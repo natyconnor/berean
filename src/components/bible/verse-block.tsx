@@ -47,13 +47,13 @@ export const VerseBlock = memo(function VerseBlock({
           <span className="w-1.5 h-1.5 rounded-full bg-primary/60 mt-1 shrink-0" />
         )}
       </span>
-      <span className="font-serif text-base leading-relaxed flex-1 whitespace-pre-wrap">
+      <span className="font-serif text-base leading-relaxed flex-1 min-w-0 whitespace-pre-wrap">
         {text}
       </span>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/10"
+            className="shrink-0 ml-3 self-stretch flex items-center justify-center min-w-8 opacity-0 group-hover:opacity-100 transition-opacity px-2 rounded hover:bg-primary/10"
             onClick={(e) => {
               e.stopPropagation()
               onAddNote()
