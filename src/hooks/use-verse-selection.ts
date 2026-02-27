@@ -29,6 +29,8 @@ export function useVerseSelection(onSelectionComplete: (selection: VerseSelectio
       onSelectionComplete({ startVerse: start, endVerse: end })
     }
     setIsDragging(false)
+    setSelectionStart(null)
+    setSelectionEnd(null)
   }, [isDragging, selectionStart, selectionEnd, onSelectionComplete])
 
   const clearSelection = useCallback(() => {

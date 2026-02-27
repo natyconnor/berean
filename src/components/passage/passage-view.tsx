@@ -11,9 +11,10 @@ import { CopyrightNotice } from "@/components/bible/copyright-notice"
 import { PassageNavigator } from "@/components/bible/passage-navigator"
 import { GospelParallelBanner } from "@/components/links/gospel-parallel-banner"
 import { VerseRowLeft } from "./verse-row"
-import { VerseNotes, type VerseNote } from "./verse-notes"
+import { VerseNotes, PassageNotesBubble, type VerseNote } from "./verse-notes"
 import { NoteEditor } from "@/components/notes/note-editor"
 import { Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 
 /** Type guard: narrows search/query union to Doc<"notes"> */
@@ -46,21 +47,23 @@ export function PassageView({ book, chapter }: PassageViewProps) {
   const linkNote = useMutation(api.noteVerseLinks.link)
 
   const [selectedVerses, setSelectedVerses] = useState<Set<number>>(new Set())
+  const [hoveredVerse, setHoveredVerse] = useState<number | null>(null)
   const [openVerseKey, setOpenVerseKey] = useState<number | null>(null)
+  const [openPassageKey, setOpenPassageKey] = useState<number | null>(null)
   const [creatingFor, setCreatingFor] = useState<VerseRef | null>(null)
   const [editingNoteId, setEditingNoteId] = useState<Id<"notes"> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Reset interaction state when navigating to a different passage.
-  // Calling setState during render (not in an effect) is the React-recommended
-  // pattern for derived state — React batches these and avoids a second commit.
   const [prevBook, setPrevBook] = useState(book)
   const [prevChapter, setPrevChapter] = useState(chapter)
   if (prevBook !== book || prevChapter !== chapter) {
     setPrevBook(book)
     setPrevChapter(chapter)
     setSelectedVerses(new Set())
+    setHoveredVerse(null)
     setOpenVerseKey(null)
+    setOpenPassageKey(null)
     setCreatingFor(null)
     setEditingNoteId(null)
   }
@@ -73,6 +76,7 @@ export function PassageView({ book, chapter }: PassageViewProps) {
         !containerRef.current.querySelector("[data-notes-open]")?.contains(e.target as Node)
       ) {
         setOpenVerseKey(null)
+        setOpenPassageKey(null)
         setCreatingFor(null)
         setEditingNoteId(null)
         setSelectedVerses(new Set())
@@ -82,14 +86,14 @@ export function PassageView({ book, chapter }: PassageViewProps) {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  // Build notes grouped by verse number (anchor to startVerse for passage notes)
-  const notesByVerse = useMemo(() => {
+  // Single-verse notes only (startVerse === endVerse), keyed by verse number
+  const singleVerseNotes = useMemo(() => {
     const map = new Map<number, VerseNote[]>()
     if (!chapterNotes) return map
     for (const entry of chapterNotes) {
       const ref = entry.verseRef
-      const anchorVerse = ref.startVerse
-      const existing = map.get(anchorVerse) ?? []
+      if (ref.startVerse !== ref.endVerse) continue
+      const existing = map.get(ref.startVerse) ?? []
       for (const note of entry.notes) {
         if (!isNote(note)) continue
         if (!existing.some((n) => n.noteId === note._id)) {
@@ -97,29 +101,50 @@ export function PassageView({ book, chapter }: PassageViewProps) {
             noteId: note._id,
             content: note.content,
             tags: note.tags,
-            verseRef: {
-              book: ref.book,
-              chapter: ref.chapter,
-              startVerse: ref.startVerse,
-              endVerse: ref.endVerse,
-            },
+            verseRef: { book: ref.book, chapter: ref.chapter, startVerse: ref.startVerse, endVerse: ref.endVerse },
             createdAt: note.createdAt,
           })
         }
       }
-      map.set(anchorVerse, existing)
+      map.set(ref.startVerse, existing)
     }
     return map
   }, [chapterNotes])
 
-  // Build note count per verse (for dot indicator)
-  const verseNoteCounts = useMemo(() => {
+  // Passage notes only (startVerse !== endVerse), keyed by startVerse (the anchor)
+  const passageNotesByAnchor = useMemo(() => {
+    const map = new Map<number, VerseNote[]>()
+    if (!chapterNotes) return map
+    for (const entry of chapterNotes) {
+      const ref = entry.verseRef
+      if (ref.startVerse === ref.endVerse) continue
+      const existing = map.get(ref.startVerse) ?? []
+      for (const note of entry.notes) {
+        if (!isNote(note)) continue
+        if (!existing.some((n) => n.noteId === note._id)) {
+          existing.push({
+            noteId: note._id,
+            content: note.content,
+            tags: note.tags,
+            verseRef: { book: ref.book, chapter: ref.chapter, startVerse: ref.startVerse, endVerse: ref.endVerse },
+            createdAt: note.createdAt,
+          })
+        }
+      }
+      map.set(ref.startVerse, existing)
+    }
+    return map
+  }, [chapterNotes])
+
+  // Maps every verse covered by a passage note → that note's startVerse (anchor)
+  const verseToPassageAnchor = useMemo(() => {
     const map = new Map<number, number>()
     if (!chapterNotes) return map
     for (const entry of chapterNotes) {
       const ref = entry.verseRef
+      if (ref.startVerse === ref.endVerse) continue
       for (let v = ref.startVerse; v <= ref.endVerse; v++) {
-        map.set(v, (map.get(v) ?? 0) + entry.notes.length)
+        map.set(v, ref.startVerse)
       }
     }
     return map
@@ -129,21 +154,30 @@ export function PassageView({ book, chapter }: PassageViewProps) {
     (selection: { startVerse: number; endVerse: number }) => {
       if (selection.startVerse === selection.endVerse) {
         const v = selection.startVerse
-        const notes = notesByVerse.get(v)
+        const singleNotes = singleVerseNotes.get(v) ?? []
+        const passageAnchor = verseToPassageAnchor.get(v)
+
         setSelectedVerses(new Set([v]))
-        if (notes && notes.length > 0) {
-          // Open existing notes
+        setEditingNoteId(null)
+
+        if (singleNotes.length > 0) {
+          // Verse has its own note → open it; passage note stays closed
           setOpenVerseKey(v)
+          setOpenPassageKey(null)
           setCreatingFor(null)
-          setEditingNoteId(null)
+        } else if (passageAnchor === v) {
+          // First verse of a passage with no own note → open the passage note
+          setOpenPassageKey(v)
+          setOpenVerseKey(null)
+          setCreatingFor(null)
         } else {
-          // Open creation form
+          // No notes yet (or middle verse in a passage) → open creation form for this verse
           setCreatingFor({ book, chapter, startVerse: v, endVerse: v })
           setOpenVerseKey(null)
-          setEditingNoteId(null)
+          setOpenPassageKey(null)
         }
       } else {
-        // Multi-verse selection: open creation form for passage
+        // Multi-verse drag selection → open creation form for a passage note
         const verses = new Set<number>()
         for (let v = selection.startVerse; v <= selection.endVerse; v++) {
           verses.add(v)
@@ -156,18 +190,42 @@ export function PassageView({ book, chapter }: PassageViewProps) {
           endVerse: selection.endVerse,
         })
         setOpenVerseKey(null)
+        setOpenPassageKey(null)
         setEditingNoteId(null)
       }
     },
-    [book, chapter, notesByVerse]
+    [book, chapter, singleVerseNotes, verseToPassageAnchor]
   )
 
   const {
     isInSelection,
     handleMouseDown,
-    handleMouseEnter,
-    handleMouseUp,
+    handleMouseEnter: handleSelectionMouseEnter,
+    handleMouseUp: selectionHandleMouseUp,
+    clearSelection,
   } = useVerseSelection(handleSelectionComplete)
+
+  // If the verse is already selected, the global mousedown handler will
+  // deselect it. Don't start a new drag so mouseup doesn't re-select it.
+  const handleVerseMouseDown = useCallback(
+    (verseNumber: number) => {
+      if (selectedVerses.has(verseNumber)) return
+      handleMouseDown(verseNumber)
+    },
+    [selectedVerses, handleMouseDown]
+  )
+
+  const handleMouseEnter = useCallback(
+    (verseNumber: number) => {
+      setHoveredVerse(verseNumber)
+      handleSelectionMouseEnter(verseNumber)
+    },
+    [handleSelectionMouseEnter]
+  )
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredVerse(null)
+  }, [])
 
   const handleAddNote = useCallback(
     (verseNumber: number) => {
@@ -179,6 +237,7 @@ export function PassageView({ book, chapter }: PassageViewProps) {
       })
       setSelectedVerses(new Set([verseNumber]))
       setOpenVerseKey(null)
+      setOpenPassageKey(null)
       setEditingNoteId(null)
     },
     [book, chapter]
@@ -197,7 +256,13 @@ export function PassageView({ book, chapter }: PassageViewProps) {
       await linkNote({ noteId, verseRefId })
       setCreatingFor(null)
       setSelectedVerses(new Set())
-      setOpenVerseKey(creatingFor.startVerse)
+      if (creatingFor.startVerse !== creatingFor.endVerse) {
+        setOpenPassageKey(creatingFor.startVerse)
+        setOpenVerseKey(null)
+      } else {
+        setOpenVerseKey(creatingFor.startVerse)
+        setOpenPassageKey(null)
+      }
     },
     [creatingFor, createNote, findOrCreateRef, linkNote]
   )
@@ -220,10 +285,16 @@ export function PassageView({ book, chapter }: PassageViewProps) {
 
   const handleClickAway = useCallback(() => {
     setOpenVerseKey(null)
+    setOpenPassageKey(null)
     setCreatingFor(null)
     setEditingNoteId(null)
     setSelectedVerses(new Set())
-  }, [])
+    clearSelection()
+  }, [clearSelection])
+
+  // For passage range hover highlighting: derive the anchor of the hovered verse's passage
+  const hoveredPassageAnchor =
+    hoveredVerse !== null ? verseToPassageAnchor.get(hoveredVerse) : undefined
 
   if (loading) {
     return (
@@ -248,8 +319,8 @@ export function PassageView({ book, chapter }: PassageViewProps) {
       <div
         ref={containerRef}
         className="max-w-6xl mx-auto px-4 pb-16"
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseUp={selectionHandleMouseUp}
+        onMouseLeave={() => { selectionHandleMouseUp(); setHoveredVerse(null) }}
       >
         {/* Header row */}
         <div className="grid grid-cols-[1fr_minmax(280px,360px)] gap-4">
@@ -272,12 +343,81 @@ export function PassageView({ book, chapter }: PassageViewProps) {
 
         {/* Verse rows */}
         {data.verses.map((verse) => {
-          const notes = notesByVerse.get(verse.number) ?? []
+          const singleNotes = singleVerseNotes.get(verse.number) ?? []
+          const passageNotes = passageNotesByAnchor.get(verse.number) ?? []
+          const passageAnchor = verseToPassageAnchor.get(verse.number)
+
+          const isPassageAnchor = passageNotesByAnchor.has(verse.number)
+          const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor
+          const isPassageHovered =
+            hoveredPassageAnchor !== undefined &&
+            verseToPassageAnchor.get(verse.number) === hoveredPassageAnchor
+
           const isVerseOpen = openVerseKey === verse.number
-          const isCreatingHere =
-            creatingFor?.startVerse === verse.number && !editingNoteId
-          const editingNote =
-            editingNoteId && notes.find((n) => n.noteId === editingNoteId)
+          const isPassageOpen = openPassageKey === verse.number
+          const isCreatingHere = creatingFor?.startVerse === verse.number && !editingNoteId
+
+          const editingSingleNote = editingNoteId
+            ? singleNotes.find((n) => n.noteId === editingNoteId)
+            : undefined
+          const editingPassageNote = editingNoteId
+            ? passageNotes.find((n) => n.noteId === editingNoteId)
+            : undefined
+
+          const isAnyOpen =
+            isVerseOpen ||
+            isPassageOpen ||
+            isCreatingHere ||
+            !!editingSingleNote ||
+            !!editingPassageNote
+
+          // Show side-by-side when both zones have collapsed content
+          const useRowLayout =
+            singleNotes.length > 0 &&
+            passageNotes.length > 0 &&
+            !isVerseOpen &&
+            !isPassageOpen &&
+            !isCreatingHere &&
+            !editingSingleNote &&
+            !editingPassageNote
+
+          const passageNoteJsx = passageNotes.length > 0 && !editingPassageNote ? (
+            <PassageNotesBubble
+              notes={passageNotes}
+              isOpen={isPassageOpen}
+              isGlowing={isPassageHovered && !isPassageOpen}
+              compact={useRowLayout}
+              onOpen={() => {
+                setOpenPassageKey(verse.number)
+                setSelectedVerses(new Set([verse.number]))
+                setCreatingFor(null)
+                setEditingNoteId(null)
+              }}
+              onClose={handleClickAway}
+              onEdit={(noteId: Id<"notes">) => {
+                setEditingNoteId(noteId)
+                setOpenPassageKey(verse.number)
+              }}
+              onDelete={handleDelete}
+              onAddNote={() =>
+                setCreatingFor({
+                  book: passageNotes[0].verseRef.book,
+                  chapter: passageNotes[0].verseRef.chapter,
+                  startVerse: passageNotes[0].verseRef.startVerse,
+                  endVerse: passageNotes[0].verseRef.endVerse,
+                })
+              }
+            />
+          ) : editingPassageNote ? (
+            <NoteEditor
+              key={`edit-passage-${editingNoteId}`}
+              verseRef={editingPassageNote.verseRef}
+              initialContent={editingPassageNote.content}
+              initialTags={editingPassageNote.tags}
+              onSave={handleSaveEdit}
+              onCancel={() => setEditingNoteId(null)}
+            />
+          ) : null
 
           return (
             <div
@@ -290,54 +430,69 @@ export function PassageView({ book, chapter }: PassageViewProps) {
                 text={verse.text}
                 isSelected={selectedVerses.has(verse.number)}
                 isInSelectionRange={isInSelection(verse.number)}
-                hasNotes={(verseNoteCounts.get(verse.number) ?? 0) > 0}
+                hasOwnNote={singleNotes.length > 0}
+                isPassageAnchor={isPassageAnchor}
+                isInPassageRange={isInPassageRange}
+                isPassageHovered={isPassageHovered}
                 onAddNote={handleAddNote}
-                onMouseDown={handleMouseDown}
+                onMouseDown={handleVerseMouseDown}
                 onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
               />
 
               {/* Right: notes for this verse */}
               <div
-                className="py-1"
-                {...(editingNote || isCreatingHere || isVerseOpen
-                  ? { "data-notes-open": "" }
-                  : {})}
+                className={cn("py-1", useRowLayout ? "flex gap-1.5 items-start" : "space-y-1.5")}
+                {...(isAnyOpen ? { "data-notes-open": "" } : {})}
               >
-                {editingNote ? (
-                  <NoteEditor
-                    key={`edit-${editingNoteId}`}
-                    verseRef={editingNote.verseRef}
-                    initialContent={editingNote.content}
-                    initialTags={editingNote.tags}
-                    onSave={handleSaveEdit}
-                    onCancel={() => setEditingNoteId(null)}
-                  />
-                ) : isCreatingHere ? (
+                {/* Zone 1: single-verse note */}
+                <div className={cn(useRowLayout && "flex-1 min-w-0")}>
+                  {editingSingleNote ? (
+                    <NoteEditor
+                      key={`edit-${editingNoteId}`}
+                      verseRef={editingSingleNote.verseRef}
+                      initialContent={editingSingleNote.content}
+                      initialTags={editingSingleNote.tags}
+                      onSave={handleSaveEdit}
+                      onCancel={() => setEditingNoteId(null)}
+                    />
+                  ) : singleNotes.length > 0 ? (
+                    <VerseNotes
+                      notes={singleNotes}
+                      isOpen={isVerseOpen}
+                      onOpen={() => {
+                        setOpenVerseKey(verse.number)
+                        setSelectedVerses(new Set([verse.number]))
+                        setCreatingFor(null)
+                        setEditingNoteId(null)
+                      }}
+                      onClose={handleClickAway}
+                      onEdit={(noteId) => {
+                        setEditingNoteId(noteId)
+                        setOpenVerseKey(verse.number)
+                      }}
+                      onDelete={handleDelete}
+                      onAddNote={() => handleAddNote(verse.number)}
+                    />
+                  ) : null}
+                </div>
+
+                {/* Zone 2: passage note anchored at this verse */}
+                {useRowLayout ? (
+                  <div className="w-2/5 shrink-0 min-w-0">{passageNoteJsx}</div>
+                ) : (
+                  passageNoteJsx
+                )}
+
+                {/* Zone 3: creation form */}
+                {!editingSingleNote && !editingPassageNote && isCreatingHere && (
                   <NoteEditor
                     key={`create-${creatingFor!.startVerse}-${creatingFor!.endVerse}`}
                     verseRef={creatingFor!}
                     onSave={handleSaveNew}
                     onCancel={handleClickAway}
                   />
-                ) : notes.length > 0 ? (
-                  <VerseNotes
-                    notes={notes}
-                    isOpen={isVerseOpen}
-                    onOpen={() => {
-                      setOpenVerseKey(verse.number)
-                      setSelectedVerses(new Set([verse.number]))
-                      setCreatingFor(null)
-                      setEditingNoteId(null)
-                    }}
-                    onClose={handleClickAway}
-                    onEdit={(noteId) => {
-                      setEditingNoteId(noteId)
-                      setOpenVerseKey(verse.number)
-                    }}
-                    onDelete={handleDelete}
-                    onAddNote={() => handleAddNote(verse.number)}
-                  />
-                ) : null}
+                )}
               </div>
             </div>
           )

@@ -7,10 +7,14 @@ interface VerseRowLeftProps {
   text: string
   isSelected: boolean
   isInSelectionRange: boolean
-  hasNotes: boolean
+  hasOwnNote: boolean
+  isPassageAnchor: boolean
+  isInPassageRange: boolean
+  isPassageHovered: boolean
   onAddNote: (verseNumber: number) => void
   onMouseDown: (verseNumber: number) => void
   onMouseEnter: (verseNumber: number) => void
+  onMouseLeave: () => void
 }
 
 export const VerseRowLeft = memo(function VerseRowLeft({
@@ -18,18 +22,23 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   text,
   isSelected,
   isInSelectionRange,
-  hasNotes,
+  hasOwnNote,
+  isPassageAnchor,
+  isInPassageRange,
+  isPassageHovered,
   onAddNote,
   onMouseDown,
   onMouseEnter,
+  onMouseLeave,
 }: VerseRowLeftProps) {
   return (
     <div
       data-verse-number={verseNumber}
       className={cn(
-        "group relative flex gap-2 py-2 px-3 min-h-[2.5rem] rounded-sm transition-colors select-none cursor-pointer",
+        "group relative flex gap-2 py-2 px-3 min-h-10 rounded-sm transition-colors select-none cursor-pointer",
         isSelected && "bg-primary/10 ring-1 ring-primary/20",
         isInSelectionRange && !isSelected && "bg-primary/5",
+        isPassageHovered && !isSelected && !isInSelectionRange && "bg-amber-50/60 dark:bg-amber-950/15",
         !isSelected && !isInSelectionRange && "hover:bg-muted"
       )}
       onMouseDown={(e) => {
@@ -37,14 +46,24 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         onMouseDown(verseNumber)
       }}
       onMouseEnter={() => onMouseEnter(verseNumber)}
+      onMouseLeave={onMouseLeave}
     >
       <span className="flex items-start gap-1 shrink-0 pt-0.5">
-        <span className="text-xs font-semibold text-muted-foreground tabular-nums min-w-[1.5rem] text-right">
+        <span className="text-xs font-semibold text-muted-foreground tabular-nums min-w-6 text-right">
           {verseNumber}
         </span>
-        {hasNotes && (
-          <span className="w-1.5 h-1.5 rounded-full bg-primary/60 mt-1 shrink-0" />
-        )}
+        {/* Indicator column: stacks up to two dots/marks */}
+        <span className="flex flex-col items-center gap-0.5 mt-1 min-w-[6px]">
+          {hasOwnNote && (
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+          )}
+          {isPassageAnchor && (
+            <span className="w-1.5 h-1.5 rounded-sm bg-amber-400/80 dark:bg-amber-500/70 shrink-0" />
+          )}
+          {isInPassageRange && !isPassageAnchor && (
+            <span className="w-2 h-0.5 rounded bg-amber-300/70 dark:bg-amber-600/60 mt-0.5 shrink-0" />
+          )}
+        </span>
       </span>
       <span className="font-serif text-base leading-relaxed flex-1 min-w-0 whitespace-pre-wrap">
         {text}
