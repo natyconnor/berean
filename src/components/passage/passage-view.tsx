@@ -297,7 +297,12 @@ export function PassageView({ book, chapter }: PassageViewProps) {
               />
 
               {/* Right: notes for this verse */}
-              <div className="py-1">
+              <div
+                className="py-1"
+                {...(editingNote || isCreatingHere || isVerseOpen
+                  ? { "data-notes-open": "" }
+                  : {})}
+              >
                 {editingNote ? (
                   <NoteEditor
                     key={`edit-${editingNoteId}`}
