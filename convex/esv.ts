@@ -14,7 +14,7 @@ export const getPassageText = action({
       q: args.query,
       "include-verse-numbers": "true",
       "include-first-verse-numbers": "true",
-      "include-headings": "true",
+      "include-headings": "false",
       "include-footnotes": "false",
       "include-footnote-body": "false",
       "include-passage-references": "true",
