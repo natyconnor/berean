@@ -1,40 +1,44 @@
-import { memo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Pencil, Plus, ChevronUp, BookOpen } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-import { formatVerseRef } from "@/lib/verse-ref-utils"
-import type { Id } from "../../../convex/_generated/dataModel"
-import type { NoteWithRef } from "@/components/notes/model/note-model"
+import { memo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Pencil, Plus, ChevronUp, BookOpen } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
+import type { Id } from "../../../convex/_generated/dataModel";
+import type { NoteWithRef } from "@/components/notes/model/note-model";
 import {
   NoteCardActions,
   NoteTagList,
   StackedCardBackground,
   HoverEditButton,
   NoteContent,
-} from "@/components/notes/view/note-card-primitives"
+} from "@/components/notes/view/note-card-primitives";
 
 const fadeInOut = {
   initial: { opacity: 0, y: -4 },
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -4 },
   transition: { duration: 0.15 },
-}
+};
 
-export type VerseNote = NoteWithRef
+export type VerseNote = NoteWithRef;
 
 interface VerseNotesProps {
-  notes: VerseNote[]
-  isOpen: boolean
-  isPill?: boolean
-  onOpen: () => void
-  onClose: () => void
-  onEdit: (noteId: Id<"notes">) => void
-  onDelete: (noteId: Id<"notes">) => void
-  onAddNote: () => void
-  onMouseEnter?: () => void
-  onMouseLeave?: () => void
+  notes: VerseNote[];
+  isOpen: boolean;
+  isPill?: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onEdit: (noteId: Id<"notes">) => void;
+  onDelete: (noteId: Id<"notes">) => void;
+  onAddNote: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 export const VerseNotes = memo(function VerseNotes({
@@ -49,7 +53,7 @@ export const VerseNotes = memo(function VerseNotes({
   onMouseEnter,
   onMouseLeave,
 }: VerseNotesProps) {
-  if (notes.length === 0) return null
+  if (notes.length === 0) return null;
 
   return (
     <AnimatePresence mode="popLayout" initial={false}>
@@ -100,7 +104,7 @@ export const VerseNotes = memo(function VerseNotes({
                   New note
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Add new note</TooltipContent>
+              <TooltipContent>Add new note for this verse</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -132,8 +136,8 @@ export const VerseNotes = memo(function VerseNotes({
         </motion.div>
       )}
     </AnimatePresence>
-  )
-})
+  );
+});
 
 function CollapsedBubble({
   note,
@@ -142,11 +146,11 @@ function CollapsedBubble({
   onMouseEnter,
   onMouseLeave,
 }: {
-  note: VerseNote
-  onClick: () => void
-  onEdit: () => void
-  onMouseEnter?: () => void
-  onMouseLeave?: () => void
+  note: VerseNote;
+  onClick: () => void;
+  onEdit: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }) {
   return (
     <div
@@ -164,7 +168,7 @@ function CollapsedBubble({
       <NoteTagList tags={note.tags} className="mt-1.5" />
       <HoverEditButton onEdit={onEdit} />
     </div>
-  )
+  );
 }
 
 function StackedBubble({
@@ -174,14 +178,20 @@ function StackedBubble({
   onMouseEnter,
   onMouseLeave,
 }: {
-  count: number
-  preview: string
-  onClick: () => void
-  onMouseEnter?: () => void
-  onMouseLeave?: () => void
+  count: number;
+  preview: string;
+  onClick: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }) {
   return (
-    <div data-note-trigger className="relative cursor-pointer" onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+    <div
+      data-note-trigger
+      className="relative cursor-pointer"
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <StackedCardBackground count={count} variant="muted" />
       <div className="relative border rounded-lg px-3 py-2 transition-all hover:shadow-sm text-sm bg-card border-border">
         <div className="flex items-center justify-between mb-0.5">
@@ -189,15 +199,19 @@ function StackedBubble({
             {count} notes
           </Badge>
         </div>
-        <p className="text-muted-foreground line-clamp-1 text-xs">
-          {preview}
-        </p>
+        <p className="text-muted-foreground line-clamp-1 text-xs">{preview}</p>
       </div>
     </div>
-  )
+  );
 }
 
-function VerseNotesPill({ count, onClick }: { count: number; onClick: () => void }) {
+function VerseNotesPill({
+  count,
+  onClick,
+}: {
+  count: number;
+  onClick: () => void;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -210,9 +224,11 @@ function VerseNotesPill({ count, onClick }: { count: number; onClick: () => void
           <span>{count}</span>
         </button>
       </TooltipTrigger>
-      <TooltipContent>{count} verse {count === 1 ? "note" : "notes"}</TooltipContent>
+      <TooltipContent>
+        {count} verse {count === 1 ? "note" : "notes"}
+      </TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
 function ExpandedBubble({
@@ -220,9 +236,9 @@ function ExpandedBubble({
   onEdit,
   onDelete,
 }: {
-  note: VerseNote
-  onEdit: () => void
-  onDelete: () => void
+  note: VerseNote;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="border rounded-lg px-3 py-2 shadow-sm text-sm bg-card border-border">
@@ -232,23 +248,23 @@ function ExpandedBubble({
       </div>
       <NoteTagList tags={note.tags} className="mt-1.5" />
     </div>
-  )
+  );
 }
 
 // ─── Passage Notes Bubble ────────────────────────────────────────────────────
 
 interface PassageNotesBubbleProps {
-  notes: VerseNote[]
-  isOpen: boolean
-  isGlowing: boolean
-  compact?: boolean
-  onOpen: () => void
-  onClose: () => void
-  onEdit: (noteId: Id<"notes">) => void
-  onDelete: (noteId: Id<"notes">) => void
-  onAddNote: () => void
-  onMouseEnter?: () => void
-  onMouseLeave?: () => void
+  notes: VerseNote[];
+  isOpen: boolean;
+  isGlowing: boolean;
+  compact?: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onEdit: (noteId: Id<"notes">) => void;
+  onDelete: (noteId: Id<"notes">) => void;
+  onAddNote: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 export const PassageNotesBubble = memo(function PassageNotesBubble({
@@ -264,14 +280,17 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
   onMouseEnter,
   onMouseLeave,
 }: PassageNotesBubbleProps) {
-  if (notes.length === 0) return null
+  if (notes.length === 0) return null;
 
-  const layoutTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }
-  const previewLength = compact ? 40 : 100
+  const layoutTransition = {
+    duration: 0.24,
+    ease: [0.22, 1, 0.36, 1] as const,
+  };
+  const previewLength = compact ? 40 : 100;
   const preview =
     notes[0].content.length > previewLength
       ? notes[0].content.slice(0, previewLength) + "..."
-      : notes[0].content
+      : notes[0].content;
 
   return (
     <motion.div layout transition={{ layout: layoutTransition }}>
@@ -280,9 +299,10 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           data-note-trigger
           className={cn(
             "group relative cursor-pointer rounded-lg border-l-2 border text-sm transition-colors",
-          "border-l-amber-400 border-amber-200 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-700/50 dark:border-l-amber-600/70",
-          "hover:shadow-sm hover:bg-amber-50 dark:hover:bg-amber-800/25",
-          isGlowing && "animate-pulse-subtle ring-1 ring-amber-400/50 shadow-sm shadow-amber-200/60 dark:shadow-amber-950/60"
+            "border-l-amber-400 border-amber-200 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-700/50 dark:border-l-amber-600/70",
+            "hover:shadow-sm hover:bg-amber-50 dark:hover:bg-amber-800/25",
+            isGlowing &&
+              "animate-pulse-subtle ring-1 ring-amber-400/50 shadow-sm shadow-amber-200/60 dark:shadow-amber-950/60"
           )}
           onClick={onOpen}
           onMouseEnter={onMouseEnter}
@@ -290,20 +310,38 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
         >
           <div className={cn("px-3 py-2", compact && "px-2 py-1.5")}>
             <div className="flex items-center gap-1.5 mb-1">
-              <BookOpen className={cn("text-amber-600 dark:text-amber-400/70 shrink-0", compact ? "h-2.5 w-2.5" : "h-3 w-3")} />
-              <span className={cn("font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide truncate", compact ? "text-[8px]" : "text-[10px]")}>
+              <BookOpen
+                className={cn(
+                  "text-amber-600 dark:text-amber-400/70 shrink-0",
+                  compact ? "h-2.5 w-2.5" : "h-3 w-3"
+                )}
+              />
+              <span
+                className={cn(
+                  "font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide truncate",
+                  compact ? "text-[8px]" : "text-[10px]"
+                )}
+              >
                 {formatVerseRef(notes[0].verseRef)}
               </span>
               {notes.length > 1 && (
                 <Badge
                   variant="outline"
-                  className={cn("border-amber-300 text-amber-700 dark:border-amber-600/50 dark:text-amber-400/70 ml-auto shrink-0", compact ? "text-[8px] px-1 py-0" : "text-[10px] px-1.5 py-0")}
+                  className={cn(
+                    "border-amber-300 text-amber-700 dark:border-amber-600/50 dark:text-amber-400/70 ml-auto shrink-0",
+                    compact ? "text-[8px] px-1 py-0" : "text-[10px] px-1.5 py-0"
+                  )}
                 >
                   {notes.length}
                 </Badge>
               )}
             </div>
-            <p className={cn("text-muted-foreground leading-relaxed", compact ? "line-clamp-1 text-[11px]" : "line-clamp-2")}>
+            <p
+              className={cn(
+                "text-muted-foreground leading-relaxed",
+                compact ? "line-clamp-1 text-[11px]" : "line-clamp-2"
+              )}
+            >
               {preview}
             </p>
             {!compact && notes[0].tags.length > 0 && (
@@ -326,8 +364,8 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                 <button
                   className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-800/30 transition-all"
                   onClick={(e) => {
-                    e.stopPropagation()
-                    onEdit(notes[0].noteId)
+                    e.stopPropagation();
+                    onEdit(notes[0].noteId);
                   }}
                 >
                   <Pencil className="h-3 w-3 text-muted-foreground" />
@@ -363,7 +401,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                     New note
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Add new note</TooltipContent>
+                <TooltipContent>Add new note for this passage</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -396,25 +434,29 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
         </div>
       )}
     </motion.div>
-  )
-})
+  );
+});
 
 function ExpandedPassageNote({
   note,
   onEdit,
   onDelete,
 }: {
-  note: VerseNote
-  onEdit: () => void
-  onDelete: () => void
+  note: VerseNote;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="rounded-md border border-amber-200/70 bg-amber-50/60 dark:bg-amber-900/18 dark:border-amber-700/45 px-3 py-2 text-sm">
       <div className="flex items-start justify-between gap-2">
         <NoteContent content={note.content} className="flex-1" />
-        <NoteCardActions onEdit={onEdit} onDelete={onDelete} variant="passage" />
+        <NoteCardActions
+          onEdit={onEdit}
+          onDelete={onDelete}
+          variant="passage"
+        />
       </div>
       <NoteTagList tags={note.tags} variant="passage" className="mt-1.5" />
     </div>
-  )
+  );
 }
