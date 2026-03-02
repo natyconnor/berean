@@ -4,7 +4,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { X } from "lucide-react"
+import { X, BookOpen } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 import { formatVerseRef } from "@/lib/verse-ref-utils"
 
@@ -12,6 +13,7 @@ interface NoteEditorProps {
   verseRef: VerseRef
   initialContent?: string
   initialTags?: string[]
+  variant?: "default" | "passage"
   onSave: (content: string, tags: string[]) => void
   onCancel: () => void
 }
@@ -20,6 +22,7 @@ export function NoteEditor({
   verseRef,
   initialContent = "",
   initialTags = [],
+  variant = "default",
   onSave,
   onCancel,
 }: NoteEditorProps) {
@@ -60,12 +63,31 @@ export function NoteEditor({
     [content, tags, onSave, onCancel]
   )
 
+  const isPassage = variant === "passage"
+
   return (
-    <div className="border rounded-lg p-3 bg-card shadow-sm space-y-3" onKeyDown={handleKeyDown}>
+    <div
+      className={cn(
+        "rounded-lg p-3 shadow-sm space-y-3",
+        isPassage
+          ? "border-l-2 border border-amber-200 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-700/50 border-l-amber-400 dark:border-l-amber-600/70"
+          : "border bg-card"
+      )}
+      onKeyDown={handleKeyDown}
+    >
       <div className="flex items-center justify-between">
-        <Badge variant="secondary" className="text-xs">
-          {formatVerseRef(verseRef)}
-        </Badge>
+        {isPassage ? (
+          <div className="flex items-center gap-1.5">
+            <BookOpen className="h-3 w-3 text-amber-600 dark:text-amber-400/70 shrink-0" />
+            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide">
+              {formatVerseRef(verseRef)}
+            </span>
+          </div>
+        ) : (
+          <Badge variant="secondary" className="text-xs">
+            {formatVerseRef(verseRef)}
+          </Badge>
+        )}
         <TooltipButton variant="ghost" size="icon" className="h-6 w-6" onClick={onCancel} tooltip="Cancel">
           <X className="h-3.5 w-3.5" />
         </TooltipButton>
@@ -82,7 +104,14 @@ export function NoteEditor({
       <div className="space-y-2">
         <div className="flex flex-wrap gap-1">
           {tags.map((tag) => (
-            <Badge key={tag} variant="outline" className="text-xs gap-1">
+            <Badge
+              key={tag}
+              variant="outline"
+              className={cn(
+                "text-xs gap-1",
+                isPassage && "border-amber-300 dark:border-amber-600/50"
+              )}
+            >
               {tag}
               <Tooltip>
                 <TooltipTrigger asChild>

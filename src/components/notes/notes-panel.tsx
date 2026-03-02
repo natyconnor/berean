@@ -10,7 +10,7 @@ import { NoteBubbleStack } from "./note-bubble-stack"
 import { NoteEditor } from "./note-editor"
 import { Plus } from "lucide-react"
 import type { VerseRef } from "@/lib/verse-ref-utils"
-import { formatVerseRef } from "@/lib/verse-ref-utils"
+import { formatVerseRef, isPassageNote } from "@/lib/verse-ref-utils"
 
 interface NotesPanelProps {
   book: string
@@ -164,6 +164,7 @@ export function NotesPanel({
           <NoteEditor
             key={`create-${activeCreatingRef.startVerse}-${activeCreatingRef.endVerse}`}
             verseRef={activeCreatingRef}
+            variant={isPassageNote(activeCreatingRef) ? "passage" : "default"}
             onSave={handleSaveNew}
             onCancel={handleCancelCreate}
           />
@@ -189,6 +190,7 @@ export function NotesPanel({
               <NoteEditor
                 key={`edit-${editingNoteId}`}
                 verseRef={editNote.verseRef}
+                variant={isPassageNote(editNote.verseRef) ? "passage" : "default"}
                 initialContent={editNote.content}
                 initialTags={editNote.tags}
                 onSave={(content, tags) =>

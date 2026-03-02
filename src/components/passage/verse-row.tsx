@@ -7,6 +7,7 @@ interface VerseRowLeftProps {
   text: string
   isSelected: boolean
   isInSelectionRange: boolean
+  isPassageSelection?: boolean
   hasOwnNote: boolean
   isPassageAnchor: boolean
   isInPassageRange: boolean
@@ -23,6 +24,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   text,
   isSelected,
   isInSelectionRange,
+  isPassageSelection = false,
   hasOwnNote,
   isPassageAnchor,
   isInPassageRange,
@@ -38,8 +40,10 @@ export const VerseRowLeft = memo(function VerseRowLeft({
       data-verse-number={verseNumber}
       className={cn(
         "group relative flex gap-2 py-2 px-3 min-h-10 rounded-sm transition-colors select-none cursor-pointer",
-        isSelected && "bg-primary/10 ring-1 ring-primary/20",
-        isInSelectionRange && !isSelected && "bg-primary/5",
+        isSelected && isPassageSelection && "bg-amber-100/80 dark:bg-amber-800/30 ring-1 ring-amber-400/40 dark:ring-amber-500/30",
+        isSelected && !isPassageSelection && "bg-primary/10 ring-1 ring-primary/20",
+        isInSelectionRange && !isSelected && isPassageSelection && "bg-amber-50/60 dark:bg-amber-800/20",
+        isInSelectionRange && !isSelected && !isPassageSelection && "bg-primary/5",
         isNoteBubbleHovered && !isSelected && !isInSelectionRange && "bg-muted/70",
         isPassageRangeActive && !isSelected && !isInSelectionRange && !isNoteBubbleHovered && "bg-amber-50/60 dark:bg-amber-800/20",
         !isSelected && !isInSelectionRange && "hover:bg-muted"

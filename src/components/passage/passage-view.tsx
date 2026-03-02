@@ -336,6 +336,11 @@ export function PassageView({ book, chapter }: PassageViewProps) {
   const passageKey = `${book}-${chapter}`
   const layoutTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }
 
+  // Determine if the current selection/creation is for a passage note (multi-verse)
+  const isPassageSelection = creatingFor
+    ? creatingFor.startVerse !== creatingFor.endVerse
+    : selectedVerses.size > 1
+
   return (
     <ScrollArea className="h-full">
       <motion.div
@@ -462,6 +467,7 @@ export function PassageView({ book, chapter }: PassageViewProps) {
                     verseRef={editingPassageNote.verseRef}
                     initialContent={editingPassageNote.content}
                     initialTags={editingPassageNote.tags}
+                    variant="passage"
                     onSave={handleSaveEdit}
                     onCancel={() => setEditingNoteId(null)}
                   />
@@ -484,6 +490,7 @@ export function PassageView({ book, chapter }: PassageViewProps) {
                   text={verse.text}
                   isSelected={selectedVerses.has(verse.number)}
                   isInSelectionRange={isInSelection(verse.number)}
+                  isPassageSelection={isPassageSelection}
                   hasOwnNote={singleNotes.length > 0}
                   isPassageAnchor={isPassageAnchor}
                   isInPassageRange={isInPassageRange}
@@ -573,6 +580,7 @@ export function PassageView({ book, chapter }: PassageViewProps) {
                     >
                       <NoteEditor
                         verseRef={creatingFor!}
+                        variant={isPassageSelection ? "passage" : "default"}
                         onSave={handleSaveNew}
                         onCancel={handleClickAway}
                       />
