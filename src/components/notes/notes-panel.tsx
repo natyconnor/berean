@@ -1,8 +1,8 @@
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import { api } from "../../../convex/_generated/api"
-import type { Doc, Id } from "../../../convex/_generated/dataModel"
+import type { Id } from "../../../convex/_generated/dataModel"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { TooltipButton } from "@/components/ui/tooltip-button"
 import { NoteBubble } from "./note-bubble"
@@ -11,6 +11,10 @@ import { NoteEditor } from "./note-editor"
 import { Plus } from "lucide-react"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 import { formatVerseRef, isPassageNote } from "@/lib/verse-ref-utils"
+import {
+  buildNotesByVerseRange,
+  type ChapterNoteEntry,
+} from "./model/note-model"
 
 interface NotesPanelProps {
   book: string
@@ -18,27 +22,6 @@ interface NotesPanelProps {
   creatingForRef?: VerseRef | null
   onNoteCreated?: () => void
   onCancelCreate?: () => void
-}
-
-interface NoteWithRef {
-  noteId: Id<"notes">
-  content: string
-  tags: string[]
-  verseRef: VerseRef
-  createdAt: number
-}
-
-/** Type guard: narrows search/query union to Doc<"notes"> */
-function isNote(
-  doc: unknown
-): doc is Doc<"notes"> {
-  return (
-    doc !== null &&
-    typeof doc === "object" &&
-    "content" in doc &&
-    "tags" in doc &&
-    "createdAt" in doc
-  )
 }
 
 export function NotesPanel({
@@ -61,49 +44,22 @@ export function NotesPanel({
   const [editingNoteId, setEditingNoteId] = useState<Id<"notes"> | null>(null)
   const [expandedVerseKey, setExpandedVerseKey] = useState<string | null>(null)
   const [internalCreating, setInternalCreating] = useState<VerseRef | null>(null)
-  const [prevCreatingForRef, setPrevCreatingForRef] = useState(creatingForRef)
 
-  // Use parent-provided creating ref or internal one
   const activeCreatingRef = creatingForRef ?? internalCreating
 
-  // Derived state: clear internal creating/editing when parent takes over creation
-  if (prevCreatingForRef !== creatingForRef) {
-    setPrevCreatingForRef(creatingForRef)
+  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on prop change */
+  useEffect(() => {
     if (creatingForRef) {
       setInternalCreating(null)
       setEditingNoteId(null)
     }
-  }
+  }, [creatingForRef])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Group notes by verse key
-  const notesByVerse = useMemo(() => {
-    if (!chapterNotes) return new Map<string, NoteWithRef[]>()
-    const map = new Map<string, NoteWithRef[]>()
-    for (const entry of chapterNotes) {
-      const ref = entry.verseRef
-      const key = `${ref.startVerse}-${ref.endVerse}`
-      const existing = map.get(key) ?? []
-      for (const note of entry.notes) {
-        if (!isNote(note)) continue
-        if (!existing.some((n) => n.noteId === note._id)) {
-          existing.push({
-            noteId: note._id,
-            content: note.content,
-            tags: note.tags,
-            verseRef: {
-              book: ref.book,
-              chapter: ref.chapter,
-              startVerse: ref.startVerse,
-              endVerse: ref.endVerse,
-            },
-            createdAt: note.createdAt,
-          })
-        }
-      }
-      map.set(key, existing)
-    }
-    return map
-  }, [chapterNotes])
+  const notesByVerse = useMemo(
+    () => buildNotesByVerseRange(chapterNotes as ChapterNoteEntry[] | undefined),
+    [chapterNotes]
+  )
 
   const sortedVerseKeys = useMemo(() => {
     return Array.from(notesByVerse.keys()).sort((a, b) => {

@@ -1,12 +1,19 @@
 import { memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Pencil, Trash2, Plus, ChevronUp, BookOpen } from "lucide-react"
+import { Pencil, Plus, ChevronUp, BookOpen } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { formatVerseRef } from "@/lib/verse-ref-utils"
-import type { VerseRef } from "@/lib/verse-ref-utils"
 import type { Id } from "../../../convex/_generated/dataModel"
+import type { NoteWithRef } from "@/components/notes/model/note-model"
+import {
+  NoteCardActions,
+  NoteTagList,
+  StackedCardBackground,
+  HoverEditButton,
+  NoteContent,
+} from "@/components/notes/view/note-card-primitives"
 
 const fadeInOut = {
   initial: { opacity: 0, y: -4 },
@@ -15,13 +22,7 @@ const fadeInOut = {
   transition: { duration: 0.15 },
 }
 
-export interface VerseNote {
-  noteId: Id<"notes">
-  content: string
-  tags: string[]
-  verseRef: VerseRef
-  createdAt: number
-}
+export type VerseNote = NoteWithRef
 
 interface VerseNotesProps {
   notes: VerseNote[]
@@ -146,11 +147,6 @@ function CollapsedBubble({
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }) {
-  const preview =
-    note.content.length > 100
-      ? note.content.slice(0, 100) + "..."
-      : note.content
-
   return (
     <div
       className="group relative border rounded-lg px-3 py-2 cursor-pointer transition-all hover:shadow-sm text-sm bg-card border-border"
@@ -158,32 +154,13 @@ function CollapsedBubble({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <p className="text-muted-foreground line-clamp-2 leading-relaxed">
-        {preview}
-      </p>
-      {note.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {note.tags.map((tag) => (
-            <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-all"
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit()
-            }}
-          >
-            <Pencil className="h-3 w-3 text-muted-foreground" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Edit note</TooltipContent>
-      </Tooltip>
+      <NoteContent
+        content={note.content}
+        truncateAt={100}
+        className="text-muted-foreground line-clamp-2"
+      />
+      <NoteTagList tags={note.tags} className="mt-1.5" />
+      <HoverEditButton onEdit={onEdit} />
     </div>
   )
 }
@@ -203,10 +180,7 @@ function StackedBubble({
 }) {
   return (
     <div className="relative cursor-pointer" onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      {count > 2 && (
-        <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-lg border bg-muted/40" />
-      )}
-      <div className="absolute inset-0 translate-x-0.5 translate-y-0.5 rounded-lg border bg-muted/60" />
+      <StackedCardBackground count={count} variant="muted" />
       <div className="relative border rounded-lg px-3 py-2 transition-all hover:shadow-sm text-sm bg-card border-border">
         <div className="flex items-center justify-between mb-0.5">
           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
@@ -250,43 +224,10 @@ function ExpandedBubble({
   return (
     <div className="border rounded-lg px-3 py-2 shadow-sm text-sm bg-card border-border">
       <div className="flex items-start justify-between gap-2">
-        <p className="leading-relaxed whitespace-pre-wrap flex-1">
-          {note.content}
-        </p>
-        <div className="flex items-center gap-0.5 shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="p-1 rounded hover:bg-muted transition-colors"
-                onClick={onEdit}
-              >
-                <Pencil className="h-3 w-3 text-muted-foreground" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Edit note</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="p-1 rounded hover:bg-destructive/10 transition-colors"
-                onClick={onDelete}
-              >
-                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Delete note</TooltipContent>
-          </Tooltip>
-        </div>
+        <NoteContent content={note.content} className="flex-1" />
+        <NoteCardActions onEdit={onEdit} onDelete={onDelete} />
       </div>
-      {note.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {note.tags.map((tag) => (
-            <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
+      <NoteTagList tags={note.tags} className="mt-1.5" />
     </div>
   )
 }
@@ -465,45 +406,10 @@ function ExpandedPassageNote({
   return (
     <div className="rounded-md border border-amber-200/70 bg-amber-50/60 dark:bg-amber-900/18 dark:border-amber-700/45 px-3 py-2 text-sm">
       <div className="flex items-start justify-between gap-2">
-        <p className="leading-relaxed whitespace-pre-wrap flex-1">{note.content}</p>
-        <div className="flex items-center gap-0.5 shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-800/30 transition-colors"
-                onClick={onEdit}
-              >
-                <Pencil className="h-3 w-3 text-muted-foreground" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Edit note</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="p-1 rounded hover:bg-destructive/10 transition-colors"
-                onClick={onDelete}
-              >
-                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Delete note</TooltipContent>
-          </Tooltip>
-        </div>
+        <NoteContent content={note.content} className="flex-1" />
+        <NoteCardActions onEdit={onEdit} onDelete={onDelete} variant="passage" />
       </div>
-      {note.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {note.tags.map((tag) => (
-            <Badge
-              key={tag}
-              variant="outline"
-              className="text-[10px] px-1.5 py-0 border-amber-300 dark:border-amber-700"
-            >
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
+      <NoteTagList tags={note.tags} variant="passage" className="mt-1.5" />
     </div>
   )
 }

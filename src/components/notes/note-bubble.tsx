@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 import { formatVerseRef, isPassageNote } from "@/lib/verse-ref-utils"
+import { NoteTagList, NoteContent } from "./view/note-card-primitives"
 
 interface NoteBubbleProps {
   noteId: string
@@ -27,10 +28,7 @@ export const NoteBubble = memo(function NoteBubble({
   onDelete,
 }: NoteBubbleProps) {
   const isPassage = isPassageNote(verseRef)
-  const truncatedContent =
-    !isExpanded && content.length > 150
-      ? content.slice(0, 150) + "..."
-      : content
+  const variant = isPassage ? "passage" : "default"
 
   return (
     <div
@@ -104,19 +102,13 @@ export const NoteBubble = memo(function NoteBubble({
         )}
       </div>
 
-      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-        {truncatedContent}
-      </p>
+      <NoteContent
+        content={content}
+        truncateAt={isExpanded ? undefined : 150}
+        className="text-sm"
+      />
 
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {tags.map((tag) => (
-            <Badge key={tag} variant="outline" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
+      <NoteTagList tags={tags} variant={variant} size="sm" className="mt-2" />
     </div>
   )
 })

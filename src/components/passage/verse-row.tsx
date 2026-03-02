@@ -2,39 +2,51 @@ import { memo } from "react"
 import { Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface VerseRowLeftProps {
-  verseNumber: number
-  text: string
+export interface VerseSelectionState {
   isSelected: boolean
   isInSelectionRange: boolean
-  isPassageSelection?: boolean
+  isPassageSelection: boolean
+}
+
+export interface VerseNoteIndicatorState {
   hasOwnNote: boolean
   isPassageAnchor: boolean
   isInPassageRange: boolean
+}
+
+export interface VerseHoverState {
   isPassageRangeActive: boolean
   isNoteBubbleHovered: boolean
+}
+
+export interface VerseInteractionHandlers {
   onAddNote: (verseNumber: number) => void
   onMouseDown: (verseNumber: number) => void
   onMouseEnter: (verseNumber: number) => void
   onMouseLeave: () => void
 }
 
+interface VerseRowLeftProps {
+  verseNumber: number
+  text: string
+  selection: VerseSelectionState
+  noteIndicator: VerseNoteIndicatorState
+  hover: VerseHoverState
+  handlers: VerseInteractionHandlers
+}
+
 export const VerseRowLeft = memo(function VerseRowLeft({
   verseNumber,
   text,
-  isSelected,
-  isInSelectionRange,
-  isPassageSelection = false,
-  hasOwnNote,
-  isPassageAnchor,
-  isInPassageRange,
-  isPassageRangeActive,
-  isNoteBubbleHovered,
-  onAddNote,
-  onMouseDown,
-  onMouseEnter,
-  onMouseLeave,
+  selection,
+  noteIndicator,
+  hover,
+  handlers,
 }: VerseRowLeftProps) {
+  const { isSelected, isInSelectionRange, isPassageSelection } = selection
+  const { hasOwnNote, isPassageAnchor, isInPassageRange } = noteIndicator
+  const { isPassageRangeActive, isNoteBubbleHovered } = hover
+  const { onAddNote, onMouseDown, onMouseEnter, onMouseLeave } = handlers
   return (
     <div
       data-verse-number={verseNumber}
