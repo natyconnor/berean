@@ -1,3 +1,4 @@
+import { motion } from "framer-motion"
 import type { Tab } from "@/lib/tab-types"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -11,7 +12,12 @@ interface TabItemProps {
 
 export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, width: 0 }}
+      animate={{ opacity: 1, width: "auto" }}
+      exit={{ opacity: 0, width: 0 }}
+      transition={{ duration: 0.15, ease: "easeOut" }}
       className={cn(
         "group flex items-center gap-1 h-10 px-4 border-r cursor-pointer select-none text-sm transition-colors",
         isActive
@@ -33,6 +39,6 @@ export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
       >
         <X className="h-3 w-3" />
       </button>
-    </div>
+    </motion.div>
   )
 }

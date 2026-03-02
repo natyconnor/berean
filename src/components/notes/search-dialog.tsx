@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
+import { motion } from "framer-motion"
 import { useQuery } from "convex-helpers/react/cache"
 import { api } from "../../../convex/_generated/api"
 import {
@@ -116,33 +117,40 @@ export function SearchDialog() {
               </div>
             ) : (
               <div className="p-1">
-                {searchResults.map((note) => (
-                  <Tooltip key={note._id}>
-                    <TooltipTrigger asChild>
-                      <button
-                        className="w-full text-left px-3 py-2 rounded-sm hover:bg-muted transition-colors cursor-pointer"
-                        onClick={handleSelectNote}
-                      >
-                    <p className="text-sm line-clamp-2">
-                      {note.content}
-                    </p>
-                    {note.tags.length > 0 && (
-                      <div className="flex gap-1 mt-1">
-                        {note.tags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Open note</TooltipContent>
-                  </Tooltip>
+                {searchResults.map((note, index) => (
+                  <motion.div
+                    key={note._id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.15, delay: index * 0.03 }}
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          className="w-full text-left px-3 py-2 rounded-sm hover:bg-muted transition-colors cursor-pointer"
+                          onClick={handleSelectNote}
+                        >
+                          <p className="text-sm line-clamp-2">
+                            {note.content}
+                          </p>
+                          {note.tags.length > 0 && (
+                            <div className="flex gap-1 mt-1">
+                              {note.tags.map((tag) => (
+                                <Badge
+                                  key={tag}
+                                  variant="outline"
+                                  className="text-xs"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Open note</TooltipContent>
+                    </Tooltip>
+                  </motion.div>
                 ))}
               </div>
             )}

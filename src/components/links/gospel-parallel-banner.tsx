@@ -1,4 +1,5 @@
 import { useQuery } from "convex-helpers/react/cache"
+import { motion, AnimatePresence } from "framer-motion"
 import { api } from "../../../convex/_generated/api"
 import { Badge } from "@/components/ui/badge"
 import { useTabs } from "@/lib/use-tabs"
@@ -24,7 +25,8 @@ export function GospelParallelBanner({
 
   if (!parallels || parallels.length === 0) return null
 
-  const displayed = expanded ? parallels : parallels.slice(0, 3)
+  const initialItems = parallels.slice(0, 3)
+  const extraItems = parallels.slice(3)
   const hasMore = parallels.length > 3
 
   return (
@@ -44,37 +46,76 @@ export function GospelParallelBanner({
       </button>
 
       <div className="mt-2 space-y-1.5">
-        {displayed.map((parallel) => (
-          <div key={parallel._id} className="text-sm">
-            <span className="text-muted-foreground">{parallel.label}: </span>
-            <span className="flex flex-wrap gap-1 mt-0.5">
-              {parallel.passages
-                .filter(
-                  (p) => !(p.book === book && p.chapter === chapter)
-                )
-                .map((p) => {
-                  const label =
-                    p.startVerse === p.endVerse
-                      ? `${p.book} ${p.chapter}:${p.startVerse}`
-                      : `${p.book} ${p.chapter}:${p.startVerse}-${p.endVerse}`
-                  return (
-                    <Badge
-                      key={`${p.book}-${p.chapter}-${p.startVerse}`}
-                      variant="outline"
-                      className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-                      onClick={() => {
-                        const id = toPassageId(p.book, p.chapter)
-                        openTab(id, `${p.book} ${p.chapter}`)
-                      }}
-                    >
-                      {label}
-                    </Badge>
-                  )
-                })}
-            </span>
-          </div>
+        {initialItems.map((parallel) => (
+          <ParallelItem
+            key={parallel._id}
+            parallel={parallel}
+            book={book}
+            chapter={chapter}
+            openTab={openTab}
+          />
         ))}
+        <AnimatePresence initial={false}>
+          {expanded &&
+            extraItems.map((parallel, index) => (
+              <motion.div
+                key={parallel._id}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.15, delay: index * 0.03 }}
+              >
+                <ParallelItem
+                  parallel={parallel}
+                  book={book}
+                  chapter={chapter}
+                  openTab={openTab}
+                />
+              </motion.div>
+            ))}
+        </AnimatePresence>
       </div>
+    </div>
+  )
+}
+
+function ParallelItem({
+  parallel,
+  book,
+  chapter,
+  openTab,
+}: {
+  parallel: { _id: string; label: string; passages: Array<{ book: string; chapter: number; startVerse: number; endVerse: number }> }
+  book: string
+  chapter: number
+  openTab: (id: string, label: string) => void
+}) {
+  return (
+    <div className="text-sm">
+      <span className="text-muted-foreground">{parallel.label}: </span>
+      <span className="flex flex-wrap gap-1 mt-0.5">
+        {parallel.passages
+          .filter((p) => !(p.book === book && p.chapter === chapter))
+          .map((p) => {
+            const label =
+              p.startVerse === p.endVerse
+                ? `${p.book} ${p.chapter}:${p.startVerse}`
+                : `${p.book} ${p.chapter}:${p.startVerse}-${p.endVerse}`
+            return (
+              <Badge
+                key={`${p.book}-${p.chapter}-${p.startVerse}`}
+                variant="outline"
+                className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                onClick={() => {
+                  const id = toPassageId(p.book, p.chapter)
+                  openTab(id, `${p.book} ${p.chapter}`)
+                }}
+              >
+                {label}
+              </Badge>
+            )
+          })}
+      </span>
     </div>
   )
 }

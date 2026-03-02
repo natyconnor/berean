@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import { api } from "../../../convex/_generated/api"
@@ -332,9 +333,16 @@ export function PassageView({ book, chapter }: PassageViewProps) {
 
   if (!data) return null
 
+  const passageKey = `${book}-${chapter}`
+  const layoutTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }
+
   return (
     <ScrollArea className="h-full">
-      <div
+      <motion.div
+        key={passageKey}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
         ref={containerRef}
         className="max-w-6xl mx-auto px-4 pb-16"
         onMouseUp={selectionHandleMouseUp}
@@ -395,135 +403,184 @@ export function PassageView({ book, chapter }: PassageViewProps) {
             !!editingSingleNote ||
             !!editingPassageNote
 
-          // Show side-by-side when both zones have collapsed content
-          const useRowLayout =
-            singleNotes.length > 0 &&
-            passageNotes.length > 0 &&
-            !isVerseOpen &&
-            !isPassageOpen &&
-            !isCreatingHere &&
-            !editingSingleNote &&
-            !editingPassageNote
+          const hasBothNoteTypes = singleNotes.length > 0 && passageNotes.length > 0
+          const useSideBySide = hasBothNoteTypes && !isCreatingHere && !editingSingleNote && !editingPassageNote
+          const showVerseAsPill = useSideBySide && isPassageOpen
+          const showPassageCompact = useSideBySide && !isPassageOpen
 
-          const passageNoteJsx = passageNotes.length > 0 && !editingPassageNote ? (
-            <PassageNotesBubble
-              notes={passageNotes}
-              isOpen={isPassageOpen}
-              isGlowing={isPassageRangeActive && !isPassageOpen}
-              compact={useRowLayout}
-              onOpen={() => {
-                setOpenPassageKey(verse.number)
-                setSelectedVerses(new Set([verse.number]))
-                setCreatingFor(null)
-                setEditingNoteId(null)
-              }}
-              onClose={handleClickAway}
-              onEdit={(noteId: Id<"notes">) => {
-                setEditingNoteId(noteId)
-                setOpenPassageKey(verse.number)
-              }}
-              onDelete={handleDelete}
-              onAddNote={() =>
-                setCreatingFor({
-                  book: passageNotes[0].verseRef.book,
-                  chapter: passageNotes[0].verseRef.chapter,
-                  startVerse: passageNotes[0].verseRef.startVerse,
-                  endVerse: passageNotes[0].verseRef.endVerse,
-                })
-              }
-              onMouseEnter={() => handlePassageBubbleMouseEnter(verse.number)}
-              onMouseLeave={handlePassageBubbleMouseLeave}
-            />
-          ) : editingPassageNote ? (
-            <NoteEditor
-              key={`edit-passage-${editingNoteId}`}
-              verseRef={editingPassageNote.verseRef}
-              initialContent={editingPassageNote.content}
-              initialTags={editingPassageNote.tags}
-              onSave={handleSaveEdit}
-              onCancel={() => setEditingNoteId(null)}
-            />
-          ) : null
+          const passageNoteJsx = (
+            <AnimatePresence initial={false}>
+              {passageNotes.length > 0 && !editingPassageNote ? (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ opacity: { duration: 0.15 }, layout: layoutTransition }}
+                  className={cn(useSideBySide && (isPassageOpen ? "flex-1 min-w-[240px]" : "w-[140px] shrink-0"))}
+                >
+                  <PassageNotesBubble
+                    notes={passageNotes}
+                    isOpen={isPassageOpen}
+                    isGlowing={isPassageRangeActive}
+                    compact={showPassageCompact}
+                    onOpen={() => {
+                      setOpenPassageKey(verse.number)
+                      setOpenVerseKey(null)
+                      setSelectedVerses(new Set([verse.number]))
+                      setCreatingFor(null)
+                      setEditingNoteId(null)
+                    }}
+                    onClose={handleClickAway}
+                    onEdit={(noteId: Id<"notes">) => {
+                      setEditingNoteId(noteId)
+                      setOpenPassageKey(verse.number)
+                    }}
+                    onDelete={handleDelete}
+                    onAddNote={() =>
+                      setCreatingFor({
+                        book: passageNotes[0].verseRef.book,
+                        chapter: passageNotes[0].verseRef.chapter,
+                        startVerse: passageNotes[0].verseRef.startVerse,
+                        endVerse: passageNotes[0].verseRef.endVerse,
+                      })
+                    }
+                    onMouseEnter={() => handlePassageBubbleMouseEnter(verse.number)}
+                    onMouseLeave={handlePassageBubbleMouseLeave}
+                  />
+                </motion.div>
+              ) : editingPassageNote ? (
+                <motion.div
+                  key={`edit-passage-${editingNoteId}`}
+                  layout
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <NoteEditor
+                    verseRef={editingPassageNote.verseRef}
+                    initialContent={editingPassageNote.content}
+                    initialTags={editingPassageNote.tags}
+                    onSave={handleSaveEdit}
+                    onCancel={() => setEditingNoteId(null)}
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          )
 
           return (
-            <div
+            <motion.div
               key={verse.number}
+              layout="position"
+              transition={{ layout: layoutTransition }}
               className="grid grid-cols-[1fr_minmax(280px,360px)] gap-4 items-start"
             >
               {/* Left: verse text */}
-              <VerseRowLeft
-                verseNumber={verse.number}
-                text={verse.text}
-                isSelected={selectedVerses.has(verse.number)}
-                isInSelectionRange={isInSelection(verse.number)}
-                hasOwnNote={singleNotes.length > 0}
-                isPassageAnchor={isPassageAnchor}
-                isInPassageRange={isInPassageRange}
-                isPassageRangeActive={isPassageRangeActive}
-                isNoteBubbleHovered={isNoteBubbleHovered}
-                onAddNote={handleAddNote}
-                onMouseDown={handleVerseMouseDown}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-              />
+              <motion.div layout="position" transition={{ layout: layoutTransition }}>
+                <VerseRowLeft
+                  verseNumber={verse.number}
+                  text={verse.text}
+                  isSelected={selectedVerses.has(verse.number)}
+                  isInSelectionRange={isInSelection(verse.number)}
+                  hasOwnNote={singleNotes.length > 0}
+                  isPassageAnchor={isPassageAnchor}
+                  isInPassageRange={isInPassageRange}
+                  isPassageRangeActive={isPassageRangeActive}
+                  isNoteBubbleHovered={isNoteBubbleHovered}
+                  onAddNote={handleAddNote}
+                  onMouseDown={handleVerseMouseDown}
+                  onMouseEnter={handleMouseEnter}
+                  onMouseLeave={handleMouseLeave}
+                />
+              </motion.div>
 
               {/* Right: notes for this verse */}
-              <div
-                className={cn("py-1", useRowLayout ? "flex gap-1.5 items-start" : "space-y-1.5")}
+              <motion.div
+                layout
+                transition={{ layout: layoutTransition }}
+                className={cn("py-1", useSideBySide ? "flex gap-2 items-start" : "space-y-1.5")}
                 {...(isAnyOpen ? { "data-notes-open": "" } : {})}
               >
                 {/* Zone 1: single-verse note */}
-                <div className={cn(useRowLayout && "flex-1 min-w-0")}>
+                <AnimatePresence mode="popLayout" initial={false}>
                   {editingSingleNote ? (
-                    <NoteEditor
+                    <motion.div
                       key={`edit-${editingNoteId}`}
-                      verseRef={editingSingleNote.verseRef}
-                      initialContent={editingSingleNote.content}
-                      initialTags={editingSingleNote.tags}
-                      onSave={handleSaveEdit}
-                      onCancel={() => setEditingNoteId(null)}
-                    />
+                      layout
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex-1 min-w-0"
+                    >
+                      <NoteEditor
+                        verseRef={editingSingleNote.verseRef}
+                        initialContent={editingSingleNote.content}
+                        initialTags={editingSingleNote.tags}
+                        onSave={handleSaveEdit}
+                        onCancel={() => setEditingNoteId(null)}
+                      />
+                    </motion.div>
                   ) : singleNotes.length > 0 ? (
-                    <VerseNotes
-                      notes={singleNotes}
-                      isOpen={isVerseOpen}
-                      onOpen={() => {
-                        setOpenVerseKey(verse.number)
-                        setSelectedVerses(new Set([verse.number]))
-                        setCreatingFor(null)
-                        setEditingNoteId(null)
-                      }}
-                      onClose={handleClickAway}
-                      onEdit={(noteId) => {
-                        setEditingNoteId(noteId)
-                        setOpenVerseKey(verse.number)
-                      }}
-                      onDelete={handleDelete}
-                      onAddNote={() => handleAddNote(verse.number)}
-                      onMouseEnter={() => handleSingleBubbleMouseEnter(verse.number)}
-                      onMouseLeave={handleSingleBubbleMouseLeave}
-                    />
+                    <motion.div
+                      key="verse-notes"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(useSideBySide && (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"))}
+                    >
+                      <VerseNotes
+                        notes={singleNotes}
+                        isOpen={isVerseOpen}
+                        isPill={showVerseAsPill}
+                        onOpen={() => {
+                          setOpenVerseKey(verse.number)
+                          setOpenPassageKey(null)
+                          setSelectedVerses(new Set([verse.number]))
+                          setCreatingFor(null)
+                          setEditingNoteId(null)
+                        }}
+                        onClose={handleClickAway}
+                        onEdit={(noteId) => {
+                          setEditingNoteId(noteId)
+                          setOpenVerseKey(verse.number)
+                        }}
+                        onDelete={handleDelete}
+                        onAddNote={() => handleAddNote(verse.number)}
+                        onMouseEnter={() => handleSingleBubbleMouseEnter(verse.number)}
+                        onMouseLeave={handleSingleBubbleMouseLeave}
+                      />
+                    </motion.div>
                   ) : null}
-                </div>
+                </AnimatePresence>
 
                 {/* Zone 2: passage note anchored at this verse */}
-                {useRowLayout ? (
-                  <div className="w-2/5 shrink-0 min-w-0">{passageNoteJsx}</div>
-                ) : (
-                  passageNoteJsx
-                )}
+                {passageNoteJsx}
 
                 {/* Zone 3: creation form */}
-                {!editingSingleNote && !editingPassageNote && isCreatingHere && (
-                  <NoteEditor
-                    key={`create-${creatingFor!.startVerse}-${creatingFor!.endVerse}`}
-                    verseRef={creatingFor!}
-                    onSave={handleSaveNew}
-                    onCancel={handleClickAway}
-                  />
-                )}
-              </div>
-            </div>
+                <AnimatePresence initial={false}>
+                  {!editingSingleNote && !editingPassageNote && isCreatingHere && (
+                    <motion.div
+                      key={`create-${creatingFor!.startVerse}-${creatingFor!.endVerse}`}
+                      layout
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <NoteEditor
+                        verseRef={creatingFor!}
+                        onSave={handleSaveNew}
+                        onCancel={handleClickAway}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            </motion.div>
           )
         })}
 
@@ -532,7 +589,7 @@ export function PassageView({ book, chapter }: PassageViewProps) {
           <CopyrightNotice text={data.copyright} />
           <div />
         </div>
-      </div>
+      </motion.div>
     </ScrollArea>
   )
 }

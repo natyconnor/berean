@@ -1,3 +1,4 @@
+import { AnimatePresence } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
 import { LogOut, Plus } from "lucide-react";
@@ -16,15 +17,17 @@ export function TabBar() {
     <div className="flex items-center border-b bg-muted/30 h-10 shrink-0">
       <ScrollArea className="flex-1">
         <div className="flex items-center h-10">
-          {tabs.map((tab) => (
-            <TabItem
-              key={tab.id}
-              tab={tab}
-              isActive={tab.id === activeTabId}
-              onActivate={() => setActiveTab(tab.id)}
-              onClose={() => closeTab(tab.id)}
-            />
-          ))}
+          <AnimatePresence initial={false}>
+            {tabs.map((tab) => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                isActive={tab.id === activeTabId}
+                onActivate={() => setActiveTab(tab.id)}
+                onClose={() => closeTab(tab.id)}
+              />
+            ))}
+          </AnimatePresence>
           <PassageNavigator
             trigger={
               <button className="h-8 w-8 mx-1 shrink-0 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer">
