@@ -20,6 +20,29 @@ export default defineSchema({
       filterFields: ["tags", "userId"],
     }),
 
+  userTags: defineTable({
+    userId: v.id("users"),
+    tag: v.string(),
+    label: v.string(),
+    source: v.union(v.literal("custom"), v.literal("starter")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_tag", ["userId", "tag"])
+    .index("by_userId_updatedAt", ["userId", "updatedAt"]),
+
+  userSettings: defineTable({
+    userId: v.id("users"),
+    starterTagsSetupCompletedAt: v.optional(v.number()),
+    starterTagCategoryColors: v.optional(v.record(v.string(), v.string())),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_updatedAt", ["userId", "updatedAt"]),
+
   verseRefs: defineTable({
     userId: v.optional(v.id("users")),
     book: v.string(),

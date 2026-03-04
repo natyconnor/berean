@@ -1,13 +1,14 @@
 import { AnimatePresence } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, Plus, Tags } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SearchDialog } from "@/components/notes/search-dialog";
 import { ThemeDropdown } from "./theme-dropdown";
 import { PassageNavigator } from "@/components/bible/passage-navigator";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { TooltipButton } from "@/components/ui/tooltip-button";
+import { Link } from "@tanstack/react-router";
 
 export function TabBar() {
   const { tabs, activeTabId, setActiveTab, closeTab } = useTabs();
@@ -40,6 +41,18 @@ export function TabBar() {
       </ScrollArea>
       <div className="flex items-center gap-1 mx-1 shrink-0">
         <SearchDialog />
+        <TooltipButton
+          asChild
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          tooltip="Starter tags settings"
+          aria-label="Starter tags settings"
+        >
+          <Link to="/settings/tags">
+            <Tags className="h-4 w-4" />
+          </Link>
+        </TooltipButton>
         <ThemeDropdown />
         <TooltipButton
           variant="ghost"

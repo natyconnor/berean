@@ -114,17 +114,12 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
               {preview}
             </p>
             {!compact && notes[0].tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {notes[0].tags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="outline"
-                    className="text-[10px] px-1.5 py-0 border-amber-300 dark:border-amber-600/45"
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+              <NoteTagList
+                tags={notes[0].tags}
+                variant="passage"
+                size="xs"
+                className="mt-1.5"
+              />
             )}
           </div>
           {notes.length === 1 && !compact && (

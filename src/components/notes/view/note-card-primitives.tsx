@@ -2,6 +2,7 @@ import { Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles"
 
 export interface NoteCardActionsProps {
   onEdit: () => void
@@ -50,6 +51,7 @@ export interface NoteTagListProps {
 }
 
 export function NoteTagList({ tags, variant = "default", size = "xs", className }: NoteTagListProps) {
+  const resolveTagStyle = useStarterTagBadgeStyle()
   if (tags.length === 0) return null
 
   const borderClass = variant === "passage" 
@@ -64,6 +66,7 @@ export function NoteTagList({ tags, variant = "default", size = "xs", className 
           key={tag}
           variant="outline"
           className={cn(sizeClass, borderClass)}
+          style={resolveTagStyle(tag)}
         >
           {tag}
         </Badge>

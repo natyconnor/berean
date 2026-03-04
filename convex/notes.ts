@@ -1,6 +1,17 @@
 import { query, mutation } from "./_generated/server"
 import { v } from "convex/values"
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth"
+import { matchesTagFilters, normalizeTags, syncUserTagsFromNote } from "./lib/tags"
+
+const DEFAULT_SEARCH_LIMIT = 50
+const MAX_SEARCH_LIMIT = 100
+const SEARCH_WINDOW_MULTIPLIER = 4
+const MAX_SEARCH_WINDOW = 400
+
+function resolveSearchLimit(limit: number | undefined): number {
+  if (typeof limit !== "number" || Number.isNaN(limit)) return DEFAULT_SEARCH_LIMIT
+  return Math.min(Math.max(Math.floor(limit), 1), MAX_SEARCH_LIMIT)
+}
 
 export const getById = query({
   args: { id: v.id("notes") },
@@ -15,20 +26,46 @@ export const getById = query({
 })
 
 export const search = query({
-  args: { query: v.string(), tag: v.optional(v.string()) },
+  args: {
+    query: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    matchMode: v.optional(v.union(v.literal("any"), v.literal("all"))),
+    limit: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx)
     if (!userId) return []
-    const results = await ctx.db
-      .query("notes")
-      .withSearchIndex("search_content", (search) =>
-        search.search("content", args.query).eq("userId", userId)
-      )
-      .take(50)
-    if (args.tag) {
-      return results.filter((note) => note.tags.includes(args.tag!))
+
+    const queryText = args.query?.trim() ?? ""
+    const selectedTags = normalizeTags(args.tags ?? [])
+    const matchMode = args.matchMode ?? "any"
+    const limit = resolveSearchLimit(args.limit)
+    const searchWindow = Math.min(
+      Math.max(limit * SEARCH_WINDOW_MULTIPLIER, DEFAULT_SEARCH_LIMIT),
+      MAX_SEARCH_WINDOW
+    )
+
+    if (queryText.length < 2 && selectedTags.length === 0) {
+      return []
     }
-    return results
+
+    const baseResults =
+      queryText.length >= 2
+        ? await ctx.db
+            .query("notes")
+            .withSearchIndex("search_content", (search) =>
+              search.search("content", queryText).eq("userId", userId)
+            )
+            .take(searchWindow)
+        : await ctx.db
+            .query("notes")
+            .withIndex("by_userId", (q) => q.eq("userId", userId))
+            .order("desc")
+            .take(searchWindow)
+
+    return baseResults
+      .filter((note) => matchesTagFilters(note.tags, selectedTags, matchMode))
+      .slice(0, limit)
   },
 })
 
@@ -56,13 +93,16 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx)
     const now = Date.now()
-    return await ctx.db.insert("notes", {
+    const tags = normalizeTags(args.tags)
+    const noteId = await ctx.db.insert("notes", {
       userId,
       content: args.content,
-      tags: args.tags,
+      tags,
       createdAt: now,
       updatedAt: now,
     })
+    await syncUserTagsFromNote(ctx, userId, tags, now)
+    return noteId
   },
 })
 
@@ -78,8 +118,23 @@ export const update = mutation({
     if (!note || note.userId !== userId) {
       throw new Error("Note not found or access denied")
     }
-    const { id, ...fields } = args
-    await ctx.db.patch(id, { ...fields, updatedAt: Date.now() })
+
+    const now = Date.now()
+    const patch: { content?: string; tags?: string[]; updatedAt: number } = {
+      updatedAt: now,
+    }
+    if (args.content !== undefined) {
+      patch.content = args.content
+    }
+    if (args.tags !== undefined) {
+      patch.tags = normalizeTags(args.tags)
+    }
+
+    await ctx.db.patch(args.id, patch)
+
+    if (patch.tags) {
+      await syncUserTagsFromNote(ctx, userId, patch.tags, now)
+    }
   },
 })
 

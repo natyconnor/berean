@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { motion } from "framer-motion"
 import { useQuery } from "convex-helpers/react/cache"
+import { useMutation } from "convex/react"
 import { api } from "../../../convex/_generated/api"
 import {
   Dialog,
@@ -11,11 +12,17 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Search } from "lucide-react"
+import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles"
+import type { TagMatchMode } from "@/lib/tag-utils"
 
 export function SearchDialog() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
-  const [selectedTag, setSelectedTag] = useState<string | undefined>()
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [matchMode, setMatchMode] = useState<TagMatchMode>("any")
+  const attemptedBackfillRef = useRef(false)
+  const backfillCatalog = useMutation(api.tags.backfillCatalogFromNotes)
+  const resolveTagStyle = useStarterTagBadgeStyle()
 
   // Keyboard shortcut
   useEffect(() => {
@@ -29,18 +36,50 @@ export function SearchDialog() {
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [])
 
+  const catalog = useQuery(api.tags.listCatalog)
+  const normalizedQuery = query.trim()
+  const hasTextQuery = normalizedQuery.length >= 2
+  const hasTagFilters = selectedTags.length > 0
+  const shouldSearch = hasTextQuery || hasTagFilters
+
   const searchResults = useQuery(
     api.notes.search,
-    query.trim().length >= 2
-      ? { query: query.trim(), tag: selectedTag }
+    shouldSearch
+      ? {
+          ...(hasTextQuery ? { query: normalizedQuery } : {}),
+          tags: selectedTags,
+          matchMode,
+          limit: 50,
+        }
       : "skip"
   )
 
-  const allTags = useQuery(api.notes.allTags)
+  const availableTags = useMemo(() => catalog?.map((entry) => entry.tag) ?? [], [catalog])
+
+  useEffect(() => {
+    if (!open) return
+    if (attemptedBackfillRef.current) return
+    if (!catalog || catalog.length > 0) return
+    attemptedBackfillRef.current = true
+    void backfillCatalog({ noteLimit: 1000 })
+  }, [backfillCatalog, catalog, open])
+
+  const toggleTag = useCallback((tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((current) => current !== tag) : [...prev, tag]
+    )
+  }, [])
 
   const handleSelectNote = useCallback(() => {
     setOpen(false)
     setQuery("")
+    setSelectedTags([])
+    setMatchMode("any")
+  }, [])
+
+  const clearFilters = useCallback(() => {
+    setSelectedTags([])
+    setMatchMode("any")
   }, [])
 
   return (
@@ -69,43 +108,81 @@ export function SearchDialog() {
             />
           </div>
 
-          {allTags && allTags.length > 0 && (
+          {availableTags.length > 0 && (
             <div className="flex flex-wrap gap-1 px-3 py-2 border-b">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge
-                    variant={selectedTag === undefined ? "default" : "outline"}
+                    variant={selectedTags.length === 0 ? "default" : "outline"}
                     className="text-xs cursor-pointer"
-                    onClick={() => setSelectedTag(undefined)}
+                    onClick={clearFilters}
+                  >
+                    Clear
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>Clear tag filters</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant={matchMode === "any" ? "default" : "outline"}
+                    className="text-xs cursor-pointer"
+                    onClick={() => setMatchMode("any")}
+                  >
+                    Any
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>Match notes containing any selected tag</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant={matchMode === "all" ? "default" : "outline"}
+                    className="text-xs cursor-pointer"
+                    onClick={() => setMatchMode("all")}
                   >
                     All
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent>Show all notes</TooltipContent>
+                <TooltipContent>Match notes containing every selected tag</TooltipContent>
               </Tooltip>
-              {allTags.map((tag) => (
-                <Tooltip key={tag}>
+              {selectedTags.map((tag) => (
+                <Tooltip key={`selected-${tag}`}>
                   <TooltipTrigger asChild>
                     <Badge
-                      variant={selectedTag === tag ? "default" : "outline"}
+                      variant="default"
                       className="text-xs cursor-pointer"
-                      onClick={() =>
-                        setSelectedTag(selectedTag === tag ? undefined : tag)
-                      }
+                      onClick={() => toggleTag(tag)}
                     >
                       {tag}
                     </Badge>
                   </TooltipTrigger>
-                  <TooltipContent>Filter by {tag}</TooltipContent>
+                  <TooltipContent>Remove {tag} filter</TooltipContent>
+                </Tooltip>
+              ))}
+              {availableTags
+                .filter((tag) => !selectedTags.includes(tag))
+                .map((tag) => (
+                <Tooltip key={tag}>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="text-xs cursor-pointer"
+                      onClick={() => toggleTag(tag)}
+                    >
+                      {tag}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>Add {tag} filter</TooltipContent>
                 </Tooltip>
               ))}
             </div>
           )}
 
           <ScrollArea className="max-h-80">
-            {query.trim().length < 2 ? (
+            {!shouldSearch ? (
               <div className="p-6 text-center text-sm text-muted-foreground">
-                Type at least 2 characters to search...
+                Type at least 2 characters or choose one or more tags.
               </div>
             ) : searchResults === undefined ? (
               <div className="p-6 text-center text-sm text-muted-foreground">
@@ -113,7 +190,9 @@ export function SearchDialog() {
               </div>
             ) : searchResults.length === 0 ? (
               <div className="p-6 text-center text-sm text-muted-foreground">
-                No results found.
+                {hasTagFilters
+                  ? "No results match your selected tags."
+                  : "No results found for that query."}
               </div>
             ) : (
               <div className="p-1">
@@ -140,6 +219,7 @@ export function SearchDialog() {
                                   key={tag}
                                   variant="outline"
                                   className="text-xs"
+                                  style={resolveTagStyle(tag)}
                                 >
                                   {tag}
                                 </Badge>

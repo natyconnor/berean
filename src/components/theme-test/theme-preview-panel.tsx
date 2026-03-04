@@ -1,18 +1,18 @@
-import type { AppTheme } from "./theme-types"
-import { MockUI } from "./mock-ui"
+import type { AppTheme } from "./theme-types";
+import { MockUI } from "./mock-ui";
 
 interface ThemePreviewPanelProps {
-  theme: AppTheme
+  theme: AppTheme;
 }
 
 export function ThemePreviewPanel({ theme }: ThemePreviewPanelProps) {
   const cssVars = Object.entries(theme.vars).reduce<Record<string, string>>(
     (acc, [key, value]) => {
-      acc[key] = value
-      return acc
+      acc[key] = value;
+      return acc;
     },
     {}
-  )
+  );
 
   return (
     <div className="flex flex-col min-w-0 flex-1">
@@ -39,15 +39,34 @@ export function ThemePreviewPanel({ theme }: ThemePreviewPanelProps) {
         {/* Primary color swatch row */}
         <div className="flex items-center gap-2 mt-2">
           {[
-            { label: "Primary", bg: theme.vars["--primary"], fg: theme.vars["--primary-foreground"] },
-            { label: "Secondary", bg: theme.vars["--secondary"], fg: theme.vars["--secondary-foreground"] },
-            { label: "Accent", bg: theme.vars["--accent"], fg: theme.vars["--accent-foreground"] },
-            { label: "Muted", bg: theme.vars["--muted"], fg: theme.vars["--muted-foreground"] },
-          ].map(({ label, bg, fg }) => (
+            {
+              label: "Primary",
+              bg: theme.vars["--primary"],
+              fg: theme.vars["--primary-foreground"],
+            },
+            {
+              label: "Secondary",
+              bg: theme.vars["--secondary"],
+              fg: theme.vars["--secondary-foreground"],
+            },
+            {
+              label: "Accent",
+              bg: theme.vars["--accent"],
+              fg: theme.vars["--accent-foreground"],
+            },
+            {
+              label: "Muted",
+              bg: theme.vars["--muted"],
+              fg: theme.vars["--muted-foreground"],
+            },
+          ].map(({ label, bg }) => (
             <div key={label} className="flex flex-col items-center gap-0.5">
               <div
                 className="h-5 w-10 rounded shadow-sm border"
-                style={{ backgroundColor: bg, borderColor: theme.vars["--border"] }}
+                style={{
+                  backgroundColor: bg,
+                  borderColor: theme.vars["--border"],
+                }}
               />
               <span
                 className="text-[10px]"
@@ -83,5 +102,5 @@ export function ThemePreviewPanel({ theme }: ThemePreviewPanelProps) {
         <MockUI />
       </div>
     </div>
-  )
+  );
 }

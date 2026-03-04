@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ThemeTestRouteImport } from './routes/theme-test'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
 import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
 
 const ThemeTestRoute = ThemeTestRouteImport.update({
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsTagsRoute = SettingsTagsRouteImport.update({
+  id: '/settings/tags',
+  path: '/settings/tags',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PassagePassageIdRoute = PassagePassageIdRouteImport.update({
   id: '/passage/$passageId',
   path: '/passage/$passageId',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/theme-test': typeof ThemeTestRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
+  '/settings/tags': typeof SettingsTagsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/theme-test': typeof ThemeTestRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
+  '/settings/tags': typeof SettingsTagsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,25 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/theme-test': typeof ThemeTestRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
+  '/settings/tags': typeof SettingsTagsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/theme-test' | '/passage/$passageId'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/theme-test'
+    | '/passage/$passageId'
+    | '/settings/tags'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/theme-test' | '/passage/$passageId'
-  id: '__root__' | '/' | '/login' | '/theme-test' | '/passage/$passageId'
+  to: '/' | '/login' | '/theme-test' | '/passage/$passageId' | '/settings/tags'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/theme-test'
+    | '/passage/$passageId'
+    | '/settings/tags'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +87,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ThemeTestRoute: typeof ThemeTestRoute
   PassagePassageIdRoute: typeof PassagePassageIdRoute
+  SettingsTagsRoute: typeof SettingsTagsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -92,6 +113,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/tags': {
+      id: '/settings/tags'
+      path: '/settings/tags'
+      fullPath: '/settings/tags'
+      preLoaderRoute: typeof SettingsTagsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/passage/$passageId': {
       id: '/passage/$passageId'
       path: '/passage/$passageId'
@@ -107,6 +135,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ThemeTestRoute: ThemeTestRoute,
   PassagePassageIdRoute: PassagePassageIdRoute,
+  SettingsTagsRoute: SettingsTagsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
