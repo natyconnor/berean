@@ -16,6 +16,7 @@ import {
   NoteTagList,
   NoteContent,
 } from "@/components/notes/view/note-card-primitives";
+import { NoteEditor } from "@/components/notes/note-editor";
 
 type PassageNote = NoteWithRef;
 
@@ -25,10 +26,13 @@ interface PassageNotesBubbleProps {
   isGlowing: boolean;
   viewMode?: "compose" | "read";
   compact?: boolean;
+  editingNoteId?: Id<"notes"> | null;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
   onDelete: (noteId: Id<"notes">) => void;
+  onSaveEdit: (content: string, tags: string[]) => Promise<void>;
+  onCancelEditing: () => void;
   onAddNote: () => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -40,10 +44,13 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
   isGlowing,
   viewMode = "compose",
   compact = false,
+  editingNoteId = null,
   onOpen,
   onClose,
   onEdit,
   onDelete,
+  onSaveEdit,
+  onCancelEditing,
   onAddNote,
   onMouseEnter,
   onMouseLeave,
@@ -190,16 +197,28 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           {notes.map((note, index) => (
             <motion.div
               key={note.noteId}
+              layout
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.15, delay: index * 0.03 }}
             >
-              <ExpandedPassageNote
-                note={note}
-                density={isReadMode ? "reading" : "default"}
-                onEdit={() => onEdit(note.noteId)}
-                onDelete={() => onDelete(note.noteId)}
-              />
+              {editingNoteId === note.noteId ? (
+                <NoteEditor
+                  verseRef={note.verseRef}
+                  initialContent={note.content}
+                  initialTags={note.tags}
+                  variant="passage"
+                  onSave={onSaveEdit}
+                  onCancel={onCancelEditing}
+                />
+              ) : (
+                <ExpandedPassageNote
+                  note={note}
+                  density={isReadMode ? "reading" : "default"}
+                  onEdit={() => onEdit(note.noteId)}
+                  onDelete={() => onDelete(note.noteId)}
+                />
+              )}
             </motion.div>
           ))}
         </div>

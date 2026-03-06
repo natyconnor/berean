@@ -14,10 +14,19 @@ import { CopyrightNotice } from "@/components/bible/copyright-notice";
 import { PassageNavigator } from "@/components/bible/passage-navigator";
 import { GospelParallelBanner } from "@/components/links/gospel-parallel-banner";
 import { VerseRowWithNotes } from "./view/verse-row-with-notes";
+import { ComposeLayoutCurrent } from "./view/compose-layout-current";
+import { ComposeLayoutRail } from "./view/compose-layout-rail";
+import { ComposeLayoutDrawer } from "./view/compose-layout-drawer";
+import {
+  deriveComposeActiveTarget,
+  type ComposeLayoutVariant,
+  type FilteredVerse,
+} from "./view/compose-layout-state";
 import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
 import { NoteEditor } from "@/components/notes/note-editor";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { VerseRef } from "@/lib/verse-ref-utils";
 import { BookOpen, Loader2, Pencil } from "lucide-react";
 
 interface PassageViewProps {
@@ -31,6 +40,7 @@ interface PassageViewProps {
 type PassageViewMode = "compose" | "read";
 
 const READING_MODE_STORAGE_KEY = "bible-notes-passage-view-mode";
+const COMPOSE_LAYOUT_STORAGE_KEY = "bible-notes-compose-layout-variant";
 
 function resolveInitialViewMode(): PassageViewMode {
   try {
@@ -42,6 +52,18 @@ function resolveInitialViewMode(): PassageViewMode {
     // localStorage unavailable
   }
   return "compose";
+}
+
+function resolveInitialComposeLayout(): ComposeLayoutVariant {
+  try {
+    const saved = localStorage.getItem(COMPOSE_LAYOUT_STORAGE_KEY);
+    if (saved === "current" || saved === "rail" || saved === "drawer") {
+      return saved;
+    }
+  } catch {
+    // localStorage unavailable
+  }
+  return "current";
 }
 
 export function PassageView({
@@ -61,6 +83,9 @@ export function PassageView({
       focusSource === "search" && forcedViewMode === "read"
         ? "read"
         : resolveInitialViewMode()
+  );
+  const [composeLayout, setComposeLayoutState] = useState<ComposeLayoutVariant>(
+    () => resolveInitialComposeLayout()
   );
   const [showOnlyWithNotes, setShowOnlyWithNotes] = useState(false);
   const [activeTag, setActiveTag] = useState("all");
@@ -109,6 +134,15 @@ export function PassageView({
     }
   }, []);
 
+  const setComposeLayout = useCallback((next: ComposeLayoutVariant) => {
+    setComposeLayoutState(next);
+    try {
+      localStorage.setItem(COMPOSE_LAYOUT_STORAGE_KEY, next);
+    } catch {
+      // localStorage unavailable
+    }
+  }, []);
+
   const isFocusNavigation =
     searchModeLock &&
     focusSource === "search" &&
@@ -116,7 +150,7 @@ export function PassageView({
     !!focusRange;
   const effectiveViewMode: PassageViewMode = isFocusNavigation ? "read" : viewMode;
   const isReadMode = effectiveViewMode === "read";
-  const editorMode = isReadMode ? "dialog" : "inline";
+  const editorMode = isReadMode || composeLayout !== "current" ? "dialog" : "inline";
 
   const noteById = useMemo(() => {
     const map = new Map<Id<"notes">, NoteWithRef>();
@@ -147,7 +181,7 @@ export function PassageView({
     return Array.from(tags).sort((a, b) => a.localeCompare(b));
   }, [noteById]);
 
-  const filteredVerses = useMemo(() => {
+  const filteredVerses = useMemo<FilteredVerse[]>(() => {
     if (!data) return [];
 
     return data.verses.flatMap((verse) => {
@@ -191,12 +225,57 @@ export function PassageView({
 
   const shouldShowQuickCaptureDialog =
     isReadMode && (!!creatingFor || !!editingNote);
+  const composeTopGridClass =
+    composeLayout === "rail"
+      ? "grid grid-cols-[minmax(0,1fr)_minmax(320px,420px)] gap-6"
+      : composeLayout === "drawer"
+        ? "grid grid-cols-[1fr_auto] gap-4"
+        : "grid grid-cols-[1fr_minmax(280px,360px)] gap-4";
   const topGridClass = isReadMode
     ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
-    : "grid grid-cols-[1fr_minmax(280px,360px)] gap-4";
+    : composeTopGridClass;
   const containerClass = isReadMode
     ? "max-w-[1400px] mx-auto px-6 pb-16"
-    : "max-w-6xl mx-auto px-4 pb-16";
+    : composeLayout === "drawer"
+      ? "max-w-6xl mx-auto px-4 pb-24"
+      : "max-w-6xl mx-auto px-4 pb-16";
+  const composeActiveTarget = useMemo(
+    () =>
+      deriveComposeActiveTarget({
+        book,
+        chapter,
+        editingNoteId,
+        creatingFor,
+        openVerseKey,
+        openPassageKey,
+        noteById,
+        singleVerseNotes,
+        passageNotesByAnchor,
+        verseToPassageAnchor,
+      }),
+    [
+      book,
+      chapter,
+      creatingFor,
+      editingNoteId,
+      noteById,
+      openPassageKey,
+      openVerseKey,
+      passageNotesByAnchor,
+      singleVerseNotes,
+      verseToPassageAnchor,
+    ]
+  );
+  const handleCreateForRef = useCallback(
+    (verseRef: VerseRef) => {
+      if (verseRef.startVerse === verseRef.endVerse) {
+        handleAddNote(verseRef.startVerse);
+        return;
+      }
+      startCreatingPassageNote(verseRef);
+    },
+    [handleAddNote, startCreatingPassageNote]
+  );
   const focusStartVerse = focusRange?.startVerse;
   const focusEndVerse = focusRange?.endVerse;
   const focusRequestKey =
@@ -268,6 +347,90 @@ export function PassageView({
   if (!data) return null;
 
   const passageKey = `${book}-${chapter}`;
+  const renderVerseRow = (verse: FilteredVerse) => (
+    <VerseRowWithNotes
+      key={verse.verseNumber}
+      verseNumber={verse.verseNumber}
+      text={verse.text}
+      viewMode={effectiveViewMode}
+      editorMode={editorMode}
+      composeLayoutVariant={isReadMode ? "current" : composeLayout}
+      selectedVerses={selectedVerses}
+      isInSelectionRange={isInSelection(verse.verseNumber)}
+      isPassageSelection={isPassageSelection}
+      singleNotes={verse.singleNotes}
+      passageNotes={verse.passageNotes}
+      passageAnchor={verseToPassageAnchor.get(verse.verseNumber)}
+      hoveredVerse={hoveredVerse}
+      hoveredPassageBubble={hoveredPassageBubble}
+      hoveredSingleBubble={hoveredSingleBubble}
+      openVerseKey={openVerseKey}
+      openPassageKey={openPassageKey}
+      creatingFor={creatingFor}
+      editingNoteId={editingNoteId}
+      isFocusTarget={
+        focusSource === "search" && focusRange
+          ? verse.verseNumber >= focusRange.startVerse &&
+            verse.verseNumber <= focusRange.endVerse
+          : false
+      }
+      onAddNote={handleAddNote}
+      onMouseDown={handleVerseMouseDown}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onSingleBubbleMouseEnter={handleSingleBubbleMouseEnter}
+      onSingleBubbleMouseLeave={handleSingleBubbleMouseLeave}
+      onPassageBubbleMouseEnter={handlePassageBubbleMouseEnter}
+      onPassageBubbleMouseLeave={handlePassageBubbleMouseLeave}
+      onOpenVerseNotes={openVerseNotes}
+      onOpenPassageNotes={openPassageNotes}
+      onEditNote={startEditingNote}
+      onCancelEditing={cancelEditing}
+      onDelete={handleDelete}
+      onSaveEdit={handleSaveEdit}
+      onSaveNew={handleSaveNew}
+      onClickAway={handleClickAway}
+      onStartCreatingPassageNote={startCreatingPassageNote}
+    />
+  );
+  const composeRows = (() => {
+    if (isReadMode) {
+      return filteredVerses.map((verse) => renderVerseRow(verse));
+    }
+    if (composeLayout === "rail") {
+      return (
+        <ComposeLayoutRail
+          verses={filteredVerses}
+          renderRow={renderVerseRow}
+          activeTarget={composeActiveTarget}
+          onCreateForRef={handleCreateForRef}
+          onEditNote={startEditingNote}
+          onDeleteNote={handleDelete}
+          onSaveEdit={handleSaveEdit}
+          onSaveNew={handleSaveNew}
+          onCancelEditing={cancelEditing}
+          onCloseSurface={handleClickAway}
+        />
+      );
+    }
+    if (composeLayout === "drawer") {
+      return (
+        <ComposeLayoutDrawer
+          verses={filteredVerses}
+          renderRow={renderVerseRow}
+          activeTarget={composeActiveTarget}
+          onCreateForRef={handleCreateForRef}
+          onEditNote={startEditingNote}
+          onDeleteNote={handleDelete}
+          onSaveEdit={handleSaveEdit}
+          onSaveNew={handleSaveNew}
+          onCancelEditing={cancelEditing}
+          onCloseSurface={handleClickAway}
+        />
+      );
+    }
+    return <ComposeLayoutCurrent verses={filteredVerses} renderRow={renderVerseRow} />;
+  })();
 
   return (
     <ScrollArea className="h-full">
@@ -286,7 +449,7 @@ export function PassageView({
             <ChapterHeader book={book} chapter={chapter} />
             <PassageNavigator />
           </div>
-          <div className="flex items-end justify-between gap-2 pb-4">
+          <div className="flex flex-col items-end justify-between gap-2 pb-4">
             <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               {isReadMode ? "Reading Notes" : "Notes"}
             </span>
@@ -308,6 +471,36 @@ export function PassageView({
                 Read
               </Button>
             </div>
+            {!isReadMode && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Experiment layout
+                </span>
+                <div className="inline-flex items-center rounded-md border bg-background p-0.5">
+                  <Button
+                    size="xs"
+                    variant={composeLayout === "current" ? "secondary" : "ghost"}
+                    onClick={() => setComposeLayout("current")}
+                  >
+                    Current
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant={composeLayout === "rail" ? "secondary" : "ghost"}
+                    onClick={() => setComposeLayout("rail")}
+                  >
+                    Rail
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant={composeLayout === "drawer" ? "secondary" : "ghost"}
+                    onClick={() => setComposeLayout("drawer")}
+                  >
+                    Drawer
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -347,51 +540,7 @@ export function PassageView({
           </div>
         </div>
 
-        {filteredVerses.map((verse) => (
-          <VerseRowWithNotes
-            key={verse.verseNumber}
-            verseNumber={verse.verseNumber}
-            text={verse.text}
-            viewMode={effectiveViewMode}
-            editorMode={editorMode}
-            selectedVerses={selectedVerses}
-            isInSelectionRange={isInSelection(verse.verseNumber)}
-            isPassageSelection={isPassageSelection}
-            singleNotes={verse.singleNotes}
-            passageNotes={verse.passageNotes}
-            passageAnchor={verseToPassageAnchor.get(verse.verseNumber)}
-            hoveredVerse={hoveredVerse}
-            hoveredPassageBubble={hoveredPassageBubble}
-            hoveredSingleBubble={hoveredSingleBubble}
-            openVerseKey={openVerseKey}
-            openPassageKey={openPassageKey}
-            creatingFor={creatingFor}
-            editingNoteId={editingNoteId}
-            isFocusTarget={
-              focusSource === "search" && focusRange
-                ? verse.verseNumber >= focusRange.startVerse &&
-                  verse.verseNumber <= focusRange.endVerse
-                : false
-            }
-            onAddNote={handleAddNote}
-            onMouseDown={handleVerseMouseDown}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            onSingleBubbleMouseEnter={handleSingleBubbleMouseEnter}
-            onSingleBubbleMouseLeave={handleSingleBubbleMouseLeave}
-            onPassageBubbleMouseEnter={handlePassageBubbleMouseEnter}
-            onPassageBubbleMouseLeave={handlePassageBubbleMouseLeave}
-            onOpenVerseNotes={openVerseNotes}
-            onOpenPassageNotes={openPassageNotes}
-            onEditNote={startEditingNote}
-            onCancelEditing={cancelEditing}
-            onDelete={handleDelete}
-            onSaveEdit={handleSaveEdit}
-            onSaveNew={handleSaveNew}
-            onClickAway={handleClickAway}
-            onStartCreatingPassageNote={startCreatingPassageNote}
-          />
-        ))}
+        {composeRows}
 
         <div className={topGridClass}>
           <CopyrightNotice text={data.copyright} />

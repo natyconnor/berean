@@ -16,6 +16,7 @@ import {
   HoverEditButton,
   NoteContent,
 } from "@/components/notes/view/note-card-primitives";
+import { NoteEditor } from "@/components/notes/note-editor";
 
 const fadeInOut = {
   initial: { opacity: 0, y: -4 },
@@ -31,10 +32,13 @@ interface VerseNotesProps {
   isOpen: boolean;
   viewMode?: "compose" | "read";
   isPill?: boolean;
+  editingNoteId?: Id<"notes"> | null;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
   onDelete: (noteId: Id<"notes">) => void;
+  onSaveEdit: (content: string, tags: string[]) => Promise<void>;
+  onCancelEditing: () => void;
   onAddNote: () => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -45,10 +49,13 @@ export const VerseNotes = memo(function VerseNotes({
   isOpen,
   viewMode = "compose",
   isPill = false,
+  editingNoteId = null,
   onOpen,
   onClose,
   onEdit,
   onDelete,
+  onSaveEdit,
+  onCancelEditing,
   onAddNote,
   onMouseEnter,
   onMouseLeave,
@@ -125,16 +132,27 @@ export const VerseNotes = memo(function VerseNotes({
           {notes.map((note, index) => (
             <motion.div
               key={note.noteId}
+              layout
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.15, delay: index * 0.03 }}
             >
-              <ExpandedBubble
-                note={note}
-                density={isReadMode ? "reading" : "default"}
-                onEdit={() => onEdit(note.noteId)}
-                onDelete={() => onDelete(note.noteId)}
-              />
+              {editingNoteId === note.noteId ? (
+                <NoteEditor
+                  verseRef={note.verseRef}
+                  initialContent={note.content}
+                  initialTags={note.tags}
+                  onSave={onSaveEdit}
+                  onCancel={onCancelEditing}
+                />
+              ) : (
+                <ExpandedBubble
+                  note={note}
+                  density={isReadMode ? "reading" : "default"}
+                  onEdit={() => onEdit(note.noteId)}
+                  onDelete={() => onDelete(note.noteId)}
+                />
+              )}
             </motion.div>
           ))}
         </motion.div>
