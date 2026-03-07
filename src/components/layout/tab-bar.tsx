@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
-import { LogOut, Plus, Search, Tags } from "lucide-react";
+import { LogOut, Search, TableOfContents, Tags } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SearchDialog } from "@/components/notes/search-dialog";
 import { ThemeDropdown } from "./theme-dropdown";
@@ -16,6 +17,7 @@ export function TabBar() {
   const { tabs, activeTabId, setActiveTab, closeTab } = useTabs();
   const { signOut } = useAuthActions();
   const location = useLocation();
+  const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false);
   const isSearchRoute = location.pathname === "/search";
   const savedSearchState = readSearchWorkspaceState();
   const searchLinkState = {
@@ -24,6 +26,18 @@ export function TabBar() {
     mode: savedSearchState.params.mode,
     noteId: savedSearchState.params.noteId,
   };
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        setPassageNavigatorOpen((open) => !open);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <div className="flex items-center border-b bg-muted/30 h-10 shrink-0">
@@ -40,13 +54,6 @@ export function TabBar() {
               />
             ))}
           </AnimatePresence>
-          <PassageNavigator
-            trigger={
-              <button className="h-8 w-8 mx-1 shrink-0 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer">
-                <Plus className="h-4 w-4" />
-              </button>
-            }
-          />
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
@@ -67,6 +74,21 @@ export function TabBar() {
             <Search className="h-4 w-4" />
           </Link>
         </TooltipButton>
+        <PassageNavigator
+          open={passageNavigatorOpen}
+          onOpenChange={setPassageNavigatorOpen}
+          trigger={
+            <TooltipButton
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              tooltip="Go to passage"
+              aria-label="Go to passage"
+            >
+              <TableOfContents className="h-4 w-4" />
+            </TooltipButton>
+          }
+        />
         <TooltipButton
           asChild
           variant="ghost"

@@ -1,8 +1,7 @@
 import { TooltipButton } from "@/components/ui/tooltip-button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useTabs } from "@/lib/use-tabs"
-import { toPassageId } from "@/lib/verse-ref-utils"
-import { getBookInfo, BIBLE_BOOKS } from "@/lib/bible-books"
+import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation"
 
 interface ChapterHeaderProps {
   book: string
@@ -11,32 +10,18 @@ interface ChapterHeaderProps {
 
 export function ChapterHeader({ book, chapter }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs()
-  const bookInfo = getBookInfo(book)
-  const bookIndex = BIBLE_BOOKS.findIndex((b) => b.name === book)
-
-  const hasPrev = chapter > 1 || bookIndex > 0
-  const hasNext = (bookInfo && chapter < bookInfo.chapters) || bookIndex < BIBLE_BOOKS.length - 1
+  const { previous, next } = getAdjacentChapterDestinations(book, chapter)
+  const hasPrev = previous !== null
+  const hasNext = next !== null
 
   function goPrev() {
-    if (chapter > 1) {
-      const id = toPassageId(book, chapter - 1)
-      navigateActiveTab(id, `${book} ${chapter - 1}`)
-    } else if (bookIndex > 0) {
-      const prevBook = BIBLE_BOOKS[bookIndex - 1]
-      const id = toPassageId(prevBook.name, prevBook.chapters)
-      navigateActiveTab(id, `${prevBook.name} ${prevBook.chapters}`)
-    }
+    if (!previous) return
+    navigateActiveTab(previous.passageId, previous.label)
   }
 
   function goNext() {
-    if (bookInfo && chapter < bookInfo.chapters) {
-      const id = toPassageId(book, chapter + 1)
-      navigateActiveTab(id, `${book} ${chapter + 1}`)
-    } else if (bookIndex < BIBLE_BOOKS.length - 1) {
-      const nextBook = BIBLE_BOOKS[bookIndex + 1]
-      const id = toPassageId(nextBook.name, 1)
-      navigateActiveTab(id, `${nextBook.name} 1`)
-    }
+    if (!next) return
+    navigateActiveTab(next.passageId, next.label)
   }
 
   return (

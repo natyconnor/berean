@@ -1,11 +1,13 @@
-import { useState, useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { TableOfContents } from "lucide-react";
@@ -24,15 +26,21 @@ const slideVariants = {
 
 interface PassageNavigatorProps {
   trigger?: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function PassageNavigator({ trigger }: PassageNavigatorProps = {}) {
-  const [open, setOpen] = useState(false);
+export function PassageNavigator({
+  trigger,
+  open: openProp,
+  onOpenChange,
+}: PassageNavigatorProps = {}) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
   const [search, setSearch] = useState("");
-  const { openTab } = useTabs();
-
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const open = openProp ?? uncontrolledOpen;
+  const { openTab } = useTabs();
 
   const filteredBooks = useMemo(
     () =>
@@ -58,23 +66,31 @@ export function PassageNavigator({ trigger }: PassageNavigatorProps = {}) {
   function selectChapter(book: BookInfo, chapter: number) {
     const passageId = toPassageId(book.name, chapter);
     openTab(passageId, `${book.name} ${chapter}`);
-    setOpen(false);
+    handleOpenChange(false);
+  }
+
+  function resetState() {
     setSelectedBook(null);
     setSearch("");
+    setHighlightedIndex(0);
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (openProp === undefined) {
+      setUncontrolledOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+    if (!nextOpen) {
+      resetState();
+    }
   }
 
   return (
-    <Popover
+    <Dialog
       open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (!o) {
-          setSelectedBook(null);
-          setSearch("");
-        }
-      }}
+      onOpenChange={handleOpenChange}
     >
-      <PopoverTrigger asChild>
+      <DialogTrigger asChild>
         {trigger ?? (
           <TooltipButton
             variant="ghost"
@@ -85,8 +101,11 @@ export function PassageNavigator({ trigger }: PassageNavigatorProps = {}) {
             <TableOfContents className="h-4 w-4" />
           </TooltipButton>
         )}
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-0 overflow-hidden" align="start">
+      </DialogTrigger>
+      <DialogContent className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-md">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Go to passage</DialogTitle>
+        </DialogHeader>
         <AnimatePresence mode="wait" initial={false}>
           {!selectedBook ? (
             <motion.div
@@ -97,7 +116,7 @@ export function PassageNavigator({ trigger }: PassageNavigatorProps = {}) {
               exit="exitToLeft"
               transition={{ duration: 0.15, ease: "easeOut" }}
             >
-              <div className="p-2 border-b">
+              <div className="border-b p-2">
                 <Input
                   placeholder="Search books..."
                   value={search}
@@ -172,7 +191,7 @@ export function PassageNavigator({ trigger }: PassageNavigatorProps = {}) {
               exit="exitToRight"
               transition={{ duration: 0.15, ease: "easeOut" }}
             >
-              <div className="p-2 border-b">
+              <div className="border-b p-2">
                 <button
                   className="text-sm text-muted-foreground hover:text-foreground cursor-pointer"
                   onClick={() => setSelectedBook(null)}
@@ -202,7 +221,7 @@ export function PassageNavigator({ trigger }: PassageNavigatorProps = {}) {
             </motion.div>
           )}
         </AnimatePresence>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   );
 }

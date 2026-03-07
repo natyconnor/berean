@@ -1,10 +1,10 @@
 interface CopyrightNoticeProps {
-  text: string
+  text: string;
 }
 
 export function CopyrightNotice({ text }: CopyrightNoticeProps) {
   return (
-    <div className="mt-8 pt-4 border-t text-xs text-muted-foreground leading-relaxed">
+    <div className="mt-4 p-4 text-xs text-muted-foreground leading-relaxed">
       <p>{text}</p>
       <p className="mt-1">
         <a
@@ -17,5 +17,5 @@ export function CopyrightNotice({ text }: CopyrightNoticeProps) {
         </a>
       </p>
     </div>
-  )
+  );
 }
