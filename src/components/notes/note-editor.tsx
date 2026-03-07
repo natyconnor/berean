@@ -98,7 +98,7 @@ export function NoteEditor({
         isDialogPresentation
           ? "px-1 pb-1"
           : cn(
-              "rounded-lg p-3 shadow-sm",
+              "rounded-lg p-2.5 shadow-sm",
               isPassage
                 ? "border-l-2 border border-amber-200 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-700/50 border-l-amber-400 dark:border-l-amber-600/70"
                 : "border bg-card"
@@ -137,7 +137,7 @@ export function NoteEditor({
         placeholder="Write your note..."
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        className={cn("resize-y text-sm", isDialogPresentation ? "min-h-[180px]" : "min-h-[100px]")}
+        className={cn("resize-y text-sm", isDialogPresentation ? "min-h-[180px]" : "min-h-[96px]")}
       />
 
       <div className="space-y-2">

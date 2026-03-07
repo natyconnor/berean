@@ -16,6 +16,7 @@ import {
   NoteTagList,
   NoteContent,
 } from "@/components/notes/view/note-card-primitives";
+import { NoteEditor } from "@/components/notes/note-editor";
 
 type PassageNote = NoteWithRef;
 
@@ -24,7 +25,11 @@ interface PassageNotesBubbleProps {
   isOpen: boolean;
   isGlowing: boolean;
   viewMode?: "compose" | "read";
+  isPill?: boolean;
   compact?: boolean;
+  editingNoteId?: Id<"notes"> | null;
+  onSaveEdit?: (content: string, tags: string[]) => void | Promise<void>;
+  onCancelEdit?: () => void;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
@@ -39,7 +44,11 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
   isOpen,
   isGlowing,
   viewMode = "compose",
+  isPill = false,
   compact = false,
+  editingNoteId = null,
+  onSaveEdit,
+  onCancelEdit,
   onOpen,
   onClose,
   onEdit,
@@ -50,12 +59,19 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
 }: PassageNotesBubbleProps) {
   if (notes.length === 0) return null;
   const isReadMode = viewMode === "read";
+  const supportsInlineEditing = !!onSaveEdit && !!onCancelEdit;
+  const editingNote =
+    supportsInlineEditing && editingNoteId
+      ? notes.find((note) => note.noteId === editingNoteId)
+      : undefined;
+  const isEditingWithinGroup = !!editingNote;
+  const shouldShowExpanded = isOpen || isReadMode || isEditingWithinGroup;
 
   const layoutTransition = {
     duration: 0.24,
     ease: [0.22, 1, 0.36, 1] as const,
   };
-  const previewLength = compact ? 40 : 100;
+  const previewLength = compact ? 34 : 100;
   const preview =
     notes[0].content.length > previewLength
       ? notes[0].content.slice(0, previewLength) + "..."
@@ -63,7 +79,14 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
 
   return (
     <motion.div layout transition={{ layout: layoutTransition }}>
-      {!isOpen && !isReadMode ? (
+      {isPill && !shouldShowExpanded && !isReadMode ? (
+        <PassageNotesPill
+          count={notes.length}
+          verseRefLabel={formatVerseRef(notes[0].verseRef)}
+          onClick={onOpen}
+          isGlowing={isGlowing}
+        />
+      ) : !shouldShowExpanded && !isReadMode ? (
         <div
           data-note-trigger
           className={cn(
@@ -108,7 +131,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
             <p
               className={cn(
                 "text-muted-foreground leading-relaxed",
-                compact ? "line-clamp-1 text-[11px]" : "line-clamp-2"
+                compact ? "line-clamp-1 text-[10px]" : "line-clamp-2"
               )}
             >
               {preview}
@@ -145,7 +168,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           className={
             isReadMode
               ? "space-y-3 rounded-xl border border-amber-200 bg-amber-50/30 dark:bg-amber-900/20 dark:border-amber-700/50 p-3"
-              : "space-y-2 rounded-lg border border-amber-200 bg-amber-50/40 dark:bg-amber-900/15 dark:border-amber-700/50 p-2"
+              : "space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 dark:bg-amber-900/15 dark:border-amber-700/50 p-2.5"
           }
           onClick={(e) => e.stopPropagation()}
           onMouseEnter={onMouseEnter}
@@ -190,16 +213,32 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           {notes.map((note, index) => (
             <motion.div
               key={note.noteId}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.15, delay: index * 0.03 }}
+              layout
+              transition={{ layout: layoutTransition }}
+              initial={index === 0 ? { opacity: 0, y: -4 } : undefined}
+              animate={index === 0 ? { opacity: 1, y: 0 } : undefined}
             >
-              <ExpandedPassageNote
-                note={note}
-                density={isReadMode ? "reading" : "default"}
-                onEdit={() => onEdit(note.noteId)}
-                onDelete={() => onDelete(note.noteId)}
-              />
+              {isEditingWithinGroup &&
+              supportsInlineEditing &&
+              editingNoteId === note.noteId ? (
+                <div data-note-surface>
+                  <NoteEditor
+                    verseRef={note.verseRef}
+                    initialContent={note.content}
+                    initialTags={note.tags}
+                    variant="passage"
+                    onSave={onSaveEdit!}
+                    onCancel={onCancelEdit!}
+                  />
+                </div>
+              ) : (
+                <ExpandedPassageNote
+                  note={note}
+                  density={isReadMode ? "reading" : "default"}
+                  onEdit={() => onEdit(note.noteId)}
+                  onDelete={() => onDelete(note.noteId)}
+                />
+              )}
             </motion.div>
           ))}
         </div>
@@ -207,6 +246,39 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
     </motion.div>
   );
 });
+
+function PassageNotesPill({
+  count,
+  verseRefLabel,
+  onClick,
+  isGlowing,
+}: {
+  count: number;
+  verseRefLabel: string;
+  onClick: () => void;
+  isGlowing: boolean;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          data-note-trigger
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-600/45 dark:bg-amber-900/20 dark:text-amber-300",
+            isGlowing && "ring-1 ring-amber-400/50"
+          )}
+          onClick={onClick}
+        >
+          <BookOpen className="h-3 w-3" />
+          <span>{count}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {count} passage {count === 1 ? "note" : "notes"} for {verseRefLabel}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function ExpandedPassageNote({
   note,

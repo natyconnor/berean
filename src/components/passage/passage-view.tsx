@@ -193,10 +193,10 @@ export function PassageView({
     isReadMode && (!!creatingFor || !!editingNote);
   const topGridClass = isReadMode
     ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
-    : "grid grid-cols-[1fr_minmax(280px,360px)] gap-4";
+    : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5";
   const containerClass = isReadMode
     ? "max-w-[1400px] mx-auto px-6 pb-16"
-    : "max-w-6xl mx-auto px-4 pb-16";
+    : "max-w-[1320px] mx-auto px-5 pb-16";
   const focusStartVerse = focusRange?.startVerse;
   const focusEndVerse = focusRange?.endVerse;
   const focusRequestKey =

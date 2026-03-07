@@ -109,84 +109,69 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const isPassageOpen = openPassageKey === verseNumber
   const isCreatingHere = creatingFor?.startVerse === verseNumber && !editingNoteId
 
-  const editingSingleNote = editingNoteId
-    ? singleNotes.find((n) => n.noteId === editingNoteId)
-    : undefined
-  const editingPassageNote = editingNoteId
-    ? passageNotes.find((n) => n.noteId === editingNoteId)
-    : undefined
+  const isEditingSingleHere =
+    editingNoteId !== null && singleNotes.some((note) => note.noteId === editingNoteId)
+  const isEditingPassageHere =
+    editingNoteId !== null && passageNotes.some((note) => note.noteId === editingNoteId)
 
   const isAnyOpen =
     isVerseOpen ||
     isPassageOpen ||
     isCreatingHere ||
-    !!editingSingleNote ||
-    !!editingPassageNote
+    isEditingSingleHere ||
+    isEditingPassageHere
 
   const hasBothNoteTypes = singleNotes.length > 0 && passageNotes.length > 0
   const useSideBySide =
     !isReadMode &&
     hasBothNoteTypes &&
-    !isCreatingHere &&
-    !editingSingleNote &&
-    !editingPassageNote
+    !isCreatingHere
   const showVerseAsPill = useSideBySide && isPassageOpen
-  const showPassageCompact = useSideBySide && !isPassageOpen
+  const showPassageAsPill =
+    useSideBySide && (isVerseOpen || isEditingSingleHere) && !isPassageOpen
+  const showPassageCompact = useSideBySide && !isPassageOpen && !showPassageAsPill
 
   const passageNoteJsx = (
-    <AnimatePresence initial={false}>
-      {passageNotes.length > 0 && (!editingPassageNote || !shouldShowInlineEditors) ? (
-        <motion.div
-          layout
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ opacity: { duration: 0.15 }, layout: layoutTransition }}
-          className={cn(useSideBySide && (isPassageOpen ? "flex-1 min-w-[240px]" : "w-[140px] shrink-0"))}
-        >
-          <PassageNotesBubble
-            notes={passageNotes}
-            isOpen={isPassageOpen}
-            isGlowing={isPassageRangeActive}
-            viewMode={viewMode}
-            compact={showPassageCompact}
-            onOpen={() => onOpenPassageNotes(verseNumber)}
-            onClose={onClickAway}
-            onEdit={(noteId: Id<"notes">) => onEditNote(noteId, verseNumber, true)}
-            onDelete={onDelete}
-            onAddNote={() =>
-              onStartCreatingPassageNote({
-                book: passageNotes[0].verseRef.book,
-                chapter: passageNotes[0].verseRef.chapter,
-                startVerse: passageNotes[0].verseRef.startVerse,
-                endVerse: passageNotes[0].verseRef.endVerse,
-              })
-            }
-            onMouseEnter={() => onPassageBubbleMouseEnter(verseNumber)}
-            onMouseLeave={onPassageBubbleMouseLeave}
-          />
-        </motion.div>
-      ) : editingPassageNote && shouldShowInlineEditors ? (
-        <motion.div
-          key={`edit-passage-${editingNoteId}`}
-          layout
-          data-note-surface
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <NoteEditor
-            verseRef={editingPassageNote.verseRef}
-            initialContent={editingPassageNote.content}
-            initialTags={editingPassageNote.tags}
-            variant="passage"
-            onSave={onSaveEdit}
-            onCancel={onCancelEditing}
-          />
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+    passageNotes.length > 0 ? (
+      <motion.div
+        layout
+        transition={{ layout: layoutTransition }}
+        className={cn(
+          useSideBySide &&
+            (isPassageOpen
+              ? "flex-1 min-w-[260px]"
+              : showPassageAsPill
+                ? "shrink-0"
+                : "w-[180px] shrink-0")
+        )}
+      >
+        <PassageNotesBubble
+          notes={passageNotes}
+          isOpen={isPassageOpen}
+          isGlowing={isPassageRangeActive}
+          viewMode={viewMode}
+          isPill={showPassageAsPill}
+          compact={showPassageCompact}
+          editingNoteId={shouldShowInlineEditors ? editingNoteId : null}
+          onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
+          onCancelEdit={shouldShowInlineEditors ? onCancelEditing : undefined}
+          onOpen={() => onOpenPassageNotes(verseNumber)}
+          onClose={onClickAway}
+          onEdit={(noteId: Id<"notes">) => onEditNote(noteId, verseNumber, true)}
+          onDelete={onDelete}
+          onAddNote={() =>
+            onStartCreatingPassageNote({
+              book: passageNotes[0].verseRef.book,
+              chapter: passageNotes[0].verseRef.chapter,
+              startVerse: passageNotes[0].verseRef.startVerse,
+              endVerse: passageNotes[0].verseRef.endVerse,
+            })
+          }
+          onMouseEnter={() => onPassageBubbleMouseEnter(verseNumber)}
+          onMouseLeave={onPassageBubbleMouseLeave}
+        />
+      </motion.div>
+    ) : null
   )
 
   return (
@@ -196,7 +181,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
       className={
         isReadMode
           ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
-          : "grid grid-cols-[1fr_minmax(280px,360px)] gap-4 items-start"
+          : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start"
       }
     >
       <motion.div layout="position" transition={{ layout: layoutTransition }}>
@@ -235,60 +220,35 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         className={cn("py-1", useSideBySide ? "flex gap-2 items-start" : "space-y-1.5")}
         {...(isAnyOpen ? { "data-notes-open": "" } : {})}
       >
-        <AnimatePresence mode="popLayout" initial={false}>
-          {editingSingleNote && shouldShowInlineEditors ? (
-            <motion.div
-              key={`edit-${editingNoteId}`}
-              layout
-              data-note-surface
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="flex-1 min-w-0"
-            >
-              <NoteEditor
-                verseRef={editingSingleNote.verseRef}
-                initialContent={editingSingleNote.content}
-                initialTags={editingSingleNote.tags}
-                onSave={onSaveEdit}
-                onCancel={onCancelEditing}
-              />
-            </motion.div>
-          ) : singleNotes.length > 0 ? (
-            <motion.div
-              key="verse-notes"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className={cn(useSideBySide && (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"))}
-            >
-              <VerseNotes
-                notes={singleNotes}
-                isOpen={isVerseOpen}
-                viewMode={viewMode}
-                isPill={showVerseAsPill}
-                onOpen={() => onOpenVerseNotes(verseNumber)}
-                onClose={onClickAway}
-                onEdit={(noteId) => onEditNote(noteId, verseNumber, false)}
-                onDelete={onDelete}
-                onAddNote={() => onAddNote(verseNumber)}
-                onMouseEnter={() => onSingleBubbleMouseEnter(verseNumber)}
-                onMouseLeave={onSingleBubbleMouseLeave}
-              />
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        {singleNotes.length > 0 ? (
+          <motion.div
+            layout
+            transition={{ layout: layoutTransition }}
+            className={cn(useSideBySide && (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"))}
+          >
+            <VerseNotes
+              notes={singleNotes}
+              isOpen={isVerseOpen}
+              viewMode={viewMode}
+              isPill={showVerseAsPill}
+              editingNoteId={shouldShowInlineEditors ? editingNoteId : null}
+              onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
+              onCancelEdit={shouldShowInlineEditors ? onCancelEditing : undefined}
+              onOpen={() => onOpenVerseNotes(verseNumber)}
+              onClose={onClickAway}
+              onEdit={(noteId) => onEditNote(noteId, verseNumber, false)}
+              onDelete={onDelete}
+              onAddNote={() => onAddNote(verseNumber)}
+              onMouseEnter={() => onSingleBubbleMouseEnter(verseNumber)}
+              onMouseLeave={onSingleBubbleMouseLeave}
+            />
+          </motion.div>
+        ) : null}
 
         {passageNoteJsx}
 
         <AnimatePresence initial={false}>
-          {shouldShowInlineEditors &&
-            !editingSingleNote &&
-            !editingPassageNote &&
-            isCreatingHere &&
-            creatingFor && (
+          {shouldShowInlineEditors && isCreatingHere && creatingFor && (
             <motion.div
               key={`create-${creatingFor.startVerse}-${creatingFor.endVerse}`}
               layout

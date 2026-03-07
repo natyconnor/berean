@@ -7,6 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { NoteEditor } from "@/components/notes/note-editor";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import {
@@ -31,6 +32,9 @@ interface VerseNotesProps {
   isOpen: boolean;
   viewMode?: "compose" | "read";
   isPill?: boolean;
+  editingNoteId?: Id<"notes"> | null;
+  onSaveEdit?: (content: string, tags: string[]) => void | Promise<void>;
+  onCancelEdit?: () => void;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
@@ -45,6 +49,9 @@ export const VerseNotes = memo(function VerseNotes({
   isOpen,
   viewMode = "compose",
   isPill = false,
+  editingNoteId = null,
+  onSaveEdit,
+  onCancelEdit,
   onOpen,
   onClose,
   onEdit,
@@ -55,14 +62,22 @@ export const VerseNotes = memo(function VerseNotes({
 }: VerseNotesProps) {
   if (notes.length === 0) return null;
   const isReadMode = viewMode === "read";
+  const supportsInlineEditing = !!onSaveEdit && !!onCancelEdit;
+  const editingNote =
+    supportsInlineEditing && editingNoteId
+      ? notes.find((note) => note.noteId === editingNoteId)
+      : undefined;
+  const isEditingWithinGroup = !!editingNote;
+  const shouldShowExpanded = isOpen || isReadMode || isEditingWithinGroup;
+  const layoutTransition = { duration: 0.2, ease: [0.22, 1, 0.36, 1] as const };
 
   return (
     <AnimatePresence mode="popLayout" initial={false}>
-      {isPill ? (
+      {isPill && !isEditingWithinGroup ? (
         <motion.div key="pill" {...fadeInOut}>
           <VerseNotesPill count={notes.length} onClick={onOpen} />
         </motion.div>
-      ) : !isOpen && !isReadMode ? (
+      ) : !shouldShowExpanded && !isReadMode ? (
         notes.length === 1 ? (
           <motion.div key="collapsed-single" {...fadeInOut}>
             <CollapsedBubble
@@ -89,7 +104,7 @@ export const VerseNotes = memo(function VerseNotes({
           key="expanded"
           {...fadeInOut}
           data-note-surface
-          className={isReadMode ? "space-y-3" : "space-y-2"}
+          className={isReadMode ? "space-y-3" : "space-y-1.5"}
           onClick={(e) => e.stopPropagation()}
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
@@ -125,16 +140,31 @@ export const VerseNotes = memo(function VerseNotes({
           {notes.map((note, index) => (
             <motion.div
               key={note.noteId}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.15, delay: index * 0.03 }}
+              layout
+              transition={layoutTransition}
+              initial={index === 0 ? { opacity: 0, y: -4 } : undefined}
+              animate={index === 0 ? { opacity: 1, y: 0 } : undefined}
             >
-              <ExpandedBubble
-                note={note}
-                density={isReadMode ? "reading" : "default"}
-                onEdit={() => onEdit(note.noteId)}
-                onDelete={() => onDelete(note.noteId)}
-              />
+              {isEditingWithinGroup &&
+              supportsInlineEditing &&
+              editingNoteId === note.noteId ? (
+                <div data-note-surface>
+                  <NoteEditor
+                    verseRef={note.verseRef}
+                    initialContent={note.content}
+                    initialTags={note.tags}
+                    onSave={onSaveEdit!}
+                    onCancel={onCancelEdit!}
+                  />
+                </div>
+              ) : (
+                <ExpandedBubble
+                  note={note}
+                  density={isReadMode ? "reading" : "default"}
+                  onEdit={() => onEdit(note.noteId)}
+                  onDelete={() => onDelete(note.noteId)}
+                />
+              )}
             </motion.div>
           ))}
         </motion.div>
@@ -159,7 +189,7 @@ function CollapsedBubble({
   return (
     <div
       data-note-trigger
-      className="group relative border rounded-lg px-3 py-2 cursor-pointer transition-all hover:shadow-sm text-sm bg-card border-border"
+      className="group relative border rounded-lg px-2.5 py-1.5 cursor-pointer transition-all hover:shadow-sm text-[13px] bg-card border-border"
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -169,7 +199,7 @@ function CollapsedBubble({
         truncateAt={100}
         className="text-muted-foreground line-clamp-2"
       />
-      <NoteTagList tags={note.tags} className="mt-1.5" />
+      <NoteTagList tags={note.tags} className="mt-1" />
       <HoverEditButton onEdit={onEdit} />
     </div>
   );
@@ -197,7 +227,7 @@ function StackedBubble({
       onMouseLeave={onMouseLeave}
     >
       <StackedCardBackground count={count} variant="muted" />
-      <div className="relative border rounded-lg px-3 py-2 transition-all hover:shadow-sm text-sm bg-card border-border">
+      <div className="relative border rounded-lg px-2.5 py-1.5 transition-all hover:shadow-sm text-xs bg-card border-border">
         <div className="flex items-center justify-between mb-0.5">
           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
             {count} notes
@@ -252,7 +282,7 @@ function ExpandedBubble({
       className={
         isReading
           ? "border rounded-xl px-4 py-3 shadow-sm bg-card border-border"
-          : "border rounded-lg px-3 py-2 shadow-sm text-sm bg-card border-border"
+          : "border rounded-lg px-3 py-2.5 shadow-sm text-sm bg-card/95 border-border/90"
       }
     >
       <div className="flex items-start justify-between gap-2">

@@ -314,6 +314,32 @@ export function usePassageNotesInteraction(
     clearSelection()
   }, [clearSelection])
 
+  useEffect(() => {
+    function handleEscapeKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return
+      if (
+        openVerseKey === null &&
+        openPassageKey === null &&
+        creatingFor === null &&
+        editingNoteId === null &&
+        selectedVerses.size === 0
+      ) {
+        return
+      }
+      handleClickAway()
+    }
+
+    document.addEventListener("keydown", handleEscapeKey)
+    return () => document.removeEventListener("keydown", handleEscapeKey)
+  }, [
+    creatingFor,
+    editingNoteId,
+    handleClickAway,
+    openPassageKey,
+    openVerseKey,
+    selectedVerses,
+  ])
+
   const openVerseNotes = useCallback((verseNumber: number) => {
     setOpenVerseKey(verseNumber)
     setOpenPassageKey(null)
