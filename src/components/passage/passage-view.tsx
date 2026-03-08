@@ -35,6 +35,13 @@ type PassageViewMode = "compose" | "read";
 type NoteVisibility = "all" | "noted";
 
 const READING_MODE_STORAGE_KEY = "bible-notes-passage-view-mode";
+const EDITABLE_SELECTOR =
+  'input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]';
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.closest(EDITABLE_SELECTOR) !== null;
+}
 
 function resolveInitialViewMode(): PassageViewMode {
   try {
@@ -250,14 +257,7 @@ export function PassageView({
     function handleKeyDown(e: KeyboardEvent) {
       if (!e.altKey) return;
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      )
-        return;
+      if (isEditableTarget(e.target)) return;
 
       e.preventDefault();
       if (e.key === "ArrowLeft" && previous) {
@@ -270,6 +270,27 @@ export function PassageView({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [previous, next, navigateActiveTab]);
+
+  useEffect(() => {
+    function handleModeShortcuts(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+      if (e.repeat) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isEditableTarget(e.target)) return;
+
+      const key = e.key.toLowerCase();
+      if (key === "r") {
+        e.preventDefault();
+        setViewMode("read");
+      } else if (key === "c") {
+        e.preventDefault();
+        setViewMode("compose");
+      }
+    }
+
+    document.addEventListener("keydown", handleModeShortcuts);
+    return () => document.removeEventListener("keydown", handleModeShortcuts);
+  }, [setViewMode]);
 
   // Save scroll position before navigating away from the current passage
   useEffect(() => {
@@ -359,17 +380,25 @@ export function PassageView({
                     effectiveViewMode === "compose" ? "secondary" : "ghost"
                   }
                   onClick={() => setViewMode("compose")}
+                  className="gap-1.5"
                 >
                   <Pencil className="h-3 w-3" />
                   Compose
+                  <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                    C
+                  </kbd>
                 </Button>
                 <Button
                   size="xs"
                   variant={effectiveViewMode === "read" ? "secondary" : "ghost"}
                   onClick={() => setViewMode("read")}
+                  className="gap-1.5"
                 >
                   <BookOpen className="h-3 w-3" />
                   Read
+                  <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                    R
+                  </kbd>
                 </Button>
               </div>
             </div>

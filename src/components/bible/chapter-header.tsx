@@ -1,27 +1,27 @@
-import { TooltipButton } from "@/components/ui/tooltip-button"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { useTabs } from "@/lib/use-tabs"
-import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation"
+import { TooltipButton } from "@/components/ui/tooltip-button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTabs } from "@/lib/use-tabs";
+import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 
 interface ChapterHeaderProps {
-  book: string
-  chapter: number
+  book: string;
+  chapter: number;
 }
 
 export function ChapterHeader({ book, chapter }: ChapterHeaderProps) {
-  const { navigateActiveTab } = useTabs()
-  const { previous, next } = getAdjacentChapterDestinations(book, chapter)
-  const hasPrev = previous !== null
-  const hasNext = next !== null
+  const { navigateActiveTab } = useTabs();
+  const { previous, next } = getAdjacentChapterDestinations(book, chapter);
+  const hasPrev = previous !== null;
+  const hasNext = next !== null;
 
   function goPrev() {
-    if (!previous) return
-    navigateActiveTab(previous.passageId, previous.label)
+    if (!previous) return;
+    navigateActiveTab(previous.passageId, previous.label);
   }
 
   function goNext() {
-    if (!next) return
-    navigateActiveTab(next.passageId, next.label)
+    if (!next) return;
+    navigateActiveTab(next.passageId, next.label);
   }
 
   return (
@@ -50,5 +50,5 @@ export function ChapterHeader({ book, chapter }: ChapterHeaderProps) {
         <ChevronRight className="h-4 w-4" />
       </TooltipButton>
     </div>
-  )
+  );
 }
