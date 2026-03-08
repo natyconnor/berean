@@ -1,43 +1,43 @@
-import { memo } from "react"
-import { Plus } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { memo } from "react";
+import { Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface VerseSelectionState {
-  isSelected: boolean
-  isInSelectionRange: boolean
-  isPassageSelection: boolean
+  isSelected: boolean;
+  isInSelectionRange: boolean;
+  isPassageSelection: boolean;
 }
 
 export interface VerseNoteIndicatorState {
-  hasOwnNote: boolean
-  isPassageAnchor: boolean
-  isInPassageRange: boolean
+  hasOwnNote: boolean;
+  isPassageAnchor: boolean;
+  isInPassageRange: boolean;
 }
 
 export interface VerseHoverState {
-  isPassageRangeActive: boolean
-  isNoteBubbleHovered: boolean
+  isPassageRangeActive: boolean;
+  isNoteBubbleHovered: boolean;
 }
 
 export interface VerseFocusState {
-  isTarget: boolean
+  isTarget: boolean;
 }
 
 export interface VerseInteractionHandlers {
-  onAddNote: (verseNumber: number) => void
-  onMouseDown: (verseNumber: number) => void
-  onMouseEnter: (verseNumber: number) => void
-  onMouseLeave: () => void
+  onAddNote: (verseNumber: number) => void;
+  onMouseDown: (verseNumber: number) => void;
+  onMouseEnter: (verseNumber: number) => void;
+  onMouseLeave: () => void;
 }
 
 interface VerseRowLeftProps {
-  verseNumber: number
-  text: string
-  selection: VerseSelectionState
-  noteIndicator: VerseNoteIndicatorState
-  hover: VerseHoverState
-  focus?: VerseFocusState
-  handlers: VerseInteractionHandlers
+  verseNumber: number;
+  text: string;
+  selection: VerseSelectionState;
+  noteIndicator: VerseNoteIndicatorState;
+  hover: VerseHoverState;
+  focus?: VerseFocusState;
+  handlers: VerseInteractionHandlers;
 }
 
 export const VerseRowLeft = memo(function VerseRowLeft({
@@ -49,28 +49,47 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   focus,
   handlers,
 }: VerseRowLeftProps) {
-  const { isSelected, isInSelectionRange, isPassageSelection } = selection
-  const { hasOwnNote, isPassageAnchor, isInPassageRange } = noteIndicator
-  const { isPassageRangeActive, isNoteBubbleHovered } = hover
-  const isFocusTarget = focus?.isTarget ?? false
-  const { onAddNote, onMouseDown, onMouseEnter, onMouseLeave } = handlers
+  const { isSelected, isInSelectionRange, isPassageSelection } = selection;
+  const { hasOwnNote, isPassageAnchor, isInPassageRange } = noteIndicator;
+  const { isPassageRangeActive, isNoteBubbleHovered } = hover;
+  const isFocusTarget = focus?.isTarget ?? false;
+  const shouldFlipTooltipBelow = verseNumber <= 2;
+  const { onAddNote, onMouseDown, onMouseEnter, onMouseLeave } = handlers;
   return (
     <div
       data-verse-number={verseNumber}
       className={cn(
         "group relative flex gap-2 py-2 px-3 min-h-10 rounded-sm transition-colors select-none cursor-pointer",
-        isSelected && isPassageSelection && "bg-amber-100/80 dark:bg-amber-800/30 ring-1 ring-amber-400/40 dark:ring-amber-500/30",
-        isSelected && !isPassageSelection && "bg-primary/10 ring-1 ring-primary/20",
-        isInSelectionRange && !isSelected && isPassageSelection && "bg-amber-50/60 dark:bg-amber-800/20",
-        isInSelectionRange && !isSelected && !isPassageSelection && "bg-primary/5",
-        isFocusTarget && "bg-sky-100/70 ring-1 ring-sky-400/40 dark:bg-sky-900/20 dark:ring-sky-500/40",
-        isNoteBubbleHovered && !isSelected && !isInSelectionRange && "bg-muted/70",
-        isPassageRangeActive && !isSelected && !isInSelectionRange && !isNoteBubbleHovered && "bg-amber-50/60 dark:bg-amber-800/20",
+        isSelected &&
+          isPassageSelection &&
+          "bg-amber-100/80 dark:bg-amber-800/30 ring-1 ring-amber-400/40 dark:ring-amber-500/30",
+        isSelected &&
+          !isPassageSelection &&
+          "bg-primary/10 ring-1 ring-primary/20",
+        isInSelectionRange &&
+          !isSelected &&
+          isPassageSelection &&
+          "bg-amber-50/60 dark:bg-amber-800/20",
+        isInSelectionRange &&
+          !isSelected &&
+          !isPassageSelection &&
+          "bg-primary/5",
+        isFocusTarget &&
+          "bg-sky-100/70 ring-1 ring-sky-400/40 dark:bg-sky-900/20 dark:ring-sky-500/40",
+        isNoteBubbleHovered &&
+          !isSelected &&
+          !isInSelectionRange &&
+          "bg-muted/70",
+        isPassageRangeActive &&
+          !isSelected &&
+          !isInSelectionRange &&
+          !isNoteBubbleHovered &&
+          "bg-amber-50/60 dark:bg-amber-800/20",
         !isSelected && !isInSelectionRange && "hover:bg-muted"
       )}
       onMouseDown={(e) => {
-        e.preventDefault()
-        onMouseDown(verseNumber)
+        e.preventDefault();
+        onMouseDown(verseNumber);
       }}
       onMouseEnter={() => onMouseEnter(verseNumber)}
       onMouseLeave={onMouseLeave}
@@ -99,16 +118,21 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         <button
           className="w-full h-full flex items-center justify-center px-2 rounded hover:bg-primary/10"
           onClick={(e) => {
-            e.stopPropagation()
-            onAddNote(verseNumber)
+            e.stopPropagation();
+            onAddNote(verseNumber);
           }}
         >
           <Plus className="h-4 w-4 text-primary" />
         </button>
-        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-3 py-1.5 text-xs rounded-md bg-foreground text-background whitespace-nowrap opacity-0 group-hover/addbtn:opacity-100 transition-opacity z-50">
+        <span
+          className={cn(
+            "pointer-events-none absolute left-1/2 -translate-x-1/2 px-3 py-1.5 text-xs rounded-md bg-foreground text-background whitespace-nowrap opacity-0 group-hover/addbtn:opacity-100 transition-opacity z-50",
+            shouldFlipTooltipBelow ? "top-full mt-1.5" : "bottom-full mb-1.5"
+          )}
+        >
           Add note
         </span>
       </div>
     </div>
-  )
-})
+  );
+});

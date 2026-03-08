@@ -109,20 +109,20 @@ export const VerseNotes = memo(function VerseNotes({
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
         >
-          <div className="flex items-center justify-between">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
-                  onClick={onAddNote}
-                >
-                  <Plus className="h-3 w-3" />
-                  New note
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Add new note for this verse</TooltipContent>
-            </Tooltip>
-            {!isReadMode && (
+          {!isReadMode && (
+            <div className="flex items-center justify-between">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                    onClick={onAddNote}
+                  >
+                    <Plus className="h-3 w-3" />
+                    New note
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Add new note for this verse</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -135,8 +135,8 @@ export const VerseNotes = memo(function VerseNotes({
                 </TooltipTrigger>
                 <TooltipContent>Collapse notes</TooltipContent>
               </Tooltip>
-            )}
-          </div>
+            </div>
+          )}
           {notes.map((note, index) => (
             <motion.div
               key={note.noteId}

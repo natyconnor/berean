@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,7 @@ interface PassageViewProps {
 }
 
 type PassageViewMode = "compose" | "read";
+type NoteVisibility = "all" | "noted";
 
 const READING_MODE_STORAGE_KEY = "bible-notes-passage-view-mode";
 
@@ -47,7 +48,6 @@ function resolveInitialViewMode(): PassageViewMode {
   return "compose";
 }
 
-
 export function PassageView({
   book,
   chapter,
@@ -60,14 +60,12 @@ export function PassageView({
   const [searchModeLock, setSearchModeLock] = useState<boolean>(
     () => focusSource === "search" && forcedViewMode === "read" && !!focusRange
   );
-  const [viewMode, setViewModeState] = useState<PassageViewMode>(
-    () =>
-      focusSource === "search" && forcedViewMode === "read"
-        ? "read"
-        : resolveInitialViewMode()
+  const [viewMode, setViewModeState] = useState<PassageViewMode>(() =>
+    focusSource === "search" && forcedViewMode === "read"
+      ? "read"
+      : resolveInitialViewMode()
   );
-  const [showOnlyWithNotes, setShowOnlyWithNotes] = useState(false);
-  const [activeTag, setActiveTag] = useState("all");
+  const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("all");
   const [isScrolled, setIsScrolled] = useState(false);
   const passageWrapperRef = useRef<HTMLDivElement>(null);
   const savedScrollPositions = useRef(new Map<string, number>());
@@ -123,7 +121,9 @@ export function PassageView({
     focusSource === "search" &&
     forcedViewMode === "read" &&
     !!focusRange;
-  const effectiveViewMode: PassageViewMode = isFocusNavigation ? "read" : viewMode;
+  const effectiveViewMode: PassageViewMode = isFocusNavigation
+    ? "read"
+    : viewMode;
   const isReadMode = effectiveViewMode === "read";
   const editorMode = isReadMode ? "dialog" : "inline";
 
@@ -146,15 +146,7 @@ export function PassageView({
     ? noteById.get(editingNoteId) ?? null
     : null;
 
-  const availableTags = useMemo(() => {
-    const tags = new Set<string>();
-    for (const note of noteById.values()) {
-      for (const tag of note.tags) {
-        tags.add(tag);
-      }
-    }
-    return Array.from(tags).sort((a, b) => a.localeCompare(b));
-  }, [noteById]);
+  const hasAnyNotes = noteById.size > 0;
 
   const filteredVerses = useMemo(() => {
     if (!data) return [];
@@ -163,19 +155,14 @@ export function PassageView({
       const singleNotes = singleVerseNotes.get(verse.number) ?? [];
       const passageNotes = passageNotesByAnchor.get(verse.number) ?? [];
 
-      const singleVisible =
-        isReadMode && !isFocusNavigation && activeTag !== "all"
-          ? singleNotes.filter((note) => note.tags.includes(activeTag))
-          : singleNotes;
-
-      const passageVisible =
-        isReadMode && !isFocusNavigation && activeTag !== "all"
-          ? passageNotes.filter((note) => note.tags.includes(activeTag))
-          : passageNotes;
-
-      const hasVisibleNotes =
-        singleVisible.length > 0 || passageVisible.length > 0;
-      if (isReadMode && !isFocusNavigation && showOnlyWithNotes && !hasVisibleNotes) {
+      const hasVisibleNotes = singleNotes.length > 0 || passageNotes.length > 0;
+      if (
+        isReadMode &&
+        !isFocusNavigation &&
+        noteVisibility === "noted" &&
+        hasAnyNotes &&
+        !hasVisibleNotes
+      ) {
         return [];
       }
 
@@ -183,18 +170,18 @@ export function PassageView({
         {
           verseNumber: verse.number,
           text: verse.text,
-          singleNotes: singleVisible,
-          passageNotes: passageVisible,
+          singleNotes,
+          passageNotes,
         },
       ];
     });
   }, [
-    activeTag,
     data,
+    hasAnyNotes,
     isFocusNavigation,
     isReadMode,
     passageNotesByAnchor,
-    showOnlyWithNotes,
+    noteVisibility,
     singleVerseNotes,
   ]);
 
@@ -269,7 +256,8 @@ export function PassageView({
         target.tagName === "INPUT" ||
         target.tagName === "TEXTAREA" ||
         target.isContentEditable
-      ) return;
+      )
+        return;
 
       e.preventDefault();
       if (e.key === "ArrowLeft" && previous) {
@@ -286,12 +274,14 @@ export function PassageView({
   // Save scroll position before navigating away from the current passage
   useEffect(() => {
     const key = `${book}-${chapter}`;
+    const wrapper = passageWrapperRef.current;
+    const scrollPositions = savedScrollPositions.current;
     return () => {
-      const viewport = passageWrapperRef.current?.querySelector<HTMLElement>(
+      const viewport = wrapper?.querySelector<HTMLElement>(
         "[data-slot='scroll-area-viewport']"
       );
       if (viewport) {
-        savedScrollPositions.current.set(key, viewport.scrollTop);
+        scrollPositions.set(key, viewport.scrollTop);
       }
     };
   }, [book, chapter]);
@@ -343,7 +333,10 @@ export function PassageView({
     : "max-w-[1320px] mx-auto px-5";
 
   return (
-    <div ref={passageWrapperRef} className="h-full flex flex-col overflow-hidden">
+    <div
+      ref={passageWrapperRef}
+      className="h-full flex flex-col overflow-hidden"
+    >
       <div
         className={cn(
           "shrink-0 bg-background transition-shadow duration-200",
@@ -354,176 +347,190 @@ export function PassageView({
           <div className="flex items-center">
             <ChapterHeader book={book} chapter={chapter} />
           </div>
-          <div className="flex items-end justify-between gap-2 pb-4">
-            <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              {isReadMode ? "Reading Notes" : "Notes"}
-            </span>
-            <div className="inline-flex items-center rounded-md border bg-background p-0.5">
-              <Button
-                size="xs"
-                variant={effectiveViewMode === "compose" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("compose")}
-              >
-                <Pencil className="h-3 w-3" />
-                Compose
-              </Button>
-              <Button
-                size="xs"
-                variant={effectiveViewMode === "read" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("read")}
-              >
-                <BookOpen className="h-3 w-3" />
-                Read
-              </Button>
+          <div className="flex flex-col gap-2 pb-3 pt-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Notes
+              </span>
+              <div className="inline-flex items-center rounded-md border bg-background p-0.5">
+                <Button
+                  size="xs"
+                  variant={
+                    effectiveViewMode === "compose" ? "secondary" : "ghost"
+                  }
+                  onClick={() => setViewMode("compose")}
+                >
+                  <Pencil className="h-3 w-3" />
+                  Compose
+                </Button>
+                <Button
+                  size="xs"
+                  variant={effectiveViewMode === "read" ? "secondary" : "ghost"}
+                  onClick={() => setViewMode("read")}
+                >
+                  <BookOpen className="h-3 w-3" />
+                  Read
+                </Button>
+              </div>
             </div>
+
+            {isReadMode &&
+              (hasAnyNotes ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Show</span>
+                  <div className="inline-flex items-center rounded-md border bg-background p-0.5">
+                    <Button
+                      size="xs"
+                      variant={noteVisibility === "all" ? "secondary" : "ghost"}
+                      onClick={() => setNoteVisibility("all")}
+                    >
+                      All Notes
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant={
+                        noteVisibility === "noted" ? "secondary" : "ghost"
+                      }
+                      onClick={() => setNoteVisibility("noted")}
+                    >
+                      Only Noted
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  No notes for this chapter
+                </p>
+              ))}
           </div>
         </div>
       </div>
 
       <ScrollArea className="flex-1 min-h-0 overflow-hidden">
-      <motion.div
-        key={passageKey}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        ref={containerRef}
-        className={containerClass}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
-        <div className={topGridClass}>
-          <div>
-            <GospelParallelBanner book={book} chapter={chapter} />
-          </div>
-          <div className="flex items-start justify-end">
-            {isReadMode && (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button
-                  size="xs"
-                  variant={showOnlyWithNotes ? "secondary" : "outline"}
-                  onClick={() => setShowOnlyWithNotes((prev) => !prev)}
-                >
-                  {showOnlyWithNotes
-                    ? "Showing noted verses"
-                    : "Only verses with notes"}
-                </Button>
-                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                  Tag
-                  <select
-                    value={activeTag}
-                    onChange={(e) => setActiveTag(e.target.value)}
-                    className="h-7 rounded-md border bg-background px-2 text-xs text-foreground"
-                  >
-                    <option value="all">All tags</option>
-                    {availableTags.map((tag) => (
-                      <option key={tag} value={tag}>
-                        {tag}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div>
-          {filteredVerses.map((verse) => (
-            <VerseRowWithNotes
-              key={verse.verseNumber}
-              verseNumber={verse.verseNumber}
-              text={verse.text}
-              viewMode={effectiveViewMode}
-              editorMode={editorMode}
-              selectedVerses={selectedVerses}
-              isInSelectionRange={isInSelection(verse.verseNumber)}
-              isPassageSelection={isPassageSelection}
-              singleNotes={verse.singleNotes}
-              passageNotes={verse.passageNotes}
-              passageAnchor={verseToPassageAnchor.get(verse.verseNumber)}
-              hoveredVerse={hoveredVerse}
-              hoveredPassageBubble={hoveredPassageBubble}
-              hoveredSingleBubble={hoveredSingleBubble}
-              openVerseKey={openVerseKey}
-              openPassageKey={openPassageKey}
-              creatingFor={creatingFor}
-              editingNoteId={editingNoteId}
-              isFocusTarget={
-                focusSource === "search" && focusRange
-                  ? verse.verseNumber >= focusRange.startVerse &&
-                    verse.verseNumber <= focusRange.endVerse
-                  : false
-              }
-              onAddNote={handleAddNote}
-              onMouseDown={handleVerseMouseDown}
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-              onSingleBubbleMouseEnter={handleSingleBubbleMouseEnter}
-              onSingleBubbleMouseLeave={handleSingleBubbleMouseLeave}
-              onPassageBubbleMouseEnter={handlePassageBubbleMouseEnter}
-              onPassageBubbleMouseLeave={handlePassageBubbleMouseLeave}
-              onOpenVerseNotes={openVerseNotes}
-              onOpenPassageNotes={openPassageNotes}
-              onEditNote={startEditingNote}
-              onCancelEditing={cancelEditing}
-              onDelete={handleDelete}
-              onSaveEdit={handleSaveEdit}
-              onSaveNew={handleSaveNew}
-              onClickAway={handleClickAway}
-              onStartCreatingPassageNote={startCreatingPassageNote}
-            />
-          ))}
-
+        <motion.div
+          key={passageKey}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          ref={containerRef}
+          className={containerClass}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
           <div className={topGridClass}>
             <div>
-              <ChapterPager book={book} chapter={chapter} />
-              <CopyrightNotice text={data.copyright} />
+              <GospelParallelBanner book={book} chapter={chapter} />
             </div>
             <div />
           </div>
-        </div>
 
-        <Dialog
-          open={shouldShowQuickCaptureDialog}
-          onOpenChange={(open) => !open && handleClickAway()}
-        >
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
-                {editingNote ? "Edit note" : "Add note"}
-              </DialogTitle>
-            </DialogHeader>
-            {editingNote ? (
-              <NoteEditor
-                verseRef={editingNote.verseRef}
-                initialContent={editingNote.content}
-                initialTags={editingNote.tags}
-                presentation="dialog"
-                variant={
-                  editingNote.verseRef.startVerse ===
-                  editingNote.verseRef.endVerse
-                    ? "default"
-                    : "passage"
-                }
-                onSave={handleSaveEdit}
-                onCancel={handleClickAway}
-              />
-            ) : creatingFor ? (
-              <NoteEditor
-                verseRef={creatingFor}
-                presentation="dialog"
-                variant={
-                  creatingFor.startVerse === creatingFor.endVerse
-                    ? "default"
-                    : "passage"
-                }
-                onSave={handleSaveNew}
-                onCancel={handleClickAway}
-              />
-            ) : null}
-          </DialogContent>
-        </Dialog>
-      </motion.div>
+          <div>
+            <AnimatePresence initial={false}>
+              {filteredVerses.map((verse) => (
+                <motion.div
+                  key={verse.verseNumber}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  style={{ overflow: "visible" }}
+                >
+                  <VerseRowWithNotes
+                    verseNumber={verse.verseNumber}
+                    text={verse.text}
+                    viewMode={effectiveViewMode}
+                    editorMode={editorMode}
+                    selectedVerses={selectedVerses}
+                    isInSelectionRange={isInSelection(verse.verseNumber)}
+                    isPassageSelection={isPassageSelection}
+                    singleNotes={verse.singleNotes}
+                    passageNotes={verse.passageNotes}
+                    passageAnchor={verseToPassageAnchor.get(verse.verseNumber)}
+                    hoveredVerse={hoveredVerse}
+                    hoveredPassageBubble={hoveredPassageBubble}
+                    hoveredSingleBubble={hoveredSingleBubble}
+                    openVerseKey={openVerseKey}
+                    openPassageKey={openPassageKey}
+                    creatingFor={creatingFor}
+                    editingNoteId={editingNoteId}
+                    isFocusTarget={
+                      focusSource === "search" && focusRange
+                        ? verse.verseNumber >= focusRange.startVerse &&
+                          verse.verseNumber <= focusRange.endVerse
+                        : false
+                    }
+                    onAddNote={handleAddNote}
+                    onMouseDown={handleVerseMouseDown}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                    onSingleBubbleMouseEnter={handleSingleBubbleMouseEnter}
+                    onSingleBubbleMouseLeave={handleSingleBubbleMouseLeave}
+                    onPassageBubbleMouseEnter={handlePassageBubbleMouseEnter}
+                    onPassageBubbleMouseLeave={handlePassageBubbleMouseLeave}
+                    onOpenVerseNotes={openVerseNotes}
+                    onOpenPassageNotes={openPassageNotes}
+                    onEditNote={startEditingNote}
+                    onCancelEditing={cancelEditing}
+                    onDelete={handleDelete}
+                    onSaveEdit={handleSaveEdit}
+                    onSaveNew={handleSaveNew}
+                    onClickAway={handleClickAway}
+                    onStartCreatingPassageNote={startCreatingPassageNote}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            <div className={topGridClass}>
+              <div>
+                <ChapterPager book={book} chapter={chapter} />
+                <CopyrightNotice text={data.copyright} />
+              </div>
+              <div />
+            </div>
+          </div>
+
+          <Dialog
+            open={shouldShowQuickCaptureDialog}
+            onOpenChange={(open) => !open && handleClickAway()}
+          >
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingNote ? "Edit note" : "Add note"}
+                </DialogTitle>
+              </DialogHeader>
+              {editingNote ? (
+                <NoteEditor
+                  verseRef={editingNote.verseRef}
+                  initialContent={editingNote.content}
+                  initialTags={editingNote.tags}
+                  presentation="dialog"
+                  variant={
+                    editingNote.verseRef.startVerse ===
+                    editingNote.verseRef.endVerse
+                      ? "default"
+                      : "passage"
+                  }
+                  onSave={handleSaveEdit}
+                  onCancel={handleClickAway}
+                />
+              ) : creatingFor ? (
+                <NoteEditor
+                  verseRef={creatingFor}
+                  presentation="dialog"
+                  variant={
+                    creatingFor.startVerse === creatingFor.endVerse
+                      ? "default"
+                      : "passage"
+                  }
+                  onSave={handleSaveNew}
+                  onCancel={handleClickAway}
+                />
+              ) : null}
+            </DialogContent>
+          </Dialog>
+        </motion.div>
       </ScrollArea>
     </div>
   );

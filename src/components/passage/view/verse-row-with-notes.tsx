@@ -178,11 +178,12 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     <motion.div
       layout="position"
       transition={{ layout: layoutTransition }}
-      className={
+      className={cn(
+        "relative overflow-visible hover:z-10 focus-within:z-10",
         isReadMode
           ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
           : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start"
-      }
+      )}
     >
       <motion.div layout="position" transition={{ layout: layoutTransition }}>
         <VerseRowLeft
