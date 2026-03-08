@@ -19,6 +19,7 @@ export function TabBar() {
   const location = useLocation();
   const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false);
   const isSearchRoute = location.pathname === "/search";
+  const isTagSettingsRoute = location.pathname === "/settings/tags";
   const savedSearchState = readSearchWorkspaceState();
   const searchLinkState = {
     q: savedSearchState.params.q,
@@ -48,7 +49,7 @@ export function TabBar() {
               <TabItem
                 key={tab.id}
                 tab={tab}
-                isActive={!isSearchRoute && tab.id === activeTabId}
+                isActive={!isSearchRoute && !isTagSettingsRoute && tab.id === activeTabId}
                 onActivate={() => setActiveTab(tab.id)}
                 onClose={() => closeTab(tab.id)}
               />
@@ -93,7 +94,11 @@ export function TabBar() {
           asChild
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className={cn(
+            "h-8 w-8",
+            isTagSettingsRoute &&
+              "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground"
+          )}
           tooltip="Starter tags settings"
           aria-label="Starter tags settings"
         >
