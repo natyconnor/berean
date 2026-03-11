@@ -1,9 +1,11 @@
 import type { Doc, Id } from "../../../../convex/_generated/dataModel"
+import type { NoteBody } from "@/lib/note-inline-content"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 
 export interface NoteWithRef {
   noteId: Id<"notes">
   content: string
+  body?: NoteBody
   tags: string[]
   verseRef: VerseRef
   createdAt: number
@@ -33,6 +35,7 @@ function toNoteWithRef(note: Doc<"notes">, ref: ChapterNoteEntry["verseRef"]): N
   return {
     noteId: note._id,
     content: note.content,
+    ...(note.body ? { body: note.body } : {}),
     tags: note.tags,
     verseRef: {
       book: ref.book,

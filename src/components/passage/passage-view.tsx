@@ -533,6 +533,7 @@ export function PassageView({
                 <NoteEditor
                   verseRef={editingNote.verseRef}
                   initialContent={editingNote.content}
+                  initialBody={editingNote.body}
                   initialTags={editingNote.tags}
                   presentation="dialog"
                   variant={

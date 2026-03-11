@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { useQuery } from "convex-helpers/react/cache"
 import { TooltipButton } from "@/components/ui/tooltip-button"
-import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { X, BookOpen } from "lucide-react"
 import { TagPicker } from "@/components/tags/tag-picker"
@@ -10,34 +9,40 @@ import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles"
 import { normalizeTags } from "@/lib/tag-utils"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 import { formatVerseRef } from "@/lib/verse-ref-utils"
+import {
+  normalizeNoteBody,
+  noteBodyToPlainText,
+  type NoteBody,
+} from "@/lib/note-inline-content"
+import { InlineVerseEditor } from "@/components/notes/editor/inline-verse-editor"
 import { api } from "../../../convex/_generated/api"
 
 interface NoteEditorProps {
   verseRef: VerseRef
   initialContent?: string
+  initialBody?: NoteBody
   initialTags?: string[]
   variant?: "default" | "passage"
   presentation?: "card" | "dialog"
-  onSave: (content: string, tags: string[]) => void
+  onSave: (body: NoteBody, tags: string[]) => void | Promise<void>
   onCancel: () => void
 }
 
 export function NoteEditor({
   verseRef,
   initialContent = "",
+  initialBody,
   initialTags = [],
   variant = "default",
   presentation = "card",
   onSave,
   onCancel,
 }: NoteEditorProps) {
-  const [content, setContent] = useState(initialContent)
+  const [initialEditorBody] = useState<NoteBody>(() => normalizeNoteBody(initialBody, initialContent))
+  const [body, setBody] = useState<NoteBody>(initialEditorBody)
   const [tags, setTags] = useState<string[]>(() => normalizeTags(initialTags))
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    textareaRef.current?.focus()
-  }, [])
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const catalog = useQuery(api.tags.listCatalog)
   const resolveTagStyle = useStarterTagBadgeStyle()
@@ -52,12 +57,35 @@ export function NoteEditor({
     setTags((prev) => prev.filter((t) => t !== tag))
   }, [])
 
+  const handleEditorChange = useCallback((nextBody: NoteBody) => {
+    setBody(nextBody)
+    setSaveError(null)
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    const content = noteBodyToPlainText(body).trim()
+    if (!content || isSaving) {
+      return
+    }
+
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      await onSave(body, tags)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Failed to save note")
+    } finally {
+      setIsSaving(false)
+    }
+  }, [body, isSaving, onSave, tags])
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      const content = noteBodyToPlainText(body).trim()
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        if (content.trim()) {
-          onSave(content.trim(), tags)
+        if (content) {
+          void handleSave()
         }
       }
       if (e.key === "Escape") {
@@ -65,11 +93,12 @@ export function NoteEditor({
         onCancel()
       }
     },
-    [content, tags, onSave, onCancel]
+    [body, handleSave, onCancel]
   )
 
   const isPassage = variant === "passage"
   const isDialogPresentation = presentation === "dialog"
+  const plainText = noteBodyToPlainText(body).trim()
 
   return (
     <div
@@ -112,13 +141,14 @@ export function NoteEditor({
         )}
       </div>
 
-      <Textarea
-        ref={textareaRef}
-        placeholder="Write your note..."
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        className={cn("resize-y text-sm", isDialogPresentation ? "min-h-[180px]" : "min-h-[96px]")}
+      <InlineVerseEditor
+        initialBody={initialEditorBody}
+        verseRef={verseRef}
+        onChange={handleEditorChange}
+        className={cn(isDialogPresentation ? "min-h-[180px]" : "min-h-[96px]")}
       />
+
+      {saveError ? <p className="text-xs text-destructive">{saveError}</p> : null}
 
       <div className="space-y-2">
         <TagPicker
@@ -145,11 +175,19 @@ export function NoteEditor({
         )}
         <TooltipButton
           size="sm"
-          onClick={() => content.trim() && onSave(content.trim(), tags)}
-          disabled={!content.trim()}
-          tooltip={content.trim() ? "Save note (⌘Enter)" : "Enter content to save"}
+          onClick={() => {
+            void handleSave()
+          }}
+          disabled={!plainText || isSaving}
+          tooltip={
+            !plainText
+              ? "Enter content to save"
+              : isSaving
+                ? "Saving note..."
+                : "Save note (⌘Enter)"
+          }
         >
-          Save
+          {isSaving ? "Saving..." : "Save"}
         </TooltipButton>
       </div>
 

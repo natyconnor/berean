@@ -4,6 +4,7 @@ import { useMutation } from "convex/react"
 import { api } from "../../../../convex/_generated/api"
 import type { Id } from "../../../../convex/_generated/dataModel"
 import { useVerseSelection } from "@/hooks/use-verse-selection"
+import type { NoteBody } from "@/lib/note-inline-content"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 import {
   buildSingleVerseNotes,
@@ -40,8 +41,8 @@ export interface PassageNotesInteraction {
   handlePassageBubbleMouseEnter: (verseNumber: number) => void
   handlePassageBubbleMouseLeave: () => void
   handleAddNote: (verseNumber: number) => void
-  handleSaveNew: (content: string, tags: string[]) => Promise<void>
-  handleSaveEdit: (content: string, tags: string[]) => Promise<void>
+  handleSaveNew: (body: NoteBody, tags: string[]) => Promise<void>
+  handleSaveEdit: (body: NoteBody, tags: string[]) => Promise<void>
   handleDelete: (noteId: Id<"notes">) => Promise<void>
   handleClickAway: () => void
   openVerseNotes: (verseNumber: number) => void
@@ -266,9 +267,9 @@ export function usePassageNotesInteraction(
   )
 
   const handleSaveNew = useCallback(
-    async (content: string, tags: string[]) => {
+    async (body: NoteBody, tags: string[]) => {
       if (!creatingFor) return
-      const noteId = await createNote({ content, tags })
+      const noteId = await createNote({ body, tags })
       const verseRefId = await findOrCreateRef({
         book: creatingFor.book,
         chapter: creatingFor.chapter,
@@ -290,9 +291,9 @@ export function usePassageNotesInteraction(
   )
 
   const handleSaveEdit = useCallback(
-    async (content: string, tags: string[]) => {
+    async (body: NoteBody, tags: string[]) => {
       if (!editingNoteId) return
-      await updateNote({ id: editingNoteId, content, tags })
+      await updateNote({ id: editingNoteId, body, tags })
       setEditingNoteId(null)
     },
     [editingNoteId, updateNote]

@@ -9,6 +9,7 @@ import { NoteBubble } from "./note-bubble";
 import { NoteBubbleStack } from "./note-bubble-stack";
 import { NoteEditor } from "./note-editor";
 import { Plus } from "lucide-react";
+import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import { formatVerseRef, isPassageNote } from "@/lib/verse-ref-utils";
 import {
@@ -73,10 +74,10 @@ export function NotesPanel({
   }, [notesByVerse]);
 
   const handleSaveNew = useCallback(
-    async (content: string, tags: string[]) => {
+    async (body: NoteBody, tags: string[]) => {
       const ref = activeCreatingRef;
       if (!ref) return;
-      const noteId = await createNote({ content, tags });
+      const noteId = await createNote({ body, tags });
       const verseRefId = await findOrCreateRef({
         book: ref.book,
         chapter: ref.chapter,
@@ -96,8 +97,8 @@ export function NotesPanel({
   }, [onCancelCreate]);
 
   const handleSaveEdit = useCallback(
-    async (noteId: Id<"notes">, content: string, tags: string[]) => {
-      await updateNote({ id: noteId, content, tags });
+    async (noteId: Id<"notes">, body: NoteBody, tags: string[]) => {
+      await updateNote({ id: noteId, body, tags });
       setEditingNoteId(null);
     },
     [updateNote]
@@ -153,9 +154,10 @@ export function NotesPanel({
                   isPassageNote(editNote.verseRef) ? "passage" : "default"
                 }
                 initialContent={editNote.content}
+                initialBody={editNote.body}
                 initialTags={editNote.tags}
-                onSave={(content, tags) =>
-                  handleSaveEdit(editingNoteId, content, tags)
+                onSave={(body, tags) =>
+                  handleSaveEdit(editingNoteId, body, tags)
                 }
                 onCancel={() => setEditingNoteId(null)}
               />
@@ -202,6 +204,7 @@ export function NotesPanel({
                   key={note.noteId}
                   noteId={note.noteId}
                   content={note.content}
+                  body={note.body}
                   tags={note.tags}
                   verseRef={note.verseRef}
                   isExpanded={isExpanded || notes.length === 1}

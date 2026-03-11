@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { NoteBody } from "@/lib/note-inline-content";
 import {
   NoteCardActions,
   NoteTagList,
@@ -28,7 +29,7 @@ interface PassageNotesBubbleProps {
   isPill?: boolean;
   compact?: boolean;
   editingNoteId?: Id<"notes"> | null;
-  onSaveEdit?: (content: string, tags: string[]) => void | Promise<void>;
+  onSaveEdit?: (body: NoteBody, tags: string[]) => void | Promise<void>;
   onCancelEdit?: () => void;
   onOpen: () => void;
   onClose: () => void;
@@ -225,6 +226,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                   <NoteEditor
                     verseRef={note.verseRef}
                     initialContent={note.content}
+                    initialBody={note.body}
                     initialTags={note.tags}
                     variant="passage"
                     onSave={onSaveEdit!}
@@ -303,6 +305,7 @@ function ExpandedPassageNote({
       <div className="flex items-start justify-between gap-2">
         <NoteContent
           content={note.content}
+          body={note.body}
           density={density}
           className={isReading ? "flex-1 text-foreground" : "flex-1"}
         />

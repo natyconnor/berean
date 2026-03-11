@@ -10,6 +10,7 @@ import {
 import { NoteEditor } from "@/components/notes/note-editor";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { NoteBody } from "@/lib/note-inline-content";
 import {
   NoteCardActions,
   NoteTagList,
@@ -33,7 +34,7 @@ interface VerseNotesProps {
   viewMode?: "compose" | "read";
   isPill?: boolean;
   editingNoteId?: Id<"notes"> | null;
-  onSaveEdit?: (content: string, tags: string[]) => void | Promise<void>;
+  onSaveEdit?: (body: NoteBody, tags: string[]) => void | Promise<void>;
   onCancelEdit?: () => void;
   onOpen: () => void;
   onClose: () => void;
@@ -152,6 +153,7 @@ export const VerseNotes = memo(function VerseNotes({
                   <NoteEditor
                     verseRef={note.verseRef}
                     initialContent={note.content}
+                    initialBody={note.body}
                     initialTags={note.tags}
                     onSave={onSaveEdit!}
                     onCancel={onCancelEdit!}
@@ -196,6 +198,7 @@ function CollapsedBubble({
     >
       <NoteContent
         content={note.content}
+        body={note.body}
         truncateAt={100}
         className="text-muted-foreground line-clamp-2"
       />
@@ -288,6 +291,7 @@ function ExpandedBubble({
       <div className="flex items-start justify-between gap-2">
         <NoteContent
           content={note.content}
+          body={note.body}
           density={density}
           className={isReading ? "flex-1 text-foreground" : "flex-1"}
         />

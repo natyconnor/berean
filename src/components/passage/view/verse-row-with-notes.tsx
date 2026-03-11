@@ -6,6 +6,7 @@ import { VerseNotes } from "../verse-notes"
 import { PassageNotesBubble } from "../passage-notes-bubble"
 import { NoteEditor } from "@/components/notes/note-editor"
 import { cn } from "@/lib/utils"
+import type { NoteBody } from "@/lib/note-inline-content"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 import type { NoteWithRef } from "@/components/notes/model/note-model"
 
@@ -48,8 +49,8 @@ export interface VerseRowWithNotesProps {
   onEditNote: (noteId: Id<"notes">, verseNumber: number, isPassage: boolean) => void
   onCancelEditing: () => void
   onDelete: (noteId: Id<"notes">) => Promise<void>
-  onSaveEdit: (content: string, tags: string[]) => Promise<void>
-  onSaveNew: (content: string, tags: string[]) => Promise<void>
+  onSaveEdit: (body: NoteBody, tags: string[]) => Promise<void>
+  onSaveNew: (body: NoteBody, tags: string[]) => Promise<void>
   onClickAway: () => void
   onStartCreatingPassageNote: (verseRef: VerseRef) => void
 }

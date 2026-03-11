@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import type { NoteBody } from "@/lib/note-inline-content"
 import type { VerseRef } from "@/lib/verse-ref-utils"
 import { formatVerseRef, isPassageNote } from "@/lib/verse-ref-utils"
 import { NoteTagList, NoteContent } from "./view/note-card-primitives"
@@ -10,6 +11,7 @@ import { NoteTagList, NoteContent } from "./view/note-card-primitives"
 interface NoteBubbleProps {
   noteId: string
   content: string
+  body?: NoteBody
   tags: string[]
   verseRef: VerseRef
   isExpanded: boolean
@@ -20,6 +22,7 @@ interface NoteBubbleProps {
 
 export const NoteBubble = memo(function NoteBubble({
   content,
+  body,
   tags,
   verseRef,
   isExpanded,
@@ -104,6 +107,7 @@ export const NoteBubble = memo(function NoteBubble({
 
       <NoteContent
         content={content}
+        body={body}
         truncateAt={isExpanded ? undefined : 150}
         className="text-sm"
       />

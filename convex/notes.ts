@@ -1,8 +1,16 @@
-import { query, mutation } from "./_generated/server"
+import { query, mutation, type MutationCtx } from "./_generated/server"
 import { v } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth"
 import { matchesTagFilters, normalizeTags, syncUserTagsFromNote } from "./lib/tags"
+import {
+  extractVerseRefsFromNoteBody,
+  noteBodyToPlainText,
+  noteBodyValue,
+  type NoteBodyInput,
+} from "./lib/noteContent"
+import { findOrCreateVerseRefId } from "./lib/verseRefs"
+import { getVerseRefBoundsErrorMessage } from "../src/lib/verse-ref-validation"
 
 const DEFAULT_SEARCH_LIMIT = 50
 const MAX_SEARCH_LIMIT = 100
@@ -17,9 +25,12 @@ const verseRefSummary = v.object({
   endVerse: v.number(),
 })
 
+const noteBodySummary = v.union(noteBodyValue, v.null())
+
 const workspaceSearchResult = v.object({
   noteId: v.id("notes"),
   content: v.string(),
+  body: noteBodySummary,
   tags: v.array(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -48,6 +59,70 @@ function isVerseRefForUser(
   userId: Id<"users">
 ): ref is Doc<"verseRefs"> {
   return !!ref && ref.userId === userId
+}
+
+function formatInlineVerseRef(ref: {
+  book: string
+  chapter: number
+  startVerse: number
+  endVerse: number
+}): string {
+  if (ref.startVerse === ref.endVerse) {
+    return `${ref.book} ${ref.chapter}:${ref.startVerse}`
+  }
+  return `${ref.book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`
+}
+
+function assertValidInlineVerseRefs(body: NoteBodyInput) {
+  const refs = extractVerseRefsFromNoteBody(body)
+  for (const ref of refs) {
+    const errorMessage = getVerseRefBoundsErrorMessage(ref)
+    if (errorMessage) {
+      throw new Error(`Invalid inline verse reference "${formatInlineVerseRef(ref)}": ${errorMessage}`)
+    }
+  }
+}
+
+async function syncInlineVerseLinksForNote(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  noteId: Id<"notes">,
+  body: NoteBodyInput | undefined
+) {
+  const existingLinks = await ctx.db
+    .query("noteInlineVerseLinks")
+    .withIndex("by_userId_noteId", (q) => q.eq("userId", userId).eq("noteId", noteId))
+    .collect()
+
+  if (!body) {
+    for (const link of existingLinks) {
+      await ctx.db.delete(link._id)
+    }
+    return
+  }
+
+  const refs = extractVerseRefsFromNoteBody(body)
+  const targetIds = new Set<Id<"verseRefs">>()
+  for (const ref of refs) {
+    const verseRefId = await findOrCreateVerseRefId(ctx, userId, ref)
+    targetIds.add(verseRefId)
+  }
+
+  const existingIds = new Set(existingLinks.map((link) => link.verseRefId))
+  for (const link of existingLinks) {
+    if (!targetIds.has(link.verseRefId)) {
+      await ctx.db.delete(link._id)
+    }
+  }
+
+  for (const verseRefId of targetIds) {
+    if (existingIds.has(verseRefId)) continue
+    await ctx.db.insert("noteInlineVerseLinks", {
+      userId,
+      noteId,
+      verseRefId,
+    })
+  }
 }
 
 export const getById = query({
@@ -153,8 +228,7 @@ export const searchWorkspace = query({
       notes.map(async (note) => {
         const links = await ctx.db
           .query("noteVerseLinks")
-          .withIndex("by_noteId", (q) => q.eq("noteId", note._id))
-          .filter((q) => q.eq(q.field("userId"), userId))
+          .withIndex("by_userId_noteId", (q) => q.eq("userId", userId).eq("noteId", note._id))
           .collect()
         const refs = await Promise.all(links.map((link) => ctx.db.get(link.verseRefId)))
         const verseRefs = refs
@@ -170,6 +244,7 @@ export const searchWorkspace = query({
         return {
           noteId: note._id,
           content: note.content,
+          body: note.body ?? null,
           tags: note.tags,
           createdAt: note.createdAt,
           updatedAt: note.updatedAt,
@@ -201,18 +276,35 @@ export const allTags = query({
 })
 
 export const create = mutation({
-  args: { content: v.string(), tags: v.array(v.string()) },
+  args: {
+    content: v.optional(v.string()),
+    body: v.optional(noteBodyValue),
+    tags: v.array(v.string()),
+  },
+  returns: v.id("notes"),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx)
     const now = Date.now()
     const tags = normalizeTags(args.tags)
+    const content = args.body ? noteBodyToPlainText(args.body) : args.content?.trim() ?? ""
+
+    if (content.trim().length === 0) {
+      throw new Error("Note content is required")
+    }
+
+    if (args.body) {
+      assertValidInlineVerseRefs(args.body)
+    }
+
     const noteId = await ctx.db.insert("notes", {
       userId,
-      content: args.content,
+      content,
+      ...(args.body ? { body: args.body } : {}),
       tags,
       createdAt: now,
       updatedAt: now,
     })
+    await syncInlineVerseLinksForNote(ctx, userId, noteId, args.body)
     await syncUserTagsFromNote(ctx, userId, tags, now)
     return noteId
   },
@@ -222,8 +314,10 @@ export const update = mutation({
   args: {
     id: v.id("notes"),
     content: v.optional(v.string()),
+    body: v.optional(noteBodyValue),
     tags: v.optional(v.array(v.string())),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx)
     const note = await ctx.db.get(args.id)
@@ -232,10 +326,26 @@ export const update = mutation({
     }
 
     const now = Date.now()
-    const patch: { content?: string; tags?: string[]; updatedAt: number } = {
+    const patch: {
+      content?: string
+      body?: NoteBodyInput
+      tags?: string[]
+      updatedAt: number
+    } = {
       updatedAt: now,
     }
-    if (args.content !== undefined) {
+    if (args.body !== undefined) {
+      const nextContent = noteBodyToPlainText(args.body)
+      if (nextContent.trim().length === 0) {
+        throw new Error("Note content is required")
+      }
+      assertValidInlineVerseRefs(args.body)
+      patch.body = args.body
+      patch.content = nextContent
+    } else if (args.content !== undefined) {
+      if (args.content.trim().length === 0) {
+        throw new Error("Note content is required")
+      }
       patch.content = args.content
     }
     if (args.tags !== undefined) {
@@ -243,15 +353,20 @@ export const update = mutation({
     }
 
     await ctx.db.patch(args.id, patch)
+    if (args.body !== undefined) {
+      await syncInlineVerseLinksForNote(ctx, userId, args.id, args.body)
+    }
 
     if (patch.tags) {
       await syncUserTagsFromNote(ctx, userId, patch.tags, now)
     }
+    return null
   },
 })
 
 export const remove = mutation({
   args: { id: v.id("notes") },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx)
     const note = await ctx.db.get(args.id)
@@ -265,6 +380,14 @@ export const remove = mutation({
     for (const link of links) {
       await ctx.db.delete(link._id)
     }
+    const inlineLinks = await ctx.db
+      .query("noteInlineVerseLinks")
+      .withIndex("by_noteId", (q) => q.eq("noteId", args.id))
+      .collect()
+    for (const link of inlineLinks) {
+      await ctx.db.delete(link._id)
+    }
     await ctx.db.delete(args.id)
+    return null
   },
 })

@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 import { authTables } from "@convex-dev/auth/server"
+import { noteBodyValue } from "./lib/noteContent"
 
 export default defineSchema({
   ...authTables,
@@ -8,6 +9,7 @@ export default defineSchema({
   notes: defineTable({
     userId: v.optional(v.id("users")),
     content: v.string(),
+    body: v.optional(noteBodyValue),
     tags: v.array(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -75,7 +77,23 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_noteId", ["noteId"])
     .index("by_verseRefId", ["verseRefId"])
-    .index("by_noteId_verseRefId", ["noteId", "verseRefId"]),
+    .index("by_noteId_verseRefId", ["noteId", "verseRefId"])
+    .index("by_userId_noteId", ["userId", "noteId"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"])
+    .index("by_userId_noteId_verseRefId", ["userId", "noteId", "verseRefId"]),
+
+  noteInlineVerseLinks: defineTable({
+    userId: v.optional(v.id("users")),
+    noteId: v.id("notes"),
+    verseRefId: v.id("verseRefs"),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_noteId", ["noteId"])
+    .index("by_verseRefId", ["verseRefId"])
+    .index("by_noteId_verseRefId", ["noteId", "verseRefId"])
+    .index("by_userId_noteId", ["userId", "noteId"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"])
+    .index("by_userId_noteId_verseRefId", ["userId", "noteId", "verseRefId"]),
 
   verseLinks: defineTable({
     userId: v.optional(v.id("users")),

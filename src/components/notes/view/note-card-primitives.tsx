@@ -1,8 +1,16 @@
+import { Fragment } from "react"
 import { Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles"
+import {
+  normalizeNoteBody,
+  noteBodyToPlainText,
+  truncatePlainTextContent,
+  type NoteBody,
+} from "@/lib/note-inline-content"
+import { VerseLinkPill } from "@/components/verse-ref/verse-link-pill"
 
 export interface NoteCardActionsProps {
   onEdit: () => void
@@ -77,6 +85,7 @@ export function NoteTagList({ tags, variant = "default", size = "xs", className 
 
 export interface NoteContentProps {
   content: string
+  body?: NoteBody | null
   truncateAt?: number
   density?: "default" | "reading"
   className?: string
@@ -84,19 +93,46 @@ export interface NoteContentProps {
 
 export function NoteContent({
   content,
+  body,
   truncateAt,
   density = "default",
   className,
 }: NoteContentProps) {
-  const displayContent = truncateAt && content.length > truncateAt
-    ? content.slice(0, truncateAt) + "..."
-    : content
   const densityClass = density === "reading" ? "text-base leading-7" : "leading-relaxed"
+  const normalizedBody = normalizeNoteBody(body, content)
+
+  if (truncateAt) {
+    const displayContent = truncatePlainTextContent(noteBodyToPlainText(normalizedBody, content), truncateAt)
+    return (
+      <p className={cn("whitespace-pre-wrap", densityClass, className)}>
+        {displayContent}
+      </p>
+    )
+  }
 
   return (
-    <p className={cn("whitespace-pre-wrap", densityClass, className)}>
-      {displayContent}
-    </p>
+    <div className={cn("whitespace-pre-wrap", densityClass, className)}>
+      {normalizedBody.segments.length === 0 ? (
+        <p />
+      ) : (
+        normalizedBody.segments.map((segment, index) => {
+          if (segment.type === "text") {
+            return <Fragment key={`text-${index}`}>{segment.text}</Fragment>
+          }
+          if (segment.type === "lineBreak") {
+            return <br key={`br-${index}`} />
+          }
+          return (
+            <VerseLinkPill
+              key={`ref-${index}`}
+              refValue={segment.ref}
+              label={segment.label}
+              className="mx-0.5"
+            />
+          )
+        })
+      )}
+    </div>
   )
 }
 

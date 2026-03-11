@@ -1,6 +1,6 @@
 import { useAction } from "convex/react"
 import { api } from "../../convex/_generated/api"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import {
   type EsvChapterData,
   getCachedPassage,
@@ -8,7 +8,7 @@ import {
   parseEsvResponse,
 } from "@/lib/esv-api"
 
-interface ReferenceQuery {
+export interface ReferenceQuery {
   book: string
   chapter: number
   startVerse: number
@@ -69,4 +69,86 @@ export function useEsvReference(ref: ReferenceQuery | null) {
     error: query ? (cached ? null : asyncError) : null,
     query,
   }
+}
+
+export interface VerseRefValidationState {
+  status: "idle" | "debouncing" | "checking" | "valid" | "invalid" | "unavailable"
+  data: EsvChapterData | null
+  error: string | null
+}
+
+export function useDebouncedEsvReferenceValidation(
+  ref: ReferenceQuery | null,
+  delayMs = 400
+): VerseRefValidationState {
+  const [debouncedRef, setDebouncedRef] = useState<ReferenceQuery | null>(null)
+
+  useEffect(() => {
+    if (!ref) {
+      setDebouncedRef(null)
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      setDebouncedRef(ref)
+    }, delayMs)
+
+    return () => window.clearTimeout(timeout)
+  }, [delayMs, ref])
+
+  const { data, loading, error } = useEsvReference(debouncedRef)
+
+  return useMemo(() => {
+    if (!ref) {
+      return {
+        status: "idle",
+        data: null,
+        error: null,
+      } satisfies VerseRefValidationState
+    }
+
+    if (
+      !debouncedRef ||
+      debouncedRef.book !== ref.book ||
+      debouncedRef.chapter !== ref.chapter ||
+      debouncedRef.startVerse !== ref.startVerse ||
+      debouncedRef.endVerse !== ref.endVerse
+    ) {
+      return {
+        status: "debouncing",
+        data: null,
+        error: null,
+      } satisfies VerseRefValidationState
+    }
+
+    if (loading) {
+      return {
+        status: "checking",
+        data: null,
+        error: null,
+      } satisfies VerseRefValidationState
+    }
+
+    if (error) {
+      return {
+        status: "unavailable",
+        data: null,
+        error,
+      } satisfies VerseRefValidationState
+    }
+
+    if (!data || data.verses.length === 0) {
+      return {
+        status: "invalid",
+        data,
+        error: null,
+      } satisfies VerseRefValidationState
+    }
+
+    return {
+      status: "valid",
+      data,
+      error: null,
+    } satisfies VerseRefValidationState
+  }, [data, debouncedRef, error, loading, ref])
 }

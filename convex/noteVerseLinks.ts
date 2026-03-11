@@ -15,14 +15,22 @@ function isNote(doc: unknown): doc is Doc<"notes"> {
 
 export const link = mutation({
   args: { noteId: v.id("notes"), verseRefId: v.id("verseRefs") },
+  returns: v.id("noteVerseLinks"),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx)
+    const [note, verseRef] = await Promise.all([ctx.db.get(args.noteId), ctx.db.get(args.verseRefId)])
+    if (!note || note.userId !== userId) {
+      throw new Error("Note not found or access denied")
+    }
+    if (!verseRef || verseRef.userId !== userId) {
+      throw new Error("Verse reference not found or access denied")
+    }
     const existing = await ctx.db
       .query("noteVerseLinks")
-      .withIndex("by_noteId_verseRefId", (q) =>
-        q.eq("noteId", args.noteId).eq("verseRefId", args.verseRefId)
+      .withIndex("by_userId_noteId_verseRefId", (q) =>
+        q.eq("userId", userId).eq("noteId", args.noteId).eq("verseRefId", args.verseRefId)
       )
-      .first()
+      .unique()
     if (existing) return existing._id
     return await ctx.db.insert("noteVerseLinks", { ...args, userId })
   },
@@ -30,17 +38,19 @@ export const link = mutation({
 
 export const unlink = mutation({
   args: { noteId: v.id("notes"), verseRefId: v.id("verseRefs") },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx)
     const existing = await ctx.db
       .query("noteVerseLinks")
-      .withIndex("by_noteId_verseRefId", (q) =>
-        q.eq("noteId", args.noteId).eq("verseRefId", args.verseRefId)
+      .withIndex("by_userId_noteId_verseRefId", (q) =>
+        q.eq("userId", userId).eq("noteId", args.noteId).eq("verseRefId", args.verseRefId)
       )
-      .first()
-    if (existing && existing.userId === userId) {
+      .unique()
+    if (existing) {
       await ctx.db.delete(existing._id)
     }
+    return null
   },
 })
 
@@ -51,8 +61,9 @@ export const getNotesForVerseRef = query({
     if (!userId) return []
     const links = await ctx.db
       .query("noteVerseLinks")
-      .withIndex("by_verseRefId", (q) => q.eq("verseRefId", args.verseRefId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_userId_verseRefId", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId)
+      )
       .collect()
     const rawNotes = await Promise.all(links.map((l) => ctx.db.get(l.noteId)))
     return rawNotes.filter(isNote)
@@ -66,8 +77,7 @@ export const getVerseRefsForNote = query({
     if (!userId) return []
     const links = await ctx.db
       .query("noteVerseLinks")
-      .withIndex("by_noteId", (q) => q.eq("noteId", args.noteId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_userId_noteId", (q) => q.eq("userId", userId).eq("noteId", args.noteId))
       .collect()
     const refs = await Promise.all(links.map((l) => ctx.db.get(l.verseRefId)))
     return refs.filter(Boolean)
@@ -94,8 +104,7 @@ export const getNotesForChapter = query({
     for (const ref of verseRefs) {
       const links = await ctx.db
         .query("noteVerseLinks")
-        .withIndex("by_verseRefId", (q) => q.eq("verseRefId", ref._id))
-        .filter((q) => q.eq(q.field("userId"), userId))
+        .withIndex("by_userId_verseRefId", (q) => q.eq("userId", userId).eq("verseRefId", ref._id))
         .collect()
       const rawNotes = await Promise.all(links.map((l) => ctx.db.get(l.noteId)))
       const notes = rawNotes.filter(isNote)
