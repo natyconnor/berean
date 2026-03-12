@@ -127,6 +127,26 @@ function readReferenceDraft(
   };
 }
 
+function isPotentialVerseQuery(
+  query: string,
+  defaults: { defaultBook?: string; defaultChapter?: number }
+): boolean {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return true;
+  }
+
+  if (parseVerseRef(query, defaults) || readReferenceDraft(query, defaults)) {
+    return true;
+  }
+
+  if (!/^[1-3]?\s?[A-Za-z]*(?:\s+[A-Za-z]*)*$/.test(trimmedQuery)) {
+    return false;
+  }
+
+  return buildVerseSuggestions(query, defaults).some((item) => item.kind === "book");
+}
+
 function buildDraftStatus(draft: ReferenceDraft): QueryStatusState {
   if (!draft.chapterText) {
     return {
@@ -262,6 +282,7 @@ function parseSegmentsFromNodeList(
   nodes: NodeListOf<ChildNode> | ChildNode[]
 ): NoteBodySegment[] {
   const segments: NoteBodySegment[] = [];
+  const nodeArray = Array.from(nodes);
 
   const pushText = (text: string) => {
     if (!text) return;
@@ -279,9 +300,51 @@ function parseSegmentsFromNodeList(
     segments.push({ type: "lineBreak" });
   };
 
-  for (const node of Array.from(nodes)) {
+  const pushTextWithLineBreaks = (text: string) => {
+    const normalizedText = text.replace(/\r\n?/g, "\n");
+    const lines = normalizedText.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      pushText(lines[index] ?? "");
+      if (index < lines.length - 1) {
+        pushLineBreak();
+      }
+    }
+  };
+
+  const appendSegments = (nextSegments: NoteBodySegment[]) => {
+    for (const segment of nextSegments) {
+      if (segment.type === "text") {
+        pushText(segment.text);
+        continue;
+      }
+      if (segment.type === "lineBreak") {
+        pushLineBreak();
+        continue;
+      }
+      segments.push(segment);
+    }
+  };
+
+  const nodeHasMeaningfulContent = (node: ChildNode): boolean => {
     if (node.nodeType === Node.TEXT_NODE) {
-      pushText(node.textContent ?? "");
+      return (node.textContent ?? "").length > 0;
+    }
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+    if (node.dataset.noteVersePill === "true") {
+      return true;
+    }
+    if (node.tagName === "BR") {
+      return true;
+    }
+    return Array.from(node.childNodes).some((child) => nodeHasMeaningfulContent(child));
+  };
+
+  for (let index = 0; index < nodeArray.length; index += 1) {
+    const node = nodeArray[index];
+    if (node.nodeType === Node.TEXT_NODE) {
+      pushTextWithLineBreaks(node.textContent ?? "");
       continue;
     }
 
@@ -310,12 +373,20 @@ function parseSegmentsFromNodeList(
     }
 
     if (node.tagName === "DIV" || node.tagName === "P") {
-      segments.push(...parseSegmentsFromNodeList(node.childNodes));
-      pushLineBreak();
+      if (segments.length > 0) {
+        pushLineBreak();
+      }
+      appendSegments(parseSegmentsFromNodeList(node.childNodes));
+      const hasFollowingContent = nodeArray
+        .slice(index + 1)
+        .some((child) => nodeHasMeaningfulContent(child));
+      if (hasFollowingContent) {
+        pushLineBreak();
+      }
       continue;
     }
 
-    segments.push(...parseSegmentsFromNodeList(node.childNodes));
+    appendSegments(parseSegmentsFromNodeList(node.childNodes));
   }
 
   return segments;
@@ -416,25 +487,6 @@ function replaceQueryWithPill(match: ActiveQueryMatch, refValue: VerseRef) {
   match.node.parentNode?.insertBefore(pill, match.node.nextSibling);
   match.node.parentNode?.insertBefore(afterNode, pill.nextSibling);
   placeCaretAfterNode(afterNode);
-}
-
-function insertLineBreak(root: HTMLElement) {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    return;
-  }
-
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer)) {
-    return;
-  }
-
-  range.deleteContents();
-  const br = document.createElement("br");
-  const spacer = document.createTextNode("");
-  range.insertNode(spacer);
-  range.insertNode(br);
-  placeCaretAfterNode(spacer);
 }
 
 function insertPlainTextAtCursor(root: HTMLElement, text: string) {
@@ -679,11 +731,14 @@ export function InlineVerseEditor({
     if (!editorRef.current) return;
     const nextMatch = readActiveQueryMatch(editorRef.current);
     const nextQuery = nextMatch?.query ?? "";
-    setHighlightedIndex((current) => (nextQuery === activeQuery ? current : 0));
-    activeQueryMatchRef.current = nextMatch;
-    setIsQueryActive(nextMatch !== null);
-    setActiveQuery(nextQuery);
-  }, [activeQuery]);
+    const nextIsQueryActive =
+      nextMatch !== null && isPotentialVerseQuery(nextQuery, parserDefaults);
+    const resolvedQuery = nextIsQueryActive ? nextQuery : "";
+    setHighlightedIndex((current) => (resolvedQuery === activeQuery ? current : 0));
+    activeQueryMatchRef.current = nextIsQueryActive ? nextMatch : null;
+    setIsQueryActive(nextIsQueryActive);
+    setActiveQuery(resolvedQuery);
+  }, [activeQuery, parserDefaults]);
 
   const clearHoverPreview = useCallback(() => {
     setHoverPreview(null);
@@ -881,7 +936,11 @@ export function InlineVerseEditor({
             return;
           }
 
-          if (event.key === "ArrowDown" && actionableSuggestions.length > 0) {
+          if (
+            isQueryActive &&
+            event.key === "ArrowDown" &&
+            actionableSuggestions.length > 0
+          ) {
             event.preventDefault();
             setHighlightedIndex(
               (activeHighlightedIndex + 1) % actionableSuggestions.length
@@ -889,7 +948,11 @@ export function InlineVerseEditor({
             return;
           }
 
-          if (event.key === "ArrowUp" && actionableSuggestions.length > 0) {
+          if (
+            isQueryActive &&
+            event.key === "ArrowUp" &&
+            actionableSuggestions.length > 0
+          ) {
             event.preventDefault();
             setHighlightedIndex(
               activeHighlightedIndex === 0
@@ -900,6 +963,7 @@ export function InlineVerseEditor({
           }
 
           if (
+            isQueryActive &&
             (event.key === "Enter" || event.key === "Tab") &&
             actionableSuggestions.length > 0
           ) {
@@ -916,11 +980,6 @@ export function InlineVerseEditor({
             return;
           }
 
-          if (event.key === "Enter") {
-            event.preventDefault();
-            insertLineBreak(event.currentTarget);
-            emitChange();
-          }
         }}
       />
 
