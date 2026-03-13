@@ -11,7 +11,7 @@ export function ThemePreviewPanel({ theme }: ThemePreviewPanelProps) {
       acc[key] = value;
       return acc;
     },
-    {}
+    {},
   );
 
   return (

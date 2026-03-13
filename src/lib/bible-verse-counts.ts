@@ -152,16 +152,16 @@ export const BIBLE_VERSE_COUNTS_BY_BOOK = {
     20, 29, 22, 11, 14, 17, 17, 13, 21, 11, 19, 17, 18, 20, 8, 21, 18, 24, 21,
     15, 27, 21,
   ],
-} as const
+} as const;
 
 export function getChapterVerseCount(
   book: string,
   chapter: number,
 ): number | null {
   const verses =
-    BIBLE_VERSE_COUNTS_BY_BOOK[book as keyof typeof BIBLE_VERSE_COUNTS_BY_BOOK]
+    BIBLE_VERSE_COUNTS_BY_BOOK[book as keyof typeof BIBLE_VERSE_COUNTS_BY_BOOK];
   if (!verses || chapter < 1 || chapter > verses.length) {
-    return null
+    return null;
   }
-  return verses[chapter - 1]
+  return verses[chapter - 1];
 }

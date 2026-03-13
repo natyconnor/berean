@@ -5,15 +5,15 @@ import {
   useState,
   startTransition,
   type ReactNode,
-} from "react"
-import { useLocation, useNavigate } from "@tanstack/react-router"
+} from "react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import {
   TabContext,
   type PassageNavigationSearch,
   loadTabs,
   saveTabs,
-} from "./tab-context-internal"
+} from "./tab-context-internal";
 import {
   activateTab,
   closeTabAndChooseFallback,
@@ -23,34 +23,34 @@ import {
   getRoutePassageId,
   navigateCurrentTab,
   openOrReuseTab,
-} from "./tab-state"
+} from "./tab-state";
 
 function TabProvider({ children }: { children: ReactNode }) {
-  const location = useLocation()
+  const location = useLocation();
   const [store, setStore] = useState(() =>
     createInitialTabStore(loadTabs(), location.pathname),
-  )
-  const navigate = useNavigate()
-  const routePassageId = getRoutePassageId(location.pathname)
+  );
+  const navigate = useNavigate();
+  const routePassageId = getRoutePassageId(location.pathname);
 
   const tabs = useMemo(
     () => ensureRouteTabVisible(store.tabs, routePassageId),
     [routePassageId, store.tabs],
-  )
+  );
   const activeTabId = useMemo(
     () => findActiveTabIdForRoute(store.tabs, location.pathname),
     [location.pathname, store.tabs],
-  )
-  const searchModeActive = location.pathname === "/search"
+  );
+  const searchModeActive = location.pathname === "/search";
 
   useEffect(() => {
-    saveTabs(store.tabs)
-  }, [store.tabs])
+    saveTabs(store.tabs);
+  }, [store.tabs]);
 
   const setSearchModeActive = useCallback((active: boolean) => {
     // Route state is the source of truth for search mode.
-    void active
-  }, [])
+    void active;
+  }, []);
 
   const openTab = useCallback(
     (
@@ -64,17 +64,17 @@ function TabProvider({ children }: { children: ReactNode }) {
           label,
           createId: () => crypto.randomUUID(),
         }),
-      )
+      );
       startTransition(() => {
         void navigate({
           to: "/passage/$passageId",
           params: { passageId },
           search,
-        })
-      })
+        });
+      });
     },
     [navigate],
-  )
+  );
 
   const navigateActiveTab = useCallback(
     (
@@ -90,58 +90,58 @@ function TabProvider({ children }: { children: ReactNode }) {
           label,
           createId: () => crypto.randomUUID(),
         }),
-      )
+      );
       startTransition(() => {
         void navigate({
           to: "/passage/$passageId",
           params: { passageId },
           search,
-        })
-      })
+        });
+      });
     },
     [activeTabId, navigate, routePassageId],
-  )
+  );
 
   const closeTab = useCallback(
     (tabId: string) => {
-      let nextPassageId: string | null = null
+      let nextPassageId: string | null = null;
       setStore((currentStore) => {
         const result = closeTabAndChooseFallback(currentStore, {
           tabId,
           activeTabId,
           routePassageId,
           createId: () => crypto.randomUUID(),
-        })
-        nextPassageId = result.navigationTarget?.passageId ?? null
-        return result.store
-      })
+        });
+        nextPassageId = result.navigationTarget?.passageId ?? null;
+        return result.store;
+      });
 
       if (nextPassageId) {
         void navigate({
           to: "/passage/$passageId",
           params: { passageId: nextPassageId },
           search: {},
-        })
+        });
       }
     },
     [activeTabId, navigate, routePassageId],
-  )
+  );
 
   const handleSetActiveTab = useCallback(
     (tabId: string) => {
-      const tab = tabs.find((t) => t.id === tabId)
-      if (!tab) return
-      setStore((currentStore) => activateTab(currentStore, tabId))
+      const tab = tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      setStore((currentStore) => activateTab(currentStore, tabId));
       startTransition(() => {
         void navigate({
           to: "/passage/$passageId",
           params: { passageId: tab.passageId },
           search: {},
-        })
-      })
+        });
+      });
     },
     [tabs, navigate],
-  )
+  );
 
   return (
     <TabContext.Provider
@@ -158,7 +158,7 @@ function TabProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </TabContext.Provider>
-  )
+  );
 }
 
-export { TabProvider }
+export { TabProvider };

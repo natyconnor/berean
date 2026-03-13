@@ -1,10 +1,10 @@
-import { ThemePreviewPanel } from "./theme-preview-panel"
-import { warmManuscriptTheme } from "./theme-warm-manuscript"
-import { deepIndigoTheme } from "./theme-deep-indigo"
-import { forestSageTheme } from "./theme-forest-sage"
+import { ThemePreviewPanel } from "./theme-preview-panel";
+import { warmManuscriptTheme } from "./theme-warm-manuscript";
+import { deepIndigoTheme } from "./theme-deep-indigo";
+import { forestSageTheme } from "./theme-forest-sage";
 
 export function ThemeTestPage() {
-  const themes = [warmManuscriptTheme, deepIndigoTheme, forestSageTheme]
+  const themes = [warmManuscriptTheme, deepIndigoTheme, forestSageTheme];
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
@@ -29,5 +29,5 @@ export function ThemeTestPage() {
         ))}
       </div>
     </div>
-  )
+  );
 }

@@ -1,60 +1,60 @@
-import { useCallback, useMemo, useRef, type CSSProperties } from "react"
-import { useQuery } from "convex-helpers/react/cache"
-import { api } from "../../../convex/_generated/api"
-import { useTabs } from "@/lib/use-tabs"
-import { useEsvReference } from "@/hooks/use-esv-reference"
+import { useCallback, useMemo, useRef, type CSSProperties } from "react";
+import { useQuery } from "convex-helpers/react/cache";
+import { api } from "../../../convex/_generated/api";
+import { useTabs } from "@/lib/use-tabs";
+import { useEsvReference } from "@/hooks/use-esv-reference";
 import {
   formatVerseRef,
   toPassageId,
   type VerseRef,
-} from "@/lib/verse-ref-utils"
-import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles"
-import { TagFilterControl } from "@/components/search/tag-filter-control"
-import { HighlightedText } from "@/components/search/highlighted-text"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { type TagMatchMode } from "@/lib/tag-utils"
-import { useSearchWorkspaceRouting } from "./hooks/use-search-workspace-routing"
-import { useSearchWorkspacePersistence } from "./hooks/use-search-workspace-persistence"
-import { useTutorial } from "@/components/tutorial/tutorial-context"
+} from "@/lib/verse-ref-utils";
+import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
+import { TagFilterControl } from "@/components/search/tag-filter-control";
+import { HighlightedText } from "@/components/search/highlighted-text";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { type TagMatchMode } from "@/lib/tag-utils";
+import { useSearchWorkspaceRouting } from "./hooks/use-search-workspace-routing";
+import { useSearchWorkspacePersistence } from "./hooks/use-search-workspace-persistence";
+import { useTutorial } from "@/components/tutorial/tutorial-context";
 
 export interface SearchWorkspaceRouteState {
-  q?: string
-  tags?: string
-  mode?: TagMatchMode
-  noteId?: string
+  q?: string;
+  tags?: string;
+  mode?: TagMatchMode;
+  noteId?: string;
 }
 
 interface SearchWorkspaceProps {
-  search: SearchWorkspaceRouteState
+  search: SearchWorkspaceRouteState;
 }
 
 interface SearchVerseRef {
-  book: string
-  chapter: number
-  startVerse: number
-  endVerse: number
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
 }
 
 interface SearchResultNote {
-  noteId: string
-  content: string
-  tags: string[]
+  noteId: string;
+  content: string;
+  tags: string[];
 }
 
 interface SearchResultGroup {
-  key: string
-  ref: SearchVerseRef | null
-  notes: SearchResultNote[]
+  key: string;
+  ref: SearchVerseRef | null;
+  notes: SearchResultNote[];
 }
 
 function toRefKey(ref: SearchVerseRef | null): string {
-  if (!ref) return "__unlinked__"
-  return `${ref.book}|${ref.chapter}|${ref.startVerse}|${ref.endVerse}`
+  if (!ref) return "__unlinked__";
+  return `${ref.book}|${ref.chapter}|${ref.startVerse}|${ref.endVerse}`;
 }
 
 function toVerseRefLabel(ref: SearchVerseRef): string {
@@ -63,24 +63,24 @@ function toVerseRefLabel(ref: SearchVerseRef): string {
     chapter: ref.chapter,
     startVerse: ref.startVerse,
     endVerse: ref.endVerse,
-  }
-  return formatVerseRef(normalizedRef)
+  };
+  return formatVerseRef(normalizedRef);
 }
 
 interface ScriptureContextPaneProps {
-  group: SearchResultGroup
-  selectedNoteId: string | undefined
-  normalizedQuery: string
-  onSelectNote: (noteId: string) => void
-  onJumpToRef: (ref: SearchVerseRef) => void
-  resolveTagStyle: (tag: string) => CSSProperties | undefined
-  isTutorialDemo?: boolean
-  markTourTargets?: boolean
+  group: SearchResultGroup;
+  selectedNoteId: string | undefined;
+  normalizedQuery: string;
+  onSelectNote: (noteId: string) => void;
+  onJumpToRef: (ref: SearchVerseRef) => void;
+  resolveTagStyle: (tag: string) => CSSProperties | undefined;
+  isTutorialDemo?: boolean;
+  markTourTargets?: boolean;
 }
 
-const SEARCH_TUTORIAL_DEMO_QUERY = "beloved"
-const SEARCH_TUTORIAL_DEMO_TAGS = ["love", "faith"]
-const SEARCH_TUTORIAL_DEMO_NOTE_ID = "tutorial-demo-note"
+const SEARCH_TUTORIAL_DEMO_QUERY = "beloved";
+const SEARCH_TUTORIAL_DEMO_TAGS = ["love", "faith"];
+const SEARCH_TUTORIAL_DEMO_NOTE_ID = "tutorial-demo-note";
 const SEARCH_TUTORIAL_DEMO_GROUPS: SearchResultGroup[] = [
   {
     key: "tutorial-john-3",
@@ -99,7 +99,7 @@ const SEARCH_TUTORIAL_DEMO_GROUPS: SearchResultGroup[] = [
       },
     ],
   },
-]
+];
 
 function SearchResultGroupRow({
   group,
@@ -111,14 +111,16 @@ function SearchResultGroupRow({
   isTutorialDemo = false,
   markTourTargets = false,
 }: ScriptureContextPaneProps) {
-  const ref = group.ref
-  const { data, loading, error, query } = useEsvReference(ref)
+  const ref = group.ref;
+  const { data, loading, error, query } = useEsvReference(ref);
 
   return (
     <div className="grid gap-3 rounded-md border bg-card p-3 lg:grid-cols-[minmax(340px,1fr)_minmax(360px,1.1fr)]">
       <div
         className="space-y-2 rounded-sm border bg-background p-2"
-        {...(markTourTargets ? { "data-tour-id": "search-demo-scripture-context" } : {})}
+        {...(markTourTargets
+          ? { "data-tour-id": "search-demo-scripture-context" }
+          : {})}
       >
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">
@@ -129,7 +131,9 @@ function SearchResultGroupRow({
               <Button
                 size="xs"
                 onClick={() => onJumpToRef(ref)}
-                {...(markTourTargets ? { "data-tour-id": "search-demo-go-to-verse" } : {})}
+                {...(markTourTargets
+                  ? { "data-tour-id": "search-demo-go-to-verse" }
+                  : {})}
               >
                 Go to verse
               </Button>
@@ -189,7 +193,7 @@ function SearchResultGroupRow({
 
       <div className="space-y-2">
         {group.notes.map((note) => {
-          const isSelected = selectedNoteId === note.noteId
+          const isSelected = selectedNoteId === note.noteId;
           return (
             <button
               key={note.noteId}
@@ -201,7 +205,9 @@ function SearchResultGroupRow({
                   : "border-transparent hover:bg-muted",
               )}
               onClick={() => onSelectNote(note.noteId)}
-              {...(markTourTargets ? { "data-tour-id": "search-demo-result" } : {})}
+              {...(markTourTargets
+                ? { "data-tour-id": "search-demo-result" }
+                : {})}
             >
               {isTutorialDemo ? (
                 <Badge variant="outline" className="mb-2 text-[10px]">
@@ -224,18 +230,18 @@ function SearchResultGroupRow({
                 ))}
               </div>
             </button>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }
 
 export function SearchWorkspace({ search }: SearchWorkspaceProps) {
-  const { openTab } = useTabs()
-  const { isTourActive } = useTutorial()
-  const resolveTagStyle = useStarterTagBadgeStyle()
-  const resultsViewportRef = useRef<HTMLDivElement | null>(null)
+  const { openTab } = useTabs();
+  const { isTourActive } = useTutorial();
+  const resolveTagStyle = useStarterTagBadgeStyle();
+  const resultsViewportRef = useRef<HTMLDivElement | null>(null);
   const {
     query,
     matchMode,
@@ -249,9 +255,9 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
     toggleTag,
     clearTags,
     selectNote,
-  } = useSearchWorkspaceRouting(search)
+  } = useSearchWorkspaceRouting(search);
 
-  const catalog = useQuery(api.tags.listCatalog)
+  const catalog = useQuery(api.tags.listCatalog);
   const searchResults = useQuery(
     api.notes.searchWorkspace,
     shouldSearch
@@ -262,79 +268,84 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
           limit: 100,
         }
       : "skip",
-  )
+  );
 
   const availableTags = useMemo(
     () => (catalog ?? []).map((entry) => entry.tag),
     [catalog],
-  )
+  );
 
   const groupedResults = useMemo<SearchResultGroup[]>(() => {
-    if (!searchResults || searchResults.length === 0) return []
+    if (!searchResults || searchResults.length === 0) return [];
 
-    const groups = new Map<string, SearchResultGroup>()
+    const groups = new Map<string, SearchResultGroup>();
 
     for (const result of searchResults) {
-      const ref = result.primaryRef ?? result.verseRefs[0] ?? null
-      const key = toRefKey(ref)
+      const ref = result.primaryRef ?? result.verseRefs[0] ?? null;
+      const key = toRefKey(ref);
       const note: SearchResultNote = {
         noteId: String(result.noteId),
         content: result.content,
         tags: result.tags,
-      }
-      const existing = groups.get(key)
+      };
+      const existing = groups.get(key);
       if (existing) {
-        existing.notes.push(note)
+        existing.notes.push(note);
       } else {
-        groups.set(key, { key, ref, notes: [note] })
+        groups.set(key, { key, ref, notes: [note] });
       }
     }
 
     return Array.from(groups.values()).sort((a, b) => {
-      if (!a.ref && !b.ref) return 0
-      if (!a.ref) return 1
-      if (!b.ref) return -1
-      return toRefKey(a.ref).localeCompare(toRefKey(b.ref))
-    })
-  }, [searchResults])
-  const isSearchTourActive = isTourActive("search")
+      if (!a.ref && !b.ref) return 0;
+      if (!a.ref) return 1;
+      if (!b.ref) return -1;
+      return toRefKey(a.ref).localeCompare(toRefKey(b.ref));
+    });
+  }, [searchResults]);
+  const isSearchTourActive = isTourActive("search");
   const useTutorialDemoResults =
-    isSearchTourActive && groupedResults.length === 0
-  const effectiveQuery = useTutorialDemoResults ? SEARCH_TUTORIAL_DEMO_QUERY : query
-  const effectiveMatchMode = useTutorialDemoResults ? "any" : matchMode
+    isSearchTourActive && groupedResults.length === 0;
+  const effectiveQuery = useTutorialDemoResults
+    ? SEARCH_TUTORIAL_DEMO_QUERY
+    : query;
+  const effectiveMatchMode = useTutorialDemoResults ? "any" : matchMode;
   const effectiveSelectedTags = useTutorialDemoResults
     ? SEARCH_TUTORIAL_DEMO_TAGS
-    : selectedTags
+    : selectedTags;
   const effectiveSelectedNoteId = useTutorialDemoResults
     ? SEARCH_TUTORIAL_DEMO_NOTE_ID
-    : selectedNoteId
+    : selectedNoteId;
   const effectiveNormalizedQuery = useTutorialDemoResults
     ? SEARCH_TUTORIAL_DEMO_QUERY
-    : normalizedQuery
-  const effectiveShouldSearch = useTutorialDemoResults || shouldSearch
+    : normalizedQuery;
+  const effectiveShouldSearch = useTutorialDemoResults || shouldSearch;
   const effectiveGroups = useTutorialDemoResults
     ? SEARCH_TUTORIAL_DEMO_GROUPS
-    : groupedResults
+    : groupedResults;
   const effectiveResultCount = useTutorialDemoResults
-    ? SEARCH_TUTORIAL_DEMO_GROUPS.reduce((count, group) => count + group.notes.length, 0)
-    : (searchResults?.length ?? 0)
+    ? SEARCH_TUTORIAL_DEMO_GROUPS.reduce(
+        (count, group) => count + group.notes.length,
+        0,
+      )
+    : (searchResults?.length ?? 0);
 
   const jumpToReference = useCallback(
     (ref: SearchVerseRef) => {
-      const passageId = toPassageId(ref.book, ref.chapter)
-      const label = `${ref.book} ${ref.chapter}`
+      const passageId = toPassageId(ref.book, ref.chapter);
+      const label = `${ref.book} ${ref.chapter}`;
       const focusSearch = {
         source: "search" as const,
         mode: "read" as const,
         startVerse: ref.startVerse,
         endVerse: ref.endVerse,
-      }
-      openTab(passageId, label, focusSearch)
+      };
+      openTab(passageId, label, focusSearch);
     },
     [openTab],
-  )
+  );
 
-  const panelScrollClass = "h-[32vh] md:h-[34vh] lg:h-[calc(100vh-2.6rem)]"
+  const panelScrollClass = "h-[32vh] md:h-[34vh] lg:h-[calc(100vh-2.6rem)]";
 
   useSearchWorkspacePersistence({
     search,
@@ -342,15 +353,15 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
     searchResultsReady: searchResults !== undefined,
     viewportRef: resultsViewportRef,
     disabled: useTutorialDemoResults,
-  })
+  });
 
   const handleSelectNote = useCallback(
     (noteId: string) => {
-      if (useTutorialDemoResults) return
-      selectNote(noteId)
+      if (useTutorialDemoResults) return;
+      selectNote(noteId);
     },
     [selectNote, useTutorialDemoResults],
-  )
+  );
 
   return (
     <div className="h-full overflow-hidden">
@@ -434,14 +445,18 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
               <div className="flex gap-1">
                 <Button
                   size="xs"
-                  variant={effectiveMatchMode === "any" ? "secondary" : "outline"}
+                  variant={
+                    effectiveMatchMode === "any" ? "secondary" : "outline"
+                  }
                   onClick={() => updateMatchMode("any")}
                 >
                   Any
                 </Button>
                 <Button
                   size="xs"
-                  variant={effectiveMatchMode === "all" ? "secondary" : "outline"}
+                  variant={
+                    effectiveMatchMode === "all" ? "secondary" : "outline"
+                  }
                   onClick={() => updateMatchMode("all")}
                 >
                   All
@@ -461,5 +476,5 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
         </aside>
       </div>
     </div>
-  )
+  );
 }

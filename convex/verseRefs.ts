@@ -1,7 +1,7 @@
-import { query, mutation } from "./_generated/server"
-import { v } from "convex/values"
-import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth"
-import { findOrCreateVerseRefId } from "./lib/verseRefs"
+import { query, mutation } from "./_generated/server";
+import { v } from "convex/values";
+import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
+import { findOrCreateVerseRefId } from "./lib/verseRefs";
 
 export const findOrCreate = mutation({
   args: {
@@ -12,10 +12,10 @@ export const findOrCreate = mutation({
   },
   returns: v.id("verseRefs"),
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx)
-    return await findOrCreateVerseRefId(ctx, userId, args)
+    const userId = await getCurrentUserId(ctx);
+    return await findOrCreateVerseRefId(ctx, userId, args);
   },
-})
+});
 
 export const getByBookChapter = query({
   args: { book: v.string(), chapter: v.number() },
@@ -28,16 +28,19 @@ export const getByBookChapter = query({
       chapter: v.number(),
       startVerse: v.number(),
       endVerse: v.number(),
-    })
+    }),
   ),
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserIdOrNull(ctx)
-    if (!userId) return []
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
     return await ctx.db
       .query("verseRefs")
       .withIndex("by_userId_book_chapter", (q) =>
-        q.eq("userId", userId).eq("book", args.book).eq("chapter", args.chapter)
+        q
+          .eq("userId", userId)
+          .eq("book", args.book)
+          .eq("chapter", args.chapter),
       )
-      .collect()
+      .collect();
   },
-})
+});

@@ -1,66 +1,70 @@
-import { memo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import type { Id } from "../../../../convex/_generated/dataModel"
-import { VerseRowLeft } from "../verse-row"
-import { VerseNotes } from "../verse-notes"
-import { PassageNotesBubble } from "../passage-notes-bubble"
-import { NoteEditor } from "@/components/notes/note-editor"
-import { cn } from "@/lib/utils"
-import type { NoteBody } from "@/lib/note-inline-content"
-import type { VerseRef } from "@/lib/verse-ref-utils"
-import type { NoteWithRef } from "@/components/notes/model/note-model"
+import { memo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import type { Id } from "../../../../convex/_generated/dataModel";
+import { VerseRowLeft } from "../verse-row";
+import { VerseNotes } from "../verse-notes";
+import { PassageNotesBubble } from "../passage-notes-bubble";
+import { NoteEditor } from "@/components/notes/note-editor";
+import { cn } from "@/lib/utils";
+import type { NoteBody } from "@/lib/note-inline-content";
+import type { VerseRef } from "@/lib/verse-ref-utils";
+import type { NoteWithRef } from "@/components/notes/model/note-model";
 
-const layoutTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const }
+const layoutTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const };
 
 export interface CurrentChapter {
-  book: string
-  chapter: number
+  book: string;
+  chapter: number;
 }
 
 export interface VerseRowWithNotesProps {
-  verseNumber: number
-  text: string
-  viewMode?: "compose" | "read"
-  editorMode?: "inline" | "dialog"
-  currentChapter?: CurrentChapter
+  verseNumber: number;
+  text: string;
+  viewMode?: "compose" | "read";
+  editorMode?: "inline" | "dialog";
+  currentChapter?: CurrentChapter;
 
-  selectedVerses: Set<number>
-  isInSelectionRange: boolean
-  isPassageSelection: boolean
+  selectedVerses: Set<number>;
+  isInSelectionRange: boolean;
+  isPassageSelection: boolean;
 
-  singleNotes: NoteWithRef[]
-  passageNotes: NoteWithRef[]
-  passageAnchor: number | undefined
+  singleNotes: NoteWithRef[];
+  passageNotes: NoteWithRef[];
+  passageAnchor: number | undefined;
 
-  isPassageRangeActive: boolean
-  isNoteBubbleHovered: boolean
+  isPassageRangeActive: boolean;
+  isNoteBubbleHovered: boolean;
 
-  openVerseKey: number | null
-  openPassageKey: number | null
-  creatingFor: VerseRef | null
-  editingNoteId: Id<"notes"> | null
-  isFocusTarget?: boolean
+  openVerseKey: number | null;
+  openPassageKey: number | null;
+  creatingFor: VerseRef | null;
+  editingNoteId: Id<"notes"> | null;
+  isFocusTarget?: boolean;
 
-  onAddNote: (verseNumber: number) => void
-  onMouseDown: (verseNumber: number) => void
-  onMouseEnter: (verseNumber: number) => void
-  onMouseLeave: () => void
-  onSingleBubbleMouseEnter: (verseNumber: number) => void
-  onSingleBubbleMouseLeave: () => void
-  onPassageBubbleMouseEnter: (verseNumber: number) => void
-  onPassageBubbleMouseLeave: () => void
-  onOpenVerseNotes: (verseNumber: number) => void
-  onOpenPassageNotes: (verseNumber: number) => void
-  onEditNote: (noteId: Id<"notes">, verseNumber: number, isPassage: boolean) => void
-  onCancelEditing: () => void
-  onDelete: (noteId: Id<"notes">) => Promise<void>
-  onSaveEdit: (body: NoteBody, tags: string[]) => Promise<void>
-  onSaveNew: (body: NoteBody, tags: string[]) => Promise<void>
-  onClickAway: () => void
-  onStartCreatingPassageNote: (verseRef: VerseRef) => void
-  forceAddButtonVisible?: boolean
-  addNoteTourId?: string
-  rowTourId?: string
+  onAddNote: (verseNumber: number) => void;
+  onMouseDown: (verseNumber: number) => void;
+  onMouseEnter: (verseNumber: number) => void;
+  onMouseLeave: () => void;
+  onSingleBubbleMouseEnter: (verseNumber: number) => void;
+  onSingleBubbleMouseLeave: () => void;
+  onPassageBubbleMouseEnter: (verseNumber: number) => void;
+  onPassageBubbleMouseLeave: () => void;
+  onOpenVerseNotes: (verseNumber: number) => void;
+  onOpenPassageNotes: (verseNumber: number) => void;
+  onEditNote: (
+    noteId: Id<"notes">,
+    verseNumber: number,
+    isPassage: boolean,
+  ) => void;
+  onCancelEditing: () => void;
+  onDelete: (noteId: Id<"notes">) => Promise<void>;
+  onSaveEdit: (body: NoteBody, tags: string[]) => Promise<void>;
+  onSaveNew: (body: NoteBody, tags: string[]) => Promise<void>;
+  onClickAway: () => void;
+  onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  forceAddButtonVisible?: boolean;
+  addNoteTourId?: string;
+  rowTourId?: string;
 }
 
 export const VerseRowWithNotes = memo(function VerseRowWithNotes({
@@ -103,40 +107,41 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   addNoteTourId,
   rowTourId,
 }: VerseRowWithNotesProps) {
-  const isReadMode = viewMode === "read"
-  const useDialogEditors = editorMode === "dialog"
-  const shouldShowInlineEditors = !useDialogEditors
+  const isReadMode = viewMode === "read";
+  const useDialogEditors = editorMode === "dialog";
+  const shouldShowInlineEditors = !useDialogEditors;
 
-  const isPassageAnchor = passageNotes.length > 0
-  const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor
+  const isPassageAnchor = passageNotes.length > 0;
+  const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor;
 
-  const isVerseOpen = openVerseKey === verseNumber
-  const isPassageOpen = openPassageKey === verseNumber
-  const isCreatingHere = creatingFor?.startVerse === verseNumber && !editingNoteId
+  const isVerseOpen = openVerseKey === verseNumber;
+  const isPassageOpen = openPassageKey === verseNumber;
+  const isCreatingHere =
+    creatingFor?.startVerse === verseNumber && !editingNoteId;
 
   const isEditingSingleHere =
-    editingNoteId !== null && singleNotes.some((note) => note.noteId === editingNoteId)
+    editingNoteId !== null &&
+    singleNotes.some((note) => note.noteId === editingNoteId);
   const isEditingPassageHere =
-    editingNoteId !== null && passageNotes.some((note) => note.noteId === editingNoteId)
+    editingNoteId !== null &&
+    passageNotes.some((note) => note.noteId === editingNoteId);
 
   const isAnyOpen =
     isVerseOpen ||
     isPassageOpen ||
     isCreatingHere ||
     isEditingSingleHere ||
-    isEditingPassageHere
+    isEditingPassageHere;
 
-  const hasBothNoteTypes = singleNotes.length > 0 && passageNotes.length > 0
-  const useSideBySide =
-    !isReadMode &&
-    hasBothNoteTypes &&
-    !isCreatingHere
-  const showVerseAsPill = useSideBySide && isPassageOpen
+  const hasBothNoteTypes = singleNotes.length > 0 && passageNotes.length > 0;
+  const useSideBySide = !isReadMode && hasBothNoteTypes && !isCreatingHere;
+  const showVerseAsPill = useSideBySide && isPassageOpen;
   const showPassageAsPill =
-    useSideBySide && (isVerseOpen || isEditingSingleHere) && !isPassageOpen
-  const showPassageCompact = useSideBySide && !isPassageOpen && !showPassageAsPill
+    useSideBySide && (isVerseOpen || isEditingSingleHere) && !isPassageOpen;
+  const showPassageCompact =
+    useSideBySide && !isPassageOpen && !showPassageAsPill;
 
-  const passageNoteJsx = (
+  const passageNoteJsx =
     passageNotes.length > 0 ? (
       <motion.div
         layout
@@ -147,7 +152,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               ? "flex-1 min-w-[260px]"
               : showPassageAsPill
                 ? "shrink-0"
-                : "w-[180px] shrink-0")
+                : "w-[180px] shrink-0"),
         )}
       >
         <PassageNotesBubble
@@ -163,7 +168,9 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           onCancelEdit={shouldShowInlineEditors ? onCancelEditing : undefined}
           onOpen={() => onOpenPassageNotes(verseNumber)}
           onClose={onClickAway}
-          onEdit={(noteId: Id<"notes">) => onEditNote(noteId, verseNumber, true)}
+          onEdit={(noteId: Id<"notes">) =>
+            onEditNote(noteId, verseNumber, true)
+          }
           onDelete={onDelete}
           onAddNote={() =>
             onStartCreatingPassageNote({
@@ -177,8 +184,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           onMouseLeave={onPassageBubbleMouseLeave}
         />
       </motion.div>
-    ) : null
-  )
+    ) : null;
 
   return (
     <motion.div
@@ -188,7 +194,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         "relative overflow-visible hover:z-10 focus-within:z-10",
         isReadMode
           ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
-          : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start"
+          : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start",
       )}
     >
       <motion.div layout="position" transition={{ layout: layoutTransition }}>
@@ -227,14 +233,20 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
       <motion.div
         layout
         transition={{ layout: layoutTransition }}
-        className={cn("py-1", useSideBySide ? "flex gap-2 items-start" : "space-y-1.5")}
+        className={cn(
+          "py-1",
+          useSideBySide ? "flex gap-2 items-start" : "space-y-1.5",
+        )}
         {...(isAnyOpen ? { "data-notes-open": "" } : {})}
       >
         {singleNotes.length > 0 ? (
           <motion.div
             layout
             transition={{ layout: layoutTransition }}
-            className={cn(useSideBySide && (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"))}
+            className={cn(
+              useSideBySide &&
+                (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"),
+            )}
           >
             <VerseNotes
               notes={singleNotes}
@@ -244,7 +256,9 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               currentChapter={currentChapter}
               editingNoteId={shouldShowInlineEditors ? editingNoteId : null}
               onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
-              onCancelEdit={shouldShowInlineEditors ? onCancelEditing : undefined}
+              onCancelEdit={
+                shouldShowInlineEditors ? onCancelEditing : undefined
+              }
               onOpen={() => onOpenVerseNotes(verseNumber)}
               onClose={onClickAway}
               onEdit={(noteId) => onEditNote(noteId, verseNumber, false)}
@@ -280,5 +294,5 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         </AnimatePresence>
       </motion.div>
     </motion.div>
-  )
-})
+  );
+});

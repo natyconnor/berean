@@ -1,28 +1,32 @@
-import { memo } from "react"
-import { Pencil, Trash2 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-import type { NoteBody } from "@/lib/note-inline-content"
-import type { VerseRef } from "@/lib/verse-ref-utils"
-import { formatVerseRef, isPassageNote } from "@/lib/verse-ref-utils"
+import { memo } from "react";
+import { Pencil, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import type { NoteBody } from "@/lib/note-inline-content";
+import type { VerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRef, isPassageNote } from "@/lib/verse-ref-utils";
 import {
   NoteTagList,
   NoteContent,
   type CurrentChapter,
-} from "./view/note-card-primitives"
+} from "./view/note-card-primitives";
 
 interface NoteBubbleProps {
-  noteId: string
-  content: string
-  body?: NoteBody
-  tags: string[]
-  verseRef: VerseRef
-  isExpanded: boolean
-  currentChapter?: CurrentChapter
-  onExpand: () => void
-  onEdit: () => void
-  onDelete: () => void
+  noteId: string;
+  content: string;
+  body?: NoteBody;
+  tags: string[];
+  verseRef: VerseRef;
+  isExpanded: boolean;
+  currentChapter?: CurrentChapter;
+  onExpand: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }
 
 export const NoteBubble = memo(function NoteBubble({
@@ -36,8 +40,8 @@ export const NoteBubble = memo(function NoteBubble({
   onEdit,
   onDelete,
 }: NoteBubbleProps) {
-  const isPassage = isPassageNote(verseRef)
-  const variant = isPassage ? "passage" : "default"
+  const isPassage = isPassageNote(verseRef);
+  const variant = isPassage ? "passage" : "default";
 
   return (
     <div
@@ -46,7 +50,7 @@ export const NoteBubble = memo(function NoteBubble({
         isPassage
           ? "bg-amber-50/80 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/50"
           : "bg-card border-border",
-        isExpanded && "shadow-md"
+        isExpanded && "shadow-md",
       )}
       onClick={() => !isExpanded && onExpand()}
     >
@@ -56,7 +60,10 @@ export const NoteBubble = memo(function NoteBubble({
             {formatVerseRef(verseRef)}
           </Badge>
           {isPassage && (
-            <Badge variant="outline" className="text-xs font-normal text-amber-700 dark:text-amber-400/70 border-amber-300 dark:border-amber-600/50">
+            <Badge
+              variant="outline"
+              className="text-xs font-normal text-amber-700 dark:text-amber-400/70 border-amber-300 dark:border-amber-600/50"
+            >
               passage
             </Badge>
           )}
@@ -68,8 +75,8 @@ export const NoteBubble = memo(function NoteBubble({
                 <button
                   className="p-1 rounded hover:bg-muted transition-colors"
                   onClick={(e) => {
-                    e.stopPropagation()
-                    onEdit()
+                    e.stopPropagation();
+                    onEdit();
                   }}
                 >
                   <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
@@ -82,8 +89,8 @@ export const NoteBubble = memo(function NoteBubble({
                 <button
                   className="p-1 rounded hover:bg-destructive/10 transition-colors"
                   onClick={(e) => {
-                    e.stopPropagation()
-                    onDelete()
+                    e.stopPropagation();
+                    onDelete();
                   }}
                 >
                   <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
@@ -99,8 +106,8 @@ export const NoteBubble = memo(function NoteBubble({
               <button
                 className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-all"
                 onClick={(e) => {
-                  e.stopPropagation()
-                  onEdit()
+                  e.stopPropagation();
+                  onEdit();
                 }}
               >
                 <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
@@ -121,5 +128,5 @@ export const NoteBubble = memo(function NoteBubble({
 
       <NoteTagList tags={tags} variant={variant} size="sm" className="mt-2" />
     </div>
-  )
-})
+  );
+});

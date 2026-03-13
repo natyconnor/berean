@@ -1,46 +1,46 @@
-import { getAuthUserId } from "@convex-dev/auth/server"
-import type { QueryCtx, MutationCtx } from "../_generated/server"
-import type { Doc, Id } from "../_generated/dataModel"
+import { getAuthUserId } from "@convex-dev/auth/server";
+import type { QueryCtx, MutationCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 
 export async function getCurrentUser(
-  ctx: QueryCtx | MutationCtx
+  ctx: QueryCtx | MutationCtx,
 ): Promise<Doc<"users">> {
-  const userId = await getAuthUserId(ctx)
+  const userId = await getAuthUserId(ctx);
   if (!userId) {
-    throw new Error("Not authenticated")
+    throw new Error("Not authenticated");
   }
 
-  const user = await ctx.db.get(userId)
+  const user = await ctx.db.get(userId);
   if (!user) {
-    throw new Error("User not found")
+    throw new Error("User not found");
   }
 
-  return user
+  return user;
 }
 
 export async function getCurrentUserOrNull(
-  ctx: QueryCtx | MutationCtx
+  ctx: QueryCtx | MutationCtx,
 ): Promise<Doc<"users"> | null> {
-  const userId = await getAuthUserId(ctx)
+  const userId = await getAuthUserId(ctx);
   if (!userId) {
-    return null
+    return null;
   }
 
-  return await ctx.db.get(userId)
+  return await ctx.db.get(userId);
 }
 
 export async function getCurrentUserId(
-  ctx: QueryCtx | MutationCtx
+  ctx: QueryCtx | MutationCtx,
 ): Promise<Id<"users">> {
-  const userId = await getAuthUserId(ctx)
+  const userId = await getAuthUserId(ctx);
   if (!userId) {
-    throw new Error("Not authenticated")
+    throw new Error("Not authenticated");
   }
-  return userId
+  return userId;
 }
 
 export async function getCurrentUserIdOrNull(
-  ctx: QueryCtx | MutationCtx
+  ctx: QueryCtx | MutationCtx,
 ): Promise<Id<"users"> | null> {
-  return await getAuthUserId(ctx)
+  return await getAuthUserId(ctx);
 }

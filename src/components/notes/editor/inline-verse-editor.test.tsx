@@ -39,7 +39,7 @@ describe("InlineVerseEditor", () => {
         initialBody={EMPTY_NOTE_BODY}
         verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
         onChange={onChange}
-      />
+      />,
     );
 
     const editor = screen.getByRole("textbox");
@@ -60,7 +60,7 @@ describe("InlineVerseEditor", () => {
         initialBody={EMPTY_NOTE_BODY}
         verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
         onChange={onChange}
-      />
+      />,
     );
 
     const editor = screen.getByRole("textbox");
@@ -96,7 +96,7 @@ describe("InlineVerseEditor", () => {
         initialBody={EMPTY_NOTE_BODY}
         verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
         onChange={onChange}
-      />
+      />,
     );
 
     const editor = screen.getByRole("textbox");

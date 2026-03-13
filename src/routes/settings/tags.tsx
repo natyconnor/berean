@@ -1,12 +1,12 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useQuery, useMutation } from "convex/react"
-import { Check, FlaskConical, Loader2, Trash2 } from "lucide-react"
+import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { Check, FlaskConical, Loader2, Trash2 } from "lucide-react";
 
-import { api } from "../../../convex/_generated/api"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+import { api } from "../../../convex/_generated/api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -14,76 +14,76 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { cn } from "@/lib/utils"
-import { normalizeTag } from "@/lib/tag-utils"
-import { ImportExportSection } from "@/components/settings/import-export-section"
-import { useTutorial } from "@/components/tutorial/tutorial-context"
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { normalizeTag } from "@/lib/tag-utils";
+import { ImportExportSection } from "@/components/settings/import-export-section";
+import { useTutorial } from "@/components/tutorial/tutorial-context";
 import {
   ALL_STARTER_TAGS,
   DEFAULT_STARTER_TAG_CATEGORY_COLORS,
   STARTER_TAG_CATEGORIES,
-} from "@/lib/starter-tags"
-import type { TutorialStatus } from "../../../convex/lib/tutorial"
+} from "@/lib/starter-tags";
+import type { TutorialStatus } from "../../../convex/lib/tutorial";
 
 export const Route = createFileRoute("/settings/tags")({
   component: LegacyTagSettingsRedirect,
-})
+});
 
 function LegacyTagSettingsRedirect() {
-  return <Navigate to="/settings" replace />
+  return <Navigate to="/settings" replace />;
 }
 
 export function SettingsPage() {
-  const catalog = useQuery(api.tags.listCatalog)
+  const catalog = useQuery(api.tags.listCatalog);
   const setupStatus: TutorialStatus | undefined = useQuery(
     api.userSettings.getTutorialStatus,
-  )
-  const addMany = useMutation(api.tags.addMany)
-  const removeMany = useMutation(api.tags.removeMany)
+  );
+  const addMany = useMutation(api.tags.addMany);
+  const removeMany = useMutation(api.tags.removeMany);
   const removeCustomTagAndDetach = useMutation(
     api.tags.removeCustomTagAndDetach,
-  )
-  const completeSetup = useMutation(api.userSettings.completeStarterTagsSetup)
+  );
+  const completeSetup = useMutation(api.userSettings.completeStarterTagsSetup);
   const setCategoryColor = useMutation(
     api.userSettings.setStarterTagCategoryColor,
-  )
-  const seedDevChapterNotes = useMutation(api.seed.seedDevChapterNotes)
-  const { startTour } = useTutorial()
+  );
+  const seedDevChapterNotes = useMutation(api.seed.seedDevChapterNotes);
+  const { startTour } = useTutorial();
 
-  const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [draftCategoryColors, setDraftCategoryColors] = useState<
     Record<string, string>
-  >({})
-  const [customTagInput, setCustomTagInput] = useState("")
+  >({});
+  const [customTagInput, setCustomTagInput] = useState("");
   const [deleteTagCandidate, setDeleteTagCandidate] = useState<string | null>(
     null,
-  )
+  );
   const [seedResult, setSeedResult] = useState<{
-    seed: number
-    selectedChapters: number
-    heavyChapters: number
-    notesCreated: number
-    verseRefsCreated: number
-    linksCreated: number
-    testamentDistribution: { ot: number; nt: number }
+    seed: number;
+    selectedChapters: number;
+    heavyChapters: number;
+    notesCreated: number;
+    verseRefsCreated: number;
+    linksCreated: number;
+    testamentDistribution: { ot: number; nt: number };
     cleanup: {
-      notesDeleted: number
-      linksDeleted: number
-      verseRefsDeleted: number
-    }
-    usedTags: string[]
-  } | null>(null)
+      notesDeleted: number;
+      linksDeleted: number;
+      verseRefsDeleted: number;
+    };
+    usedTags: string[];
+  } | null>(null);
 
   const catalogByTag = useMemo(() => {
-    const entries = catalog ?? []
-    return new Map(entries.map((entry) => [entry.tag, entry]))
-  }, [catalog])
+    const entries = catalog ?? [];
+    return new Map(entries.map((entry) => [entry.tag, entry]));
+  }, [catalog]);
 
   const customTags = useMemo(
     () => (catalog ?? []).filter((entry) => entry.source === "custom"),
     [catalog],
-  )
+  );
 
   const parsedCustomTagInput = useMemo(() => {
     const inputTags = customTagInput
@@ -91,34 +91,34 @@ export function SettingsPage() {
       .map((part) => part.trim())
       .filter((part) => part.length > 0)
       .map((part) => normalizeTag(part))
-      .filter((part) => part.length > 0)
+      .filter((part) => part.length > 0);
 
-    const seen = new Set<string>()
-    const duplicateTagsInInput: string[] = []
-    const duplicateTagsInCatalog: string[] = []
-    const tagsToAdd: string[] = []
+    const seen = new Set<string>();
+    const duplicateTagsInInput: string[] = [];
+    const duplicateTagsInCatalog: string[] = [];
+    const tagsToAdd: string[] = [];
 
     for (const tag of inputTags) {
       if (seen.has(tag)) {
-        duplicateTagsInInput.push(tag)
-        continue
+        duplicateTagsInInput.push(tag);
+        continue;
       }
-      seen.add(tag)
+      seen.add(tag);
 
       if (catalogByTag.has(tag)) {
-        duplicateTagsInCatalog.push(tag)
-        continue
+        duplicateTagsInCatalog.push(tag);
+        continue;
       }
 
-      tagsToAdd.push(tag)
+      tagsToAdd.push(tag);
     }
 
     return {
       duplicateTagsInInput,
       duplicateTagsInCatalog,
       tagsToAdd,
-    }
-  }, [catalogByTag, customTagInput])
+    };
+  }, [catalogByTag, customTagInput]);
 
   const categoryColors = useMemo<Record<string, string>>(
     () => ({
@@ -126,133 +126,133 @@ export function SettingsPage() {
       ...(setupStatus?.categoryColors ?? {}),
     }),
     [setupStatus?.categoryColors],
-  )
+  );
 
   useEffect(() => {
-    setDraftCategoryColors(categoryColors)
-  }, [categoryColors])
+    setDraftCategoryColors(categoryColors);
+  }, [categoryColors]);
 
   useEffect(() => {
     if (setupStatus?.needsStarterTagsSetup) {
-      void completeSetup({})
+      void completeSetup({});
     }
-  }, [setupStatus?.needsStarterTagsSetup, completeSetup])
+  }, [setupStatus?.needsStarterTagsSetup, completeSetup]);
 
   const selectedStarterCount = useMemo(() => {
-    let count = 0
+    let count = 0;
     for (const tag of ALL_STARTER_TAGS) {
-      if (catalogByTag.has(tag)) count += 1
+      if (catalogByTag.has(tag)) count += 1;
     }
-    return count
-  }, [catalogByTag])
+    return count;
+  }, [catalogByTag]);
 
-  const isLoading = catalog === undefined || setupStatus === undefined
-  const isDev = import.meta.env.DEV
+  const isLoading = catalog === undefined || setupStatus === undefined;
+  const isDev = import.meta.env.DEV;
 
   const handleAddAll = async () => {
-    setBusyAction("add-all")
+    setBusyAction("add-all");
     try {
-      await addMany({ tags: ALL_STARTER_TAGS, source: "starter" })
+      await addMany({ tags: ALL_STARTER_TAGS, source: "starter" });
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   const handleAddCategory = async (categoryId: string, tags: string[]) => {
-    setBusyAction(`add-category:${categoryId}`)
+    setBusyAction(`add-category:${categoryId}`);
     try {
-      await addMany({ tags, source: "starter" })
+      await addMany({ tags, source: "starter" });
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   const handleToggleTag = async (tag: string) => {
-    const existing = catalogByTag.get(tag)
-    const isStarterTagInCatalog = existing?.source === "starter"
-    const isCustomTagInCatalog = existing?.source === "custom"
+    const existing = catalogByTag.get(tag);
+    const isStarterTagInCatalog = existing?.source === "starter";
+    const isCustomTagInCatalog = existing?.source === "custom";
 
-    if (isCustomTagInCatalog) return
+    if (isCustomTagInCatalog) return;
 
-    setBusyAction(`toggle:${tag}`)
+    setBusyAction(`toggle:${tag}`);
     try {
       if (isStarterTagInCatalog) {
-        await removeMany({ tags: [tag] })
+        await removeMany({ tags: [tag] });
       } else {
-        await addMany({ tags: [tag], source: "starter" })
+        await addMany({ tags: [tag], source: "starter" });
       }
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   const colorSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
-  )
+  );
 
   const saveCategoryColor = useCallback(
     (categoryId: string, color: string) => {
-      void setCategoryColor({ categoryId, color })
+      void setCategoryColor({ categoryId, color });
     },
     [setCategoryColor],
-  )
+  );
 
   const handleColorChange = useCallback(
     (categoryId: string, color: string) => {
-      setDraftCategoryColors((prev) => ({ ...prev, [categoryId]: color }))
+      setDraftCategoryColors((prev) => ({ ...prev, [categoryId]: color }));
 
       if (colorSaveTimers.current[categoryId]) {
-        clearTimeout(colorSaveTimers.current[categoryId])
+        clearTimeout(colorSaveTimers.current[categoryId]);
       }
       colorSaveTimers.current[categoryId] = setTimeout(() => {
-        saveCategoryColor(categoryId, color)
-        delete colorSaveTimers.current[categoryId]
-      }, 500)
+        saveCategoryColor(categoryId, color);
+        delete colorSaveTimers.current[categoryId];
+      }, 500);
     },
     [saveCategoryColor],
-  )
+  );
 
   useEffect(() => {
-    const timers = colorSaveTimers.current
+    const timers = colorSaveTimers.current;
     return () => {
       for (const timer of Object.values(timers)) {
-        clearTimeout(timer)
+        clearTimeout(timer);
       }
-    }
-  }, [])
+    };
+  }, []);
 
   const handleAddCustomTags = async () => {
-    const tags = parsedCustomTagInput.tagsToAdd
+    const tags = parsedCustomTagInput.tagsToAdd;
 
-    if (tags.length === 0) return
+    if (tags.length === 0) return;
 
-    setBusyAction("add-custom")
+    setBusyAction("add-custom");
     try {
-      await addMany({ tags, source: "custom" })
-      setCustomTagInput("")
+      await addMany({ tags, source: "custom" });
+      setCustomTagInput("");
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   const handleConfirmDeleteCustomTag = async () => {
-    if (!deleteTagCandidate) return
+    if (!deleteTagCandidate) return;
 
-    setBusyAction(`delete-custom:${deleteTagCandidate}`)
+    setBusyAction(`delete-custom:${deleteTagCandidate}`);
     try {
-      await removeCustomTagAndDetach({ tag: deleteTagCandidate })
-      setDeleteTagCandidate(null)
+      await removeCustomTagAndDetach({ tag: deleteTagCandidate });
+      setDeleteTagCandidate(null);
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   const handleRunDevSeed = async () => {
-    setBusyAction("seed-dev-notes")
+    setBusyAction("seed-dev-notes");
     try {
       const result = await seedDevChapterNotes({
         confirmReplace: true,
-      })
+      });
       setSeedResult({
         seed: result.seed,
         selectedChapters: result.selectedChapters,
@@ -263,18 +263,18 @@ export function SettingsPage() {
         testamentDistribution: result.testamentDistribution,
         cleanup: result.cleanup,
         usedTags: result.usedTags,
-      })
+      });
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
-    )
+    );
   }
 
   return (
@@ -313,8 +313,8 @@ export function SettingsPage() {
                 onChange={(event) => setCustomTagInput(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    event.preventDefault()
-                    void handleAddCustomTags()
+                    event.preventDefault();
+                    void handleAddCustomTags();
                   }
                 }}
                 placeholder="Add custom tag (comma-separated supported)"
@@ -422,12 +422,12 @@ export function SettingsPage() {
               {STARTER_TAG_CATEGORIES.map((category) => {
                 const categorySelectedCount = category.tags.filter((tag) =>
                   catalogByTag.has(tag),
-                ).length
-                const addCategoryActionId = `add-category:${category.id}`
+                ).length;
+                const addCategoryActionId = `add-category:${category.id}`;
                 const draftCategoryColor =
                   draftCategoryColors[category.id] ??
                   categoryColors[category.id] ??
-                  DEFAULT_STARTER_TAG_CATEGORY_COLORS[category.id]
+                  DEFAULT_STARTER_TAG_CATEGORY_COLORS[category.id];
 
                 return (
                   <div
@@ -488,11 +488,11 @@ export function SettingsPage() {
 
                     <div className="flex flex-wrap gap-2">
                       {category.tags.map((tag) => {
-                        const entry = catalogByTag.get(tag)
-                        const isSelected = entry !== undefined
-                        const isStarter = entry?.source === "starter"
-                        const isCustom = entry?.source === "custom"
-                        const toggleActionId = `toggle:${tag}`
+                        const entry = catalogByTag.get(tag);
+                        const isSelected = entry !== undefined;
+                        const isStarter = entry?.source === "starter";
+                        const isCustom = entry?.source === "custom";
+                        const toggleActionId = `toggle:${tag}`;
 
                         return (
                           <button
@@ -531,11 +531,11 @@ export function SettingsPage() {
                               </span>
                             )}
                           </button>
-                        )
+                        );
                       })}
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           </div>
@@ -657,7 +657,7 @@ export function SettingsPage() {
         open={deleteTagCandidate !== null}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
-            setDeleteTagCandidate(null)
+            setDeleteTagCandidate(null);
           }
         }}
       >
@@ -693,5 +693,5 @@ export function SettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

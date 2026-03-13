@@ -1,8 +1,8 @@
 export interface BookInfo {
-  name: string
-  abbreviation: string
-  chapters: number
-  testament: "OT" | "NT"
+  name: string;
+  abbreviation: string;
+  chapters: number;
+  testament: "OT" | "NT";
 }
 
 export const BIBLE_BOOKS: BookInfo[] = [
@@ -28,7 +28,12 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: "Psalms", abbreviation: "Ps", chapters: 150, testament: "OT" },
   { name: "Proverbs", abbreviation: "Prov", chapters: 31, testament: "OT" },
   { name: "Ecclesiastes", abbreviation: "Eccl", chapters: 12, testament: "OT" },
-  { name: "Song of Solomon", abbreviation: "Song", chapters: 8, testament: "OT" },
+  {
+    name: "Song of Solomon",
+    abbreviation: "Song",
+    chapters: 8,
+    testament: "OT",
+  },
   { name: "Isaiah", abbreviation: "Isa", chapters: 66, testament: "OT" },
   { name: "Jeremiah", abbreviation: "Jer", chapters: 52, testament: "OT" },
   { name: "Lamentations", abbreviation: "Lam", chapters: 5, testament: "OT" },
@@ -54,14 +59,34 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: "John", abbreviation: "John", chapters: 21, testament: "NT" },
   { name: "Acts", abbreviation: "Acts", chapters: 28, testament: "NT" },
   { name: "Romans", abbreviation: "Rom", chapters: 16, testament: "NT" },
-  { name: "1 Corinthians", abbreviation: "1Cor", chapters: 16, testament: "NT" },
-  { name: "2 Corinthians", abbreviation: "2Cor", chapters: 13, testament: "NT" },
+  {
+    name: "1 Corinthians",
+    abbreviation: "1Cor",
+    chapters: 16,
+    testament: "NT",
+  },
+  {
+    name: "2 Corinthians",
+    abbreviation: "2Cor",
+    chapters: 13,
+    testament: "NT",
+  },
   { name: "Galatians", abbreviation: "Gal", chapters: 6, testament: "NT" },
   { name: "Ephesians", abbreviation: "Eph", chapters: 6, testament: "NT" },
   { name: "Philippians", abbreviation: "Phil", chapters: 4, testament: "NT" },
   { name: "Colossians", abbreviation: "Col", chapters: 4, testament: "NT" },
-  { name: "1 Thessalonians", abbreviation: "1Thess", chapters: 5, testament: "NT" },
-  { name: "2 Thessalonians", abbreviation: "2Thess", chapters: 3, testament: "NT" },
+  {
+    name: "1 Thessalonians",
+    abbreviation: "1Thess",
+    chapters: 5,
+    testament: "NT",
+  },
+  {
+    name: "2 Thessalonians",
+    abbreviation: "2Thess",
+    chapters: 3,
+    testament: "NT",
+  },
   { name: "1 Timothy", abbreviation: "1Tim", chapters: 6, testament: "NT" },
   { name: "2 Timothy", abbreviation: "2Tim", chapters: 4, testament: "NT" },
   { name: "Titus", abbreviation: "Titus", chapters: 3, testament: "NT" },
@@ -75,10 +100,10 @@ export const BIBLE_BOOKS: BookInfo[] = [
   { name: "3 John", abbreviation: "3John", chapters: 1, testament: "NT" },
   { name: "Jude", abbreviation: "Jude", chapters: 1, testament: "NT" },
   { name: "Revelation", abbreviation: "Rev", chapters: 22, testament: "NT" },
-]
+];
 
-export const BOOK_BY_NAME = new Map(BIBLE_BOOKS.map((b) => [b.name, b]))
+export const BOOK_BY_NAME = new Map(BIBLE_BOOKS.map((b) => [b.name, b]));
 
 export function getBookInfo(name: string): BookInfo | undefined {
-  return BOOK_BY_NAME.get(name)
+  return BOOK_BY_NAME.get(name);
 }

@@ -1,62 +1,62 @@
-import { useEffect, useState } from "react"
-import { AnimatePresence } from "framer-motion"
-import { useTabs } from "@/lib/use-tabs"
-import { TabItem } from "./tab-item"
-import { LogOut, Search, Settings, TableOfContents } from "lucide-react"
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { SearchDialog } from "@/components/notes/search-dialog"
-import { ThemeDropdown } from "./theme-dropdown"
-import { PassageNavigator } from "@/components/bible/passage-navigator"
-import { useAuthActions } from "@convex-dev/auth/react"
-import { TooltipButton } from "@/components/ui/tooltip-button"
-import { Link, useLocation, useNavigate } from "@tanstack/react-router"
-import { readSearchWorkspaceState } from "@/lib/search-workspace-state"
-import { cn } from "@/lib/utils"
-import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts"
-import { useOptionalTutorial } from "@/components/tutorial/tutorial-context"
+import { useEffect, useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import { useTabs } from "@/lib/use-tabs";
+import { TabItem } from "./tab-item";
+import { LogOut, Search, Settings, TableOfContents } from "lucide-react";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { SearchDialog } from "@/components/notes/search-dialog";
+import { ThemeDropdown } from "./theme-dropdown";
+import { PassageNavigator } from "@/components/bible/passage-navigator";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { TooltipButton } from "@/components/ui/tooltip-button";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { readSearchWorkspaceState } from "@/lib/search-workspace-state";
+import { cn } from "@/lib/utils";
+import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
+import { useOptionalTutorial } from "@/components/tutorial/tutorial-context";
 
 export function TabBar() {
-  const { tabs, activeTabId, setActiveTab, closeTab } = useTabs()
-  const { signOut } = useAuthActions()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false)
-  const isSearchRoute = location.pathname === "/search"
-  const isSettingsRoute = location.pathname.startsWith("/settings")
-  const savedSearchState = readSearchWorkspaceState()
-  const tutorial = useOptionalTutorial()
-  const isToolbarStep = tutorial?.isStepActive("main", "toolbar") ?? false
-  const searchShortcutLabel = formatCommandOrControlShortcut("K")
-  const passageShortcutLabel = formatCommandOrControlShortcut("G")
-  const settingsShortcutLabel = formatCommandOrControlShortcut(",")
+  const { tabs, activeTabId, setActiveTab, closeTab } = useTabs();
+  const { signOut } = useAuthActions();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false);
+  const isSearchRoute = location.pathname === "/search";
+  const isSettingsRoute = location.pathname.startsWith("/settings");
+  const savedSearchState = readSearchWorkspaceState();
+  const tutorial = useOptionalTutorial();
+  const isToolbarStep = tutorial?.isStepActive("main", "toolbar") ?? false;
+  const searchShortcutLabel = formatCommandOrControlShortcut("K");
+  const passageShortcutLabel = formatCommandOrControlShortcut("G");
+  const settingsShortcutLabel = formatCommandOrControlShortcut(",");
   const searchLinkState = {
     q: savedSearchState.params.q,
     tags: savedSearchState.params.tags,
     mode: savedSearchState.params.mode,
     noteId: savedSearchState.params.noteId,
-  }
+  };
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
-        return
+        return;
       }
 
       if (event.key.toLowerCase() === "g") {
-        event.preventDefault()
-        setPassageNavigatorOpen((open) => !open)
-        return
+        event.preventDefault();
+        setPassageNavigatorOpen((open) => !open);
+        return;
       }
 
       if (event.key === ",") {
-        event.preventDefault()
-        void navigate({ to: "/settings" })
+        event.preventDefault();
+        void navigate({ to: "/settings" });
       }
     }
 
-    document.addEventListener("keydown", handleKeyDown)
-    return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [navigate])
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [navigate]);
 
   return (
     <div className="flex items-center border-b bg-muted/30 h-10 shrink-0">
@@ -78,7 +78,10 @@ export function TabBar() {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <div className="flex items-center gap-1 mx-1 shrink-0" data-tour-id="app-toolbar">
+      <div
+        className="flex items-center gap-1 mx-1 shrink-0"
+        data-tour-id="app-toolbar"
+      >
         <TooltipButton
           asChild
           variant="ghost"
@@ -148,5 +151,5 @@ export function TabBar() {
       </div>
       <SearchDialog showTrigger={false} />
     </div>
-  )
+  );
 }

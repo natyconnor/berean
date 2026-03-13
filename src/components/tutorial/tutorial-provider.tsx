@@ -1,11 +1,11 @@
 import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type CSSProperties,
-    type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
 } from "react";
 import { useMutation } from "convex/react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -13,28 +13,28 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 import {
-    TutorialContext,
-    type TutorialContextValue,
-    type TutorialStep as TourStep,
+  TutorialContext,
+  type TutorialContextValue,
+  type TutorialStep as TourStep,
 } from "./tutorial-context";
 import {
-    readActiveTutorialTour,
-    writeActiveTutorialTour,
-    type TutorialTourName,
+  readActiveTutorialTour,
+  writeActiveTutorialTour,
+  type TutorialTourName,
 } from "./tutorial-session";
 
 interface TutorialStatus {
-  needsStarterTagsSetup: boolean
-  starterTagsSetupCompletedAt?: number
-  mainTutorialCompletedAt?: number
-  advancedSearchTutorialCompletedAt?: number
-  categoryColors: Record<string, string>
+  needsStarterTagsSetup: boolean;
+  starterTagsSetupCompletedAt?: number;
+  mainTutorialCompletedAt?: number;
+  advancedSearchTutorialCompletedAt?: number;
+  categoryColors: Record<string, string>;
 }
 
 const isMac =
   typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad|iPod/.test(navigator.platform)
-const modKey = isMac ? "⌘" : "Ctrl+"
+  /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+const modKey = isMac ? "⌘" : "Ctrl+";
 
 const MAIN_TOUR_STEPS: TourStep[] = [
   {
@@ -97,7 +97,7 @@ const MAIN_TOUR_STEPS: TourStep[] = [
       "settings-starter-tag-categories",
     ],
   },
-]
+];
 
 const SEARCH_TOUR_STEPS: TourStep[] = [
   {
@@ -131,54 +131,54 @@ const SEARCH_TOUR_STEPS: TourStep[] = [
       "search-demo-go-to-verse",
     ],
   },
-]
+];
 
 const TOUR_STEPS: Record<TutorialTourName, TourStep[]> = {
   main: MAIN_TOUR_STEPS,
   search: SEARCH_TOUR_STEPS,
-}
+};
 
-const DEFAULT_CARD_WIDTH = 320
-const CARD_MARGIN = 16
-const SPOTLIGHT_PADDING = 10
+const DEFAULT_CARD_WIDTH = 320;
+const CARD_MARGIN = 16;
+const SPOTLIGHT_PADDING = 10;
 
 function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
+  return Math.min(Math.max(value, min), max);
 }
 
 function getStepList(tour: TutorialTourName | null): TourStep[] {
-  return tour ? TOUR_STEPS[tour] : []
+  return tour ? TOUR_STEPS[tour] : [];
 }
 
 function buildTargetSelector(targetIds: string[]): string {
-  return targetIds.map((targetId) => `[data-tour-id="${targetId}"]`).join(", ")
+  return targetIds.map((targetId) => `[data-tour-id="${targetId}"]`).join(", ");
 }
 
 function getTargetElements(targetIds: string[]): HTMLElement[] {
-  if (typeof document === "undefined") return []
+  if (typeof document === "undefined") return [];
   return Array.from(
     document.querySelectorAll<HTMLElement>(buildTargetSelector(targetIds)),
-  )
+  );
 }
 
 function getUnionRect(elements: HTMLElement[]): DOMRect | null {
-  if (elements.length === 0) return null
+  if (elements.length === 0) return null;
 
-  let left = Number.POSITIVE_INFINITY
-  let top = Number.POSITIVE_INFINITY
-  let right = Number.NEGATIVE_INFINITY
-  let bottom = Number.NEGATIVE_INFINITY
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
 
   for (const element of elements) {
-    const rect = element.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) continue
-    left = Math.min(left, rect.left)
-    top = Math.min(top, rect.top)
-    right = Math.max(right, rect.right)
-    bottom = Math.max(bottom, rect.bottom)
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    left = Math.min(left, rect.left);
+    top = Math.min(top, rect.top);
+    right = Math.max(right, rect.right);
+    bottom = Math.max(bottom, rect.bottom);
   }
 
-  if (!Number.isFinite(left) || !Number.isFinite(top)) return null
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
 
   return {
     x: left,
@@ -190,12 +190,12 @@ function getUnionRect(elements: HTMLElement[]): DOMRect | null {
     width: right - left,
     height: bottom - top,
     toJSON: () => ({}),
-  } satisfies DOMRect
+  } satisfies DOMRect;
 }
 
 function getCardPosition(rect: DOMRect | null): CSSProperties {
   if (typeof window === "undefined") {
-    return { left: CARD_MARGIN, right: CARD_MARGIN, bottom: CARD_MARGIN }
+    return { left: CARD_MARGIN, right: CARD_MARGIN, bottom: CARD_MARGIN };
   }
 
   if (!rect) {
@@ -205,135 +205,133 @@ function getCardPosition(rect: DOMRect | null): CSSProperties {
       transform: "translate(-50%, -50%)",
       width: DEFAULT_CARD_WIDTH,
       maxWidth: `calc(100vw - ${CARD_MARGIN * 2}px)`,
-    }
+    };
   }
 
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
-  const width = Math.min(DEFAULT_CARD_WIDTH, viewportWidth - CARD_MARGIN * 2)
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = Math.min(DEFAULT_CARD_WIDTH, viewportWidth - CARD_MARGIN * 2);
   const left = clamp(
     rect.left,
     CARD_MARGIN,
     viewportWidth - width - CARD_MARGIN,
-  )
-  const belowTop = rect.bottom + CARD_MARGIN
-  const aboveTop = rect.top - 180 - CARD_MARGIN
+  );
+  const belowTop = rect.bottom + CARD_MARGIN;
+  const aboveTop = rect.top - 180 - CARD_MARGIN;
   const top =
     belowTop + 180 <= viewportHeight - CARD_MARGIN
       ? belowTop
-      : Math.max(CARD_MARGIN, aboveTop)
+      : Math.max(CARD_MARGIN, aboveTop);
 
   return {
     width,
     left,
     top,
-  }
+  };
 }
 
 export function TutorialProvider({
   children,
   tutorialStatus,
 }: {
-  children: ReactNode
-  tutorialStatus: TutorialStatus
+  children: ReactNode;
+  tutorialStatus: TutorialStatus;
 }) {
-  const navigate = useNavigate()
-  const location = useLocation()
+  const navigate = useNavigate();
+  const location = useLocation();
   const completeMainTutorial = useMutation(
     api.userSettings.completeMainTutorial,
-  )
+  );
   const completeAdvancedSearchTutorial = useMutation(
     api.userSettings.completeAdvancedSearchTutorial,
-  )
+  );
   const [activeTour, setActiveTour] = useState<TutorialTourName | null>(() =>
     readActiveTutorialTour(),
-  )
-  const [pendingTour, setPendingTour] = useState<TutorialTourName | null>(
-    null,
-  )
-  const [stepIndex, setStepIndex] = useState(0)
+  );
+  const [pendingTour, setPendingTour] = useState<TutorialTourName | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
   const [locallyCompletedTours, setLocallyCompletedTours] = useState<
     Partial<Record<TutorialTourName, true>>
-  >({})
-  const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
-  const [cardAnchorRect, setCardAnchorRect] = useState<DOMRect | null>(null)
-  const finishingTourRef = useRef<TutorialTourName | null>(null)
+  >({});
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+  const [cardAnchorRect, setCardAnchorRect] = useState<DOMRect | null>(null);
+  const finishingTourRef = useRef<TutorialTourName | null>(null);
 
   const isMainComplete =
     locallyCompletedTours.main === true ||
-    tutorialStatus.mainTutorialCompletedAt !== undefined
+    tutorialStatus.mainTutorialCompletedAt !== undefined;
   const isSearchComplete =
     locallyCompletedTours.search === true ||
-    tutorialStatus.advancedSearchTutorialCompletedAt !== undefined
-  const activeSteps = getStepList(activeTour)
-  const activeStep = activeSteps[stepIndex] ?? null
-  const isPassageRoute = location.pathname.startsWith("/passage/")
-  const isSearchRoute = location.pathname === "/search"
+    tutorialStatus.advancedSearchTutorialCompletedAt !== undefined;
+  const activeSteps = getStepList(activeTour);
+  const activeStep = activeSteps[stepIndex] ?? null;
+  const isPassageRoute = location.pathname.startsWith("/passage/");
+  const isSearchRoute = location.pathname === "/search";
 
   useEffect(() => {
-    writeActiveTutorialTour(activeTour)
-  }, [activeTour])
+    writeActiveTutorialTour(activeTour);
+  }, [activeTour]);
 
   useEffect(() => {
     if (!activeStep) {
-      setTargetRect(null)
-      setCardAnchorRect(null)
-      return
+      setTargetRect(null);
+      setCardAnchorRect(null);
+      return;
     }
 
-    let frameId = 0
-    let hasScrolled = false
+    let frameId = 0;
+    let hasScrolled = false;
     const updateRect = () => {
-      const elements = getTargetElements(activeStep.targetIds)
-      const rect = getUnionRect(elements)
-      setTargetRect(rect)
+      const elements = getTargetElements(activeStep.targetIds);
+      const rect = getUnionRect(elements);
+      setTargetRect(rect);
 
       if (activeStep.cardAnchorIds) {
-        const anchorElements = getTargetElements(activeStep.cardAnchorIds)
-        setCardAnchorRect(getUnionRect(anchorElements))
+        const anchorElements = getTargetElements(activeStep.cardAnchorIds);
+        setCardAnchorRect(getUnionRect(anchorElements));
       } else {
-        setCardAnchorRect(null)
+        setCardAnchorRect(null);
       }
 
       if (!hasScrolled && rect) {
-        hasScrolled = true
-        const inViewport = rect.top >= 0 && rect.bottom <= window.innerHeight
+        hasScrolled = true;
+        const inViewport = rect.top >= 0 && rect.bottom <= window.innerHeight;
         if (!inViewport) {
-          elements[0].scrollIntoView({ behavior: "smooth", block: "start" })
+          elements[0].scrollIntoView({ behavior: "smooth", block: "start" });
         }
       }
 
-      frameId = window.requestAnimationFrame(updateRect)
-    }
+      frameId = window.requestAnimationFrame(updateRect);
+    };
 
-    updateRect()
-    return () => window.cancelAnimationFrame(frameId)
-  }, [activeStep, location.pathname])
+    updateRect();
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeStep, location.pathname]);
 
   useEffect(() => {
-    if (activeTour || pendingTour) return
+    if (activeTour || pendingTour) return;
 
     if (!isMainComplete) {
-      writeActiveTutorialTour("main")
+      writeActiveTutorialTour("main");
       if (isPassageRoute) {
-        setActiveTour("main")
-        setStepIndex(0)
+        setActiveTour("main");
+        setStepIndex(0);
       } else {
-        setPendingTour("main")
+        setPendingTour("main");
         void navigate({
           to: "/passage/$passageId",
           params: { passageId: "John-1" },
           search: {},
           replace: true,
-        })
+        });
       }
-      return
+      return;
     }
 
     if (!isSearchComplete && isSearchRoute) {
-      writeActiveTutorialTour("search")
-      setActiveTour("search")
-      setStepIndex(0)
+      writeActiveTutorialTour("search");
+      setActiveTour("search");
+      setStepIndex(0);
     }
   }, [
     activeTour,
@@ -343,53 +341,53 @@ export function TutorialProvider({
     isSearchRoute,
     navigate,
     pendingTour,
-  ])
+  ]);
 
   useEffect(() => {
-    if (!pendingTour) return
+    if (!pendingTour) return;
 
     if (pendingTour === "main" && isPassageRoute) {
-      setActiveTour("main")
-      setStepIndex(0)
-      setPendingTour(null)
-      return
+      setActiveTour("main");
+      setStepIndex(0);
+      setPendingTour(null);
+      return;
     }
 
     if (pendingTour === "search" && isSearchRoute) {
-      setActiveTour("search")
-      setStepIndex(0)
-      setPendingTour(null)
+      setActiveTour("search");
+      setStepIndex(0);
+      setPendingTour(null);
     }
-  }, [isPassageRoute, isSearchRoute, pendingTour])
+  }, [isPassageRoute, isSearchRoute, pendingTour]);
 
   const finalizeTour = useCallback(
     async (tour: TutorialTourName) => {
-      if (finishingTourRef.current === tour) return
+      if (finishingTourRef.current === tour) return;
 
-      finishingTourRef.current = tour
+      finishingTourRef.current = tour;
       setLocallyCompletedTours((current) => ({
         ...current,
         [tour]: true,
-      }))
-      setActiveTour(null)
-      setPendingTour(null)
-      setStepIndex(0)
-      writeActiveTutorialTour(null)
+      }));
+      setActiveTour(null);
+      setPendingTour(null);
+      setStepIndex(0);
+      writeActiveTutorialTour(null);
 
       try {
         if (tour === "main") {
-          await completeMainTutorial({})
+          await completeMainTutorial({});
           if (
             tutorialStatus.needsStarterTagsSetup &&
             location.pathname !== "/settings"
           ) {
-            await navigate({ to: "/settings" })
+            await navigate({ to: "/settings" });
           }
         } else {
-          await completeAdvancedSearchTutorial({})
+          await completeAdvancedSearchTutorial({});
         }
       } finally {
-        finishingTourRef.current = null
+        finishingTourRef.current = null;
       }
     },
     [
@@ -399,72 +397,72 @@ export function TutorialProvider({
       navigate,
       tutorialStatus.needsStarterTagsSetup,
     ],
-  )
+  );
 
   const startTour = useCallback(
     (tour: TutorialTourName) => {
-      setStepIndex(0)
-      setPendingTour(null)
-      writeActiveTutorialTour(tour)
+      setStepIndex(0);
+      setPendingTour(null);
+      writeActiveTutorialTour(tour);
 
       if (tour === "main") {
-        setActiveTour(null)
+        setActiveTour(null);
         if (isPassageRoute) {
-          setActiveTour("main")
+          setActiveTour("main");
         } else {
-          setPendingTour("main")
+          setPendingTour("main");
           void navigate({
             to: "/passage/$passageId",
             params: { passageId: "John-1" },
             search: {},
-          })
+          });
         }
-        return
+        return;
       }
 
-      setActiveTour(null)
+      setActiveTour(null);
       if (isSearchRoute) {
-        setActiveTour("search")
+        setActiveTour("search");
       } else {
-        setPendingTour("search")
-        void navigate({ to: "/search", search: {} })
+        setPendingTour("search");
+        void navigate({ to: "/search", search: {} });
       }
     },
     [isPassageRoute, isSearchRoute, navigate],
-  )
+  );
 
   const handleNext = () => {
-    if (!activeTour || !activeStep) return
+    if (!activeTour || !activeStep) return;
 
-    const nextIndex = stepIndex + 1
+    const nextIndex = stepIndex + 1;
     if (nextIndex >= activeSteps.length) {
-      void finalizeTour(activeTour)
-      return
+      void finalizeTour(activeTour);
+      return;
     }
 
-    const nextStep = activeSteps[nextIndex]
-    setStepIndex(nextIndex)
+    const nextStep = activeSteps[nextIndex];
+    setStepIndex(nextIndex);
 
     if (activeTour === "main" && nextStep.id === "import-notes") {
-      void navigate({ to: "/settings" })
+      void navigate({ to: "/settings" });
     }
-  }
+  };
 
   const handleBack = () => {
-    if (!activeTour) return
+    if (!activeTour) return;
 
-    const nextIndex = Math.max(stepIndex - 1, 0)
-    setStepIndex(nextIndex)
+    const nextIndex = Math.max(stepIndex - 1, 0);
+    setStepIndex(nextIndex);
 
     if (activeTour === "main" && nextIndex <= 5 && !isPassageRoute) {
-      setPendingTour("main")
+      setPendingTour("main");
       void navigate({
         to: "/passage/$passageId",
         params: { passageId: "John-1" },
         search: {},
-      })
+      });
     }
-  }
+  };
 
   const contextValue = useMemo<TutorialContextValue>(
     () => ({
@@ -478,7 +476,7 @@ export function TutorialProvider({
         activeTour === tour && activeStep?.id === stepId,
     }),
     [activeStep, activeSteps.length, activeTour, startTour, stepIndex],
-  )
+  );
 
   const spotlightStyle: CSSProperties | undefined = targetRect
     ? {
@@ -488,7 +486,7 @@ export function TutorialProvider({
         height: targetRect.height + SPOTLIGHT_PADDING * 2,
         boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.58)",
       }
-    : undefined
+    : undefined;
 
   return (
     <TutorialContext.Provider value={contextValue}>
@@ -559,5 +557,5 @@ export function TutorialProvider({
         </>
       ) : null}
     </TutorialContext.Provider>
-  )
+  );
 }

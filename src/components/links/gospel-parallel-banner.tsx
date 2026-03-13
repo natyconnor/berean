@@ -1,15 +1,15 @@
-import { useQuery } from "convex-helpers/react/cache"
-import { motion, AnimatePresence } from "framer-motion"
-import { api } from "../../../convex/_generated/api"
-import { Badge } from "@/components/ui/badge"
-import { useTabs } from "@/lib/use-tabs"
-import { toPassageId } from "@/lib/verse-ref-utils"
-import { BookOpen, ChevronDown, ChevronUp } from "lucide-react"
-import { useState } from "react"
+import { useQuery } from "convex-helpers/react/cache";
+import { motion, AnimatePresence } from "framer-motion";
+import { api } from "../../../convex/_generated/api";
+import { Badge } from "@/components/ui/badge";
+import { useTabs } from "@/lib/use-tabs";
+import { toPassageId } from "@/lib/verse-ref-utils";
+import { BookOpen, ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
 
 interface GospelParallelBannerProps {
-  book: string
-  chapter: number
+  book: string;
+  chapter: number;
 }
 
 export function GospelParallelBanner({
@@ -19,15 +19,15 @@ export function GospelParallelBanner({
   const parallels = useQuery(api.gospelParallels.findParallels, {
     book,
     chapter,
-  })
-  const [expanded, setExpanded] = useState(false)
-  const { openTab } = useTabs()
+  });
+  const [expanded, setExpanded] = useState(false);
+  const { openTab } = useTabs();
 
-  if (!parallels || parallels.length === 0) return null
+  if (!parallels || parallels.length === 0) return null;
 
-  const initialItems = parallels.slice(0, 3)
-  const extraItems = parallels.slice(3)
-  const hasMore = parallels.length > 3
+  const initialItems = parallels.slice(0, 3);
+  const extraItems = parallels.slice(3);
+  const hasMore = parallels.length > 3;
 
   return (
     <div className="border rounded-lg bg-muted/30 px-3 py-2 mb-3">
@@ -76,7 +76,7 @@ export function GospelParallelBanner({
         </AnimatePresence>
       </div>
     </div>
-  )
+  );
 }
 
 function ParallelItem({
@@ -85,10 +85,19 @@ function ParallelItem({
   chapter,
   openTab,
 }: {
-  parallel: { _id: string; label: string; passages: Array<{ book: string; chapter: number; startVerse: number; endVerse: number }> }
-  book: string
-  chapter: number
-  openTab: (id: string, label: string) => void
+  parallel: {
+    _id: string;
+    label: string;
+    passages: Array<{
+      book: string;
+      chapter: number;
+      startVerse: number;
+      endVerse: number;
+    }>;
+  };
+  book: string;
+  chapter: number;
+  openTab: (id: string, label: string) => void;
 }) {
   return (
     <div className="text-sm">
@@ -100,22 +109,22 @@ function ParallelItem({
             const label =
               p.startVerse === p.endVerse
                 ? `${p.book} ${p.chapter}:${p.startVerse}`
-                : `${p.book} ${p.chapter}:${p.startVerse}-${p.endVerse}`
+                : `${p.book} ${p.chapter}:${p.startVerse}-${p.endVerse}`;
             return (
               <Badge
                 key={`${p.book}-${p.chapter}-${p.startVerse}`}
                 variant="outline"
                 className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
                 onClick={() => {
-                  const id = toPassageId(p.book, p.chapter)
-                  openTab(id, `${p.book} ${p.chapter}`)
+                  const id = toPassageId(p.book, p.chapter);
+                  openTab(id, `${p.book} ${p.chapter}`);
                 }}
               >
                 {label}
               </Badge>
-            )
+            );
           })}
       </span>
     </div>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import type { AppTheme } from "./theme-types"
+import type { AppTheme } from "./theme-types";
 
 export const deepIndigoTheme: AppTheme = {
   name: "Deep Indigo",
@@ -46,4 +46,4 @@ export const deepIndigoTheme: AppTheme = {
     "--ring": "oklch(0.68 0.130 258)",
     "--radius": "0.375rem",
   },
-}
+};

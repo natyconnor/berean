@@ -38,7 +38,7 @@ export function useStarterTagBadgeStyle() {
       ...DEFAULT_STARTER_TAG_CATEGORY_COLORS,
       ...(setupStatus?.categoryColors ?? {}),
     }),
-    [setupStatus?.categoryColors]
+    [setupStatus?.categoryColors],
   );
 
   return useMemo(
@@ -57,6 +57,6 @@ export function useStarterTagBadgeStyle() {
           color,
         };
       },
-    [categoryColors]
+    [categoryColors],
   );
 }

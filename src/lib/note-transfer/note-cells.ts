@@ -1,33 +1,33 @@
-import { normalizeTags } from "@/lib/tag-utils"
+import { normalizeTags } from "@/lib/tag-utils";
 
 function trimTrailingEmptyLines(lines: string[]): string[] {
-  const result = [...lines]
+  const result = [...lines];
   while (result.length > 0 && result[result.length - 1].trim().length === 0) {
-    result.pop()
+    result.pop();
   }
-  return result
+  return result;
 }
 
 function parseTagLine(line: string): string[] | null {
   const pieces = line
     .split(",")
     .map((piece) => piece.trim())
-    .filter((piece) => piece.length > 0)
+    .filter((piece) => piece.length > 0);
 
   if (pieces.length === 0) {
-    return null
+    return null;
   }
 
   if (pieces.some((piece) => !piece.startsWith("#") || piece === "#")) {
-    return null
+    return null;
   }
 
-  return normalizeTags(pieces.map((piece) => piece.slice(1)))
+  return normalizeTags(pieces.map((piece) => piece.slice(1)));
 }
 
 export function parseImportedNoteCell(rawValue: unknown): {
-  content: string
-  tags: string[]
+  content: string;
+  tags: string[];
 } | null {
   const value =
     typeof rawValue === "string"
@@ -36,39 +36,44 @@ export function parseImportedNoteCell(rawValue: unknown): {
           typeof rawValue === "boolean" ||
           typeof rawValue === "bigint"
         ? String(rawValue).trim()
-        : ""
+        : "";
   if (value.length === 0) {
-    return null
+    return null;
   }
 
-  const lines = trimTrailingEmptyLines(value.split("\n"))
+  const lines = trimTrailingEmptyLines(value.split("\n"));
   if (lines.length === 0) {
-    return null
+    return null;
   }
 
-  const parsedTags = parseTagLine(lines[lines.length - 1])
-  const contentLines = parsedTags ? trimTrailingEmptyLines(lines.slice(0, -1)) : lines
-  const content = contentLines.join("\n").trim()
+  const parsedTags = parseTagLine(lines[lines.length - 1]);
+  const contentLines = parsedTags
+    ? trimTrailingEmptyLines(lines.slice(0, -1))
+    : lines;
+  const content = contentLines.join("\n").trim();
 
   if (content.length === 0) {
-    return null
+    return null;
   }
 
   return {
     content,
     tags: parsedTags ?? [],
-  }
+  };
 }
 
-export function serializeExportedNoteCell(content: string, tags: string[]): string {
-  const normalizedContent = content.replace(/\r\n/g, "\n").trim()
-  const normalizedTags = normalizeTags(tags)
+export function serializeExportedNoteCell(
+  content: string,
+  tags: string[],
+): string {
+  const normalizedContent = content.replace(/\r\n/g, "\n").trim();
+  const normalizedTags = normalizeTags(tags);
   if (normalizedTags.length === 0) {
-    return normalizedContent
+    return normalizedContent;
   }
 
-  const tagLine = normalizedTags.map((tag) => `#${tag}`).join(", ")
+  const tagLine = normalizedTags.map((tag) => `#${tag}`).join(", ");
   return normalizedContent.length > 0
     ? `${normalizedContent}\n${tagLine}`
-    : tagLine
+    : tagLine;
 }

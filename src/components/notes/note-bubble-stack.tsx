@@ -1,11 +1,11 @@
-import { Badge } from "@/components/ui/badge"
-import { StackedCardBackground } from "./view/note-card-primitives"
+import { Badge } from "@/components/ui/badge";
+import { StackedCardBackground } from "./view/note-card-primitives";
 
 interface NoteBubbleStackProps {
-  count: number
-  firstNotePreview: string
-  verseLabel: string
-  onClick: () => void
+  count: number;
+  firstNotePreview: string;
+  verseLabel: string;
+  onClick: () => void;
 }
 
 export function NoteBubbleStack({
@@ -31,5 +31,5 @@ export function NoteBubbleStack({
         </p>
       </div>
     </div>
-  )
+  );
 }

@@ -1,6 +1,6 @@
-"use node"
-import { action } from "./_generated/server"
-import { v } from "convex/values"
+"use node";
+import { action } from "./_generated/server";
+import { v } from "convex/values";
 
 async function fetchPassageText(
   apiKey: string,
@@ -19,20 +19,20 @@ async function fetchPassageText(
     "indent-poetry": "true",
     "indent-using": "space",
     "line-length": "0",
-  })
+  });
 
   const response = await fetch(
     `https://api.esv.org/v3/passage/text/?${params}`,
     {
       headers: { Authorization: `Token ${apiKey}` },
     },
-  )
+  );
 
   if (!response.ok) {
-    throw new Error(`ESV API error: ${response.status} ${response.statusText}`)
+    throw new Error(`ESV API error: ${response.status} ${response.statusText}`);
   }
 
-  return await response.json()
+  return await response.json();
 }
 
 export const getPassageText = action({
@@ -40,11 +40,14 @@ export const getPassageText = action({
     query: v.string(),
   },
   handler: async (_ctx, args) => {
-    const apiKey = process.env.ESV_API_KEY
-    if (!apiKey) throw new Error("ESV_API_KEY not configured in Convex environment variables")
-    return await fetchPassageText(apiKey, args.query)
+    const apiKey = process.env.ESV_API_KEY;
+    if (!apiKey)
+      throw new Error(
+        "ESV_API_KEY not configured in Convex environment variables",
+      );
+    return await fetchPassageText(apiKey, args.query);
   },
-})
+});
 
 export const getChaptersTextBatch = action({
   args: {
@@ -58,24 +61,26 @@ export const getChaptersTextBatch = action({
     }),
   ),
   handler: async (_ctx, args) => {
-    const apiKey = process.env.ESV_API_KEY
+    const apiKey = process.env.ESV_API_KEY;
     if (!apiKey) {
-      throw new Error("ESV_API_KEY not configured in Convex environment variables")
+      throw new Error(
+        "ESV_API_KEY not configured in Convex environment variables",
+      );
     }
 
     const uniqueChapters = Array.from(
       new Set(args.chapters.map((chapter) => Math.floor(chapter))),
-    ).filter((chapter) => chapter > 0)
+    ).filter((chapter) => chapter > 0);
 
-    const results = []
+    const results = [];
     for (const chapter of uniqueChapters) {
-      const raw = await fetchPassageText(apiKey, `${args.book} ${chapter}`)
+      const raw = await fetchPassageText(apiKey, `${args.book} ${chapter}`);
       results.push({
         chapter,
         raw,
-      })
+      });
     }
 
-    return results
+    return results;
   },
-})
+});

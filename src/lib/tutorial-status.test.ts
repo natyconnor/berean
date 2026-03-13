@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
-import { resolveTutorialStatus } from "../../convex/lib/tutorial"
+import { resolveTutorialStatus } from "../../convex/lib/tutorial";
 
 describe("resolveTutorialStatus", () => {
   it("returns default tutorial flags for a new user", () => {
@@ -10,8 +10,8 @@ describe("resolveTutorialStatus", () => {
       mainTutorialCompletedAt: undefined,
       advancedSearchTutorialCompletedAt: undefined,
       categoryColors: {},
-    })
-  })
+    });
+  });
 
   it("preserves tutorial and starter tag completion state independently", () => {
     expect(
@@ -27,6 +27,6 @@ describe("resolveTutorialStatus", () => {
       mainTutorialCompletedAt: 20,
       advancedSearchTutorialCompletedAt: 30,
       categoryColors: { themes: "#abcdef" },
-    })
-  })
-})
+    });
+  });
+});

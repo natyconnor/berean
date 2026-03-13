@@ -1,23 +1,23 @@
-import { useEffect } from "react"
+import { useEffect } from "react";
 
 const EDITABLE_SELECTOR =
-  'input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]'
+  'input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]';
 
 function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  return target.isContentEditable || target.closest(EDITABLE_SELECTOR) !== null
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.closest(EDITABLE_SELECTOR) !== null;
 }
 
 interface ChapterDestination {
-  passageId: string
-  label: string
+  passageId: string;
+  label: string;
 }
 
 interface UsePassageKeyboardShortcutsOptions {
-  previous: ChapterDestination | null
-  next: ChapterDestination | null
-  navigateActiveTab: (passageId: string, label: string) => void
-  setViewMode: (mode: "compose" | "read") => void
+  previous: ChapterDestination | null;
+  next: ChapterDestination | null;
+  navigateActiveTab: (passageId: string, label: string) => void;
+  setViewMode: (mode: "compose" | "read") => void;
 }
 
 export function usePassageKeyboardShortcuts({
@@ -28,40 +28,40 @@ export function usePassageKeyboardShortcuts({
 }: UsePassageKeyboardShortcutsOptions) {
   useEffect(() => {
     function handleNavigationKeyDown(event: KeyboardEvent) {
-      if (!event.altKey) return
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
-      if (isEditableTarget(event.target)) return
+      if (!event.altKey) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (isEditableTarget(event.target)) return;
 
-      event.preventDefault()
+      event.preventDefault();
       if (event.key === "ArrowLeft" && previous) {
-        navigateActiveTab(previous.passageId, previous.label)
+        navigateActiveTab(previous.passageId, previous.label);
       } else if (event.key === "ArrowRight" && next) {
-        navigateActiveTab(next.passageId, next.label)
+        navigateActiveTab(next.passageId, next.label);
       }
     }
 
-    document.addEventListener("keydown", handleNavigationKeyDown)
+    document.addEventListener("keydown", handleNavigationKeyDown);
     return () =>
-      document.removeEventListener("keydown", handleNavigationKeyDown)
-  }, [navigateActiveTab, next, previous])
+      document.removeEventListener("keydown", handleNavigationKeyDown);
+  }, [navigateActiveTab, next, previous]);
 
   useEffect(() => {
     function handleModeShortcuts(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.repeat) return
-      if (event.metaKey || event.ctrlKey || event.altKey) return
-      if (isEditableTarget(event.target)) return
+      if (event.defaultPrevented || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableTarget(event.target)) return;
 
-      const key = event.key.toLowerCase()
+      const key = event.key.toLowerCase();
       if (key === "r") {
-        event.preventDefault()
-        setViewMode("read")
+        event.preventDefault();
+        setViewMode("read");
       } else if (key === "c") {
-        event.preventDefault()
-        setViewMode("compose")
+        event.preventDefault();
+        setViewMode("compose");
       }
     }
 
-    document.addEventListener("keydown", handleModeShortcuts)
-    return () => document.removeEventListener("keydown", handleModeShortcuts)
-  }, [setViewMode])
+    document.addEventListener("keydown", handleModeShortcuts);
+    return () => document.removeEventListener("keydown", handleModeShortcuts);
+  }, [setViewMode]);
 }

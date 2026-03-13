@@ -1,5 +1,5 @@
-import type { ReactNode } from "react"
-import { TabBar } from "./tab-bar"
+import type { ReactNode } from "react";
+import { TabBar } from "./tab-bar";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -7,5 +7,5 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TabBar />
       <div className="flex-1 overflow-hidden">{children}</div>
     </div>
-  )
+  );
 }

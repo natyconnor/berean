@@ -1,9 +1,13 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Button } from "@/components/ui/button"
-import type { ComponentProps } from "react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import type { ComponentProps } from "react";
 
 interface TooltipButtonProps extends ComponentProps<typeof Button> {
-  tooltip: string
+  tooltip: string;
 }
 
 export function TooltipButton({ tooltip, ...props }: TooltipButtonProps) {
@@ -14,5 +18,5 @@ export function TooltipButton({ tooltip, ...props }: TooltipButtonProps) {
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
-  )
+  );
 }

@@ -100,7 +100,7 @@ function buildStarterSuggestions(currentBook: string): VerseSuggestionItem[] {
 
 function readReferenceDraft(
   query: string,
-  defaults: { defaultBook?: string; defaultChapter?: number }
+  defaults: { defaultBook?: string; defaultChapter?: number },
 ): ReferenceDraft | null {
   const value = query.trim();
   if (!value) return null;
@@ -134,7 +134,7 @@ function readReferenceDraft(
 
 function isPotentialVerseQuery(
   query: string,
-  defaults: { defaultBook?: string; defaultChapter?: number }
+  defaults: { defaultBook?: string; defaultChapter?: number },
 ): boolean {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
@@ -149,7 +149,9 @@ function isPotentialVerseQuery(
     return false;
   }
 
-  return buildVerseSuggestions(query, defaults).some((item) => item.kind === "book");
+  return buildVerseSuggestions(query, defaults).some(
+    (item) => item.kind === "book",
+  );
 }
 
 function buildDraftStatus(draft: ReferenceDraft): QueryStatusState {
@@ -185,7 +187,7 @@ function buildDraftStatus(draft: ReferenceDraft): QueryStatusState {
 }
 
 function getDraftChapterErrorMessage(
-  draft: ReferenceDraft | null
+  draft: ReferenceDraft | null,
 ): string | null {
   if (!draft?.chapterText) {
     return null;
@@ -212,7 +214,7 @@ function getDraftChapterErrorMessage(
 
 function buildPreviewSnippet(
   refValue: VerseRef,
-  verses: Array<{ number: number; text: string }>
+  verses: Array<{ number: number; text: string }>,
 ): string | null {
   if (verses.length === 0) {
     return null;
@@ -239,7 +241,7 @@ function buildPreviewSnippet(
 function createPillElement(
   documentRef: Document,
   label: string,
-  refValue: VerseRef
+  refValue: VerseRef,
 ): HTMLSpanElement {
   const pill = documentRef.createElement("span");
   pill.contentEditable = "false";
@@ -284,7 +286,7 @@ function appendSegmentsToEditor(root: HTMLElement, body: NoteBody) {
 }
 
 function parseSegmentsFromNodeList(
-  nodes: NodeListOf<ChildNode> | ChildNode[]
+  nodes: NodeListOf<ChildNode> | ChildNode[],
 ): NoteBodySegment[] {
   const segments: NoteBodySegment[] = [];
   const nodeArray = Array.from(nodes);
@@ -343,7 +345,9 @@ function parseSegmentsFromNodeList(
     if (node.tagName === "BR") {
       return true;
     }
-    return Array.from(node.childNodes).some((child) => nodeHasMeaningfulContent(child));
+    return Array.from(node.childNodes).some((child) =>
+      nodeHasMeaningfulContent(child),
+    );
   };
 
   for (let index = 0; index < nodeArray.length; index += 1) {
@@ -366,8 +370,8 @@ function parseSegmentsFromNodeList(
             startVerse: Number.parseInt(node.dataset.startVerse ?? "0", 10),
             endVerse: Number.parseInt(node.dataset.endVerse ?? "0", 10),
           },
-          node.dataset.label ?? ""
-        )
+          node.dataset.label ?? "",
+        ),
       );
       continue;
     }
@@ -542,13 +546,13 @@ export function InlineVerseEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isEmpty, setIsEmpty] = useState(
-    () => normalizeNoteBody(initialBody).segments.length === 0
+    () => normalizeNoteBody(initialBody).segments.length === 0,
   );
   const [isQueryActive, setIsQueryActive] = useState(false);
   const [activeQuery, setActiveQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(
-    null
+    null,
   );
   const activeQueryMatchRef = useRef<ActiveQueryMatch | null>(null);
   const showTutorialText = !!tutorialPreviewText;
@@ -581,7 +585,10 @@ export function InlineVerseEditor({
   });
   const [isTutorialLinkInserted, setIsTutorialLinkInserted] = useState(false);
   const showTutorialQueryPreview =
-    !isQueryActive && isTutorialLinkStep && isTutorialQueryComplete && !isTutorialLinkInserted;
+    !isQueryActive &&
+    isTutorialLinkStep &&
+    isTutorialQueryComplete &&
+    !isTutorialLinkInserted;
   const showSuggestionPopover = isQueryActive || showTutorialQueryPreview;
 
   const parserDefaults = useMemo(
@@ -589,31 +596,31 @@ export function InlineVerseEditor({
       defaultBook: verseRef.book,
       defaultChapter: verseRef.chapter,
     }),
-    [verseRef.book, verseRef.chapter]
+    [verseRef.book, verseRef.chapter],
   );
 
   const starterSuggestions = useMemo(
     () => buildStarterSuggestions(verseRef.book),
-    [verseRef.book]
+    [verseRef.book],
   );
   const parsedRef = useMemo(
     () => parseVerseRef(effectiveQuery, parserDefaults),
-    [effectiveQuery, parserDefaults]
+    [effectiveQuery, parserDefaults],
   );
   const draft = useMemo(
     () => readReferenceDraft(effectiveQuery, parserDefaults),
-    [effectiveQuery, parserDefaults]
+    [effectiveQuery, parserDefaults],
   );
   const localValidationMessage = useMemo(
     () => (parsedRef ? getVerseRefBoundsErrorMessage(parsedRef) : null),
-    [parsedRef]
+    [parsedRef],
   );
   const draftChapterErrorMessage = useMemo(
     () => getDraftChapterErrorMessage(draft),
-    [draft]
+    [draft],
   );
   const validation = useDebouncedEsvReferenceValidation(
-    parsedRef && !localValidationMessage ? parsedRef : null
+    parsedRef && !localValidationMessage ? parsedRef : null,
   );
 
   const hasStructuredReferenceInput = useMemo(() => {
@@ -774,7 +781,9 @@ export function InlineVerseEditor({
     const nextIsQueryActive =
       nextMatch !== null && isPotentialVerseQuery(nextQuery, parserDefaults);
     const resolvedQuery = nextIsQueryActive ? nextQuery : "";
-    setHighlightedIndex((current) => (resolvedQuery === activeQuery ? current : 0));
+    setHighlightedIndex((current) =>
+      resolvedQuery === activeQuery ? current : 0,
+    );
     activeQueryMatchRef.current = nextIsQueryActive ? nextMatch : null;
     setIsQueryActive(nextIsQueryActive);
     setActiveQuery(resolvedQuery);
@@ -837,7 +846,7 @@ export function InlineVerseEditor({
       emitChange();
       editorRef.current?.focus();
     },
-    [emitChange]
+    [emitChange],
   );
 
   useEffect(() => {
@@ -858,7 +867,7 @@ export function InlineVerseEditor({
   }, [showTutorialText, tutorialPreviewQuery]);
 
   useEffect(() => {
-    let timeoutId: number | null = null
+    let timeoutId: number | null = null;
 
     if (!isTutorialLinkStep) {
       timeoutId = window.setTimeout(() => {
@@ -906,7 +915,9 @@ export function InlineVerseEditor({
             <>
               {"\n"}
               {isTutorialLinkInserted ? (
-                <span className={EDITOR_PILL_CLASSNAME}>{tutorialPreviewQuery}</span>
+                <span className={EDITOR_PILL_CLASSNAME}>
+                  {tutorialPreviewQuery}
+                </span>
               ) : (
                 <span className="font-mono text-sky-700 dark:text-sky-300">
                   {animatedTutorialQuery}
@@ -927,7 +938,7 @@ export function InlineVerseEditor({
         aria-multiline="true"
         className={cn(
           "min-h-[96px] rounded-md border bg-background px-3 py-2.5 text-sm leading-relaxed outline-hidden whitespace-pre-wrap",
-          "focus:border-ring focus:ring-ring/50 focus:ring-[3px]"
+          "focus:border-ring focus:ring-ring/50 focus:ring-[3px]",
         )}
         {...(tourId ? { "data-tour-id": tourId } : {})}
         onFocus={() => setIsFocused(true)}
@@ -946,14 +957,14 @@ export function InlineVerseEditor({
           event.preventDefault();
           insertPlainTextAtCursor(
             event.currentTarget,
-            event.clipboardData.getData("text/plain")
+            event.clipboardData.getData("text/plain"),
           );
           emitChange();
         }}
         onClick={(event) => {
           const target = event.target as HTMLElement;
           const removeButton = target.closest<HTMLElement>(
-            "[data-note-pill-remove='true']"
+            "[data-note-pill-remove='true']",
           );
           if (removeButton) {
             event.preventDefault();
@@ -964,14 +975,14 @@ export function InlineVerseEditor({
             return;
           }
           const pill = target.closest<HTMLElement>(
-            "[data-note-verse-pill='true']"
+            "[data-note-verse-pill='true']",
           );
           if (pill && currentChapter) {
             const book = pill.dataset.book;
             const chapter = Number.parseInt(pill.dataset.chapter ?? "", 10);
             const startVerse = Number.parseInt(
               pill.dataset.startVerse ?? "",
-              10
+              10,
             );
             const endVerse = Number.parseInt(pill.dataset.endVerse ?? "", 10);
             if (
@@ -994,7 +1005,7 @@ export function InlineVerseEditor({
         onMouseOver={(event) => {
           const target = event.target as HTMLElement;
           const pill = target.closest<HTMLElement>(
-            "[data-note-verse-pill='true']"
+            "[data-note-verse-pill='true']",
           );
           if (!pill || !event.currentTarget.contains(pill)) return;
           showHoverPreview(pill);
@@ -1002,7 +1013,7 @@ export function InlineVerseEditor({
         onMouseOut={(event) => {
           const target = event.target as HTMLElement;
           const pill = target.closest<HTMLElement>(
-            "[data-note-verse-pill='true']"
+            "[data-note-verse-pill='true']",
           );
           if (!pill) return;
 
@@ -1014,7 +1025,7 @@ export function InlineVerseEditor({
           const nextPill =
             relatedTarget instanceof Element
               ? relatedTarget.closest<HTMLElement>(
-                  "[data-note-verse-pill='true']"
+                  "[data-note-verse-pill='true']",
                 )
               : null;
           if (nextPill && event.currentTarget.contains(nextPill)) {
@@ -1046,7 +1057,7 @@ export function InlineVerseEditor({
           ) {
             event.preventDefault();
             setHighlightedIndex(
-              (activeHighlightedIndex + 1) % actionableSuggestions.length
+              (activeHighlightedIndex + 1) % actionableSuggestions.length,
             );
             return;
           }
@@ -1060,7 +1071,7 @@ export function InlineVerseEditor({
             setHighlightedIndex(
               activeHighlightedIndex === 0
                 ? actionableSuggestions.length - 1
-                : activeHighlightedIndex - 1
+                : activeHighlightedIndex - 1,
             );
             return;
           }
@@ -1073,7 +1084,7 @@ export function InlineVerseEditor({
             event.preventDefault();
             handleSelectSuggestion(
               actionableSuggestions[activeHighlightedIndex] ??
-                actionableSuggestions[0]
+                actionableSuggestions[0],
             );
             return;
           }
@@ -1082,7 +1093,6 @@ export function InlineVerseEditor({
             event.preventDefault();
             return;
           }
-
         }}
       />
 
@@ -1103,7 +1113,7 @@ export function InlineVerseEditor({
                   "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
                 queryStatus.tone === "loading" &&
                   "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-                queryStatus.tone === "info" && "bg-muted/70 text-foreground"
+                queryStatus.tone === "info" && "bg-muted/70 text-foreground",
               )}
             >
               <div className="flex items-start gap-2">
@@ -1146,7 +1156,7 @@ export function InlineVerseEditor({
                   className={cn(
                     "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60",
                     index === activeHighlightedIndex &&
-                      "bg-accent text-accent-foreground"
+                      "bg-accent text-accent-foreground",
                   )}
                   onMouseDown={(event) => {
                     event.preventDefault();
@@ -1160,7 +1170,9 @@ export function InlineVerseEditor({
                     <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
                   )}
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{suggestion.label}</div>
+                    <div className="truncate font-medium">
+                      {suggestion.label}
+                    </div>
                     {suggestion.description ? (
                       <div className="text-xs text-muted-foreground">
                         {suggestion.description}

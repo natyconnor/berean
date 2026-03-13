@@ -1,18 +1,18 @@
-import { Palette, Check, Sun, Moon } from "lucide-react"
-import { TooltipButton } from "@/components/ui/tooltip-button"
+import { Palette, Check, Sun, Moon } from "lucide-react";
+import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { useTheme } from "@/lib/use-theme"
-import { THEMES } from "@/lib/themes"
-import { useState } from "react"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/popover";
+import { useTheme } from "@/lib/use-theme";
+import { THEMES } from "@/lib/themes";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 export function ThemeDropdown() {
-  const { theme, setTheme, darkMode, setDarkMode } = useTheme()
-  const [open, setOpen] = useState(false)
+  const { theme, setTheme, darkMode, setDarkMode } = useTheme();
+  const [open, setOpen] = useState(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -32,8 +32,8 @@ export function ThemeDropdown() {
         </p>
         <div className="space-y-0.5">
           {THEMES.map((t) => {
-            const isActive = t.name === theme.name
-            const swatchVars = darkMode ? t.darkVars : t.vars
+            const isActive = t.name === theme.name;
+            const swatchVars = darkMode ? t.darkVars : t.vars;
             return (
               <button
                 key={t.name}
@@ -41,35 +41,41 @@ export function ThemeDropdown() {
                   "w-full flex items-start gap-3 px-2 py-2 rounded-md text-left transition-colors cursor-pointer",
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "hover:bg-muted"
+                    : "hover:bg-muted",
                 )}
                 onClick={() => {
-                  setTheme(t)
-                  setOpen(false)
+                  setTheme(t);
+                  setOpen(false);
                 }}
               >
                 <div className="flex gap-0.5 mt-0.5 shrink-0">
-                  {[swatchVars["--primary"], swatchVars["--secondary"], swatchVars["--background"]].map(
-                    (color, i) => (
-                      <div
-                        key={i}
-                        className="h-3.5 w-3.5 rounded-sm border border-black/10"
-                        style={{ backgroundColor: color }}
-                      />
-                    )
-                  )}
+                  {[
+                    swatchVars["--primary"],
+                    swatchVars["--secondary"],
+                    swatchVars["--background"],
+                  ].map((color, i) => (
+                    <div
+                      key={i}
+                      className="h-3.5 w-3.5 rounded-sm border border-black/10"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium leading-none">{t.name}</span>
-                    {isActive && <Check className="h-3 w-3 text-primary shrink-0" />}
+                    <span className="text-sm font-medium leading-none">
+                      {t.name}
+                    </span>
+                    {isActive && (
+                      <Check className="h-3 w-3 text-primary shrink-0" />
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-snug">
                     {t.description}
                   </p>
                 </div>
               </button>
-            )
+            );
           })}
         </div>
 
@@ -89,13 +95,13 @@ export function ThemeDropdown() {
             <div
               className={cn(
                 "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
-                darkMode ? "bg-primary" : "bg-muted-foreground/30"
+                darkMode ? "bg-primary" : "bg-muted-foreground/30",
               )}
             >
               <span
                 className={cn(
                   "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-                  darkMode ? "translate-x-4" : "translate-x-0.5"
+                  darkMode ? "translate-x-4" : "translate-x-0.5",
                 )}
               />
             </div>
@@ -103,5 +109,5 @@ export function ThemeDropdown() {
         </div>
       </PopoverContent>
     </Popover>
-  )
+  );
 }

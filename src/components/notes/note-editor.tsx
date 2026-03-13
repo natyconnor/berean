@@ -1,38 +1,38 @@
-import { useState, useCallback, useMemo } from "react"
-import { useQuery } from "convex-helpers/react/cache"
-import { TooltipButton } from "@/components/ui/tooltip-button"
-import { Badge } from "@/components/ui/badge"
-import { X, BookOpen } from "lucide-react"
-import { TagPicker } from "@/components/tags/tag-picker"
-import { cn } from "@/lib/utils"
-import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles"
-import { normalizeTags } from "@/lib/tag-utils"
-import type { VerseRef } from "@/lib/verse-ref-utils"
-import { formatVerseRef } from "@/lib/verse-ref-utils"
+import { useState, useCallback, useMemo } from "react";
+import { useQuery } from "convex-helpers/react/cache";
+import { TooltipButton } from "@/components/ui/tooltip-button";
+import { Badge } from "@/components/ui/badge";
+import { X, BookOpen } from "lucide-react";
+import { TagPicker } from "@/components/tags/tag-picker";
+import { cn } from "@/lib/utils";
+import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
+import { normalizeTags } from "@/lib/tag-utils";
+import type { VerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 import {
   normalizeNoteBody,
   noteBodyToPlainText,
   type NoteBody,
-} from "@/lib/note-inline-content"
-import { InlineVerseEditor } from "@/components/notes/editor/inline-verse-editor"
-import { useNoteEditorTour } from "@/components/tutorial/use-note-editor-tour"
-import { api } from "../../../convex/_generated/api"
+} from "@/lib/note-inline-content";
+import { InlineVerseEditor } from "@/components/notes/editor/inline-verse-editor";
+import { useNoteEditorTour } from "@/components/tutorial/use-note-editor-tour";
+import { api } from "../../../convex/_generated/api";
 
 interface CurrentChapter {
-  book: string
-  chapter: number
+  book: string;
+  chapter: number;
 }
 
 interface NoteEditorProps {
-  verseRef: VerseRef
-  initialContent?: string
-  initialBody?: NoteBody
-  initialTags?: string[]
-  variant?: "default" | "passage"
-  presentation?: "card" | "dialog"
-  currentChapter?: CurrentChapter
-  onSave: (body: NoteBody, tags: string[]) => void | Promise<void>
-  onCancel: () => void
+  verseRef: VerseRef;
+  initialContent?: string;
+  initialBody?: NoteBody;
+  initialTags?: string[];
+  variant?: "default" | "passage";
+  presentation?: "card" | "dialog";
+  currentChapter?: CurrentChapter;
+  onSave: (body: NoteBody, tags: string[]) => void | Promise<void>;
+  onCancel: () => void;
 }
 
 export function NoteEditor({
@@ -46,68 +46,75 @@ export function NoteEditor({
   onSave,
   onCancel,
 }: NoteEditorProps) {
-  const [initialEditorBody] = useState<NoteBody>(() => normalizeNoteBody(initialBody, initialContent))
-  const [body, setBody] = useState<NoteBody>(initialEditorBody)
-  const [tags, setTags] = useState<string[]>(() => normalizeTags(initialTags))
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [isSaving, setIsSaving] = useState(false)
+  const [initialEditorBody] = useState<NoteBody>(() =>
+    normalizeNoteBody(initialBody, initialContent),
+  );
+  const [body, setBody] = useState<NoteBody>(initialEditorBody);
+  const [tags, setTags] = useState<string[]>(() => normalizeTags(initialTags));
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const catalog = useQuery(api.tags.listCatalog)
-  const resolveTagStyle = useStarterTagBadgeStyle()
-  const tour = useNoteEditorTour()
+  const catalog = useQuery(api.tags.listCatalog);
+  const resolveTagStyle = useStarterTagBadgeStyle();
+  const tour = useNoteEditorTour();
 
-  const availableTags = useMemo(() => (catalog ?? []).map((entry) => entry.tag), [catalog])
+  const availableTags = useMemo(
+    () => (catalog ?? []).map((entry) => entry.tag),
+    [catalog],
+  );
 
   const addTag = useCallback((tag: string) => {
-    setTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]))
-  }, [])
+    setTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
+  }, []);
 
   const removeTag = useCallback((tag: string) => {
-    setTags((prev) => prev.filter((t) => t !== tag))
-  }, [])
+    setTags((prev) => prev.filter((t) => t !== tag));
+  }, []);
 
   const handleEditorChange = useCallback((nextBody: NoteBody) => {
-    setBody(nextBody)
-    setSaveError(null)
-  }, [])
+    setBody(nextBody);
+    setSaveError(null);
+  }, []);
 
   const handleSave = useCallback(async () => {
-    const content = noteBodyToPlainText(body).trim()
+    const content = noteBodyToPlainText(body).trim();
     if (!content || isSaving) {
-      return
+      return;
     }
 
-    setIsSaving(true)
-    setSaveError(null)
+    setIsSaving(true);
+    setSaveError(null);
     try {
-      await onSave(body, tags)
+      await onSave(body, tags);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Failed to save note")
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to save note",
+      );
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }, [body, isSaving, onSave, tags])
+  }, [body, isSaving, onSave, tags]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      const content = noteBodyToPlainText(body).trim()
+      const content = noteBodyToPlainText(body).trim();
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
+        e.preventDefault();
         if (content) {
-          void handleSave()
+          void handleSave();
         }
       }
       if (e.key === "Escape") {
-        e.preventDefault()
-        onCancel()
+        e.preventDefault();
+        onCancel();
       }
     },
-    [body, handleSave, onCancel]
-  )
+    [body, handleSave, onCancel],
+  );
 
-  const isPassage = variant === "passage"
-  const isDialogPresentation = presentation === "dialog"
-  const plainText = noteBodyToPlainText(body).trim()
+  const isPassage = variant === "passage";
+  const isDialogPresentation = presentation === "dialog";
+  const plainText = noteBodyToPlainText(body).trim();
 
   return (
     <div
@@ -119,8 +126,8 @@ export function NoteEditor({
               "rounded-lg p-2.5 shadow-sm",
               isPassage
                 ? "border-l-2 border border-amber-200 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-700/50 border-l-amber-400 dark:border-l-amber-600/70"
-                : "border bg-card"
-            )
+                : "border bg-card",
+            ),
       )}
       onKeyDown={handleKeyDown}
     >
@@ -153,7 +160,9 @@ export function NoteEditor({
       <InlineVerseEditor
         initialBody={initialEditorBody}
         verseRef={verseRef}
-        currentChapter={currentChapter ?? { book: verseRef.book, chapter: verseRef.chapter }}
+        currentChapter={
+          currentChapter ?? { book: verseRef.book, chapter: verseRef.chapter }
+        }
         onChange={handleEditorChange}
         className={cn(isDialogPresentation ? "min-h-[180px]" : "min-h-[96px]")}
         tourId={tour.bodyTourId}
@@ -162,7 +171,9 @@ export function NoteEditor({
         tutorialPreviewQuery={tour.tutorialPreviewQuery}
       />
 
-      {saveError ? <p className="text-xs text-destructive">{saveError}</p> : null}
+      {saveError ? (
+        <p className="text-xs text-destructive">{saveError}</p>
+      ) : null}
 
       <div className="space-y-2">
         <TagPicker
@@ -176,7 +187,7 @@ export function NoteEditor({
           popoverDropdown
           selectedTagBadgeClassName={cn(
             "text-xs",
-            isPassage && "border-amber-300 dark:border-amber-600/50"
+            isPassage && "border-amber-300 dark:border-amber-600/50",
           )}
           tourId={tour.tagsTourId}
           tutorialPreviewTags={tour.tutorialPreviewTags}
@@ -186,14 +197,19 @@ export function NoteEditor({
 
       <div className="flex justify-end gap-2">
         {!isDialogPresentation && (
-          <TooltipButton variant="ghost" size="sm" onClick={onCancel} tooltip="Cancel (Esc)">
+          <TooltipButton
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            tooltip="Cancel (Esc)"
+          >
             Cancel
           </TooltipButton>
         )}
         <TooltipButton
           size="sm"
           onClick={() => {
-            void handleSave()
+            void handleSave();
           }}
           disabled={!plainText || isSaving}
           tooltip={
@@ -209,9 +225,9 @@ export function NoteEditor({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {/(Mac|iPhone|iPad)/i.test(navigator.userAgent) ? "Cmd" : "Ctrl"}+Enter to save
-        &middot; Esc to cancel
+        {/(Mac|iPhone|iPad)/i.test(navigator.userAgent) ? "Cmd" : "Ctrl"}+Enter
+        to save &middot; Esc to cancel
       </p>
     </div>
-  )
+  );
 }

@@ -1,13 +1,13 @@
-import { motion } from "framer-motion"
-import type { Tab } from "@/lib/tab-types"
-import { X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { motion } from "framer-motion";
+import type { Tab } from "@/lib/tab-types";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TabItemProps {
-  tab: Tab
-  isActive: boolean
-  onActivate: () => void
-  onClose: () => void
+  tab: Tab;
+  isActive: boolean;
+  onActivate: () => void;
+  onClose: () => void;
 }
 
 export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
@@ -41,12 +41,12 @@ export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         )}
         onClick={(e) => {
-          e.stopPropagation()
-          onClose()
+          e.stopPropagation();
+          onClose();
         }}
       >
         <X className="h-3 w-3" />
       </button>
     </motion.div>
-  )
+  );
 }

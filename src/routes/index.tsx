@@ -1,7 +1,7 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router"
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   component: () => (
     <Navigate to="/passage/$passageId" params={{ passageId: "John-1" }} />
   ),
-})
+});

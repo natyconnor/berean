@@ -1,16 +1,16 @@
 interface UserSettingsStatusInput {
-  starterTagsSetupCompletedAt?: number
-  mainOnboardingCompletedAt?: number
-  advancedSearchOnboardingCompletedAt?: number
-  starterTagCategoryColors?: Record<string, string>
+  starterTagsSetupCompletedAt?: number;
+  mainOnboardingCompletedAt?: number;
+  advancedSearchOnboardingCompletedAt?: number;
+  starterTagCategoryColors?: Record<string, string>;
 }
 
 export interface TutorialStatus {
-  needsStarterTagsSetup: boolean
-  starterTagsSetupCompletedAt?: number
-  mainTutorialCompletedAt?: number
-  advancedSearchTutorialCompletedAt?: number
-  categoryColors: Record<string, string>
+  needsStarterTagsSetup: boolean;
+  starterTagsSetupCompletedAt?: number;
+  mainTutorialCompletedAt?: number;
+  advancedSearchTutorialCompletedAt?: number;
+  categoryColors: Record<string, string>;
 }
 
 export function resolveTutorialStatus(
@@ -23,5 +23,5 @@ export function resolveTutorialStatus(
     advancedSearchTutorialCompletedAt:
       settings?.advancedSearchOnboardingCompletedAt,
     categoryColors: settings?.starterTagCategoryColors ?? {},
-  }
+  };
 }

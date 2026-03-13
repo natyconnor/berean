@@ -1,5 +1,5 @@
 export interface Tab {
-  id: string
-  passageId: string
-  label: string
+  id: string;
+  passageId: string;
+  label: string;
 }

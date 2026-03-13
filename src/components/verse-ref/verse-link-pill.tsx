@@ -38,7 +38,7 @@ export function VerseLinkPill({
         "inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-100/80 px-2 py-0.5 align-baseline text-xs font-medium text-sky-900 dark:border-sky-700/60 dark:bg-sky-900/35 dark:text-sky-100",
         editable && "pr-1",
         !editable && currentChapter && "cursor-pointer",
-        className
+        className,
       )}
       onClick={handleClick}
       role={!editable && currentChapter ? "link" : undefined}
@@ -77,7 +77,7 @@ export function VerseLinkPill({
       <span
         className={cn(
           "inline-block",
-          currentChapter ? "cursor-pointer" : "cursor-help"
+          currentChapter ? "cursor-pointer" : "cursor-help",
         )}
       >
         {pill}

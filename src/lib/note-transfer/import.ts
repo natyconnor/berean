@@ -1,14 +1,14 @@
-import type * as XLSX from "xlsx"
+import type * as XLSX from "xlsx";
 
-import { getChapterVerseCount } from "@/lib/bible-verse-counts"
-import { getCanonicalBookNameFromFileName } from "@/lib/note-transfer/books"
-import { parseImportedNoteCell } from "@/lib/note-transfer/note-cells"
+import { getChapterVerseCount } from "@/lib/bible-verse-counts";
+import { getCanonicalBookNameFromFileName } from "@/lib/note-transfer/books";
+import { parseImportedNoteCell } from "@/lib/note-transfer/note-cells";
 import type {
   ImportIssue,
   ParsedImportPreview,
   ParsedImportWorkbook,
   ParsedImportedNote,
-} from "@/lib/note-transfer/types"
+} from "@/lib/note-transfer/types";
 
 const OMITTED_VERSE_WARNINGS_SUPPRESSED: Partial<
   Record<string, Partial<Record<number, readonly number[]>>>
@@ -41,52 +41,52 @@ const OMITTED_VERSE_WARNINGS_SUPPRESSED: Partial<
   Romans: {
     16: [24],
   },
-}
+};
 
 function toCellString(value: unknown): string {
   if (typeof value === "string") {
-    return value.replace(/\r\n/g, "\n").trim()
+    return value.replace(/\r\n/g, "\n").trim();
   }
   if (
     typeof value === "number" ||
     typeof value === "boolean" ||
     typeof value === "bigint"
   ) {
-    return String(value).trim()
+    return String(value).trim();
   }
-  return ""
+  return "";
 }
 
 function isEmptyRow(row: unknown[]): boolean {
-  return row.every((cell) => toCellString(cell).length === 0)
+  return row.every((cell) => toCellString(cell).length === 0);
 }
 
 function trimTrailingEmptyRows(rows: unknown[][]): unknown[][] {
-  const result = [...rows]
+  const result = [...rows];
   while (result.length > 0 && isEmptyRow(result[result.length - 1] ?? [])) {
-    result.pop()
+    result.pop();
   }
-  return result
+  return result;
 }
 
 export function parseChapterSheetName(sheetName: string): number | null {
-  const match = sheetName.trim().match(/^chapter\s*0*(\d+)$/i)
-  if (!match) return null
-  const chapter = Number.parseInt(match[1], 10)
-  return Number.isFinite(chapter) && chapter > 0 ? chapter : null
+  const match = sheetName.trim().match(/^chapter\s*0*(\d+)$/i);
+  if (!match) return null;
+  const chapter = Number.parseInt(match[1], 10);
+  return Number.isFinite(chapter) && chapter > 0 ? chapter : null;
 }
 
 function hasHeaderRow(rows: unknown[][]): boolean {
-  const firstCell = toCellString(rows[0]?.[0])
-  return firstCell.toLowerCase() === "verse"
+  const firstCell = toCellString(rows[0]?.[0]);
+  return firstCell.toLowerCase() === "verse";
 }
 
 function parseLeadingVerseNumber(value: string): number | null {
-  const match = value.match(/^(\d+)(\D|$)/)
-  if (!match) return null
+  const match = value.match(/^(\d+)(\D|$)/);
+  if (!match) return null;
 
-  const verseNumber = Number.parseInt(match[1], 10)
-  return Number.isFinite(verseNumber) && verseNumber > 0 ? verseNumber : null
+  const verseNumber = Number.parseInt(match[1], 10);
+  return Number.isFinite(verseNumber) && verseNumber > 0 ? verseNumber : null;
 }
 
 function isSuppressedMissingVerse(
@@ -96,40 +96,40 @@ function isSuppressedMissingVerse(
 ): boolean {
   return (
     OMITTED_VERSE_WARNINGS_SUPPRESSED[book]?.[chapter]?.includes(verse) ?? false
-  )
+  );
 }
 
 function formatVerseList(verses: number[]): string {
-  if (verses.length === 0) return ""
+  if (verses.length === 0) return "";
 
-  const sortedVerses = [...verses].sort((a, b) => a - b)
-  const ranges: string[] = []
-  let rangeStart = sortedVerses[0]
-  let previousVerse = sortedVerses[0]
+  const sortedVerses = [...verses].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let rangeStart = sortedVerses[0];
+  let previousVerse = sortedVerses[0];
 
   for (let index = 1; index < sortedVerses.length; index += 1) {
-    const verse = sortedVerses[index]
+    const verse = sortedVerses[index];
     if (verse === previousVerse + 1) {
-      previousVerse = verse
-      continue
+      previousVerse = verse;
+      continue;
     }
 
     ranges.push(
       rangeStart === previousVerse
         ? String(rangeStart)
         : `${rangeStart}-${previousVerse}`,
-    )
-    rangeStart = verse
-    previousVerse = verse
+    );
+    rangeStart = verse;
+    previousVerse = verse;
   }
 
   ranges.push(
     rangeStart === previousVerse
       ? String(rangeStart)
       : `${rangeStart}-${previousVerse}`,
-  )
+  );
 
-  return ranges.join(", ")
+  return ranges.join(", ");
 }
 
 function createIssue(
@@ -139,7 +139,7 @@ function createIssue(
   return {
     ...issue,
     fileName,
-  }
+  };
 }
 
 export function parseImportWorkbook(
@@ -147,11 +147,11 @@ export function parseImportWorkbook(
   fileName: string,
   utils: typeof XLSX.utils,
 ): ParsedImportWorkbook {
-  const book = getCanonicalBookNameFromFileName(fileName)
-  const issues: ImportIssue[] = []
-  const notes: ParsedImportedNote[] = []
-  const chapterNumbers: number[] = []
-  const seenChapters = new Set<number>()
+  const book = getCanonicalBookNameFromFileName(fileName);
+  const issues: ImportIssue[] = [];
+  const notes: ParsedImportedNote[] = [];
+  const chapterNumbers: number[] = [];
+  const seenChapters = new Set<number>();
 
   if (!book) {
     issues.push(
@@ -163,18 +163,18 @@ export function parseImportWorkbook(
         },
         fileName,
       ),
-    )
+    );
     return {
       fileName,
       book: null,
       notes,
       issues,
       chapterNumbers,
-    }
+    };
   }
 
   for (const sheetName of workbook.SheetNames) {
-    const chapter = parseChapterSheetName(sheetName)
+    const chapter = parseChapterSheetName(sheetName);
     if (!chapter) {
       issues.push(
         createIssue(
@@ -186,8 +186,8 @@ export function parseImportWorkbook(
           },
           fileName,
         ),
-      )
-      continue
+      );
+      continue;
     }
 
     if (seenChapters.has(chapter)) {
@@ -201,14 +201,14 @@ export function parseImportWorkbook(
           },
           fileName,
         ),
-      )
-      continue
+      );
+      continue;
     }
 
-    seenChapters.add(chapter)
-    chapterNumbers.push(chapter)
+    seenChapters.add(chapter);
+    chapterNumbers.push(chapter);
 
-    const expectedVerseCount = getChapterVerseCount(book, chapter)
+    const expectedVerseCount = getChapterVerseCount(book, chapter);
     if (!expectedVerseCount) {
       issues.push(
         createIssue(
@@ -220,18 +220,18 @@ export function parseImportWorkbook(
           },
           fileName,
         ),
-      )
-      continue
+      );
+      continue;
     }
 
-    const worksheet = workbook.Sheets[sheetName]
+    const worksheet = workbook.Sheets[sheetName];
     const rawRows = utils.sheet_to_json<unknown[]>(worksheet, {
       header: 1,
       raw: false,
       defval: "",
       blankrows: false,
-    })
-    const rows = trimTrailingEmptyRows(rawRows)
+    });
+    const rows = trimTrailingEmptyRows(rawRows);
 
     if (rows.length === 0) {
       issues.push(
@@ -244,28 +244,28 @@ export function parseImportWorkbook(
           },
           fileName,
         ),
-      )
-      continue
+      );
+      continue;
     }
 
-    const headerRowPresent = hasHeaderRow(rows)
-    const dataRows = headerRowPresent ? rows.slice(1) : rows
+    const headerRowPresent = hasHeaderRow(rows);
+    const dataRows = headerRowPresent ? rows.slice(1) : rows;
     const parsedRows: Array<{
-      row: unknown[]
-      verseNumber: number
-    }> = []
-    const seenVerseNumbers = new Set<number>()
-    let previousVerseNumber = 0
-    let hasVerseRowErrors = false
+      row: unknown[];
+      verseNumber: number;
+    }> = [];
+    const seenVerseNumbers = new Set<number>();
+    let previousVerseNumber = 0;
+    let hasVerseRowErrors = false;
 
     for (let rowIndex = 0; rowIndex < dataRows.length; rowIndex += 1) {
-      const row = dataRows[rowIndex] ?? []
-      const rowNumber = rowIndex + (headerRowPresent ? 2 : 1)
-      const verseCell = toCellString(row[0])
-      const verseNumber = parseLeadingVerseNumber(verseCell)
+      const row = dataRows[rowIndex] ?? [];
+      const rowNumber = rowIndex + (headerRowPresent ? 2 : 1);
+      const verseCell = toCellString(row[0]);
+      const verseNumber = parseLeadingVerseNumber(verseCell);
 
       if (!verseNumber) {
-        hasVerseRowErrors = true
+        hasVerseRowErrors = true;
         issues.push(
           createIssue(
             {
@@ -276,12 +276,12 @@ export function parseImportWorkbook(
             },
             fileName,
           ),
-        )
-        continue
+        );
+        continue;
       }
 
       if (verseNumber > expectedVerseCount) {
-        hasVerseRowErrors = true
+        hasVerseRowErrors = true;
         issues.push(
           createIssue(
             {
@@ -292,12 +292,12 @@ export function parseImportWorkbook(
             },
             fileName,
           ),
-        )
-        continue
+        );
+        continue;
       }
 
       if (seenVerseNumbers.has(verseNumber)) {
-        hasVerseRowErrors = true
+        hasVerseRowErrors = true;
         issues.push(
           createIssue(
             {
@@ -308,12 +308,12 @@ export function parseImportWorkbook(
             },
             fileName,
           ),
-        )
-        continue
+        );
+        continue;
       }
 
       if (verseNumber < previousVerseNumber) {
-        hasVerseRowErrors = true
+        hasVerseRowErrors = true;
         issues.push(
           createIssue(
             {
@@ -324,29 +324,29 @@ export function parseImportWorkbook(
             },
             fileName,
           ),
-        )
-        continue
+        );
+        continue;
       }
 
-      seenVerseNumbers.add(verseNumber)
-      previousVerseNumber = verseNumber
+      seenVerseNumbers.add(verseNumber);
+      previousVerseNumber = verseNumber;
       parsedRows.push({
         row,
         verseNumber,
-      })
+      });
     }
 
     if (!hasVerseRowErrors) {
-      const missingVerses: number[] = []
+      const missingVerses: number[] = [];
       for (let verse = 1; verse <= expectedVerseCount; verse += 1) {
         if (!seenVerseNumbers.has(verse)) {
-          missingVerses.push(verse)
+          missingVerses.push(verse);
         }
       }
 
       const unexpectedMissingVerses = missingVerses.filter(
         (verse) => !isSuppressedMissingVerse(book, chapter, verse),
-      )
+      );
       if (unexpectedMissingVerses.length > 0) {
         issues.push(
           createIssue(
@@ -358,7 +358,7 @@ export function parseImportWorkbook(
             },
             fileName,
           ),
-        )
+        );
       }
     }
 
@@ -368,8 +368,8 @@ export function parseImportWorkbook(
         columnIndex < parsedRow.row.length;
         columnIndex += 1
       ) {
-        const parsedCell = parseImportedNoteCell(parsedRow.row[columnIndex])
-        if (!parsedCell) continue
+        const parsedCell = parseImportedNoteCell(parsedRow.row[columnIndex]);
+        if (!parsedCell) continue;
 
         notes.push({
           book,
@@ -379,7 +379,7 @@ export function parseImportWorkbook(
           tags: parsedCell.tags,
           sourceFileName: fileName,
           sourceSheetName: sheetName,
-        })
+        });
       }
     }
   }
@@ -390,36 +390,36 @@ export function parseImportWorkbook(
     notes,
     issues,
     chapterNumbers: chapterNumbers.sort((a, b) => a - b),
-  }
+  };
 }
 
 export function buildImportPreview(
   workbooks: ParsedImportWorkbook[],
 ): ParsedImportPreview {
-  const issues = workbooks.flatMap((workbook) => workbook.issues)
-  const notes = workbooks.flatMap((workbook) => workbook.notes)
-  const seenBooks = new Map<string, string>()
+  const issues = workbooks.flatMap((workbook) => workbook.issues);
+  const notes = workbooks.flatMap((workbook) => workbook.notes);
+  const seenBooks = new Map<string, string>();
 
   for (const workbook of workbooks) {
-    if (!workbook.book) continue
+    if (!workbook.book) continue;
 
-    const previousFileName = seenBooks.get(workbook.book)
+    const previousFileName = seenBooks.get(workbook.book);
     if (previousFileName) {
       issues.push({
         severity: "error",
         code: "duplicate-book-file",
         message: `Book "${workbook.book}" appears in both "${previousFileName}" and "${workbook.fileName}".`,
         fileName: workbook.fileName,
-      })
-      continue
+      });
+      continue;
     }
 
-    seenBooks.set(workbook.book, workbook.fileName)
+    seenBooks.set(workbook.book, workbook.fileName);
   }
 
   return {
     workbooks,
     notes,
     issues,
-  }
+  };
 }

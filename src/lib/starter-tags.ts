@@ -75,7 +75,7 @@ export const STARTER_TAG_CATEGORIES: StarterTagCategory[] = [
 ];
 
 export const ALL_STARTER_TAGS = Array.from(
-  new Set(STARTER_TAG_CATEGORIES.flatMap((category) => category.tags))
+  new Set(STARTER_TAG_CATEGORIES.flatMap((category) => category.tags)),
 );
 
 export const DEFAULT_STARTER_TAG_CATEGORY_COLORS: Record<string, string> =
@@ -83,7 +83,7 @@ export const DEFAULT_STARTER_TAG_CATEGORY_COLORS: Record<string, string> =
     STARTER_TAG_CATEGORIES.map((category) => [
       category.id,
       category.defaultColor,
-    ])
+    ]),
   ) as Record<string, string>;
 
 export const STARTER_TAG_CATEGORY_BY_TAG: Record<string, string> =

@@ -1,30 +1,30 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router"
-import { useAuthActions } from "@convex-dev/auth/react"
-import { useConvexAuth } from "convex/react"
-import { useState } from "react"
+import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth } from "convex/react";
+import { useState } from "react";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
-})
+});
 
 function LoginPage() {
-  const { signIn } = useAuthActions()
-  const { isAuthenticated } = useConvexAuth()
-  const [isSigningIn, setIsSigningIn] = useState(false)
+  const { signIn } = useAuthActions();
+  const { isAuthenticated } = useConvexAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/" replace />;
   }
 
   const handleGoogleSignIn = async () => {
-    setIsSigningIn(true)
+    setIsSigningIn(true);
     try {
-      await signIn("google")
+      await signIn("google");
     } catch (error) {
-      console.error("Sign in failed:", error)
-      setIsSigningIn(false)
+      console.error("Sign in failed:", error);
+      setIsSigningIn(false);
     }
-  }
+  };
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
@@ -142,5 +142,5 @@ function LoginPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

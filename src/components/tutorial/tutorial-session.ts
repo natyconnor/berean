@@ -1,28 +1,31 @@
-const ACTIVE_TUTORIAL_TOUR_KEY = "bible-notes-active-tutorial-tour"
+const ACTIVE_TUTORIAL_TOUR_KEY = "bible-notes-active-tutorial-tour";
 
 function hasWindow(): boolean {
-  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
+  return (
+    typeof window !== "undefined" &&
+    typeof window.sessionStorage !== "undefined"
+  );
 }
 
-export type TutorialTourName = "main" | "search"
+export type TutorialTourName = "main" | "search";
 
 export function readActiveTutorialTour(): TutorialTourName | null {
-  if (!hasWindow()) return null
+  if (!hasWindow()) return null;
   try {
-    const value = window.sessionStorage.getItem(ACTIVE_TUTORIAL_TOUR_KEY)
-    return value === "main" || value === "search" ? value : null
+    const value = window.sessionStorage.getItem(ACTIVE_TUTORIAL_TOUR_KEY);
+    return value === "main" || value === "search" ? value : null;
   } catch {
-    return null
+    return null;
   }
 }
 
 export function writeActiveTutorialTour(tour: TutorialTourName | null) {
-  if (!hasWindow()) return
+  if (!hasWindow()) return;
   try {
     if (tour) {
-      window.sessionStorage.setItem(ACTIVE_TUTORIAL_TOUR_KEY, tour)
+      window.sessionStorage.setItem(ACTIVE_TUTORIAL_TOUR_KEY, tour);
     } else {
-      window.sessionStorage.removeItem(ACTIVE_TUTORIAL_TOUR_KEY)
+      window.sessionStorage.removeItem(ACTIVE_TUTORIAL_TOUR_KEY);
     }
   } catch {
     // ignore sessionStorage failures

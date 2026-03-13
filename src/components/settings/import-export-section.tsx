@@ -5,9 +5,9 @@ import {
   type ChangeEvent,
   type DragEvent,
   type ReactNode,
-} from "react"
-import { useAction, useMutation } from "convex/react"
-import { useQuery } from "convex-helpers/react/cache"
+} from "react";
+import { useAction, useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 import {
   Loader2,
   Upload,
@@ -17,56 +17,56 @@ import {
   ChevronDown,
   ChevronRight,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import { api } from "../../../convex/_generated/api"
-import { BIBLE_BOOKS } from "@/lib/bible-books"
-import { parseEsvResponse } from "@/lib/esv-api"
-import { Button } from "@/components/ui/button"
+import { api } from "../../../convex/_generated/api";
+import { BIBLE_BOOKS } from "@/lib/bible-books";
+import { parseEsvResponse } from "@/lib/esv-api";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   buildChapterExportRows,
   formatChapterSheetName,
   getExportBooks,
   getExportWorkbookName,
   groupExportNotesByBook,
-} from "@/lib/note-transfer/export"
+} from "@/lib/note-transfer/export";
 import {
   buildImportPreview,
   parseImportWorkbook,
-} from "@/lib/note-transfer/import"
+} from "@/lib/note-transfer/import";
 import type {
   ExportableLinkedNote,
   ExportScope,
   ImportIssue,
   ParsedImportPreview,
   ParsedImportWorkbook,
-} from "@/lib/note-transfer/types"
+} from "@/lib/note-transfer/types";
 
-const IMPORT_BATCH_SIZE = 100
-const EXPORT_ENABLED = false
+const IMPORT_BATCH_SIZE = 100;
+const EXPORT_ENABLED = false;
 
 function hasFileDragPayload(event: DragEvent<HTMLElement>): boolean {
-  return Array.from(event.dataTransfer.types).includes("Files")
+  return Array.from(event.dataTransfer.types).includes("Files");
 }
 
 function isIgnorableZipEntry(entryName: string): boolean {
-  const normalized = entryName.replace(/\\/g, "/")
-  const basename = normalized.split("/").pop() ?? normalized
+  const normalized = entryName.replace(/\\/g, "/");
+  const basename = normalized.split("/").pop() ?? normalized;
   return (
     normalized.endsWith("/") ||
     normalized.startsWith("__MACOSX/") ||
     basename === ".DS_Store"
-  )
+  );
 }
 
 function createImportIssue(
@@ -75,20 +75,20 @@ function createImportIssue(
   message: string,
   fileName?: string,
 ): ImportIssue {
-  return { severity, code, message, fileName }
+  return { severity, code, message, fileName };
 }
 
 function chunkArray<T>(items: T[], chunkSize: number): T[][] {
-  const chunks: T[][] = []
+  const chunks: T[][] = [];
   for (let index = 0; index < items.length; index += chunkSize) {
-    chunks.push(items.slice(index, index + chunkSize))
+    chunks.push(items.slice(index, index + chunkSize));
   }
-  return chunks
+  return chunks;
 }
 
 function formatIssueLocation(issue: ImportIssue): string {
-  const parts = [issue.fileName, issue.sheetName].filter(Boolean)
-  return parts.length > 0 ? `${parts.join(" / ")}: ` : ""
+  const parts = [issue.fileName, issue.sheetName].filter(Boolean);
+  return parts.length > 0 ? `${parts.join(" / ")}: ` : "";
 }
 
 function InlineCode({ children }: { children: string }) {
@@ -96,57 +96,57 @@ function InlineCode({ children }: { children: string }) {
     <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">
       {children}
     </code>
-  )
+  );
 }
 
 export function ImportExportSection() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const importNotesBatch = useMutation(api.noteTransfer.importNotesBatch)
-  const fetchChaptersTextBatch = useAction(api.esv.getChaptersTextBatch)
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const importNotesBatch = useMutation(api.noteTransfer.importNotesBatch);
+  const fetchChaptersTextBatch = useAction(api.esv.getChaptersTextBatch);
   const exportableNotes = useQuery(
     api.noteTransfer.listExportableNotes,
     EXPORT_ENABLED ? {} : "skip",
-  )
+  );
 
   const [importPreview, setImportPreview] =
-    useState<ParsedImportPreview | null>(null)
+    useState<ParsedImportPreview | null>(null);
   const [importParseState, setImportParseState] = useState<
     "idle" | "parsing" | "parsed" | "error"
-  >("idle")
-  const [importParseError, setImportParseError] = useState<string | null>(null)
-  const [isImportDropActive, setIsImportDropActive] = useState(false)
+  >("idle");
+  const [importParseError, setImportParseError] = useState<string | null>(null);
+  const [isImportDropActive, setIsImportDropActive] = useState(false);
   const [areImportWorkbooksExpanded, setAreImportWorkbooksExpanded] =
-    useState(false)
+    useState(false);
   const [importProgress, setImportProgress] = useState<{
-    processedBatches: number
-    totalBatches: number
-    importedCount: number
-  } | null>(null)
+    processedBatches: number;
+    totalBatches: number;
+    importedCount: number;
+  } | null>(null);
   const [importSuccessMessage, setImportSuccessMessage] = useState<
     string | null
-  >(null)
+  >(null);
 
-  const [exportScope, setExportScope] = useState<ExportScope>("booksWithNotes")
+  const [exportScope, setExportScope] = useState<ExportScope>("booksWithNotes");
   const [exportProgress, setExportProgress] = useState<{
-    currentBook: string
-    completedBooks: number
-    totalBooks: number
-  } | null>(null)
-  const [exportError, setExportError] = useState<string | null>(null)
+    currentBook: string;
+    completedBooks: number;
+    totalBooks: number;
+  } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const importErrors = useMemo(
     () =>
       importPreview?.issues.filter((issue) => issue.severity === "error") ?? [],
     [importPreview],
-  )
+  );
   const importWarnings = useMemo(
     () =>
       importPreview?.issues.filter((issue) => issue.severity === "warning") ??
       [],
     [importPreview],
-  )
-  const importErrorCount = importErrors.length
-  const importWarningCount = importWarnings.length
+  );
+  const importErrorCount = importErrors.length;
+  const importWarningCount = importWarnings.length;
   const importChapterCount = useMemo(
     () =>
       importPreview?.workbooks.reduce(
@@ -154,72 +154,73 @@ export function ImportExportSection() {
         0,
       ) ?? 0,
     [importPreview],
-  )
-  const isImportBusy = importParseState === "parsing" || importProgress !== null
-  const hasBlockingImportIssues = importErrorCount > 0
+  );
+  const isImportBusy =
+    importParseState === "parsing" || importProgress !== null;
+  const hasBlockingImportIssues = importErrorCount > 0;
 
   const clearImportInput = () => {
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""
+      fileInputRef.current.value = "";
     }
-  }
+  };
 
   const resetImportState = ({
     preserveSuccessMessage = false,
   }: {
-    preserveSuccessMessage?: boolean
+    preserveSuccessMessage?: boolean;
   } = {}) => {
-    setImportPreview(null)
-    setImportParseState("idle")
-    setImportParseError(null)
-    setIsImportDropActive(false)
-    setAreImportWorkbooksExpanded(false)
+    setImportPreview(null);
+    setImportParseState("idle");
+    setImportParseError(null);
+    setIsImportDropActive(false);
+    setAreImportWorkbooksExpanded(false);
     if (!preserveSuccessMessage) {
-      setImportSuccessMessage(null)
+      setImportSuccessMessage(null);
     }
-    clearImportInput()
-  }
+    clearImportInput();
+  };
 
   const handleImportFiles = async (files: File[]) => {
-    resetImportState()
+    resetImportState();
 
     if (files.length === 0) {
-      return
+      return;
     }
 
-    setImportParseState("parsing")
+    setImportParseState("parsing");
 
     try {
-      const XLSX = await import("xlsx")
-      const extraIssues: ImportIssue[] = []
-      const parsedWorkbooks: ParsedImportWorkbook[] = []
+      const XLSX = await import("xlsx");
+      const extraIssues: ImportIssue[] = [];
+      const parsedWorkbooks: ParsedImportWorkbook[] = [];
 
       const parseWorkbookBinary = (
         fileName: string,
         binary: ArrayBuffer | Uint8Array,
       ) => {
-        const workbook = XLSX.read(binary, { type: "array" })
+        const workbook = XLSX.read(binary, { type: "array" });
         parsedWorkbooks.push(
           parseImportWorkbook(workbook, fileName, XLSX.utils),
-        )
-      }
+        );
+      };
 
       for (const file of files) {
-        const lowerName = file.name.toLowerCase()
+        const lowerName = file.name.toLowerCase();
 
         if (lowerName.endsWith(".xlsx")) {
-          parseWorkbookBinary(file.name, await file.arrayBuffer())
-          continue
+          parseWorkbookBinary(file.name, await file.arrayBuffer());
+          continue;
         }
 
         if (lowerName.endsWith(".zip")) {
-          const { unzipSync } = await import("fflate")
-          const entries = unzipSync(new Uint8Array(await file.arrayBuffer()))
+          const { unzipSync } = await import("fflate");
+          const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
           for (const [entryName, entryData] of Object.entries(entries)) {
-            if (isIgnorableZipEntry(entryName)) continue
+            if (isIgnorableZipEntry(entryName)) continue;
             if (entryName.toLowerCase().endsWith(".xlsx")) {
-              parseWorkbookBinary(entryName, entryData)
-              continue
+              parseWorkbookBinary(entryName, entryData);
+              continue;
             }
 
             extraIssues.push(
@@ -229,9 +230,9 @@ export function ImportExportSection() {
                 "Zip archives may only contain .xlsx workbooks.",
                 entryName,
               ),
-            )
+            );
           }
-          continue
+          continue;
         }
 
         extraIssues.push(
@@ -241,95 +242,95 @@ export function ImportExportSection() {
             "Only .xlsx files or .zip archives containing .xlsx files are supported.",
             file.name,
           ),
-        )
+        );
       }
 
-      const preview = buildImportPreview(parsedWorkbooks)
+      const preview = buildImportPreview(parsedWorkbooks);
       setImportPreview({
         ...preview,
         issues: [...preview.issues, ...extraIssues],
-      })
-      setImportParseState("parsed")
+      });
+      setImportParseState("parsed");
     } catch (error) {
-      setImportParseState("error")
+      setImportParseState("error");
       setImportParseError(
         error instanceof Error
           ? error.message
           : "Failed to parse import files.",
-      )
+      );
     } finally {
-      clearImportInput()
+      clearImportInput();
     }
-  }
+  };
 
   const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
-    void handleImportFiles(Array.from(event.target.files ?? []))
-  }
+    void handleImportFiles(Array.from(event.target.files ?? []));
+  };
 
   const handleImportDropZoneClick = () => {
-    if (isImportBusy) return
-    fileInputRef.current?.click()
-  }
+    if (isImportBusy) return;
+    fileInputRef.current?.click();
+  };
 
   const handleImportDropZoneDragEnter = (event: DragEvent<HTMLElement>) => {
-    if (isImportBusy || !hasFileDragPayload(event)) return
-    event.preventDefault()
-    setIsImportDropActive(true)
-  }
+    if (isImportBusy || !hasFileDragPayload(event)) return;
+    event.preventDefault();
+    setIsImportDropActive(true);
+  };
 
   const handleImportDropZoneDragOver = (event: DragEvent<HTMLElement>) => {
-    if (isImportBusy || !hasFileDragPayload(event)) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = "copy"
+    if (isImportBusy || !hasFileDragPayload(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
     if (!isImportDropActive) {
-      setIsImportDropActive(true)
+      setIsImportDropActive(true);
     }
-  }
+  };
 
   const handleImportDropZoneDragLeave = (event: DragEvent<HTMLElement>) => {
-    if (!hasFileDragPayload(event)) return
-    const nextTarget = event.relatedTarget
+    if (!hasFileDragPayload(event)) return;
+    const nextTarget = event.relatedTarget;
     if (
       nextTarget instanceof Node &&
       event.currentTarget.contains(nextTarget)
     ) {
-      return
+      return;
     }
-    setIsImportDropActive(false)
-  }
+    setIsImportDropActive(false);
+  };
 
   const handleImportDropZoneDrop = (event: DragEvent<HTMLElement>) => {
-    if (!hasFileDragPayload(event)) return
-    event.preventDefault()
+    if (!hasFileDragPayload(event)) return;
+    event.preventDefault();
     if (isImportBusy) {
-      setIsImportDropActive(false)
-      return
+      setIsImportDropActive(false);
+      return;
     }
-    void handleImportFiles(Array.from(event.dataTransfer.files))
-  }
+    void handleImportFiles(Array.from(event.dataTransfer.files));
+  };
 
   const handleImport = async () => {
-    if (!importPreview) return
-    if (hasBlockingImportIssues) return
-    if (importPreview.notes.length === 0) return
+    if (!importPreview) return;
+    if (hasBlockingImportIssues) return;
+    if (importPreview.notes.length === 0) return;
 
-    setImportParseError(null)
-    setImportSuccessMessage(null)
+    setImportParseError(null);
+    setImportSuccessMessage(null);
 
-    const batches = chunkArray(importPreview.notes, IMPORT_BATCH_SIZE)
+    const batches = chunkArray(importPreview.notes, IMPORT_BATCH_SIZE);
     setImportProgress({
       processedBatches: 0,
       totalBatches: batches.length,
       importedCount: 0,
-    })
+    });
 
     try {
-      const importedWorkbookCount = importPreview.workbooks.length
-      const importedNoteCount = importPreview.notes.length
-      let importedCount = 0
-      let duplicateCount = 0
+      const importedWorkbookCount = importPreview.workbooks.length;
+      const importedNoteCount = importPreview.notes.length;
+      let importedCount = 0;
+      let duplicateCount = 0;
       for (let index = 0; index < batches.length; index += 1) {
-        const batch = batches[index]
+        const batch = batches[index];
         const result = await importNotesBatch({
           notes: batch.map((note) => ({
             book: note.book,
@@ -338,20 +339,20 @@ export function ImportExportSection() {
             content: note.content,
             tags: note.tags,
           })),
-        })
+        });
         const batchDuplicateCount =
           "duplicateCount" in result &&
           typeof result.duplicateCount === "number"
             ? result.duplicateCount
-            : 0
+            : 0;
 
-        importedCount += result.importedCount
-        duplicateCount += batchDuplicateCount
+        importedCount += result.importedCount;
+        duplicateCount += batchDuplicateCount;
         setImportProgress({
           processedBatches: index + 1,
           totalBatches: batches.length,
           importedCount,
-        })
+        });
       }
 
       setImportSuccessMessage(
@@ -360,40 +361,40 @@ export function ImportExportSection() {
             ? ` Skipped ${duplicateCount} duplicate note${duplicateCount === 1 ? "" : "s"}.`
             : ""
         }`,
-      )
-      resetImportState({ preserveSuccessMessage: true })
+      );
+      resetImportState({ preserveSuccessMessage: true });
     } catch (error) {
       setImportParseError(
         error instanceof Error ? error.message : "Failed to import notes.",
-      )
+      );
     } finally {
-      setImportProgress(null)
+      setImportProgress(null);
     }
-  }
+  };
 
   const handleExport = async () => {
-    if (!EXPORT_ENABLED) return
-    if (!exportableNotes) return
+    if (!EXPORT_ENABLED) return;
+    if (!exportableNotes) return;
 
     try {
-      setExportError(null)
-      const notes = exportableNotes as ExportableLinkedNote[]
-      const books = getExportBooks(notes, exportScope)
-      const grouped = groupExportNotesByBook(notes)
-      const XLSX = await import("xlsx")
-      const { zipSync } = await import("fflate")
-      const zipEntries: Record<string, Uint8Array> = {}
+      setExportError(null);
+      const notes = exportableNotes as ExportableLinkedNote[];
+      const books = getExportBooks(notes, exportScope);
+      const grouped = groupExportNotesByBook(notes);
+      const XLSX = await import("xlsx");
+      const { zipSync } = await import("fflate");
+      const zipEntries: Record<string, Uint8Array> = {};
 
       for (let index = 0; index < books.length; index += 1) {
-        const book = books[index]
-        const bookInfo = BIBLE_BOOKS.find((entry) => entry.name === book)
-        if (!bookInfo) continue
+        const book = books[index];
+        const bookInfo = BIBLE_BOOKS.find((entry) => entry.name === book);
+        if (!bookInfo) continue;
 
         setExportProgress({
           currentBook: book,
           completedBooks: index,
           totalBooks: books.length,
-        })
+        });
 
         const rawChapters = await fetchChaptersTextBatch({
           book,
@@ -401,55 +402,57 @@ export function ImportExportSection() {
             { length: bookInfo.chapters },
             (_, chapterIndex) => chapterIndex + 1,
           ),
-        })
+        });
 
-        const workbook = XLSX.utils.book_new()
-        const notesByChapter = grouped.get(book)
+        const workbook = XLSX.utils.book_new();
+        const notesByChapter = grouped.get(book);
         for (const chapterResult of rawChapters.sort(
           (a, b) => a.chapter - b.chapter,
         )) {
-          const parsedChapter = parseEsvResponse(chapterResult.raw)
+          const parsedChapter = parseEsvResponse(chapterResult.raw);
           const rows = buildChapterExportRows(
             parsedChapter.verses,
             notesByChapter?.get(chapterResult.chapter),
-          )
-          const worksheet = XLSX.utils.aoa_to_sheet(rows)
+          );
+          const worksheet = XLSX.utils.aoa_to_sheet(rows);
           XLSX.utils.book_append_sheet(
             workbook,
             worksheet,
             formatChapterSheetName(chapterResult.chapter),
-          )
+          );
         }
 
         const workbookBinary = XLSX.write(workbook, {
           bookType: "xlsx",
           type: "array",
-        }) as ArrayBuffer
+        }) as ArrayBuffer;
 
-        zipEntries[getExportWorkbookName(book)] = new Uint8Array(workbookBinary)
+        zipEntries[getExportWorkbookName(book)] = new Uint8Array(
+          workbookBinary,
+        );
       }
 
-      const zipBinary = zipSync(zipEntries)
-      const zipBytes = Uint8Array.from(zipBinary)
+      const zipBinary = zipSync(zipEntries);
+      const zipBytes = Uint8Array.from(zipBinary);
       const blob = new Blob([zipBytes], {
         type: "application/zip",
-      })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = "bible-notes-export.zip"
-      document.body.append(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "bible-notes-export.zip";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     } catch (error) {
       setExportError(
         error instanceof Error ? error.message : "Failed to export notes.",
-      )
+      );
     } finally {
-      setExportProgress(null)
+      setExportProgress(null);
     }
-  }
+  };
 
   return (
     <Card data-tour-id="settings-import-section">
@@ -667,7 +670,7 @@ export function ImportExportSection() {
                   <Button
                     size="sm"
                     onClick={() => {
-                      void handleImport()
+                      void handleImport();
                     }}
                     disabled={
                       importProgress !== null ||
@@ -748,7 +751,7 @@ export function ImportExportSection() {
               <Button
                 size="sm"
                 onClick={() => {
-                  void handleExport()
+                  void handleExport();
                 }}
                 disabled={exportProgress !== null}
               >
@@ -770,7 +773,7 @@ export function ImportExportSection() {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function Stat({ label, value }: { label: string; value: ReactNode }) {
@@ -781,11 +784,11 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
       </p>
       <div className="text-sm font-semibold">{value}</div>
     </div>
-  )
+  );
 }
 
 function ImportIssueRow({ issue }: { issue: ImportIssue }) {
-  const isError = issue.severity === "error"
+  const isError = issue.severity === "error";
 
   return (
     <div
@@ -813,15 +816,15 @@ function ImportIssueRow({ issue }: { issue: ImportIssue }) {
         </p>
       </div>
     </div>
-  )
+  );
 }
 
 function ImportIssueGroup({
   title,
   issues,
 }: {
-  title: string
-  issues: ImportIssue[]
+  title: string;
+  issues: ImportIssue[];
 }) {
   return (
     <div className="space-y-2">
@@ -835,5 +838,5 @@ function ImportIssueGroup({
         ))}
       </div>
     </div>
-  )
+  );
 }

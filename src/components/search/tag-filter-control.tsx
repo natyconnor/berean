@@ -1,16 +1,16 @@
-import { type CSSProperties } from "react"
-import { Button } from "@/components/ui/button"
-import { TagPicker } from "@/components/tags/tag-picker"
+import { type CSSProperties } from "react";
+import { Button } from "@/components/ui/button";
+import { TagPicker } from "@/components/tags/tag-picker";
 
 interface TagFilterControlProps {
-  availableTags: string[]
-  selectedTags: string[]
-  onToggleTag: (tag: string) => void
-  onClear: () => void
-  resolveTagStyle?: (tag: string) => CSSProperties | undefined
+  availableTags: string[];
+  selectedTags: string[];
+  onToggleTag: (tag: string) => void;
+  onClear: () => void;
+  resolveTagStyle?: (tag: string) => CSSProperties | undefined;
   /** When true, the autocomplete dropdown floats over content instead of pushing it down */
-  popoverDropdown?: boolean
-  tourId?: string
+  popoverDropdown?: boolean;
+  tourId?: string;
 }
 
 export function TagFilterControl({
@@ -22,7 +22,7 @@ export function TagFilterControl({
   popoverDropdown = false,
   tourId,
 }: TagFilterControlProps) {
-  const hasSelectedTags = selectedTags.length > 0
+  const hasSelectedTags = selectedTags.length > 0;
 
   return (
     <div className="space-y-2" {...(tourId ? { "data-tour-id": tourId } : {})}>
@@ -51,7 +51,7 @@ export function TagFilterControl({
         selectedTags={selectedTags}
         onAddTag={(tag) => {
           if (!selectedTags.includes(tag)) {
-            onToggleTag(tag)
+            onToggleTag(tag);
           }
         }}
         onRemoveTag={onToggleTag}
@@ -61,5 +61,5 @@ export function TagFilterControl({
         clearInputOnEscape
       />
     </div>
-  )
+  );
 }

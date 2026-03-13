@@ -1,15 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { PassageView } from "@/components/passage/passage-view"
-import { parsePassageId } from "@/lib/verse-ref-utils"
+import { createFileRoute } from "@tanstack/react-router";
+import { PassageView } from "@/components/passage/passage-view";
+import { parsePassageId } from "@/lib/verse-ref-utils";
 
-type PassageSearchMode = "compose" | "read"
-type PassageSearchSource = "search"
+type PassageSearchMode = "compose" | "read";
+type PassageSearchSource = "search";
 
 interface PassageSearchState {
-  startVerse?: number
-  endVerse?: number
-  mode?: PassageSearchMode
-  source?: PassageSearchSource
+  startVerse?: number;
+  endVerse?: number;
+  mode?: PassageSearchMode;
+  source?: PassageSearchSource;
 }
 
 function parsePositiveInt(value: unknown): number | undefined {
@@ -18,56 +18,61 @@ function parsePositiveInt(value: unknown): number | undefined {
       ? value
       : typeof value === "string"
         ? Number.parseInt(value, 10)
-        : Number.NaN
-  if (!Number.isFinite(numeric)) return undefined
-  const rounded = Math.floor(numeric)
-  return rounded > 0 ? rounded : undefined
+        : Number.NaN;
+  if (!Number.isFinite(numeric)) return undefined;
+  const rounded = Math.floor(numeric);
+  return rounded > 0 ? rounded : undefined;
 }
 
-function validatePassageSearch(search: Record<string, unknown>): PassageSearchState {
-  const startVerse = parsePositiveInt(search.startVerse)
-  const endVerseCandidate = parsePositiveInt(search.endVerse)
-  const hasRange = typeof startVerse === "number"
+function validatePassageSearch(
+  search: Record<string, unknown>,
+): PassageSearchState {
+  const startVerse = parsePositiveInt(search.startVerse);
+  const endVerseCandidate = parsePositiveInt(search.endVerse);
+  const hasRange = typeof startVerse === "number";
   const endVerse =
     hasRange && typeof endVerseCandidate === "number"
       ? Math.max(startVerse, endVerseCandidate)
       : hasRange
         ? startVerse
-        : undefined
+        : undefined;
   const mode: PassageSearchMode | undefined =
-    search.mode === "compose" || search.mode === "read" ? search.mode : undefined
+    search.mode === "compose" || search.mode === "read"
+      ? search.mode
+      : undefined;
   const source: PassageSearchSource | undefined =
-    search.source === "search" ? "search" : undefined
+    search.source === "search" ? "search" : undefined;
 
   return {
     startVerse: hasRange ? startVerse : undefined,
     endVerse,
     mode,
     source,
-  }
+  };
 }
 
 export const Route = createFileRoute("/passage/$passageId")({
   validateSearch: validatePassageSearch,
   component: PassagePage,
-})
+});
 
 function PassagePage() {
-  const { passageId } = Route.useParams()
-  const search = Route.useSearch()
-  const { book, chapter } = parsePassageId(passageId)
+  const { passageId } = Route.useParams();
+  const search = Route.useSearch();
+  const { book, chapter } = parsePassageId(passageId);
 
   return (
     <PassageView
       book={book}
       chapter={chapter}
       focusRange={
-        typeof search.startVerse === "number" && typeof search.endVerse === "number"
+        typeof search.startVerse === "number" &&
+        typeof search.endVerse === "number"
           ? { startVerse: search.startVerse, endVerse: search.endVerse }
           : null
       }
       forcedViewMode={search.mode}
       focusSource={search.source}
     />
-  )
+  );
 }

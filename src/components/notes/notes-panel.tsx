@@ -45,7 +45,7 @@ export function NotesPanel({
   const [editingNoteId, setEditingNoteId] = useState<Id<"notes"> | null>(null);
   const [expandedVerseKey, setExpandedVerseKey] = useState<string | null>(null);
   const [internalCreating, setInternalCreating] = useState<VerseRef | null>(
-    null
+    null,
   );
 
   const activeCreatingRef = creatingForRef ?? internalCreating;
@@ -62,7 +62,7 @@ export function NotesPanel({
   const notesByVerse = useMemo(
     () =>
       buildNotesByVerseRange(chapterNotes as ChapterNoteEntry[] | undefined),
-    [chapterNotes]
+    [chapterNotes],
   );
 
   const sortedVerseKeys = useMemo(() => {
@@ -88,7 +88,7 @@ export function NotesPanel({
       setInternalCreating(null);
       onNoteCreated?.();
     },
-    [activeCreatingRef, createNote, findOrCreateRef, linkNote, onNoteCreated]
+    [activeCreatingRef, createNote, findOrCreateRef, linkNote, onNoteCreated],
   );
 
   const handleCancelCreate = useCallback(() => {
@@ -101,14 +101,14 @@ export function NotesPanel({
       await updateNote({ id: noteId, body, tags });
       setEditingNoteId(null);
     },
-    [updateNote]
+    [updateNote],
   );
 
   const handleDelete = useCallback(
     async (noteId: Id<"notes">) => {
       await removeNote({ id: noteId });
     },
-    [removeNote]
+    [removeNote],
   );
 
   return (

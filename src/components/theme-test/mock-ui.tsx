@@ -3,7 +3,7 @@
  * No Convex queries — everything is hardcoded sample data.
  */
 
-import { Plus, X, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { Plus, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 export function MockUI() {
   return (
@@ -32,7 +32,9 @@ export function MockUI() {
             <button className="h-8 w-8 flex items-center justify-center rounded text-[--muted-foreground] hover:bg-[--muted]">
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <h1 className="text-2xl font-serif font-semibold tracking-tight">John 1</h1>
+            <h1 className="text-2xl font-serif font-semibold tracking-tight">
+              John 1
+            </h1>
             <button className="h-8 w-8 flex items-center justify-center rounded text-[--muted-foreground] hover:bg-[--muted]">
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -40,13 +42,38 @@ export function MockUI() {
 
           {/* Verses */}
           <div className="space-y-0.5">
-            <MockVerse number={1} text="In the beginning was the Word, and the Word was with God, and the Word was God." selected />
-            <MockVerse number={2} text="He was in the beginning with God." hasNote />
-            <MockVerse number={3} text="All things were made through him, and without him was not any thing made that was made." />
-            <MockVerse number={4} text="In him was life, and the life was the light of men." hovered />
-            <MockVerse number={5} text="The light shines in the darkness, and the darkness has not overcome it." />
-            <MockVerse number={6} text="There was a man sent from God, whose name was John." hasNote />
-            <MockVerse number={7} text="He came as a witness, to bear witness about the light, that all might believe through him." />
+            <MockVerse
+              number={1}
+              text="In the beginning was the Word, and the Word was with God, and the Word was God."
+              selected
+            />
+            <MockVerse
+              number={2}
+              text="He was in the beginning with God."
+              hasNote
+            />
+            <MockVerse
+              number={3}
+              text="All things were made through him, and without him was not any thing made that was made."
+            />
+            <MockVerse
+              number={4}
+              text="In him was life, and the life was the light of men."
+              hovered
+            />
+            <MockVerse
+              number={5}
+              text="The light shines in the darkness, and the darkness has not overcome it."
+            />
+            <MockVerse
+              number={6}
+              text="There was a man sent from God, whose name was John."
+              hasNote
+            />
+            <MockVerse
+              number={7}
+              text="He came as a witness, to bear witness about the light, that all might believe through him."
+            />
           </div>
         </div>
 
@@ -80,11 +107,15 @@ export function MockUI() {
           />
 
           {/* Stacked note bubble */}
-          <MockNoteBubbleStack verse="v. 14" count={3} preview="And the Word became flesh and dwelt among us..." />
+          <MockNoteBubbleStack
+            verse="v. 14"
+            count={3}
+            preview="And the Word became flesh and dwelt among us..."
+          />
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function MockTab({ label, active }: { label: string; active: boolean }) {
@@ -104,7 +135,7 @@ function MockTab({ label, active }: { label: string; active: boolean }) {
         </span>
       )}
     </div>
-  )
+  );
 }
 
 function MockVerse({
@@ -114,11 +145,11 @@ function MockVerse({
   hasNote,
   hovered,
 }: {
-  number: number
-  text: string
-  selected?: boolean
-  hasNote?: boolean
-  hovered?: boolean
+  number: number;
+  text: string;
+  selected?: boolean;
+  hasNote?: boolean;
+  hovered?: boolean;
 }) {
   return (
     <div
@@ -144,7 +175,7 @@ function MockVerse({
         </button>
       )}
     </div>
-  )
+  );
 }
 
 function MockNoteEditor() {
@@ -170,7 +201,7 @@ function MockNoteEditor() {
         </button>
       </div>
     </div>
-  )
+  );
 }
 
 function MockNoteBubble({
@@ -179,10 +210,10 @@ function MockNoteBubble({
   tags,
   isPassage,
 }: {
-  verse: string
-  content: string
-  tags: string[]
-  isPassage?: boolean
+  verse: string;
+  content: string;
+  tags: string[];
+  isPassage?: boolean;
 }) {
   return (
     <div
@@ -217,7 +248,7 @@ function MockNoteBubble({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function MockNoteBubbleStack({
@@ -225,9 +256,9 @@ function MockNoteBubbleStack({
   count,
   preview,
 }: {
-  verse: string
-  count: number
-  preview: string
+  verse: string;
+  count: number;
+  preview: string;
 }) {
   return (
     <div className="relative cursor-pointer">
@@ -245,5 +276,5 @@ function MockNoteBubbleStack({
         <p className="text-sm text-[--muted-foreground] truncate">{preview}</p>
       </div>
     </div>
-  )
+  );
 }

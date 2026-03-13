@@ -1,4 +1,4 @@
-import type { AppTheme } from "./theme-types"
+import type { AppTheme } from "./theme-types";
 
 export const forestSageTheme: AppTheme = {
   name: "Forest Sage",
@@ -46,4 +46,4 @@ export const forestSageTheme: AppTheme = {
     "--ring": "oklch(0.66 0.088 145)",
     "--radius": "0.375rem",
   },
-}
+};

@@ -1,7 +1,7 @@
-import { defineSchema, defineTable } from "convex/server"
-import { v } from "convex/values"
-import { authTables } from "@convex-dev/auth/server"
-import { noteBodyValue } from "./lib/noteContent"
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
+import { noteBodyValue } from "./lib/noteContent";
 
 export default defineSchema({
   ...authTables,
@@ -115,7 +115,7 @@ export default defineSchema({
         chapter: v.number(),
         startVerse: v.number(),
         endVerse: v.number(),
-      })
+      }),
     ),
   }).index("by_label", ["label"]),
-})
+});
