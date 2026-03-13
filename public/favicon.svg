@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Outer flame -->
+  <path d="M16 1c-4 6-9 12-9 18a9 9 0 0018 0c0-6-5-12-9-18Z" fill="#D97706"/>
+  <!-- Inner flame -->
+  <path d="M16 8c-2 3.5-4.5 7-4.5 11a4.5 4.5 0 009 0c0-4-2.5-7.5-4.5-11Z" fill="#FCD34D"/>
+  <!-- Base -->
+  <rect x="8" y="28" width="16" height="3" rx="1.5" fill="#78350F"/>
+</svg>
