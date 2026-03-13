@@ -31,7 +31,7 @@ function LoginPage() {
       {/* Background image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url(/berea-hero.png)" }}
+        style={{ backgroundImage: "url(/berean-hero.png)" }}
       />
       {/* Dark overlay with gradient */}
       <div className="absolute inset-0 bg-linear-to-b from-black/70 via-black/60 to-black/80" />
@@ -43,7 +43,7 @@ function LoginPage() {
           className="text-7xl tracking-[0.2em] text-white/95 sm:text-8xl"
           style={{ fontFamily: "'Cormorant SC', serif", fontWeight: 300 }}
         >
-          BEREA
+          BEREAN
         </h1>
 
         {/* Decorative divider */}
@@ -89,11 +89,10 @@ function LoginPage() {
             fontWeight: 400,
           }}
         >
-          In Acts 17, Paul and Silas arrive in the small city of Berea. Luke
-          records one remarkable detail about its people: they eagerly received
-          God&rsquo;s word and examined the Scriptures daily. Berea invites
-          Christians today to continue that heritage&mdash;studying God&rsquo;s
-          word with eagerness, care, and devotion.
+          In Acts 17, the people of Berea received the word with all eagerness,
+          examining the Scriptures daily. Berean invites Christians today to
+          embody that same spirit&mdash;studying God&rsquo;s word with eagerness,
+          care, and devotion.
         </p>
 
         {/* Sign in */}
