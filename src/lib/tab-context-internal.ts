@@ -24,6 +24,7 @@ export interface TabContextValue {
     search?: PassageNavigationSearch,
   ) => void;
   closeTab: (tabId: string) => void;
+  reorderTabs: (tabs: Tab[]) => void;
   setActiveTab: (tabId: string) => void;
   setSearchModeActive: (active: boolean) => void;
 }

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { Reorder } from "framer-motion";
 import type { Tab } from "@/lib/tab-types";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,9 @@ interface TabItemProps {
 
 export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
   return (
-    <motion.div
+    <Reorder.Item
+      as="div"
+      value={tab}
       layout
       initial={{ opacity: 0, width: 0 }}
       animate={{ opacity: 1, width: "auto" }}
@@ -40,6 +42,7 @@ export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           "mr-2 self-center rounded-sm p-0.5 hover:bg-muted-foreground/20 transition-opacity",
           isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         )}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onClose();
@@ -47,6 +50,6 @@ export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
       >
         <X className="h-3 w-3" />
       </button>
-    </motion.div>
+    </Reorder.Item>
   );
 }

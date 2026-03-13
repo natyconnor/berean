@@ -14,6 +14,7 @@ import {
   loadTabs,
   saveTabs,
 } from "./tab-context-internal";
+import type { Tab } from "./tab-types";
 import {
   activateTab,
   closeTabAndChooseFallback,
@@ -23,6 +24,7 @@ import {
   getRoutePassageId,
   navigateCurrentTab,
   openOrReuseTab,
+  reorderTabs,
 } from "./tab-state";
 
 function TabProvider({ children }: { children: ReactNode }) {
@@ -127,6 +129,10 @@ function TabProvider({ children }: { children: ReactNode }) {
     [activeTabId, navigate, routePassageId],
   );
 
+  const handleReorderTabs = useCallback((newTabs: Tab[]) => {
+    setStore((currentStore) => reorderTabs(currentStore, newTabs));
+  }, []);
+
   const handleSetActiveTab = useCallback(
     (tabId: string) => {
       const tab = tabs.find((t) => t.id === tabId);
@@ -152,6 +158,7 @@ function TabProvider({ children }: { children: ReactNode }) {
         openTab,
         navigateActiveTab,
         closeTab,
+        reorderTabs: handleReorderTabs,
         setActiveTab: handleSetActiveTab,
         setSearchModeActive,
       }}

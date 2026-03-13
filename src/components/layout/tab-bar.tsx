@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
 import { LogOut, Search, Settings, TableOfContents } from "lucide-react";
@@ -16,7 +16,7 @@ import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { useOptionalTutorial } from "@/components/tutorial/tutorial-context";
 
 export function TabBar() {
-  const { tabs, activeTabId, setActiveTab, closeTab } = useTabs();
+  const { tabs, activeTabId, setActiveTab, closeTab, reorderTabs } = useTabs();
   const { signOut } = useAuthActions();
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,6 +38,14 @@ export function TabBar() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+        if (event.key.toLowerCase() === "w") {
+          event.preventDefault();
+          if (activeTabId) closeTab(activeTabId);
+          return;
+        }
+      }
+
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
         return;
       }
@@ -56,12 +64,18 @@ export function TabBar() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [navigate]);
+  }, [navigate, activeTabId, closeTab]);
 
   return (
     <div className="flex items-center border-b bg-muted/30 h-10 shrink-0">
       <ScrollArea className="flex-1">
-        <div className="flex items-center h-10">
+        <Reorder.Group
+          as="div"
+          axis="x"
+          values={tabs}
+          onReorder={reorderTabs}
+          className="flex items-center h-10"
+        >
           <AnimatePresence initial={false}>
             {tabs.map((tab) => (
               <TabItem
@@ -75,7 +89,7 @@ export function TabBar() {
               />
             ))}
           </AnimatePresence>
-        </div>
+        </Reorder.Group>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
       <div

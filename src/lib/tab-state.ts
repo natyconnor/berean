@@ -182,6 +182,10 @@ export function activateTab(store: TabStore, tabId: string): TabStore {
   };
 }
 
+export function reorderTabs(store: TabStore, newTabs: Tab[]): TabStore {
+  return { ...store, tabs: newTabs };
+}
+
 export function closeTabAndChooseFallback(
   store: TabStore,
   options: {
