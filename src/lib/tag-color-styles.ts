@@ -31,7 +31,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 export function useStarterTagBadgeStyle() {
-  const setupStatus = useQuery(api.userSettings.getOnboardingStatus);
+  const setupStatus = useQuery(api.userSettings.getTutorialStatus);
 
   const categoryColors = useMemo<Record<string, string>>(
     () => ({

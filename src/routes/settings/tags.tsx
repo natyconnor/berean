@@ -18,13 +18,13 @@ import {
 import { cn } from "@/lib/utils"
 import { normalizeTag } from "@/lib/tag-utils"
 import { ImportExportSection } from "@/components/settings/import-export-section"
-import { useOnboarding } from "@/components/onboarding/onboarding-context"
+import { useTutorial } from "@/components/tutorial/tutorial-context"
 import {
   ALL_STARTER_TAGS,
   DEFAULT_STARTER_TAG_CATEGORY_COLORS,
   STARTER_TAG_CATEGORIES,
 } from "@/lib/starter-tags"
-import type { OnboardingStatus } from "../../../convex/lib/onboarding"
+import type { TutorialStatus } from "../../../convex/lib/tutorial"
 
 export const Route = createFileRoute("/settings/tags")({
   component: LegacyTagSettingsRedirect,
@@ -37,8 +37,8 @@ function LegacyTagSettingsRedirect() {
 export function SettingsPage() {
   const navigate = useNavigate()
   const catalog = useQuery(api.tags.listCatalog)
-  const setupStatus: OnboardingStatus | undefined = useQuery(
-    api.userSettings.getOnboardingStatus,
+  const setupStatus: TutorialStatus | undefined = useQuery(
+    api.userSettings.getTutorialStatus,
   )
   const addMany = useMutation(api.tags.addMany)
   const removeMany = useMutation(api.tags.removeMany)
@@ -50,7 +50,7 @@ export function SettingsPage() {
     api.userSettings.setStarterTagCategoryColor,
   )
   const seedDevChapterNotes = useMutation(api.seed.seedDevChapterNotes)
-  const { startTour } = useOnboarding()
+  const { startTour } = useTutorial()
 
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [draftCategoryColors, setDraftCategoryColors] = useState<

@@ -5,22 +5,22 @@ interface UserSettingsStatusInput {
   starterTagCategoryColors?: Record<string, string>
 }
 
-export interface OnboardingStatus {
+export interface TutorialStatus {
   needsStarterTagsSetup: boolean
   starterTagsSetupCompletedAt?: number
-  mainOnboardingCompletedAt?: number
-  advancedSearchOnboardingCompletedAt?: number
+  mainTutorialCompletedAt?: number
+  advancedSearchTutorialCompletedAt?: number
   categoryColors: Record<string, string>
 }
 
-export function resolveOnboardingStatus(
+export function resolveTutorialStatus(
   settings: UserSettingsStatusInput | null | undefined,
-): OnboardingStatus {
+): TutorialStatus {
   return {
     needsStarterTagsSetup: settings?.starterTagsSetupCompletedAt === undefined,
     starterTagsSetupCompletedAt: settings?.starterTagsSetupCompletedAt,
-    mainOnboardingCompletedAt: settings?.mainOnboardingCompletedAt,
-    advancedSearchOnboardingCompletedAt:
+    mainTutorialCompletedAt: settings?.mainOnboardingCompletedAt,
+    advancedSearchTutorialCompletedAt:
       settings?.advancedSearchOnboardingCompletedAt,
     categoryColors: settings?.starterTagCategoryColors ?? {},
   }

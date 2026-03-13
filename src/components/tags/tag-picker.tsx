@@ -6,7 +6,7 @@ import { X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useTypedText } from "@/components/onboarding/use-typed-text"
+import { useTypedText } from "@/components/tutorial/use-typed-text"
 import { normalizeTag } from "@/lib/tag-utils"
 import { cn } from "@/lib/utils"
 
@@ -125,8 +125,8 @@ export function TagPicker({
 
   return (
     <div className="space-y-2" {...(tourId ? { "data-tour-id": tourId } : {})}>
-      {(selectedTags.length > 0 || visiblePreviewTags.length > 0) && (
-        <div className="flex flex-wrap gap-1">
+      {(selectedTags.length > 0 || visiblePreviewTags.length > 0 || shouldAnimatePreviewTag) && (
+        <div className={cn("flex flex-wrap gap-1", shouldAnimatePreviewTag && "min-h-[22px]")}>
           {visiblePreviewTags.map((tag) => (
             <Badge
               key={`tutorial-${tag}`}

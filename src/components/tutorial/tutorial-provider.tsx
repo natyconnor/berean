@@ -1,33 +1,33 @@
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react"
-import { useMutation } from "convex/react"
-import { useLocation, useNavigate } from "@tanstack/react-router"
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type ReactNode,
+} from "react";
+import { useMutation } from "convex/react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 
-import { Button } from "@/components/ui/button"
-import { api } from "../../../convex/_generated/api"
+import { Button } from "@/components/ui/button";
+import { api } from "../../../convex/_generated/api";
 import {
-  OnboardingContext,
-  type OnboardingContextValue,
-  type OnboardingStep as TourStep,
-} from "./onboarding-context"
+    TutorialContext,
+    type TutorialContextValue,
+    type TutorialStep as TourStep,
+} from "./tutorial-context";
 import {
-  readActiveOnboardingTour,
-  writeActiveOnboardingTour,
-  type OnboardingTourName,
-} from "./onboarding-session"
+    readActiveTutorialTour,
+    writeActiveTutorialTour,
+    type TutorialTourName,
+} from "./tutorial-session";
 
-interface OnboardingStatus {
+interface TutorialStatus {
   needsStarterTagsSetup: boolean
   starterTagsSetupCompletedAt?: number
-  mainOnboardingCompletedAt?: number
-  advancedSearchOnboardingCompletedAt?: number
+  mainTutorialCompletedAt?: number
+  advancedSearchTutorialCompletedAt?: number
   categoryColors: Record<string, string>
 }
 
@@ -56,7 +56,7 @@ const MAIN_TOUR_STEPS: TourStep[] = [
     id: "inline-links",
     title: "Create verse links",
     description:
-      "Use @ to type a verse reference like John 3:16 to insert a clickable verse link.",
+      "Use @ to type a verse reference like Genesis 1:1 to insert a clickable verse link.",
     targetIds: ["note-editor-link-demo"],
   },
   {
@@ -133,7 +133,7 @@ const SEARCH_TOUR_STEPS: TourStep[] = [
   },
 ]
 
-const TOUR_STEPS: Record<OnboardingTourName, TourStep[]> = {
+const TOUR_STEPS: Record<TutorialTourName, TourStep[]> = {
   main: MAIN_TOUR_STEPS,
   search: SEARCH_TOUR_STEPS,
 }
@@ -146,7 +146,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-function getStepList(tour: OnboardingTourName | null): TourStep[] {
+function getStepList(tour: TutorialTourName | null): TourStep[] {
   return tour ? TOUR_STEPS[tour] : []
 }
 
@@ -230,48 +230,48 @@ function getCardPosition(rect: DOMRect | null): CSSProperties {
   }
 }
 
-export function OnboardingProvider({
+export function TutorialProvider({
   children,
-  onboardingStatus,
+  tutorialStatus,
 }: {
   children: ReactNode
-  onboardingStatus: OnboardingStatus
+  tutorialStatus: TutorialStatus
 }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const completeMainOnboarding = useMutation(
-    api.userSettings.completeMainOnboarding,
+  const completeMainTutorial = useMutation(
+    api.userSettings.completeMainTutorial,
   )
-  const completeAdvancedSearchOnboarding = useMutation(
-    api.userSettings.completeAdvancedSearchOnboarding,
+  const completeAdvancedSearchTutorial = useMutation(
+    api.userSettings.completeAdvancedSearchTutorial,
   )
-  const [activeTour, setActiveTour] = useState<OnboardingTourName | null>(() =>
-    readActiveOnboardingTour(),
+  const [activeTour, setActiveTour] = useState<TutorialTourName | null>(() =>
+    readActiveTutorialTour(),
   )
-  const [pendingTour, setPendingTour] = useState<OnboardingTourName | null>(
+  const [pendingTour, setPendingTour] = useState<TutorialTourName | null>(
     null,
   )
   const [stepIndex, setStepIndex] = useState(0)
   const [locallyCompletedTours, setLocallyCompletedTours] = useState<
-    Partial<Record<OnboardingTourName, true>>
+    Partial<Record<TutorialTourName, true>>
   >({})
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
   const [cardAnchorRect, setCardAnchorRect] = useState<DOMRect | null>(null)
-  const finishingTourRef = useRef<OnboardingTourName | null>(null)
+  const finishingTourRef = useRef<TutorialTourName | null>(null)
 
   const isMainComplete =
     locallyCompletedTours.main === true ||
-    onboardingStatus.mainOnboardingCompletedAt !== undefined
+    tutorialStatus.mainTutorialCompletedAt !== undefined
   const isSearchComplete =
     locallyCompletedTours.search === true ||
-    onboardingStatus.advancedSearchOnboardingCompletedAt !== undefined
+    tutorialStatus.advancedSearchTutorialCompletedAt !== undefined
   const activeSteps = getStepList(activeTour)
   const activeStep = activeSteps[stepIndex] ?? null
   const isPassageRoute = location.pathname.startsWith("/passage/")
   const isSearchRoute = location.pathname === "/search"
 
   useEffect(() => {
-    writeActiveOnboardingTour(activeTour)
+    writeActiveTutorialTour(activeTour)
   }, [activeTour])
 
   useEffect(() => {
@@ -314,7 +314,7 @@ export function OnboardingProvider({
     if (activeTour || pendingTour) return
 
     if (!isMainComplete) {
-      writeActiveOnboardingTour("main")
+      writeActiveTutorialTour("main")
       if (isPassageRoute) {
         setActiveTour("main")
         setStepIndex(0)
@@ -331,7 +331,7 @@ export function OnboardingProvider({
     }
 
     if (!isSearchComplete && isSearchRoute) {
-      writeActiveOnboardingTour("search")
+      writeActiveTutorialTour("search")
       setActiveTour("search")
       setStepIndex(0)
     }
@@ -363,7 +363,7 @@ export function OnboardingProvider({
   }, [isPassageRoute, isSearchRoute, pendingTour])
 
   const finalizeTour = useCallback(
-    async (tour: OnboardingTourName) => {
+    async (tour: TutorialTourName) => {
       if (finishingTourRef.current === tour) return
 
       finishingTourRef.current = tour
@@ -374,38 +374,38 @@ export function OnboardingProvider({
       setActiveTour(null)
       setPendingTour(null)
       setStepIndex(0)
-      writeActiveOnboardingTour(null)
+      writeActiveTutorialTour(null)
 
       try {
         if (tour === "main") {
-          await completeMainOnboarding({})
+          await completeMainTutorial({})
           if (
-            onboardingStatus.needsStarterTagsSetup &&
+            tutorialStatus.needsStarterTagsSetup &&
             location.pathname !== "/settings"
           ) {
             await navigate({ to: "/settings" })
           }
         } else {
-          await completeAdvancedSearchOnboarding({})
+          await completeAdvancedSearchTutorial({})
         }
       } finally {
         finishingTourRef.current = null
       }
     },
     [
-      completeAdvancedSearchOnboarding,
-      completeMainOnboarding,
+      completeAdvancedSearchTutorial,
+      completeMainTutorial,
       location.pathname,
       navigate,
-      onboardingStatus.needsStarterTagsSetup,
+      tutorialStatus.needsStarterTagsSetup,
     ],
   )
 
   const startTour = useCallback(
-    (tour: OnboardingTourName) => {
+    (tour: TutorialTourName) => {
       setStepIndex(0)
       setPendingTour(null)
-      writeActiveOnboardingTour(tour)
+      writeActiveTutorialTour(tour)
 
       if (tour === "main") {
         setActiveTour(null)
@@ -466,7 +466,7 @@ export function OnboardingProvider({
     }
   }
 
-  const contextValue = useMemo<OnboardingContextValue>(
+  const contextValue = useMemo<TutorialContextValue>(
     () => ({
       activeTour,
       activeStep,
@@ -491,7 +491,7 @@ export function OnboardingProvider({
     : undefined
 
   return (
-    <OnboardingContext.Provider value={contextValue}>
+    <TutorialContext.Provider value={contextValue}>
       {children}
       {activeTour && activeStep ? (
         <>
@@ -558,6 +558,6 @@ export function OnboardingProvider({
           </section>
         </>
       ) : null}
-    </OnboardingContext.Provider>
+    </TutorialContext.Provider>
   )
 }

@@ -13,7 +13,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { readSearchWorkspaceState } from "@/lib/search-workspace-state"
 import { cn } from "@/lib/utils"
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts"
-import { useOptionalOnboarding } from "@/components/onboarding/onboarding-context"
+import { useOptionalTutorial } from "@/components/tutorial/tutorial-context"
 
 export function TabBar() {
   const { tabs, activeTabId, setActiveTab, closeTab } = useTabs()
@@ -24,8 +24,8 @@ export function TabBar() {
   const isSearchRoute = location.pathname === "/search"
   const isSettingsRoute = location.pathname.startsWith("/settings")
   const savedSearchState = readSearchWorkspaceState()
-  const onboarding = useOptionalOnboarding()
-  const isToolbarStep = onboarding?.isStepActive("main", "toolbar") ?? false
+  const tutorial = useOptionalTutorial()
+  const isToolbarStep = tutorial?.isStepActive("main", "toolbar") ?? false
   const searchShortcutLabel = formatCommandOrControlShortcut("K")
   const passageShortcutLabel = formatCommandOrControlShortcut("G")
   const settingsShortcutLabel = formatCommandOrControlShortcut(",")

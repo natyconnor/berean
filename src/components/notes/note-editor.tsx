@@ -15,7 +15,7 @@ import {
   type NoteBody,
 } from "@/lib/note-inline-content"
 import { InlineVerseEditor } from "@/components/notes/editor/inline-verse-editor"
-import { useOptionalOnboarding } from "@/components/onboarding/onboarding-context"
+import { useNoteEditorTour } from "@/components/tutorial/use-note-editor-tour"
 import { api } from "../../../convex/_generated/api"
 
 interface CurrentChapter {
@@ -54,33 +54,9 @@ export function NoteEditor({
 
   const catalog = useQuery(api.tags.listCatalog)
   const resolveTagStyle = useStarterTagBadgeStyle()
-  const onboarding = useOptionalOnboarding()
+  const tour = useNoteEditorTour()
 
   const availableTags = useMemo(() => (catalog ?? []).map((entry) => entry.tag), [catalog])
-  const bodyTourId =
-    onboarding?.isStepActive("main", "inline-links")
-      ? "note-editor-link-demo"
-      : onboarding?.isStepActive("main", "note-body")
-        ? "note-editor-body"
-        : undefined
-  const tutorialPreviewText = onboarding?.isStepActive("main", "inline-links")
-    ? "Jesus meets Nicodemus in the dark, but he goes straight to the heart."
-    : onboarding?.isStepActive("main", "note-body") ||
-        onboarding?.isStepActive("main", "note-tags")
-      ? "Jesus meets Nicodemus in the dark, but he goes straight to the heart: new birth and real transformation."
-      : undefined
-  const tutorialAnimateText = onboarding?.isStepActive("main", "note-body") ?? false
-  const tagsTourId = onboarding?.isStepActive("main", "note-tags")
-    ? "note-editor-tags"
-    : undefined
-  const tutorialPreviewTags =
-    onboarding?.isStepActive("main", "note-tags") ||
-    onboarding?.isStepActive("main", "inline-links")
-      ? ["new birth"]
-      : []
-  const tutorialPreviewQuery = onboarding?.isStepActive("main", "inline-links")
-    ? "John 3:16"
-    : undefined
 
   const addTag = useCallback((tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]))
@@ -180,10 +156,10 @@ export function NoteEditor({
         currentChapter={currentChapter ?? { book: verseRef.book, chapter: verseRef.chapter }}
         onChange={handleEditorChange}
         className={cn(isDialogPresentation ? "min-h-[180px]" : "min-h-[96px]")}
-        tourId={bodyTourId}
-        tutorialPreviewText={tutorialPreviewText}
-        tutorialAnimateText={tutorialAnimateText}
-        tutorialPreviewQuery={tutorialPreviewQuery}
+        tourId={tour.bodyTourId}
+        tutorialPreviewText={tour.tutorialPreviewText}
+        tutorialAnimateText={tour.tutorialAnimateText}
+        tutorialPreviewQuery={tour.tutorialPreviewQuery}
       />
 
       {saveError ? <p className="text-xs text-destructive">{saveError}</p> : null}
@@ -202,9 +178,9 @@ export function NoteEditor({
             "text-xs",
             isPassage && "border-amber-300 dark:border-amber-600/50"
           )}
-          tourId={tagsTourId}
-          tutorialPreviewTags={tutorialPreviewTags}
-          tutorialAnimatePreview={onboarding?.isStepActive("main", "note-tags") ?? false}
+          tourId={tour.tagsTourId}
+          tutorialPreviewTags={tour.tutorialPreviewTags}
+          tutorialAnimatePreview={tour.tutorialAnimateTagPreview}
         />
       </div>
 

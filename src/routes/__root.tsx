@@ -5,8 +5,8 @@ import { TabProvider } from "@/lib/tab-context"
 import { ThemeProvider } from "@/lib/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppShell } from "@/components/layout/app-shell"
-import { OnboardingProvider } from "@/components/onboarding/onboarding-provider"
-import { readActiveOnboardingTour } from "@/components/onboarding/onboarding-session"
+import { TutorialProvider } from "@/components/tutorial/tutorial-provider"
+import { readActiveTutorialTour } from "@/components/tutorial/tutorial-session"
 import { api } from "../../convex/_generated/api"
 
 export const Route = createRootRoute({
@@ -18,11 +18,11 @@ function RootComponent() {
   const location = useLocation()
   const isLoginRoute = location.pathname === "/login"
   const isSettingsRoute = location.pathname.startsWith("/settings")
-  const onboardingStatus = useQuery(
-    api.userSettings.getOnboardingStatus,
+  const tutorialStatus = useQuery(
+    api.userSettings.getTutorialStatus,
     isAuthenticated ? {} : "skip"
   )
-  const activeOnboardingTour = readActiveOnboardingTour()
+  const activeTutorialTour = readActiveTutorialTour()
 
   if (isLoading) {
     return (
@@ -36,7 +36,7 @@ function RootComponent() {
     return <Navigate to="/login" replace />
   }
 
-  if (isAuthenticated && !isLoginRoute && onboardingStatus === undefined) {
+  if (isAuthenticated && !isLoginRoute && tutorialStatus === undefined) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
@@ -48,14 +48,14 @@ function RootComponent() {
     isAuthenticated &&
     !isLoginRoute &&
     !isSettingsRoute &&
-    onboardingStatus?.needsStarterTagsSetup &&
-    onboardingStatus.mainOnboardingCompletedAt !== undefined &&
-    activeOnboardingTour !== "main"
+    tutorialStatus?.needsStarterTagsSetup &&
+    tutorialStatus.mainTutorialCompletedAt !== undefined &&
+    activeTutorialTour !== "main"
   ) {
     return <Navigate to="/settings" replace />
   }
 
-  const resolvedOnboardingStatus = onboardingStatus ?? {
+  const resolvedTutorialStatus = tutorialStatus ?? {
     needsStarterTagsSetup: false,
     categoryColors: {},
   }
@@ -67,11 +67,11 @@ function RootComponent() {
           <Outlet />
         ) : (
           <TooltipProvider>
-            <OnboardingProvider onboardingStatus={resolvedOnboardingStatus}>
+            <TutorialProvider tutorialStatus={resolvedTutorialStatus}>
               <AppShell>
                 <Outlet />
               </AppShell>
-            </OnboardingProvider>
+            </TutorialProvider>
           </TooltipProvider>
         )}
       </TabProvider>

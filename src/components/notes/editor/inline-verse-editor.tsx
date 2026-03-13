@@ -27,7 +27,7 @@ import { getVerseRefBoundsErrorMessage } from "@/lib/verse-ref-validation";
 import { useDebouncedEsvReferenceValidation } from "@/hooks/use-esv-reference";
 import { VerseRefPreviewCard } from "@/components/verse-ref/verse-ref-hover-preview";
 import { useVerseLinkNavigation } from "@/hooks/use-verse-link-navigation";
-import { useTypedText } from "@/components/onboarding/use-typed-text";
+import { useTypedText } from "@/components/tutorial/use-typed-text";
 
 interface CurrentChapter {
   book: string;

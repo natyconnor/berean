@@ -3,7 +3,7 @@ import { v } from "convex/values"
 import type { Id } from "./_generated/dataModel"
 import type { MutationCtx } from "./_generated/server"
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth"
-import { resolveOnboardingStatus } from "./lib/onboarding"
+import { resolveTutorialStatus } from "./lib/tutorial"
 
 const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
@@ -26,21 +26,21 @@ async function getOrCreateUserSettings(
   return await ctx.db.get(settingsId)
 }
 
-const onboardingStatusValue = v.object({
+const tutorialStatusValue = v.object({
   needsStarterTagsSetup: v.boolean(),
   starterTagsSetupCompletedAt: v.optional(v.number()),
-  mainOnboardingCompletedAt: v.optional(v.number()),
-  advancedSearchOnboardingCompletedAt: v.optional(v.number()),
+  mainTutorialCompletedAt: v.optional(v.number()),
+  advancedSearchTutorialCompletedAt: v.optional(v.number()),
   categoryColors: v.record(v.string(), v.string()),
 })
 
-export const getOnboardingStatus = query({
+export const getTutorialStatus = query({
   args: {},
-  returns: onboardingStatusValue,
+  returns: tutorialStatusValue,
   handler: async (ctx) => {
     const userId = await getCurrentUserIdOrNull(ctx)
     if (!userId) {
-      return resolveOnboardingStatus(null)
+      return resolveTutorialStatus(null)
     }
 
     const settings = await ctx.db
@@ -48,7 +48,7 @@ export const getOnboardingStatus = query({
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first()
 
-    return resolveOnboardingStatus(settings)
+    return resolveTutorialStatus(settings)
   },
 })
 
@@ -77,7 +77,7 @@ export const completeStarterTagsSetup = mutation({
   },
 })
 
-export const completeMainOnboarding = mutation({
+export const completeMainTutorial = mutation({
   args: {},
   returns: v.object({
     completedAt: v.number(),
@@ -102,7 +102,7 @@ export const completeMainOnboarding = mutation({
   },
 })
 
-export const completeAdvancedSearchOnboarding = mutation({
+export const completeAdvancedSearchTutorial = mutation({
   args: {},
   returns: v.object({
     completedAt: v.number(),

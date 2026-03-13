@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 import { type TagMatchMode } from "@/lib/tag-utils"
 import { useSearchWorkspaceRouting } from "./hooks/use-search-workspace-routing"
 import { useSearchWorkspacePersistence } from "./hooks/use-search-workspace-persistence"
-import { useOnboarding } from "@/components/onboarding/onboarding-context"
+import { useTutorial } from "@/components/tutorial/tutorial-context"
 
 export interface SearchWorkspaceRouteState {
   q?: string
@@ -233,7 +233,7 @@ function SearchResultGroupRow({
 
 export function SearchWorkspace({ search }: SearchWorkspaceProps) {
   const { openTab } = useTabs()
-  const { isTourActive } = useOnboarding()
+  const { isTourActive } = useTutorial()
   const resolveTagStyle = useStarterTagBadgeStyle()
   const resultsViewportRef = useRef<HTMLDivElement | null>(null)
   const {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 import { usePassageViewMode } from "./hooks/use-passage-view-mode"
 import { usePassageKeyboardShortcuts } from "./hooks/use-passage-keyboard-shortcuts"
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration"
-import { useOnboarding } from "@/components/onboarding/onboarding-context"
+import { usePassageViewTour } from "./hooks/use-passage-view-tour"
 
 interface PassageViewProps {
   book: string
@@ -37,44 +37,6 @@ interface PassageViewProps {
 type PassageViewMode = "compose" | "read"
 type NoteVisibility = "all" | "noted"
 
-function buildTutorialReadingNotes(book: string, chapter: number): Map<number, NoteWithRef[]> {
-  const previews = [
-    "John opens with Jesus already present before creation.",
-    "The light keeps breaking into darkness without being overcome.",
-    "John the Baptist points away from himself toward the true light.",
-    "The Word arrives in the world he made, and many still miss him.",
-    "Receiving Jesus is pictured as a new birth from God.",
-    "Grace and truth arrive in fullness through the Word made flesh.",
-    "John keeps centering his witness on someone greater than himself.",
-    "The first chapter keeps building expectancy around who Jesus is.",
-    "Every scene pushes the reader toward recognition and response.",
-    "Reading mode gives your notes room to breathe beside the passage.",
-  ]
-
-  return new Map(
-    previews.map((content, index) => {
-      const verseNumber = index + 1
-      return [
-        verseNumber,
-        [
-          {
-            noteId: `tutorial-reading-${verseNumber}` as Id<"notes">,
-            content,
-            tags: [],
-            verseRef: {
-              book,
-              chapter,
-              startVerse: verseNumber,
-              endVerse: verseNumber,
-            },
-            createdAt: 0,
-          },
-        ],
-      ]
-    }),
-  )
-}
-
 export function PassageView({
   book,
   chapter,
@@ -86,7 +48,6 @@ export function PassageView({
   const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("all")
   const viewportRef = useRef<HTMLDivElement>(null)
   const { navigateActiveTab } = useTabs()
-  const { activeStep, activeTour } = useOnboarding()
   const { previous, next } = getAdjacentChapterDestinations(book, chapter)
   const {
     containerRef,
@@ -129,26 +90,22 @@ export function PassageView({
       forcedViewMode,
       focusSource,
     })
-  const isMainAddNoteStep = activeTour === "main" && activeStep?.id === "add-note"
-  const isMainNoteEditorStep =
-    activeTour === "main" &&
-    (activeStep?.id === "note-body" ||
-      activeStep?.id === "note-tags" ||
-      activeStep?.id === "inline-links")
-  const isMainReadingModeStep =
-    activeTour === "main" && activeStep?.id === "reading-mode"
-  const forceAddButtonVisible = isMainAddNoteStep
-  const shouldKeepComposeMode =
-    isMainAddNoteStep || isMainNoteEditorStep
+
+  const { forceAddButtonVisible, displaySingleVerseNotes } = usePassageViewTour({
+    book,
+    chapter,
+    effectiveViewMode,
+    setViewMode,
+    singleVerseNotes,
+    creatingFor,
+    editingNoteId,
+    handleClickAway,
+    handleAddNote,
+  })
 
   const hasFocusRange =
     typeof focusRange?.startVerse === "number" &&
     typeof focusRange?.endVerse === "number"
-  const tutorialReadingNotes =
-    isMainReadingModeStep && book === "John" && chapter === 1
-      ? buildTutorialReadingNotes(book, chapter)
-      : null
-  const displaySingleVerseNotes = tutorialReadingNotes ?? singleVerseNotes
 
   const noteById = useMemo(() => {
     const map = new Map<Id<"notes">, NoteWithRef>()
@@ -232,36 +189,6 @@ export function PassageView({
     navigateActiveTab,
     setViewMode,
   })
-
-  useEffect(() => {
-    if (!shouldKeepComposeMode) return
-    if (effectiveViewMode !== "compose") {
-      setViewMode("compose")
-    }
-  }, [effectiveViewMode, setViewMode, shouldKeepComposeMode])
-
-  useEffect(() => {
-    if (!isMainAddNoteStep) return
-    handleClickAway()
-  }, [handleClickAway, isMainAddNoteStep])
-
-  useEffect(() => {
-    if (!isMainNoteEditorStep) return
-
-    const isAlreadyVerseOneEditor =
-      creatingFor?.startVerse === 1 && creatingFor.endVerse === 1
-    if (!isAlreadyVerseOneEditor || editingNoteId !== null) {
-      handleAddNote(1)
-    }
-  }, [creatingFor, editingNoteId, handleAddNote, isMainNoteEditorStep])
-
-  useEffect(() => {
-    if (!isMainReadingModeStep) return
-    handleClickAway()
-    if (effectiveViewMode !== "read") {
-      setViewMode("read")
-    }
-  }, [effectiveViewMode, handleClickAway, isMainReadingModeStep, setViewMode])
 
   const { isScrolled } = usePassageScrollRestoration({
     book,
