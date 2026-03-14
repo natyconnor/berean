@@ -87,9 +87,9 @@ export function LoginPage() {
           translate: "calc(var(--mx, 0) * 8px) calc(var(--my, 0) * 8px)",
         }}
       />
+      <LoginPageAtmosphere />
       {/* Centered content area - grows to fill space */}
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
-        <LoginPageAtmosphere />
         {/* Content */}
         <div
           className="relative z-10 flex w-full max-w-2xl flex-col items-center px-6 py-12 text-center"
