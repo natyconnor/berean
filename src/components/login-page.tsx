@@ -68,7 +68,7 @@ export function LoginPage() {
   return (
     <div
       ref={parallaxRef}
-      className="relative z-10 flex flex-1 min-h-screen flex-col items-center justify-center overflow-hidden px-6 py-12 text-center"
+      className="relative z-10 flex flex-1 min-h-screen flex-col items-center overflow-hidden px-6 py-12 text-center"
     >
       {/* Background image */}
       <div
@@ -87,14 +87,16 @@ export function LoginPage() {
           translate: "calc(var(--mx, 0) * 8px) calc(var(--my, 0) * 8px)",
         }}
       />
-      <LoginPageAtmosphere />
-      {/* Content */}
-      <div
-        className="relative z-10 flex w-full max-w-2xl flex-col items-center px-6 py-12 text-center"
-        style={{
-          translate: "calc(var(--mx, 0) * -2px) calc(var(--my, 0) * -2px)",
-        }}
-      >
+      {/* Centered content area - grows to fill space */}
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
+        <LoginPageAtmosphere />
+        {/* Content */}
+        <div
+          className="relative z-10 flex w-full max-w-2xl flex-col items-center px-6 py-12 text-center"
+          style={{
+            translate: "calc(var(--mx, 0) * -2px) calc(var(--my, 0) * -2px)",
+          }}
+        >
         <div className="flex w-full max-w-2xl flex-col items-center">
           {/* App name */}
           <h1
@@ -188,10 +190,11 @@ export function LoginPage() {
             </button>
           </div>
         </div>
+        </div>
       </div>
       {/* Footer at bottom of page */}
       <p
-        className="relative z-10 mt-auto pb-6 text-center text-sm text-white/35"
+        className="relative z-10 shrink-0 pb-6 text-center text-sm text-white/35"
         style={{
           fontFamily: "'Cormorant Garamond', serif",
           fontWeight: 400,
