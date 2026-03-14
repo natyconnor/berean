@@ -16,7 +16,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
+    <div className="relative flex min-h-screen flex-col overflow-hidden">
       {/* Background image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -26,7 +26,8 @@ export function LoginPage() {
       <div className="absolute inset-0 bg-linear-to-b from-black/70 via-black/60 to-black/80" />
 
       {/* Content */}
-      <div className="relative z-10 flex w-full max-w-2xl flex-col items-center px-6 py-12 text-center">
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+        <div className="flex w-full max-w-2xl flex-col items-center">
         {/* App name */}
         <h1
           className="text-7xl tracking-[0.2em] text-white/95 sm:text-8xl"
@@ -117,18 +118,36 @@ export function LoginPage() {
             </svg>
             {isSigningIn ? "Signing in..." : "Continue with Google"}
           </button>
-
-          <p
-            className="text-center text-sm text-white/35"
-            style={{
-              fontFamily: "'Cormorant Garamond', serif",
-              fontWeight: 400,
-            }}
-          >
-            Your notes are private and synced across devices
-          </p>
+        </div>
         </div>
       </div>
+
+      {/* Footer at bottom of page */}
+      <p
+        className="relative z-10 pb-6 text-center text-sm text-white/35"
+        style={{
+          fontFamily: "'Cormorant Garamond', serif",
+          fontWeight: 400,
+        }}
+      >
+        <a
+          href="https://nathanconnor.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-white/50 underline decoration-white/30 underline-offset-2 transition-colors hover:text-white/70 hover:decoration-white/50"
+        >
+          Check out my other work
+        </a>{" "}
+        ·{" "}
+        <a
+          href="https://github.com/natyconnor/berean"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-white/50 underline decoration-white/30 underline-offset-2 transition-colors hover:text-white/70 hover:decoration-white/50"
+        >
+          GitHub
+        </a>
+      </p>
     </div>
   );
 }
