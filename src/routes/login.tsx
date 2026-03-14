@@ -31,7 +31,7 @@ function LoginPage() {
       {/* Background image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url(/berean-hero.png)" }}
+        style={{ backgroundImage: "url(/berean-hero.webp)" }}
       />
       {/* Dark overlay with gradient */}
       <div className="absolute inset-0 bg-linear-to-b from-black/70 via-black/60 to-black/80" />
