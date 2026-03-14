@@ -1,75 +1,45 @@
-# React + TypeScript + Vite
+# Berean
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Berean is a scripture notes app focused on verse by verse note taking, emphasizing careful and intentional notes based on the text. Inspired by Acts 17:11 where the Bereans are described as eagerly examining the scriptures, this app invites Christians to do the same, methodically studying God's word verse by verse, and recording down the insights God grants.
 
-Currently, two official plugins are available:
+**Features**
+- Passage reader with chapter navigation and tabbed workspaces
+- Compose and read modes for verse-linked notes, including multi-verse ranges
+- Tag notes for later search and categorization, as well as link notes to other verses.
+- Full-text note search with tag filters and scripture context
+- Tag catalog with starter tags, custom tags, and category colors
+- Import notes from `.xlsx` or `.zip` workbooks (export UI is present but currently disabled)
+- Guided tutorial tours for the main workflow and advanced search
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+**Integrations And Keys**
+- Convex (database, serverless functions, auth): requires a Convex deployment and the frontend `VITE_CONVEX_URL`
+- Convex Auth + Google OAuth: requires a Google OAuth Client ID and Client Secret configured in the Convex environment
+- ESV API (scripture text): requires `ESV_API_KEY` in the Convex environment
+- Vercel (optional deploy): uses `npx convex deploy` during build via `vercel.json`
 
-## React Compiler
+**Local Setup**
+1. Install dependencies.
+   ```bash
+   pnpm install
+   ```
+1. Create or attach a Convex deployment.
+   ```bash
+   npx convex dev
+   ```
+1. Configure frontend environment variables.
+   Create `.env.local` with:
+   ```env
+   VITE_CONVEX_URL=https://<your-deployment>.convex.cloud
+   ```
+1. Configure Convex environment variables (Dashboard or CLI).
+   Set `ESV_API_KEY` (from api.esv.org), `CONVEX_SITE_URL` (your app base URL; use `http://localhost:5173` in dev), and your Google OAuth Client ID/Secret (for Convex Auth).
+1. Run the app.
+   ```bash
+   pnpm dev
+   ```
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+**Testing**
+- `pnpm test`
 
-Note: This will impact Vite dev & build performances.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from "eslint-plugin-react-x";
-import reactDom from "eslint-plugin-react-dom";
-
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs["recommended-typescript"],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
-```
+**Notes On Import Format**
+- One Bible book per file, one chapter per sheet, one verse per row.
