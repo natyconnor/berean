@@ -12,6 +12,7 @@ export interface PassageNavigationSearch {
 export interface TabContextValue {
   tabs: Tab[];
   activeTabId: string | null;
+  backPassageId: string;
   searchModeActive: boolean;
   openTab: (
     passageId: string,

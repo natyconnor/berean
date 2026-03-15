@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
-import { LogOut, Search, Settings, TableOfContents } from "lucide-react";
+import { LogOut, Search, Settings, TableOfContents, X } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SearchDialog } from "@/components/notes/search-dialog";
 import { ThemeDropdown } from "./theme-dropdown";
@@ -16,7 +16,7 @@ import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { useOptionalTutorial } from "@/components/tutorial/tutorial-context";
 
 export function TabBar() {
-  const { tabs, activeTabId, setActiveTab, closeTab, reorderTabs } = useTabs();
+  const { tabs, activeTabId, backPassageId, setActiveTab, closeTab, reorderTabs } = useTabs();
   const { signOut } = useAuthActions();
   const location = useLocation();
   const navigate = useNavigate();
@@ -58,13 +58,20 @@ export function TabBar() {
 
       if (event.key === ",") {
         event.preventDefault();
-        void navigate({ to: "/settings" });
+        if (isSettingsRoute) {
+          void navigate({
+            to: "/passage/$passageId",
+            params: { passageId: backPassageId },
+          });
+        } else {
+          void navigate({ to: "/settings" });
+        }
       }
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [navigate, activeTabId, closeTab]);
+  }, [navigate, activeTabId, closeTab, isSettingsRoute, backPassageId]);
 
   return (
     <div className="flex items-center border-b bg-muted/30 h-10 shrink-0">
@@ -130,23 +137,38 @@ export function TabBar() {
           }
         />
         <div className="relative">
-          <TooltipButton
-            asChild
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-8 w-8",
-              isSettingsRoute &&
-                "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
-            )}
-            tooltip={`Open settings (${settingsShortcutLabel})`}
-            aria-label="Open settings"
-            data-tour-id="app-settings-button"
-          >
-            <Link to="/settings">
-              <Settings className="h-4 w-4" />
-            </Link>
-          </TooltipButton>
+          {isSettingsRoute ? (
+            <TooltipButton
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground"
+              tooltip={`Close settings (${settingsShortcutLabel})`}
+              aria-label="Close settings"
+              data-tour-id="app-settings-button"
+              onClick={() =>
+                void navigate({
+                  to: "/passage/$passageId",
+                  params: { passageId: backPassageId },
+                })
+              }
+            >
+              <X className="h-4 w-4" />
+            </TooltipButton>
+          ) : (
+            <TooltipButton
+              asChild
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              tooltip={`Open settings (${settingsShortcutLabel})`}
+              aria-label="Open settings"
+              data-tour-id="app-settings-button"
+            >
+              <Link to="/settings">
+                <Settings className="h-4 w-4" />
+              </Link>
+            </TooltipButton>
+          )}
           {isToolbarStep && (
             <span className="pointer-events-none absolute -inset-1 animate-pulse rounded-full ring-2 ring-sky-400" />
           )}
