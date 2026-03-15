@@ -45,6 +45,15 @@ function TabProvider({ children }: { children: ReactNode }) {
   );
   const searchModeActive = location.pathname === "/search";
 
+  const backPassageId = useMemo(() => {
+    for (let i = store.history.length - 1; i >= 0; i--) {
+      const tabId = store.history[i];
+      const tab = store.tabs.find((t) => t.id === tabId);
+      if (tab) return tab.passageId;
+    }
+    return store.tabs[0]?.passageId ?? "John-1";
+  }, [store.history, store.tabs]);
+
   useEffect(() => {
     saveTabs(store.tabs);
   }, [store.tabs]);
@@ -154,6 +163,7 @@ function TabProvider({ children }: { children: ReactNode }) {
       value={{
         tabs,
         activeTabId,
+        backPassageId,
         searchModeActive,
         openTab,
         navigateActiveTab,

@@ -1,7 +1,8 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { Check, FlaskConical, Loader2, Trash2 } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowLeft, Check, FlaskConical, Loader2, Trash2 } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,8 @@ import { cn } from "@/lib/utils";
 import { normalizeTag } from "@/lib/tag-utils";
 import { ImportExportSection } from "@/components/settings/import-export-section";
 import { useTutorial } from "@/components/tutorial/tutorial-context";
+import { useTabs } from "@/lib/use-tabs";
+import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
   ALL_STARTER_TAGS,
   DEFAULT_STARTER_TAG_CATEGORY_COLORS,
@@ -50,6 +53,15 @@ export function SettingsPage() {
   );
   const seedDevChapterNotes = useMutation(api.seed.seedDevChapterNotes);
   const { startTour } = useTutorial();
+  const { backPassageId } = useTabs();
+  const navigate = useNavigate();
+
+  const handleBack = useCallback(() => {
+    void navigate({
+      to: "/passage/$passageId",
+      params: { passageId: backPassageId },
+    });
+  }, [navigate, backPassageId]);
 
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [draftCategoryColors, setDraftCategoryColors] = useState<
@@ -279,10 +291,29 @@ export function SettingsPage() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+      <motion.div
+        className="mx-auto max-w-6xl px-4 py-8 space-y-6"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+      >
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <div className="flex items-center gap-2">
+              <TooltipButton
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                tooltip="Back to passage"
+                aria-label="Back to passage"
+                onClick={handleBack}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </TooltipButton>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                Settings
+              </h1>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
             Manage import/export, tags, and category colors.
@@ -651,7 +682,7 @@ export function SettingsPage() {
             </Button>
           </div>
         </section>
-      </div>
+      </motion.div>
 
       <Dialog
         open={deleteTagCandidate !== null}

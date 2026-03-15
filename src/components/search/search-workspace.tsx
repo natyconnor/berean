@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, type CSSProperties } from "react";
+import { motion } from "framer-motion";
 import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import { useTabs } from "@/lib/use-tabs";
@@ -365,7 +366,12 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
 
   return (
     <div className="h-full overflow-hidden">
-      <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]">
+      <motion.div
+        className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+      >
         <section className="order-1 border-b lg:border-r lg:border-b-0">
           <div className="grid border-b lg:grid-cols-[minmax(340px,1fr)_minmax(360px,1.1fr)]">
             <div className="border-r px-4 py-3">
@@ -474,7 +480,7 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
             />
           </div>
         </aside>
-      </div>
+      </motion.div>
     </div>
   );
 }
