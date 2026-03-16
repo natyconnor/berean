@@ -178,7 +178,7 @@ export function TabBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => void signOut()}
+          onClick={() => void signOut().then(() => navigate({ to: "/" }))}
           tooltip="Sign out"
           aria-label="Sign out"
         >
