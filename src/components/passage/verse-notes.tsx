@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Pencil, Plus, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,13 +18,6 @@ import {
   HoverEditButton,
   NoteContent,
 } from "@/components/notes/view/note-card-primitives";
-
-const fadeInOut = {
-  initial: { opacity: 0, y: -4 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -4 },
-  transition: { duration: 0.15 },
-};
 
 export type VerseNote = NoteWithRef;
 
@@ -80,16 +73,27 @@ export const VerseNotes = memo(function VerseNotes({
   const isEditingWithinGroup = hasEditsInGroup;
   const shouldShowExpanded = isOpen || isReadMode || isEditingWithinGroup;
   const layoutTransition = { duration: 0.2, ease: [0.22, 1, 0.36, 1] as const };
+  const enterTransition = { duration: 0.12, ease: [0.22, 1, 0.36, 1] as const };
 
   return (
-    <AnimatePresence mode="popLayout" initial={false}>
+    <motion.div layout transition={{ layout: layoutTransition }}>
       {isPill && !isEditingWithinGroup ? (
-        <motion.div key="pill" {...fadeInOut}>
+        <motion.div
+          key="pill"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={enterTransition}
+        >
           <VerseNotesPill count={notes.length} onClick={onOpen} />
         </motion.div>
       ) : !shouldShowExpanded && !isReadMode ? (
         notes.length === 1 ? (
-          <motion.div key="collapsed-single" {...fadeInOut}>
+          <motion.div
+            key="collapsed-single"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={enterTransition}
+          >
             <CollapsedBubble
               note={notes[0]}
               currentChapter={currentChapter}
@@ -100,7 +104,12 @@ export const VerseNotes = memo(function VerseNotes({
             />
           </motion.div>
         ) : (
-          <motion.div key="collapsed-stacked" {...fadeInOut}>
+          <motion.div
+            key="collapsed-stacked"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={enterTransition}
+          >
             <StackedBubble
               count={notes.length}
               preview={notes[0].content}
@@ -113,7 +122,9 @@ export const VerseNotes = memo(function VerseNotes({
       ) : (
         <motion.div
           key="expanded"
-          {...fadeInOut}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={enterTransition}
           data-note-surface
           className={isReadMode ? "space-y-3" : "space-y-1.5"}
           onClick={(e) => e.stopPropagation()}
@@ -148,13 +159,11 @@ export const VerseNotes = memo(function VerseNotes({
               </Tooltip>
             </div>
           )}
-          {notes.map((note, index) => (
+          {notes.map((note) => (
             <motion.div
               key={note.noteId}
               layout
               transition={layoutTransition}
-              initial={index === 0 ? { opacity: 0, y: -4 } : undefined}
-              animate={index === 0 ? { opacity: 1, y: 0 } : undefined}
             >
               {supportsInlineEditing &&
               editingNoteIds?.has(note.noteId) ? (
@@ -187,7 +196,7 @@ export const VerseNotes = memo(function VerseNotes({
           ))}
         </motion.div>
       )}
-    </AnimatePresence>
+    </motion.div>
   );
 });
 
