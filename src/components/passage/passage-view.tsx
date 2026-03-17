@@ -415,7 +415,6 @@ export function PassageView({
                       onSaveNew={handleSaveNew}
                       onCancelEditor={cancelEditor}
                       onEditorDirtyChange={notifyEditorDirty}
-                      onClickAway={handleClickAway}
                       onStartCreatingPassageNote={startCreatingPassageNote}
                       forceAddButtonVisible={
                         forceAddButtonVisible && verse.verseNumber === 1

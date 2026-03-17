@@ -28,6 +28,60 @@ export type EditorSlot =
   | { kind: "new"; verseRef: VerseRef }
   | { kind: "edit"; noteId: Id<"notes">; verseRef: VerseRef };
 
+export interface PassageNotesUiState {
+  selectedVerses: Set<number>;
+  passageDraftVerses: Set<number>;
+  canDismissOnClickAway: boolean;
+  notifyEditorDirty: (key: string, isDirty: boolean) => void;
+  hoveredVerse: number | null;
+  hoveredSingleBubble: number | null;
+  hoveredPassageBubble: number | null;
+  openVerseKey: number | null;
+  openPassageKey: number | null;
+  openEditors: Map<string, EditorSlot>;
+  editingNoteIds: Set<Id<"notes">>;
+  newDraftsByAnchor: Map<number, VerseRef[]>;
+  isPassageSelection: boolean;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  isInSelection: (verseNumber: number) => boolean;
+  handleVerseMouseDown: (verseNumber: number) => void;
+  handleMouseEnter: (verseNumber: number) => void;
+  handleMouseLeave: () => void;
+  handleMouseUp: () => void;
+  handleSingleBubbleMouseEnter: (verseNumber: number) => void;
+  handleSingleBubbleMouseLeave: () => void;
+  handlePassageBubbleMouseEnter: (verseNumber: number) => void;
+  handlePassageBubbleMouseLeave: () => void;
+  handleAddNote: (verseNumber: number) => void;
+  handleSaveNew: (
+    verseRef: VerseRef,
+    body: NoteBody,
+    tags: string[],
+  ) => Promise<void>;
+  handleSaveEdit: (
+    noteId: Id<"notes">,
+    body: NoteBody,
+    tags: string[],
+  ) => Promise<void>;
+  handleDelete: (noteId: Id<"notes">) => Promise<void>;
+  handleClickAway: () => void;
+  cancelEditor: (key: string) => void;
+  openVerseNotes: (verseNumber: number) => void;
+  closeVerseNotes: () => void;
+  openPassageNotes: (verseNumber: number) => void;
+  closePassageNotes: () => void;
+  startEditingNote: (
+    noteId: Id<"notes">,
+    verseRef: VerseRef,
+    verseNumber: number,
+    isPassage: boolean,
+  ) => void;
+  startCreatingPassageNote: (verseRef: VerseRef) => void;
+  showDiscardConfirmation: boolean;
+  confirmDiscard: () => void;
+  cancelDiscard: () => void;
+}
+
 export function editorKey(slot: EditorSlot): string {
   return slot.kind === "new"
     ? `new:${slot.verseRef.startVerse}:${slot.verseRef.endVerse}`
@@ -51,7 +105,7 @@ export function usePassageNotesUiState({
   onSaveNewNote,
   onSaveEditNote,
   onDeleteNote,
-}: UsePassageNotesUiStateOptions) {
+}: UsePassageNotesUiStateOptions): PassageNotesUiState {
   const [openEditors, setOpenEditors] = useState<Map<string, EditorSlot>>(
     new Map(),
   );

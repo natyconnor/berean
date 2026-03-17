@@ -74,7 +74,6 @@ export interface VerseRowWithNotesProps {
   ) => Promise<void>;
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
-  onClickAway: () => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
   forceAddButtonVisible?: boolean;
   addNoteTourId?: string;
@@ -118,7 +117,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onSaveNew,
   onCancelEditor,
   onEditorDirtyChange,
-  onClickAway,
   onStartCreatingPassageNote,
   forceAddButtonVisible = false,
   addNoteTourId,
