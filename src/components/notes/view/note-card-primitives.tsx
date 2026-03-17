@@ -15,6 +15,7 @@ import {
   type NoteBody,
 } from "@/lib/note-inline-content";
 import { VerseLinkPill } from "@/components/verse-ref/verse-link-pill";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { CurrentChapter } from "@/hooks/use-verse-link-navigation";
 
 export type { CurrentChapter };
@@ -143,6 +144,19 @@ export function NoteContent({
           }
           if (segment.type === "lineBreak") {
             return <br key={`br-${index}`} />;
+          }
+          if (segment.type === "verseQuote") {
+            return (
+              <blockquote
+                key={`quote-${index}`}
+                className="my-1.5 rounded border-l-2 border-amber-400 bg-amber-50/60 px-3 py-2 text-sm italic text-muted-foreground dark:border-amber-600/70 dark:bg-amber-900/20"
+              >
+                <span>&ldquo;{segment.text}&rdquo;</span>
+                <span className="ml-2 text-xs font-medium not-italic text-amber-700 dark:text-amber-400/70">
+                  &mdash; {formatVerseRef(segment.ref)}
+                </span>
+              </blockquote>
+            );
           }
           return (
             <VerseLinkPill

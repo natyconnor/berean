@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, type MutableRefObject } from "react";
 import { useQuery } from "convex-helpers/react/cache";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
   noteBodyToPlainText,
   type NoteBody,
 } from "@/lib/note-inline-content";
-import { InlineVerseEditor } from "@/components/notes/editor/inline-verse-editor";
+import { InlineVerseEditor, type InsertQuoteFn } from "@/components/notes/editor/inline-verse-editor";
 import { useNoteEditorTour } from "@/components/tutorial/use-note-editor-tour";
 import { api } from "../../../convex/_generated/api";
 
@@ -31,6 +31,7 @@ interface NoteEditorProps {
   variant?: "default" | "passage";
   presentation?: "card" | "dialog";
   currentChapter?: CurrentChapter;
+  insertQuoteRef?: MutableRefObject<InsertQuoteFn | null>;
   onSave: (body: NoteBody, tags: string[]) => void | Promise<void>;
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -44,6 +45,7 @@ export function NoteEditor({
   variant = "default",
   presentation = "card",
   currentChapter,
+  insertQuoteRef,
   onSave,
   onCancel,
   onDirtyChange,
@@ -178,6 +180,7 @@ export function NoteEditor({
         currentChapter={
           currentChapter ?? { book: verseRef.book, chapter: verseRef.chapter }
         }
+        insertQuoteRef={insertQuoteRef}
         onChange={handleEditorChange}
         className={cn(isDialogPresentation ? "min-h-[180px]" : "min-h-[96px]")}
         tourId={tour.bodyTourId}

@@ -107,6 +107,24 @@ export default defineSchema({
     .index("by_verseRefId2", ["verseRefId2"])
     .index("by_userId_verseRefId1", ["userId", "verseRefId1"]),
 
+  highlights: defineTable({
+    userId: v.id("users"),
+    book: v.string(),
+    chapter: v.number(),
+    verse: v.number(),
+    startOffset: v.number(),
+    endOffset: v.number(),
+    color: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_userId_book_chapter", ["userId", "book", "chapter"])
+    .index("by_userId_book_chapter_verse", [
+      "userId",
+      "book",
+      "chapter",
+      "verse",
+    ]),
+
   gospelParallels: defineTable({
     label: v.string(),
     passages: v.array(

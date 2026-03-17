@@ -226,6 +226,11 @@ export function usePassageNotesUiState({
         return;
       }
 
+      const textSelection = window.getSelection();
+      if (textSelection && !textSelection.isCollapsed) {
+        return;
+      }
+
       const path = event.composedPath();
       const hasSelectorInPath = (selector: string) =>
         path.some((node) => node instanceof Element && node.matches(selector));

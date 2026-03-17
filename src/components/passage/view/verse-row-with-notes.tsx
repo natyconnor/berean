@@ -1,14 +1,17 @@
-import { memo } from "react";
+import { memo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { VerseRowLeft } from "../verse-row";
 import { VerseNotes } from "../verse-notes";
 import { PassageNotesBubble } from "../passage-notes-bubble";
 import { NoteEditor } from "@/components/notes/note-editor";
+import { HighlightToolbar } from "../highlight-toolbar";
 import { cn } from "@/lib/utils";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { HighlightRange } from "@/lib/highlight-utils";
+import type { InsertQuoteFn } from "@/components/notes/editor/inline-verse-editor";
 import {
   NOTE_LAYOUT_TRANSITION,
   NOTE_ENTER_TRANSITION,
@@ -75,6 +78,13 @@ export interface VerseRowWithNotesProps {
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  highlights?: HighlightRange[];
+  onCreateHighlight?: (
+    verse: number,
+    startOffset: number,
+    endOffset: number,
+    color: string,
+  ) => void;
   forceAddButtonVisible?: boolean;
   addNoteTourId?: string;
   rowTourId?: string;
@@ -118,6 +128,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onCancelEditor,
   onEditorDirtyChange,
   onStartCreatingPassageNote,
+  highlights,
+  onCreateHighlight,
   forceAddButtonVisible = false,
   addNoteTourId,
   rowTourId,
@@ -125,6 +137,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const isReadMode = viewMode === "read";
   const useDialogEditors = editorMode === "dialog";
   const shouldShowInlineEditors = !useDialogEditors;
+  const verseTextRef = useRef<HTMLSpanElement>(null);
+  const insertQuoteRef = useRef<InsertQuoteFn | null>(null);
 
   const isPassageAnchor = passageNotes.length > 0;
   const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor;
@@ -154,6 +168,33 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     useSideBySide && (isVerseOpen || isEditingSingleHere) && !isPassageOpen;
   const showPassageCompact =
     useSideBySide && !isPassageOpen && !showPassageAsPill;
+
+  const isExpanded =
+    !isReadMode &&
+    (isCreatingHere || isEditingSingleHere || isEditingPassageHere);
+
+  const handleHighlight = useCallback(
+    (startOffset: number, endOffset: number, color: string) => {
+      onCreateHighlight?.(verseNumber, startOffset, endOffset, color);
+    },
+    [onCreateHighlight, verseNumber],
+  );
+
+  const handleQuote = useCallback(
+    (selectedText: string, ref: VerseRef) => {
+      insertQuoteRef.current?.(selectedText, ref);
+    },
+    [],
+  );
+
+  const verseRef: VerseRef = currentChapter
+    ? {
+        book: currentChapter.book,
+        chapter: currentChapter.chapter,
+        startVerse: verseNumber,
+        endVerse: verseNumber,
+      }
+    : { book: "", chapter: 0, startVerse: verseNumber, endVerse: verseNumber };
 
   const passageNoteJsx =
     passageNotes.length > 0 ? (
@@ -213,16 +254,20 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
 
   return (
     <motion.div
-      layout="position"
+      layout
       transition={{ layout: NOTE_LAYOUT_TRANSITION }}
       className={cn(
         "relative overflow-visible hover:z-10 focus-within:z-10",
         isReadMode
           ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
-          : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start",
+          : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-stretch",
       )}
     >
-      <div>
+      <motion.div
+        layout
+        transition={{ layout: NOTE_LAYOUT_TRANSITION }}
+        className="flex h-full flex-col"
+      >
         <VerseRowLeft
           verseNumber={verseNumber}
           text={text}
@@ -243,6 +288,9 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           focus={{
             isTarget: isFocusTarget,
           }}
+          isExpanded={isExpanded}
+          highlights={highlights}
+          verseTextRef={verseTextRef}
           forceAddButtonVisible={forceAddButtonVisible}
           addNoteTourId={addNoteTourId}
           rowTourId={rowTourId}
@@ -253,13 +301,23 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
             onMouseLeave,
           }}
         />
-      </div>
+        {isExpanded && onCreateHighlight && (
+          <HighlightToolbar
+            verseTextRef={verseTextRef}
+            verseNumber={verseNumber}
+            verseText={text}
+            verseRef={verseRef}
+            onHighlight={handleHighlight}
+            onQuote={handleQuote}
+          />
+        )}
+      </motion.div>
 
       <motion.div
         layout
         transition={{ layout: NOTE_LAYOUT_TRANSITION }}
         className={cn(
-          "py-1",
+          "py-1 select-none",
           useSideBySide ? "flex gap-2 items-start" : "space-y-1.5",
         )}
         {...(isAnyOpen ? { "data-notes-open": "" } : {})}
@@ -331,6 +389,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                         ? "passage"
                         : "default"
                     }
+                    insertQuoteRef={insertQuoteRef}
                     onSave={(body, tags) => onSaveNew(draft, body, tags)}
                     onCancel={() => onCancelEditor(draftEditorKey)}
                     onDirtyChange={(isDirty) =>

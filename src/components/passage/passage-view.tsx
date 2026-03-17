@@ -1,5 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuery } from "convex-helpers/react/cache";
+import { useMutation } from "convex/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +21,7 @@ import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interactio
 import { NoteEditor } from "@/components/notes/note-editor";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { HighlightRange } from "@/lib/highlight-utils";
 import { BookOpen, Loader2, Pencil } from "lucide-react";
 import { useTabs } from "@/lib/use-tabs";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
@@ -28,6 +31,7 @@ import { usePassageKeyboardShortcuts } from "./hooks/use-passage-keyboard-shortc
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
 import { usePassageViewTour } from "./hooks/use-passage-view-tour";
 import { NOTE_LAYOUT_TRANSITION } from "./note-animation-config";
+import { api } from "../../../convex/_generated/api";
 
 interface PassageViewProps {
   book: string;
@@ -95,6 +99,43 @@ export function PassageView({
     confirmDiscard,
     cancelDiscard,
   } = usePassageNotesInteraction(book, chapter);
+
+  const chapterHighlights = useQuery(api.highlights.getForChapter, {
+    book,
+    chapter,
+  });
+  const createHighlightMutation = useMutation(api.highlights.create);
+
+  const highlightsByVerse = useMemo(() => {
+    const map = new Map<number, HighlightRange[]>();
+    if (!chapterHighlights) return map;
+    for (const hl of chapterHighlights) {
+      const ranges = map.get(hl.verse) ?? [];
+      ranges.push({
+        highlightId: hl._id,
+        startOffset: hl.startOffset,
+        endOffset: hl.endOffset,
+        color: hl.color,
+        createdAt: hl.createdAt,
+      });
+      map.set(hl.verse, ranges);
+    }
+    return map;
+  }, [chapterHighlights]);
+
+  const handleCreateHighlight = useCallback(
+    (verse: number, startOffset: number, endOffset: number, color: string) => {
+      void createHighlightMutation({
+        book,
+        chapter,
+        verse,
+        startOffset,
+        endOffset,
+        color,
+      });
+    },
+    [book, chapter, createHighlightMutation],
+  );
 
   const { effectiveViewMode, isReadMode, editorMode, setViewMode } =
     usePassageViewMode({
@@ -416,6 +457,8 @@ export function PassageView({
                       onCancelEditor={cancelEditor}
                       onEditorDirtyChange={notifyEditorDirty}
                       onStartCreatingPassageNote={startCreatingPassageNote}
+                      highlights={highlightsByVerse.get(verse.verseNumber)}
+                      onCreateHighlight={handleCreateHighlight}
                       forceAddButtonVisible={
                         forceAddButtonVisible && verse.verseNumber === 1
                       }
