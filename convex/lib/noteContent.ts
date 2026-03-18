@@ -69,7 +69,7 @@ export function noteBodyToPlainText(body: NoteBodyInput): string {
     .map((segment) => {
       if (segment.type === "text") return segment.text;
       if (segment.type === "lineBreak") return "\n";
-      if (segment.type === "verseQuote") return `> ${segment.text}\n`;
+      if (segment.type === "verseQuote") return segment.text;
       return segment.label;
     })
     .join("");

@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type MutableRefObject,
 } from "react";
 import {
   AlertCircle,
@@ -41,8 +40,6 @@ interface CurrentChapter {
   chapter: number;
 }
 
-export type InsertQuoteFn = (text: string, ref: VerseRef) => void;
-
 interface InlineVerseEditorProps {
   initialBody: NoteBody;
   verseRef: VerseRef;
@@ -53,7 +50,6 @@ interface InlineVerseEditorProps {
   tutorialPreviewText?: string;
   tutorialAnimateText?: boolean;
   tutorialPreviewQuery?: string;
-  insertQuoteRef?: MutableRefObject<InsertQuoteFn | null>;
   onChange: (body: NoteBody) => void;
 }
 
@@ -279,44 +275,6 @@ function createPillElement(
   return pill;
 }
 
-const EDITOR_QUOTE_CLASSNAME =
-  "group/quote relative block my-1.5 rounded border-l-2 border-amber-400 bg-amber-50/60 px-3 py-2 pr-7 text-sm italic text-muted-foreground dark:border-amber-600/70 dark:bg-amber-900/20";
-
-function createQuoteBlockElement(
-  documentRef: Document,
-  text: string,
-  refValue: VerseRef,
-): HTMLQuoteElement {
-  const blockquote = documentRef.createElement("blockquote");
-  blockquote.contentEditable = "false";
-  blockquote.className = EDITOR_QUOTE_CLASSNAME;
-  blockquote.dataset.noteVerseQuote = "true";
-  blockquote.dataset.book = refValue.book;
-  blockquote.dataset.chapter = String(refValue.chapter);
-  blockquote.dataset.startVerse = String(refValue.startVerse);
-  blockquote.dataset.endVerse = String(refValue.endVerse);
-
-  const quoteText = documentRef.createElement("span");
-  quoteText.textContent = `"${text}"`;
-  blockquote.append(quoteText);
-
-  const refLabel = documentRef.createElement("span");
-  refLabel.className = "ml-2 text-xs font-medium not-italic text-amber-700 dark:text-amber-400/70";
-  refLabel.textContent = `— ${formatVerseRef(refValue)}`;
-  blockquote.append(refLabel);
-
-  const removeBtn = documentRef.createElement("button");
-  removeBtn.type = "button";
-  removeBtn.dataset.noteQuoteRemove = "true";
-  removeBtn.className =
-    "absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded text-xs text-muted-foreground/50 opacity-0 transition-opacity hover:bg-amber-200/60 hover:text-amber-900 group-hover/quote:opacity-100 dark:hover:bg-amber-800/40 dark:hover:text-amber-200";
-  removeBtn.setAttribute("aria-label", "Remove quote");
-  removeBtn.textContent = "×";
-  blockquote.append(removeBtn);
-
-  return blockquote;
-}
-
 function appendSegmentsToEditor(root: HTMLElement, body: NoteBody) {
   const normalized = normalizeNoteBody(body);
   const documentRef = root.ownerDocument;
@@ -327,10 +285,6 @@ function appendSegmentsToEditor(root: HTMLElement, body: NoteBody) {
     }
     if (segment.type === "lineBreak") {
       root.append(documentRef.createElement("br"));
-      continue;
-    }
-    if (segment.type === "verseQuote") {
-      root.append(createQuoteBlockElement(documentRef, segment.text, segment.ref));
       continue;
     }
     root.append(createPillElement(documentRef, segment.label, segment.ref));
@@ -394,9 +348,6 @@ function parseSegmentsFromNodeList(
     if (node.dataset.noteVersePill === "true") {
       return true;
     }
-    if (node.dataset.noteVerseQuote === "true") {
-      return true;
-    }
     if (node.tagName === "BR") {
       return true;
     }
@@ -428,28 +379,6 @@ function parseSegmentsFromNodeList(
           node.dataset.label ?? "",
         ),
       );
-      continue;
-    }
-
-    if (node.dataset.noteVerseQuote === "true") {
-      const quoteTextEl = node.querySelector("span");
-      let quoteText = quoteTextEl?.textContent ?? "";
-      if (quoteText.startsWith("\u201C") && quoteText.endsWith("\u201D")) {
-        quoteText = quoteText.slice(1, -1);
-      }
-      if (quoteText.startsWith('"') && quoteText.endsWith('"')) {
-        quoteText = quoteText.slice(1, -1);
-      }
-      segments.push({
-        type: "verseQuote",
-        text: quoteText,
-        ref: {
-          book: node.dataset.book ?? "",
-          chapter: Number.parseInt(node.dataset.chapter ?? "0", 10),
-          startVerse: Number.parseInt(node.dataset.startVerse ?? "0", 10),
-          endVerse: Number.parseInt(node.dataset.endVerse ?? "0", 10),
-        },
-      });
       continue;
     }
 
@@ -616,7 +545,6 @@ export function InlineVerseEditor({
   tutorialPreviewText,
   tutorialAnimateText = false,
   tutorialPreviewQuery,
-  insertQuoteRef,
   onChange,
 }: InlineVerseEditorProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -908,39 +836,6 @@ export function InlineVerseEditor({
     refreshQueryState();
   }, [onChange, refreshQueryState]);
 
-  const insertVerseQuote = useCallback(
-    (text: string, ref: VerseRef) => {
-      const editor = editorRef.current;
-      if (!editor) return;
-
-      const documentRef = editor.ownerDocument;
-      const blockquote = createQuoteBlockElement(documentRef, text, ref);
-
-      if (editor.firstChild) {
-        editor.insertBefore(documentRef.createElement("br"), editor.firstChild);
-        editor.insertBefore(blockquote, editor.firstChild);
-      } else {
-        editor.append(blockquote);
-        editor.append(documentRef.createElement("br"));
-      }
-
-      emitChange();
-      editor.focus();
-    },
-    [emitChange],
-  );
-
-  useEffect(() => {
-    if (insertQuoteRef) {
-      insertQuoteRef.current = insertVerseQuote;
-    }
-    return () => {
-      if (insertQuoteRef) {
-        insertQuoteRef.current = null;
-      }
-    };
-  }, [insertQuoteRef, insertVerseQuote]);
-
   const handleSelectSuggestion = useCallback(
     (item: VerseSuggestionItem) => {
       const match = activeQueryMatchRef.current;
@@ -1085,16 +980,6 @@ export function InlineVerseEditor({
             emitChange();
             return;
           }
-          const removeQuoteButton = target.closest<HTMLElement>(
-            "[data-note-quote-remove='true']",
-          );
-          if (removeQuoteButton) {
-            event.preventDefault();
-            event.stopPropagation();
-            removeQuoteButton.closest("[data-note-verse-quote='true']")?.remove();
-            emitChange();
-            return;
-          }
           const pill = target.closest<HTMLElement>(
             "[data-note-verse-pill='true']",
           );
@@ -1159,27 +1044,6 @@ export function InlineVerseEditor({
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
             return;
-          }
-
-          if (event.key === "Backspace" || event.key === "Delete") {
-            const sel = window.getSelection();
-            if (sel && sel.isCollapsed && sel.rangeCount > 0) {
-              const range = sel.getRangeAt(0);
-              const adjacentNode =
-                event.key === "Backspace"
-                  ? range.startContainer.previousSibling
-                  : range.startContainer.nextSibling;
-              if (
-                adjacentNode instanceof HTMLElement &&
-                adjacentNode.dataset.noteVerseQuote === "true" &&
-                range.startOffset === 0
-              ) {
-                event.preventDefault();
-                adjacentNode.remove();
-                emitChange();
-                return;
-              }
-            }
           }
 
           if (event.key === "Escape" && isQueryActive) {

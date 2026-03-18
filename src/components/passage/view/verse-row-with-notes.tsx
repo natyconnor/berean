@@ -13,7 +13,6 @@ import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { HighlightRange } from "@/lib/highlight-utils";
-import type { InsertQuoteFn } from "@/components/notes/editor/inline-verse-editor";
 import {
   LAYOUT_CORRECTION_TRANSITION,
   NOTE_ENTER_TRANSITION,
@@ -144,7 +143,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const useDialogEditors = editorMode === "dialog";
   const shouldShowInlineEditors = !useDialogEditors;
   const verseTextRef = useRef<HTMLSpanElement>(null);
-  const insertQuoteRef = useRef<InsertQuoteFn | null>(null);
 
   const {
     markPopover,
@@ -206,22 +204,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     },
     [onCreateHighlight, verseNumber],
   );
-
-  const handleQuote = useCallback(
-    (selectedText: string, ref: VerseRef) => {
-      insertQuoteRef.current?.(selectedText, ref);
-    },
-    [],
-  );
-
-  const verseRef: VerseRef = currentChapter
-    ? {
-        book: currentChapter.book,
-        chapter: currentChapter.chapter,
-        startVerse: verseNumber,
-        endVerse: verseNumber,
-      }
-    : { book: "", chapter: 0, startVerse: verseNumber, endVerse: verseNumber };
 
   const passageNoteJsx =
     passageNotes.length > 0 ? (
@@ -335,10 +317,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         {isExpanded && onCreateHighlight && (
           <HighlightToolbar
             verseTextRef={verseTextRef}
-            verseText={text}
-            verseRef={verseRef}
             onHighlight={handleHighlight}
-            onQuote={handleQuote}
           />
         )}
         <AnimatePresence>
@@ -432,7 +411,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                         ? "passage"
                         : "default"
                     }
-                    insertQuoteRef={insertQuoteRef}
                     onSave={(body, tags) => onSaveNew(draft, body, tags)}
                     onCancel={() => onCancelEditor(draftEditorKey)}
                     onDirtyChange={(isDirty) =>

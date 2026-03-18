@@ -15,17 +15,10 @@ export interface NoteVerseRefSegment {
   ref: VerseRef;
 }
 
-export interface NoteVerseQuoteSegment {
-  type: "verseQuote";
-  text: string;
-  ref: VerseRef;
-}
-
 export type NoteBodySegment =
   | NoteTextSegment
   | NoteLineBreakSegment
-  | NoteVerseRefSegment
-  | NoteVerseQuoteSegment;
+  | NoteVerseRefSegment;
 
 export interface NoteBody {
   version: 1;
@@ -135,23 +128,16 @@ export function normalizeNoteBody(
 
     if (
       segment.type === "verseQuote" &&
-      typeof segment.text === "string" &&
-      segment.text.length > 0 &&
-      typeof segment.ref?.book === "string" &&
-      typeof segment.ref.chapter === "number" &&
-      typeof segment.ref.startVerse === "number" &&
-      typeof segment.ref.endVerse === "number"
+      typeof (segment as { text?: string }).text === "string" &&
+      (segment as { text: string }).text.length > 0
     ) {
-      normalizedSegments.push({
-        type: "verseQuote",
-        text: segment.text,
-        ref: {
-          book: segment.ref.book,
-          chapter: segment.ref.chapter,
-          startVerse: segment.ref.startVerse,
-          endVerse: segment.ref.endVerse,
-        },
-      });
+      const previous = normalizedSegments[normalizedSegments.length - 1];
+      const quoteText = `> ${(segment as { text: string }).text}`;
+      if (previous?.type === "text") {
+        previous.text += quoteText;
+      } else {
+        normalizedSegments.push({ type: "text", text: quoteText });
+      }
     }
   }
 
@@ -170,7 +156,6 @@ export function noteBodyToPlainText(
     .map((segment) => {
       if (segment.type === "text") return segment.text;
       if (segment.type === "lineBreak") return "\n";
-      if (segment.type === "verseQuote") return `> ${segment.text}\n`;
       return segment.label;
     })
     .join("");

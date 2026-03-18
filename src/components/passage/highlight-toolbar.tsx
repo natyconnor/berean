@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HIGHLIGHT_COLORS } from "@/lib/highlight-colors";
 import {
   getSelectionOffsets,
 } from "@/lib/highlight-utils";
-import type { VerseRef } from "@/lib/verse-ref-utils";
 
 export interface HighlightToolbarHandle {
   refreshPosition: () => void;
@@ -14,10 +12,7 @@ export interface HighlightToolbarHandle {
 
 interface HighlightToolbarProps {
   verseTextRef: React.RefObject<HTMLSpanElement | null>;
-  verseText: string;
-  verseRef: VerseRef;
   onHighlight: (startOffset: number, endOffset: number, color: string) => void;
-  onQuote: (text: string, verseRef: VerseRef) => void;
 }
 
 interface ToolbarPosition {
@@ -28,14 +23,10 @@ interface ToolbarPosition {
 
 export function HighlightToolbar({
   verseTextRef,
-  verseText,
-  verseRef,
   onHighlight,
-  onQuote,
 }: HighlightToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
-  const [selectedText, setSelectedText] = useState("");
   const [selectionOffsets, setSelectionOffsets] = useState<{
     start: number;
     end: number;
@@ -51,7 +42,6 @@ export function HighlightToolbar({
     const offsets = getSelectionOffsets(el);
     if (!offsets) {
       setPosition(null);
-      setSelectedText("");
       setSelectionOffsets(null);
       return;
     }
@@ -71,9 +61,8 @@ export function HighlightToolbar({
       top: showAbove ? rect.top : rect.bottom,
       showAbove,
     });
-    setSelectedText(verseText.slice(offsets.start, offsets.end));
     setSelectionOffsets(offsets);
-  }, [verseTextRef, verseText]);
+  }, [verseTextRef]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -107,13 +96,6 @@ export function HighlightToolbar({
     [selectionOffsets, onHighlight],
   );
 
-  const handleQuoteClick = useCallback(() => {
-    if (!selectedText) return;
-    onQuote(selectedText, verseRef);
-    window.getSelection()?.removeAllRanges();
-    setPosition(null);
-  }, [selectedText, verseRef, onQuote]);
-
   if (!position || !selectionOffsets) return null;
 
   return createPortal(
@@ -143,16 +125,6 @@ export function HighlightToolbar({
           onClick={() => handleColorClick(color.id)}
         />
       ))}
-      <div className="mx-1 h-5 w-px bg-border" />
-      <button
-        type="button"
-        className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        title="Quote in note"
-        onClick={handleQuoteClick}
-      >
-        <Quote className="h-3.5 w-3.5" />
-        Quote
-      </button>
     </div>,
     document.body,
   );
