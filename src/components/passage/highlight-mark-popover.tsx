@@ -23,7 +23,6 @@ const POPOVER_SPRING = {
 
 export function HighlightMarkPopover({
   anchorRect,
-  highlightId: _highlightId,
   currentColor,
   onDelete,
   onRecolor,

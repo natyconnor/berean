@@ -68,8 +68,8 @@ export function PassageView({
     hoveredVerse,
     hoveredPassageBubble,
     hoveredSingleBubble,
-    openVerseKey,
-    openPassageKey,
+    openVerseKeys,
+    openPassageKeys,
     openEditors,
     editingNoteIds,
     newDraftsByAnchor,
@@ -93,7 +93,7 @@ export function PassageView({
     handleClickAway,
     cancelEditor,
     notifyEditorDirty,
-    canDismissOnClickAway,
+    hasDirtyEditors,
     startCreatingPassageNote,
     showDiscardConfirmation,
     confirmDiscard,
@@ -442,8 +442,8 @@ export function PassageView({
                       passageAnchor={passageAnchor}
                       isPassageRangeActive={isPassageRangeActive}
                       isNoteBubbleHovered={isNoteBubbleHovered}
-                      openVerseKey={openVerseKey}
-                      openPassageKey={openPassageKey}
+                      openVerseKeys={openVerseKeys}
+                      openPassageKeys={openPassageKeys}
                       draftsForThisAnchor={
                         newDraftsByAnchor.get(verse.verseNumber) ?? []
                       }
@@ -503,7 +503,7 @@ export function PassageView({
 
           <Dialog
             open={shouldShowQuickCaptureDialog}
-            onOpenChange={(open) => !open && canDismissOnClickAway && handleClickAway()}
+            onOpenChange={(open) => !open && !hasDirtyEditors && handleClickAway()}
           >
             <DialogContent className="sm:max-w-2xl">
               <DialogHeader>

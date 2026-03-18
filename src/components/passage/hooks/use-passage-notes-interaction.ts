@@ -11,13 +11,13 @@ import {
 export interface PassageNotesInteraction {
   selectedVerses: Set<number>;
   passageDraftVerses: Set<number>;
-  canDismissOnClickAway: boolean;
+  hasDirtyEditors: boolean;
   notifyEditorDirty: (key: string, isDirty: boolean) => void;
   hoveredVerse: number | null;
   hoveredSingleBubble: number | null;
   hoveredPassageBubble: number | null;
-  openVerseKey: number | null;
-  openPassageKey: number | null;
+  openVerseKeys: Set<number>;
+  openPassageKeys: Set<number>;
   openEditors: Map<string, EditorSlot>;
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, VerseRef[]>;
@@ -53,9 +53,9 @@ export interface PassageNotesInteraction {
   handleClickAway: () => void;
   cancelEditor: (key: string) => void;
   openVerseNotes: (verseNumber: number) => void;
-  closeVerseNotes: () => void;
+  closeVerseNotes: (verseNumber: number) => void;
   openPassageNotes: (verseNumber: number) => void;
-  closePassageNotes: () => void;
+  closePassageNotes: (verseNumber: number) => void;
   startEditingNote: (
     noteId: Id<"notes">,
     verseRef: VerseRef,

@@ -42,8 +42,8 @@ export interface VerseRowWithNotesProps {
   isPassageRangeActive: boolean;
   isNoteBubbleHovered: boolean;
 
-  openVerseKey: number | null;
-  openPassageKey: number | null;
+  openVerseKeys: Set<number>;
+  openPassageKeys: Set<number>;
   draftsForThisAnchor: VerseRef[];
   editingNoteIds: Set<Id<"notes">>;
   isFocusTarget?: boolean;
@@ -57,9 +57,9 @@ export interface VerseRowWithNotesProps {
   onPassageBubbleMouseEnter: (verseNumber: number) => void;
   onPassageBubbleMouseLeave: () => void;
   onOpenVerseNotes: (verseNumber: number) => void;
-  onCloseVerseNotes: () => void;
+  onCloseVerseNotes: (verseNumber: number) => void;
   onOpenPassageNotes: (verseNumber: number) => void;
-  onClosePassageNotes: () => void;
+  onClosePassageNotes: (verseNumber: number) => void;
   onEditNote: (
     noteId: Id<"notes">,
     verseRef: VerseRef,
@@ -108,8 +108,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   passageAnchor,
   isPassageRangeActive,
   isNoteBubbleHovered,
-  openVerseKey,
-  openPassageKey,
+  openVerseKeys,
+  openPassageKeys,
   draftsForThisAnchor,
   editingNoteIds,
   isFocusTarget = false,
@@ -162,8 +162,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const isPassageAnchor = passageNotes.length > 0;
   const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor;
 
-  const isVerseOpen = openVerseKey === verseNumber;
-  const isPassageOpen = openPassageKey === verseNumber;
+  const isVerseOpen = openVerseKeys.has(verseNumber);
+  const isPassageOpen = openPassageKeys.has(verseNumber);
   const isCreatingHere = draftsForThisAnchor.length > 0;
 
   const isEditingSingleHere =
@@ -191,6 +191,14 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const isExpanded =
     !isReadMode &&
     (isVerseOpen || isPassageOpen || isCreatingHere || isEditingSingleHere || isEditingPassageHere);
+
+  const handleCollapseVerse = useCallback(() => {
+    if (isVerseOpen) onCloseVerseNotes(verseNumber);
+    if (isPassageOpen) onClosePassageNotes(verseNumber);
+    for (const draft of draftsForThisAnchor) {
+      onCancelEditor(`new:${draft.startVerse}:${draft.endVerse}`);
+    }
+  }, [isVerseOpen, isPassageOpen, verseNumber, onCloseVerseNotes, onClosePassageNotes, draftsForThisAnchor, onCancelEditor]);
 
   const handleHighlight = useCallback(
     (startOffset: number, endOffset: number, color: string) => {
@@ -251,7 +259,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               : undefined
           }
           onOpen={() => onOpenPassageNotes(verseNumber)}
-          onClose={onClosePassageNotes}
+          onClose={() => onClosePassageNotes(verseNumber)}
           onEdit={(noteId: Id<"notes">) => {
             const note = passageNotes.find((n) => n.noteId === noteId);
             if (note) onEditNote(noteId, note.verseRef, verseNumber, true);
@@ -309,6 +317,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
             isTarget: isFocusTarget,
           }}
           isExpanded={isExpanded}
+          onCollapseVerse={handleCollapseVerse}
           highlights={highlights}
           activeHighlightId={activeHighlightId}
           verseTextRef={verseTextRef}
@@ -387,7 +396,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                   : undefined
               }
               onOpen={() => onOpenVerseNotes(verseNumber)}
-              onClose={onCloseVerseNotes}
+              onClose={() => onCloseVerseNotes(verseNumber)}
               onEdit={(noteId) => {
                 const note = singleNotes.find((n) => n.noteId === noteId);
                 if (note) onEditNote(noteId, note.verseRef, verseNumber, false);

@@ -1,6 +1,11 @@
 import { memo, useCallback, useRef, type RefObject } from "react";
 import { motion } from "framer-motion";
-import { Plus } from "lucide-react";
+import { ChevronUp, Plus } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   splitTextByHighlights,
@@ -45,6 +50,7 @@ interface VerseRowLeftProps {
   hover: VerseHoverState;
   focus?: VerseFocusState;
   isExpanded?: boolean;
+  onCollapseVerse?: (verseNumber: number) => void;
   highlights?: HighlightRange[];
   activeHighlightId?: string | null;
   verseTextRef?: RefObject<HTMLSpanElement | null>;
@@ -86,6 +92,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   hover,
   focus,
   isExpanded = false,
+  onCollapseVerse,
   highlights,
   activeHighlightId = null,
   verseTextRef,
@@ -236,26 +243,57 @@ export const VerseRowLeft = memo(function VerseRowLeft({
             transition={VERSE_EXPAND_TRANSITION}
             className="flex items-start gap-1 shrink-0 select-none"
           >
-            <span
-              style={{
-                fontSize: sizes.verseNumberFontSize,
-                transition: "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
-              }}
-              className="font-semibold text-muted-foreground tabular-nums min-w-6 text-right"
-            >
-              {verseNumber}
-            </span>
-            <span className="mt-1 flex min-w-[6px] flex-col items-center gap-0.5">
-              {hasOwnNote && (
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
-              )}
-              {isPassageAnchor && (
-                <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-amber-400/80 dark:bg-amber-400/50" />
-              )}
-              {isInPassageRange && !isPassageAnchor && (
-                <span className="mt-0.5 h-0.5 w-2 shrink-0 rounded bg-amber-300/70 dark:bg-amber-500/40" />
-              )}
-            </span>
+            {isExpanded && onCollapseVerse ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="group/collapse flex items-start gap-1 shrink-0 select-none cursor-pointer rounded px-0.5 -mx-0.5 hover:bg-muted transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCollapseVerse(verseNumber);
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: sizes.verseNumberFontSize,
+                        transition: "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+                      }}
+                      className="font-semibold text-muted-foreground tabular-nums min-w-6 text-right"
+                    >
+                      {verseNumber}
+                    </span>
+                    <span className="mt-1 flex min-w-[6px] flex-col items-center gap-0.5">
+                      <ChevronUp className="h-3 w-3 text-muted-foreground opacity-0 group-hover/collapse:opacity-100 transition-opacity" />
+                    </span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Collapse</TooltipContent>
+              </Tooltip>
+            ) : (
+              <>
+                <span
+                  style={{
+                    fontSize: sizes.verseNumberFontSize,
+                    transition: "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+                  }}
+                  className="font-semibold text-muted-foreground tabular-nums min-w-6 text-right"
+                >
+                  {verseNumber}
+                </span>
+                <span className="mt-1 flex min-w-[6px] flex-col items-center gap-0.5">
+                  {hasOwnNote && (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
+                  )}
+                  {isPassageAnchor && (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-amber-400/80 dark:bg-amber-400/50" />
+                  )}
+                  {isInPassageRange && !isPassageAnchor && (
+                    <span className="mt-0.5 h-0.5 w-2 shrink-0 rounded bg-amber-300/70 dark:bg-amber-500/40" />
+                  )}
+                </span>
+              </>
+            )}
           </motion.span>
           <div className="relative flex-1 min-w-0">
             {/* Collapsed copy — drives layout when not expanded */}
