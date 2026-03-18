@@ -342,6 +342,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
             >
               <button
                 className="flex h-full w-full items-center justify-center rounded px-2 hover:bg-primary/10"
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
                   onAddNote(verseNumber);

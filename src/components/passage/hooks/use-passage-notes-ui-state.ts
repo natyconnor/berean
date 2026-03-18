@@ -420,9 +420,14 @@ export function usePassageNotesUiState({
         startVerse: verseNumber,
         endVerse: verseNumber,
       });
+      const existingNotes = singleVerseNotes.get(verseNumber) ?? [];
+      if (existingNotes.length > 0) {
+        setOpenVerseKeys((prev) => new Set(prev).add(verseNumber));
+      }
+      setViewSelectedVerses((prev) => new Set(prev).add(verseNumber));
       setIsPassageSelection(false);
     },
-    [addNewDraft, book, chapter],
+    [addNewDraft, book, chapter, singleVerseNotes],
   );
 
   const notifyEditorDirty = useCallback(

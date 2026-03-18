@@ -420,8 +420,12 @@ export function PassageView({
                   <motion.div
                     key={verse.verseNumber}
                     initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
+                    animate={{
+                      height: "auto",
+                      opacity: 1,
+                      transitionEnd: { overflow: "visible" },
+                    }}
+                    exit={{ height: 0, opacity: 0, overflow: "hidden" }}
                     transition={NOTE_ENTER_TRANSITION}
                     style={{ overflow: "hidden" }}
                   >
