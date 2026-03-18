@@ -106,14 +106,14 @@ export const VerseRowLeft = memo(function VerseRowLeft({
       ? splitTextByHighlights(text, highlights)
       : null;
 
-  const renderHighlightedText = useCallback(() => {
+  const renderHighlightedText = useCallback((expanded: boolean) => {
     if (!segments) return text;
     return segments.map((seg, i) => {
       if (!seg.color) {
         return <span key={i}>{seg.text}</span>;
       }
       const colorDef = getHighlightColor(seg.color);
-      const bgClass = isExpanded ? colorDef?.bg : colorDef?.bgSubtle;
+      const bgClass = expanded ? colorDef?.bg : colorDef?.bgSubtle;
       return (
         <mark
           key={i}
@@ -126,7 +126,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         </mark>
       );
     });
-  }, [segments, text, isExpanded]);
+  }, [segments, text]);
 
   return (
     // No `layout` here — padding and font-size are driven by explicit `animate`
@@ -218,16 +218,40 @@ export const VerseRowLeft = memo(function VerseRowLeft({
               )}
             </span>
           </motion.span>
-          <span
-            ref={verseTextRef}
-            style={{
-              fontSize: sizes.textFontSize,
-              transition: "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-            className="font-serif flex-1 min-w-0 whitespace-pre-wrap leading-relaxed"
-          >
-            {renderHighlightedText()}
-          </span>
+          <div className="relative flex-1 min-w-0">
+            {/* Collapsed copy — drives layout when not expanded */}
+            <span
+              aria-hidden={isExpanded}
+              style={{
+                fontSize: COLLAPSED.textFontSize,
+                opacity: isExpanded ? 0 : 1,
+                transition: "opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+                ...(isExpanded
+                  ? { position: "absolute" as const, top: 0, left: 0, right: 0 }
+                  : {}),
+              }}
+              className="font-serif w-full whitespace-pre-wrap leading-relaxed"
+            >
+              {renderHighlightedText(false)}
+            </span>
+
+            {/* Expanded copy — drives layout when expanded; owns verseTextRef for HighlightToolbar */}
+            <span
+              ref={verseTextRef}
+              aria-hidden={!isExpanded}
+              style={{
+                fontSize: EXPANDED.textFontSize,
+                opacity: isExpanded ? 1 : 0,
+                transition: "opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+                ...(!isExpanded
+                  ? { position: "absolute" as const, top: 0, left: 0, right: 0 }
+                  : {}),
+              }}
+              className="font-serif w-full whitespace-pre-wrap leading-relaxed"
+            >
+              {renderHighlightedText(true)}
+            </span>
+          </div>
           {!isExpanded && (
             <div
               className={cn(
