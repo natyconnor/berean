@@ -74,7 +74,7 @@ export function TabBar() {
   }, [navigate, activeTabId, closeTab, isSettingsRoute, backPassageId]);
 
   return (
-    <div className="flex items-center border-b bg-muted/30 h-10 shrink-0">
+    <div className="flex items-center border-b bg-muted/30 h-10 shrink-0" data-passage-dismiss-exempt>
       <ScrollArea className="flex-1">
         <Reorder.Group
           as="div"

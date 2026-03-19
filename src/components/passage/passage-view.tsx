@@ -394,6 +394,7 @@ export function PassageView({
           "shrink-0 bg-background transition-shadow duration-200",
           isScrolled && "shadow-sm",
         )}
+        data-passage-dismiss-exempt
       >
         <div className={cn("grid", passageGridClass, headerInnerClass)}>
           <div className="flex items-center">

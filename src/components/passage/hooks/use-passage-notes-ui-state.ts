@@ -285,6 +285,7 @@ export function usePassageNotesUiState({
       }
 
       if (isInsideInteractiveSurface(event)) return;
+      if (isInsideDismissExemptChrome(event)) return;
 
       setOpenVerseKeys(new Set());
       setOpenPassageKeys(new Set());
@@ -723,11 +724,21 @@ const INTERACTIVE_SURFACE_SELECTORS = [
   "[data-highlight-toolbar]",
 ] as const;
 
+const DISMISS_EXEMPT_SELECTOR = "[data-passage-dismiss-exempt]";
+
 function isInsideInteractiveSurface(event: MouseEvent): boolean {
   const path = event.composedPath();
   return path.some(
     (node) =>
       node instanceof Element &&
       INTERACTIVE_SURFACE_SELECTORS.some((sel) => node.matches(sel)),
+  );
+}
+
+function isInsideDismissExemptChrome(event: MouseEvent): boolean {
+  const path = event.composedPath();
+  return path.some(
+    (node) =>
+      node instanceof Element && node.matches(DISMISS_EXEMPT_SELECTOR),
   );
 }
