@@ -28,9 +28,16 @@ export type EditorSlot =
   | { kind: "new"; verseRef: VerseRef }
   | { kind: "edit"; noteId: Id<"notes">; verseRef: VerseRef };
 
+export interface ExpandedPassageRange {
+  anchorVerse: number;
+  startVerse: number;
+  endVerse: number;
+}
+
 export interface PassageNotesUiState {
   selectedVerses: Set<number>;
   passageDraftVerses: Set<number>;
+  expandedPassageRanges: ExpandedPassageRange[];
   hasDirtyEditors: boolean;
   notifyEditorDirty: (key: string, isDirty: boolean) => void;
   hoveredVerse: number | null;
@@ -187,6 +194,53 @@ export function usePassageNotesUiState({
   }, [openEditors]);
 
   const hasDirtyEditors = editorHasChanges.size > 0;
+
+  const expandedPassageRanges = useMemo(() => {
+    const ranges: ExpandedPassageRange[] = [];
+
+    for (const anchor of openPassageKeys) {
+      const notes = passageNotesByAnchor.get(anchor);
+      if (!notes || notes.length === 0) continue;
+      let minVerse = Infinity;
+      let maxVerse = -Infinity;
+      for (const note of notes) {
+        minVerse = Math.min(minVerse, note.verseRef.startVerse);
+        maxVerse = Math.max(maxVerse, note.verseRef.endVerse);
+      }
+      ranges.push({ anchorVerse: anchor, startVerse: minVerse, endVerse: maxVerse });
+    }
+
+    for (const [, slot] of openEditors) {
+      if (slot.kind === "new" && slot.verseRef.startVerse !== slot.verseRef.endVerse) {
+        const anchor = slot.verseRef.startVerse;
+        if (!ranges.some((r) => r.anchorVerse === anchor)) {
+          ranges.push({
+            anchorVerse: anchor,
+            startVerse: slot.verseRef.startVerse,
+            endVerse: slot.verseRef.endVerse,
+          });
+        }
+      }
+    }
+
+    for (const noteId of editingNoteIds) {
+      for (const [anchor, notes] of passageNotesByAnchor) {
+        if (notes.some((n) => n.noteId === noteId)) {
+          if (!ranges.some((r) => r.anchorVerse === anchor)) {
+            let minV = Infinity;
+            let maxV = -Infinity;
+            for (const note of notes) {
+              minV = Math.min(minV, note.verseRef.startVerse);
+              maxV = Math.max(maxV, note.verseRef.endVerse);
+            }
+            ranges.push({ anchorVerse: anchor, startVerse: minV, endVerse: maxV });
+          }
+        }
+      }
+    }
+
+    return ranges;
+  }, [openPassageKeys, passageNotesByAnchor, openEditors, editingNoteIds]);
 
   useEffect(() => {
     editorHasChangesRef.current = editorHasChanges;
@@ -557,13 +611,22 @@ export function usePassageNotesUiState({
     [getSelectedVersesForPassageAnchor],
   );
 
-  const closePassageNotes = useCallback((verseNumber: number) => {
-    setOpenPassageKeys((prev) => {
-      const next = new Set(prev);
-      next.delete(verseNumber);
-      return next;
-    });
-  }, []);
+  const closePassageNotes = useCallback(
+    (verseNumber: number) => {
+      setOpenPassageKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(verseNumber);
+        return next;
+      });
+      const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+      setViewSelectedVerses((prev) => {
+        const next = new Set(prev);
+        for (const v of passageVerses) next.delete(v);
+        return next;
+      });
+    },
+    [getSelectedVersesForPassageAnchor],
+  );
 
   const startEditingNote = useCallback(
     (noteId: Id<"notes">, verseRef: VerseRef, verseNumber: number, isPassage: boolean) => {
@@ -612,6 +675,7 @@ export function usePassageNotesUiState({
   return {
     selectedVerses,
     passageDraftVerses,
+    expandedPassageRanges,
     hasDirtyEditors,
     notifyEditorDirty,
     hoveredVerse,

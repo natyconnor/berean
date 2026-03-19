@@ -6,11 +6,13 @@ import { useChapterNotesData } from "./use-chapter-notes-data";
 import {
   usePassageNotesUiState,
   type EditorSlot,
+  type ExpandedPassageRange,
 } from "./use-passage-notes-ui-state";
 
 export interface PassageNotesInteraction {
   selectedVerses: Set<number>;
   passageDraftVerses: Set<number>;
+  expandedPassageRanges: ExpandedPassageRange[];
   hasDirtyEditors: boolean;
   notifyEditorDirty: (key: string, isDirty: boolean) => void;
   hoveredVerse: number | null;

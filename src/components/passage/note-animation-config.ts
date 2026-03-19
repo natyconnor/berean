@@ -36,6 +36,16 @@ export const NOTE_ENTER_TRANSITION: Transition = {
  */
 export const NOTE_LAYOUT_TRANSITION: Transition = LAYOUT_CORRECTION_TRANSITION;
 
+/**
+ * Used for the merged passage block enter animation. Slightly delayed so
+ * individual verse rows can exit first before the block slides in.
+ */
+export const MERGE_ENTER_TRANSITION: Transition = {
+  duration: 0.28,
+  ease: [0.22, 1, 0.36, 1],
+  delay: 0.08,
+};
+
 export const NOTE_CONTENT_VARIANTS: Variants = {
   hidden: { opacity: 0, y: -4 },
   visible: { opacity: 1, y: 0 },
