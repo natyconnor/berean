@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "convex-helpers/react/cache";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import { Badge } from "@/components/ui/badge";
-import { X, BookOpen } from "lucide-react";
+import { X } from "lucide-react";
 import { TagPicker } from "@/components/tags/tag-picker";
 import { cn } from "@/lib/utils";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
@@ -130,6 +130,7 @@ export function NoteEditor({
   const isPassage = variant === "passage";
   const isDialogPresentation = presentation === "dialog";
   const plainText = noteBodyToPlainText(body).trim();
+  const showEditorHeaderRow = !isPassage || !isDialogPresentation;
 
   return (
     <div
@@ -146,31 +147,31 @@ export function NoteEditor({
       )}
       onKeyDown={handleKeyDown}
     >
-      <div className="flex items-center justify-between">
-        {isPassage ? (
-          <div className="flex items-center gap-1.5">
-            <BookOpen className="h-3 w-3 text-amber-600 dark:text-amber-400/70 shrink-0" />
-            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide">
+      {showEditorHeaderRow ? (
+        <div
+          className={cn(
+            "flex items-center",
+            isPassage ? "justify-end" : "justify-between",
+          )}
+        >
+          {!isPassage ? (
+            <Badge variant="secondary" className="text-xs">
               {formatVerseRef(verseRef)}
-            </span>
-          </div>
-        ) : (
-          <Badge variant="secondary" className="text-xs">
-            {formatVerseRef(verseRef)}
-          </Badge>
-        )}
-        {!isDialogPresentation && (
-          <TooltipButton
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onCancel}
-            tooltip="Cancel"
-          >
-            <X className="h-3.5 w-3.5" />
-          </TooltipButton>
-        )}
-      </div>
+            </Badge>
+          ) : null}
+          {!isDialogPresentation ? (
+            <TooltipButton
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onCancel}
+              tooltip="Cancel"
+            >
+              <X className="h-3.5 w-3.5" />
+            </TooltipButton>
+          ) : null}
+        </div>
+      ) : null}
 
       <InlineVerseEditor
         initialBody={initialEditorBody}
