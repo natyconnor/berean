@@ -1,5 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Id } from "../../../../convex/_generated/dataModel";
+import type { NoteWithRef } from "@/components/notes/model/note-model";
 import {
   usePassageNotesUiState,
   type PassageNotesUiState,
@@ -25,6 +27,8 @@ function defaultOptions() {
   return {
     book: "Genesis",
     chapter: 1,
+    viewMode: "compose" as const,
+    setViewMode: vi.fn(),
     singleVerseNotes: new Map(),
     passageNotesByAnchor: new Map(),
     verseToPassageAnchor: new Map(),
@@ -153,6 +157,113 @@ describe("usePassageNotesUiState outside-click dismissal", () => {
     clickElement(outsideDiv);
 
     expect(result.current.openVerseKeys.size).toBe(0);
+    expect(result.current.openEditors.has(editorKey)).toBe(true);
+  });
+});
+
+describe("usePassageNotesUiState view mode switch", () => {
+  const passageNote: NoteWithRef = {
+    noteId: "n1" as Id<"notes">,
+    content: "",
+    tags: [],
+    verseRef: {
+      book: "Genesis",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 2,
+    },
+    createdAt: 0,
+  };
+
+  it("clears notes surface and calls setViewMode when switching with no dirty editors", () => {
+    const setViewMode = vi.fn();
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        setViewMode,
+        passageNotesByAnchor: new Map([[1, [passageNote]]]),
+      }),
+    );
+
+    act(() => {
+      result.current.openPassageNotes(1);
+    });
+    expect(result.current.openPassageKeys.has(1)).toBe(true);
+    expect(result.current.selectedVerses.size).toBeGreaterThan(0);
+
+    act(() => {
+      result.current.setViewModeWithNotesReset("read");
+    });
+
+    expect(setViewMode).toHaveBeenCalledWith("read");
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.selectedVerses.size).toBe(0);
+  });
+
+  it("opens discard confirmation when switching with dirty editors; confirm applies mode", () => {
+    const setViewMode = vi.fn();
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        setViewMode,
+      }),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    const editorKey = Array.from(result.current.openEditors.keys())[0];
+    expect(editorKey).toBeDefined();
+
+    act(() => {
+      result.current.notifyEditorDirty(editorKey, true);
+    });
+
+    act(() => {
+      result.current.setViewModeWithNotesReset("read");
+    });
+
+    expect(setViewMode).not.toHaveBeenCalled();
+    expect(result.current.showDiscardConfirmation).toBe(true);
+    expect(result.current.openEditors.has(editorKey)).toBe(true);
+
+    act(() => {
+      result.current.confirmDiscard();
+    });
+
+    expect(setViewMode).toHaveBeenCalledWith("read");
+    expect(result.current.showDiscardConfirmation).toBe(false);
+    expect(result.current.openEditors.size).toBe(0);
+  });
+
+  it("cancel discard leaves mode unchanged and clears pending switch", () => {
+    const setViewMode = vi.fn();
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        setViewMode,
+      }),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    const editorKey = Array.from(result.current.openEditors.keys())[0]!;
+
+    act(() => {
+      result.current.notifyEditorDirty(editorKey, true);
+    });
+
+    act(() => {
+      result.current.setViewModeWithNotesReset("read");
+    });
+
+    act(() => {
+      result.current.cancelDiscard();
+    });
+
+    expect(setViewMode).not.toHaveBeenCalled();
+    expect(result.current.showDiscardConfirmation).toBe(false);
     expect(result.current.openEditors.has(editorKey)).toBe(true);
   });
 });

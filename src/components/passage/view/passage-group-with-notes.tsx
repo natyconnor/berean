@@ -139,10 +139,17 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
     [verses, singleNotesByVerse],
   );
 
+  const isReadMode = viewMode === "read";
+
   return (
     <LayoutGroup id={`passage-group-${anchorVerse}`}>
       <div
-        className="grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start"
+        className={cn(
+          "grid items-start",
+          isReadMode
+            ? "grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
+            : "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5",
+        )}
         data-note-surface
       >
         {/* LEFT — stacked expanded verse rows in a shared passage shell */}

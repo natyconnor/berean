@@ -68,12 +68,23 @@ export interface PassageNotesInteraction {
   showDiscardConfirmation: boolean;
   confirmDiscard: () => void;
   cancelDiscard: () => void;
+  setViewModeWithNotesReset: (next: "compose" | "read") => void;
 }
 
 export function usePassageNotesInteraction(
   book: string,
   chapter: number,
+  options?: {
+    viewMode?: "compose" | "read";
+    setViewMode?: (next: "compose" | "read") => void;
+  },
 ): PassageNotesInteraction {
+  const viewMode = options?.viewMode ?? "compose";
+  const setViewMode =
+    options?.setViewMode ??
+    (() => {
+      /* no-op when view mode is not wired (tests) */
+    });
   const {
     singleVerseNotes,
     passageNotesByAnchor,
@@ -86,6 +97,8 @@ export function usePassageNotesInteraction(
   const uiState = usePassageNotesUiState({
     book,
     chapter,
+    viewMode,
+    setViewMode,
     singleVerseNotes,
     passageNotesByAnchor,
     verseToPassageAnchor,

@@ -162,10 +162,15 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     isEditingPassageHere;
 
   const hasBothNoteTypes = singleNotes.length > 0 && passageNotes.length > 0;
-  const useSideBySide = !isReadMode && hasBothNoteTypes && !isCreatingHere;
-  const showVerseAsPill = useSideBySide && isPassageOpen;
+  const useSideBySide = hasBothNoteTypes && !isCreatingHere;
+  const showVerseAsPill =
+    useSideBySide &&
+    isPassageOpen &&
+    (isVerseOpen || isReadMode || isEditingSingleHere);
   const showPassageAsPill =
-    useSideBySide && (isVerseOpen || isEditingSingleHere) && !isPassageOpen;
+    useSideBySide &&
+    !isPassageOpen &&
+    (isVerseOpen || isEditingSingleHere || isReadMode);
   const showPassageCompact =
     useSideBySide && !isPassageOpen && !showPassageAsPill;
 

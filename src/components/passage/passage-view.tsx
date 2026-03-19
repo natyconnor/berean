@@ -73,6 +73,12 @@ export function PassageView({
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
+  const { effectiveViewMode, isReadMode, editorMode, setViewMode } =
+    usePassageViewMode({
+      focusRange,
+      forcedViewMode,
+      focusSource,
+    });
   const {
     containerRef,
     selectedVerses,
@@ -116,7 +122,11 @@ export function PassageView({
     showDiscardConfirmation,
     confirmDiscard,
     cancelDiscard,
-  } = usePassageNotesInteraction(book, chapter);
+    setViewModeWithNotesReset,
+  } = usePassageNotesInteraction(book, chapter, {
+    viewMode: effectiveViewMode,
+    setViewMode,
+  });
 
   const chapterHighlights = useQuery(api.highlights.getForChapter, {
     book,
@@ -171,19 +181,12 @@ export function PassageView({
     [updateHighlightColorMutation],
   );
 
-  const { effectiveViewMode, isReadMode, editorMode, setViewMode } =
-    usePassageViewMode({
-      focusRange,
-      forcedViewMode,
-      focusSource,
-    });
-
   const { forceAddButtonVisible, displaySingleVerseNotes } = usePassageViewTour(
     {
       book,
       chapter,
       effectiveViewMode,
-      setViewMode,
+      setViewMode: setViewModeWithNotesReset,
       singleVerseNotes,
       openEditors,
       handleClickAway,
@@ -349,7 +352,7 @@ export function PassageView({
     previous,
     next,
     navigateActiveTab,
-    setViewMode,
+    setViewMode: setViewModeWithNotesReset,
   });
 
   const { isScrolled } = usePassageScrollRestoration({
@@ -414,7 +417,7 @@ export function PassageView({
                   variant={
                     effectiveViewMode === "compose" ? "secondary" : "ghost"
                   }
-                  onClick={() => setViewMode("compose")}
+                  onClick={() => setViewModeWithNotesReset("compose")}
                   className="gap-1.5"
                 >
                   <Pencil className="h-3 w-3" />
@@ -426,7 +429,7 @@ export function PassageView({
                 <Button
                   size="xs"
                   variant={effectiveViewMode === "read" ? "secondary" : "ghost"}
-                  onClick={() => setViewMode("read")}
+                  onClick={() => setViewModeWithNotesReset("read")}
                   className="gap-1.5"
                 >
                   <BookOpen className="h-3 w-3" />

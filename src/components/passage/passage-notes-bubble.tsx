@@ -86,7 +86,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
       : notes[0].content;
 
   const bubbleState: BubbleState =
-    isPill && !shouldShowExpanded && !isReadMode
+    isPill && !isEditingWithinGroup
       ? "pill"
       : shouldShowExpanded || isReadMode
         ? "expanded"
