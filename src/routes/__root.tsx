@@ -14,6 +14,10 @@ import { AppShell } from "@/components/layout/app-shell";
 import { TutorialProvider } from "@/components/tutorial/tutorial-provider";
 import { readActiveTutorialTour } from "@/components/tutorial/tutorial-session";
 import { LoginPage } from "@/components/login-page";
+import {
+  heroBackgroundLayerStyle,
+  heroGradientOverlayLayerStyle,
+} from "@/lib/hero-backdrop";
 import { api } from "../../convex/_generated/api";
 
 const MIN_SPLASH_MS = 600;
@@ -64,9 +68,12 @@ function RootComponent() {
       <div className="fixed inset-0">
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: "url(/berean-hero.webp)" }}
+          style={heroBackgroundLayerStyle()}
         />
-        <div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/50 to-black/90" />
+        <div
+          className="absolute inset-0 bg-linear-to-b from-black/60 via-black/50 to-black/90"
+          style={heroGradientOverlayLayerStyle()}
+        />
       </div>
     );
   }
@@ -101,9 +108,12 @@ function RootComponent() {
         >
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url(/berean-hero.webp)" }}
+            style={heroBackgroundLayerStyle()}
           />
-          <div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/50 to-black/90" />
+          <div
+            className="absolute inset-0 bg-linear-to-b from-black/60 via-black/50 to-black/90"
+            style={heroGradientOverlayLayerStyle()}
+          />
         </div>
       )}
     </>

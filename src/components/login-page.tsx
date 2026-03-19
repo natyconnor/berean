@@ -1,6 +1,10 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LoginPageAtmosphere } from "@/components/login-page-atmosphere";
+import {
+  heroBackgroundLayerStyle,
+  heroGradientOverlayLayerStyle,
+} from "@/lib/hero-backdrop";
 
 const PARALLAX_DAMPING = 0.04;
 
@@ -76,18 +80,15 @@ export function LoginPage({ isLoading = false }: { isLoading?: boolean }) {
     >
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage: "url(/berean-hero.webp)",
-          scale: "1.03",
+        style={heroBackgroundLayerStyle({
           translate: "calc(var(--mx, 0) * 8px) calc(var(--my, 0) * 8px)",
-        }}
+        })}
       />
       <div
         className="absolute inset-0 bg-linear-to-b from-black/60 via-black/50 to-black/90"
-        style={{
-          scale: "1.03",
+        style={heroGradientOverlayLayerStyle({
           translate: "calc(var(--mx, 0) * 8px) calc(var(--my, 0) * 8px)",
-        }}
+        })}
       />
 
       {!isLoading && <LoginPageAtmosphere />}
