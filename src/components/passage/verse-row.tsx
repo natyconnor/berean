@@ -60,6 +60,7 @@ interface VerseRowLeftProps {
   addNoteTourId?: string;
   rowTourId?: string;
   handlers: VerseInteractionHandlers;
+  variant?: "default" | "groupedPassage";
 }
 
 // Explicit pixel values for each expand state. Editing these two objects is the
@@ -84,6 +85,16 @@ const EXPANDED = {
   verseNumberPaddingTop: "0.375rem", // pt-1.5
 } as const;
 
+const GROUPED_EXPANDED = {
+  paddingTop: "0.625rem",    // tighter vertical gap between grouped verses
+  paddingBottom: "0.625rem",
+  paddingLeft: "1.25rem",
+  paddingRight: "1.25rem",
+  verseNumberFontSize: "0.875rem", // text-sm
+  textFontSize: "1.25rem",         // text-xl — slightly smaller than solo expanded
+  verseNumberPaddingTop: "0.25rem",
+} as const;
+
 export const VerseRowLeft = memo(function VerseRowLeft({
   verseNumber,
   text,
@@ -102,6 +113,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   addNoteTourId,
   rowTourId,
   handlers,
+  variant = "default",
 }: VerseRowLeftProps) {
   const { isSelected, isInSelectionRange, isPassageSelection } = selection;
   const { hasOwnNote, isPassageAnchor, isInPassageRange } = noteIndicator;
@@ -110,7 +122,9 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   const shouldFlipTooltipBelow = verseNumber <= 2;
   const { onAddNote, onMouseDown, onMouseEnter, onMouseLeave } = handlers;
 
-  const sizes = isExpanded ? EXPANDED : COLLAPSED;
+  const sizes = isExpanded
+    ? variant === "groupedPassage" ? GROUPED_EXPANDED : EXPANDED
+    : COLLAPSED;
 
   const segments =
     highlights && highlights.length > 0
@@ -179,6 +193,12 @@ export const VerseRowLeft = memo(function VerseRowLeft({
     // values so Framer Motion never needs to use scale-based projection to
     // correct this element's size, eliminating the "text zooms" artifact.
     <motion.div
+      initial={variant === "groupedPassage" ? {
+        paddingTop: COLLAPSED.paddingTop,
+        paddingBottom: COLLAPSED.paddingBottom,
+        paddingLeft: COLLAPSED.paddingLeft,
+        paddingRight: COLLAPSED.paddingRight,
+      } : undefined}
       animate={{
         paddingTop: sizes.paddingTop,
         paddingBottom: sizes.paddingBottom,
@@ -220,6 +240,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         isExpanded &&
           !isSelected &&
           !isInSelectionRange &&
+          variant !== "groupedPassage" &&
           "bg-stone-50/80 dark:bg-stone-900/20",
       )}
       onMouseDown={
@@ -318,7 +339,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
               ref={verseTextRef}
               aria-hidden={!isExpanded}
               style={{
-                fontSize: EXPANDED.textFontSize,
+                fontSize: (variant === "groupedPassage" ? GROUPED_EXPANDED : EXPANDED).textFontSize,
                 opacity: isExpanded ? 1 : 0,
                 pointerEvents: isExpanded ? undefined : "none",
                 transition: "opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1)",

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "convex-helpers/react/cache";
 import { useMutation } from "convex/react";
@@ -17,7 +17,7 @@ import { ChapterHeader } from "@/components/bible/chapter-header";
 import { ChapterPager } from "@/components/bible/chapter-pager";
 import { CopyrightNotice } from "@/components/bible/copyright-notice";
 import { VerseRowWithNotes } from "./view/verse-row-with-notes";
-import { MergedPassageBlock } from "./view/merged-passage-block";
+import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
 import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
 import { NoteEditor } from "@/components/notes/note-editor";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -31,7 +31,7 @@ import { usePassageViewMode } from "./hooks/use-passage-view-mode";
 import { usePassageKeyboardShortcuts } from "./hooks/use-passage-keyboard-shortcuts";
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
 import { usePassageViewTour } from "./hooks/use-passage-view-tour";
-import { NOTE_ENTER_TRANSITION, MERGE_ENTER_TRANSITION } from "./note-animation-config";
+import { NOTE_ENTER_TRANSITION, CROSSFADE_TRANSITION } from "./note-animation-config";
 import { api } from "../../../convex/_generated/api";
 
 interface PassageViewProps {
@@ -54,7 +54,7 @@ type VerseItem =
       passageNotes: NoteWithRef[];
     }
   | {
-      kind: "merged";
+      kind: "passageGroup";
       anchorVerse: number;
       verses: Array<{ verseNumber: number; text: string }>;
       passageNotes: NoteWithRef[];
@@ -251,7 +251,7 @@ export function PassageView({
               singleNotesByVerse.set(v.verseNumber, notes);
           }
           items.push({
-            kind: "merged",
+            kind: "passageGroup",
             anchorVerse: range.anchorVerse,
             verses: blockVerses,
             passageNotes: passageNotesByAnchor.get(range.anchorVerse) ?? [],
@@ -295,6 +295,31 @@ export function PassageView({
     noteVisibility,
     displaySingleVerseNotes,
   ]);
+
+  const currentGroupedVerses = useMemo(() => {
+    const set = new Set<number>();
+    for (const range of expandedPassageRanges) {
+      for (let v = range.startVerse; v <= range.endVerse; v++) {
+        set.add(v);
+      }
+    }
+    return set;
+  }, [expandedPassageRanges]);
+
+  const prevGroupedVersesRef = useRef<Set<number>>(new Set());
+  const reenteringFromGroup = useMemo(() => {
+    const set = new Set<number>();
+    for (const v of prevGroupedVersesRef.current) {
+      if (!currentGroupedVerses.has(v)) {
+        set.add(v);
+      }
+    }
+    return set;
+  }, [currentGroupedVerses]);
+
+  useEffect(() => {
+    prevGroupedVersesRef.current = currentGroupedVerses;
+  }, [currentGroupedVerses]);
 
   const dialogDraft = useMemo(() => {
     for (const slot of openEditors.values()) {
@@ -459,23 +484,18 @@ export function PassageView({
           onMouseLeave={handleMouseUp}
         >
           <div>
-            <AnimatePresence initial={false}>
+            <AnimatePresence initial={false} mode="popLayout">
               {filteredVerses.map((item) => {
-                if (item.kind === "merged") {
+                if (item.kind === "passageGroup") {
                   return (
                     <motion.div
-                      key={`merged-${item.anchorVerse}`}
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{
-                        height: "auto",
-                        opacity: 1,
-                        transitionEnd: { overflow: "visible" },
-                      }}
-                      exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-                      transition={MERGE_ENTER_TRANSITION}
-                      style={{ overflow: "hidden" }}
+                      key={`passage-group-${item.anchorVerse}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={CROSSFADE_TRANSITION}
                     >
-                      <MergedPassageBlock
+                      <PassageGroupWithNotes
                         verses={item.verses}
                         passageNotes={item.passageNotes}
                         singleNotesByVerse={item.singleNotesByVerse}
@@ -524,18 +544,32 @@ export function PassageView({
                   hoveredSingleBubble === item.verseNumber ||
                   hoveredPassageBubble === item.verseNumber;
 
+                const isReentering = reenteringFromGroup.has(item.verseNumber);
+
                 return (
                   <motion.div
                     key={item.verseNumber}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{
-                      height: "auto",
-                      opacity: 1,
-                      transitionEnd: { overflow: "visible" },
-                    }}
-                    exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-                    transition={NOTE_ENTER_TRANSITION}
-                    style={{ overflow: "hidden" }}
+                    initial={
+                      isReentering
+                        ? { opacity: 0 }
+                        : { height: 0, opacity: 0 }
+                    }
+                    animate={
+                      isReentering
+                        ? { opacity: 1 }
+                        : {
+                            height: "auto",
+                            opacity: 1,
+                            transitionEnd: { overflow: "visible" },
+                          }
+                    }
+                    exit={{ opacity: 0 }}
+                    transition={
+                      isReentering
+                        ? CROSSFADE_TRANSITION
+                        : NOTE_ENTER_TRANSITION
+                    }
+                    style={isReentering ? undefined : { overflow: "hidden" }}
                   >
                     <VerseRowWithNotes
                       verseNumber={item.verseNumber}

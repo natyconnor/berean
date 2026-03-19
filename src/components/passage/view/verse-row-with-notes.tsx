@@ -1,13 +1,10 @@
-import { memo, useCallback, useRef } from "react";
+import { memo, useCallback } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { VerseRowLeft } from "../verse-row";
+import { VerseTextPane } from "./verse-text-pane";
 import { VerseNotes } from "../verse-notes";
 import { PassageNotesBubble } from "../passage-notes-bubble";
 import { NoteEditor } from "@/components/notes/note-editor";
-import { HighlightToolbar } from "../highlight-toolbar";
-import { HighlightMarkPopover } from "../highlight-mark-popover";
-import { useHighlightPopover } from "../hooks/use-highlight-popover";
 import { cn } from "@/lib/utils";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
@@ -142,20 +139,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const isReadMode = viewMode === "read";
   const useDialogEditors = editorMode === "dialog";
   const shouldShowInlineEditors = !useDialogEditors;
-  const verseTextRef = useRef<HTMLSpanElement>(null);
-
-  const {
-    markPopover,
-    activeHighlightId,
-    handleMarkClick,
-    handlePopoverClose,
-    handlePopoverDelete,
-    handlePopoverRecolor,
-  } = useHighlightPopover({
-    highlights,
-    onDeleteHighlight,
-    onRecolorHighlight,
-  });
 
   const isPassageAnchor = passageNotes.length > 0;
   const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor;
@@ -197,13 +180,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
       onCancelEditor(`new:${draft.startVerse}:${draft.endVerse}`);
     }
   }, [isVerseOpen, isPassageOpen, verseNumber, onCloseVerseNotes, onClosePassageNotes, draftsForThisAnchor, onCancelEditor]);
-
-  const handleHighlight = useCallback(
-    (startOffset: number, endOffset: number, color: string) => {
-      onCreateHighlight?.(verseNumber, startOffset, endOffset, color);
-    },
-    [onCreateHighlight, verseNumber],
-  );
 
   const passageNoteJsx =
     passageNotes.length > 0 ? (
@@ -278,7 +254,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
         className="flex h-full flex-col"
       >
-        <VerseRowLeft
+        <VerseTextPane
           verseNumber={verseNumber}
           text={text}
           selection={{
@@ -301,9 +277,9 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           isExpanded={isExpanded}
           onCollapseVerse={handleCollapseVerse}
           highlights={highlights}
-          activeHighlightId={activeHighlightId}
-          verseTextRef={verseTextRef}
-          onMarkClick={handleMarkClick}
+          onCreateHighlight={onCreateHighlight}
+          onDeleteHighlight={onDeleteHighlight}
+          onRecolorHighlight={onRecolorHighlight}
           forceAddButtonVisible={forceAddButtonVisible}
           addNoteTourId={addNoteTourId}
           rowTourId={rowTourId}
@@ -314,25 +290,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
             onMouseLeave,
           }}
         />
-        {isExpanded && onCreateHighlight && (
-          <HighlightToolbar
-            verseTextRef={verseTextRef}
-            onHighlight={handleHighlight}
-          />
-        )}
-        <AnimatePresence>
-          {markPopover && (
-            <HighlightMarkPopover
-              key={markPopover.highlightId}
-              anchorRect={markPopover.rect}
-              highlightId={markPopover.highlightId}
-              currentColor={markPopover.currentColor}
-              onDelete={handlePopoverDelete}
-              onRecolor={handlePopoverRecolor}
-              onClose={handlePopoverClose}
-            />
-          )}
-        </AnimatePresence>
       </motion.div>
 
       <motion.div
