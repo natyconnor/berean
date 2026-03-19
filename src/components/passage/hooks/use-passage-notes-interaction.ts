@@ -6,18 +6,20 @@ import { useChapterNotesData } from "./use-chapter-notes-data";
 import {
   usePassageNotesUiState,
   type EditorSlot,
+  type ExpandedPassageRange,
 } from "./use-passage-notes-ui-state";
 
 export interface PassageNotesInteraction {
   selectedVerses: Set<number>;
   passageDraftVerses: Set<number>;
-  canDismissOnClickAway: boolean;
+  expandedPassageRanges: ExpandedPassageRange[];
+  hasDirtyEditors: boolean;
   notifyEditorDirty: (key: string, isDirty: boolean) => void;
   hoveredVerse: number | null;
   hoveredSingleBubble: number | null;
   hoveredPassageBubble: number | null;
-  openVerseKey: number | null;
-  openPassageKey: number | null;
+  openVerseKeys: Set<number>;
+  openPassageKeys: Set<number>;
   openEditors: Map<string, EditorSlot>;
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, VerseRef[]>;
@@ -53,9 +55,9 @@ export interface PassageNotesInteraction {
   handleClickAway: () => void;
   cancelEditor: (key: string) => void;
   openVerseNotes: (verseNumber: number) => void;
-  closeVerseNotes: () => void;
+  closeVerseNotes: (verseNumber: number) => void;
   openPassageNotes: (verseNumber: number) => void;
-  closePassageNotes: () => void;
+  closePassageNotes: (verseNumber: number) => void;
   startEditingNote: (
     noteId: Id<"notes">,
     verseRef: VerseRef,
@@ -66,12 +68,23 @@ export interface PassageNotesInteraction {
   showDiscardConfirmation: boolean;
   confirmDiscard: () => void;
   cancelDiscard: () => void;
+  setViewModeWithNotesReset: (next: "compose" | "read") => void;
 }
 
 export function usePassageNotesInteraction(
   book: string,
   chapter: number,
+  options?: {
+    viewMode?: "compose" | "read";
+    setViewMode?: (next: "compose" | "read") => void;
+  },
 ): PassageNotesInteraction {
+  const viewMode = options?.viewMode ?? "compose";
+  const setViewMode =
+    options?.setViewMode ??
+    (() => {
+      /* no-op when view mode is not wired (tests) */
+    });
   const {
     singleVerseNotes,
     passageNotesByAnchor,
@@ -84,6 +97,8 @@ export function usePassageNotesInteraction(
   const uiState = usePassageNotesUiState({
     book,
     chapter,
+    viewMode,
+    setViewMode,
     singleVerseNotes,
     passageNotesByAnchor,
     verseToPassageAnchor,

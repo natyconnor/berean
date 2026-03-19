@@ -19,7 +19,7 @@ import {
 } from "@/components/notes/view/note-card-primitives";
 import { NoteEditor } from "@/components/notes/note-editor";
 import { NoteBubbleShell, type BubbleState } from "./view/note-bubble-shell";
-import { NOTE_LAYOUT_TRANSITION } from "./note-animation-config";
+import { LAYOUT_CORRECTION_TRANSITION } from "./note-animation-config";
 
 type PassageNote = NoteWithRef;
 
@@ -86,7 +86,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
       : notes[0].content;
 
   const bubbleState: BubbleState =
-    isPill && !shouldShowExpanded && !isReadMode
+    isPill && !isEditingWithinGroup
       ? "pill"
       : shouldShowExpanded || isReadMode
         ? "expanded"
@@ -121,7 +121,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           className={
             isReadMode
               ? "space-y-3 rounded-xl border border-amber-200 bg-amber-50/30 dark:bg-amber-900/20 dark:border-amber-700/50 p-3"
-              : "space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 dark:bg-amber-900/15 dark:border-amber-700/50 p-2.5"
+              : "min-h-[96px] space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 dark:bg-amber-900/15 dark:border-amber-700/50 p-2.5"
           }
           onClick={(e) => e.stopPropagation()}
           onMouseEnter={onMouseEnter}
@@ -168,7 +168,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
               key={note.noteId}
               layout
               transition={{
-                layout: NOTE_LAYOUT_TRANSITION,
+                layout: LAYOUT_CORRECTION_TRANSITION,
                 delay: index * 0.03,
               }}
             >

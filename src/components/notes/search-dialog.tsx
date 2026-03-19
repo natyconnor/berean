@@ -151,7 +151,7 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
       ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-xl p-0 gap-0">
+        <DialogContent className="sm:max-w-xl p-0 gap-0" data-passage-dismiss-exempt>
           <div className="flex items-center border-b px-3">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <Input

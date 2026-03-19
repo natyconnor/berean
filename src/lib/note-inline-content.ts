@@ -125,6 +125,20 @@ export function normalizeNoteBody(
         },
       });
     }
+
+    if (
+      segment.type === "verseQuote" &&
+      typeof (segment as { text?: string }).text === "string" &&
+      (segment as { text: string }).text.length > 0
+    ) {
+      const previous = normalizedSegments[normalizedSegments.length - 1];
+      const quoteText = `> ${(segment as { text: string }).text}`;
+      if (previous?.type === "text") {
+        previous.text += quoteText;
+      } else {
+        normalizedSegments.push({ type: "text", text: quoteText });
+      }
+    }
   }
 
   return {

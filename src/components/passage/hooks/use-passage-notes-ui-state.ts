@@ -5,9 +5,14 @@ import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 
+type PassageViewMode = "compose" | "read";
+
 interface UsePassageNotesUiStateOptions {
   book: string;
   chapter: number;
+  viewMode: PassageViewMode;
+  /** Parent passage view mode setter; used when switching modes clears notes UI state. */
+  setViewMode: (next: PassageViewMode) => void;
   singleVerseNotes: Map<number, NoteWithRef[]>;
   passageNotesByAnchor: Map<number, NoteWithRef[]>;
   verseToPassageAnchor: Map<number, number>;
@@ -28,16 +33,23 @@ export type EditorSlot =
   | { kind: "new"; verseRef: VerseRef }
   | { kind: "edit"; noteId: Id<"notes">; verseRef: VerseRef };
 
+export interface ExpandedPassageRange {
+  anchorVerse: number;
+  startVerse: number;
+  endVerse: number;
+}
+
 export interface PassageNotesUiState {
   selectedVerses: Set<number>;
   passageDraftVerses: Set<number>;
-  canDismissOnClickAway: boolean;
+  expandedPassageRanges: ExpandedPassageRange[];
+  hasDirtyEditors: boolean;
   notifyEditorDirty: (key: string, isDirty: boolean) => void;
   hoveredVerse: number | null;
   hoveredSingleBubble: number | null;
   hoveredPassageBubble: number | null;
-  openVerseKey: number | null;
-  openPassageKey: number | null;
+  openVerseKeys: Set<number>;
+  openPassageKeys: Set<number>;
   openEditors: Map<string, EditorSlot>;
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, VerseRef[]>;
@@ -67,9 +79,9 @@ export interface PassageNotesUiState {
   handleClickAway: () => void;
   cancelEditor: (key: string) => void;
   openVerseNotes: (verseNumber: number) => void;
-  closeVerseNotes: () => void;
+  closeVerseNotes: (verseNumber: number) => void;
   openPassageNotes: (verseNumber: number) => void;
-  closePassageNotes: () => void;
+  closePassageNotes: (verseNumber: number) => void;
   startEditingNote: (
     noteId: Id<"notes">,
     verseRef: VerseRef,
@@ -80,6 +92,7 @@ export interface PassageNotesUiState {
   showDiscardConfirmation: boolean;
   confirmDiscard: () => void;
   cancelDiscard: () => void;
+  setViewModeWithNotesReset: (next: PassageViewMode) => void;
 }
 
 export function editorKey(slot: EditorSlot): string {
@@ -99,6 +112,8 @@ function editEditorKey(noteId: Id<"notes">): string {
 export function usePassageNotesUiState({
   book,
   chapter,
+  viewMode,
+  setViewMode,
   singleVerseNotes,
   passageNotesByAnchor,
   verseToPassageAnchor,
@@ -122,13 +137,16 @@ export function usePassageNotesUiState({
   const [hoveredPassageBubble, setHoveredPassageBubble] = useState<
     number | null
   >(null);
-  const [openVerseKey, setOpenVerseKey] = useState<number | null>(null);
-  const [openPassageKey, setOpenPassageKey] = useState<number | null>(null);
+  const [openVerseKeys, setOpenVerseKeys] = useState<Set<number>>(new Set());
+  const [openPassageKeys, setOpenPassageKeys] = useState<Set<number>>(new Set());
   const [isPassageSelection, setIsPassageSelection] = useState(false);
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const suppressNextDocumentClickRef = useRef(false);
-  const canDismissOnClickAwayRef = useRef(true);
+  const editorHasChangesRef = useRef<Set<string>>(new Set());
+  /** Anchors the user collapsed in read mode; skip auto-reopen until chapter change. */
+  const readPassageAutoOpenSuppressedRef = useRef<Set<number>>(new Set());
+  const pendingViewModeAfterDiscardRef = useRef<PassageViewMode | null>(null);
 
   // --- Derived values from the unified openEditors map ---
 
@@ -186,12 +204,58 @@ export function usePassageNotesUiState({
     return s;
   }, [openEditors]);
 
-  const canDismissOnClickAway =
-    openEditors.size <= 1 && editorHasChanges.size === 0;
+  const hasDirtyEditors = editorHasChanges.size > 0;
+
+  const expandedPassageRanges = useMemo(() => {
+    const ranges: ExpandedPassageRange[] = [];
+
+    for (const anchor of openPassageKeys) {
+      const notes = passageNotesByAnchor.get(anchor);
+      if (!notes || notes.length === 0) continue;
+      let minVerse = Infinity;
+      let maxVerse = -Infinity;
+      for (const note of notes) {
+        minVerse = Math.min(minVerse, note.verseRef.startVerse);
+        maxVerse = Math.max(maxVerse, note.verseRef.endVerse);
+      }
+      ranges.push({ anchorVerse: anchor, startVerse: minVerse, endVerse: maxVerse });
+    }
+
+    for (const [, slot] of openEditors) {
+      if (slot.kind === "new" && slot.verseRef.startVerse !== slot.verseRef.endVerse) {
+        const anchor = slot.verseRef.startVerse;
+        if (!ranges.some((r) => r.anchorVerse === anchor)) {
+          ranges.push({
+            anchorVerse: anchor,
+            startVerse: slot.verseRef.startVerse,
+            endVerse: slot.verseRef.endVerse,
+          });
+        }
+      }
+    }
+
+    for (const noteId of editingNoteIds) {
+      for (const [anchor, notes] of passageNotesByAnchor) {
+        if (notes.some((n) => n.noteId === noteId)) {
+          if (!ranges.some((r) => r.anchorVerse === anchor)) {
+            let minV = Infinity;
+            let maxV = -Infinity;
+            for (const note of notes) {
+              minV = Math.min(minV, note.verseRef.startVerse);
+              maxV = Math.max(maxV, note.verseRef.endVerse);
+            }
+            ranges.push({ anchorVerse: anchor, startVerse: minV, endVerse: maxV });
+          }
+        }
+      }
+    }
+
+    return ranges;
+  }, [openPassageKeys, passageNotesByAnchor, openEditors, editingNoteIds]);
 
   useEffect(() => {
-    canDismissOnClickAwayRef.current = canDismissOnClickAway;
-  }, [canDismissOnClickAway]);
+    editorHasChangesRef.current = editorHasChanges;
+  }, [editorHasChanges]);
 
   const selectedVerses = useMemo(() => {
     if (draftCoveredVerses.size === 0) return viewSelectedVerses;
@@ -205,17 +269,49 @@ export function usePassageNotesUiState({
 
   useEffect(() => {
     queueMicrotask(() => {
+      readPassageAutoOpenSuppressedRef.current.clear();
       setViewSelectedVerses(new Set());
       setHoveredVerse(null);
       setHoveredSingleBubble(null);
       setHoveredPassageBubble(null);
-      setOpenVerseKey(null);
-      setOpenPassageKey(null);
+      setOpenVerseKeys(new Set());
+      setOpenPassageKeys(new Set());
       setOpenEditors(new Map());
       setEditorHasChanges(new Set());
       setIsPassageSelection(false);
     });
   }, [book, chapter]);
+
+  // After chapter reset (microtask above), open passage groups in read mode when
+  // the passage span has no per-verse notes. Re-run when note data loads.
+  useEffect(() => {
+    if (viewMode !== "read") return;
+    queueMicrotask(() => {
+      setOpenPassageKeys((prev) => {
+        const next = new Set(prev);
+        const suppressed = readPassageAutoOpenSuppressedRef.current;
+        for (const [anchor, notes] of passageNotesByAnchor) {
+          if (notes.length === 0) continue;
+          if (suppressed.has(anchor)) continue;
+          let minVerse = Infinity;
+          let maxVerse = -Infinity;
+          for (const note of notes) {
+            minVerse = Math.min(minVerse, note.verseRef.startVerse);
+            maxVerse = Math.max(maxVerse, note.verseRef.endVerse);
+          }
+          let hasVerseNoteInRange = false;
+          for (let v = minVerse; v <= maxVerse; v++) {
+            if ((singleVerseNotes.get(v)?.length ?? 0) > 0) {
+              hasVerseNoteInRange = true;
+              break;
+            }
+          }
+          if (!hasVerseNoteInRange) next.add(anchor);
+        }
+        return next;
+      });
+    });
+  }, [viewMode, passageNotesByAnchor, singleVerseNotes]);
 
   // --- Outside click ---
 
@@ -226,29 +322,39 @@ export function usePassageNotesUiState({
         return;
       }
 
-      const path = event.composedPath();
-      const hasSelectorInPath = (selector: string) =>
-        path.some((node) => node instanceof Element && node.matches(selector));
-      const isInteractiveTarget =
-        hasSelectorInPath("[data-note-trigger]") ||
-        hasSelectorInPath("[data-note-surface]") ||
-        hasSelectorInPath("[data-verse-number]");
+      const textSelection = window.getSelection();
+      if (textSelection && !textSelection.isCollapsed) {
+        return;
+      }
 
-      if (!isInteractiveTarget) {
-        if (canDismissOnClickAwayRef.current) {
-          setOpenVerseKey(null);
-          setOpenPassageKey(null);
-          setOpenEditors(new Map());
-          setEditorHasChanges(new Set());
-          setViewSelectedVerses(new Set());
-          setIsPassageSelection(false);
-        }
+      if (isInsideInteractiveSurface(event)) return;
+      if (isInsideDismissExemptChrome(event)) return;
+
+      setOpenVerseKeys(new Set());
+      if (viewMode !== "read") {
+        setOpenPassageKeys(new Set());
+      }
+      setViewSelectedVerses(new Set());
+      setIsPassageSelection(false);
+
+      const dirtyKeys = editorHasChangesRef.current;
+      if (dirtyKeys.size === 0) {
+        setOpenEditors(new Map());
+        setEditorHasChanges(new Set());
+      } else {
+        setOpenEditors((prev) => {
+          const next = new Map<string, EditorSlot>();
+          for (const [key, slot] of prev) {
+            if (dirtyKeys.has(key)) next.set(key, slot);
+          }
+          return next;
+        });
       }
     }
 
     document.addEventListener("click", handleOutsideClick);
     return () => document.removeEventListener("click", handleOutsideClick);
-  }, []);
+  }, [viewMode]);
 
   // --- Helpers ---
 
@@ -311,15 +417,16 @@ export function usePassageNotesUiState({
         setIsPassageSelection(false);
 
         if (singleNotes.length > 0) {
-          setViewSelectedVerses(new Set([verseNumber]));
-          setOpenVerseKey(verseNumber);
-          setOpenPassageKey(null);
+          setViewSelectedVerses((prev) => new Set(prev).add(verseNumber));
+          setOpenVerseKeys((prev) => new Set(prev).add(verseNumber));
         } else if (passageAnchor === verseNumber) {
-          setViewSelectedVerses(
-            getSelectedVersesForPassageAnchor(verseNumber),
-          );
-          setOpenPassageKey(verseNumber);
-          setOpenVerseKey(null);
+          const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+          setViewSelectedVerses((prev) => {
+            const next = new Set(prev);
+            for (const v of passageVerses) next.add(v);
+            return next;
+          });
+          setOpenPassageKeys((prev) => new Set(prev).add(verseNumber));
         } else {
           addNewDraft({
             book,
@@ -387,6 +494,16 @@ export function usePassageNotesUiState({
     setHoveredVerse(null);
   }, [selectionHandleMouseUp]);
 
+  const fullResetForModeSwitch = useCallback(() => {
+    setOpenVerseKeys(new Set());
+    setOpenPassageKeys(new Set());
+    setOpenEditors(new Map());
+    setEditorHasChanges(new Set());
+    setViewSelectedVerses(new Set());
+    setIsPassageSelection(false);
+    clearSelection();
+  }, [clearSelection]);
+
   const handleSingleBubbleMouseEnter = useCallback((verseNumber: number) => {
     setHoveredSingleBubble(verseNumber);
   }, []);
@@ -413,9 +530,14 @@ export function usePassageNotesUiState({
         startVerse: verseNumber,
         endVerse: verseNumber,
       });
+      const existingNotes = singleVerseNotes.get(verseNumber) ?? [];
+      if (existingNotes.length > 0) {
+        setOpenVerseKeys((prev) => new Set(prev).add(verseNumber));
+      }
+      setViewSelectedVerses((prev) => new Set(prev).add(verseNumber));
       setIsPassageSelection(false);
     },
-    [addNewDraft, book, chapter],
+    [addNewDraft, book, chapter, singleVerseNotes],
   );
 
   const notifyEditorDirty = useCallback(
@@ -440,11 +562,9 @@ export function usePassageNotesUiState({
       await onSaveNewNote(verseRef, body, tags);
       removeEditor(newEditorKey(verseRef));
       if (verseRef.startVerse !== verseRef.endVerse) {
-        setOpenPassageKey(verseRef.startVerse);
-        setOpenVerseKey(null);
+        setOpenPassageKeys((prev) => new Set(prev).add(verseRef.startVerse));
       } else {
-        setOpenVerseKey(verseRef.startVerse);
-        setOpenPassageKey(null);
+        setOpenVerseKeys((prev) => new Set(prev).add(verseRef.startVerse));
       }
     },
     [onSaveNewNote, removeEditor],
@@ -466,14 +586,30 @@ export function usePassageNotesUiState({
   );
 
   const handleClickAway = useCallback(() => {
-    setOpenVerseKey(null);
-    setOpenPassageKey(null);
+    setOpenVerseKeys(new Set());
+    if (viewMode !== "read") {
+      setOpenPassageKeys(new Set());
+    }
     setOpenEditors(new Map());
     setEditorHasChanges(new Set());
     setViewSelectedVerses(new Set());
     setIsPassageSelection(false);
     clearSelection();
-  }, [clearSelection]);
+  }, [clearSelection, viewMode]);
+
+  const setViewModeWithNotesReset = useCallback(
+    (next: PassageViewMode) => {
+      if (next === viewMode) return;
+      if (editorHasChanges.size > 0) {
+        pendingViewModeAfterDiscardRef.current = next;
+        setShowDiscardConfirmation(true);
+        return;
+      }
+      fullResetForModeSwitch();
+      setViewMode(next);
+    },
+    [editorHasChanges, fullResetForModeSwitch, setViewMode, viewMode],
+  );
 
   const cancelEditor = useCallback(
     (key: string) => {
@@ -488,8 +624,8 @@ export function usePassageNotesUiState({
     function handleEscapeKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (
-        openVerseKey === null &&
-        openPassageKey === null &&
+        openVerseKeys.size === 0 &&
+        openPassageKeys.size === 0 &&
         openEditors.size === 0 &&
         viewSelectedVerses.size === 0
       ) {
@@ -507,8 +643,8 @@ export function usePassageNotesUiState({
   }, [
     editorHasChanges,
     handleClickAway,
-    openPassageKey,
-    openVerseKey,
+    openPassageKeys,
+    openVerseKeys,
     openEditors,
     viewSelectedVerses,
   ]);
@@ -516,28 +652,65 @@ export function usePassageNotesUiState({
   // --- Open / edit note groups ---
 
   const openVerseNotes = useCallback((verseNumber: number) => {
-    setOpenVerseKey(verseNumber);
-    setOpenPassageKey(null);
-    setViewSelectedVerses(new Set([verseNumber]));
+    setOpenVerseKeys((prev) => new Set(prev).add(verseNumber));
+    setViewSelectedVerses((prev) => new Set(prev).add(verseNumber));
+    setIsPassageSelection(false);
   }, []);
 
-  const closeVerseNotes = useCallback(() => {
-    setOpenVerseKey(null);
+  const closeVerseNotes = useCallback((verseNumber: number) => {
+    setOpenVerseKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(verseNumber);
+      return next;
+    });
+    setViewSelectedVerses((prev) => {
+      const next = new Set(prev);
+      next.delete(verseNumber);
+      return next;
+    });
   }, []);
 
   const openPassageNotes = useCallback(
     (verseNumber: number) => {
-      setOpenPassageKey(verseNumber);
-      setOpenVerseKey(null);
-      setViewSelectedVerses(getSelectedVersesForPassageAnchor(verseNumber));
+      readPassageAutoOpenSuppressedRef.current.delete(verseNumber);
+      setOpenPassageKeys((prev) => new Set(prev).add(verseNumber));
+      const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+      setOpenVerseKeys((prev) => {
+        const next = new Set(prev);
+        for (const v of passageVerses) {
+          next.delete(v);
+        }
+        return next;
+      });
+      setViewSelectedVerses((prev) => {
+        const next = new Set(prev);
+        for (const v of passageVerses) next.add(v);
+        return next;
+      });
       setIsPassageSelection(true);
     },
     [getSelectedVersesForPassageAnchor],
   );
 
-  const closePassageNotes = useCallback(() => {
-    setOpenPassageKey(null);
-  }, []);
+  const closePassageNotes = useCallback(
+    (verseNumber: number) => {
+      if (viewMode === "read") {
+        readPassageAutoOpenSuppressedRef.current.add(verseNumber);
+      }
+      setOpenPassageKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(verseNumber);
+        return next;
+      });
+      const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+      setViewSelectedVerses((prev) => {
+        const next = new Set(prev);
+        for (const v of passageVerses) next.delete(v);
+        return next;
+      });
+    },
+    [getSelectedVersesForPassageAnchor, viewMode],
+  );
 
   const startEditingNote = useCallback(
     (noteId: Id<"notes">, verseRef: VerseRef, verseNumber: number, isPassage: boolean) => {
@@ -549,14 +722,17 @@ export function usePassageNotesUiState({
         return next;
       });
       if (isPassage) {
-        setOpenPassageKey(verseNumber);
-        setOpenVerseKey(null);
-        setViewSelectedVerses(getSelectedVersesForPassageAnchor(verseNumber));
+        setOpenPassageKeys((prev) => new Set(prev).add(verseNumber));
+        const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+        setViewSelectedVerses((prev) => {
+          const next = new Set(prev);
+          for (const v of passageVerses) next.add(v);
+          return next;
+        });
         setIsPassageSelection(true);
       } else {
-        setOpenVerseKey(verseNumber);
-        setOpenPassageKey(null);
-        setViewSelectedVerses(new Set([verseNumber]));
+        setOpenVerseKeys((prev) => new Set(prev).add(verseNumber));
+        setViewSelectedVerses((prev) => new Set(prev).add(verseNumber));
         setIsPassageSelection(false);
       }
     },
@@ -572,24 +748,33 @@ export function usePassageNotesUiState({
   );
 
   const confirmDiscard = useCallback(() => {
-    handleClickAway();
+    const pending = pendingViewModeAfterDiscardRef.current;
+    pendingViewModeAfterDiscardRef.current = null;
     setShowDiscardConfirmation(false);
-  }, [handleClickAway]);
+    if (pending !== null) {
+      fullResetForModeSwitch();
+      setViewMode(pending);
+    } else {
+      handleClickAway();
+    }
+  }, [fullResetForModeSwitch, handleClickAway, setViewMode]);
 
   const cancelDiscard = useCallback(() => {
+    pendingViewModeAfterDiscardRef.current = null;
     setShowDiscardConfirmation(false);
   }, []);
 
   return {
     selectedVerses,
     passageDraftVerses,
-    canDismissOnClickAway,
+    expandedPassageRanges,
+    hasDirtyEditors,
     notifyEditorDirty,
     hoveredVerse,
     hoveredSingleBubble,
     hoveredPassageBubble,
-    openVerseKey,
-    openPassageKey,
+    openVerseKeys,
+    openPassageKeys,
     openEditors,
     editingNoteIds,
     newDraftsByAnchor,
@@ -619,5 +804,33 @@ export function usePassageNotesUiState({
     showDiscardConfirmation,
     confirmDiscard,
     cancelDiscard,
+    setViewModeWithNotesReset,
   };
+}
+
+const INTERACTIVE_SURFACE_SELECTORS = [
+  "[data-note-trigger]",
+  "[data-note-surface]",
+  "[data-verse-number]",
+  "[data-highlight-popover]",
+  "[data-highlight-toolbar]",
+] as const;
+
+const DISMISS_EXEMPT_SELECTOR = "[data-passage-dismiss-exempt]";
+
+function isInsideInteractiveSurface(event: MouseEvent): boolean {
+  const path = event.composedPath();
+  return path.some(
+    (node) =>
+      node instanceof Element &&
+      INTERACTIVE_SURFACE_SELECTORS.some((sel) => node.matches(sel)),
+  );
+}
+
+function isInsideDismissExemptChrome(event: MouseEvent): boolean {
+  const path = event.composedPath();
+  return path.some(
+    (node) =>
+      node instanceof Element && node.matches(DISMISS_EXEMPT_SELECTOR),
+  );
 }

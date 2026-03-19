@@ -20,6 +20,11 @@ export const noteBodySegmentValue = v.union(
     label: v.string(),
     ref: verseRefValue,
   }),
+  v.object({
+    type: v.literal("verseQuote"),
+    text: v.string(),
+    ref: verseRefValue,
+  }),
 );
 
 export const noteBodyValue = v.object({
@@ -64,6 +69,7 @@ export function noteBodyToPlainText(body: NoteBodyInput): string {
     .map((segment) => {
       if (segment.type === "text") return segment.text;
       if (segment.type === "lineBreak") return "\n";
+      if (segment.type === "verseQuote") return segment.text;
       return segment.label;
     })
     .join("");

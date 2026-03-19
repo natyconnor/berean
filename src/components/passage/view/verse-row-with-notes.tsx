@@ -1,7 +1,7 @@
-import { memo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { memo, useCallback } from "react";
+import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { VerseRowLeft } from "../verse-row";
+import { VerseTextPane } from "./verse-text-pane";
 import { VerseNotes } from "../verse-notes";
 import { PassageNotesBubble } from "../passage-notes-bubble";
 import { NoteEditor } from "@/components/notes/note-editor";
@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { HighlightRange } from "@/lib/highlight-utils";
 import {
-  NOTE_LAYOUT_TRANSITION,
+  LAYOUT_CORRECTION_TRANSITION,
   NOTE_ENTER_TRANSITION,
 } from "../note-animation-config";
 
@@ -37,8 +38,8 @@ export interface VerseRowWithNotesProps {
   isPassageRangeActive: boolean;
   isNoteBubbleHovered: boolean;
 
-  openVerseKey: number | null;
-  openPassageKey: number | null;
+  openVerseKeys: Set<number>;
+  openPassageKeys: Set<number>;
   draftsForThisAnchor: VerseRef[];
   editingNoteIds: Set<Id<"notes">>;
   isFocusTarget?: boolean;
@@ -52,9 +53,9 @@ export interface VerseRowWithNotesProps {
   onPassageBubbleMouseEnter: (verseNumber: number) => void;
   onPassageBubbleMouseLeave: () => void;
   onOpenVerseNotes: (verseNumber: number) => void;
-  onCloseVerseNotes: () => void;
+  onCloseVerseNotes: (verseNumber: number) => void;
   onOpenPassageNotes: (verseNumber: number) => void;
-  onClosePassageNotes: () => void;
+  onClosePassageNotes: (verseNumber: number) => void;
   onEditNote: (
     noteId: Id<"notes">,
     verseRef: VerseRef,
@@ -75,6 +76,15 @@ export interface VerseRowWithNotesProps {
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  highlights?: HighlightRange[];
+  onCreateHighlight?: (
+    verse: number,
+    startOffset: number,
+    endOffset: number,
+    color: string,
+  ) => void;
+  onDeleteHighlight?: (highlightId: string) => void;
+  onRecolorHighlight?: (highlightId: string, color: string) => void;
   forceAddButtonVisible?: boolean;
   addNoteTourId?: string;
   rowTourId?: string;
@@ -94,8 +104,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   passageAnchor,
   isPassageRangeActive,
   isNoteBubbleHovered,
-  openVerseKey,
-  openPassageKey,
+  openVerseKeys,
+  openPassageKeys,
   draftsForThisAnchor,
   editingNoteIds,
   isFocusTarget = false,
@@ -118,6 +128,10 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onCancelEditor,
   onEditorDirtyChange,
   onStartCreatingPassageNote,
+  highlights,
+  onCreateHighlight,
+  onDeleteHighlight,
+  onRecolorHighlight,
   forceAddButtonVisible = false,
   addNoteTourId,
   rowTourId,
@@ -129,8 +143,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const isPassageAnchor = passageNotes.length > 0;
   const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor;
 
-  const isVerseOpen = openVerseKey === verseNumber;
-  const isPassageOpen = openPassageKey === verseNumber;
+  const isVerseOpen = openVerseKeys.has(verseNumber);
+  const isPassageOpen = openPassageKeys.has(verseNumber);
   const isCreatingHere = draftsForThisAnchor.length > 0;
 
   const isEditingSingleHere =
@@ -148,18 +162,35 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     isEditingPassageHere;
 
   const hasBothNoteTypes = singleNotes.length > 0 && passageNotes.length > 0;
-  const useSideBySide = !isReadMode && hasBothNoteTypes && !isCreatingHere;
-  const showVerseAsPill = useSideBySide && isPassageOpen;
+  const useSideBySide = hasBothNoteTypes && !isCreatingHere;
+  const showVerseAsPill =
+    useSideBySide &&
+    isPassageOpen &&
+    (isVerseOpen || isReadMode || isEditingSingleHere);
   const showPassageAsPill =
-    useSideBySide && (isVerseOpen || isEditingSingleHere) && !isPassageOpen;
+    useSideBySide &&
+    !isPassageOpen &&
+    (isVerseOpen || isEditingSingleHere || isReadMode);
   const showPassageCompact =
     useSideBySide && !isPassageOpen && !showPassageAsPill;
+
+  const isExpanded =
+    !isReadMode &&
+    (isVerseOpen || isPassageOpen || isCreatingHere || isEditingSingleHere || isEditingPassageHere);
+
+  const handleCollapseVerse = useCallback(() => {
+    if (isVerseOpen) onCloseVerseNotes(verseNumber);
+    if (isPassageOpen) onClosePassageNotes(verseNumber);
+    for (const draft of draftsForThisAnchor) {
+      onCancelEditor(`new:${draft.startVerse}:${draft.endVerse}`);
+    }
+  }, [isVerseOpen, isPassageOpen, verseNumber, onCloseVerseNotes, onClosePassageNotes, draftsForThisAnchor, onCancelEditor]);
 
   const passageNoteJsx =
     passageNotes.length > 0 ? (
       <motion.div
-        layout
-        transition={{ layout: NOTE_LAYOUT_TRANSITION }}
+        layout="position"
+        transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
         className={cn(
           useSideBySide &&
             (isPassageOpen
@@ -191,7 +222,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               : undefined
           }
           onOpen={() => onOpenPassageNotes(verseNumber)}
-          onClose={onClosePassageNotes}
+          onClose={() => onClosePassageNotes(verseNumber)}
           onEdit={(noteId: Id<"notes">) => {
             const note = passageNotes.find((n) => n.noteId === noteId);
             if (note) onEditNote(noteId, note.verseRef, verseNumber, true);
@@ -212,9 +243,10 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     ) : null;
 
   return (
-    <motion.div
-      layout="position"
-      transition={{ layout: NOTE_LAYOUT_TRANSITION }}
+    // LayoutGroup scopes all layout animations to this single verse row so
+    // that a layout change in row N never triggers layout corrections in row M.
+    <LayoutGroup id={`verse-row-${verseNumber}`}>
+    <div
       className={cn(
         "relative overflow-visible hover:z-10 focus-within:z-10",
         isReadMode
@@ -222,8 +254,12 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start",
       )}
     >
-      <div>
-        <VerseRowLeft
+      <motion.div
+        layout="position"
+        transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
+        className="flex h-full flex-col"
+      >
+        <VerseTextPane
           verseNumber={verseNumber}
           text={text}
           selection={{
@@ -243,6 +279,12 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           focus={{
             isTarget: isFocusTarget,
           }}
+          isExpanded={isExpanded}
+          onCollapseVerse={handleCollapseVerse}
+          highlights={highlights}
+          onCreateHighlight={onCreateHighlight}
+          onDeleteHighlight={onDeleteHighlight}
+          onRecolorHighlight={onRecolorHighlight}
           forceAddButtonVisible={forceAddButtonVisible}
           addNoteTourId={addNoteTourId}
           rowTourId={rowTourId}
@@ -253,21 +295,21 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
             onMouseLeave,
           }}
         />
-      </div>
+      </motion.div>
 
       <motion.div
-        layout
-        transition={{ layout: NOTE_LAYOUT_TRANSITION }}
+        layout="position"
+        transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
         className={cn(
-          "py-1",
+          "py-1 select-none",
           useSideBySide ? "flex gap-2 items-start" : "space-y-1.5",
         )}
         {...(isAnyOpen ? { "data-notes-open": "" } : {})}
       >
         {singleNotes.length > 0 ? (
           <motion.div
-            layout
-            transition={{ layout: NOTE_LAYOUT_TRANSITION }}
+            layout="position"
+            transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
             className={cn(
               useSideBySide &&
                 (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"),
@@ -295,7 +337,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                   : undefined
               }
               onOpen={() => onOpenVerseNotes(verseNumber)}
-              onClose={onCloseVerseNotes}
+              onClose={() => onCloseVerseNotes(verseNumber)}
               onEdit={(noteId) => {
                 const note = singleNotes.find((n) => n.noteId === noteId);
                 if (note) onEditNote(noteId, note.verseRef, verseNumber, false);
@@ -342,6 +384,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
             })}
         </AnimatePresence>
       </motion.div>
-    </motion.div>
+    </div>
+    </LayoutGroup>
   );
 });

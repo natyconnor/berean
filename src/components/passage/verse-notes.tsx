@@ -19,7 +19,7 @@ import {
   NoteContent,
 } from "@/components/notes/view/note-card-primitives";
 import { NoteBubbleShell, type BubbleState } from "./view/note-bubble-shell";
-import { NOTE_LAYOUT_TRANSITION } from "./note-animation-config";
+import { LAYOUT_CORRECTION_TRANSITION } from "./note-animation-config";
 
 export type VerseNote = NoteWithRef;
 
@@ -109,7 +109,7 @@ export const VerseNotes = memo(function VerseNotes({
       expanded={
         <div
           data-note-surface
-          className={isReadMode ? "space-y-3" : "space-y-1.5"}
+          className={isReadMode ? "space-y-3" : "min-h-[96px] space-y-1.5"}
           onClick={(e) => e.stopPropagation()}
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
@@ -147,7 +147,7 @@ export const VerseNotes = memo(function VerseNotes({
               key={note.noteId}
               layout
               transition={{
-                layout: NOTE_LAYOUT_TRANSITION,
+                layout: LAYOUT_CORRECTION_TRANSITION,
                 delay: index * 0.03,
               }}
             >
@@ -262,7 +262,7 @@ function StackedBubble({
   );
 }
 
-function VerseNotesPill({
+export function VerseNotesPill({
   count,
   onClick,
 }: {

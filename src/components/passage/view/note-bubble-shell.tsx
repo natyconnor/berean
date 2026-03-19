@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  NOTE_ENTER_TRANSITION,
-  NOTE_CONTENT_VARIANTS,
-  NOTE_FADE_VARIANTS,
-} from "../note-animation-config";
+import { NOTE_ENTER_TRANSITION } from "../note-animation-config";
 
 export type BubbleState = "pill" | "collapsed" | "expanded";
 
@@ -21,18 +17,24 @@ export function NoteBubbleShell({
   collapsed,
   expanded,
 }: NoteBubbleShellProps) {
-  const variants =
-    state === "expanded" ? NOTE_CONTENT_VARIANTS : NOTE_FADE_VARIANTS;
+  const isExpanded = state === "expanded";
 
   return (
-    <AnimatePresence mode="popLayout" initial={false}>
+    <AnimatePresence initial={false} mode="popLayout">
       <motion.div
         key={state}
-        variants={variants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        transition={NOTE_ENTER_TRANSITION}
+        initial={isExpanded ? { opacity: 0, height: 0 } : { opacity: 0 }}
+        animate={isExpanded ? { opacity: 1, height: "auto" } : { opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={
+          isExpanded
+            ? {
+                opacity: NOTE_ENTER_TRANSITION,
+                height: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+              }
+            : NOTE_ENTER_TRANSITION
+        }
+        style={isExpanded ? { overflow: "hidden" } : undefined}
       >
         {state === "pill"
           ? pill

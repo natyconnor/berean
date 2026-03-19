@@ -1,5 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuery } from "convex-helpers/react/cache";
+import { useMutation } from "convex/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,10 +17,12 @@ import { ChapterHeader } from "@/components/bible/chapter-header";
 import { ChapterPager } from "@/components/bible/chapter-pager";
 import { CopyrightNotice } from "@/components/bible/copyright-notice";
 import { VerseRowWithNotes } from "./view/verse-row-with-notes";
+import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
 import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
 import { NoteEditor } from "@/components/notes/note-editor";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { HighlightRange } from "@/lib/highlight-utils";
 import { BookOpen, Loader2, Pencil } from "lucide-react";
 import { useTabs } from "@/lib/use-tabs";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
@@ -27,7 +31,8 @@ import { usePassageViewMode } from "./hooks/use-passage-view-mode";
 import { usePassageKeyboardShortcuts } from "./hooks/use-passage-keyboard-shortcuts";
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
 import { usePassageViewTour } from "./hooks/use-passage-view-tour";
-import { NOTE_LAYOUT_TRANSITION } from "./note-animation-config";
+import { NOTE_ENTER_TRANSITION, CROSSFADE_TRANSITION } from "./note-animation-config";
+import { api } from "../../../convex/_generated/api";
 
 interface PassageViewProps {
   book: string;
@@ -39,6 +44,22 @@ interface PassageViewProps {
 
 type PassageViewMode = "compose" | "read";
 type NoteVisibility = "all" | "noted";
+
+type VerseItem =
+  | {
+      kind: "single";
+      verseNumber: number;
+      text: string;
+      singleNotes: NoteWithRef[];
+      passageNotes: NoteWithRef[];
+    }
+  | {
+      kind: "passageGroup";
+      anchorVerse: number;
+      verses: Array<{ verseNumber: number; text: string }>;
+      passageNotes: NoteWithRef[];
+      singleNotesByVerse: Map<number, NoteWithRef[]>;
+    };
 
 export function PassageView({
   book,
@@ -52,10 +73,17 @@ export function PassageView({
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
+  const { effectiveViewMode, isReadMode, editorMode, setViewMode } =
+    usePassageViewMode({
+      focusRange,
+      forcedViewMode,
+      focusSource,
+    });
   const {
     containerRef,
     selectedVerses,
     passageDraftVerses,
+    expandedPassageRanges,
     isInSelection,
     isPassageSelection,
     singleVerseNotes,
@@ -64,8 +92,8 @@ export function PassageView({
     hoveredVerse,
     hoveredPassageBubble,
     hoveredSingleBubble,
-    openVerseKey,
-    openPassageKey,
+    openVerseKeys,
+    openPassageKeys,
     openEditors,
     editingNoteIds,
     newDraftsByAnchor,
@@ -89,26 +117,76 @@ export function PassageView({
     handleClickAway,
     cancelEditor,
     notifyEditorDirty,
-    canDismissOnClickAway,
+    hasDirtyEditors,
     startCreatingPassageNote,
     showDiscardConfirmation,
     confirmDiscard,
     cancelDiscard,
-  } = usePassageNotesInteraction(book, chapter);
+    setViewModeWithNotesReset,
+  } = usePassageNotesInteraction(book, chapter, {
+    viewMode: effectiveViewMode,
+    setViewMode,
+  });
 
-  const { effectiveViewMode, isReadMode, editorMode, setViewMode } =
-    usePassageViewMode({
-      focusRange,
-      forcedViewMode,
-      focusSource,
-    });
+  const chapterHighlights = useQuery(api.highlights.getForChapter, {
+    book,
+    chapter,
+  });
+  const createHighlightMutation = useMutation(api.highlights.create);
+  const removeHighlightMutation = useMutation(api.highlights.remove);
+  const updateHighlightColorMutation = useMutation(api.highlights.updateColor);
+
+  const highlightsByVerse = useMemo(() => {
+    const map = new Map<number, HighlightRange[]>();
+    if (!chapterHighlights) return map;
+    for (const hl of chapterHighlights) {
+      const ranges = map.get(hl.verse) ?? [];
+      ranges.push({
+        highlightId: hl._id,
+        startOffset: hl.startOffset,
+        endOffset: hl.endOffset,
+        color: hl.color,
+        createdAt: hl.createdAt,
+      });
+      map.set(hl.verse, ranges);
+    }
+    return map;
+  }, [chapterHighlights]);
+
+  const handleCreateHighlight = useCallback(
+    (verse: number, startOffset: number, endOffset: number, color: string) => {
+      void createHighlightMutation({
+        book,
+        chapter,
+        verse,
+        startOffset,
+        endOffset,
+        color,
+      });
+    },
+    [book, chapter, createHighlightMutation],
+  );
+
+  const handleDeleteHighlight = useCallback(
+    (highlightId: string) => {
+      void removeHighlightMutation({ id: highlightId as Id<"highlights"> });
+    },
+    [removeHighlightMutation],
+  );
+
+  const handleRecolorHighlight = useCallback(
+    (highlightId: string, color: string) => {
+      void updateHighlightColorMutation({ id: highlightId as Id<"highlights">, color });
+    },
+    [updateHighlightColorMutation],
+  );
 
   const { forceAddButtonVisible, displaySingleVerseNotes } = usePassageViewTour(
     {
       book,
       chapter,
       effectiveViewMode,
-      setViewMode,
+      setViewMode: setViewModeWithNotesReset,
       singleVerseNotes,
       openEditors,
       handleClickAway,
@@ -146,14 +224,50 @@ export function PassageView({
 
   const hasAnyNotes = noteById.size > 0;
 
-  const filteredVerses = useMemo(() => {
+  const filteredVerses = useMemo((): VerseItem[] => {
     if (!data) return [];
 
-    return data.verses.flatMap((verse) => {
+    const mergedVerses = new Set<number>();
+    for (const range of expandedPassageRanges) {
+      for (let v = range.startVerse; v <= range.endVerse; v++) {
+        mergedVerses.add(v);
+      }
+    }
+
+    const items: VerseItem[] = [];
+
+    for (const verse of data.verses) {
+      if (mergedVerses.has(verse.number)) {
+        const range = expandedPassageRanges.find(
+          (r) => r.anchorVerse === verse.number,
+        );
+        if (range) {
+          const blockVerses = data.verses
+            .filter(
+              (v) => v.number >= range.startVerse && v.number <= range.endVerse,
+            )
+            .map((v) => ({ verseNumber: v.number, text: v.text }));
+          const singleNotesByVerse = new Map<number, NoteWithRef[]>();
+          for (const v of blockVerses) {
+            const notes = displaySingleVerseNotes.get(v.verseNumber);
+            if (notes && notes.length > 0)
+              singleNotesByVerse.set(v.verseNumber, notes);
+          }
+          items.push({
+            kind: "passageGroup",
+            anchorVerse: range.anchorVerse,
+            verses: blockVerses,
+            passageNotes: passageNotesByAnchor.get(range.anchorVerse) ?? [],
+            singleNotesByVerse,
+          });
+        }
+        continue;
+      }
+
       const singleNotes = displaySingleVerseNotes.get(verse.number) ?? [];
       const passageNotes = passageNotesByAnchor.get(verse.number) ?? [];
-
-      const hasVisibleNotes = singleNotes.length > 0 || passageNotes.length > 0;
+      const hasVisibleNotes =
+        singleNotes.length > 0 || passageNotes.length > 0;
       if (
         isReadMode &&
         !hasFocusRange &&
@@ -161,20 +275,22 @@ export function PassageView({
         hasAnyNotes &&
         !hasVisibleNotes
       ) {
-        return [];
+        continue;
       }
 
-      return [
-        {
-          verseNumber: verse.number,
-          text: verse.text,
-          singleNotes,
-          passageNotes,
-        },
-      ];
-    });
+      items.push({
+        kind: "single",
+        verseNumber: verse.number,
+        text: verse.text,
+        singleNotes,
+        passageNotes,
+      });
+    }
+
+    return items;
   }, [
     data,
+    expandedPassageRanges,
     hasAnyNotes,
     hasFocusRange,
     isReadMode,
@@ -182,6 +298,31 @@ export function PassageView({
     noteVisibility,
     displaySingleVerseNotes,
   ]);
+
+  const currentGroupedVerses = useMemo(() => {
+    const set = new Set<number>();
+    for (const range of expandedPassageRanges) {
+      for (let v = range.startVerse; v <= range.endVerse; v++) {
+        set.add(v);
+      }
+    }
+    return set;
+  }, [expandedPassageRanges]);
+
+  const prevGroupedVersesRef = useRef<Set<number>>(new Set());
+  const reenteringFromGroup = useMemo(() => {
+    const set = new Set<number>();
+    for (const v of prevGroupedVersesRef.current) {
+      if (!currentGroupedVerses.has(v)) {
+        set.add(v);
+      }
+    }
+    return set;
+  }, [currentGroupedVerses]);
+
+  useEffect(() => {
+    prevGroupedVersesRef.current = currentGroupedVerses;
+  }, [currentGroupedVerses]);
 
   const dialogDraft = useMemo(() => {
     for (const slot of openEditors.values()) {
@@ -211,7 +352,7 @@ export function PassageView({
     previous,
     next,
     navigateActiveTab,
-    setViewMode,
+    setViewMode: setViewModeWithNotesReset,
   });
 
   const { isScrolled } = usePassageScrollRestoration({
@@ -256,6 +397,7 @@ export function PassageView({
           "shrink-0 bg-background transition-shadow duration-200",
           isScrolled && "shadow-sm",
         )}
+        data-passage-dismiss-exempt
       >
         <div className={cn("grid", passageGridClass, headerInnerClass)}>
           <div className="flex items-center">
@@ -275,7 +417,7 @@ export function PassageView({
                   variant={
                     effectiveViewMode === "compose" ? "secondary" : "ghost"
                   }
-                  onClick={() => setViewMode("compose")}
+                  onClick={() => setViewModeWithNotesReset("compose")}
                   className="gap-1.5"
                 >
                   <Pencil className="h-3 w-3" />
@@ -287,7 +429,7 @@ export function PassageView({
                 <Button
                   size="xs"
                   variant={effectiveViewMode === "read" ? "secondary" : "ghost"}
-                  onClick={() => setViewMode("read")}
+                  onClick={() => setViewModeWithNotesReset("read")}
                   className="gap-1.5"
                 >
                   <BookOpen className="h-3 w-3" />
@@ -346,55 +488,118 @@ export function PassageView({
           onMouseLeave={handleMouseUp}
         >
           <div>
-            <AnimatePresence initial={false}>
-              {filteredVerses.map((verse) => {
+            <AnimatePresence initial={false} mode="popLayout">
+              {filteredVerses.map((item) => {
+                if (item.kind === "passageGroup") {
+                  return (
+                    <motion.div
+                      key={`passage-group-${item.anchorVerse}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={CROSSFADE_TRANSITION}
+                    >
+                      <PassageGroupWithNotes
+                        verses={item.verses}
+                        passageNotes={item.passageNotes}
+                        singleNotesByVerse={item.singleNotesByVerse}
+                        viewMode={effectiveViewMode}
+                        editorMode={editorMode}
+                        currentChapter={{ book, chapter }}
+                        highlightsByVerse={highlightsByVerse}
+                        onCreateHighlight={handleCreateHighlight}
+                        onDeleteHighlight={handleDeleteHighlight}
+                        onRecolorHighlight={handleRecolorHighlight}
+                        isPassageOpen={openPassageKeys.has(item.anchorVerse)}
+                        editingNoteIds={editingNoteIds}
+                        draftsForAnchor={
+                          newDraftsByAnchor.get(item.anchorVerse) ?? []
+                        }
+                        onOpenPassageNotes={openPassageNotes}
+                        onClosePassageNotes={closePassageNotes}
+                        onOpenVerseNotes={openVerseNotes}
+                        onEditNote={startEditingNote}
+                        onDelete={handleDelete}
+                        onSaveEdit={handleSaveEdit}
+                        onSaveNew={handleSaveNew}
+                        onCancelEditor={cancelEditor}
+                        onEditorDirtyChange={notifyEditorDirty}
+                        onStartCreatingPassageNote={startCreatingPassageNote}
+                        onPassageBubbleMouseEnter={handlePassageBubbleMouseEnter}
+                        onPassageBubbleMouseLeave={handlePassageBubbleMouseLeave}
+                        onCollapse={() =>
+                          closePassageNotes(item.anchorVerse)
+                        }
+                      />
+                    </motion.div>
+                  );
+                }
+
                 const passageAnchor = verseToPassageAnchor.get(
-                  verse.verseNumber,
+                  item.verseNumber,
                 );
                 const isPassageRangeActive =
                   passageAnchor !== undefined &&
                   (hoveredVerse === passageAnchor ||
                     hoveredPassageBubble === passageAnchor);
                 const isNoteBubbleHovered =
-                  hoveredSingleBubble === verse.verseNumber ||
-                  hoveredPassageBubble === verse.verseNumber;
+                  hoveredSingleBubble === item.verseNumber ||
+                  hoveredPassageBubble === item.verseNumber;
+
+                const isReentering = reenteringFromGroup.has(item.verseNumber);
 
                 return (
                   <motion.div
-                    key={verse.verseNumber}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={NOTE_LAYOUT_TRANSITION}
-                    style={{ overflow: "visible" }}
+                    key={item.verseNumber}
+                    initial={
+                      isReentering
+                        ? { opacity: 0 }
+                        : { height: 0, opacity: 0 }
+                    }
+                    animate={
+                      isReentering
+                        ? { opacity: 1 }
+                        : {
+                            height: "auto",
+                            opacity: 1,
+                            transitionEnd: { overflow: "visible" },
+                          }
+                    }
+                    exit={{ opacity: 0 }}
+                    transition={
+                      isReentering
+                        ? CROSSFADE_TRANSITION
+                        : NOTE_ENTER_TRANSITION
+                    }
+                    style={isReentering ? undefined : { overflow: "hidden" }}
                   >
                     <VerseRowWithNotes
-                      verseNumber={verse.verseNumber}
-                      text={verse.text}
+                      verseNumber={item.verseNumber}
+                      text={item.text}
                       viewMode={effectiveViewMode}
                       editorMode={editorMode}
                       currentChapter={{ book, chapter }}
                       selectedVerses={selectedVerses}
-                      isInSelectionRange={isInSelection(verse.verseNumber)}
+                      isInSelectionRange={isInSelection(item.verseNumber)}
                       isPassageSelection={
-                        passageDraftVerses.has(verse.verseNumber) ||
+                        passageDraftVerses.has(item.verseNumber) ||
                         isPassageSelection
                       }
-                      singleNotes={verse.singleNotes}
-                      passageNotes={verse.passageNotes}
+                      singleNotes={item.singleNotes}
+                      passageNotes={item.passageNotes}
                       passageAnchor={passageAnchor}
                       isPassageRangeActive={isPassageRangeActive}
                       isNoteBubbleHovered={isNoteBubbleHovered}
-                      openVerseKey={openVerseKey}
-                      openPassageKey={openPassageKey}
+                      openVerseKeys={openVerseKeys}
+                      openPassageKeys={openPassageKeys}
                       draftsForThisAnchor={
-                        newDraftsByAnchor.get(verse.verseNumber) ?? []
+                        newDraftsByAnchor.get(item.verseNumber) ?? []
                       }
                       editingNoteIds={editingNoteIds}
                       isFocusTarget={
                         hasFocusRange
-                          ? verse.verseNumber >= focusRange.startVerse &&
-                            verse.verseNumber <= focusRange.endVerse
+                          ? item.verseNumber >= focusRange.startVerse &&
+                            item.verseNumber <= focusRange.endVerse
                           : false
                       }
                       onAddNote={handleAddNote}
@@ -416,14 +621,18 @@ export function PassageView({
                       onCancelEditor={cancelEditor}
                       onEditorDirtyChange={notifyEditorDirty}
                       onStartCreatingPassageNote={startCreatingPassageNote}
+                      highlights={highlightsByVerse.get(item.verseNumber)}
+                      onCreateHighlight={handleCreateHighlight}
+                      onDeleteHighlight={handleDeleteHighlight}
+                      onRecolorHighlight={handleRecolorHighlight}
                       forceAddButtonVisible={
-                        forceAddButtonVisible && verse.verseNumber === 1
+                        forceAddButtonVisible && item.verseNumber === 1
                       }
                       addNoteTourId={
-                        verse.verseNumber === 1 ? "passage-add-note" : undefined
+                        item.verseNumber === 1 ? "passage-add-note" : undefined
                       }
                       rowTourId={
-                        verse.verseNumber === 1 ? "passage-verse-1" : undefined
+                        item.verseNumber === 1 ? "passage-verse-1" : undefined
                       }
                     />
                   </motion.div>
@@ -442,7 +651,7 @@ export function PassageView({
 
           <Dialog
             open={shouldShowQuickCaptureDialog}
-            onOpenChange={(open) => !open && canDismissOnClickAway && handleClickAway()}
+            onOpenChange={(open) => !open && !hasDirtyEditors && handleClickAway()}
           >
             <DialogContent className="sm:max-w-2xl">
               <DialogHeader>
