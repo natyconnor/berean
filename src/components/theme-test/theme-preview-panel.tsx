@@ -1,4 +1,4 @@
-import type { AppTheme } from "./theme-types";
+import type { AppTheme } from "@/themes/theme-types";
 import { MockUI } from "./mock-ui";
 
 interface ThemePreviewPanelProps {

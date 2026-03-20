@@ -13,8 +13,8 @@ vi.mock("@/hooks/use-verse-selection", () => ({
     selectionEnd: null,
     isSelecting: false,
     isInSelection: () => false,
-    handleMouseDown: (_v: number) => {},
-    handleMouseEnter: (_v: number) => {},
+    handleMouseDown: () => {},
+    handleMouseEnter: () => {},
     handleMouseUp: () => {
       onComplete({ startVerse: 1, endVerse: 1 });
       return true;
@@ -248,7 +248,7 @@ describe("usePassageNotesUiState view mode switch", () => {
     act(() => {
       result.current.handleAddNote(1);
     });
-    const editorKey = Array.from(result.current.openEditors.keys())[0]!;
+    const editorKey = Array.from(result.current.openEditors.keys())[0];
 
     act(() => {
       result.current.notifyEditorDirty(editorKey, true);

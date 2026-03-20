@@ -1,7 +1,7 @@
-import type { AppTheme } from "@/components/theme-test/theme-types";
-import { warmManuscriptTheme } from "@/components/theme-test/theme-warm-manuscript";
-import { deepIndigoTheme } from "@/components/theme-test/theme-deep-indigo";
-import { forestSageTheme } from "@/components/theme-test/theme-forest-sage";
+import type { AppTheme } from "@/themes/theme-types";
+import { warmManuscriptTheme } from "@/themes/theme-warm-manuscript";
+import { deepIndigoTheme } from "@/themes/theme-deep-indigo";
+import { forestSageTheme } from "@/themes/theme-forest-sage";
 
 export const THEMES: AppTheme[] = [
   warmManuscriptTheme,

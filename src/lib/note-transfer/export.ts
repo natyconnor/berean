@@ -1,4 +1,4 @@
-import type { EsvVerse } from "@/lib/esv-api";
+import type { EsvVerse } from "../../../shared/esv-api";
 import { BIBLE_BOOKS } from "@/lib/bible-books";
 import {
   formatExportWorkbookFileName,

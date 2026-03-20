@@ -1,12 +1,11 @@
 import { query, mutation } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
   chapterNoteEntryValue,
   noteSummaryValue,
   verseRefLinkValue,
-  type ChapterNoteEntry,
   type NoteSummary,
   type VerseRefLink,
   type VerseRefSummary,
@@ -151,27 +150,49 @@ export const getNotesForChapter = query({
       )
       .collect();
 
-    const result: ChapterNoteEntry[] = [];
+    const linksByVerseRef = await Promise.all(
+      verseRefs.map(async (ref) => ({
+        ref,
+        links: await ctx.db
+          .query("noteVerseLinks")
+          .withIndex("by_userId_verseRefId", (q) =>
+            q.eq("userId", userId).eq("verseRefId", ref._id),
+          )
+          .collect(),
+      })),
+    );
 
-    for (const ref of verseRefs) {
-      const links = await ctx.db
-        .query("noteVerseLinks")
-        .withIndex("by_userId_verseRefId", (q) =>
-          q.eq("userId", userId).eq("verseRefId", ref._id),
-        )
-        .collect();
-      const rawNotes = await Promise.all(
-        links.map((l) => ctx.db.get(l.noteId)),
-      );
-      const notes = rawNotes.filter(isNote);
-      if (notes.length > 0) {
-        result.push({
-          verseRef: toVerseRefSummary(ref),
-          notes: notes.map(toNoteSummary),
-        });
+    const uniqueNoteIds = new Set<string>();
+    for (const entry of linksByVerseRef) {
+      for (const link of entry.links) {
+        uniqueNoteIds.add(String(link.noteId));
       }
     }
 
-    return result;
+    const rawNotes = await Promise.all(
+      Array.from(uniqueNoteIds).map((noteId) =>
+        ctx.db.get(noteId as Id<"notes">),
+      ),
+    );
+    const notesById = new Map(
+      rawNotes
+        .filter(isNote)
+        .map((note) => [String(note._id), note] as const),
+    );
+
+    return linksByVerseRef.flatMap(({ ref, links }) => {
+      const notes = links.flatMap((link) => {
+        const note = notesById.get(String(link.noteId));
+        return note ? [toNoteSummary(note)] : [];
+      });
+      return notes.length > 0
+        ? [
+            {
+              verseRef: toVerseRefSummary(ref),
+              notes,
+            },
+          ]
+        : [];
+    });
   },
 });

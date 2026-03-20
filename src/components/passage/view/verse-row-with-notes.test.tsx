@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { VerseRowWithNotes } from "./verse-row-with-notes";
 import type { HighlightRange } from "@/lib/highlight-utils";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const VERSE_TEXT = "In the beginning";
 
@@ -30,8 +31,8 @@ function defaultProps() {
     passageAnchor: undefined,
     isPassageRangeActive: false,
     isNoteBubbleHovered: false,
-    openVerseKey: null as number | null,
-    openPassageKey: null as number | null,
+    openVerseKeys: new Set<number>(),
+    openPassageKeys: new Set<number>(),
     draftsForThisAnchor: [] as never[],
     editingNoteIds: new Set<Id<"notes">>(),
     onAddNote: vi.fn(),
@@ -71,11 +72,19 @@ function clickMark(mark: HTMLElement) {
   fireEvent.pointerUp(mark, { clientX: 10, clientY: 10 });
 }
 
+function renderVerseRow(props: ReturnType<typeof defaultProps>) {
+  return render(
+    <TooltipProvider>
+      <VerseRowWithNotes {...props} />
+    </TooltipProvider>,
+  );
+}
+
 describe("VerseRowWithNotes – highlight interaction", () => {
   it("opens the popover when clicking a highlight in an expanded verse", () => {
     const props = defaultProps();
-    props.openVerseKey = 1;
-    const { container } = render(<VerseRowWithNotes {...props} />);
+    props.openVerseKeys = new Set([1]);
+    const { container } = renderVerseRow(props);
 
     clickMark(getExpandedMark(container));
 
@@ -86,8 +95,8 @@ describe("VerseRowWithNotes – highlight interaction", () => {
   it("invokes the recolor callback and closes the popover on color selection", async () => {
     const user = userEvent.setup();
     const props = defaultProps();
-    props.openVerseKey = 1;
-    const { container } = render(<VerseRowWithNotes {...props} />);
+    props.openVerseKeys = new Set([1]);
+    const { container } = renderVerseRow(props);
 
     clickMark(getExpandedMark(container));
     await user.click(screen.getByTitle("Change to Green"));
@@ -98,8 +107,8 @@ describe("VerseRowWithNotes – highlight interaction", () => {
   it("invokes the delete callback and closes the popover on delete", async () => {
     const user = userEvent.setup();
     const props = defaultProps();
-    props.openVerseKey = 1;
-    const { container } = render(<VerseRowWithNotes {...props} />);
+    props.openVerseKeys = new Set([1]);
+    const { container } = renderVerseRow(props);
 
     clickMark(getExpandedMark(container));
     await user.click(screen.getByTitle("Remove highlight"));
@@ -110,12 +119,12 @@ describe("VerseRowWithNotes – highlight interaction", () => {
   it("supports keyboard activation on popover buttons", async () => {
     const user = userEvent.setup();
     const props = defaultProps();
-    props.openVerseKey = 1;
-    const { container } = render(<VerseRowWithNotes {...props} />);
+    props.openVerseKeys = new Set([1]);
+    const { container } = renderVerseRow(props);
 
     clickMark(getExpandedMark(container));
 
-    await user.tab();
+    screen.getByTitle("Change to Yellow").focus();
     await user.keyboard("{Enter}");
 
     expect(props.onRecolorHighlight).toHaveBeenCalledWith("hl_1", "yellow");
@@ -123,8 +132,7 @@ describe("VerseRowWithNotes – highlight interaction", () => {
 
   it("does not open the popover when clicking a collapsed verse with a highlight", () => {
     const props = defaultProps();
-    props.openVerseKey = null;
-    const { container } = render(<VerseRowWithNotes {...props} />);
+    const { container } = renderVerseRow(props);
 
     const row = container.querySelector('[data-verse-number="1"]')!;
     fireEvent.mouseDown(row);

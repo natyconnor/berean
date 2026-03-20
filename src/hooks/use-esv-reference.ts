@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { EsvChapterData } from "@/lib/esv-api";
+import type { EsvChapterData } from "../../shared/esv-api";
 import { useCachedEsvQuery } from "@/hooks/use-cached-esv-query";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 

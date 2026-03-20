@@ -60,8 +60,9 @@ export const getLinksForVerseRef = query({
       .collect();
     const asSecond = await ctx.db
       .query("verseLinks")
-      .withIndex("by_verseRefId2", (q) => q.eq("verseRefId2", args.verseRefId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_userId_verseRefId2", (q) =>
+        q.eq("userId", userId).eq("verseRefId2", args.verseRefId),
+      )
       .collect();
 
     const linkedIds = [

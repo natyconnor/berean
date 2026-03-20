@@ -8,7 +8,8 @@ import {
   type EsvChapterData,
   type EsvChapterResult,
 } from "./lib/publicValues";
-import { parseEsvResponse } from "../src/lib/esv-api";
+import { requireActionIdentity } from "./lib/auth";
+import { parseEsvResponse } from "../shared/esv-api";
 
 function parseJsonBody(value: string): unknown {
   return JSON.parse(value) as unknown;
@@ -53,7 +54,8 @@ export const getPassageText = action({
     query: v.string(),
   },
   returns: esvChapterDataValue,
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    await requireActionIdentity(ctx);
     const apiKey = process.env.ESV_API_KEY;
     if (!apiKey)
       throw new Error(
@@ -69,7 +71,8 @@ export const getChaptersTextBatch = action({
     chapters: v.array(v.number()),
   },
   returns: v.array(esvChapterResultValue),
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    await requireActionIdentity(ctx);
     const apiKey = process.env.ESV_API_KEY;
     if (!apiKey) {
       throw new Error(

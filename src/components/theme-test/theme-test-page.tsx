@@ -1,7 +1,7 @@
 import { ThemePreviewPanel } from "./theme-preview-panel";
-import { warmManuscriptTheme } from "./theme-warm-manuscript";
-import { deepIndigoTheme } from "./theme-deep-indigo";
-import { forestSageTheme } from "./theme-forest-sage";
+import { warmManuscriptTheme } from "@/themes/theme-warm-manuscript";
+import { deepIndigoTheme } from "@/themes/theme-deep-indigo";
+import { forestSageTheme } from "@/themes/theme-forest-sage";
 
 export function ThemeTestPage() {
   const themes = [warmManuscriptTheme, deepIndigoTheme, forestSageTheme];

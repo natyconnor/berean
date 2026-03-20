@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { AppTheme } from "@/components/theme-test/theme-types";
+import type { AppTheme } from "@/themes/theme-types";
 
 export interface ThemeContextValue {
   theme: AppTheme;

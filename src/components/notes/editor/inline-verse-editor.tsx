@@ -29,7 +29,7 @@ import {
   type VerseRef,
   type VerseSuggestionItem,
 } from "@/lib/verse-ref-utils";
-import { getVerseRefBoundsErrorMessage } from "@/lib/verse-ref-validation";
+import { getVerseRefBoundsErrorMessage } from "../../../../shared/verse-ref-validation";
 import { useDebouncedEsvReferenceValidation } from "@/hooks/use-esv-reference";
 import { VerseRefPreviewCard } from "@/components/verse-ref/verse-ref-hover-preview";
 import { useVerseLinkNavigation } from "@/hooks/use-verse-link-navigation";

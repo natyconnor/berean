@@ -17,7 +17,7 @@ vi.mock("../../convex/_generated/api", () => ({
   },
 }));
 
-vi.mock("@/lib/esv-api", () => ({
+vi.mock("../../shared/esv-api", () => ({
   getCachedPassage: (query: string) => cache.get(query) ?? null,
   setCachedPassage: (query: string, data: unknown) => {
     cache.set(query, data);

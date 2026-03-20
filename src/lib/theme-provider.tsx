@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
-import { warmManuscriptTheme } from "@/components/theme-test/theme-warm-manuscript";
+import { warmManuscriptTheme } from "@/themes/theme-warm-manuscript";
 import { THEMES } from "@/lib/themes";
 import { ThemeContext } from "@/lib/theme-context";
-import type { AppTheme } from "@/components/theme-test/theme-types";
+import type { AppTheme } from "@/themes/theme-types";
 
 const THEME_STORAGE_KEY = "bible-notes-theme";
 const DARK_MODE_STORAGE_KEY = "bible-notes-dark-mode";

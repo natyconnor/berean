@@ -19,7 +19,7 @@ import {
   type NoteSummary,
 } from "./lib/publicValues";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
-import { getVerseRefBoundsErrorMessage } from "../src/lib/verse-ref-validation";
+import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 
 const DEFAULT_SEARCH_LIMIT = 50;
 const MAX_SEARCH_LIMIT = 100;
@@ -248,41 +248,71 @@ export const searchWorkspace = query({
       .filter((note) => matchesTagFilters(note.tags, selectedTags, matchMode))
       .slice(0, limit);
 
-    return await Promise.all(
-      notes.map(async (note) => {
-        const links = await ctx.db
+    const linksByNote = await Promise.all(
+      notes.map(async (note) => ({
+        noteId: note._id,
+        links: await ctx.db
           .query("noteVerseLinks")
           .withIndex("by_userId_noteId", (q) =>
             q.eq("userId", userId).eq("noteId", note._id),
           )
-          .collect();
-        const refs = await Promise.all(
-          links.map((link) => ctx.db.get(link.verseRefId)),
-        );
-        const verseRefs = refs
-          .filter((ref): ref is Doc<"verseRefs"> =>
-            isVerseRefForUser(ref, userId),
-          )
-          .map((ref) => ({
-            book: ref.book,
-            chapter: ref.chapter,
-            startVerse: ref.startVerse,
-            endVerse: ref.endVerse,
-          }))
-          .sort(compareVerseRefs);
-
-        return {
-          noteId: note._id,
-          content: note.content,
-          body: note.body ?? null,
-          tags: note.tags,
-          createdAt: note.createdAt,
-          updatedAt: note.updatedAt,
-          verseRefs,
-          primaryRef: verseRefs[0] ?? null,
-        };
-      }),
+          .collect(),
+      })),
     );
+    const linksByNoteId = new Map(
+      linksByNote.map((entry) => [String(entry.noteId), entry.links] as const),
+    );
+
+    const uniqueVerseRefIds = new Set<string>();
+    for (const entry of linksByNote) {
+      for (const link of entry.links) {
+        uniqueVerseRefIds.add(String(link.verseRefId));
+      }
+    }
+
+    const refs = await Promise.all(
+      Array.from(uniqueVerseRefIds).map((verseRefId) =>
+        ctx.db.get(verseRefId as Id<"verseRefs">),
+      ),
+    );
+    const refsById = new Map(
+      refs
+        .filter((ref): ref is Doc<"verseRefs"> => isVerseRefForUser(ref, userId))
+        .map((ref) => [String(ref._id), ref] as const),
+    );
+
+    return notes.map((note) => {
+      const seenRefs = new Set<string>();
+      const verseRefs = (linksByNoteId.get(String(note._id)) ?? [])
+        .flatMap((link) => {
+          const key = String(link.verseRefId);
+          if (seenRefs.has(key)) return [];
+          seenRefs.add(key);
+          const ref = refsById.get(key);
+          return ref
+            ? [
+                {
+                  book: ref.book,
+                  chapter: ref.chapter,
+                  startVerse: ref.startVerse,
+                  endVerse: ref.endVerse,
+                },
+              ]
+            : [];
+        })
+        .sort(compareVerseRefs);
+
+      return {
+        noteId: note._id,
+        content: note.content,
+        body: note.body ?? null,
+        tags: note.tags,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+        verseRefs,
+        primaryRef: verseRefs[0] ?? null,
+      };
+    });
   },
 });
 

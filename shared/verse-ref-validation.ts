@@ -1,5 +1,5 @@
-import { getBookInfo } from "./bible-books";
-import { getChapterVerseCount } from "./bible-verse-counts";
+import { getBookInfo } from "../src/lib/bible-books";
+import { getChapterVerseCount } from "../src/lib/bible-verse-counts";
 
 export interface VerseRefLike {
   book: string;

@@ -99,7 +99,6 @@ export function parseEsvResponse(raw: unknown): EsvChapterData {
   const defaultCopyright =
     "Scripture quotations are from the ESV\u00AE Bible (The Holy Bible, English Standard Version\u00AE), \u00A9 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.";
 
-  // The ESV API appends the copyright after double newlines at the end
   const copyrightMatch = passageText.match(
     /\n\n\s*(Scripture quotations.*|ESV.*)$/s,
   );

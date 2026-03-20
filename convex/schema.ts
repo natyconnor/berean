@@ -105,7 +105,8 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_verseRefId1", ["verseRefId1"])
     .index("by_verseRefId2", ["verseRefId2"])
-    .index("by_userId_verseRefId1", ["userId", "verseRefId1"]),
+    .index("by_userId_verseRefId1", ["userId", "verseRefId1"])
+    .index("by_userId_verseRefId2", ["userId", "verseRefId2"]),
 
   highlights: defineTable({
     userId: v.id("users"),

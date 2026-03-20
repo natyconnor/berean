@@ -5,7 +5,7 @@ import {
   type EsvChapterData,
   getCachedPassage,
   setCachedPassage,
-} from "@/lib/esv-api";
+} from "../../shared/esv-api";
 
 interface AsyncQueryState {
   query: string | null;

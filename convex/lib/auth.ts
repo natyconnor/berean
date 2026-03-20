@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { QueryCtx, MutationCtx } from "../_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
 export async function getCurrentUser(
@@ -43,4 +43,18 @@ export async function getCurrentUserIdOrNull(
   ctx: QueryCtx | MutationCtx,
 ): Promise<Id<"users"> | null> {
   return await getAuthUserId(ctx);
+}
+
+type AuthenticatedActionIdentity = NonNullable<
+  Awaited<ReturnType<ActionCtx["auth"]["getUserIdentity"]>>
+>;
+
+export async function requireActionIdentity(
+  ctx: ActionCtx,
+): Promise<AuthenticatedActionIdentity> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Not authenticated");
+  }
+  return identity;
 }
