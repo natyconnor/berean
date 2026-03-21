@@ -26,6 +26,8 @@ export function HighlightToolbar({
   onHighlight,
 }: HighlightToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement>(null);
+  /** Avoid portaling/updating toolbar DOM while extending selection (see docs/fix-verse-text-selection-glitch.md Phase A). */
+  const isPrimaryPointerDownRef = useRef(false);
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
   const [selectionOffsets, setSelectionOffsets] = useState<{
     start: number;
@@ -66,6 +68,7 @@ export function HighlightToolbar({
 
   useEffect(() => {
     const handleSelectionChange = () => {
+      if (isPrimaryPointerDownRef.current) return;
       updatePosition();
     };
     document.addEventListener("selectionchange", handleSelectionChange);
@@ -75,16 +78,37 @@ export function HighlightToolbar({
   }, [updatePosition]);
 
   useEffect(() => {
-    const el = verseTextRef.current;
-    if (!el) return;
-    const handleMouseUp = () => {
+    const scheduleUpdateAfterRelease = () => {
       setTimeout(updatePosition, 10);
     };
-    el.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      el.removeEventListener("mouseup", handleMouseUp);
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button === 0) {
+        isPrimaryPointerDownRef.current = true;
+      }
     };
-  }, [verseTextRef, updatePosition]);
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      isPrimaryPointerDownRef.current = false;
+      scheduleUpdateAfterRelease();
+    };
+
+    const onPointerCancel = () => {
+      isPrimaryPointerDownRef.current = false;
+      scheduleUpdateAfterRelease();
+    };
+
+    const opts = { capture: true };
+    document.addEventListener("pointerdown", onPointerDown, opts);
+    document.addEventListener("pointerup", onPointerUp, opts);
+    document.addEventListener("pointercancel", onPointerCancel, opts);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, opts);
+      document.removeEventListener("pointerup", onPointerUp, opts);
+      document.removeEventListener("pointercancel", onPointerCancel, opts);
+    };
+  }, [updatePosition]);
 
   const handleColorClick = useCallback(
     (colorId: string) => {

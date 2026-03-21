@@ -5,7 +5,10 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexQueryCacheProvider } from "convex-helpers/react/cache";
 import { routeTree } from "./routeTree.gen";
+import { initDevSelectionLogger } from "./lib/dev-selection-logger";
 import "./index.css";
+
+initDevSelectionLogger();
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
