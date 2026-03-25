@@ -249,7 +249,7 @@ function CollapsedPassageBubble({
           className={cn(
             "px-3 py-2",
             compact && "px-2 py-1.5",
-            notes.length === 1 && !compact && "pr-10",
+            notes.length === 1 && !compact && "pr-12",
           )}
         >
           <div className="mb-1 flex min-w-0 items-center gap-1.5">

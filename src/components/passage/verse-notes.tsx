@@ -211,7 +211,7 @@ function CollapsedBubble({
       <button
         type="button"
         data-note-trigger
-        className="w-full cursor-pointer py-1.5 pl-2.5 pr-10 text-left transition-colors rounded-lg text-[13px] bg-card cl-depth-1 cl-transition shadow-none"
+        className="flex min-h-10 w-full cursor-pointer flex-col justify-center gap-1 py-2 pl-3 pr-12 text-left transition-colors rounded-lg text-[13px] bg-card cl-depth-1 cl-transition shadow-none"
         onClick={onClick}
       >
         <NoteContent
@@ -221,7 +221,7 @@ function CollapsedBubble({
           currentChapter={currentChapter}
           className="text-muted-foreground line-clamp-2"
         />
-        <NoteTagList tags={note.tags} className="mt-1" />
+        <NoteTagList tags={note.tags} />
       </button>
       <HoverEditButton onEdit={onEdit} />
     </div>

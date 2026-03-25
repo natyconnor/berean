@@ -152,7 +152,7 @@ export function NoteContent({
     return (
       <p
         className={cn(
-          "whitespace-pre-wrap",
+          "m-0 whitespace-pre-wrap",
           densityClass,
           className,
         )}
@@ -257,7 +257,7 @@ export function HoverEditButton({
         <button
           type="button"
           className={cn(
-            "absolute top-1 right-1 z-10 opacity-0 transition-all group-hover:opacity-100",
+            "absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 transition-all group-hover:opacity-100",
             NOTE_CARD_ACTION_ICON_BUTTON,
             hoverBg,
           )}
