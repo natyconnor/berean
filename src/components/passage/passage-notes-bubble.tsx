@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
-import { Pencil, Plus, ChevronUp, BookOpen } from "lucide-react";
+import { Plus, ChevronUp, BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -13,9 +13,10 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { NoteBody } from "@/lib/note-inline-content";
 import {
+  HoverEditButton,
   NoteCardActions,
-  NoteTagList,
   NoteContent,
+  NoteTagList,
 } from "@/components/notes/view/note-card-primitives";
 import { NoteEditor } from "@/components/notes/note-editor";
 import { NoteBubbleShell, type BubbleState } from "./view/note-bubble-shell";
@@ -244,8 +245,14 @@ function CollapsedPassageBubble({
         className="w-full rounded-[inherit] text-left"
         onClick={onOpen}
       >
-        <div className={cn("px-3 py-2", compact && "px-2 py-1.5")}>
-          <div className="mb-1 flex items-center gap-1.5">
+        <div
+          className={cn(
+            "px-3 py-2",
+            compact && "px-2 py-1.5",
+            notes.length === 1 && !compact && "pr-10",
+          )}
+        >
+          <div className="mb-1 flex min-w-0 items-center gap-1.5">
             <BookOpen
               className={cn(
                 "text-amber-600 dark:text-amber-400/70 shrink-0",
@@ -254,7 +261,7 @@ function CollapsedPassageBubble({
             />
             <span
               className={cn(
-                "font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide truncate",
+                "min-w-0 flex-1 font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide truncate",
                 compact ? "text-[8px]" : "text-[10px]",
               )}
             >
@@ -295,20 +302,10 @@ function CollapsedPassageBubble({
         </div>
       </button>
       {notes.length === 1 && !compact && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-800/30 transition-all"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(notes[0].noteId);
-              }}
-            >
-              <Pencil className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Edit note</TooltipContent>
-        </Tooltip>
+        <HoverEditButton
+          variant="passage"
+          onEdit={() => onEdit(notes[0].noteId)}
+        />
       )}
     </div>
   );

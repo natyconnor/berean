@@ -211,7 +211,7 @@ function CollapsedBubble({
       <button
         type="button"
         data-note-trigger
-        className="w-full cursor-pointer px-2.5 py-1.5 text-left transition-colors rounded-lg text-[13px] bg-card cl-depth-1 cl-transition shadow-none"
+        className="w-full cursor-pointer py-1.5 pl-2.5 pr-10 text-left transition-colors rounded-lg text-[13px] bg-card cl-depth-1 cl-transition shadow-none"
         onClick={onClick}
       >
         <NoteContent

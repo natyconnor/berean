@@ -19,6 +19,10 @@ import type { CurrentChapter } from "@/hooks/use-verse-link-navigation";
 
 export type { CurrentChapter };
 
+/** Shared 32×32 hit target for note card icon actions (expanded + collapsed hover). */
+const NOTE_CARD_ACTION_ICON_BUTTON =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded transition-colors";
+
 export interface NoteCardActionsProps {
   onEdit: () => void;
   onDelete: () => void;
@@ -36,11 +40,16 @@ export function NoteCardActions({
       : "hover:bg-muted";
 
   return (
-    <div className="flex items-center gap-0.5 shrink-0">
+    <div
+      className="flex shrink-0 flex-col gap-0.5"
+      role="group"
+      aria-label="Note actions"
+    >
       <Tooltip>
         <TooltipTrigger asChild>
           <button
-            className={cn("p-1 rounded transition-colors", hoverBg)}
+            type="button"
+            className={cn(NOTE_CARD_ACTION_ICON_BUTTON, hoverBg)}
             onClick={onEdit}
           >
             <Pencil className="h-3 w-3 text-muted-foreground" />
@@ -51,7 +60,11 @@ export function NoteCardActions({
       <Tooltip>
         <TooltipTrigger asChild>
           <button
-            className="p-1 rounded hover:bg-destructive/10 transition-colors"
+            type="button"
+            className={cn(
+              NOTE_CARD_ACTION_ICON_BUTTON,
+              "hover:bg-destructive/10",
+            )}
             onClick={onDelete}
           >
             <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
@@ -231,8 +244,10 @@ export function HoverEditButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <button
+          type="button"
           className={cn(
-            "absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded transition-all",
+            "absolute top-1 right-1 z-10 opacity-0 transition-all group-hover:opacity-100",
+            NOTE_CARD_ACTION_ICON_BUTTON,
             hoverBg,
           )}
           onClick={(e) => {
