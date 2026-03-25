@@ -18,6 +18,7 @@ interface UsePassageKeyboardShortcutsOptions {
   next: ChapterDestination | null;
   navigateActiveTab: (passageId: string, label: string) => void;
   setViewMode: (mode: "compose" | "read") => void;
+  onToggleFocusMode?: () => void;
 }
 
 export function usePassageKeyboardShortcuts({
@@ -25,6 +26,7 @@ export function usePassageKeyboardShortcuts({
   next,
   navigateActiveTab,
   setViewMode,
+  onToggleFocusMode,
 }: UsePassageKeyboardShortcutsOptions) {
   useEffect(() => {
     function handleNavigationKeyDown(event: KeyboardEvent) {
@@ -58,10 +60,13 @@ export function usePassageKeyboardShortcuts({
       } else if (key === "c") {
         event.preventDefault();
         setViewMode("compose");
+      } else if (key === "f" && onToggleFocusMode) {
+        event.preventDefault();
+        onToggleFocusMode();
       }
     }
 
     document.addEventListener("keydown", handleModeShortcuts);
     return () => document.removeEventListener("keydown", handleModeShortcuts);
-  }, [setViewMode]);
+  }, [setViewMode, onToggleFocusMode]);
 }

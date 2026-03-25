@@ -250,7 +250,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
       }
       className={cn(
         "group relative h-full rounded-sm transition-[color,background-color,border-color,box-shadow] duration-200 ease-out",
-        !isExpanded && "cl-verse-glint cl-verse-specular",
+        !isExpanded && "cl-verse-glint",
         isExpanded ? "cursor-text" : "min-h-10 select-none cursor-pointer",
         isSelected &&
           isPassageSelection &&
@@ -333,6 +333,12 @@ export const VerseRowLeft = memo(function VerseRowLeft({
             }}
           />
         </>
+      )}
+      {!isExpanded && (
+        <div
+          className="cl-verse-specular-strip rounded-[inherit]"
+          aria-hidden
+        />
       )}
       <div className="relative flex h-full items-center">
         <div className="flex w-full gap-2">

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type CSSProperties } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { VerseTextPane } from "./verse-text-pane";
@@ -37,6 +37,7 @@ interface PassageGroupWithNotesProps {
   isPassageOpen: boolean;
   editingNoteIds: Set<Id<"notes">>;
   draftsForAnchor: VerseRef[];
+  focusDistance?: number | null;
   onOpenPassageNotes: (verseNumber: number) => void;
   onClosePassageNotes: (verseNumber: number) => void;
   onOpenVerseNotes: (verseNumber: number) => void;
@@ -103,6 +104,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   isPassageOpen,
   editingNoteIds,
   draftsForAnchor,
+  focusDistance = null,
   onOpenPassageNotes,
   onClosePassageNotes,
   onOpenVerseNotes,
@@ -141,6 +143,16 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
 
   const isReadMode = viewMode === "read";
 
+  const focusDimStyle: CSSProperties | undefined = useMemo(() => {
+    if (focusDistance === null) return undefined;
+    if (focusDistance === 0) return { opacity: 1, filter: "none" };
+    if (focusDistance === 1) return { opacity: 0.55, filter: "blur(0.4px)" };
+    if (focusDistance === 2) return { opacity: 0.3, filter: "blur(0.8px)" };
+    return { opacity: 0.12, filter: "blur(1.2px)" };
+  }, [focusDistance]);
+
+  const isFocusDimmed = focusDistance !== null && focusDistance > 0;
+
   return (
     <LayoutGroup id={`passage-group-${anchorVerse}`}>
       <div
@@ -149,8 +161,10 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
           isReadMode
             ? "grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
             : "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5",
-          "transition-[margin] duration-280 ease-[cubic-bezier(0.22,1,0.36,1)] my-3",
+          "transition-[margin,opacity,filter] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)] my-3",
+          isFocusDimmed && "pointer-events-none",
         )}
+        style={focusDimStyle}
         data-note-surface
       >
         {/* LEFT — stacked expanded verse rows in a shared passage shell */}

@@ -474,13 +474,22 @@
     background-image 280ms ease-out;
 }
 
-/* Candlelight — top-edge specular on verse row hover */
-.cl-verse-specular {
-  position: relative;
+/* Candlelight — top-edge specular on verse row hover.
+   Kept in a short strip so the verse shell stays overflow-visible (add-note CSS tooltip). */
+.cl-verse-specular-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
   overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
 }
 
-.cl-verse-specular::after {
+.cl-verse-specular-strip::after {
   content: "";
   position: absolute;
   top: 0;
@@ -503,11 +512,11 @@
   z-index: 2;
 }
 
-.cl-verse-specular:hover::after {
+.group:hover .cl-verse-specular-strip::after {
   opacity: 1;
 }
 
-.dark .cl-verse-specular::after {
+.dark .cl-verse-specular-strip::after {
   background: linear-gradient(
     90deg,
     transparent,
@@ -631,7 +640,7 @@
   .cl-verse-glint {
     transition: none !important;
   }
-  .cl-verse-specular::after {
+  .cl-verse-specular-strip::after {
     transition: none !important;
   }
   .cl-ember-single,

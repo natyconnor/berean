@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { VerseTextPane } from "./verse-text-pane";
@@ -76,6 +76,7 @@ export interface VerseRowWithNotesProps {
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  focusDistance?: number | null;
   highlights?: HighlightRange[];
   onCreateHighlight?: (
     verse: number,
@@ -128,6 +129,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onCancelEditor,
   onEditorDirtyChange,
   onStartCreatingPassageNote,
+  focusDistance = null,
   highlights,
   onCreateHighlight,
   onDeleteHighlight,
@@ -176,7 +178,11 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
 
   const isExpanded =
     !isReadMode &&
-    (isVerseOpen || isPassageOpen || isCreatingHere || isEditingSingleHere || isEditingPassageHere);
+    (isVerseOpen ||
+      isPassageOpen ||
+      isCreatingHere ||
+      isEditingSingleHere ||
+      isEditingPassageHere);
 
   const handleCollapseVerse = useCallback(() => {
     if (isVerseOpen) onCloseVerseNotes(verseNumber);
@@ -184,7 +190,27 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     for (const draft of draftsForThisAnchor) {
       onCancelEditor(`new:${draft.startVerse}:${draft.endVerse}`);
     }
-  }, [isVerseOpen, isPassageOpen, verseNumber, onCloseVerseNotes, onClosePassageNotes, draftsForThisAnchor, onCancelEditor]);
+  }, [
+    isVerseOpen,
+    isPassageOpen,
+    verseNumber,
+    onCloseVerseNotes,
+    onClosePassageNotes,
+    draftsForThisAnchor,
+    onCancelEditor,
+  ]);
+
+  const focusDimStyle = useMemo(() => {
+    if (focusDistance === null) return undefined;
+    if (focusDistance === 0) return { opacity: 1, filter: "none" } as const;
+    if (focusDistance === 1)
+      return { opacity: 0.55, filter: "blur(0.4px)" } as const;
+    if (focusDistance === 2)
+      return { opacity: 0.3, filter: "blur(0.8px)" } as const;
+    return { opacity: 0.12, filter: "blur(1.2px)" } as const;
+  }, [focusDistance]);
+
+  const isFocusDimmed = focusDistance !== null && focusDistance > 0;
 
   const passageNoteJsx =
     passageNotes.length > 0 ? (
@@ -246,148 +272,151 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     // LayoutGroup scopes all layout animations to this single verse row so
     // that a layout change in row N never triggers layout corrections in row M.
     <LayoutGroup id={`verse-row-${verseNumber}`}>
-    <div
-      className={cn(
-        "relative overflow-visible hover:z-10 focus-within:z-10",
-        isReadMode
-          ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
-          : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start",
-        isExpanded && "min-h-[240px]",
-        "transition-[margin] duration-280 ease-[cubic-bezier(0.22,1,0.36,1)]",
-        isExpanded && "my-3",
-      )}
-    >
-      <motion.div
-        layout="position"
-        transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
-        className="flex h-full flex-col"
-      >
-        <VerseTextPane
-          verseNumber={verseNumber}
-          text={text}
-          selection={{
-            isSelected: selectedVerses.has(verseNumber),
-            isInSelectionRange,
-            isPassageSelection,
-          }}
-          noteIndicator={{
-            hasOwnNote: singleNotes.length > 0,
-            isPassageAnchor,
-            isInPassageRange,
-          }}
-          hover={{
-            isPassageRangeActive,
-            isNoteBubbleHovered,
-          }}
-          focus={{
-            isTarget: isFocusTarget,
-          }}
-          isExpanded={isExpanded}
-          onCollapseVerse={handleCollapseVerse}
-          highlights={highlights}
-          onCreateHighlight={onCreateHighlight}
-          onDeleteHighlight={onDeleteHighlight}
-          onRecolorHighlight={onRecolorHighlight}
-          forceAddButtonVisible={forceAddButtonVisible}
-          addNoteTourId={addNoteTourId}
-          rowTourId={rowTourId}
-          handlers={{
-            onAddNote,
-            onMouseDown,
-            onMouseEnter,
-            onMouseLeave,
-          }}
-        />
-      </motion.div>
-
-      <motion.div
-        layout="position"
-        transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
+      <div
         className={cn(
-          "py-1 select-none",
-          useSideBySide ? "flex gap-2 items-start" : "space-y-1.5",
+          "relative overflow-visible hover:z-10 focus-within:z-10",
+          isReadMode
+            ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
+            : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start",
+          isExpanded && "min-h-[240px]",
+          "transition-[margin,opacity,filter] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          isExpanded && "my-3",
+          isFocusDimmed && "pointer-events-none",
         )}
-        {...(isAnyOpen ? { "data-notes-open": "" } : {})}
+        style={focusDimStyle}
       >
-        {singleNotes.length > 0 ? (
-          <motion.div
-            layout="position"
-            transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
-            className={cn(
-              useSideBySide &&
-                (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"),
-            )}
-          >
-            <VerseNotes
-              notes={singleNotes}
-              isOpen={isVerseOpen}
-              viewMode={viewMode}
-              isPill={showVerseAsPill}
-              currentChapter={currentChapter}
-              editingNoteIds={
-                shouldShowInlineEditors ? editingNoteIds : undefined
-              }
-              onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
-              onCancelEdit={
-                shouldShowInlineEditors
-                  ? (noteId) => onCancelEditor(`edit:${noteId}`)
-                  : undefined
-              }
-              onEditorDirtyChange={
-                shouldShowInlineEditors
-                  ? (noteId, isDirty) =>
-                      onEditorDirtyChange(`edit:${noteId}`, isDirty)
-                  : undefined
-              }
-              onOpen={() => onOpenVerseNotes(verseNumber)}
-              onClose={() => onCloseVerseNotes(verseNumber)}
-              onEdit={(noteId) => {
-                const note = singleNotes.find((n) => n.noteId === noteId);
-                if (note) onEditNote(noteId, note.verseRef, verseNumber, false);
-              }}
-              onDelete={onDelete}
-              onAddNote={() => onAddNote(verseNumber)}
-              onMouseEnter={() => onSingleBubbleMouseEnter(verseNumber)}
-              onMouseLeave={onSingleBubbleMouseLeave}
-            />
-          </motion.div>
-        ) : null}
+        <motion.div
+          layout="position"
+          transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
+          className="flex h-full flex-col"
+        >
+          <VerseTextPane
+            verseNumber={verseNumber}
+            text={text}
+            selection={{
+              isSelected: selectedVerses.has(verseNumber),
+              isInSelectionRange,
+              isPassageSelection,
+            }}
+            noteIndicator={{
+              hasOwnNote: singleNotes.length > 0,
+              isPassageAnchor,
+              isInPassageRange,
+            }}
+            hover={{
+              isPassageRangeActive,
+              isNoteBubbleHovered,
+            }}
+            focus={{
+              isTarget: isFocusTarget,
+            }}
+            isExpanded={isExpanded}
+            onCollapseVerse={handleCollapseVerse}
+            highlights={highlights}
+            onCreateHighlight={onCreateHighlight}
+            onDeleteHighlight={onDeleteHighlight}
+            onRecolorHighlight={onRecolorHighlight}
+            forceAddButtonVisible={forceAddButtonVisible}
+            addNoteTourId={addNoteTourId}
+            rowTourId={rowTourId}
+            handlers={{
+              onAddNote,
+              onMouseDown,
+              onMouseEnter,
+              onMouseLeave,
+            }}
+          />
+        </motion.div>
 
-        {passageNoteJsx}
+        <motion.div
+          layout="position"
+          transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
+          className={cn(
+            "py-1 select-none",
+            useSideBySide ? "flex gap-2 items-start" : "space-y-1.5",
+          )}
+          {...(isAnyOpen ? { "data-notes-open": "" } : {})}
+        >
+          {singleNotes.length > 0 ? (
+            <motion.div
+              layout="position"
+              transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
+              className={cn(
+                useSideBySide &&
+                  (showVerseAsPill ? "shrink-0" : "flex-1 min-w-0"),
+              )}
+            >
+              <VerseNotes
+                notes={singleNotes}
+                isOpen={isVerseOpen}
+                viewMode={viewMode}
+                isPill={showVerseAsPill}
+                currentChapter={currentChapter}
+                editingNoteIds={
+                  shouldShowInlineEditors ? editingNoteIds : undefined
+                }
+                onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
+                onCancelEdit={
+                  shouldShowInlineEditors
+                    ? (noteId) => onCancelEditor(`edit:${noteId}`)
+                    : undefined
+                }
+                onEditorDirtyChange={
+                  shouldShowInlineEditors
+                    ? (noteId, isDirty) =>
+                        onEditorDirtyChange(`edit:${noteId}`, isDirty)
+                    : undefined
+                }
+                onOpen={() => onOpenVerseNotes(verseNumber)}
+                onClose={() => onCloseVerseNotes(verseNumber)}
+                onEdit={(noteId) => {
+                  const note = singleNotes.find((n) => n.noteId === noteId);
+                  if (note)
+                    onEditNote(noteId, note.verseRef, verseNumber, false);
+                }}
+                onDelete={onDelete}
+                onAddNote={() => onAddNote(verseNumber)}
+                onMouseEnter={() => onSingleBubbleMouseEnter(verseNumber)}
+                onMouseLeave={onSingleBubbleMouseLeave}
+              />
+            </motion.div>
+          ) : null}
 
-        <AnimatePresence initial={false}>
-          {shouldShowInlineEditors &&
-            draftsForThisAnchor.map((draft) => {
-              const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
-              return (
-                <motion.div
-                  key={draftEditorKey}
-                  layout
-                  data-note-surface
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={NOTE_ENTER_TRANSITION}
-                >
-                  <NoteEditor
-                    verseRef={draft}
-                    variant={
-                      draft.startVerse !== draft.endVerse
-                        ? "passage"
-                        : "default"
-                    }
-                    onSave={(body, tags) => onSaveNew(draft, body, tags)}
-                    onCancel={() => onCancelEditor(draftEditorKey)}
-                    onDirtyChange={(isDirty) =>
-                      onEditorDirtyChange(draftEditorKey, isDirty)
-                    }
-                  />
-                </motion.div>
-              );
-            })}
-        </AnimatePresence>
-      </motion.div>
-    </div>
+          {passageNoteJsx}
+
+          <AnimatePresence initial={false}>
+            {shouldShowInlineEditors &&
+              draftsForThisAnchor.map((draft) => {
+                const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
+                return (
+                  <motion.div
+                    key={draftEditorKey}
+                    layout
+                    data-note-surface
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={NOTE_ENTER_TRANSITION}
+                  >
+                    <NoteEditor
+                      verseRef={draft}
+                      variant={
+                        draft.startVerse !== draft.endVerse
+                          ? "passage"
+                          : "default"
+                      }
+                      onSave={(body, tags) => onSaveNew(draft, body, tags)}
+                      onCancel={() => onCancelEditor(draftEditorKey)}
+                      onDirtyChange={(isDirty) =>
+                        onEditorDirtyChange(draftEditorKey, isDirty)
+                      }
+                    />
+                  </motion.div>
+                );
+              })}
+          </AnimatePresence>
+        </motion.div>
+      </div>
     </LayoutGroup>
   );
 });

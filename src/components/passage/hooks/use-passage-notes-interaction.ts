@@ -77,6 +77,7 @@ export function usePassageNotesInteraction(
   options?: {
     viewMode?: "compose" | "read";
     setViewMode?: (next: "compose" | "read") => void;
+    isFocusMode?: boolean;
   },
 ): PassageNotesInteraction {
   const viewMode = options?.viewMode ?? "compose";
@@ -85,6 +86,7 @@ export function usePassageNotesInteraction(
     (() => {
       /* no-op when view mode is not wired (tests) */
     });
+  const isFocusMode = options?.isFocusMode ?? false;
   const {
     singleVerseNotes,
     passageNotesByAnchor,
@@ -99,6 +101,7 @@ export function usePassageNotesInteraction(
     chapter,
     viewMode,
     setViewMode,
+    isFocusMode,
     singleVerseNotes,
     passageNotesByAnchor,
     verseToPassageAnchor,

@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { useTabs } from "@/lib/use-tabs";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { cn } from "@/lib/utils";
+import { useFocusMode } from "./hooks/use-focus-mode";
 import { usePassageViewMode } from "./hooks/use-passage-view-mode";
 import { usePassageKeyboardShortcuts } from "./hooks/use-passage-keyboard-shortcuts";
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
@@ -64,9 +65,11 @@ export function PassageView({
       forcedViewMode,
       focusSource,
     });
+  const { isFocusMode, toggleFocusMode } = useFocusMode();
   const passageNotesInteraction = usePassageNotesInteraction(book, chapter, {
     viewMode: effectiveViewMode,
     setViewMode,
+    isFocusMode: !isReadMode && isFocusMode,
   });
   const {
     containerRef,
@@ -135,7 +138,10 @@ export function PassageView({
 
   const handleRecolorHighlight = useCallback(
     (highlightId: string, color: string) => {
-      void updateHighlightColorMutation({ id: highlightId as Id<"highlights">, color });
+      void updateHighlightColorMutation({
+        id: highlightId as Id<"highlights">,
+        color,
+      });
     },
     [updateHighlightColorMutation],
   );
@@ -225,8 +231,7 @@ export function PassageView({
 
       const singleNotes = displaySingleVerseNotes.get(verse.number) ?? [];
       const passageNotes = passageNotesByAnchor.get(verse.number) ?? [];
-      const hasVisibleNotes =
-        singleNotes.length > 0 || passageNotes.length > 0;
+      const hasVisibleNotes = singleNotes.length > 0 || passageNotes.length > 0;
       if (
         isReadMode &&
         !hasFocusRange &&
@@ -314,6 +319,7 @@ export function PassageView({
     next,
     navigateActiveTab,
     setViewMode: setViewModeWithNotesReset,
+    onToggleFocusMode: toggleFocusMode,
   });
 
   const { isScrolled } = usePassageScrollRestoration({
@@ -361,10 +367,12 @@ export function PassageView({
         headerInnerClass={headerInnerClass}
         effectiveViewMode={effectiveViewMode}
         isReadMode={isReadMode}
+        isFocusMode={isFocusMode}
         hasAnyNotes={hasAnyNotes}
         noteVisibility={noteVisibility}
         setViewModeWithNotesReset={setViewModeWithNotesReset}
         setNoteVisibility={setNoteVisibility}
+        onToggleFocusMode={toggleFocusMode}
       />
 
       <PassageViewBody
@@ -379,6 +387,7 @@ export function PassageView({
         passageNotesInteraction={passageNotesInteraction}
         effectiveViewMode={effectiveViewMode}
         editorMode={editorMode}
+        isFocusMode={!isReadMode && isFocusMode}
         hasFocusRange={hasFocusRange}
         focusRange={focusRange}
         reenteringFromGroup={reenteringFromGroup}
