@@ -59,7 +59,7 @@ export function PassageView({
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
-  const { effectiveViewMode, isReadMode, editorMode, setViewMode } =
+  const { effectiveViewMode, isReadMode, setViewMode } =
     usePassageViewMode({
       focusRange,
       forcedViewMode,
@@ -77,7 +77,6 @@ export function PassageView({
     singleVerseNotes,
     passageNotesByAnchor,
     openEditors,
-    editingNoteIds,
     handleAddNote,
     handleSaveEdit,
     handleSaveNew,
@@ -177,15 +176,6 @@ export function PassageView({
     }
     return map;
   }, [displaySingleVerseNotes, passageNotesByAnchor]);
-
-  const dialogEditingNote = useMemo(() => {
-    if (editingNoteIds.size === 0) return null;
-    for (const id of editingNoteIds) {
-      const note = noteById.get(id);
-      if (note) return note;
-    }
-    return null;
-  }, [editingNoteIds, noteById]);
 
   const hasAnyNotes = noteById.size > 0;
 
@@ -290,14 +280,6 @@ export function PassageView({
     setPreviousGroupedVerses(currentGroupedVerses);
   }, [currentGroupedVerses]);
 
-  const dialogDraft = useMemo(() => {
-    for (const slot of openEditors.values()) {
-      if (slot.kind === "new") return slot.verseRef;
-    }
-    return null;
-  }, [openEditors]);
-  const shouldShowQuickCaptureDialog =
-    isReadMode && (!!dialogDraft || !!dialogEditingNote);
   const passageGridClass = isReadMode
     ? "grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
     : "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5";
@@ -386,7 +368,6 @@ export function PassageView({
         filteredVerses={filteredVerses}
         passageNotesInteraction={passageNotesInteraction}
         effectiveViewMode={effectiveViewMode}
-        editorMode={editorMode}
         isFocusMode={!isReadMode && isFocusMode}
         hasFocusRange={hasFocusRange}
         focusRange={focusRange}
@@ -399,14 +380,6 @@ export function PassageView({
       />
 
       <PassageViewDialogs
-        shouldShowQuickCaptureDialog={shouldShowQuickCaptureDialog}
-        hasDirtyEditors={hasDirtyEditors}
-        handleClickAway={handleClickAway}
-        dialogEditingNote={dialogEditingNote}
-        dialogDraft={dialogDraft}
-        handleSaveEdit={handleSaveEdit}
-        notifyEditorDirty={notifyEditorDirty}
-        handleSaveNew={handleSaveNew}
         showDiscardConfirmation={showDiscardConfirmation}
         cancelDiscard={cancelDiscard}
         confirmDiscard={confirmDiscard}

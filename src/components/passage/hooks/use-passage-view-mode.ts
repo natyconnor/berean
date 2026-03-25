@@ -25,7 +25,6 @@ interface UsePassageViewModeOptions {
 interface UsePassageViewModeResult {
   effectiveViewMode: PassageViewMode;
   isReadMode: boolean;
-  editorMode: "dialog" | "inline";
   setViewMode: (next: PassageViewMode) => void;
 }
 
@@ -68,7 +67,6 @@ export function usePassageViewMode({
   return {
     effectiveViewMode,
     isReadMode: effectiveViewMode === "read",
-    editorMode: effectiveViewMode === "read" ? "dialog" : "inline",
     setViewMode,
   };
 }

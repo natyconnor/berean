@@ -23,7 +23,6 @@ interface PassageGroupWithNotesProps {
   passageNotes: NoteWithRef[];
   singleNotesByVerse: Map<number, NoteWithRef[]>;
   viewMode: "compose" | "read";
-  editorMode: "inline" | "dialog";
   currentChapter: CurrentChapter;
   highlightsByVerse: Map<number, HighlightRange[]>;
   onCreateHighlight?: (
@@ -95,7 +94,6 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   passageNotes,
   singleNotesByVerse,
   viewMode,
-  editorMode,
   currentChapter,
   highlightsByVerse,
   onCreateHighlight,
@@ -120,7 +118,6 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onCollapse,
 }: PassageGroupWithNotesProps) {
   const anchorVerse = verses[0]?.verseNumber ?? 0;
-  const shouldShowInlineEditors = editorMode === "inline";
 
   const handleCollapseGroup = useCallback(() => onCollapse(), [onCollapse]);
 
@@ -241,20 +238,11 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                   isGlowing={false}
                   viewMode={viewMode}
                   currentChapter={currentChapter}
-                  editingNoteIds={
-                    shouldShowInlineEditors ? editingNoteIds : undefined
-                  }
-                  onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
-                  onCancelEdit={
-                    shouldShowInlineEditors
-                      ? (noteId) => onCancelEditor(`edit:${noteId}`)
-                      : undefined
-                  }
-                  onEditorDirtyChange={
-                    shouldShowInlineEditors
-                      ? (noteId, isDirty) =>
-                          onEditorDirtyChange(`edit:${noteId}`, isDirty)
-                      : undefined
+                  editingNoteIds={editingNoteIds}
+                  onSaveEdit={onSaveEdit}
+                  onCancelEdit={(noteId) => onCancelEditor(`edit:${noteId}`)}
+                  onEditorDirtyChange={(noteId, isDirty) =>
+                    onEditorDirtyChange(`edit:${noteId}`, isDirty)
                   }
                   onOpen={() => onOpenPassageNotes(anchorVerse)}
                   onClose={() => onClosePassageNotes(anchorVerse)}
@@ -278,8 +266,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
               )}
 
               <AnimatePresence initial={false}>
-                {shouldShowInlineEditors &&
-                  draftsForAnchor.map((draft) => {
+                {draftsForAnchor.map((draft) => {
                     const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
                     return (
                       <motion.div

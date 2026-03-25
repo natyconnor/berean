@@ -267,3 +267,156 @@ describe("usePassageNotesUiState view mode switch", () => {
     expect(result.current.openEditors.has(editorKey)).toBe(true);
   });
 });
+
+describe("usePassageNotesUiState read-mode single-editor gate", () => {
+  function readModeOptions() {
+    return {
+      ...defaultOptions(),
+      viewMode: "read" as const,
+      isFocusMode: false,
+    };
+  }
+
+  it("allows opening an editor when none is active", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(readModeOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+
+    expect(result.current.openEditors.size).toBe(1);
+    expect(result.current.showDiscardConfirmation).toBe(false);
+  });
+
+  it("silently replaces a clean editor when opening another", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(readModeOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    expect(result.current.openEditors.size).toBe(1);
+    const firstKey = Array.from(result.current.openEditors.keys())[0];
+
+    act(() => {
+      result.current.handleAddNote(2);
+    });
+    expect(result.current.openEditors.size).toBe(1);
+    expect(result.current.openEditors.has(firstKey)).toBe(false);
+  });
+
+  it("shows discard confirmation when replacing a dirty editor", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(readModeOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    const firstKey = Array.from(result.current.openEditors.keys())[0];
+
+    act(() => {
+      result.current.notifyEditorDirty(firstKey, true);
+    });
+
+    act(() => {
+      result.current.handleAddNote(2);
+    });
+    expect(result.current.showDiscardConfirmation).toBe(true);
+    expect(result.current.openEditors.has(firstKey)).toBe(true);
+    expect(result.current.openEditors.size).toBe(1);
+  });
+
+  it("confirm discard replaces the dirty editor with the new one", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(readModeOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    const firstKey = Array.from(result.current.openEditors.keys())[0];
+
+    act(() => {
+      result.current.notifyEditorDirty(firstKey, true);
+    });
+
+    act(() => {
+      result.current.handleAddNote(2);
+    });
+
+    act(() => {
+      result.current.confirmDiscard();
+    });
+
+    expect(result.current.showDiscardConfirmation).toBe(false);
+    expect(result.current.openEditors.has(firstKey)).toBe(false);
+    expect(result.current.openEditors.size).toBe(1);
+    const newKey = Array.from(result.current.openEditors.keys())[0];
+    expect(newKey).toContain("new:2:2");
+  });
+
+  it("cancel discard keeps the original dirty editor", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(readModeOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    const firstKey = Array.from(result.current.openEditors.keys())[0];
+
+    act(() => {
+      result.current.notifyEditorDirty(firstKey, true);
+    });
+
+    act(() => {
+      result.current.handleAddNote(2);
+    });
+
+    act(() => {
+      result.current.cancelDiscard();
+    });
+
+    expect(result.current.showDiscardConfirmation).toBe(false);
+    expect(result.current.openEditors.has(firstKey)).toBe(true);
+    expect(result.current.openEditors.size).toBe(1);
+  });
+
+  it("startEditingNote replaces a clean draft in read mode", () => {
+    const noteId = "n1" as Id<"notes">;
+    const verseRef = { book: "Genesis", chapter: 1, startVerse: 3, endVerse: 3 };
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(readModeOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    expect(result.current.openEditors.size).toBe(1);
+
+    act(() => {
+      result.current.startEditingNote(noteId, verseRef, 3, false);
+    });
+    expect(result.current.openEditors.size).toBe(1);
+    expect(result.current.editingNoteIds.has(noteId)).toBe(true);
+  });
+
+  it("does not gate in compose mode — multiple editors allowed", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(defaultOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    act(() => {
+      result.current.handleAddNote(2);
+    });
+
+    expect(result.current.openEditors.size).toBe(2);
+  });
+});

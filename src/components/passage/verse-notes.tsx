@@ -311,6 +311,7 @@ function ExpandedBubble({
       className={cn(
         isReading ? "rounded-xl px-4 py-3" : "rounded-lg px-3 py-2.5 text-sm",
         "bg-card shadow-none cl-depth-3 cl-transition",
+        isReading && "group",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -321,7 +322,11 @@ function ExpandedBubble({
           currentChapter={currentChapter}
           className={isReading ? "flex-1 text-foreground" : "flex-1"}
         />
-        <NoteCardActions onEdit={onEdit} onDelete={onDelete} />
+        <NoteCardActions
+          onEdit={onEdit}
+          onDelete={onDelete}
+          reveal={isReading ? "hover" : "always"}
+        />
       </div>
       <NoteTagList
         tags={note.tags}

@@ -45,7 +45,6 @@ interface PassageViewBodyProps {
   filteredVerses: VerseItem[];
   passageNotesInteraction: PassageNotesInteraction;
   effectiveViewMode: PassageViewMode;
-  editorMode: "dialog" | "inline";
   isFocusMode: boolean;
   hasFocusRange: boolean;
   focusRange: { startVerse: number; endVerse: number } | null;
@@ -73,7 +72,6 @@ export function PassageViewBody({
   filteredVerses,
   passageNotesInteraction,
   effectiveViewMode,
-  editorMode,
   isFocusMode,
   hasFocusRange,
   focusRange,
@@ -203,7 +201,6 @@ export function PassageViewBody({
                         passageNotes={item.passageNotes}
                         singleNotesByVerse={item.singleNotesByVerse}
                         viewMode={effectiveViewMode}
-                        editorMode={editorMode}
                         currentChapter={{ book, chapter }}
                         highlightsByVerse={highlightsByVerse}
                         onCreateHighlight={onCreateHighlight}
@@ -281,7 +278,6 @@ export function PassageViewBody({
                       verseNumber={item.verseNumber}
                       text={item.text}
                       viewMode={effectiveViewMode}
-                      editorMode={editorMode}
                       currentChapter={{ book, chapter }}
                       selectedVerses={selectedVerses}
                       isInSelectionRange={isInSelection(item.verseNumber)}

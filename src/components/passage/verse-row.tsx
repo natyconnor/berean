@@ -61,6 +61,7 @@ interface VerseRowLeftProps {
   rowTourId?: string;
   handlers: VerseInteractionHandlers;
   variant?: "default" | "groupedPassage";
+  density?: "default" | "reading";
 }
 
 // Explicit pixel values for each expand state. Editing these two objects is the
@@ -73,6 +74,16 @@ const COLLAPSED = {
   verseNumberFontSize: "0.75rem",  // text-xs
   textFontSize: "1rem",            // text-base
   verseNumberPaddingTop: "0.125rem", // pt-0.5
+} as const;
+
+const COLLAPSED_READING = {
+  paddingTop: "0.625rem",
+  paddingBottom: "0.625rem",
+  paddingLeft: "0.75rem",
+  paddingRight: "0.75rem",
+  verseNumberFontSize: "0.8125rem", // ~13px, between text-xs and text-sm
+  textFontSize: "1.1875rem",        // ~19px, between text-lg and text-xl
+  verseNumberPaddingTop: "0.1875rem",
 } as const;
 
 const EXPANDED = {
@@ -114,6 +125,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   rowTourId,
   handlers,
   variant = "default",
+  density = "default",
 }: VerseRowLeftProps) {
   const { isSelected, isInSelectionRange, isPassageSelection } = selection;
   const { hasOwnNote, isPassageAnchor, isInPassageRange } = noteIndicator;
@@ -158,7 +170,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
 
   const sizes = isExpanded
     ? variant === "groupedPassage" ? GROUPED_EXPANDED : EXPANDED
-    : COLLAPSED;
+    : density === "reading" ? COLLAPSED_READING : COLLAPSED;
 
   const segments =
     highlights && highlights.length > 0
@@ -404,7 +416,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
             <span
               aria-hidden={isExpanded}
               style={{
-                fontSize: COLLAPSED.textFontSize,
+                fontSize: (density === "reading" ? COLLAPSED_READING : COLLAPSED).textFontSize,
                 opacity: isExpanded ? 0 : 1,
                 pointerEvents: isExpanded ? "none" : undefined,
                 transition: "opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1)",

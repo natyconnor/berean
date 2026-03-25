@@ -33,6 +33,7 @@ export interface VerseTextPaneProps {
   onCollapseVerse?: (verseNumber: number) => void;
   handlers: VerseInteractionHandlers;
   variant?: "default" | "groupedPassage";
+  density?: "default" | "reading";
   showCollapseControl?: boolean;
   forceAddButtonVisible?: boolean;
   addNoteTourId?: string;
@@ -54,6 +55,7 @@ export const VerseTextPane = memo(function VerseTextPane({
   onCollapseVerse,
   handlers,
   variant = "default",
+  density = "default",
   showCollapseControl = true,
   forceAddButtonVisible = false,
   addNoteTourId,
@@ -101,6 +103,7 @@ export const VerseTextPane = memo(function VerseTextPane({
         rowTourId={rowTourId}
         handlers={handlers}
         variant={variant}
+        density={density}
       />
       {isExpanded && onCreateHighlight && (
         <HighlightToolbar

@@ -365,6 +365,7 @@ function ExpandedPassageNote({
           ? "rounded-lg bg-amber-50/90 dark:bg-amber-900/22 px-4 py-3"
           : "rounded-md bg-amber-50/90 dark:bg-amber-900/22 px-3 py-2 text-sm",
         "cl-depth-3-amber cl-transition shadow-none",
+        isReading && "group",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -379,6 +380,7 @@ function ExpandedPassageNote({
           onEdit={onEdit}
           onDelete={onDelete}
           variant="passage"
+          reveal={isReading ? "hover" : "always"}
         />
       </div>
       <NoteTagList

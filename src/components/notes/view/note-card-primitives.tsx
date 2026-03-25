@@ -27,12 +27,19 @@ export interface NoteCardActionsProps {
   onEdit: () => void;
   onDelete: () => void;
   variant?: "default" | "passage";
+  /**
+   * `"always"` — actions are permanently visible (compose mode).
+   * `"hover"` — hidden on fine-pointer devices until the parent `group` is
+   *   hovered or focused-within; always visible for coarse/touch pointers.
+   */
+  reveal?: "always" | "hover";
 }
 
 export function NoteCardActions({
   onEdit,
   onDelete,
   variant = "default",
+  reveal = "always",
 }: NoteCardActionsProps) {
   const hoverBg =
     variant === "passage"
@@ -41,7 +48,11 @@ export function NoteCardActions({
 
   return (
     <div
-      className="flex shrink-0 flex-col gap-0.5"
+      className={cn(
+        "flex shrink-0 flex-col gap-0.5 transition-opacity",
+        reveal === "hover" &&
+          "[@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:group-focus-within:opacity-100",
+      )}
       role="group"
       aria-label="Note actions"
     >

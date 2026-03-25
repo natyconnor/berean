@@ -24,7 +24,6 @@ export interface VerseRowWithNotesProps {
   verseNumber: number;
   text: string;
   viewMode?: "compose" | "read";
-  editorMode?: "inline" | "dialog";
   currentChapter?: CurrentChapter;
 
   selectedVerses: Set<number>;
@@ -95,7 +94,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   verseNumber,
   text,
   viewMode = "compose",
-  editorMode = "inline",
   currentChapter,
   selectedVerses,
   isInSelectionRange,
@@ -139,8 +137,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   rowTourId,
 }: VerseRowWithNotesProps) {
   const isReadMode = viewMode === "read";
-  const useDialogEditors = editorMode === "dialog";
-  const shouldShowInlineEditors = !useDialogEditors;
 
   const isPassageAnchor = passageNotes.length > 0;
   const isInPassageRange = passageAnchor !== undefined && !isPassageAnchor;
@@ -177,12 +173,11 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     useSideBySide && !isPassageOpen && !showPassageAsPill;
 
   const isExpanded =
-    !isReadMode &&
-    (isVerseOpen ||
-      isPassageOpen ||
-      isCreatingHere ||
-      isEditingSingleHere ||
-      isEditingPassageHere);
+    isVerseOpen ||
+    isPassageOpen ||
+    isCreatingHere ||
+    isEditingSingleHere ||
+    isEditingPassageHere;
 
   const handleCollapseVerse = useCallback(() => {
     if (isVerseOpen) onCloseVerseNotes(verseNumber);
@@ -234,18 +229,11 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           isPill={showPassageAsPill}
           compact={showPassageCompact}
           currentChapter={currentChapter}
-          editingNoteIds={shouldShowInlineEditors ? editingNoteIds : undefined}
-          onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
-          onCancelEdit={
-            shouldShowInlineEditors
-              ? (noteId) => onCancelEditor(`edit:${noteId}`)
-              : undefined
-          }
-          onEditorDirtyChange={
-            shouldShowInlineEditors
-              ? (noteId, isDirty) =>
-                  onEditorDirtyChange(`edit:${noteId}`, isDirty)
-              : undefined
+          editingNoteIds={editingNoteIds}
+          onSaveEdit={onSaveEdit}
+          onCancelEdit={(noteId) => onCancelEditor(`edit:${noteId}`)}
+          onEditorDirtyChange={(noteId, isDirty) =>
+            onEditorDirtyChange(`edit:${noteId}`, isDirty)
           }
           onOpen={() => onOpenPassageNotes(verseNumber)}
           onClose={() => onClosePassageNotes(verseNumber)}
@@ -311,6 +299,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               isTarget: isFocusTarget,
             }}
             isExpanded={isExpanded}
+            density={isReadMode ? "reading" : "default"}
             onCollapseVerse={handleCollapseVerse}
             highlights={highlights}
             onCreateHighlight={onCreateHighlight}
@@ -352,20 +341,11 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                 viewMode={viewMode}
                 isPill={showVerseAsPill}
                 currentChapter={currentChapter}
-                editingNoteIds={
-                  shouldShowInlineEditors ? editingNoteIds : undefined
-                }
-                onSaveEdit={shouldShowInlineEditors ? onSaveEdit : undefined}
-                onCancelEdit={
-                  shouldShowInlineEditors
-                    ? (noteId) => onCancelEditor(`edit:${noteId}`)
-                    : undefined
-                }
-                onEditorDirtyChange={
-                  shouldShowInlineEditors
-                    ? (noteId, isDirty) =>
-                        onEditorDirtyChange(`edit:${noteId}`, isDirty)
-                    : undefined
+                editingNoteIds={editingNoteIds}
+                onSaveEdit={onSaveEdit}
+                onCancelEdit={(noteId) => onCancelEditor(`edit:${noteId}`)}
+                onEditorDirtyChange={(noteId, isDirty) =>
+                  onEditorDirtyChange(`edit:${noteId}`, isDirty)
                 }
                 onOpen={() => onOpenVerseNotes(verseNumber)}
                 onClose={() => onCloseVerseNotes(verseNumber)}
@@ -385,8 +365,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           {passageNoteJsx}
 
           <AnimatePresence initial={false}>
-            {shouldShowInlineEditors &&
-              draftsForThisAnchor.map((draft) => {
+            {draftsForThisAnchor.map((draft) => {
                 const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
                 return (
                   <motion.div
