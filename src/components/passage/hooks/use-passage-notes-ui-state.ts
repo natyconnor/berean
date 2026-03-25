@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useVerseSelection } from "@/hooks/use-verse-selection";
 import type { NoteBody } from "@/lib/note-inline-content";
@@ -153,7 +160,9 @@ export function usePassageNotesUiState({
   const pendingViewModeAfterDiscardRef = useRef<PassageViewMode | null>(null);
   const pendingReadModeEditorActionRef = useRef<(() => void) | null>(null);
   const openEditorsRef = useRef(openEditors);
-  openEditorsRef.current = openEditors;
+  useLayoutEffect(() => {
+    openEditorsRef.current = openEditors;
+  }, [openEditors]);
 
   // --- Derived values from the unified openEditors map ---
 

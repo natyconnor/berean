@@ -29,6 +29,7 @@ function defaultOptions() {
     chapter: 1,
     viewMode: "compose" as const,
     setViewMode: vi.fn(),
+    isFocusMode: false,
     singleVerseNotes: new Map(),
     passageNotesByAnchor: new Map(),
     verseToPassageAnchor: new Map(),
@@ -273,7 +274,6 @@ describe("usePassageNotesUiState read-mode single-editor gate", () => {
     return {
       ...defaultOptions(),
       viewMode: "read" as const,
-      isFocusMode: false,
     };
   }
 

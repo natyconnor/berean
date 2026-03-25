@@ -42,9 +42,12 @@ export function usePassageViewTour({
   const setViewModeRef = useRef(setViewMode);
   const handleAddNoteRef = useRef(handleAddNote);
   const readingTourEnteredRef = useRef(false);
-  handleClickAwayRef.current = handleClickAway;
-  setViewModeRef.current = setViewMode;
-  handleAddNoteRef.current = handleAddNote;
+
+  useEffect(() => {
+    handleClickAwayRef.current = handleClickAway;
+    setViewModeRef.current = setViewMode;
+    handleAddNoteRef.current = handleAddNote;
+  }, [handleClickAway, setViewMode, handleAddNote]);
 
   const isAddNoteStep = activeTour === "main" && activeStep?.id === "add-note";
   const isNoteEditorStep =
