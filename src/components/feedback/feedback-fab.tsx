@@ -23,8 +23,8 @@ import {
 } from "@/components/ui/tooltip";
 import {
   devLog,
-  formatDevLogEntriesForExport,
-  getDevLogEntries,
+  formatRecentDevLogEntriesForExport,
+  logInteraction,
 } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +48,39 @@ const MAX_CAPTURE_WIDTH = 1280;
 const MAX_CAPTURE_HEIGHT = 800;
 const TARGET_SCREENSHOT_BYTES = 100 * 1024;
 const MIN_SCREENSHOT_BYTES = 45 * 1024;
+const BUG_REPORT_LOG_WINDOW_MS = 60_000;
+const BUG_REPORT_APP_LOG_MAX_CHARS = 350_000;
+const BUG_REPORT_CAPTURE_LOG_MAX_CHARS = 40_000;
+const BUG_REPORT_NO_RECENT_LOGS =
+  "(No recent app log entries captured in the last 60 seconds.)";
+
+function truncateText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const omittedChars = text.length - maxChars;
+  return `[truncated ${omittedChars} chars]\n${text.slice(-maxChars)}`;
+}
+
+function buildBugReportLogsText(captureDebugLines: readonly string[]): string {
+  const recentAppLogs =
+    formatRecentDevLogEntriesForExport(BUG_REPORT_LOG_WINDOW_MS, {
+      maxChars: BUG_REPORT_APP_LOG_MAX_CHARS,
+    }) || BUG_REPORT_NO_RECENT_LOGS;
+  const captureLogs =
+    captureDebugLines.length > 0
+      ? truncateText(
+          captureDebugLines.join("\n"),
+          BUG_REPORT_CAPTURE_LOG_MAX_CHARS,
+        )
+      : "(No capture diagnostics recorded.)";
+
+  return [
+    "=== Recent app logs (last 60s) ===",
+    recentAppLogs,
+    "",
+    "=== Feedback capture diagnostics ===",
+    captureLogs,
+  ].join("\n");
+}
 
 function waitForNextFrame(): Promise<void> {
   return new Promise((resolve) => {
@@ -174,10 +207,15 @@ export function FeedbackFab() {
 
   const onOpenChange = useCallback(
     (next: boolean) => {
+      if (next !== open) {
+        logInteraction("feedback", next ? "dialog-opened" : "dialog-closed", {
+          kind,
+        });
+      }
       setOpen(next);
       if (!next) resetForm();
     },
-    [resetForm],
+    [kind, open, resetForm],
   );
 
   const onSubmit = useCallback(async () => {
@@ -206,11 +244,6 @@ export function FeedbackFab() {
 
     try {
       if (kind === "bug") {
-        logsText = formatDevLogEntriesForExport(getDevLogEntries());
-        if (logsText.length === 0) {
-          logsText = "(No in-app dev log entries captured.)";
-        }
-
         let blob: Blob | null = null;
         try {
           logCaptureDebug("starting");
@@ -322,7 +355,7 @@ export function FeedbackFab() {
           }
         }
 
-        logsText = `${logsText}\n---\n${captureDebugLines.join("\n")}`;
+        logsText = buildBugReportLogsText(captureDebugLines);
 
         if (warnings.length > 0) {
           setCaptureWarning(
@@ -339,10 +372,19 @@ export function FeedbackFab() {
         logsText: kind === "bug" ? logsText : undefined,
         screenshotId: kind === "bug" ? screenshotId : undefined,
       });
+      logInteraction("feedback", "submitted", {
+        kind,
+        hasScreenshot: kind === "bug" && !!screenshotId,
+        hasWarnings: warnings.length > 0,
+      });
 
       setOpen(false);
       resetForm();
     } catch (e) {
+      logInteraction("feedback", "submit-failed", {
+        kind,
+        message: e instanceof Error ? e.message : "unknown-error",
+      });
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setSubmitting(false);
@@ -361,7 +403,10 @@ export function FeedbackFab() {
               open &&
                 "ring-2 ring-primary ring-offset-2 ring-offset-background",
             )}
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              logInteraction("feedback", "dialog-opened", { kind });
+              setOpen(true);
+            }}
           >
             <MessageSquarePlus className="h-5 w-5" />
           </button>
@@ -398,7 +443,11 @@ export function FeedbackFab() {
                 className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                 value={kind}
                 disabled={submitting}
-                onChange={(e) => setKind(e.target.value as FeedbackKind)}
+                onChange={(e) => {
+                  const nextKind = e.target.value as FeedbackKind;
+                  logInteraction("feedback", "kind-changed", { kind: nextKind });
+                  setKind(nextKind);
+                }}
                 aria-label="Feedback type"
               >
                 <option value="bug">Bug report</option>

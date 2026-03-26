@@ -5,6 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { logInteraction } from "@/lib/dev-log";
 import { useTheme } from "@/lib/use-theme";
 import { THEMES } from "@/lib/themes";
 import { useState } from "react";
@@ -13,9 +14,18 @@ import { cn } from "@/lib/utils";
 export function ThemeDropdown() {
   const { theme, setTheme, darkMode, setDarkMode } = useTheme();
   const [open, setOpen] = useState(false);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen !== open) {
+      logInteraction(
+        "toolbar",
+        nextOpen ? "theme-menu-opened" : "theme-menu-closed",
+      );
+    }
+    setOpen(nextOpen);
+  };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <TooltipButton
           variant="ghost"

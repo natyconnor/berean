@@ -6,8 +6,9 @@ import {
 } from "@tanstack/react-router";
 import { useConvexAuth } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TabProvider } from "@/lib/tab-context";
+import { logInteraction } from "@/lib/dev-log";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
@@ -40,6 +41,10 @@ function RootComponent() {
     isAuthenticated ? {} : "skip",
   );
   const activeTutorialTour = readActiveTutorialTour();
+  const lastAuthStateRef = useRef<string | null>(null);
+  const lastRouteKeyRef = useRef<string | null>(null);
+  const lastSettingsRedirectPathRef = useRef<string | null>(null);
+  const protectedShellReadyRef = useRef(false);
 
   const alreadyReady = !isLoading && isAuthenticated;
 
@@ -63,6 +68,58 @@ function RootComponent() {
   }, [minTimePassed]);
 
   const isReady = !isLoading && minTimePassed;
+  const shouldRedirectToSettings =
+    !isSettingsRoute &&
+    tutorialStatus?.needsStarterTagsSetup &&
+    tutorialStatus.mainTutorialCompletedAt !== undefined &&
+    activeTutorialTour !== "main";
+
+  useEffect(() => {
+    const authState = isLoading
+      ? "loading"
+      : isAuthenticated
+        ? "authenticated"
+        : "signed-out";
+    if (lastAuthStateRef.current === authState) return;
+    lastAuthStateRef.current = authState;
+    logInteraction("app", "auth-state-changed", { state: authState });
+  }, [isAuthenticated, isLoading]);
+
+  useEffect(() => {
+    const routeKey = `${location.pathname}${window.location.search}`;
+    if (lastRouteKeyRef.current === routeKey) return;
+    lastRouteKeyRef.current = routeKey;
+    logInteraction("route", "viewed", {
+      path: location.pathname,
+      hasSearch: window.location.search.length > 0,
+      isPublicLegalPath,
+    });
+  }, [isPublicLegalPath, location.pathname]);
+
+  useEffect(() => {
+    if (!isReady || !isAuthenticated || tutorialStatus === undefined) {
+      protectedShellReadyRef.current = false;
+      return;
+    }
+    if (protectedShellReadyRef.current) return;
+    protectedShellReadyRef.current = true;
+    logInteraction("app", "protected-shell-ready", {
+      path: location.pathname,
+      needsStarterTagsSetup: tutorialStatus.needsStarterTagsSetup,
+    });
+  }, [isAuthenticated, isReady, location.pathname, tutorialStatus]);
+
+  useEffect(() => {
+    if (!shouldRedirectToSettings) {
+      lastSettingsRedirectPathRef.current = null;
+      return;
+    }
+    if (lastSettingsRedirectPathRef.current === location.pathname) return;
+    lastSettingsRedirectPathRef.current = location.pathname;
+    logInteraction("app", "redirect-to-settings", {
+      fromPath: location.pathname,
+    });
+  }, [location.pathname, shouldRedirectToSettings]);
 
   if (isPublicLegalPath) {
     return (
@@ -91,12 +148,7 @@ function RootComponent() {
     );
   }
 
-  if (
-    !isSettingsRoute &&
-    tutorialStatus.needsStarterTagsSetup &&
-    tutorialStatus.mainTutorialCompletedAt !== undefined &&
-    activeTutorialTour !== "main"
-  ) {
+  if (shouldRedirectToSettings) {
     return <Navigate to="/settings" replace />;
   }
 

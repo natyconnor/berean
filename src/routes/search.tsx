@@ -4,6 +4,7 @@ import {
   SearchWorkspace,
   type SearchWorkspaceRouteState,
 } from "@/components/search/search-workspace";
+import { logInteraction } from "@/lib/dev-log";
 import { readSearchWorkspaceState } from "@/lib/search-workspace-state";
 
 function normalizeSearchState(
@@ -45,6 +46,14 @@ function SearchPage() {
       savedParams.mode === "all";
     if (!hasSavedState) return;
 
+    logInteraction("search", "workspace-restored", {
+      hasNoteId: !!savedParams.noteId,
+      hasQuery: !!savedParams.q,
+      matchMode: savedParams.mode ?? "any",
+      selectedTagCount: savedParams.tags
+        ? savedParams.tags.split(",").filter(Boolean).length
+        : 0,
+    });
     void navigate({
       to: "/search",
       search: {

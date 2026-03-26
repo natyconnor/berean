@@ -11,6 +11,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { readSearchWorkspaceState } from "@/lib/search-workspace-state";
+import { logInteraction } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { useOptionalTutorial } from "@/components/tutorial/tutorial-context";
@@ -29,6 +30,15 @@ export function TabBar() {
   const searchShortcutLabel = formatCommandOrControlShortcut("K");
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
   const settingsShortcutLabel = formatCommandOrControlShortcut(",");
+  const handlePassageNavigatorOpenChange = (nextOpen: boolean) => {
+    if (nextOpen !== passageNavigatorOpen) {
+      logInteraction(
+        "toolbar",
+        nextOpen ? "passage-navigator-opened" : "passage-navigator-closed",
+      );
+    }
+    setPassageNavigatorOpen(nextOpen);
+  };
   const searchLinkState = {
     q: savedSearchState.params.q,
     tags: savedSearchState.params.tags,
@@ -52,18 +62,28 @@ export function TabBar() {
 
       if (event.key.toLowerCase() === "g") {
         event.preventDefault();
-        setPassageNavigatorOpen((open) => !open);
+        setPassageNavigatorOpen((open) => {
+          const nextOpen = !open;
+          logInteraction(
+            "toolbar",
+            nextOpen ? "passage-navigator-opened" : "passage-navigator-closed",
+            { trigger: "keyboard" },
+          );
+          return nextOpen;
+        });
         return;
       }
 
       if (event.key === ",") {
         event.preventDefault();
         if (isSettingsRoute) {
+          logInteraction("toolbar", "settings-closed", { trigger: "keyboard" });
           void navigate({
             to: "/passage/$passageId",
             params: { passageId: backPassageId },
           });
         } else {
+          logInteraction("toolbar", "settings-opened", { trigger: "keyboard" });
           void navigate({ to: "/settings" });
         }
       }
@@ -116,13 +136,17 @@ export function TabBar() {
           aria-label="Open search workspace"
           data-tour-id="app-search-button"
         >
-          <Link to="/search" search={searchLinkState}>
+          <Link
+            to="/search"
+            search={searchLinkState}
+            onClick={() => logInteraction("toolbar", "search-workspace-opened")}
+          >
             <Search className="h-4 w-4" />
           </Link>
         </TooltipButton>
         <PassageNavigator
           open={passageNavigatorOpen}
-          onOpenChange={setPassageNavigatorOpen}
+          onOpenChange={handlePassageNavigatorOpenChange}
           trigger={
             <TooltipButton
               variant="ghost"
@@ -145,12 +169,13 @@ export function TabBar() {
               tooltip={`Close settings (${settingsShortcutLabel})`}
               aria-label="Close settings"
               data-tour-id="app-settings-button"
-              onClick={() =>
+              onClick={() => {
+                logInteraction("toolbar", "settings-closed");
                 void navigate({
                   to: "/passage/$passageId",
                   params: { passageId: backPassageId },
-                })
-              }
+                });
+              }}
             >
               <X className="h-4 w-4" />
             </TooltipButton>
@@ -164,7 +189,10 @@ export function TabBar() {
               aria-label="Open settings"
               data-tour-id="app-settings-button"
             >
-              <Link to="/settings">
+              <Link
+                to="/settings"
+                onClick={() => logInteraction("toolbar", "settings-opened")}
+              >
                 <Settings className="h-4 w-4" />
               </Link>
             </TooltipButton>
@@ -178,7 +206,19 @@ export function TabBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => void signOut().then(() => navigate({ to: "/" }))}
+          onClick={() => {
+            logInteraction("toolbar", "sign-out-started");
+            void signOut()
+              .then(() => {
+                logInteraction("toolbar", "sign-out-completed");
+                return navigate({ to: "/" });
+              })
+              .catch((error) => {
+                logInteraction("toolbar", "sign-out-failed", {
+                  message: error instanceof Error ? error.message : "unknown-error",
+                });
+              });
+          }}
           tooltip="Sign out"
           aria-label="Sign out"
         >

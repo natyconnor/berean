@@ -11,6 +11,7 @@ import { useMutation } from "convex/react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
+import { logInteraction } from "@/lib/dev-log";
 import { api } from "../../../convex/_generated/api";
 import {
   TutorialContext,
@@ -407,6 +408,7 @@ export function TutorialProvider({
     async (tour: TutorialTourName) => {
       if (finishingTourRef.current === tour) return;
 
+      logInteraction("tutorial", "finished", { tour });
       finishingTourRef.current = tour;
       setLocallyCompletedTours((current) => ({
         ...current,
@@ -447,6 +449,7 @@ export function TutorialProvider({
 
   const startTour = useCallback(
     (tour: TutorialTourName) => {
+      logInteraction("tutorial", "started", { tour });
       setStepIndex(0);
       setPendingTour(null);
       writeActiveTutorialTour(tour);
@@ -492,6 +495,11 @@ export function TutorialProvider({
     }
 
     const nextStep = activeSteps[nextIndex];
+    logInteraction("tutorial", "advanced", {
+      fromStepId: activeStep.id,
+      toStepId: nextStep.id,
+      tour: activeTour,
+    });
     setStepIndex(nextIndex);
 
     if (activeTour === "main" && nextStep.id === "import-notes") {
@@ -500,9 +508,14 @@ export function TutorialProvider({
   };
 
   const handleBack = () => {
-    if (!activeTour) return;
+    if (!activeTour || !activeStep) return;
 
     const nextIndex = Math.max(stepIndex - 1, 0);
+    logInteraction("tutorial", "went-back", {
+      fromStepId: activeStep.id,
+      toStepId: activeSteps[nextIndex]?.id ?? activeStep.id,
+      tour: activeTour,
+    });
     setStepIndex(nextIndex);
 
     if (activeTour === "main" && nextIndex <= 5 && !isPassageRoute) {

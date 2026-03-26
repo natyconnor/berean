@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { logInteraction } from "@/lib/dev-log";
 import type { NoteBody } from "@/lib/note-inline-content";
 import {
   buildPassageNotesByAnchor,
@@ -48,9 +49,36 @@ export function useChapterNotesData(book: string, chapter: number) {
     body: NoteBody,
     tags: string[],
   ) => {
-    const noteId = await createNote({ body, tags });
-    const verseRefId = await findOrCreateRef(verseRef);
-    await linkNote({ noteId, verseRefId });
+    logInteraction("notes", "create-started", {
+      book: verseRef.book,
+      chapter: verseRef.chapter,
+      startVerse: verseRef.startVerse,
+      endVerse: verseRef.endVerse,
+      tagCount: tags.length,
+    });
+    try {
+      const noteId = await createNote({ body, tags });
+      const verseRefId = await findOrCreateRef(verseRef);
+      await linkNote({ noteId, verseRefId });
+      logInteraction("notes", "created", {
+        noteId,
+        book: verseRef.book,
+        chapter: verseRef.chapter,
+        startVerse: verseRef.startVerse,
+        endVerse: verseRef.endVerse,
+        tagCount: tags.length,
+      });
+    } catch (error) {
+      logInteraction("notes", "create-failed", {
+        book: verseRef.book,
+        chapter: verseRef.chapter,
+        startVerse: verseRef.startVerse,
+        endVerse: verseRef.endVerse,
+        message: error instanceof Error ? error.message : "unknown-error",
+        tagCount: tags.length,
+      });
+      throw error;
+    }
   };
 
   const saveEditedNote = async (
@@ -58,11 +86,38 @@ export function useChapterNotesData(book: string, chapter: number) {
     body: NoteBody,
     tags: string[],
   ) => {
-    await updateNote({ id: noteId, body, tags });
+    logInteraction("notes", "update-started", {
+      noteId,
+      tagCount: tags.length,
+    });
+    try {
+      await updateNote({ id: noteId, body, tags });
+      logInteraction("notes", "updated", {
+        noteId,
+        tagCount: tags.length,
+      });
+    } catch (error) {
+      logInteraction("notes", "update-failed", {
+        noteId,
+        message: error instanceof Error ? error.message : "unknown-error",
+        tagCount: tags.length,
+      });
+      throw error;
+    }
   };
 
   const deleteNote = async (noteId: Id<"notes">) => {
-    await removeNote({ id: noteId });
+    logInteraction("notes", "delete-started", { noteId });
+    try {
+      await removeNote({ id: noteId });
+      logInteraction("notes", "deleted", { noteId });
+    } catch (error) {
+      logInteraction("notes", "delete-failed", {
+        noteId,
+        message: error instanceof Error ? error.message : "unknown-error",
+      });
+      throw error;
+    }
   };
 
   return {

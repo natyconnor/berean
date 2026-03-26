@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { logInteraction } from "@/lib/dev-log";
 import {
   buildChapterExportRows,
   formatChapterSheetName,
@@ -186,6 +187,9 @@ export function ImportExportSection() {
       return;
     }
 
+    logInteraction("import-export", "import-parse-started", {
+      fileCount: files.length,
+    });
     setImportParseState("parsing");
 
     try {
@@ -249,8 +253,21 @@ export function ImportExportSection() {
         issues: [...preview.issues, ...extraIssues],
       });
       setImportParseState("parsed");
+      logInteraction("import-export", "import-parse-completed", {
+        errorCount: [...preview.issues, ...extraIssues].filter(
+          (issue) => issue.severity === "error",
+        ).length,
+        noteCount: preview.notes.length,
+        warningCount: [...preview.issues, ...extraIssues].filter(
+          (issue) => issue.severity === "warning",
+        ).length,
+        workbookCount: preview.workbooks.length,
+      });
     } catch (error) {
       setImportParseState("error");
+      logInteraction("import-export", "import-parse-failed", {
+        message: error instanceof Error ? error.message : "unknown-error",
+      });
       setImportParseError(
         error instanceof Error
           ? error.message
@@ -267,6 +284,7 @@ export function ImportExportSection() {
 
   const handleImportDropZoneClick = () => {
     if (isImportBusy) return;
+    logInteraction("import-export", "import-picker-opened");
     fileInputRef.current?.click();
   };
 
@@ -304,6 +322,9 @@ export function ImportExportSection() {
       setIsImportDropActive(false);
       return;
     }
+    logInteraction("import-export", "import-files-dropped", {
+      fileCount: event.dataTransfer.files.length,
+    });
     void handleImportFiles(Array.from(event.dataTransfer.files));
   };
 
@@ -312,6 +333,10 @@ export function ImportExportSection() {
     if (hasBlockingImportIssues) return;
     if (importPreview.notes.length === 0) return;
 
+    logInteraction("import-export", "import-started", {
+      noteCount: importPreview.notes.length,
+      workbookCount: importPreview.workbooks.length,
+    });
     setImportParseError(null);
     setImportSuccessMessage(null);
 
@@ -360,8 +385,16 @@ export function ImportExportSection() {
             : ""
         }`,
       );
+      logInteraction("import-export", "import-completed", {
+        duplicateCount,
+        importedCount,
+        workbookCount: importedWorkbookCount,
+      });
       resetImportState({ preserveSuccessMessage: true });
     } catch (error) {
+      logInteraction("import-export", "import-failed", {
+        message: error instanceof Error ? error.message : "unknown-error",
+      });
       setImportParseError(
         error instanceof Error ? error.message : "Failed to import notes.",
       );
@@ -374,10 +407,17 @@ export function ImportExportSection() {
     if (!EXPORT_ENABLED) return;
     if (!exportableNotes) return;
 
+    let exportedBookCount = 0;
     try {
       setExportError(null);
       const notes = exportableNotes;
       const books = getExportBooks(notes, exportScope);
+      exportedBookCount = books.length;
+      logInteraction("import-export", "export-started", {
+        noteCount: notes.length,
+        scope: exportScope,
+        bookCount: books.length,
+      });
       const grouped = groupExportNotesByBook(notes);
       const XLSX = await import("xlsx");
       const { zipSync } = await import("fflate");
@@ -442,7 +482,15 @@ export function ImportExportSection() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      logInteraction("import-export", "export-completed", {
+        bookCount: exportedBookCount,
+        scope: exportScope,
+      });
     } catch (error) {
+      logInteraction("import-export", "export-failed", {
+        message: error instanceof Error ? error.message : "unknown-error",
+        scope: exportScope,
+      });
       setExportError(
         error instanceof Error ? error.message : "Failed to export notes.",
       );
@@ -718,7 +766,12 @@ export function ImportExportSection() {
                   variant={
                     exportScope === "booksWithNotes" ? "default" : "outline"
                   }
-                  onClick={() => setExportScope("booksWithNotes")}
+                  onClick={() => {
+                    logInteraction("import-export", "export-scope-changed", {
+                      scope: "booksWithNotes",
+                    });
+                    setExportScope("booksWithNotes");
+                  }}
                   disabled={exportProgress !== null}
                 >
                   Books with notes
@@ -726,7 +779,12 @@ export function ImportExportSection() {
                 <Button
                   size="sm"
                   variant={exportScope === "allBooks" ? "default" : "outline"}
-                  onClick={() => setExportScope("allBooks")}
+                  onClick={() => {
+                    logInteraction("import-export", "export-scope-changed", {
+                      scope: "allBooks",
+                    });
+                    setExportScope("allBooks");
+                  }}
                   disabled={exportProgress !== null}
                 >
                   All 66 books

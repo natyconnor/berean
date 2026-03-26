@@ -10,6 +10,7 @@ import {
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { logInteraction } from "@/lib/dev-log";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import { formatVerseRef, parseVerseRef } from "@/lib/verse-ref-utils";
 
@@ -32,6 +33,10 @@ export function VerseLinkDialog({
   const handleCreate = useCallback(async () => {
     const target = parseVerseRef(targetInput.trim());
     if (!target) {
+      logInteraction("verse-links", "create-failed", {
+        reason: "invalid-reference",
+        source: formatVerseRef(sourceRef),
+      });
       setError('Enter a valid reference like "Romans 8:28" or "John 3:16-18"');
       return;
     }
@@ -53,16 +58,34 @@ export function VerseLinkDialog({
         verseRefId1: sourceRefId,
         verseRefId2: targetRefId,
       });
+      logInteraction("verse-links", "created", {
+        source: formatVerseRef(sourceRef),
+        target: formatVerseRef(target),
+      });
       onOpenChange(false);
       setTargetInput("");
       setError(null);
     } catch (err) {
+      logInteraction("verse-links", "create-failed", {
+        message: err instanceof Error ? err.message : "unknown-error",
+        source: formatVerseRef(sourceRef),
+      });
       setError(err instanceof Error ? err.message : "Failed to create link");
     }
   }, [targetInput, sourceRef, findOrCreateRef, createLink, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        logInteraction(
+          "verse-links",
+          nextOpen ? "dialog-opened" : "dialog-closed",
+          { source: formatVerseRef(sourceRef) },
+        );
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Link Verse</DialogTitle>

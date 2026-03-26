@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import { useTabs } from "@/lib/use-tabs";
+import { logInteraction } from "@/lib/dev-log";
 import { toPassageId } from "@/lib/verse-ref-utils";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
 import { useSearchWorkspaceRouting } from "./hooks/use-search-workspace-routing";
@@ -42,6 +43,8 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
   const { isTourActive } = useTutorial();
   const resolveTagStyle = useStarterTagBadgeStyle();
   const resultsViewportRef = useRef<HTMLDivElement | null>(null);
+  const hasLoggedWorkspaceOpenRef = useRef(false);
+  const lastCriteriaSignatureRef = useRef<string | null>(null);
   const {
     query,
     matchMode,
@@ -134,6 +137,12 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
     (ref: SearchVerseRef) => {
       const passageId = toPassageId(ref.book, ref.chapter);
       const label = `${ref.book} ${ref.chapter}`;
+      logInteraction("search", "result-opened", {
+        book: ref.book,
+        chapter: ref.chapter,
+        endVerse: ref.endVerse,
+        startVerse: ref.startVerse,
+      });
       openTab(passageId, label, {
         source: "search",
         mode: "read",
@@ -143,6 +152,38 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
     },
     [openTab],
   );
+
+  useEffect(() => {
+    if (hasLoggedWorkspaceOpenRef.current) return;
+    hasLoggedWorkspaceOpenRef.current = true;
+    logInteraction("search", "workspace-opened", {
+      hasNoteId: !!search.noteId,
+      hasQuery: !!search.q,
+      matchMode,
+      selectedTagCount: selectedTags.length,
+    });
+  }, [matchMode, search.noteId, search.q, selectedTags.length]);
+
+  useEffect(() => {
+    const signature = shouldSearch
+      ? `${hasTextQuery}:${selectedTags.length}:${matchMode}`
+      : "idle";
+    if (lastCriteriaSignatureRef.current === signature) return;
+    if (lastCriteriaSignatureRef.current === null && !shouldSearch) {
+      lastCriteriaSignatureRef.current = signature;
+      return;
+    }
+    lastCriteriaSignatureRef.current = signature;
+    if (!shouldSearch) {
+      logInteraction("search", "criteria-cleared");
+      return;
+    }
+    logInteraction("search", "criteria-applied", {
+      hasTextQuery,
+      matchMode,
+      selectedTagCount: selectedTags.length,
+    });
+  }, [hasTextQuery, matchMode, selectedTags.length, shouldSearch]);
 
   useSearchWorkspacePersistence({
     search,

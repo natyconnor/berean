@@ -3,7 +3,6 @@ import { getMirrorToConsole, pushDevLogEntry } from "./store";
 import type { DevLogLevel } from "./types";
 
 function emit(level: DevLogLevel, channel: string, parts: unknown[]): void {
-  if (!import.meta.env.DEV) return;
   const body = serializeDevLogParts(parts);
   pushDevLogEntry({ ts: Date.now(), level, channel, body });
   if (!getMirrorToConsole()) return;
@@ -24,6 +23,16 @@ function emit(level: DevLogLevel, channel: string, parts: unknown[]): void {
   }
 }
 
+function normalizeDetails(
+  details?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!details) return undefined;
+  const entries = Object.entries(details).filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return undefined;
+  entries.sort(([a], [b]) => a.localeCompare(b));
+  return Object.fromEntries(entries);
+}
+
 export const devLog = {
   debug(channel: string, ...parts: unknown[]): void {
     emit("debug", channel, parts);
@@ -38,3 +47,16 @@ export const devLog = {
     emit("error", channel, parts);
   },
 };
+
+export function logInteraction(
+  category: string,
+  action: string,
+  details?: Record<string, unknown>,
+): void {
+  const normalized = normalizeDetails(details);
+  if (normalized) {
+    devLog.info(`interaction:${category}`, action, normalized);
+    return;
+  }
+  devLog.info(`interaction:${category}`, action);
+}

@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { logInteraction } from "@/lib/dev-log";
 import { normalizeTags, type TagMatchMode } from "@/lib/tag-utils";
 import type { SearchWorkspaceRouteState } from "../search-workspace";
 
@@ -54,6 +55,9 @@ export function useSearchWorkspaceRouting(search: SearchWorkspaceRouteState) {
 
   const updateMatchMode = useCallback(
     (nextMatchMode: TagMatchMode) => {
+      logInteraction("search", "match-mode-changed", {
+        matchMode: nextMatchMode,
+      });
       updateSearch({ mode: nextMatchMode, noteId: undefined });
     },
     [updateSearch],
@@ -64,6 +68,9 @@ export function useSearchWorkspaceRouting(search: SearchWorkspaceRouteState) {
       const nextTags = selectedTags.includes(tag)
         ? selectedTags.filter((currentTag) => currentTag !== tag)
         : [...selectedTags, tag];
+      logInteraction("search", "tag-filters-changed", {
+        selectedTagCount: nextTags.length,
+      });
       updateSearch({
         tags: serializeTags(nextTags),
         noteId: undefined,
@@ -73,11 +80,15 @@ export function useSearchWorkspaceRouting(search: SearchWorkspaceRouteState) {
   );
 
   const clearTags = useCallback(() => {
+    logInteraction("search", "tag-filters-cleared");
     updateSearch({ tags: undefined, noteId: undefined });
   }, [updateSearch]);
 
   const selectNote = useCallback(
     (noteId: string) => {
+      logInteraction("search", "result-selected", {
+        hasNoteId: noteId.length > 0,
+      });
       updateSearch({ noteId });
     },
     [updateSearch],

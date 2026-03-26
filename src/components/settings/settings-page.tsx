@@ -21,6 +21,7 @@ import { DevSeedSection } from "@/components/settings/dev-seed-section";
 import { TutorialActionsSection } from "@/components/settings/tutorial-actions-section";
 import { DeleteCustomTagDialog } from "@/components/settings/delete-custom-tag-dialog";
 import { DeleteAccountSection } from "@/components/settings/delete-account-section";
+import { logInteraction } from "@/lib/dev-log";
 
 interface SeedResultSummary {
   seed: number;
@@ -58,6 +59,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
 
   const handleBack = useCallback(() => {
+    logInteraction("settings", "closed");
     void navigate({
       to: "/passage/$passageId",
       params: { passageId: backPassageId },
@@ -152,6 +154,9 @@ export function SettingsPage() {
     setBusyAction("add-all");
     try {
       await addMany({ tags: ALL_STARTER_TAGS, source: "starter" });
+      logInteraction("settings", "starter-tags-added-all", {
+        tagCount: ALL_STARTER_TAGS.length,
+      });
     } finally {
       setBusyAction(null);
     }
@@ -161,6 +166,10 @@ export function SettingsPage() {
     setBusyAction(`add-category:${categoryId}`);
     try {
       await addMany({ tags, source: "starter" });
+      logInteraction("settings", "starter-tag-category-added", {
+        categoryId,
+        tagCount: tags.length,
+      });
     } finally {
       setBusyAction(null);
     }
@@ -177,8 +186,10 @@ export function SettingsPage() {
     try {
       if (isStarterTagInCatalog) {
         await removeMany({ tags: [tag] });
+        logInteraction("settings", "starter-tag-removed");
       } else {
         await addMany({ tags: [tag], source: "starter" });
+        logInteraction("settings", "starter-tag-added");
       }
     } finally {
       setBusyAction(null);
@@ -198,6 +209,9 @@ export function SettingsPage() {
 
   const handleColorChange = useCallback(
     (categoryId: string, color: string) => {
+      logInteraction("settings", "starter-tag-category-color-changed", {
+        categoryId,
+      });
       setDraftCategoryColors((prev) => ({ ...prev, [categoryId]: color }));
 
       if (colorSaveTimers.current[categoryId]) {
@@ -227,6 +241,11 @@ export function SettingsPage() {
     setBusyAction("add-custom");
     try {
       await addMany({ tags, source: "custom" });
+      logInteraction("settings", "custom-tags-added", {
+        duplicateInCatalogCount: parsedCustomTagInput.duplicateTagsInCatalog.length,
+        duplicateInInputCount: parsedCustomTagInput.duplicateTagsInInput.length,
+        tagCount: tags.length,
+      });
       setCustomTagInput("");
     } finally {
       setBusyAction(null);
@@ -239,6 +258,7 @@ export function SettingsPage() {
     setBusyAction(`delete-custom:${deleteTagCandidate}`);
     try {
       await removeCustomTagAndDetach({ tag: deleteTagCandidate });
+      logInteraction("settings", "custom-tag-deleted");
       setDeleteTagCandidate(null);
     } finally {
       setBusyAction(null);
@@ -250,6 +270,11 @@ export function SettingsPage() {
     try {
       const result = await seedDevChapterNotes({
         confirmReplace: true,
+      });
+      logInteraction("settings", "dev-seed-completed", {
+        chapters: result.selectedChapters,
+        linksCreated: result.linksCreated,
+        notesCreated: result.notesCreated,
       });
       setSeedResult({
         seed: result.seed,
@@ -350,8 +375,18 @@ export function SettingsPage() {
 
         <TutorialActionsSection
           busyAction={busyAction}
-          onReplayMainTour={() => startTour("main")}
-          onReplaySearchTour={() => startTour("search")}
+          onReplayMainTour={() => {
+            logInteraction("settings", "tutorial-replay-started", {
+              tour: "main",
+            });
+            startTour("main");
+          }}
+          onReplaySearchTour={() => {
+            logInteraction("settings", "tutorial-replay-started", {
+              tour: "search",
+            });
+            startTour("search");
+          }}
         />
 
         <DeleteAccountSection />

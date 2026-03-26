@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { warmManuscriptTheme } from "@/themes/theme-warm-manuscript";
+import { logInteraction } from "@/lib/dev-log";
 import { THEMES } from "@/lib/themes";
 import { ThemeContext } from "@/lib/theme-context";
 import type { AppTheme } from "@/themes/theme-types";
@@ -49,6 +50,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: AppTheme) => {
     setThemeState(next);
+    logInteraction("preferences", "theme-changed", { theme: next.name });
     try {
       localStorage.setItem(THEME_STORAGE_KEY, next.name);
     } catch {
@@ -58,6 +60,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setDarkMode = useCallback((dark: boolean) => {
     setDarkModeState(dark);
+    logInteraction("preferences", "dark-mode-changed", { darkMode: dark });
     try {
       localStorage.setItem(DARK_MODE_STORAGE_KEY, String(dark));
     } catch {

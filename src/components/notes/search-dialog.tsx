@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search } from "lucide-react";
 import { useTabs } from "@/lib/use-tabs";
+import { logInteraction } from "@/lib/dev-log";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
 import { normalizeTags, type TagMatchMode } from "@/lib/tag-utils";
 import { toPassageId } from "@/lib/verse-ref-utils";
@@ -37,18 +38,31 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
   const backfillCatalog = useMutation(api.tags.backfillCatalogFromNotes);
   const resolveTagStyle = useStarterTagBadgeStyle();
   const searchShortcutLabel = formatCommandOrControlShortcut("K");
+  const setDialogOpen = useCallback(
+    (nextOpen: boolean, trigger: string) => {
+      if (nextOpen !== open) {
+        logInteraction(
+          "quick-search",
+          nextOpen ? "dialog-opened" : "dialog-closed",
+          { trigger },
+        );
+      }
+      setOpen(nextOpen);
+    },
+    [open],
+  );
 
   // Keyboard shortcut
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((o) => !o);
+        setDialogOpen(!open, "keyboard");
       }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [open, setDialogOpen]);
 
   const catalog = useQuery(api.tags.listCatalog);
   const normalizedQuery = query.trim();
@@ -82,17 +96,27 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
   }, [backfillCatalog, catalog, open]);
 
   const toggleTag = useCallback((tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag)
+    setSelectedTags((prev) => {
+      const nextSelectedTags = prev.includes(tag)
         ? prev.filter((current) => current !== tag)
-        : [...prev, tag],
-    );
+        : [...prev, tag];
+      logInteraction("quick-search", "tag-filters-changed", {
+        selectedTagCount: nextSelectedTags.length,
+      });
+      return nextSelectedTags;
+    });
   }, []);
 
   const openAdvancedSearch = useCallback(
     (noteId?: string) => {
       const nextQuery = query.trim();
       const nextTags = normalizeTags(selectedTags);
+      logInteraction("quick-search", "opened-advanced-search", {
+        hasNoteId: !!noteId,
+        hasQuery: nextQuery.length > 0,
+        matchMode,
+        selectedTagCount: nextTags.length,
+      });
       void navigate({
         to: "/search",
         search: {
@@ -102,9 +126,9 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
           noteId,
         },
       });
-      setOpen(false);
+      setDialogOpen(false, "advanced-search");
     },
-    [matchMode, navigate, query, selectedTags],
+    [matchMode, navigate, query, selectedTags, setDialogOpen],
   );
 
   const jumpToSearchResultVerse = useCallback(
@@ -124,15 +148,21 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
 
       const passageId = toPassageId(primaryRef.book, primaryRef.chapter);
       const label = `${primaryRef.book} ${primaryRef.chapter}`;
+      logInteraction("quick-search", "result-opened", {
+        book: primaryRef.book,
+        chapter: primaryRef.chapter,
+        endVerse: primaryRef.endVerse,
+        startVerse: primaryRef.startVerse,
+      });
       openTab(passageId, label, {
         source: "search",
         mode: "read",
         startVerse: primaryRef.startVerse,
         endVerse: primaryRef.endVerse,
       });
-      setOpen(false);
+      setDialogOpen(false, "result");
     },
-    [openAdvancedSearch, openTab],
+    [openAdvancedSearch, openTab, setDialogOpen],
   );
 
   return (
@@ -140,7 +170,7 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
       {showTrigger ? (
         <button
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md border bg-muted/30 hover:bg-muted cursor-pointer"
-          onClick={() => setOpen(true)}
+          onClick={() => setDialogOpen(true, "button")}
         >
           <Search className="h-3.5 w-3.5" />
           <span>Search notes...</span>
@@ -150,7 +180,7 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
         </button>
       ) : null}
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(nextOpen) => setDialogOpen(nextOpen, "dialog")}>
         <DialogContent className="sm:max-w-xl p-0 gap-0" data-passage-dismiss-exempt>
           <div className="flex items-center border-b px-3">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -181,7 +211,12 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
                       <Badge
                         variant={matchMode === "any" ? "default" : "outline"}
                         className="text-xs cursor-pointer"
-                        onClick={() => setMatchMode("any")}
+                        onClick={() => {
+                          logInteraction("quick-search", "match-mode-changed", {
+                            matchMode: "any",
+                          });
+                          setMatchMode("any");
+                        }}
                       >
                         Any
                       </Badge>
@@ -195,7 +230,12 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
                       <Badge
                         variant={matchMode === "all" ? "default" : "outline"}
                         className="text-xs cursor-pointer"
-                        onClick={() => setMatchMode("all")}
+                        onClick={() => {
+                          logInteraction("quick-search", "match-mode-changed", {
+                            matchMode: "all",
+                          });
+                          setMatchMode("all");
+                        }}
                       >
                         All
                       </Badge>
@@ -210,7 +250,10 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
                 availableTags={availableTags}
                 selectedTags={selectedTags}
                 onToggleTag={toggleTag}
-                onClear={() => setSelectedTags([])}
+                onClear={() => {
+                  logInteraction("quick-search", "tag-filters-cleared");
+                  setSelectedTags([]);
+                }}
                 resolveTagStyle={resolveTagStyle}
                 popoverDropdown
               />

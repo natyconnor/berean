@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex-helpers/react/cache";
 import { useMutation } from "convex/react";
 import { useEsvPassage } from "@/hooks/use-esv-passage";
+import { logInteraction } from "@/lib/dev-log";
 import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
@@ -70,11 +71,23 @@ export function PassageView({
       forcedViewMode,
       focusSource,
     });
+  const handleSetViewMode = useCallback(
+    (next: PassageViewMode) => {
+      if (next === effectiveViewMode) return;
+      logInteraction("reader", "view-mode-changed", {
+        book,
+        chapter,
+        mode: next,
+      });
+      setViewMode(next);
+    },
+    [book, chapter, effectiveViewMode, setViewMode],
+  );
   const { isFocusMode, toggleFocusMode } = useFocusMode();
   const { activeTour, startTour, isFocusModeTutorialComplete } = useTutorial();
   const passageNotesInteraction = usePassageNotesInteraction(book, chapter, {
     viewMode: effectiveViewMode,
-    setViewMode,
+    setViewMode: handleSetViewMode,
     isFocusMode: !isReadMode && isFocusMode,
   });
   const {
@@ -95,6 +108,11 @@ export function PassageView({
 
   const handleFocusModeToggle = useCallback(() => {
     const enabling = !isFocusMode;
+    logInteraction("reader", "focus-mode-changed", {
+      book,
+      chapter,
+      enabled: enabling,
+    });
     toggleFocusMode();
     if (
       enabling &&
@@ -106,6 +124,8 @@ export function PassageView({
     }
   }, [
     activeTour,
+    book,
+    chapter,
     isFocusMode,
     isFocusModeTutorialComplete,
     isReadMode,
@@ -127,6 +147,7 @@ export function PassageView({
   const highlightBannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const lastChapterLifecycleLogRef = useRef<string | null>(null);
 
   const clearHighlightMutationBanner = useCallback(() => {
     if (highlightBannerTimeoutRef.current) {
@@ -182,8 +203,24 @@ export function PassageView({
         endOffset,
         color,
       })
-        .then(() => clearHighlightMutationBanner())
-        .catch(() => showHighlightMutationError());
+        .then(() => {
+          logInteraction("reader", "highlight-created", {
+            book,
+            chapter,
+            color,
+            verse,
+          });
+          clearHighlightMutationBanner();
+        })
+        .catch(() => {
+          logInteraction("reader", "highlight-create-failed", {
+            book,
+            chapter,
+            color,
+            verse,
+          });
+          showHighlightMutationError();
+        });
     },
     [
       book,
@@ -197,10 +234,24 @@ export function PassageView({
   const handleDeleteHighlight = useCallback(
     (highlightId: string) => {
       void removeHighlightMutation({ id: highlightId as Id<"highlights"> })
-        .then(() => clearHighlightMutationBanner())
-        .catch(() => showHighlightMutationError());
+        .then(() => {
+          logInteraction("reader", "highlight-deleted", {
+            book,
+            chapter,
+          });
+          clearHighlightMutationBanner();
+        })
+        .catch(() => {
+          logInteraction("reader", "highlight-delete-failed", {
+            book,
+            chapter,
+          });
+          showHighlightMutationError();
+        });
     },
     [
+      book,
+      chapter,
       clearHighlightMutationBanner,
       removeHighlightMutation,
       showHighlightMutationError,
@@ -213,10 +264,26 @@ export function PassageView({
         id: highlightId as Id<"highlights">,
         color,
       })
-        .then(() => clearHighlightMutationBanner())
-        .catch(() => showHighlightMutationError());
+        .then(() => {
+          logInteraction("reader", "highlight-recolored", {
+            book,
+            chapter,
+            color,
+          });
+          clearHighlightMutationBanner();
+        })
+        .catch(() => {
+          logInteraction("reader", "highlight-recolor-failed", {
+            book,
+            chapter,
+            color,
+          });
+          showHighlightMutationError();
+        });
     },
     [
+      book,
+      chapter,
       clearHighlightMutationBanner,
       showHighlightMutationError,
       updateHighlightColorMutation,
@@ -375,6 +442,43 @@ export function PassageView({
   const focusLayoutKey = focusRequestKey
     ? `${focusRequestKey}|${noteById.size}`
     : null;
+  const handleSetNoteVisibility = useCallback(
+    (next: NoteVisibility) => {
+      if (next === noteVisibility) return;
+      logInteraction("reader", "note-visibility-changed", {
+        book,
+        chapter,
+        visibility: next,
+      });
+      setNoteVisibility(next);
+    },
+    [book, chapter, noteVisibility],
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    if (error) {
+      const errorKey = `error:${book}:${chapter}:${hasFocusRange}`;
+      if (lastChapterLifecycleLogRef.current === errorKey) return;
+      lastChapterLifecycleLogRef.current = errorKey;
+      logInteraction("reader", "chapter-load-failed", {
+        book,
+        chapter,
+        hasFocusRange,
+      });
+      return;
+    }
+    if (!data) return;
+    const loadedKey = `loaded:${book}:${chapter}:${hasFocusRange}:${data.verses.length}`;
+    if (lastChapterLifecycleLogRef.current === loadedKey) return;
+    lastChapterLifecycleLogRef.current = loadedKey;
+    logInteraction("reader", "chapter-loaded", {
+      book,
+      chapter,
+      hasFocusRange,
+      verseCount: data.verses.length,
+    });
+  }, [book, chapter, data, error, hasFocusRange, loading]);
 
   usePassageKeyboardShortcuts({
     previous,
@@ -415,7 +519,13 @@ export function PassageView({
             type="button"
             size="sm"
             className="mt-1"
-            onClick={() => retryPassage()}
+            onClick={() => {
+              logInteraction("reader", "chapter-retry-requested", {
+                book,
+                chapter,
+              });
+              retryPassage();
+            }}
           >
             Try again
           </Button>
@@ -455,7 +565,7 @@ export function PassageView({
         hasAnyNotes={hasAnyNotes}
         noteVisibility={noteVisibility}
         setViewModeWithNotesReset={setViewModeWithNotesReset}
-        setNoteVisibility={setNoteVisibility}
+        setNoteVisibility={handleSetNoteVisibility}
         onToggleFocusMode={handleFocusModeToggle}
       />
 

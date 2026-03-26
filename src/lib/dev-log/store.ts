@@ -1,6 +1,7 @@
 import type { DevLogEntry, DevLogLevel } from "./types";
 
 export const DEV_LOG_MAX_ENTRIES = 800;
+export const DEV_LOG_MAX_AGE_MS = 90_000;
 
 const MIRROR_SESSION_KEY = "berean:devLogMirrorConsole";
 
@@ -27,6 +28,14 @@ function notify(): void {
   }
 }
 
+function trimEntries(
+  nextEntries: readonly DevLogEntry[],
+  now: number,
+): DevLogEntry[] {
+  const minTs = now - DEV_LOG_MAX_AGE_MS;
+  return nextEntries.filter((entry) => entry.ts >= minTs).slice(-DEV_LOG_MAX_ENTRIES);
+}
+
 export function subscribeDevLog(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
@@ -36,6 +45,11 @@ export function subscribeDevLog(listener: () => void): () => void {
 
 export function getDevLogEntries(): readonly DevLogEntry[] {
   return entries;
+}
+
+export function getRecentDevLogEntries(windowMs: number): readonly DevLogEntry[] {
+  const minTs = Date.now() - Math.max(0, windowMs);
+  return entries.filter((entry) => entry.ts >= minTs);
 }
 
 export function getMirrorToConsole(): boolean {
@@ -71,7 +85,7 @@ export function pushDevLogEntry(partial: {
     channel: partial.channel,
     body: partial.body,
   };
-  entries = [...entries, entry].slice(-DEV_LOG_MAX_ENTRIES);
+  entries = trimEntries([...entries, entry], entry.ts);
   notify();
   return entry;
 }

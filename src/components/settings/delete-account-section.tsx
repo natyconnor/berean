@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { logInteraction } from "@/lib/dev-log";
 
 const CONFIRM_PHRASE = "i understand";
 
@@ -40,9 +41,11 @@ export function DeleteAccountSection() {
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (!next) {
+        logInteraction("account", "delete-dialog-closed");
         resetAndClose();
         return;
       }
+      logInteraction("account", "delete-dialog-opened");
       setOpen(true);
     },
     [resetAndClose],
@@ -50,6 +53,7 @@ export function DeleteAccountSection() {
 
   const handleDelete = useCallback(async () => {
     if (!canSubmit || busy) return;
+    logInteraction("account", "delete-started");
     setBusy(true);
     try {
       await deleteMyAccount({});
@@ -59,7 +63,13 @@ export function DeleteAccountSection() {
         // Session is already removed server-side; still clear client state when possible.
       }
       resetAndClose();
+      logInteraction("account", "delete-completed");
       await navigate({ to: "/" });
+    } catch (error) {
+      logInteraction("account", "delete-failed", {
+        message: error instanceof Error ? error.message : "unknown-error",
+      });
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -88,7 +98,10 @@ export function DeleteAccountSection() {
           type="button"
           variant="destructive"
           size="sm"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            logInteraction("account", "delete-dialog-opened");
+            setOpen(true);
+          }}
           disabled={busy}
         >
           Delete my account…

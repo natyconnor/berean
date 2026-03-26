@@ -2,7 +2,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { Link } from "@tanstack/react-router";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LoginPageAtmosphere } from "@/components/login-page-atmosphere";
-import { devLog } from "@/lib/dev-log";
+import { devLog, logInteraction } from "@/lib/dev-log";
 import {
   heroBackgroundLayerStyle,
   heroGradientOverlayLayerStyle,
@@ -66,15 +66,17 @@ export function LoginPage({ isLoading = false }: { isLoading?: boolean }) {
   const parallaxRef = useMouseParallax();
 
   const handleGoogleSignIn = async () => {
+    logInteraction("auth", "sign-in-started", { provider: "google" });
     setIsSigningIn(true);
     try {
       await signIn("google");
+      logInteraction("auth", "sign-in-completed", { provider: "google" });
     } catch (error) {
-      if (import.meta.env.DEV) {
-        devLog.error("auth", "Sign in failed:", error);
-      } else {
-        console.error("Sign in failed:", error);
-      }
+      devLog.error("auth", "Sign in failed:", error);
+      logInteraction("auth", "sign-in-failed", {
+        message: error instanceof Error ? error.message : "unknown-error",
+        provider: "google",
+      });
       setIsSigningIn(false);
     }
   };

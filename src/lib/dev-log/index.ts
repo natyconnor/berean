@@ -1,8 +1,9 @@
 export type { DevLogEntry, DevLogLevel } from "./types";
-export { devLog } from "./dev-log";
+export { devLog, logInteraction } from "./dev-log";
 export {
   clearDevLog,
   getDevLogEntries,
+  getRecentDevLogEntries,
   getMirrorToConsole,
   setMirrorToConsole,
   subscribeDevLog,
@@ -10,5 +11,6 @@ export {
 export {
   formatDevLogEntriesForExport,
   formatDevLogEntryLine,
+  formatRecentDevLogEntriesForExport,
 } from "./format-lines";
 export { serializeDevLogArg, serializeDevLogParts } from "./serialize";
