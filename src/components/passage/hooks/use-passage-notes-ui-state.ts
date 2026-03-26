@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useVerseSelection } from "@/hooks/use-verse-selection";
+import { logInteraction } from "@/lib/dev-log";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
@@ -115,6 +116,22 @@ function newEditorKey(ref: VerseRef): string {
 
 function editEditorKey(noteId: Id<"notes">): string {
   return `edit:${noteId}`;
+}
+
+function getVerseRefLogDetails(verseRef: VerseRef): {
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
+  isPassage: boolean;
+} {
+  return {
+    book: verseRef.book,
+    chapter: verseRef.chapter,
+    startVerse: verseRef.startVerse,
+    endVerse: verseRef.endVerse,
+    isPassage: verseRef.startVerse !== verseRef.endVerse,
+  };
 }
 
 export function usePassageNotesUiState({
@@ -397,8 +414,13 @@ export function usePassageNotesUiState({
   );
 
   const addNewDraft = useCallback((ref: VerseRef) => {
+    const key = newEditorKey(ref);
+    if (openEditorsRef.current.has(key)) return;
+    logInteraction("notes", "editor-opened", {
+      mode: "create",
+      ...getVerseRefLogDetails(ref),
+    });
     setOpenEditors((prev) => {
-      const key = newEditorKey(ref);
       if (prev.has(key)) return prev;
       const next = new Map(prev);
       next.set(key, { kind: "new", verseRef: ref });
@@ -685,6 +707,46 @@ export function usePassageNotesUiState({
     [onDeleteNote],
   );
 
+  const clearCancelledDraftSelection = useCallback(
+    (verseRef: VerseRef) => {
+      setViewSelectedVerses((prev) => {
+        if (prev.size === 0) return prev;
+
+        const next = new Set(prev);
+        for (let verse = verseRef.startVerse; verse <= verseRef.endVerse; verse += 1) {
+          next.delete(verse);
+        }
+
+        if (
+          verseRef.startVerse === verseRef.endVerse &&
+          openVerseKeys.has(verseRef.startVerse) &&
+          (singleVerseNotes.get(verseRef.startVerse)?.length ?? 0) > 0
+        ) {
+          next.add(verseRef.startVerse);
+        }
+
+        for (const anchor of openPassageKeys) {
+          const passageVerses = getSelectedVersesForPassageAnchor(anchor);
+          const hadExplicitSelection = Array.from(passageVerses).some((verse) =>
+            prev.has(verse),
+          );
+          if (!hadExplicitSelection) continue;
+          for (const verse of passageVerses) {
+            next.add(verse);
+          }
+        }
+
+        return next;
+      });
+    },
+    [
+      getSelectedVersesForPassageAnchor,
+      openPassageKeys,
+      openVerseKeys,
+      singleVerseNotes,
+    ],
+  );
+
   const handleClickAway = useCallback(() => {
     setOpenVerseKeys(new Set());
     if (viewMode !== "read") {
@@ -713,9 +775,20 @@ export function usePassageNotesUiState({
 
   const cancelEditor = useCallback(
     (key: string) => {
+      const slot = openEditorsRef.current.get(key);
+      if (slot) {
+        logInteraction("notes", "editor-cancelled", {
+          mode: slot.kind === "new" ? "create" : "edit",
+          noteId: slot.kind === "edit" ? slot.noteId : undefined,
+          ...getVerseRefLogDetails(slot.verseRef),
+        });
+      }
       removeEditor(key);
+      if (slot?.kind === "new") {
+        clearCancelledDraftSelection(slot.verseRef);
+      }
     },
-    [removeEditor],
+    [clearCancelledDraftSelection, removeEditor],
   );
 
   // --- Escape key ---
@@ -835,8 +908,15 @@ export function usePassageNotesUiState({
       isPassage: boolean,
     ) => {
       gateReadModeEditor(() => {
+        const key = editEditorKey(noteId);
+        if (openEditorsRef.current.has(key)) return;
+        logInteraction("notes", "editor-opened", {
+          mode: "edit",
+          noteId,
+          ...getVerseRefLogDetails(verseRef),
+          isPassage,
+        });
         setOpenEditors((prev) => {
-          const key = editEditorKey(noteId);
           if (prev.has(key)) return prev;
           const next = new Map(prev);
           next.set(key, { kind: "edit", noteId, verseRef });
@@ -874,6 +954,11 @@ export function usePassageNotesUiState({
   const confirmDiscard = useCallback(() => {
     const pendingViewMode = pendingViewModeAfterDiscardRef.current;
     const pendingEditorAction = pendingReadModeEditorActionRef.current;
+    if (editorHasChangesRef.current.size > 0) {
+      logInteraction("notes", "discard-confirmed", {
+        dirtyEditorCount: editorHasChangesRef.current.size,
+      });
+    }
     pendingViewModeAfterDiscardRef.current = null;
     pendingReadModeEditorActionRef.current = null;
     setShowDiscardConfirmation(false);
@@ -890,6 +975,11 @@ export function usePassageNotesUiState({
   }, [fullResetForModeSwitch, handleClickAway, setViewMode]);
 
   const cancelDiscard = useCallback(() => {
+    if (editorHasChangesRef.current.size > 0) {
+      logInteraction("notes", "discard-cancelled", {
+        dirtyEditorCount: editorHasChangesRef.current.size,
+      });
+    }
     pendingViewModeAfterDiscardRef.current = null;
     pendingReadModeEditorActionRef.current = null;
     setShowDiscardConfirmation(false);

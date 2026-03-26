@@ -420,3 +420,65 @@ describe("usePassageNotesUiState read-mode single-editor gate", () => {
     expect(result.current.openEditors.size).toBe(2);
   });
 });
+
+describe("usePassageNotesUiState editor cancellation", () => {
+  const singleVerseNote: NoteWithRef = {
+    noteId: "n1" as Id<"notes">,
+    content: "",
+    tags: [],
+    verseRef: {
+      book: "Genesis",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    },
+    createdAt: 0,
+  };
+
+  it("clears verse selection when cancelling a new draft on an empty verse", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(defaultOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+
+    const editorKey = Array.from(result.current.openEditors.keys())[0];
+    expect(editorKey).toBe("new:1:1");
+    expect(result.current.selectedVerses.has(1)).toBe(true);
+
+    act(() => {
+      result.current.cancelEditor(editorKey);
+    });
+
+    expect(result.current.openEditors.size).toBe(0);
+    expect(result.current.selectedVerses.size).toBe(0);
+  });
+
+  it("preserves verse selection when cancelling a draft over open existing notes", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        singleVerseNotes: new Map([[1, [singleVerseNote]]]),
+      }),
+    );
+
+    act(() => {
+      result.current.openVerseNotes(1);
+      result.current.handleAddNote(1);
+    });
+
+    const editorKey = Array.from(result.current.openEditors.keys())[0];
+    expect(editorKey).toBe("new:1:1");
+    expect(result.current.selectedVerses.has(1)).toBe(true);
+
+    act(() => {
+      result.current.cancelEditor(editorKey);
+    });
+
+    expect(result.current.openEditors.size).toBe(0);
+    expect(result.current.openVerseKeys.has(1)).toBe(true);
+    expect(result.current.selectedVerses.has(1)).toBe(true);
+  });
+});
