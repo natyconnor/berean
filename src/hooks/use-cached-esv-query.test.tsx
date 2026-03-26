@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCachedEsvQuery } from "./use-cached-esv-query";
 
@@ -68,5 +68,33 @@ describe("useCachedEsvQuery", () => {
       verses: [{ number: 2, text: "Cached verse" }],
     });
     expect(cache.get("John 1")).toBeUndefined();
+  });
+
+  it("retry refetches after a failed passage load", async () => {
+    fetchPassageMock
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce({ verses: [{ number: 1, text: "ok" }] });
+
+    const { result } = renderHook(() => useCachedEsvQuery("John 1"));
+
+    await waitFor(() => {
+      expect(result.current.error).toBe("network");
+    });
+
+    expect(fetchPassageMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.retry();
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).toBeNull();
+      expect(result.current.data).toEqual({
+        verses: [{ number: 1, text: "ok" }],
+      });
+    });
+
+    expect(fetchPassageMock).toHaveBeenCalledTimes(2);
+    expect(fetchPassageMock).toHaveBeenLastCalledWith({ query: "John 1" });
   });
 });

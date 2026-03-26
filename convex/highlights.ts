@@ -25,7 +25,10 @@ export const getForChapter = query({
     const rows = await ctx.db
       .query("highlights")
       .withIndex("by_userId_book_chapter", (q) =>
-        q.eq("userId", userId).eq("book", args.book).eq("chapter", args.chapter),
+        q
+          .eq("userId", userId)
+          .eq("book", args.book)
+          .eq("chapter", args.chapter),
       )
       .collect();
     return rows.map((row) => ({

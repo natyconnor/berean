@@ -7,6 +7,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { HighlightRange } from "@/lib/highlight-utils";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useTabs } from "@/lib/use-tabs";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,10 @@ export function PassageView({
   forcedViewMode,
   focusSource,
 }: PassageViewProps) {
-  const { data, loading, error } = useEsvPassage(book, chapter);
+  const { data, loading, error, retry: retryPassage } = useEsvPassage(
+    book,
+    chapter,
+  );
   const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("all");
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
@@ -117,6 +121,40 @@ export function PassageView({
   const removeHighlightMutation = useMutation(api.highlights.remove);
   const updateHighlightColorMutation = useMutation(api.highlights.updateColor);
 
+  const [highlightMutationBanner, setHighlightMutationBanner] = useState<
+    string | null
+  >(null);
+  const highlightBannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const clearHighlightMutationBanner = useCallback(() => {
+    if (highlightBannerTimeoutRef.current) {
+      clearTimeout(highlightBannerTimeoutRef.current);
+      highlightBannerTimeoutRef.current = null;
+    }
+    setHighlightMutationBanner(null);
+  }, []);
+
+  const showHighlightMutationError = useCallback(() => {
+    if (highlightBannerTimeoutRef.current) {
+      clearTimeout(highlightBannerTimeoutRef.current);
+    }
+    setHighlightMutationBanner("Couldn't update highlight. Try again.");
+    highlightBannerTimeoutRef.current = setTimeout(() => {
+      setHighlightMutationBanner(null);
+      highlightBannerTimeoutRef.current = null;
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (highlightBannerTimeoutRef.current) {
+        clearTimeout(highlightBannerTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const highlightsByVerse = useMemo(() => {
     const map = new Map<number, HighlightRange[]>();
     if (!chapterHighlights) return map;
@@ -143,16 +181,30 @@ export function PassageView({
         startOffset,
         endOffset,
         color,
-      });
+      })
+        .then(() => clearHighlightMutationBanner())
+        .catch(() => showHighlightMutationError());
     },
-    [book, chapter, createHighlightMutation],
+    [
+      book,
+      chapter,
+      clearHighlightMutationBanner,
+      createHighlightMutation,
+      showHighlightMutationError,
+    ],
   );
 
   const handleDeleteHighlight = useCallback(
     (highlightId: string) => {
-      void removeHighlightMutation({ id: highlightId as Id<"highlights"> });
+      void removeHighlightMutation({ id: highlightId as Id<"highlights"> })
+        .then(() => clearHighlightMutationBanner())
+        .catch(() => showHighlightMutationError());
     },
-    [removeHighlightMutation],
+    [
+      clearHighlightMutationBanner,
+      removeHighlightMutation,
+      showHighlightMutationError,
+    ],
   );
 
   const handleRecolorHighlight = useCallback(
@@ -160,9 +212,15 @@ export function PassageView({
       void updateHighlightColorMutation({
         id: highlightId as Id<"highlights">,
         color,
-      });
+      })
+        .then(() => clearHighlightMutationBanner())
+        .catch(() => showHighlightMutationError());
     },
-    [updateHighlightColorMutation],
+    [
+      clearHighlightMutationBanner,
+      showHighlightMutationError,
+      updateHighlightColorMutation,
+    ],
   );
 
   const { forceAddButtonVisible, displaySingleVerseNotes } = usePassageViewTour(
@@ -347,8 +405,21 @@ export function PassageView({
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-2 text-destructive">
-        <p className="text-sm">{error}</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
+        <div className="max-w-md space-y-2 rounded-lg border border-border bg-card px-4 py-3 text-center shadow-sm">
+          <p className="text-sm font-medium text-foreground">
+            Couldn&apos;t load this chapter
+          </p>
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-1"
+            onClick={() => retryPassage()}
+          >
+            Try again
+          </Button>
+        </div>
       </div>
     );
   }
@@ -363,6 +434,15 @@ export function PassageView({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
+      {highlightMutationBanner ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive"
+        >
+          {highlightMutationBanner}
+        </div>
+      ) : null}
       <PassageViewHeader
         book={book}
         chapter={chapter}

@@ -19,11 +19,13 @@ import {
   heroGradientOverlayLayerStyle,
 } from "@/lib/hero-backdrop";
 import { api } from "../../convex/_generated/api";
+import { RootRouteError } from "@/components/error-fallbacks/root-route-error";
 
 const MIN_SPLASH_MS = 600;
 
 export const Route = createRootRoute({
   component: RootComponent,
+  errorComponent: RootRouteError,
 });
 
 const PUBLIC_LEGAL_PATHS = new Set(["/privacy", "/terms"]);

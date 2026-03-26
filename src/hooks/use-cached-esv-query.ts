@@ -1,5 +1,5 @@
 import { useAction } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import {
   type EsvChapterData,
@@ -16,6 +16,7 @@ interface AsyncQueryState {
 export function useCachedEsvQuery(query: string | null) {
   const fetchPassage = useAction(api.esv.getPassageText);
   const requestVersionRef = useRef(0);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [asyncState, setAsyncState] = useState<AsyncQueryState>({
     query: null,
     data: null,
@@ -23,6 +24,12 @@ export function useCachedEsvQuery(query: string | null) {
   });
 
   const cached = query ? getCachedPassage(query) : null;
+
+  const retry = useCallback(() => {
+    requestVersionRef.current += 1;
+    setAsyncState({ query: null, data: null, error: null });
+    setRetryNonce((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     const requestVersion = ++requestVersionRef.current;
@@ -50,7 +57,7 @@ export function useCachedEsvQuery(query: string | null) {
             error instanceof Error ? error.message : "Failed to load passage",
         });
       });
-  }, [cached, fetchPassage, query]);
+  }, [cached, fetchPassage, query, retryNonce]);
 
   const hasFreshAsyncState = asyncState.query === query;
 
@@ -58,5 +65,6 @@ export function useCachedEsvQuery(query: string | null) {
     data: cached ?? (hasFreshAsyncState ? asyncState.data : null),
     loading: !!query && !cached && !hasFreshAsyncState,
     error: !query || cached || !hasFreshAsyncState ? null : asyncState.error,
+    retry,
   };
 }
