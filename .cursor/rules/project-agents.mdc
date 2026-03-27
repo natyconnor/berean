@@ -1,0 +1,10 @@
+---
+description: Use the repository AGENTS.md instructions
+alwaysApply: true
+---
+
+# Repository Agent Instructions
+
+Read and follow `AGENTS.md` at the repository root for project-wide workflow, validation, and safety guidance.
+
+After code changes, run `pnpm run agent:check` unless the user explicitly tells you not to.

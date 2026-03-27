@@ -6,6 +6,7 @@
   "packageManager": "pnpm@10.27.0",
   "scripts": {
     "dev": "vite",
+    "agent:check": "pnpm run format && pnpm run lint && pnpm run typecheck",
     "codegen": "pnpm exec convex codegen --typecheck disable",
     "build": "vite build",
     "build:vercel": "pnpm exec convex deploy --cmd 'pnpm run build' --cmd-url-env-var-name VITE_CONVEX_URL",
