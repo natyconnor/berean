@@ -33,9 +33,6 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# Convex
-convex/_generated
-
 # Test coverage
 coverage
 *.lcov
