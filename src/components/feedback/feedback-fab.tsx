@@ -131,7 +131,8 @@ async function compressScreenshot(
     });
     if (
       blob &&
-      (blob.size <= TARGET_SCREENSHOT_BYTES || blob.size <= MIN_SCREENSHOT_BYTES)
+      (blob.size <= TARGET_SCREENSHOT_BYTES ||
+        blob.size <= MIN_SCREENSHOT_BYTES)
     ) {
       return blob;
     }
@@ -310,7 +311,9 @@ export function FeedbackFab() {
           );
           logCaptureDebug("capture error", {
             message:
-              captureErr instanceof Error ? captureErr.message : "Unknown error",
+              captureErr instanceof Error
+                ? captureErr.message
+                : "Unknown error",
           });
         }
 
@@ -350,7 +353,9 @@ export function FeedbackFab() {
             );
             logCaptureDebug("upload error", {
               message:
-                uploadErr instanceof Error ? uploadErr.message : "Unknown error",
+                uploadErr instanceof Error
+                  ? uploadErr.message
+                  : "Unknown error",
             });
           }
         }
@@ -447,7 +452,9 @@ export function FeedbackFab() {
                 disabled={submitting}
                 onChange={(e) => {
                   const nextKind = e.target.value as FeedbackKind;
-                  logInteraction("feedback", "kind-changed", { kind: nextKind });
+                  logInteraction("feedback", "kind-changed", {
+                    kind: nextKind,
+                  });
                   setKind(nextKind);
                 }}
                 aria-label="Feedback type"

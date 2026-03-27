@@ -1,15 +1,16 @@
 # Note margin depth — implementation spec (C, F, G)
 
 This is the third pass for the Margin note UI variant, building on:
+
 - `note-ui-variants-spec.md` — A, B, D, E (editor chrome)
 - `note-display-unification-spec.md` — card display warmth
 
 Those specs establish the material (warm stone surfaces, ruled-line editor, softer actions). This spec adds **depth and personality**:
 
-| ID | Name | What it does |
-|----|------|-------------|
-| **C** | Serif note content | Saved note text uses `Cormorant Garamond` (the same serif as verse text) so notes read as margin annotations of the scripture, not app widget text |
-| **F** | Paper grain | A barely-perceptible noise texture on note card surfaces so they feel like paper rather than flat CSS rectangles |
+| ID    | Name                      | What it does                                                                                                                                                                                       |
+| ----- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C** | Serif note content        | Saved note text uses `Cormorant Garamond` (the same serif as verse text) so notes read as margin annotations of the scripture, not app widget text                                                 |
+| **F** | Paper grain               | A barely-perceptible noise texture on note card surfaces so they feel like paper rather than flat CSS rectangles                                                                                   |
 | **G** | Writing-state left accent | When the editor has focus, a warm left accent bar appears on the editor container — the same visual idiom as the amber passage-note bar — communicating "this space is alive and being written in" |
 
 ---
@@ -26,7 +27,8 @@ Those specs establish the material (warm stone surfaces, ruled-line editor, soft
 ## C — Serif note content
 
 ### Goal
-Saved note text (`NoteContent` component) renders in `Cormorant Garamond` in Margin mode. The editing textarea stays in the default sans — you want writing to feel crisp and modern; only the *finished, read* state gets the serif warmth.
+
+Saved note text (`NoteContent` component) renders in `Cormorant Garamond` in Margin mode. The editing textarea stays in the default sans — you want writing to feel crisp and modern; only the _finished, read_ state gets the serif warmth.
 
 ### Where
 
@@ -35,6 +37,7 @@ Saved note text (`NoteContent` component) renders in `Cormorant Garamond` in Mar
 **Component:** `NoteContent` (~line 111).
 
 `NoteContent` currently applies:
+
 - `density === "reading"` → `text-base leading-7`
 - `density === "default"` → `leading-relaxed`
 
@@ -52,6 +55,7 @@ Callers that want Margin serif: pass `uiVariant={noteUiVariant}` from `ExpandedB
 Alternatively: if `NoteContent` calling `useNoteUiVariant()` directly feels cleaner (it's rendered deeply enough that the context is always available), that works too — just be consistent.
 
 **Class to add when `uiVariant === "margin"`:**
+
 ```
 font-serif tracking-[0.01em]
 ```
@@ -61,12 +65,14 @@ font-serif tracking-[0.01em]
 - `leading-relaxed` / `leading-7` — keep existing density classes. Cormorant Garamond has tall ascenders; the existing line-height is fine.
 
 **Do NOT apply serif to:**
+
 - The editor `contentEditable` in `InlineVerseEditor` — editing stays sans.
 - `CollapsedBubble` preview text if it has `line-clamp` — **actually do apply it** here too. The collapsed preview should already hint at the serif warmth so the expand isn't a jarring font swap.
 - Tag badges (`NoteTagList`) — leave sans, tags are UI metadata not note prose.
 - Verse-ref pills inside note content — already inline elements, leave as-is.
 
 ### Dark mode note
+
 Cormorant Garamond at light weights can be harder to read in dark mode at small sizes. If dark mode renders uncomfortably thin, consider `font-[450]` or step up to weight 400 explicitly via `font-normal` when dark. This can be handled with `dark:font-normal` on the serif class if needed — test and decide.
 
 ---
@@ -74,11 +80,12 @@ Cormorant Garamond at light weights can be harder to read in dark mode at small 
 ## F — Paper grain
 
 ### Goal
+
 A barely-perceptible noise texture on note card surfaces (`ExpandedBubble`, `ExpandedPassageNote`, the editor outer shell). At the right opacity it makes flat warm stone feel like actual paper. Wrong opacity and it's distracting — **err on the side of too subtle**.
 
 ### Approach: inline SVG data-URI background
 
-No image assets, no new CSS files. A repeating SVG noise pattern as a `background-image` data URI, layered *on top of* the warm stone background-color via a pseudo-element or an `after` overlay div.
+No image assets, no new CSS files. A repeating SVG noise pattern as a `background-image` data URI, layered _on top of_ the warm stone background-color via a pseudo-element or an `after` overlay div.
 
 The cleanest React approach is a **CSS utility class** defined in `src/index.css`:
 
@@ -100,11 +107,13 @@ The cleanest React approach is a **CSS utility class** defined in `src/index.css
 ```
 
 Key parameters to tune:
+
 - `opacity: 0.028` — start here. Range 0.02–0.04 is the safe zone for "feels like paper, not static."
 - `baseFrequency="0.75"` — medium-grain noise. Lower (0.5) = coarser; higher (1.0) = finer dust.
 - `background-size: 180px 180px` — tiles the pattern. Too small → visible tiling; too large → pattern is too uniform.
 
 In dark mode the grain should be slightly more visible since dark backgrounds can make it disappear:
+
 ```css
 .dark .note-grain::after {
   opacity: 0.045;
@@ -117,13 +126,11 @@ Only in **Margin** mode. The `note-grain` class is added conditionally via `cn()
 
 ```tsx
 // In ExpandedBubble, ExpandedPassageNote, NoteEditor outer shell
-cn(
-  "...",
-  noteUiVariant === "margin" && "note-grain"
-)
+cn("...", noteUiVariant === "margin" && "note-grain");
 ```
 
 Apply to:
+
 - `ExpandedBubble` outer `<div>` — `src/components/passage/verse-notes.tsx`
 - `ExpandedPassageNote` outer `<div>` — `src/components/passage/passage-notes-bubble.tsx`
 - `NoteEditor` outer `<div>` (the `isMarginCard` branch) — `src/components/notes/note-editor.tsx`
@@ -131,11 +138,13 @@ Apply to:
 - `CollapsedPassageBubble` outer `<div>` — `src/components/passage/passage-notes-bubble.tsx` (amber surface, grain on top)
 
 **Do NOT apply to:**
+
 - Pills (too small, grain would be invisible and waste a pseudo-element)
 - The `contentEditable` itself — you want writing to feel clean
 - Tag picker, dropdowns, popovers
 
 ### CSS note
+
 Because `::after` uses `position: absolute`, the parent needs `position: relative` and `overflow: hidden` (or `overflow: visible` is fine — the `inset: 0` + `border-radius: inherit` keeps it visually contained). Most note card containers already have `rounded-lg` — `border-radius: inherit` on the pseudo-element ensures grain doesn't bleed outside the rounded corners.
 
 ---
@@ -143,6 +152,7 @@ Because `::after` uses `position: absolute`, the parent needs `position: relativ
 ## G — Writing-state left accent
 
 ### Goal
+
 When the Margin editor has focus, a warm left accent bar appears on the outer `NoteEditor` container. This communicates "you are writing here right now" with the same visual idiom as the amber passage-note left bar (`border-l-2 border-l-amber-400`). It distinguishes the active editor from inactive-but-open note cards — subtle focus management without the heavy `ring` treatment.
 
 ### Mechanism
@@ -159,13 +169,15 @@ Two options:
 // In NoteEditor outer div className:
 cn(
   "...",
-  isMarginCard && "transition-[border-left-color] duration-150 focus-within:border-l-stone-400/60"
-)
+  isMarginCard &&
+    "transition-[border-left-color] duration-150 focus-within:border-l-stone-400/60",
+);
 ```
 
 The outer container already has `rounded-lg p-3 shadow-sm bg-stone-50/60` for the margin non-passage case. Adding `border-l-2 border-l-transparent focus-within:border-l-stone-400/60` gives a left accent that appears on focus and fades away on blur. For the passage editor, the `border-l-amber-400` is already permanent — the accent is already there.
 
 **Option B is preferred** because:
+
 - No new prop, no state lift, no component interface change
 - CSS `:focus-within` correctly activates when focus is anywhere inside `NoteEditor` (editor, tag picker, Save button, etc.)
 - Transition just needs `border-left-color` in the `transition` property
@@ -175,7 +187,9 @@ The outer container already has `rounded-lg p-3 shadow-sm bg-stone-50/60` for th
 For non-passage Margin card:
 
 ```tsx
-isMarginCard && !isPassage && "border-l-2 border-l-transparent focus-within:border-l-stone-400/60 transition-[border-left-color] duration-150"
+isMarginCard &&
+  !isPassage &&
+  "border-l-2 border-l-transparent focus-within:border-l-stone-400/60 transition-[border-left-color] duration-150";
 ```
 
 - `border-l-transparent` — invisible until focus
@@ -200,13 +214,13 @@ This addresses the earlier feedback about multiple editors being open — the fo
 
 ## File checklist
 
-| Action | File |
-|--------|------|
-| **Edit** | `src/index.css` — add `.note-grain` + `::after` CSS |
-| **Edit** | `src/components/notes/view/note-card-primitives.tsx` — serif in `NoteContent` |
-| **Edit** | `src/components/notes/note-editor.tsx` — G: `border-l` + `focus-within` on outer div |
-| **Edit** | `src/components/passage/verse-notes.tsx` — C: pass `uiVariant` to `NoteContent`; F: `note-grain` class on cards |
-| **Edit** | `src/components/passage/passage-notes-bubble.tsx` — C: pass `uiVariant`; F: `note-grain` |
+| Action       | File                                                                                                             |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| **Edit**     | `src/index.css` — add `.note-grain` + `::after` CSS                                                              |
+| **Edit**     | `src/components/notes/view/note-card-primitives.tsx` — serif in `NoteContent`                                    |
+| **Edit**     | `src/components/notes/note-editor.tsx` — G: `border-l` + `focus-within` on outer div                             |
+| **Edit**     | `src/components/passage/verse-notes.tsx` — C: pass `uiVariant` to `NoteContent`; F: `note-grain` class on cards  |
+| **Edit**     | `src/components/passage/passage-notes-bubble.tsx` — C: pass `uiVariant`; F: `note-grain`                         |
 | **Optional** | `src/components/notes/editor/inline-verse-editor.tsx` — only if Option A is chosen for G (prop-based focus lift) |
 
 ---
@@ -234,4 +248,4 @@ The result: a notes column that reads as a continuous physical document margin r
 
 ---
 
-*End of spec.*
+_End of spec._

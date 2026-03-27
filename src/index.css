@@ -529,7 +529,9 @@
 
 /* Candlelight — note indicator ember glow on verse hover */
 .cl-ember-single {
-  transition: box-shadow 200ms ease-out, filter 200ms ease-out;
+  transition:
+    box-shadow 200ms ease-out,
+    filter 200ms ease-out;
 }
 .group:hover .cl-ember-single {
   box-shadow:
@@ -545,7 +547,9 @@
 }
 
 .cl-ember-passage {
-  transition: box-shadow 200ms ease-out, filter 200ms ease-out;
+  transition:
+    box-shadow 200ms ease-out,
+    filter 200ms ease-out;
 }
 .group:hover .cl-ember-passage {
   box-shadow:
@@ -561,7 +565,9 @@
 }
 
 .cl-ember-range {
-  transition: box-shadow 200ms ease-out, filter 200ms ease-out;
+  transition:
+    box-shadow 200ms ease-out,
+    filter 200ms ease-out;
 }
 .group:hover .cl-ember-range {
   box-shadow:
@@ -578,7 +584,8 @@
 
 /* Candlelight — shadow flicker on expanded verse hover */
 @keyframes cl-depth-2-flicker {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.52),
       0 1px 4px rgba(0, 0, 0, 0.08),
@@ -589,12 +596,12 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.55),
       0 2px 8px rgba(0, 0, 0, 0.12),
-      0 7px 22px rgba(50, 35, 15, 0.10),
+      0 7px 22px rgba(50, 35, 15, 0.1),
       0 20px 44px rgba(50, 35, 15, 0.08);
   }
   66% {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.50),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
       0 1px 3px rgba(0, 0, 0, 0.07),
       0 4px 14px rgba(50, 35, 15, 0.06),
       0 14px 32px rgba(50, 35, 15, 0.04);
@@ -602,7 +609,8 @@
 }
 
 @keyframes cl-depth-2-flicker-dark {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.06),
       0 1px 4px rgba(0, 0, 0, 0.28),
@@ -614,7 +622,7 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.07),
       0 2px 8px rgba(0, 0, 0, 0.34),
       0 7px 22px rgba(0, 0, 0, 0.28),
-      0 20px 44px rgba(0, 0, 0, 0.20);
+      0 20px 44px rgba(0, 0, 0, 0.2);
   }
   66% {
     box-shadow:
@@ -700,12 +708,24 @@
 }
 
 @keyframes cl-grain-shift {
-  0%   { background-position: 0 0; }
-  20%  { background-position: -47px -31px; }
-  40%  { background-position: 23px -58px; }
-  60%  { background-position: -68px 14px; }
-  80%  { background-position: 41px 37px; }
-  100% { background-position: 0 0; }
+  0% {
+    background-position: 0 0;
+  }
+  20% {
+    background-position: -47px -31px;
+  }
+  40% {
+    background-position: 23px -58px;
+  }
+  60% {
+    background-position: -68px 14px;
+  }
+  80% {
+    background-position: 41px 37px;
+  }
+  100% {
+    background-position: 0 0;
+  }
 }
 
 .cl-grain-animate.cl-grain-full::before,
@@ -723,30 +743,30 @@
 .cl-grain-lightfalloff .cl-grain-vignette {
   mask-image: radial-gradient(
     ellipse 60% 50% at var(--cl-light-x, 50%) var(--cl-light-y, 25%),
-    rgba(0,0,0,0.55) 20%,
-    rgba(0,0,0,0.72) 50%,
-    rgba(0,0,0,0.88) 100%
+    rgba(0, 0, 0, 0.55) 20%,
+    rgba(0, 0, 0, 0.72) 50%,
+    rgba(0, 0, 0, 0.88) 100%
   );
   -webkit-mask-image: radial-gradient(
     ellipse 60% 50% at var(--cl-light-x, 50%) var(--cl-light-y, 25%),
-    rgba(0,0,0,0.55) 20%,
-    rgba(0,0,0,0.72) 50%,
-    rgba(0,0,0,0.88) 100%
+    rgba(0, 0, 0, 0.55) 20%,
+    rgba(0, 0, 0, 0.72) 50%,
+    rgba(0, 0, 0, 0.88) 100%
   );
 }
 
 .cl-grain-lightfalloff.cl-grain-full::before {
   mask-image: radial-gradient(
     ellipse 70% 55% at var(--cl-light-x, 50%) var(--cl-light-y, 25%),
-    rgba(0,0,0,0.55) 25%,
-    rgba(0,0,0,0.72) 55%,
-    rgba(0,0,0,0.88) 100%
+    rgba(0, 0, 0, 0.55) 25%,
+    rgba(0, 0, 0, 0.72) 55%,
+    rgba(0, 0, 0, 0.88) 100%
   );
   -webkit-mask-image: radial-gradient(
     ellipse 70% 55% at var(--cl-light-x, 50%) var(--cl-light-y, 25%),
-    rgba(0,0,0,0.55) 25%,
-    rgba(0,0,0,0.72) 55%,
-    rgba(0,0,0,0.88) 100%
+    rgba(0, 0, 0, 0.55) 25%,
+    rgba(0, 0, 0, 0.72) 55%,
+    rgba(0, 0, 0, 0.88) 100%
   );
 }
 

@@ -162,10 +162,20 @@ export function DevLogRoot() {
               <span className="text-xs text-muted-foreground">{copyHint}</span>
             )}
             <div className="ml-auto flex flex-wrap items-center gap-1">
-              <Button type="button" size="sm" variant="outline" onClick={onCopyVisible}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onCopyVisible}
+              >
                 Copy visible
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onCopyAll}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onCopyAll}
+              >
                 Copy all
               </Button>
               <Button
@@ -249,7 +259,8 @@ export function DevLogRoot() {
                     <span
                       className={cn(
                         e.level === "error" && "text-destructive",
-                        e.level === "warn" && "text-amber-600 dark:text-amber-400",
+                        e.level === "warn" &&
+                          "text-amber-600 dark:text-amber-400",
                         e.level === "info" && "text-sky-600 dark:text-sky-400",
                         e.level === "debug" && "text-muted-foreground",
                       )}

@@ -57,10 +57,7 @@ export function StarterTagsSection({
         </Button>
       </div>
 
-      <div
-        className="space-y-4"
-        data-tour-id="settings-starter-tag-categories"
-      >
+      <div className="space-y-4" data-tour-id="settings-starter-tag-categories">
         {STARTER_TAG_CATEGORIES.map((category) => {
           const categorySelectedCount = category.tags.filter((tag) =>
             catalogByTag.has(tag),

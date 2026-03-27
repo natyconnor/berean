@@ -73,14 +73,7 @@ export function DeleteAccountSection() {
     } finally {
       setBusy(false);
     }
-  }, [
-    busy,
-    canSubmit,
-    deleteMyAccount,
-    navigate,
-    resetAndClose,
-    signOut,
-  ]);
+  }, [busy, canSubmit, deleteMyAccount, navigate, resetAndClose, signOut]);
 
   return (
     <>
@@ -124,7 +117,9 @@ export function DeleteAccountSection() {
               className="text-sm font-medium leading-none"
             >
               Type{" "}
-              <span className="font-mono text-foreground">{CONFIRM_PHRASE}</span>{" "}
+              <span className="font-mono text-foreground">
+                {CONFIRM_PHRASE}
+              </span>{" "}
               to confirm
             </label>
             <Input

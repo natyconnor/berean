@@ -366,33 +366,33 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
 
           <AnimatePresence initial={false}>
             {draftsForThisAnchor.map((draft) => {
-                const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
-                return (
-                  <motion.div
-                    key={draftEditorKey}
-                    layout
-                    data-note-surface
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={NOTE_ENTER_TRANSITION}
-                  >
-                    <NoteEditor
-                      verseRef={draft}
-                      variant={
-                        draft.startVerse !== draft.endVerse
-                          ? "passage"
-                          : "default"
-                      }
-                      onSave={(body, tags) => onSaveNew(draft, body, tags)}
-                      onCancel={() => onCancelEditor(draftEditorKey)}
-                      onDirtyChange={(isDirty) =>
-                        onEditorDirtyChange(draftEditorKey, isDirty)
-                      }
-                    />
-                  </motion.div>
-                );
-              })}
+              const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
+              return (
+                <motion.div
+                  key={draftEditorKey}
+                  layout
+                  data-note-surface
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={NOTE_ENTER_TRANSITION}
+                >
+                  <NoteEditor
+                    verseRef={draft}
+                    variant={
+                      draft.startVerse !== draft.endVerse
+                        ? "passage"
+                        : "default"
+                    }
+                    onSave={(body, tags) => onSaveNew(draft, body, tags)}
+                    onCancel={() => onCancelEditor(draftEditorKey)}
+                    onDirtyChange={(isDirty) =>
+                      onEditorDirtyChange(draftEditorKey, isDirty)
+                    }
+                  />
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </motion.div>
       </div>

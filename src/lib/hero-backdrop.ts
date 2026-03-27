@@ -8,9 +8,7 @@ export const heroBackdropScaleStyle: Pick<CSSProperties, "scale"> = {
   scale: "1.03",
 };
 
-export function heroBackgroundLayerStyle(
-  extra?: CSSProperties,
-): CSSProperties {
+export function heroBackgroundLayerStyle(extra?: CSSProperties): CSSProperties {
   return {
     backgroundImage: `url(${HERO_IMAGE_PATH})`,
     ...heroBackdropScaleStyle,

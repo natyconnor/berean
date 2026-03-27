@@ -16,7 +16,5 @@ function IndexRedirect() {
   const tabs = loadTabs();
   const passageId = tabs[0].passageId;
 
-  return (
-    <Navigate to="/passage/$passageId" params={{ passageId }} replace />
-  );
+  return <Navigate to="/passage/$passageId" params={{ passageId }} replace />;
 }

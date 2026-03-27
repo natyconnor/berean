@@ -242,7 +242,8 @@ export function SettingsPage() {
     try {
       await addMany({ tags, source: "custom" });
       logInteraction("settings", "custom-tags-added", {
-        duplicateInCatalogCount: parsedCustomTagInput.duplicateTagsInCatalog.length,
+        duplicateInCatalogCount:
+          parsedCustomTagInput.duplicateTagsInCatalog.length,
         duplicateInInputCount: parsedCustomTagInput.duplicateTagsInInput.length,
         tagCount: tags.length,
       });

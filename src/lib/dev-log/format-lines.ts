@@ -26,5 +26,8 @@ export function formatRecentDevLogEntriesForExport(
   windowMs: number,
   options?: { maxChars?: number },
 ): string {
-  return formatDevLogEntriesForExport(getRecentDevLogEntries(windowMs), options);
+  return formatDevLogEntriesForExport(
+    getRecentDevLogEntries(windowMs),
+    options,
+  );
 }

@@ -24,7 +24,9 @@ lerna-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .idea
-.cursor
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .claude
 .DS_Store
 *.suo
@@ -32,9 +34,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
-
-# Convex
-convex/_generated
 
 # Test coverage
 coverage

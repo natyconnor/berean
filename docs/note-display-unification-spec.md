@@ -2,20 +2,20 @@
 
 This is the follow-up to `note-ui-variants-spec.md`. It assumes the `NoteUiVariantId` type, `useNoteUiVariant()` hook, and the Margin editor changes (A, B, D, E) are already in place.
 
-**Goal:** Unify the *saved / display* state of note cards with the warmer Margin editor aesthetic. Right now the editor feels like writing on paper, but closed and expanded note cards still render as `border bg-card` web-app tiles. This spec closes that gap so the whole notes column — writing or reading — feels like a continuous document margin.
+**Goal:** Unify the _saved / display_ state of note cards with the warmer Margin editor aesthetic. Right now the editor feels like writing on paper, but closed and expanded note cards still render as `border bg-card` web-app tiles. This spec closes that gap so the whole notes column — writing or reading — feels like a continuous document margin.
 
 ---
 
 ## Affected components
 
-| Component | File | What changes |
-|-----------|------|--------------|
-| `CollapsedBubble` | `src/components/passage/verse-notes.tsx` | Warm background + softer border |
-| `StackedBubble` | `src/components/passage/verse-notes.tsx` | Warm card face + no stacking layers in Margin |
-| `ExpandedBubble` | `src/components/passage/verse-notes.tsx` | Already partially done — verify & complete |
-| Expanded verse header | `src/components/passage/verse-notes.tsx` | Soften "New note" blue color |
-| `ExpandedPassageNote` | `src/components/passage/passage-notes-bubble.tsx` | Remove inner double-border in Margin |
-| Expanded passage header | `src/components/passage/passage-notes-bubble.tsx` | Soften "New note" blue color |
+| Component               | File                                              | What changes                                  |
+| ----------------------- | ------------------------------------------------- | --------------------------------------------- |
+| `CollapsedBubble`       | `src/components/passage/verse-notes.tsx`          | Warm background + softer border               |
+| `StackedBubble`         | `src/components/passage/verse-notes.tsx`          | Warm card face + no stacking layers in Margin |
+| `ExpandedBubble`        | `src/components/passage/verse-notes.tsx`          | Already partially done — verify & complete    |
+| Expanded verse header   | `src/components/passage/verse-notes.tsx`          | Soften "New note" blue color                  |
+| `ExpandedPassageNote`   | `src/components/passage/passage-notes-bubble.tsx` | Remove inner double-border in Margin          |
+| Expanded passage header | `src/components/passage/passage-notes-bubble.tsx` | Soften "New note" blue color                  |
 
 **Do not touch** for this pass: `CollapsedPassageBubble` (already warm amber — fine as-is), `PassageNotesPill`, `VerseNotesPill`, `NoteBubbleShell` animation shell.
 
@@ -25,10 +25,10 @@ This is the follow-up to `note-ui-variants-spec.md`. It assumes the `NoteUiVaria
 
 All warm Margin surfaces use this palette (consistent with the Margin editor shell):
 
-| Purpose | Light | Dark |
-|---------|-------|------|
-| Card background | `bg-stone-50/60` | `dark:bg-stone-950/40` |
-| Card border | `border-stone-200/70` | `dark:border-stone-800/60` |
+| Purpose               | Light                 | Dark                       |
+| --------------------- | --------------------- | -------------------------- |
+| Card background       | `bg-stone-50/60`      | `dark:bg-stone-950/40`     |
+| Card border           | `border-stone-200/70` | `dark:border-stone-800/60` |
 | Card border (tighter) | `border-stone-200/50` | `dark:border-stone-800/40` |
 
 These should already be established in the editor implementation. Use the same values here for visual consistency.
@@ -38,16 +38,19 @@ These should already be established in the editor implementation. Use the same v
 ## 2. `CollapsedBubble` — verse-notes.tsx (~line 205)
 
 **Current (`classic`):**
+
 ```
 rounded-lg border border-border bg-card px-2.5 py-1.5 text-left text-[13px] transition-all hover:shadow-sm
 ```
 
 **Margin:**
+
 - Background: `bg-stone-50/60 dark:bg-stone-950/40`
 - Border: `border-stone-200/70 dark:border-stone-800/60`
 - On hover: keep `hover:shadow-sm`, optionally add `hover:bg-stone-50/80` for subtle warmth lift
 
 The `CollapsedBubble` sub-components that are passed to `NoteBubbleShell` are currently pure functions with no access to the variant. They need to either:
+
 - **Option A (preferred):** Call `useNoteUiVariant()` directly inside `CollapsedBubble` (it's already a named function, just not a hook consumer).
 - **Option B:** Accept a `uiVariant` prop threaded from `VerseNotes` (which already calls `useNoteUiVariant()` or can).
 
@@ -66,7 +69,11 @@ The `CollapsedBubble` sub-components that are passed to `NoteBubbleShell` are cu
 2. **Stacked layers:** The visual stacking metaphor (physical "card deck") belongs to the Classic idiom. In Margin, **suppress the stacked layers entirely** — pass a `showStack={false}` prop to `StackedCardBackground`, or conditionally skip rendering it:
 
    ```tsx
-   {noteUiVariant !== "margin" && <StackedCardBackground count={count} variant="muted" />}
+   {
+     noteUiVariant !== "margin" && (
+       <StackedCardBackground count={count} variant="muted" />
+     );
+   }
    ```
 
    Without the offset shadow layers the multi-note indicator comes from the badge alone, which is cleaner.
@@ -92,7 +99,8 @@ The "New note" and "Collapse" buttons at the top of the expanded note group:
 
 ```tsx
 // Current "New note" — too loud in Margin
-className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+className =
+  "flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors";
 ```
 
 **Margin:** Change `text-primary` → `text-muted-foreground` and `hover:text-primary/80` → `hover:text-foreground`. This keeps the action discoverable but stops it from being the first thing the eye lands on — the note content should be primary, not the chrome.
@@ -106,11 +114,12 @@ The "Collapse" button is already `text-muted-foreground` — **no change needed*
 ## 6. `ExpandedPassageNote` — passage-notes-bubble.tsx (~line 350)
 
 **Current:** Inner note card inside the amber shell:
+
 ```
 rounded-lg border border-amber-200/70 bg-amber-50/60 dark:bg-amber-900/18 dark:border-amber-700/45 px-4 py-3
 ```
 
-**Problem:** In Margin mode the expanded passage section already has an amber outer container (`rounded-xl border border-amber-200 bg-amber-50/40 p-3`). Each `ExpandedPassageNote` inside it then adds *another* amber border. The result is nested amber boxes.
+**Problem:** In Margin mode the expanded passage section already has an amber outer container (`rounded-xl border border-amber-200 bg-amber-50/40 p-3`). Each `ExpandedPassageNote` inside it then adds _another_ amber border. The result is nested amber boxes.
 
 **Margin fix:** Remove the border from `ExpandedPassageNote` in Margin mode — let the outer shell provide containment:
 
@@ -129,7 +138,8 @@ Same treatment as the verse group header (section 5 above):
 
 ```tsx
 // Current "New note" — same loud blue
-className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+className =
+  "flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors";
 ```
 
 **Margin:** `text-muted-foreground hover:text-foreground`.
@@ -177,13 +187,13 @@ const isMargin = noteUiVariant === "margin";
 
 ## 11. File checklist
 
-| Action | File |
-|--------|------|
-| **Edit** | `src/components/passage/verse-notes.tsx` |
+| Action   | File                                              |
+| -------- | ------------------------------------------------- |
+| **Edit** | `src/components/passage/verse-notes.tsx`          |
 | **Edit** | `src/components/passage/passage-notes-bubble.tsx` |
 
 No new files required.
 
 ---
 
-*End of spec.*
+_End of spec._

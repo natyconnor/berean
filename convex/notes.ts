@@ -277,7 +277,9 @@ export const searchWorkspace = query({
     );
     const refsById = new Map(
       refs
-        .filter((ref): ref is Doc<"verseRefs"> => isVerseRefForUser(ref, userId))
+        .filter((ref): ref is Doc<"verseRefs"> =>
+          isVerseRefForUser(ref, userId),
+        )
         .map((ref) => [String(ref._id), ref] as const),
     );
 

@@ -1,4 +1,11 @@
-import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { motion } from "framer-motion";
 import { ChevronUp, Plus } from "lucide-react";
 import {
@@ -67,12 +74,12 @@ interface VerseRowLeftProps {
 // Explicit pixel values for each expand state. Editing these two objects is the
 // single place to tune the verse growing animation — no class swaps involved.
 const COLLAPSED = {
-  paddingTop: "0.5rem",    // py-2
+  paddingTop: "0.5rem", // py-2
   paddingBottom: "0.5rem",
-  paddingLeft: "0.75rem",  // px-3
+  paddingLeft: "0.75rem", // px-3
   paddingRight: "0.75rem",
-  verseNumberFontSize: "0.75rem",  // text-xs
-  textFontSize: "1rem",            // text-base
+  verseNumberFontSize: "0.75rem", // text-xs
+  textFontSize: "1rem", // text-base
   verseNumberPaddingTop: "0.125rem", // pt-0.5
 } as const;
 
@@ -82,27 +89,27 @@ const COLLAPSED_READING = {
   paddingLeft: "0.75rem",
   paddingRight: "0.75rem",
   verseNumberFontSize: "0.8125rem", // ~13px, between text-xs and text-sm
-  textFontSize: "1.1875rem",        // ~19px, between text-lg and text-xl
+  textFontSize: "1.1875rem", // ~19px, between text-lg and text-xl
   verseNumberPaddingTop: "0.1875rem",
 } as const;
 
 const EXPANDED = {
-  paddingTop: "1.25rem",   // py-5
+  paddingTop: "1.25rem", // py-5
   paddingBottom: "1.25rem",
-  paddingLeft: "1.25rem",  // px-5
+  paddingLeft: "1.25rem", // px-5
   paddingRight: "1.25rem",
-  verseNumberFontSize: "1rem",     // text-base
-  textFontSize: "1.5rem",          // text-2xl
+  verseNumberFontSize: "1rem", // text-base
+  textFontSize: "1.5rem", // text-2xl
   verseNumberPaddingTop: "0.375rem", // pt-1.5
 } as const;
 
 const GROUPED_EXPANDED = {
-  paddingTop: "0.625rem",    // tighter vertical gap between grouped verses
+  paddingTop: "0.625rem", // tighter vertical gap between grouped verses
   paddingBottom: "0.625rem",
   paddingLeft: "1.25rem",
   paddingRight: "1.25rem",
   verseNumberFontSize: "0.875rem", // text-sm
-  textFontSize: "1.25rem",         // text-xl — slightly smaller than solo expanded
+  textFontSize: "1.25rem", // text-xl — slightly smaller than solo expanded
   verseNumberPaddingTop: "0.25rem",
 } as const;
 
@@ -135,7 +142,9 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   const { onAddNote, onMouseDown, onMouseEnter, onMouseLeave } = handlers;
 
   const glintRef = useRef<{ x: number; y: number } | null>(null);
-  const [glintPos, setGlintPos] = useState<{ x: number; y: number } | null>(null);
+  const [glintPos, setGlintPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const warmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isWarmed, setIsWarmed] = useState(false);
 
@@ -169,8 +178,12 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   }, []);
 
   const sizes = isExpanded
-    ? variant === "groupedPassage" ? GROUPED_EXPANDED : EXPANDED
-    : density === "reading" ? COLLAPSED_READING : COLLAPSED;
+    ? variant === "groupedPassage"
+      ? GROUPED_EXPANDED
+      : EXPANDED
+    : density === "reading"
+      ? COLLAPSED_READING
+      : COLLAPSED;
 
   const segments =
     highlights && highlights.length > 0
@@ -181,70 +194,85 @@ export const VerseRowLeft = memo(function VerseRowLeft({
 
   const DRAG_THRESHOLD = 4;
 
-  const renderHighlightedText = useCallback((expanded: boolean) => {
-    if (!segments) return text;
-    return segments.map((seg, i) => {
-      if (!seg.color) {
-        return <span key={i}>{seg.text}</span>;
-      }
-      const colorDef = getHighlightColor(seg.color);
-      const bgClass = expanded ? colorDef?.bg : colorDef?.bgSubtle;
-      const isActiveHighlight =
-        expanded &&
-        seg.highlightId !== undefined &&
-        seg.highlightId === activeHighlightId;
-      return (
-        <mark
-          key={i}
-          className={cn(
-            "rounded-sm",
-            bgClass ?? "bg-yellow-200/70",
-            expanded && onMarkClick
-              ? cn(
-                  "cursor-pointer px-1 py-0.5 rounded transition-all duration-150 hover:brightness-[1.08] hover:saturate-[1.4] hover:shadow-sm",
-                  isActiveHighlight &&
-                    "brightness-[1.08] saturate-[1.4] shadow-sm",
-                )
-              : "px-px",
-          )}
-          onPointerDown={
-            expanded && onMarkClick
-              ? (e) => { dragStateRef.current = { startX: e.clientX, startY: e.clientY }; }
-              : undefined
-          }
-          onPointerUp={
-            expanded && onMarkClick && seg.highlightId
-              ? (e) => {
-                  if (dragStateRef.current) {
-                    const dx = e.clientX - dragStateRef.current.startX;
-                    const dy = e.clientY - dragStateRef.current.startY;
-                    if (Math.sqrt(dx * dx + dy * dy) <= DRAG_THRESHOLD) {
-                      e.stopPropagation();
-                      onMarkClick(seg.highlightId!, e.currentTarget.getBoundingClientRect());
-                    }
-                    dragStateRef.current = null;
+  const renderHighlightedText = useCallback(
+    (expanded: boolean) => {
+      if (!segments) return text;
+      return segments.map((seg, i) => {
+        if (!seg.color) {
+          return <span key={i}>{seg.text}</span>;
+        }
+        const colorDef = getHighlightColor(seg.color);
+        const bgClass = expanded ? colorDef?.bg : colorDef?.bgSubtle;
+        const isActiveHighlight =
+          expanded &&
+          seg.highlightId !== undefined &&
+          seg.highlightId === activeHighlightId;
+        return (
+          <mark
+            key={i}
+            className={cn(
+              "rounded-sm",
+              bgClass ?? "bg-yellow-200/70",
+              expanded && onMarkClick
+                ? cn(
+                    "cursor-pointer px-1 py-0.5 rounded transition-all duration-150 hover:brightness-[1.08] hover:saturate-[1.4] hover:shadow-sm",
+                    isActiveHighlight &&
+                      "brightness-[1.08] saturate-[1.4] shadow-sm",
+                  )
+                : "px-px",
+            )}
+            onPointerDown={
+              expanded && onMarkClick
+                ? (e) => {
+                    dragStateRef.current = {
+                      startX: e.clientX,
+                      startY: e.clientY,
+                    };
                   }
-                }
-              : undefined
-          }
-        >
-          {seg.text}
-        </mark>
-      );
-    });
-  }, [activeHighlightId, segments, text, onMarkClick]);
+                : undefined
+            }
+            onPointerUp={
+              expanded && onMarkClick && seg.highlightId
+                ? (e) => {
+                    if (dragStateRef.current) {
+                      const dx = e.clientX - dragStateRef.current.startX;
+                      const dy = e.clientY - dragStateRef.current.startY;
+                      if (Math.sqrt(dx * dx + dy * dy) <= DRAG_THRESHOLD) {
+                        e.stopPropagation();
+                        onMarkClick(
+                          seg.highlightId!,
+                          e.currentTarget.getBoundingClientRect(),
+                        );
+                      }
+                      dragStateRef.current = null;
+                    }
+                  }
+                : undefined
+            }
+          >
+            {seg.text}
+          </mark>
+        );
+      });
+    },
+    [activeHighlightId, segments, text, onMarkClick],
+  );
 
   return (
     // No `layout` here — padding and font-size are driven by explicit `animate`
     // values so Framer Motion never needs to use scale-based projection to
     // correct this element's size, eliminating the "text zooms" artifact.
     <motion.div
-      initial={variant === "groupedPassage" ? {
-        paddingTop: COLLAPSED.paddingTop,
-        paddingBottom: COLLAPSED.paddingBottom,
-        paddingLeft: COLLAPSED.paddingLeft,
-        paddingRight: COLLAPSED.paddingRight,
-      } : undefined}
+      initial={
+        variant === "groupedPassage"
+          ? {
+              paddingTop: COLLAPSED.paddingTop,
+              paddingBottom: COLLAPSED.paddingBottom,
+              paddingLeft: COLLAPSED.paddingLeft,
+              paddingRight: COLLAPSED.paddingRight,
+            }
+          : undefined
+      }
       animate={{
         paddingTop: sizes.paddingTop,
         paddingBottom: sizes.paddingBottom,
@@ -257,7 +285,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
       {...(rowTourId ? { "data-tour-id": rowTourId } : {})}
       style={
         showGlint && glintPos
-          ? { "--specular-x": `${glintPos.x}px` } as React.CSSProperties
+          ? ({ "--specular-x": `${glintPos.x}px` } as React.CSSProperties)
           : undefined
       }
       className={cn(
@@ -331,7 +359,9 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                 ? `radial-gradient(ellipse ${isExpanded ? "360px 240px" : "220px 140px"} at ${glintPos.x}px ${glintPos.y}px, var(--cl-glint), transparent 70%)`
                 : undefined,
               opacity: glintPos ? 1 : 0,
-              transition: glintPos ? "opacity 150ms ease-out" : "opacity 200ms ease-out",
+              transition: glintPos
+                ? "opacity 150ms ease-out"
+                : "opacity 200ms ease-out",
             }}
           />
           <div
@@ -373,7 +403,8 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                     <span
                       style={{
                         fontSize: sizes.verseNumberFontSize,
-                        transition: "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+                        transition:
+                          "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
                       }}
                       className="font-semibold text-muted-foreground tabular-nums min-w-6 text-right"
                     >
@@ -391,7 +422,8 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                 <span
                   style={{
                     fontSize: sizes.verseNumberFontSize,
-                    transition: "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+                    transition:
+                      "font-size 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
                   }}
                   className="font-semibold text-muted-foreground tabular-nums min-w-6 text-right"
                 >
@@ -416,7 +448,10 @@ export const VerseRowLeft = memo(function VerseRowLeft({
             <span
               aria-hidden={isExpanded}
               style={{
-                fontSize: (density === "reading" ? COLLAPSED_READING : COLLAPSED).textFontSize,
+                fontSize: (density === "reading"
+                  ? COLLAPSED_READING
+                  : COLLAPSED
+                ).textFontSize,
                 opacity: isExpanded ? 0 : 1,
                 pointerEvents: isExpanded ? "none" : undefined,
                 transition: "opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
@@ -434,7 +469,10 @@ export const VerseRowLeft = memo(function VerseRowLeft({
               ref={verseTextRef}
               aria-hidden={!isExpanded}
               style={{
-                fontSize: (variant === "groupedPassage" ? GROUPED_EXPANDED : EXPANDED).textFontSize,
+                fontSize: (variant === "groupedPassage"
+                  ? GROUPED_EXPANDED
+                  : EXPANDED
+                ).textFontSize,
                 opacity: isExpanded ? 1 : 0,
                 pointerEvents: isExpanded ? undefined : "none",
                 transition: "opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
@@ -470,7 +508,9 @@ export const VerseRowLeft = memo(function VerseRowLeft({
               <span
                 className={cn(
                   "pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/addbtn:opacity-100",
-                  shouldFlipTooltipBelow ? "top-full mt-1.5" : "bottom-full mb-1.5",
+                  shouldFlipTooltipBelow
+                    ? "top-full mt-1.5"
+                    : "bottom-full mb-1.5",
                 )}
               >
                 Add note

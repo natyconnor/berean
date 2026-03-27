@@ -22,13 +22,13 @@ Short description: **Paper page, ink cues, more personal**
 
 ## 1. Goals
 
-| ID | Name | Summary |
-|----|------|---------|
-| **H** | Whole-app paper field | Add subtle paper texture and warm page tone to the main app background so the entire reading/writing experience sits on one material plane |
-| **I** | No-elevation note surfaces | Remove the floating-card feel by dropping note shadows and reducing heavy container treatment |
-| **J** | Ink cues instead of borders | Replace full borders with lighter editorial / handwritten cues: rules, left accents, underlines, and small ink marks |
-| **K** | Personal artifacts | Add a small amount of decorative personality such as tape or a folded corner, used sparingly and deterministically |
-| **L** | Settled motion | Make notes animate like placed paper, not UI panels lifting off a canvas |
+| ID    | Name                        | Summary                                                                                                                                    |
+| ----- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **H** | Whole-app paper field       | Add subtle paper texture and warm page tone to the main app background so the entire reading/writing experience sits on one material plane |
+| **I** | No-elevation note surfaces  | Remove the floating-card feel by dropping note shadows and reducing heavy container treatment                                              |
+| **J** | Ink cues instead of borders | Replace full borders with lighter editorial / handwritten cues: rules, left accents, underlines, and small ink marks                       |
+| **K** | Personal artifacts          | Add a small amount of decorative personality such as tape or a folded corner, used sparingly and deterministically                         |
+| **L** | Settled motion              | Make notes animate like placed paper, not UI panels lifting off a canvas                                                                   |
 
 ---
 
@@ -121,7 +121,7 @@ Add a manuscript-only shell class to the root app container in `AppShell`, for e
 cn(
   "flex flex-col h-screen w-screen overflow-hidden",
   noteUiVariant === "manuscript" ? "app-paper" : "bg-background",
-)
+);
 ```
 
 In `src/index.css`, define a background utility such as:
@@ -131,7 +131,11 @@ In `src/index.css`, define a background utility such as:
   position: relative;
   background:
     radial-gradient(circle at top, rgba(255, 248, 235, 0.65), transparent 40%),
-    linear-gradient(to bottom, rgba(120, 90, 50, 0.03), rgba(120, 90, 50, 0.015)),
+    linear-gradient(
+      to bottom,
+      rgba(120, 90, 50, 0.03),
+      rgba(120, 90, 50, 0.015)
+    ),
     var(--background);
 }
 
@@ -377,18 +381,18 @@ Keep crossfades, but make them feel calmer and less mechanical than a panel stac
 
 ## 10. File checklist
 
-| Action | File |
-|--------|------|
-| **Edit** | `src/lib/note-ui-variant.ts` — add `"manuscript"` registry entry |
-| **Edit** | `src/components/layout/app-shell.tsx` — variant-aware shell class for page background |
-| **Edit** | `src/index.css` — `app-paper`, manuscript grain, ink-rule helpers, optional artifact helpers |
-| **Edit** | `src/components/passage/passage-view-header.tsx` — manuscript header surface / bottom rule |
-| **Edit** | `src/components/notes/note-editor.tsx` — remove elevation, rely on manuscript cues |
-| **Edit** | `src/components/passage/verse-notes.tsx` — manuscript collapsed / expanded treatment |
-| **Edit** | `src/components/passage/passage-notes-bubble.tsx` — manuscript passage treatment |
-| **Edit** | `src/components/notes/note-bubble.tsx` — manuscript notes-panel treatment |
-| **Edit** | `src/components/notes/note-bubble-stack.tsx` — manuscript stack treatment |
-| **Optional** | `src/components/passage/note-animation-config.ts` — tuned motion values for manuscript |
+| Action       | File                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| **Edit**     | `src/lib/note-ui-variant.ts` — add `"manuscript"` registry entry                             |
+| **Edit**     | `src/components/layout/app-shell.tsx` — variant-aware shell class for page background        |
+| **Edit**     | `src/index.css` — `app-paper`, manuscript grain, ink-rule helpers, optional artifact helpers |
+| **Edit**     | `src/components/passage/passage-view-header.tsx` — manuscript header surface / bottom rule   |
+| **Edit**     | `src/components/notes/note-editor.tsx` — remove elevation, rely on manuscript cues           |
+| **Edit**     | `src/components/passage/verse-notes.tsx` — manuscript collapsed / expanded treatment         |
+| **Edit**     | `src/components/passage/passage-notes-bubble.tsx` — manuscript passage treatment             |
+| **Edit**     | `src/components/notes/note-bubble.tsx` — manuscript notes-panel treatment                    |
+| **Edit**     | `src/components/notes/note-bubble-stack.tsx` — manuscript stack treatment                    |
+| **Optional** | `src/components/passage/note-animation-config.ts` — tuned motion values for manuscript       |
 
 ---
 
@@ -457,4 +461,4 @@ without sounding like a generic design-system variant name.
 
 ---
 
-*End of spec.*
+_End of spec._

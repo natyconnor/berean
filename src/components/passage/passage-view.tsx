@@ -57,20 +57,21 @@ export function PassageView({
   forcedViewMode,
   focusSource,
 }: PassageViewProps) {
-  const { data, loading, error, retry: retryPassage } = useEsvPassage(
-    book,
-    chapter,
-  );
+  const {
+    data,
+    loading,
+    error,
+    retry: retryPassage,
+  } = useEsvPassage(book, chapter);
   const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("all");
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
-  const { effectiveViewMode, isReadMode, setViewMode } =
-    usePassageViewMode({
-      focusRange,
-      forcedViewMode,
-      focusSource,
-    });
+  const { effectiveViewMode, isReadMode, setViewMode } = usePassageViewMode({
+    focusRange,
+    forcedViewMode,
+    focusSource,
+  });
   const handleSetViewMode = useCallback(
     (next: PassageViewMode) => {
       if (next === effectiveViewMode) return;
@@ -144,9 +145,9 @@ export function PassageView({
   const [highlightMutationBanner, setHighlightMutationBanner] = useState<
     string | null
   >(null);
-  const highlightBannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const highlightBannerTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const lastChapterLifecycleLogRef = useRef<string | null>(null);
 
   const clearHighlightMutationBanner = useCallback(() => {

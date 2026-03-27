@@ -175,9 +175,7 @@ export const getNotesForChapter = query({
       ),
     );
     const notesById = new Map(
-      rawNotes
-        .filter(isNote)
-        .map((note) => [String(note._id), note] as const),
+      rawNotes.filter(isNote).map((note) => [String(note._id), note] as const),
     );
 
     return linksByVerseRef.flatMap(({ ref, links }) => {

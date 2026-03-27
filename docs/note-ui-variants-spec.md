@@ -6,14 +6,14 @@ This document describes how to implement **visual variant A, B, D, E** for the n
 
 ## 1. Goals
 
-| ID | Goal | Summary |
-|----|------|---------|
-| **A** | Warm note surfaces | Replace cold `bg-card` / `bg-background` note shells with subtle warm neutrals (aligned with expanded verse `bg-stone-50/80`). |
-| **B** | Softer editor chrome | Replace the full bordered `contentEditable` box with a **ruled-line** feel: transparent background, **bottom border only**, focus deepens the line (not a heavy ring). |
-| **D** | Fewer nested boxes | For the Margin variant, **drop the outer bordered card** around `NoteEditor` so it is not “box inside box.” |
+| ID    | Goal                                 | Summary                                                                                                                                                                                                |
+| ----- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **A** | Warm note surfaces                   | Replace cold `bg-card` / `bg-background` note shells with subtle warm neutrals (aligned with expanded verse `bg-stone-50/80`).                                                                         |
+| **B** | Softer editor chrome                 | Replace the full bordered `contentEditable` box with a **ruled-line** feel: transparent background, **bottom border only**, focus deepens the line (not a heavy ring).                                 |
+| **D** | Fewer nested boxes                   | For the Margin variant, **drop the outer bordered card** around `NoteEditor` so it is not “box inside box.”                                                                                            |
 | **E** | Softer actions + shortcut affordance | Margin: **Cancel** as text link; **Save** smaller / less primary-chrome; shortcut row uses **`<kbd>`** chips (match Compose/Read toggle style), with **⌘ on Mac / Ctrl on Windows** for Enter-to-save. |
 
-**Non-goals for this pass:** Changing typography of *saved* note display (`NoteContent` / `ExpandedBubble`) unless trivial; passage-note amber styling can stay structurally the same but should respect the same variant hooks where it shares `NoteEditor`.
+**Non-goals for this pass:** Changing typography of _saved_ note display (`NoteContent` / `ExpandedBubble`) unless trivial; passage-note amber styling can stay structurally the same but should respect the same variant hooks where it shares `NoteEditor`.
 
 ---
 
@@ -117,7 +117,7 @@ File: `src/components/notes/editor/inline-verse-editor.tsx`.
 - **`classic`:** keep current classes on `contentEditable`:
 
   ```tsx
-  "min-h-[96px] rounded-md border bg-background px-3 py-2.5 text-sm leading-relaxed ... focus:ring-[3px]"
+  "min-h-[96px] rounded-md border bg-background px-3 py-2.5 text-sm leading-relaxed ... focus:ring-[3px]";
   ```
 
 - **`margin` — B:**
@@ -136,7 +136,6 @@ File: `src/components/notes/note-editor.tsx` (footer).
   - **Cancel:** `<button type="button" className="text-sm text-muted-foreground hover:text-foreground ...">Cancel</button>` (or `Button variant="link"` if available).
   - **Save:** smaller button, e.g. `size="sm"` or custom `text-xs font-medium` with `variant="secondary"` or soft primary — avoid large solid primary if it feels loud; still must meet contrast.
   - **Shortcut line:** replace plain text with:
-
     - Mac: `<kbd className="...">⌘</kbd><kbd className="...">Enter</kbd> <span className="text-muted-foreground">to save</span>`
     - Non-Mac: `<kbd>Ctrl</kbd><kbd>Enter</kbd> ...`
 
@@ -155,16 +154,16 @@ Files: `src/components/passage/verse-notes.tsx` (`ExpandedBubble`), `src/compone
 
 ## 5. File checklist (expected new / touched files)
 
-| Action | Path |
-|--------|------|
-| **Add** | `src/lib/note-ui-variant.ts` — type, storage key, `readNoteUiVariant()`, `writeNoteUiVariant()`, `NOTE_UI_VARIANTS` |
-| **Add** | `src/components/notes/note-ui-variant-context.tsx` — provider + hook |
-| **Edit** | `src/components/layout/app-shell.tsx` — wrap with `NoteUiVariantProvider` |
-| **Edit** | `src/components/layout/tab-bar.tsx` — dropdown trigger + radio items |
-| **Edit** | `src/components/notes/note-editor.tsx` — variant branches for shell + footer |
-| **Edit** | `src/components/notes/editor/inline-verse-editor.tsx` — variant branches for `contentEditable` |
-| **Optional** | `src/lib/keyboard-shortcuts.ts` — export `isApplePlatform` / reuse for kbd labels |
-| **Optional** | `verse-notes.tsx` / `passage-notes-bubble.tsx` — warm card for margin |
+| Action       | Path                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| **Add**      | `src/lib/note-ui-variant.ts` — type, storage key, `readNoteUiVariant()`, `writeNoteUiVariant()`, `NOTE_UI_VARIANTS` |
+| **Add**      | `src/components/notes/note-ui-variant-context.tsx` — provider + hook                                                |
+| **Edit**     | `src/components/layout/app-shell.tsx` — wrap with `NoteUiVariantProvider`                                           |
+| **Edit**     | `src/components/layout/tab-bar.tsx` — dropdown trigger + radio items                                                |
+| **Edit**     | `src/components/notes/note-editor.tsx` — variant branches for shell + footer                                        |
+| **Edit**     | `src/components/notes/editor/inline-verse-editor.tsx` — variant branches for `contentEditable`                      |
+| **Optional** | `src/lib/keyboard-shortcuts.ts` — export `isApplePlatform` / reuse for kbd labels                                   |
+| **Optional** | `verse-notes.tsx` / `passage-notes-bubble.tsx` — warm card for margin                                               |
 
 ---
 
@@ -207,4 +206,4 @@ Files: `src/components/passage/verse-notes.tsx` (`ExpandedBubble`), `src/compone
 
 ---
 
-*End of spec.*
+_End of spec._

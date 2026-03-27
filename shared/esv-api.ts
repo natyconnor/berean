@@ -92,7 +92,9 @@ export function parsePassageIntoVerses(passageText: string): EsvVerse[] {
 export function parseEsvResponse(raw: unknown): EsvChapterData {
   const value = isRecord(raw) ? raw : {};
   const passages = Array.isArray(value.passages)
-    ? value.passages.filter((entry): entry is string => typeof entry === "string")
+    ? value.passages.filter(
+        (entry): entry is string => typeof entry === "string",
+      )
     : [];
   const passageText = passages[0] ?? "";
 

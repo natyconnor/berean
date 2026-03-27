@@ -312,9 +312,7 @@ export function TutorialProvider({
 
     const { targetIds, cardAnchorIds, scrollIntoViewTargetId } = activeStep;
     const scrollIntoViewTargets: string[] | null =
-      scrollIntoViewTargetId !== undefined
-        ? [scrollIntoViewTargetId]
-        : null;
+      scrollIntoViewTargetId !== undefined ? [scrollIntoViewTargetId] : null;
 
     let frameId = 0;
     let hasScrolled = false;

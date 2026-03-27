@@ -101,7 +101,10 @@ export function PassageNavigator({
           </TooltipButton>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-md" data-passage-dismiss-exempt>
+      <DialogContent
+        className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-md"
+        data-passage-dismiss-exempt
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>Go to passage</DialogTitle>
         </DialogHeader>

@@ -83,7 +83,10 @@ export function getSelectionOffsets(
   }
 
   const range = selection.getRangeAt(0);
-  if (!containerEl.contains(range.startContainer) || !containerEl.contains(range.endContainer)) {
+  if (
+    !containerEl.contains(range.startContainer) ||
+    !containerEl.contains(range.endContainer)
+  ) {
     return null;
   }
 

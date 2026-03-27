@@ -47,8 +47,6 @@ export const HIGHLIGHT_COLORS: HighlightColor[] = [
   },
 ];
 
-export function getHighlightColor(
-  colorId: string,
-): HighlightColor | undefined {
+export function getHighlightColor(colorId: string): HighlightColor | undefined {
   return HIGHLIGHT_COLORS.find((c) => c.id === colorId);
 }

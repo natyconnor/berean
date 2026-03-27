@@ -29,8 +29,9 @@ export function useHighlightPopover({
   onDeleteHighlight,
   onRecolorHighlight,
 }: UseHighlightPopoverOptions): UseHighlightPopoverReturn {
-  const [markPopover, setMarkPopover] =
-    useState<HighlightPopoverState | null>(null);
+  const [markPopover, setMarkPopover] = useState<HighlightPopoverState | null>(
+    null,
+  );
 
   const handleMarkClick = useCallback(
     (highlightId: string, rect: DOMRect) => {

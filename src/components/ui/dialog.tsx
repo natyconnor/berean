@@ -66,10 +66,7 @@ function DialogContent({
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay
         {...overlayProps}
-        className={cn(
-          overlayProps?.className,
-          overlayClassName,
-        )}
+        className={cn(overlayProps?.className, overlayClassName)}
       />
       <DialogPrimitive.Content
         data-slot="dialog-content"

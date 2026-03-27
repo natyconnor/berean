@@ -222,8 +222,7 @@ export function NoteEditor({
                 "border-border/50 focus:border-border/80",
                 "focus-visible:ring-0 focus-visible:ring-offset-0",
                 "placeholder:text-muted-foreground/50",
-                isPassage &&
-                  "border-amber-300/60 focus:border-amber-400/70",
+                isPassage && "border-amber-300/60 focus:border-amber-400/70",
               ),
           )}
           tourId={tour.tagsTourId}
