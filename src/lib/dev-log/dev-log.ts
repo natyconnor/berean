@@ -27,7 +27,9 @@ function normalizeDetails(
   details?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   if (!details) return undefined;
-  const entries = Object.entries(details).filter(([, value]) => value !== undefined);
+  const entries = Object.entries(details).filter(
+    ([, value]) => value !== undefined,
+  );
   if (entries.length === 0) return undefined;
   entries.sort(([a], [b]) => a.localeCompare(b));
   return Object.fromEntries(entries);

@@ -652,7 +652,14 @@ export function usePassageNotesUiState({
         setIsPassageSelection(false);
       });
     },
-    [addNewDraft, book, chapter, gateReadModeEditor, isFocusMode, singleVerseNotes],
+    [
+      addNewDraft,
+      book,
+      chapter,
+      gateReadModeEditor,
+      isFocusMode,
+      singleVerseNotes,
+    ],
   );
 
   const notifyEditorDirty = useCallback((key: string, isDirty: boolean) => {
@@ -713,7 +720,11 @@ export function usePassageNotesUiState({
         if (prev.size === 0) return prev;
 
         const next = new Set(prev);
-        for (let verse = verseRef.startVerse; verse <= verseRef.endVerse; verse += 1) {
+        for (
+          let verse = verseRef.startVerse;
+          verse <= verseRef.endVerse;
+          verse += 1
+        ) {
           next.delete(verse);
         }
 

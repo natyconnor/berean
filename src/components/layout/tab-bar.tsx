@@ -17,7 +17,14 @@ import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { useOptionalTutorial } from "@/components/tutorial/tutorial-context";
 
 export function TabBar() {
-  const { tabs, activeTabId, backPassageId, setActiveTab, closeTab, reorderTabs } = useTabs();
+  const {
+    tabs,
+    activeTabId,
+    backPassageId,
+    setActiveTab,
+    closeTab,
+    reorderTabs,
+  } = useTabs();
   const { signOut } = useAuthActions();
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,7 +101,10 @@ export function TabBar() {
   }, [navigate, activeTabId, closeTab, isSettingsRoute, backPassageId]);
 
   return (
-    <div className="flex items-center border-b bg-muted/30 h-10 shrink-0" data-passage-dismiss-exempt>
+    <div
+      className="flex items-center border-b bg-muted/30 h-10 shrink-0"
+      data-passage-dismiss-exempt
+    >
       <ScrollArea className="flex-1">
         <Reorder.Group
           as="div"
@@ -215,7 +225,8 @@ export function TabBar() {
               })
               .catch((error) => {
                 logInteraction("toolbar", "sign-out-failed", {
-                  message: error instanceof Error ? error.message : "unknown-error",
+                  message:
+                    error instanceof Error ? error.message : "unknown-error",
                 });
               });
           }}

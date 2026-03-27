@@ -13,8 +13,14 @@ function AppShellSurface({ children }: { children: ReactNode }) {
     const onMove = (e: MouseEvent) => {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        root.style.setProperty("--cl-light-x", `${(e.clientX / window.innerWidth) * 100}%`);
-        root.style.setProperty("--cl-light-y", `${(e.clientY / window.innerHeight) * 100}%`);
+        root.style.setProperty(
+          "--cl-light-x",
+          `${(e.clientX / window.innerWidth) * 100}%`,
+        );
+        root.style.setProperty(
+          "--cl-light-y",
+          `${(e.clientY / window.innerHeight) * 100}%`,
+        );
       });
     };
 
@@ -40,7 +46,11 @@ function AppShellSurface({ children }: { children: ReactNode }) {
     <div
       data-feedback-capture-root
       className="flex flex-col h-screen w-screen overflow-hidden bg-background cl-theme cl-grain-full cl-grain-lightfalloff"
-      style={{ "--cl-grain-intensity": GRAIN_CONFIG.grainIntensity } as React.CSSProperties}
+      style={
+        {
+          "--cl-grain-intensity": GRAIN_CONFIG.grainIntensity,
+        } as React.CSSProperties
+      }
     >
       <TabBar />
       <FeedbackFab />

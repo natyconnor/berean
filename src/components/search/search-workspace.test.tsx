@@ -163,7 +163,9 @@ describe("SearchWorkspace", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText((_, element) => element?.textContent === "Beloved and sent"),
+      screen.getByText(
+        (_, element) => element?.textContent === "Beloved and sent",
+      ),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /go to verse/i }));

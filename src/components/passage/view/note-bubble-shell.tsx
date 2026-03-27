@@ -30,11 +30,7 @@ export function NoteBubbleShell({
         exit={{ opacity: 0 }}
         transition={NOTE_ENTER_TRANSITION}
       >
-        {state === "pill"
-          ? pill
-          : state === "collapsed"
-            ? collapsed
-            : expanded}
+        {state === "pill" ? pill : state === "collapsed" ? collapsed : expanded}
       </motion.div>
     </AnimatePresence>
   );

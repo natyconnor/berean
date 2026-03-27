@@ -8,7 +8,9 @@ import {
 } from "./use-passage-notes-ui-state";
 
 vi.mock("@/hooks/use-verse-selection", () => ({
-  useVerseSelection: (onComplete: (sel: { startVerse: number; endVerse: number }) => void) => ({
+  useVerseSelection: (
+    onComplete: (sel: { startVerse: number; endVerse: number }) => void,
+  ) => ({
     selectionStart: null,
     selectionEnd: null,
     isSelecting: false,
@@ -425,7 +427,12 @@ describe("usePassageNotesUiState read-mode single-editor gate", () => {
 
   it("startEditingNote replaces a clean draft in read mode", () => {
     const noteId = "n1" as Id<"notes">;
-    const verseRef = { book: "Genesis", chapter: 1, startVerse: 3, endVerse: 3 };
+    const verseRef = {
+      book: "Genesis",
+      chapter: 1,
+      startVerse: 3,
+      endVerse: 3,
+    };
     const { result } = renderHook(() =>
       usePassageNotesUiState(readModeOptions()),
     );

@@ -36,7 +36,12 @@ export function ThemeDropdown() {
           <Palette className="h-4 w-4" />
         </TooltipButton>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={6} className="w-56 p-1.5" data-passage-dismiss-exempt>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-56 p-1.5"
+        data-passage-dismiss-exempt
+      >
         <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-2 pt-1 pb-1.5">
           Theme
         </p>

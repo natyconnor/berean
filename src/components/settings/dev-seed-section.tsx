@@ -81,8 +81,9 @@ export function DevSeedSection({
             <p>
               Chapters:{" "}
               <span className="font-semibold">
-                {seedResult.selectedChapters} ({seedResult.testamentDistribution.ot}{" "}
-                OT / {seedResult.testamentDistribution.nt} NT)
+                {seedResult.selectedChapters} (
+                {seedResult.testamentDistribution.ot} OT /{" "}
+                {seedResult.testamentDistribution.nt} NT)
               </span>
             </p>
             <p>

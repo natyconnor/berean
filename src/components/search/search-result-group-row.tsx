@@ -1,10 +1,7 @@
 import type { CSSProperties } from "react";
 import { Loader2 } from "lucide-react";
 import { useEsvReference } from "@/hooks/use-esv-reference";
-import {
-  formatVerseRef,
-  type VerseRef,
-} from "@/lib/verse-ref-utils";
+import { formatVerseRef, type VerseRef } from "@/lib/verse-ref-utils";
 import { HighlightedText } from "@/components/search/highlighted-text";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

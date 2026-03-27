@@ -38,7 +38,11 @@ interface PassageNotesBubbleProps {
   compact?: boolean;
   currentChapter?: CurrentChapter;
   editingNoteIds?: Set<Id<"notes">>;
-  onSaveEdit?: (noteId: Id<"notes">, body: NoteBody, tags: string[]) => void | Promise<void>;
+  onSaveEdit?: (
+    noteId: Id<"notes">,
+    body: NoteBody,
+    tags: string[],
+  ) => void | Promise<void>;
   onCancelEdit?: (noteId: Id<"notes">) => void;
   onEditorDirtyChange?: (noteId: Id<"notes">, isDirty: boolean) => void;
   onOpen: () => void;
@@ -170,8 +174,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                 delay: index * 0.03,
               }}
             >
-              {supportsInlineEditing &&
-              editingNoteIds?.has(note.noteId) ? (
+              {supportsInlineEditing && editingNoteIds?.has(note.noteId) ? (
                 <div data-note-surface>
                   <NoteEditor
                     verseRef={note.verseRef}
@@ -272,9 +275,7 @@ function CollapsedPassageBubble({
                 variant="outline"
                 className={cn(
                   "border-amber-300 text-amber-700 dark:border-amber-600/50 dark:text-amber-400/70 ml-auto shrink-0",
-                  compact
-                    ? "text-[8px] px-1 py-0"
-                    : "text-[10px] px-1.5 py-0",
+                  compact ? "text-[8px] px-1 py-0" : "text-[10px] px-1.5 py-0",
                 )}
               >
                 {notes.length}

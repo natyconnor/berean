@@ -36,7 +36,10 @@ export function HighlightMarkPopover({
 
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node)
+      ) {
         onClose();
       }
     };
@@ -46,8 +49,12 @@ export function HighlightMarkPopover({
 
   useEffect(() => {
     const handleScroll = () => onClose();
-    window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
-    return () => window.removeEventListener("scroll", handleScroll, { capture: true });
+    window.addEventListener("scroll", handleScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      window.removeEventListener("scroll", handleScroll, { capture: true });
   }, [onClose]);
 
   return createPortal(

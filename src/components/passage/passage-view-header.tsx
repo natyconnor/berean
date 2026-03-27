@@ -107,7 +107,9 @@ export function PassageViewHeader({
                     </Button>
                     <Button
                       size="xs"
-                      variant={noteVisibility === "noted" ? "secondary" : "ghost"}
+                      variant={
+                        noteVisibility === "noted" ? "secondary" : "ghost"
+                      }
                       onClick={() => setNoteVisibility("noted")}
                     >
                       Only Verses with Notes

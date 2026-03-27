@@ -56,7 +56,13 @@ export function usePassageViewTour({
     handleAddNoteRef.current = handleAddNote;
     openVerseNotesRef.current = openVerseNotes;
     openVerseKeysRef.current = openVerseKeys;
-  }, [handleClickAway, setViewMode, handleAddNote, openVerseNotes, openVerseKeys]);
+  }, [
+    handleClickAway,
+    setViewMode,
+    handleAddNote,
+    openVerseNotes,
+    openVerseKeys,
+  ]);
 
   const isAddNoteStep = activeTour === "main" && activeStep?.id === "add-note";
   const isNoteEditorStep =

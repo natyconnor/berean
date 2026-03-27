@@ -33,7 +33,9 @@ function trimEntries(
   now: number,
 ): DevLogEntry[] {
   const minTs = now - DEV_LOG_MAX_AGE_MS;
-  return nextEntries.filter((entry) => entry.ts >= minTs).slice(-DEV_LOG_MAX_ENTRIES);
+  return nextEntries
+    .filter((entry) => entry.ts >= minTs)
+    .slice(-DEV_LOG_MAX_ENTRIES);
 }
 
 export function subscribeDevLog(listener: () => void): () => void {
@@ -47,7 +49,9 @@ export function getDevLogEntries(): readonly DevLogEntry[] {
   return entries;
 }
 
-export function getRecentDevLogEntries(windowMs: number): readonly DevLogEntry[] {
+export function getRecentDevLogEntries(
+  windowMs: number,
+): readonly DevLogEntry[] {
   const minTs = Date.now() - Math.max(0, windowMs);
   return entries.filter((entry) => entry.ts >= minTs);
 }

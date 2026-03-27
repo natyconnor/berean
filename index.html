@@ -12,11 +12,30 @@
     />
     <title>Berean</title>
   </head>
-  <body style="background:#000">
+  <body style="background: #000">
     <!-- Hero scale matches src/lib/hero-backdrop.ts (pre-bundle splash). -->
-    <div id="splash-bg" style="position:fixed;inset:0;z-index:9999">
-      <div style="position:absolute;inset:0;background:url(/berean-hero.webp) center/cover no-repeat;transform:scale(1.03)"></div>
-      <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.6),rgba(0,0,0,.5),rgba(0,0,0,.9));transform:scale(1.03)"></div>
+    <div id="splash-bg" style="position: fixed; inset: 0; z-index: 9999">
+      <div
+        style="
+          position: absolute;
+          inset: 0;
+          background: url(/berean-hero.webp) center/cover no-repeat;
+          transform: scale(1.03);
+        "
+      ></div>
+      <div
+        style="
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            to bottom,
+            rgba(0, 0, 0, 0.6),
+            rgba(0, 0, 0, 0.5),
+            rgba(0, 0, 0, 0.9)
+          );
+          transform: scale(1.03);
+        "
+      ></div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

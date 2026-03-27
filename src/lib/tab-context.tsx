@@ -160,16 +160,19 @@ function TabProvider({ children }: { children: ReactNode }) {
     [activeTabId, navigate, routePassageId, tabs],
   );
 
-  const handleReorderTabs = useCallback((newTabs: Tab[]) => {
-    const previousOrder = tabs.map((tab) => tab.id).join(",");
-    const nextOrder = newTabs.map((tab) => tab.id).join(",");
-    if (previousOrder !== nextOrder) {
-      logInteraction("tabs", "reordered", {
-        tabCount: newTabs.length,
-      });
-    }
-    setStore((currentStore) => reorderTabs(currentStore, newTabs));
-  }, [tabs]);
+  const handleReorderTabs = useCallback(
+    (newTabs: Tab[]) => {
+      const previousOrder = tabs.map((tab) => tab.id).join(",");
+      const nextOrder = newTabs.map((tab) => tab.id).join(",");
+      if (previousOrder !== nextOrder) {
+        logInteraction("tabs", "reordered", {
+          tabCount: newTabs.length,
+        });
+      }
+      setStore((currentStore) => reorderTabs(currentStore, newTabs));
+    },
+    [tabs],
+  );
 
   const handleSetActiveTab = useCallback(
     (tabId: string) => {

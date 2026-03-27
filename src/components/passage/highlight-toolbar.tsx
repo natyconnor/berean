@@ -2,9 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { HIGHLIGHT_COLORS } from "@/lib/highlight-colors";
-import {
-  getSelectionOffsets,
-} from "@/lib/highlight-utils";
+import { getSelectionOffsets } from "@/lib/highlight-utils";
 
 export interface HighlightToolbarHandle {
   refreshPosition: () => void;

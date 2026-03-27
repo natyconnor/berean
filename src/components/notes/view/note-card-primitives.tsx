@@ -150,22 +150,14 @@ export function NoteContent({
       truncateAt,
     );
     return (
-      <p
-        className={cn(
-          "m-0 whitespace-pre-wrap",
-          densityClass,
-          className,
-        )}
-      >
+      <p className={cn("m-0 whitespace-pre-wrap", densityClass, className)}>
         {displayContent}
       </p>
     );
   }
 
   return (
-    <div
-      className={cn("whitespace-pre-wrap", densityClass, className)}
-    >
+    <div className={cn("whitespace-pre-wrap", densityClass, className)}>
       {normalizedBody.segments.length === 0 ? (
         <p />
       ) : (

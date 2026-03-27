@@ -102,22 +102,22 @@ So this is **not** primarily “multi-verse React state” or `select-none` gaps
 
 **Options (pick one):**
 
-1. **Portal into a dedicated host**  
-   - Add `<div id="overlay-root" />` next to `#root` in `index.html` (or create it once in `main.tsx`).  
-   - `createPortal(..., document.getElementById("overlay-root"))`.  
+1. **Portal into a dedicated host**
+   - Add `<div id="overlay-root" />` next to `#root` in `index.html` (or create it once in `main.tsx`).
+   - `createPortal(..., document.getElementById("overlay-root"))`.
    - Keeps overlays out of the React tree but **not** mixed into arbitrary `body` child order with ad-hoc portals.
 
-2. **No portal**  
-   - Render toolbar as **`fixed`** positioned **inside** `VerseTextPane` (or a passage-level provider).  
+2. **No portal**
+   - Render toolbar as **`fixed`** positioned **inside** `VerseTextPane` (or a passage-level provider).
    - May need **`z-index` / stacking context** tuning so it clears note columns and scroll containers.
 
-3. **Portal to `#root`’s parent but after `#root`**  
+3. **Portal to `#root`’s parent but after `#root`**
    - Similar to (1); document the invariant: “all overlays go here.”
 
 **Files:**
 
-- `src/components/passage/highlight-toolbar.tsx`  
-- Possibly `index.html` / `src/main.tsx`  
+- `src/components/passage/highlight-toolbar.tsx`
+- Possibly `index.html` / `src/main.tsx`
 - Later: `src/components/passage/highlight-mark-popover.tsx` for consistency
 
 **Done when:** With Phase A **disabled** (for a harsh test), glitch rate drops; with Phase A **enabled**, glitch is gone across browsers you care about.
@@ -148,7 +148,7 @@ So this is **not** primarily “multi-verse React state” or `select-none` gaps
 
 **Files:**
 
-- `src/components/passage/verse-row.tsx`  
+- `src/components/passage/verse-row.tsx`
 - Any styles/animation that assumed two layers
 
 **Pros:** Fewer weird boundary cases at `<mark>` / text edges.  
@@ -170,14 +170,14 @@ and audit other `createPortal(..., document.body)` usages app-wide (`grep`) for 
 
 ## Suggested implementation order
 
-| Order | Phase | Rationale |
-|------:|-------|-----------|
-| 1 | **A** | Matches logs; smallest change; immediate validation |
-| 2 | **B** | Cheap hardening; good with A |
-| 3 | **C** | Removes structural footgun for future features |
-| 4 | **D** | Polish / perf |
-| 5 | **E** | Only if still needed |
-| 6 | **F** | Consistency |
+| Order | Phase | Rationale                                           |
+| ----: | ----- | --------------------------------------------------- |
+|     1 | **A** | Matches logs; smallest change; immediate validation |
+|     2 | **B** | Cheap hardening; good with A                        |
+|     3 | **C** | Removes structural footgun for future features      |
+|     4 | **D** | Polish / perf                                       |
+|     5 | **E** | Only if still needed                                |
+|     6 | **F** | Consistency                                         |
 
 ---
 
@@ -199,6 +199,6 @@ and audit other `createPortal(..., document.body)` usages app-wide (`grep`) for 
 
 ## Changelog
 
-| Date | Note |
-|------|------|
+| Date       | Note                                                                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-03-20 | Phase A: skip `updatePosition` on `selectionchange` while primary pointer down; `document` capture `pointerup`/`pointercancel` + deferred `updatePosition` |

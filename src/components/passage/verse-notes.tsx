@@ -36,7 +36,11 @@ interface VerseNotesProps {
   isPill?: boolean;
   currentChapter?: CurrentChapter;
   editingNoteIds?: Set<Id<"notes">>;
-  onSaveEdit?: (noteId: Id<"notes">, body: NoteBody, tags: string[]) => void | Promise<void>;
+  onSaveEdit?: (
+    noteId: Id<"notes">,
+    body: NoteBody,
+    tags: string[],
+  ) => void | Promise<void>;
   onCancelEdit?: (noteId: Id<"notes">) => void;
   onEditorDirtyChange?: (noteId: Id<"notes">, isDirty: boolean) => void;
   onOpen: () => void;
@@ -152,8 +156,7 @@ export const VerseNotes = memo(function VerseNotes({
                 delay: index * 0.03,
               }}
             >
-              {supportsInlineEditing &&
-              editingNoteIds?.has(note.noteId) ? (
+              {supportsInlineEditing && editingNoteIds?.has(note.noteId) ? (
                 <div data-note-surface>
                   <NoteEditor
                     verseRef={note.verseRef}
@@ -257,9 +260,7 @@ function StackedBubble({
             {count} notes
           </Badge>
         </div>
-        <p className="text-muted-foreground line-clamp-1 text-xs">
-          {preview}
-        </p>
+        <p className="text-muted-foreground line-clamp-1 text-xs">{preview}</p>
       </div>
     </button>
   );
