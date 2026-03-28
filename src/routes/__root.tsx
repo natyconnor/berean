@@ -60,7 +60,11 @@ function RootComponent() {
     if (!el) return;
     el.style.transition = "opacity 400ms ease-out";
     el.style.opacity = "0";
-    el.addEventListener("transitionend", () => el.remove(), { once: true });
+    const remove = () => el.remove();
+    el.addEventListener("transitionend", remove, { once: true });
+    // Fallback: remove even if transitionend doesn't fire (e.g. iPad Safari)
+    const fallback = setTimeout(remove, 500);
+    return () => clearTimeout(fallback);
   }, []);
 
   useEffect(() => {
