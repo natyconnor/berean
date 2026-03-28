@@ -7,6 +7,8 @@ import {
   type PassageNotesUiState,
 } from "./use-passage-notes-ui-state";
 
+const clearSelectionMock = vi.fn();
+
 vi.mock("@/hooks/use-verse-selection", () => ({
   useVerseSelection: (
     onComplete: (sel: { startVerse: number; endVerse: number }) => void,
@@ -21,7 +23,7 @@ vi.mock("@/hooks/use-verse-selection", () => ({
       onComplete({ startVerse: 1, endVerse: 1 });
       return true;
     },
-    clearSelection: () => {},
+    clearSelection: clearSelectionMock,
   }),
 }));
 
@@ -57,6 +59,7 @@ describe("usePassageNotesUiState outside-click dismissal", () => {
   let devLogPanel: HTMLDivElement;
 
   beforeEach(() => {
+    clearSelectionMock.mockReset();
     outsideDiv = document.createElement("div");
     document.body.appendChild(outsideDiv);
 
@@ -524,5 +527,30 @@ describe("usePassageNotesUiState editor cancellation", () => {
     expect(result.current.openEditors.size).toBe(0);
     expect(result.current.openVerseKeys.has(1)).toBe(true);
     expect(result.current.selectedVerses.has(1)).toBe(true);
+  });
+
+  it("clears lingering selection state when the last verse note is deleted", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        singleVerseNotes: new Map([[1, [singleVerseNote]]]),
+      }),
+    );
+
+    act(() => {
+      result.current.openVerseNotes(1);
+    });
+
+    expect(result.current.openVerseKeys.has(1)).toBe(true);
+    expect(result.current.selectedVerses.has(1)).toBe(true);
+
+    act(() => {
+      result.current.handleNoteDeleteCleanup("n1" as Id<"notes">, 1, false);
+    });
+
+    expect(result.current.openVerseKeys.has(1)).toBe(false);
+    expect(result.current.selectedVerses.has(1)).toBe(false);
+    expect(result.current.isPassageSelection).toBe(false);
+    expect(clearSelectionMock).toHaveBeenCalled();
   });
 });

@@ -73,3 +73,37 @@ export const NOTE_FADE_VARIANTS: Variants = {
   visible: { opacity: 1 },
   exit: { opacity: 0 },
 };
+
+/**
+ * Exit transition for note deletion: slide toward the trailing (delete-button)
+ * side + fade out. When prefers-reduced-motion is active, callers should use
+ * NOTE_DELETE_REDUCED_EXIT instead.
+ */
+export const NOTE_DELETE_EXIT_TRANSITION: Transition = {
+  duration: 0.2,
+  ease: [0.22, 1, 0.36, 1],
+};
+
+/** Slide right + fade for note delete exit. */
+export const NOTE_DELETE_EXIT = {
+  x: 14,
+  opacity: 0,
+  transition: NOTE_DELETE_EXIT_TRANSITION,
+};
+
+/** Opacity-only exit for prefers-reduced-motion. */
+export const NOTE_DELETE_REDUCED_EXIT = {
+  opacity: 0,
+  transition: { duration: 0.1 },
+};
+
+/**
+ * Height-collapse backup exit (use if slide feels wrong in QA):
+ *   exit={{ height: 0, opacity: 0, overflow: "hidden", transition: NOTE_DELETE_EXIT_TRANSITION }}
+ */
+
+/** Delay (ms) between note exit animation and panel collapse. */
+export const PANEL_COLLAPSE_STAGGER_MS = 100;
+
+/** x-keyframes for a short shake on a restored note (failed delete). */
+export const NOTE_SHAKE_KEYFRAMES = [0, -6, 5, -3, 2, 0];

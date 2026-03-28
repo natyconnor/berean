@@ -36,7 +36,7 @@ describe("VerseNotes", () => {
           onOpen={onOpen}
           onClose={vi.fn()}
           onEdit={vi.fn()}
-          onDelete={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
           onAddNote={vi.fn()}
         />
       </TooltipProvider>,
@@ -69,7 +69,7 @@ describe("VerseNotes", () => {
           onOpen={onOpen}
           onClose={vi.fn()}
           onEdit={vi.fn()}
-          onDelete={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
           onAddNote={vi.fn()}
         />
       </TooltipProvider>,

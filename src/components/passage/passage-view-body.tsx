@@ -115,6 +115,7 @@ export function PassageViewBody({
     closePassageNotes,
     startEditingNote,
     handleDelete,
+    handleNoteDeleteCleanup,
     handleSaveEdit,
     handleSaveNew,
     cancelEditor,
@@ -230,6 +231,7 @@ export function PassageViewBody({
                         onCancelEditor={cancelEditor}
                         onEditorDirtyChange={notifyEditorDirty}
                         onStartCreatingPassageNote={startCreatingPassageNote}
+                        onNoteDeleteCleanup={handleNoteDeleteCleanup}
                         onPassageBubbleMouseEnter={
                           handlePassageBubbleMouseEnter
                         }
@@ -328,6 +330,7 @@ export function PassageViewBody({
                       onCancelEditor={cancelEditor}
                       onEditorDirtyChange={notifyEditorDirty}
                       onStartCreatingPassageNote={startCreatingPassageNote}
+                      onNoteDeleteCleanup={handleNoteDeleteCleanup}
                       highlights={highlightsByVerse.get(item.verseNumber)}
                       onCreateHighlight={onCreateHighlight}
                       onDeleteHighlight={onDeleteHighlight}

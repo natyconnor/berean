@@ -85,6 +85,11 @@ export interface PassageNotesUiState {
     tags: string[],
   ) => Promise<void>;
   handleDelete: (noteId: Id<"notes">) => Promise<void>;
+  handleNoteDeleteCleanup: (
+    noteId: Id<"notes">,
+    verseNumber: number,
+    isPassage: boolean,
+  ) => void;
   handleClickAway: () => void;
   cancelEditor: (key: string) => void;
   openVerseNotes: (verseNumber: number) => void;
@@ -911,6 +916,23 @@ export function usePassageNotesUiState({
     [getSelectedVersesForPassageAnchor, viewMode],
   );
 
+  const handleNoteDeleteCleanup = useCallback(
+    (noteId: Id<"notes">, verseNumber: number, isPassage: boolean) => {
+      removeEditor(editEditorKey(noteId));
+      clearSelection();
+      setHoveredVerse(null);
+      setHoveredSingleBubble(null);
+      setHoveredPassageBubble(null);
+      setIsPassageSelection(false);
+      if (isPassage) {
+        closePassageNotes(verseNumber);
+      } else {
+        closeVerseNotes(verseNumber);
+      }
+    },
+    [clearSelection, closePassageNotes, closeVerseNotes, removeEditor],
+  );
+
   const startEditingNote = useCallback(
     (
       noteId: Id<"notes">,
@@ -1025,6 +1047,7 @@ export function usePassageNotesUiState({
     handleSaveNew,
     handleSaveEdit,
     handleDelete,
+    handleNoteDeleteCleanup,
     handleClickAway,
     cancelEditor,
     openVerseNotes,

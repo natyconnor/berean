@@ -1,11 +1,7 @@
 import { Fragment } from "react";
+import { motion } from "framer-motion";
 import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
 import {
@@ -56,33 +52,23 @@ export function NoteCardActions({
       role="group"
       aria-label="Note actions"
     >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className={cn(NOTE_CARD_ACTION_ICON_BUTTON, hoverBg)}
-            onClick={onEdit}
-          >
-            <Pencil className="h-3 w-3 text-muted-foreground" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Edit note</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className={cn(
-              NOTE_CARD_ACTION_ICON_BUTTON,
-              "hover:bg-destructive/10",
-            )}
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Delete note</TooltipContent>
-      </Tooltip>
+      <button
+        type="button"
+        className={cn(NOTE_CARD_ACTION_ICON_BUTTON, hoverBg)}
+        onClick={onEdit}
+        aria-label="Edit note"
+      >
+        <Pencil className="h-3 w-3 text-muted-foreground" />
+      </button>
+      <motion.button
+        type="button"
+        className={cn(NOTE_CARD_ACTION_ICON_BUTTON, "hover:bg-destructive/10")}
+        whileTap={{ scale: 0.92 }}
+        onClick={onDelete}
+        aria-label="Delete note"
+      >
+        <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+      </motion.button>
     </div>
   );
 }
@@ -244,24 +230,20 @@ export function HoverEditButton({
       : "hover:bg-muted";
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 transition-all group-hover:opacity-100",
-            NOTE_CARD_ACTION_ICON_BUTTON,
-            hoverBg,
-          )}
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-        >
-          <Pencil className="h-3 w-3 text-muted-foreground" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>Edit note</TooltipContent>
-    </Tooltip>
+    <button
+      type="button"
+      className={cn(
+        "absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 transition-all group-hover:opacity-100",
+        NOTE_CARD_ACTION_ICON_BUTTON,
+        hoverBg,
+      )}
+      onClick={(e) => {
+        e.stopPropagation();
+        onEdit();
+      }}
+      aria-label="Edit note"
+    >
+      <Pencil className="h-3 w-3 text-muted-foreground" />
+    </button>
   );
 }

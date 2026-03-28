@@ -1,11 +1,6 @@
 import { memo } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
@@ -71,51 +66,42 @@ export const NoteBubble = memo(function NoteBubble({
         </div>
         {isExpanded && (
           <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="p-1 rounded hover:bg-muted transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit();
-                  }}
-                >
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Edit note</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="p-1 rounded hover:bg-destructive/10 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete();
-                  }}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Delete note</TooltipContent>
-            </Tooltip>
+            <button
+              type="button"
+              className="p-1 rounded hover:bg-muted transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              aria-label="Edit note"
+            >
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+            <button
+              type="button"
+              className="p-1 rounded hover:bg-destructive/10 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              aria-label="Delete note"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+            </button>
           </div>
         )}
         {!isExpanded && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-all"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Edit note</TooltipContent>
-          </Tooltip>
+          <button
+            type="button"
+            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            aria-label="Edit note"
+          >
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
         )}
       </div>
 
