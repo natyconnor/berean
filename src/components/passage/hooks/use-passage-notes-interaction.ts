@@ -52,6 +52,11 @@ export interface PassageNotesInteraction {
     tags: string[],
   ) => Promise<void>;
   handleDelete: (noteId: Id<"notes">) => Promise<void>;
+  handleNoteDeleteCleanup: (
+    noteId: Id<"notes">,
+    verseNumber: number,
+    isPassage: boolean,
+  ) => void;
   handleClickAway: () => void;
   cancelEditor: (key: string) => void;
   openVerseNotes: (verseNumber: number) => void;

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { VerseTextPane } from "./verse-text-pane";
@@ -75,6 +75,11 @@ export interface VerseRowWithNotesProps {
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  onNoteDeleteCleanup: (
+    noteId: Id<"notes">,
+    verseNumber: number,
+    isPassage: boolean,
+  ) => void;
   focusDistance?: number | null;
   highlights?: HighlightRange[];
   onCreateHighlight?: (
@@ -127,6 +132,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onCancelEditor,
   onEditorDirtyChange,
   onStartCreatingPassageNote,
+  onNoteDeleteCleanup,
   focusDistance = null,
   highlights,
   onCreateHighlight,
@@ -136,6 +142,9 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   addNoteTourId,
   rowTourId,
 }: VerseRowWithNotesProps) {
+  const [isExitingSingleNote, setIsExitingSingleNote] = useState(false);
+  const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
+
   const isReadMode = viewMode === "read";
 
   const isPassageAnchor = passageNotes.length > 0;
@@ -208,7 +217,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   const isFocusDimmed = focusDistance !== null && focusDistance > 0;
 
   const passageNoteJsx =
-    passageNotes.length > 0 ? (
+    passageNotes.length > 0 || isExitingPassageNote ? (
       <motion.div
         layout="position"
         transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
@@ -250,6 +259,10 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               endVerse: passageNotes[0].verseRef.endVerse,
             })
           }
+          onLastNoteDeletedAfterExit={(noteId) =>
+            onNoteDeleteCleanup(noteId, verseNumber, true)
+          }
+          onExitingLastChange={setIsExitingPassageNote}
           onMouseEnter={() => onPassageBubbleMouseEnter(verseNumber)}
           onMouseLeave={onPassageBubbleMouseLeave}
         />
@@ -326,7 +339,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           )}
           {...(isAnyOpen ? { "data-notes-open": "" } : {})}
         >
-          {singleNotes.length > 0 ? (
+          {singleNotes.length > 0 || isExitingSingleNote ? (
             <motion.div
               layout="position"
               transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
@@ -356,6 +369,10 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                 }}
                 onDelete={onDelete}
                 onAddNote={() => onAddNote(verseNumber)}
+                onLastNoteDeletedAfterExit={(noteId) =>
+                  onNoteDeleteCleanup(noteId, verseNumber, false)
+                }
+                onExitingLastChange={setIsExitingSingleNote}
                 onMouseEnter={() => onSingleBubbleMouseEnter(verseNumber)}
                 onMouseLeave={onSingleBubbleMouseLeave}
               />

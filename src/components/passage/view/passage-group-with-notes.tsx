@@ -1,4 +1,10 @@
-import { memo, useCallback, useMemo, type CSSProperties } from "react";
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { VerseTextPane } from "./verse-text-pane";
@@ -60,6 +66,11 @@ interface PassageGroupWithNotesProps {
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  onNoteDeleteCleanup: (
+    noteId: Id<"notes">,
+    verseNumber: number,
+    isPassage: boolean,
+  ) => void;
   onPassageBubbleMouseEnter: (verseNumber: number) => void;
   onPassageBubbleMouseLeave: () => void;
   onCollapse: () => void;
@@ -113,10 +124,12 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onCancelEditor,
   onEditorDirtyChange,
   onStartCreatingPassageNote,
+  onNoteDeleteCleanup,
   onPassageBubbleMouseEnter,
   onPassageBubbleMouseLeave,
   onCollapse,
 }: PassageGroupWithNotesProps) {
+  const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
   const anchorVerse = verses[0]?.verseNumber ?? 0;
 
   const handleCollapseGroup = useCallback(() => onCollapse(), [onCollapse]);
@@ -231,7 +244,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
               </div>
             )}
             <div className="flex-1 min-w-0 space-y-1.5">
-              {passageNotes.length > 0 && (
+              {(passageNotes.length > 0 || isExitingPassageNote) && (
                 <PassageNotesBubble
                   notes={passageNotes}
                   isOpen={isPassageOpen}
@@ -260,6 +273,10 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                       endVerse: passageNotes[0].verseRef.endVerse,
                     })
                   }
+                  onLastNoteDeletedAfterExit={(noteId) =>
+                    onNoteDeleteCleanup(noteId, anchorVerse, true)
+                  }
+                  onExitingLastChange={setIsExitingPassageNote}
                   onMouseEnter={() => onPassageBubbleMouseEnter(anchorVerse)}
                   onMouseLeave={onPassageBubbleMouseLeave}
                 />

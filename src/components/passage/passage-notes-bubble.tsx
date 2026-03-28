@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Plus, ChevronUp, BookOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +20,13 @@ import {
 } from "@/components/notes/view/note-card-primitives";
 import { NoteEditor } from "@/components/notes/note-editor";
 import { NoteBubbleShell, type BubbleState } from "./view/note-bubble-shell";
-import { LAYOUT_CORRECTION_TRANSITION } from "./note-animation-config";
+import {
+  LAYOUT_CORRECTION_TRANSITION,
+  NOTE_DELETE_EXIT,
+  NOTE_DELETE_REDUCED_EXIT,
+  NOTE_SHAKE_KEYFRAMES,
+} from "./note-animation-config";
+import { useOptimisticNoteRemoval } from "./hooks/use-optimistic-note-removal";
 
 type PassageNote = NoteWithRef;
 
@@ -48,8 +54,10 @@ interface PassageNotesBubbleProps {
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
-  onDelete: (noteId: Id<"notes">) => void;
+  onDelete: (noteId: Id<"notes">) => Promise<void>;
   onAddNote: () => void;
+  onLastNoteDeletedAfterExit?: (noteId: Id<"notes">) => void;
+  onExitingLastChange?: (isExiting: boolean) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
@@ -71,10 +79,28 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
   onEdit,
   onDelete,
   onAddNote,
+  onLastNoteDeletedAfterExit,
+  onExitingLastChange,
   onMouseEnter,
   onMouseLeave,
 }: PassageNotesBubbleProps) {
-  if (notes.length === 0) return null;
+  const reduceMotion = useReducedMotion();
+  const {
+    visibleNotes,
+    isExitingLast,
+    requestRemove,
+    handleExitComplete,
+    failedNoteId,
+    clearFailed,
+  } = useOptimisticNoteRemoval({
+    notes,
+    onDelete,
+    onLastNoteDeletedAfterExit,
+    onExitingLastChange,
+  });
+
+  if (notes.length === 0 && !isExitingLast) return null;
+
   const isReadMode = viewMode === "read";
   const supportsInlineEditing = !!onSaveEdit && !!onCancelEdit;
   const hasEditsInGroup =
@@ -86,36 +112,45 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
 
   const previewLength = compact ? 34 : 100;
 
-  const bubbleState: BubbleState =
-    isPill && !isEditingWithinGroup
+  const bubbleState: BubbleState = isExitingLast
+    ? "expanded"
+    : isPill && !isEditingWithinGroup
       ? "pill"
       : shouldShowExpanded || isReadMode
         ? "expanded"
         : "collapsed";
 
+  const exitVariant = reduceMotion
+    ? NOTE_DELETE_REDUCED_EXIT
+    : NOTE_DELETE_EXIT;
+
   return (
     <NoteBubbleShell
       state={bubbleState}
       pill={
-        <PassageNotesPill
-          count={notes.length}
-          verseRefLabel={formatVerseRef(notes[0].verseRef)}
-          onClick={onOpen}
-          isGlowing={isGlowing}
-        />
+        notes.length > 0 ? (
+          <PassageNotesPill
+            count={notes.length}
+            verseRefLabel={formatVerseRef(notes[0].verseRef)}
+            onClick={onOpen}
+            isGlowing={isGlowing}
+          />
+        ) : null
       }
       collapsed={
-        <CollapsedPassageBubble
-          notes={notes}
-          previewLength={previewLength}
-          currentChapter={currentChapter}
-          compact={compact}
-          isGlowing={isGlowing}
-          onOpen={onOpen}
-          onEdit={onEdit}
-          onMouseEnter={onMouseEnter}
-          onMouseLeave={onMouseLeave}
-        />
+        notes.length > 0 ? (
+          <CollapsedPassageBubble
+            notes={notes}
+            previewLength={previewLength}
+            currentChapter={currentChapter}
+            compact={compact}
+            isGlowing={isGlowing}
+            onOpen={onOpen}
+            onEdit={onEdit}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+          />
+        ) : null
       }
       expanded={
         <div
@@ -129,80 +164,96 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
         >
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5">
-              <BookOpen className="h-3 w-3 text-amber-600 dark:text-amber-400/70 shrink-0" />
-              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide">
-                {formatVerseRef(notes[0].verseRef)}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="flex items-center gap-1 text-xs font-medium transition-colors text-primary hover:text-primary/80"
-                    onClick={onAddNote}
-                  >
-                    <Plus className="h-3 w-3" />
-                    New note
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Add new note for this passage</TooltipContent>
-              </Tooltip>
-              {!isReadMode && (
+          {visibleNotes.length > 0 && (
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-1.5">
+                <BookOpen className="h-3 w-3 text-amber-600 dark:text-amber-400/70 shrink-0" />
+                <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide">
+                  {formatVerseRef(notes[0].verseRef)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={onClose}
+                      className="flex items-center gap-1 text-xs font-medium transition-colors text-primary hover:text-primary/80"
+                      onClick={onAddNote}
                     >
-                      <ChevronUp className="h-3 w-3" />
-                      Collapse
+                      <Plus className="h-3 w-3" />
+                      New note
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>Collapse notes</TooltipContent>
+                  <TooltipContent>Add new note for this passage</TooltipContent>
                 </Tooltip>
-              )}
+                {!isReadMode && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={onClose}
+                      >
+                        <ChevronUp className="h-3 w-3" />
+                        Collapse
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Collapse notes</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
             </div>
-          </div>
-          {notes.map((note, index) => (
-            <motion.div
-              key={note.noteId}
-              layout
-              transition={{
-                layout: LAYOUT_CORRECTION_TRANSITION,
-                delay: index * 0.03,
-              }}
-            >
-              {supportsInlineEditing && editingNoteIds?.has(note.noteId) ? (
-                <div data-note-surface>
-                  <NoteEditor
-                    verseRef={note.verseRef}
-                    initialContent={note.content}
-                    initialBody={note.body}
-                    initialTags={note.tags}
-                    variant="passage"
+          )}
+          <AnimatePresence mode="popLayout" onExitComplete={handleExitComplete}>
+            {visibleNotes.map((note, index) => (
+              <motion.div
+                key={note.noteId}
+                layout
+                exit={exitVariant}
+                transition={{
+                  layout: LAYOUT_CORRECTION_TRANSITION,
+                  delay: index * 0.03,
+                }}
+                animate={
+                  note.noteId === failedNoteId
+                    ? { x: NOTE_SHAKE_KEYFRAMES }
+                    : undefined
+                }
+                onAnimationComplete={() => {
+                  if (note.noteId === failedNoteId) clearFailed();
+                }}
+              >
+                {supportsInlineEditing && editingNoteIds?.has(note.noteId) ? (
+                  <div data-note-surface>
+                    <NoteEditor
+                      verseRef={note.verseRef}
+                      initialContent={note.content}
+                      initialBody={note.body}
+                      initialTags={note.tags}
+                      variant="passage"
+                      currentChapter={currentChapter}
+                      onSave={(body, tags) =>
+                        onSaveEdit(note.noteId, body, tags)
+                      }
+                      onCancel={() => onCancelEdit(note.noteId)}
+                      onDirtyChange={
+                        onEditorDirtyChange
+                          ? (isDirty) =>
+                              onEditorDirtyChange(note.noteId, isDirty)
+                          : undefined
+                      }
+                    />
+                  </div>
+                ) : (
+                  <ExpandedPassageNote
+                    note={note}
                     currentChapter={currentChapter}
-                    onSave={(body, tags) => onSaveEdit(note.noteId, body, tags)}
-                    onCancel={() => onCancelEdit(note.noteId)}
-                    onDirtyChange={
-                      onEditorDirtyChange
-                        ? (isDirty) => onEditorDirtyChange(note.noteId, isDirty)
-                        : undefined
-                    }
+                    density={isReadMode ? "reading" : "default"}
+                    onEdit={() => onEdit(note.noteId)}
+                    onDelete={() => requestRemove(note.noteId)}
                   />
-                </div>
-              ) : (
-                <ExpandedPassageNote
-                  note={note}
-                  currentChapter={currentChapter}
-                  density={isReadMode ? "reading" : "default"}
-                  onEdit={() => onEdit(note.noteId)}
-                  onDelete={() => onDelete(note.noteId)}
-                />
-              )}
-            </motion.div>
-          ))}
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       }
     />

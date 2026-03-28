@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Pencil, Plus, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +20,13 @@ import {
 } from "@/components/notes/view/note-card-primitives";
 import { cn } from "@/lib/utils";
 import { NoteBubbleShell, type BubbleState } from "./view/note-bubble-shell";
-import { LAYOUT_CORRECTION_TRANSITION } from "./note-animation-config";
+import {
+  LAYOUT_CORRECTION_TRANSITION,
+  NOTE_DELETE_EXIT,
+  NOTE_DELETE_REDUCED_EXIT,
+  NOTE_SHAKE_KEYFRAMES,
+} from "./note-animation-config";
+import { useOptimisticNoteRemoval } from "./hooks/use-optimistic-note-removal";
 
 export type VerseNote = NoteWithRef;
 
@@ -46,8 +52,10 @@ interface VerseNotesProps {
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
-  onDelete: (noteId: Id<"notes">) => void;
+  onDelete: (noteId: Id<"notes">) => Promise<void>;
   onAddNote: () => void;
+  onLastNoteDeletedAfterExit?: (noteId: Id<"notes">) => void;
+  onExitingLastChange?: (isExiting: boolean) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
@@ -67,10 +75,28 @@ export const VerseNotes = memo(function VerseNotes({
   onEdit,
   onDelete,
   onAddNote,
+  onLastNoteDeletedAfterExit,
+  onExitingLastChange,
   onMouseEnter,
   onMouseLeave,
 }: VerseNotesProps) {
-  if (notes.length === 0) return null;
+  const reduceMotion = useReducedMotion();
+  const {
+    visibleNotes,
+    isExitingLast,
+    requestRemove,
+    handleExitComplete,
+    failedNoteId,
+    clearFailed,
+  } = useOptimisticNoteRemoval({
+    notes,
+    onDelete,
+    onLastNoteDeletedAfterExit,
+    onExitingLastChange,
+  });
+
+  if (notes.length === 0 && !isExitingLast) return null;
+
   const isReadMode = viewMode === "read";
   const supportsInlineEditing = !!onSaveEdit && !!onCancelEdit;
   const hasEditsInGroup =
@@ -80,12 +106,17 @@ export const VerseNotes = memo(function VerseNotes({
   const isEditingWithinGroup = hasEditsInGroup;
   const shouldShowExpanded = isOpen || isReadMode || isEditingWithinGroup;
 
-  const bubbleState: BubbleState =
-    isPill && !isEditingWithinGroup
+  const bubbleState: BubbleState = isExitingLast
+    ? "expanded"
+    : isPill && !isEditingWithinGroup
       ? "pill"
       : shouldShowExpanded || isReadMode
         ? "expanded"
         : "collapsed";
+
+  const exitVariant = reduceMotion
+    ? NOTE_DELETE_REDUCED_EXIT
+    : NOTE_DELETE_EXIT;
 
   return (
     <NoteBubbleShell
@@ -101,7 +132,7 @@ export const VerseNotes = memo(function VerseNotes({
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
           />
-        ) : (
+        ) : notes.length > 1 ? (
           <StackedBubble
             count={notes.length}
             preview={notes[0].content}
@@ -109,7 +140,7 @@ export const VerseNotes = memo(function VerseNotes({
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
           />
-        )
+        ) : null
       }
       expanded={
         <div
@@ -119,7 +150,7 @@ export const VerseNotes = memo(function VerseNotes({
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
         >
-          {!isReadMode && (
+          {!isReadMode && visibleNotes.length > 0 && (
             <div className="flex items-center justify-between">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -147,43 +178,57 @@ export const VerseNotes = memo(function VerseNotes({
               </Tooltip>
             </div>
           )}
-          {notes.map((note, index) => (
-            <motion.div
-              key={note.noteId}
-              layout
-              transition={{
-                layout: LAYOUT_CORRECTION_TRANSITION,
-                delay: index * 0.03,
-              }}
-            >
-              {supportsInlineEditing && editingNoteIds?.has(note.noteId) ? (
-                <div data-note-surface>
-                  <NoteEditor
-                    verseRef={note.verseRef}
-                    initialContent={note.content}
-                    initialBody={note.body}
-                    initialTags={note.tags}
+          <AnimatePresence mode="popLayout" onExitComplete={handleExitComplete}>
+            {visibleNotes.map((note, index) => (
+              <motion.div
+                key={note.noteId}
+                layout
+                exit={exitVariant}
+                transition={{
+                  layout: LAYOUT_CORRECTION_TRANSITION,
+                  delay: index * 0.03,
+                }}
+                animate={
+                  note.noteId === failedNoteId
+                    ? { x: NOTE_SHAKE_KEYFRAMES }
+                    : undefined
+                }
+                onAnimationComplete={() => {
+                  if (note.noteId === failedNoteId) clearFailed();
+                }}
+              >
+                {supportsInlineEditing && editingNoteIds?.has(note.noteId) ? (
+                  <div data-note-surface>
+                    <NoteEditor
+                      verseRef={note.verseRef}
+                      initialContent={note.content}
+                      initialBody={note.body}
+                      initialTags={note.tags}
+                      currentChapter={currentChapter}
+                      onSave={(body, tags) =>
+                        onSaveEdit(note.noteId, body, tags)
+                      }
+                      onCancel={() => onCancelEdit(note.noteId)}
+                      onDirtyChange={
+                        onEditorDirtyChange
+                          ? (isDirty) =>
+                              onEditorDirtyChange(note.noteId, isDirty)
+                          : undefined
+                      }
+                    />
+                  </div>
+                ) : (
+                  <ExpandedBubble
+                    note={note}
                     currentChapter={currentChapter}
-                    onSave={(body, tags) => onSaveEdit(note.noteId, body, tags)}
-                    onCancel={() => onCancelEdit(note.noteId)}
-                    onDirtyChange={
-                      onEditorDirtyChange
-                        ? (isDirty) => onEditorDirtyChange(note.noteId, isDirty)
-                        : undefined
-                    }
+                    density={isReadMode ? "reading" : "default"}
+                    onEdit={() => onEdit(note.noteId)}
+                    onDelete={() => requestRemove(note.noteId)}
                   />
-                </div>
-              ) : (
-                <ExpandedBubble
-                  note={note}
-                  currentChapter={currentChapter}
-                  density={isReadMode ? "reading" : "default"}
-                  onEdit={() => onEdit(note.noteId)}
-                  onDelete={() => onDelete(note.noteId)}
-                />
-              )}
-            </motion.div>
-          ))}
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       }
     />
