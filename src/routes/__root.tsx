@@ -13,12 +13,16 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/app-shell";
 import { TutorialProvider } from "@/components/tutorial/tutorial-provider";
-import { readActiveTutorialTour } from "@/components/tutorial/tutorial-session";
+import {
+  readActiveTutorialTour,
+  readSuppressSettingsRedirectAfterSkip,
+} from "@/components/tutorial/tutorial-session";
 import { LoginPage } from "@/components/login-page";
 import {
   heroBackgroundLayerStyle,
   heroGradientOverlayLayerStyle,
 } from "@/lib/hero-backdrop";
+import { shouldRedirectToSettings } from "@/lib/tutorial-settings-redirect";
 import { api } from "../../convex/_generated/api";
 import { RootRouteError } from "@/components/error-fallbacks/root-route-error";
 import { usePreviewAutoSignIn } from "@/hooks/use-preview-auto-sign-in";
@@ -43,6 +47,8 @@ function RootComponent() {
     isAuthenticated ? {} : "skip",
   );
   const activeTutorialTour = readActiveTutorialTour();
+  const suppressSettingsRedirectAfterSkip =
+    readSuppressSettingsRedirectAfterSkip();
   const lastAuthStateRef = useRef<string | null>(null);
   const lastRouteKeyRef = useRef<string | null>(null);
   const lastSettingsRedirectPathRef = useRef<string | null>(null);
@@ -74,11 +80,13 @@ function RootComponent() {
   }, [minTimePassed]);
 
   const isReady = !isLoading && minTimePassed;
-  const shouldRedirectToSettings =
-    !isSettingsRoute &&
-    tutorialStatus?.needsStarterTagsSetup &&
-    tutorialStatus.mainTutorialCompletedAt !== undefined &&
-    activeTutorialTour !== "main";
+  const shouldShowSettingsRedirect = shouldRedirectToSettings({
+    isSettingsRoute,
+    needsStarterTagsSetup: tutorialStatus?.needsStarterTagsSetup,
+    mainTutorialCompletedAt: tutorialStatus?.mainTutorialCompletedAt,
+    activeTutorialTour,
+    suppressRedirectAfterSkip: suppressSettingsRedirectAfterSkip,
+  });
 
   useEffect(() => {
     const authState = isLoading
@@ -116,7 +124,7 @@ function RootComponent() {
   }, [isAuthenticated, isReady, location.pathname, tutorialStatus]);
 
   useEffect(() => {
-    if (!shouldRedirectToSettings) {
+    if (!shouldShowSettingsRedirect) {
       lastSettingsRedirectPathRef.current = null;
       return;
     }
@@ -125,7 +133,7 @@ function RootComponent() {
     logInteraction("app", "redirect-to-settings", {
       fromPath: location.pathname,
     });
-  }, [location.pathname, shouldRedirectToSettings]);
+  }, [location.pathname, shouldShowSettingsRedirect]);
 
   if (isPublicLegalPath) {
     return (
@@ -154,7 +162,7 @@ function RootComponent() {
     );
   }
 
-  if (shouldRedirectToSettings) {
+  if (shouldShowSettingsRedirect) {
     return <Navigate to="/settings" replace />;
   }
 

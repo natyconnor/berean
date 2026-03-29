@@ -26,6 +26,7 @@ import {
 import {
   readActiveTutorialTour,
   writeActiveTutorialTour,
+  writeSuppressSettingsRedirectAfterSkip,
   type TutorialTourName,
 } from "./tutorial-session";
 
@@ -390,7 +391,9 @@ export function TutorialProvider({
 
     if (pendingTour === "main" && isPassageRoute) {
       setActiveTour("main");
-      setStepIndex(0);
+      if (activeTour !== "main") {
+        setStepIndex(0);
+      }
       setPendingTour(null);
       return;
     }
@@ -400,12 +403,18 @@ export function TutorialProvider({
       setStepIndex(0);
       setPendingTour(null);
     }
-  }, [isPassageRoute, isSearchRoute, pendingTour]);
+  }, [activeTour, isPassageRoute, isSearchRoute, pendingTour]);
 
   const finalizeTour = useCallback(
-    async (tour: TutorialTourName) => {
+    async (
+      tour: TutorialTourName,
+      options?: {
+        skipped?: boolean;
+      },
+    ) => {
       if (finishingTourRef.current === tour) return;
 
+      const skipped = options?.skipped === true;
       logInteraction("tutorial", "finished", { tour });
       finishingTourRef.current = tour;
       setLocallyCompletedTours((current) => ({
@@ -419,8 +428,10 @@ export function TutorialProvider({
 
       try {
         if (tour === "main") {
+          writeSuppressSettingsRedirectAfterSkip(skipped);
           await completeMainTutorial({});
           if (
+            !skipped &&
             tutorialStatus.needsStarterTagsSetup &&
             location.pathname !== "/settings"
           ) {
@@ -453,6 +464,7 @@ export function TutorialProvider({
       writeActiveTutorialTour(tour);
 
       if (tour === "main") {
+        writeSuppressSettingsRedirectAfterSkip(false);
         setActiveTour(null);
         if (isPassageRoute) {
           setActiveTour("main");
@@ -606,7 +618,9 @@ export function TutorialProvider({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => void finalizeTour(activeTour)}
+                      onClick={() =>
+                        void finalizeTour(activeTour, { skipped: true })
+                      }
                     >
                       Skip
                     </Button>
