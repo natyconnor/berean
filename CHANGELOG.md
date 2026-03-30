@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/natyconnor/berean/compare/v1.4.0...v1.4.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* update note tag field to not be as wide so note controls can be seen when dropdown is open. Also ensure that modifiers with Enter don't get registered as Enter to select a tag from the dropdown ([#42](https://github.com/natyconnor/berean/issues/42)) ([309b220](https://github.com/natyconnor/berean/commit/309b220d25a803a173c0f322758ebdc159629bce))
+
 ## [1.4.0](https://github.com/natyconnor/berean/compare/v1.3.2...v1.4.0) (2026-03-30)
 
 
