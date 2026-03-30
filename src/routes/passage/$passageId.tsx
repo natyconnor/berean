@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PassageView } from "@/components/passage/passage-view";
-import { parsePassageId } from "@/lib/verse-ref-utils";
+import { PassagePage } from "@/components/routes/passage-page";
 
 type PassageSearchMode = "compose" | "read";
 type PassageSearchSource = "search";
@@ -55,24 +54,3 @@ export const Route = createFileRoute("/passage/$passageId")({
   validateSearch: validatePassageSearch,
   component: PassagePage,
 });
-
-function PassagePage() {
-  const { passageId } = Route.useParams();
-  const search = Route.useSearch();
-  const { book, chapter } = parsePassageId(passageId);
-
-  return (
-    <PassageView
-      book={book}
-      chapter={chapter}
-      focusRange={
-        typeof search.startVerse === "number" &&
-        typeof search.endVerse === "number"
-          ? { startVerse: search.startVerse, endVerse: search.endVerse }
-          : null
-      }
-      forcedViewMode={search.mode}
-      focusSource={search.source}
-    />
-  );
-}
