@@ -80,6 +80,7 @@ export function SearchWorkspaceResultsPane({
                   resolveTagStyle={resolveTagStyle}
                   isTutorialDemo={useTutorialDemoResults}
                   markTourTargets={isSearchTourActive && index === 0}
+                  resultsViewportRef={resultsViewportRef}
                 />
               ))}
             </div>

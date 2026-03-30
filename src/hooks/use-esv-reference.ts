@@ -1,7 +1,11 @@
 import { useMemo } from "react";
-import type { EsvChapterData } from "../../shared/esv-api";
+import {
+  type EsvChapterData,
+  sliceEsvChapterToVerseRange,
+} from "../../shared/esv-api";
 import { useCachedEsvQuery } from "@/hooks/use-cached-esv-query";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { formatVerseRef, toEsvQuery } from "@/lib/verse-ref-utils";
 
 export interface ReferenceQuery {
   book: string;
@@ -10,22 +14,39 @@ export interface ReferenceQuery {
   endVerse: number;
 }
 
-function toReferenceQuery(ref: ReferenceQuery): string {
-  if (ref.startVerse === ref.endVerse) {
-    return `${ref.book} ${ref.chapter}:${ref.startVerse}`;
-  }
-  return `${ref.book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
+export interface UseEsvReferenceOptions {
+  enabled?: boolean;
 }
 
-export function useEsvReference(ref: ReferenceQuery | null) {
-  const query = ref ? toReferenceQuery(ref) : null;
-  const { data, loading, error } = useCachedEsvQuery(query);
+export function useEsvReference(
+  ref: ReferenceQuery | null,
+  options?: UseEsvReferenceOptions,
+) {
+  const enabled = options?.enabled ?? true;
+  const chapterQuery = ref ? toEsvQuery(ref.book, ref.chapter) : null;
+  const {
+    data: chapterData,
+    loading,
+    error,
+  } = useCachedEsvQuery(chapterQuery, { enabled });
+
+  const data = useMemo((): EsvChapterData | null => {
+    if (!chapterData || !ref) return null;
+    return sliceEsvChapterToVerseRange(
+      chapterData,
+      ref.startVerse,
+      ref.endVerse,
+    );
+  }, [chapterData, ref]);
+
+  const rangeLabel = ref ? formatVerseRef(ref) : null;
 
   return {
     data,
     loading,
     error,
-    query,
+    /** Human-readable verse range (e.g. `John 3:16-18`). Passage fetch uses chapter key. */
+    query: rangeLabel,
   };
 }
 

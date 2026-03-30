@@ -13,7 +13,16 @@ interface AsyncQueryState {
   error: string | null;
 }
 
-export function useCachedEsvQuery(query: string | null) {
+export interface UseCachedEsvQueryOptions {
+  /** When false, do not call the ESV action (unless value is already in session cache). */
+  enabled?: boolean;
+}
+
+export function useCachedEsvQuery(
+  query: string | null,
+  options?: UseCachedEsvQueryOptions,
+) {
+  const enabled = options?.enabled ?? true;
   const fetchPassage = useAction(api.esv.getPassageText);
   const requestVersionRef = useRef(0);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -34,7 +43,7 @@ export function useCachedEsvQuery(query: string | null) {
   useEffect(() => {
     const requestVersion = ++requestVersionRef.current;
 
-    if (!query || cached) {
+    if (!query || cached || !enabled) {
       return;
     }
 
@@ -57,13 +66,13 @@ export function useCachedEsvQuery(query: string | null) {
             error instanceof Error ? error.message : "Failed to load passage",
         });
       });
-  }, [cached, fetchPassage, query, retryNonce]);
+  }, [cached, enabled, fetchPassage, query, retryNonce]);
 
   const hasFreshAsyncState = asyncState.query === query;
 
   return {
     data: cached ?? (hasFreshAsyncState ? asyncState.data : null),
-    loading: !!query && !cached && !hasFreshAsyncState,
+    loading: !!query && enabled && !cached && !hasFreshAsyncState,
     error: !query || cached || !hasFreshAsyncState ? null : asyncState.error,
     retry,
   };

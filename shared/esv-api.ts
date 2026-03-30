@@ -116,3 +116,17 @@ export function parseEsvResponse(raw: unknown): EsvChapterData {
     copyright,
   };
 }
+
+/** Narrow full-chapter ESV data to an inclusive verse range (for previews). */
+export function sliceEsvChapterToVerseRange(
+  chapter: EsvChapterData,
+  startVerse: number,
+  endVerse: number,
+): EsvChapterData {
+  const lo = Math.min(startVerse, endVerse);
+  const hi = Math.max(startVerse, endVerse);
+  return {
+    ...chapter,
+    verses: chapter.verses.filter((v) => v.number >= lo && v.number <= hi),
+  };
+}

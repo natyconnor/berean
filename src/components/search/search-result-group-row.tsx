@@ -1,6 +1,8 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, RefObject } from "react";
+import { useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { useEsvReference } from "@/hooks/use-esv-reference";
+import { useNearViewportVisible } from "@/hooks/use-near-viewport-visible";
 import { formatVerseRef, type VerseRef } from "@/lib/verse-ref-utils";
 import { HighlightedText } from "@/components/search/highlighted-text";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ interface SearchResultGroupRowProps {
   resolveTagStyle: (tag: string) => CSSProperties | undefined;
   isTutorialDemo?: boolean;
   markTourTargets?: boolean;
+  resultsViewportRef: RefObject<HTMLDivElement | null>;
 }
 
 function toVerseRefLabel(ref: SearchVerseRef): string {
@@ -41,12 +44,21 @@ export function SearchResultGroupRow({
   resolveTagStyle,
   isTutorialDemo = false,
   markTourTargets = false,
+  resultsViewportRef,
 }: SearchResultGroupRowProps) {
   const ref = group.ref;
-  const { data, loading, error, query } = useEsvReference(ref);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const isNearViewport = useNearViewportVisible(rowRef, resultsViewportRef);
+  const shouldFetchEsv = !!ref && (isTutorialDemo || isNearViewport);
+  const { data, loading, error, query } = useEsvReference(ref, {
+    enabled: shouldFetchEsv,
+  });
 
   return (
-    <div className="grid gap-3 rounded-md border bg-card p-3 lg:grid-cols-[minmax(340px,1fr)_minmax(360px,1.1fr)]">
+    <div
+      ref={rowRef}
+      className="grid gap-3 rounded-md border bg-card p-3 lg:grid-cols-[minmax(340px,1fr)_minmax(360px,1.1fr)]"
+    >
       <div
         className="space-y-2 rounded-sm border bg-background p-2"
         {...(markTourTargets
@@ -86,6 +98,10 @@ export function SearchResultGroupRow({
         {!ref ? (
           <p className="text-sm text-muted-foreground">
             These notes are not linked to verse references yet.
+          </p>
+        ) : !shouldFetchEsv ? (
+          <p className="text-sm text-muted-foreground">
+            Scroll to load scripture preview…
           </p>
         ) : loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

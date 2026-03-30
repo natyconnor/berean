@@ -97,4 +97,37 @@ describe("useCachedEsvQuery", () => {
     expect(fetchPassageMock).toHaveBeenCalledTimes(2);
     expect(fetchPassageMock).toHaveBeenLastCalledWith({ query: "John 1" });
   });
+
+  it("does not fetch when enabled is false", () => {
+    const { result } = renderHook(() =>
+      useCachedEsvQuery("John 1", { enabled: false }),
+    );
+
+    expect(fetchPassageMock).not.toHaveBeenCalled();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.data).toBeNull();
+  });
+
+  it("fetches once enabled becomes true", async () => {
+    fetchPassageMock.mockResolvedValue({
+      verses: [{ number: 1, text: "ok" }],
+    });
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useCachedEsvQuery("John 1", { enabled }),
+      { initialProps: { enabled: false } },
+    );
+
+    expect(fetchPassageMock).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual({
+        verses: [{ number: 1, text: "ok" }],
+      });
+    });
+
+    expect(fetchPassageMock).toHaveBeenCalledTimes(1);
+  });
 });
