@@ -3,3 +3,4 @@ coverage
 convex/_generated
 src/routeTree.gen.ts
 CHANGELOG.md
+pnpm-lock.yaml
