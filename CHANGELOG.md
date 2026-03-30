@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/natyconnor/berean/compare/v1.3.1...v1.3.2) (2026-03-30)
+
+
+### Bug Fixes
+
+* update react-refresh eslint to new version which now requires routes/ folder and update app so all routes are within there and follow new component export rule ([#37](https://github.com/natyconnor/berean/issues/37)) ([fe2aa06](https://github.com/natyconnor/berean/commit/fe2aa06cf92dd64252c571b70bab6594af8cf739))
+
 ## [1.3.1](https://github.com/natyconnor/berean/compare/v1.3.0...v1.3.1) (2026-03-30)
 
 
