@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/natyconnor/berean/compare/v1.3.2...v1.4.0) (2026-03-30)
+
+
+### Features
+
+* implement optimizations for esv passage fetching for search so we don't get blocked for large search results: ([#40](https://github.com/natyconnor/berean/issues/40)) ([f024b5c](https://github.com/natyconnor/berean/commit/f024b5c8361ddfdb5cac682d9eb9779bd7d9e50c))
+
 ## [1.3.2](https://github.com/natyconnor/berean/compare/v1.3.1...v1.3.2) (2026-03-30)
 
 
