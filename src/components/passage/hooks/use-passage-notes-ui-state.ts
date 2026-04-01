@@ -254,6 +254,26 @@ function getSelectedVersesForTarget(
   return new Set(verses);
 }
 
+function areFocusTargetsEqual(
+  left: FocusTarget | null,
+  right: FocusTarget | null,
+): boolean {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "verse" && right.kind === "verse") {
+    return left.verseNumber === right.verseNumber;
+  }
+  if (left.kind === "passage" && right.kind === "passage") {
+    return (
+      left.anchorVerse === right.anchorVerse &&
+      left.startVerse === right.startVerse &&
+      left.endVerse === right.endVerse
+    );
+  }
+  return false;
+}
+
 export function usePassageNotesUiState({
   book,
   chapter,
@@ -419,6 +439,9 @@ export function usePassageNotesUiState({
 
   const markTargetActive = useCallback((target: FocusTarget) => {
     lastActiveTargetRef.current = target;
+    setCurrentFocusTarget((prev) =>
+      areFocusTargetsEqual(prev, target) ? prev : target,
+    );
   }, []);
 
   const clearActiveEditorFocus = useCallback(() => {
@@ -1332,19 +1355,13 @@ export function usePassageNotesUiState({
     verseToPassageAnchor,
   ]);
 
-  useEffect(() => {
-    setCurrentFocusTarget(resolveCurrentFocusTarget());
-  }, [resolveCurrentFocusTarget]);
-
   const handleEditorFocus = useCallback(
     (key: string) => {
       if (!openEditorsRef.current.has(key)) return;
       activeEditorKeyRef.current = key;
       const slot = openEditorsRef.current.get(key);
       if (!slot) return;
-      const target = targetFromVerseRef(slot.verseRef);
-      markTargetActive(target);
-      setCurrentFocusTarget(target);
+      markTargetActive(targetFromVerseRef(slot.verseRef));
     },
     [markTargetActive],
   );
@@ -1373,7 +1390,9 @@ export function usePassageNotesUiState({
         ? activeEditorKeyRef.current
         : null;
     lastActiveTargetRef.current = target;
-    setCurrentFocusTarget(target);
+    setCurrentFocusTarget((prev) =>
+      areFocusTargetsEqual(prev, target) ? prev : target,
+    );
 
     setOpenEditors(nextEditors);
     setEditorHasChanges(nextDirtyEditors);
