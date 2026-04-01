@@ -67,12 +67,30 @@ export function PassageViewHeader({
               {!isReadMode && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="inline-flex items-center gap-2 rounded-md border bg-background px-2 py-1">
+                    <div
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,box-shadow,color] duration-200",
+                        isFocusMode
+                          ? "border-primary/35 bg-primary/8 text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.45),0_0_0_1px_hsl(var(--primary)/0.06),0_8px_24px_hsl(var(--primary)/0.10)]"
+                          : "border-border bg-background",
+                      )}
+                    >
                       <label
                         htmlFor="passage-focus-mode"
-                        className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                        className={cn(
+                          "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
+                          isFocusMode
+                            ? "text-foreground"
+                            : "text-muted-foreground",
+                        )}
                       >
-                        <Crosshair className="h-3 w-3 shrink-0" aria-hidden />
+                        <Crosshair
+                          className={cn(
+                            "h-3 w-3 shrink-0 transition-colors",
+                            isFocusMode && "text-primary",
+                          )}
+                          aria-hidden
+                        />
                         Focus
                         <kbd className="rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
                           F

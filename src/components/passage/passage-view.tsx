@@ -57,6 +57,7 @@ export function PassageView({
   forcedViewMode,
   focusSource,
 }: PassageViewProps) {
+  const FOCUS_GLOW_AMOUNT = 200;
   const {
     data,
     loading,
@@ -100,6 +101,7 @@ export function PassageView({
     openEditors,
     handleAddNote,
     handleClickAway,
+    normalizeForFocusMode,
     openVerseNotes,
     showDiscardConfirmation,
     confirmDiscard,
@@ -109,6 +111,9 @@ export function PassageView({
 
   const handleFocusModeToggle = useCallback(() => {
     const enabling = !isFocusMode;
+    if (enabling) {
+      normalizeForFocusMode();
+    }
     logInteraction("reader", "focus-mode-changed", {
       book,
       chapter,
@@ -130,6 +135,7 @@ export function PassageView({
     isFocusMode,
     isFocusModeTutorialComplete,
     isReadMode,
+    normalizeForFocusMode,
     startTour,
     toggleFocusMode,
   ]);
@@ -582,6 +588,7 @@ export function PassageView({
         passageNotesInteraction={passageNotesInteraction}
         effectiveViewMode={effectiveViewMode}
         isFocusMode={!isReadMode && isFocusMode}
+        focusGlowAmount={FOCUS_GLOW_AMOUNT}
         hasFocusRange={hasFocusRange}
         focusRange={focusRange}
         reenteringFromGroup={reenteringFromGroup}

@@ -53,6 +53,7 @@ function defaultProps() {
     onSaveNew: vi.fn().mockResolvedValue(undefined),
     onCancelEditor: vi.fn(),
     onEditorDirtyChange: vi.fn(),
+    onEditorFocus: vi.fn(),
     onStartCreatingPassageNote: vi.fn(),
     onNoteDeleteCleanup: vi.fn(),
     highlights: HIGHLIGHTS,
