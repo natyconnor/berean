@@ -9,13 +9,15 @@ import {
 } from "./use-passage-notes-ui-state";
 
 const clearSelectionMock = vi.fn();
+let mockSelectionStart: number | null = null;
+let mockSelectionEnd: number | null = null;
 
 vi.mock("@/hooks/use-verse-selection", () => ({
   useVerseSelection: (
     onComplete: (sel: { startVerse: number; endVerse: number }) => void,
   ) => ({
-    selectionStart: null,
-    selectionEnd: null,
+    selectionStart: mockSelectionStart,
+    selectionEnd: mockSelectionEnd,
     isSelecting: false,
     isInSelection: () => false,
     handleMouseDown: () => {},
@@ -61,6 +63,8 @@ describe("usePassageNotesUiState outside-click dismissal", () => {
 
   beforeEach(() => {
     clearSelectionMock.mockReset();
+    mockSelectionStart = null;
+    mockSelectionEnd = null;
     outsideDiv = document.createElement("div");
     document.body.appendChild(outsideDiv);
 
@@ -557,6 +561,225 @@ describe("usePassageNotesUiState editor cancellation", () => {
 });
 
 describe("usePassageNotesUiState focus mode save behavior", () => {
+  const singleVerseNote: NoteWithRef = {
+    noteId: "single-1" as Id<"notes">,
+    content: "",
+    tags: [],
+    verseRef: {
+      book: "Genesis",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    },
+    createdAt: 0,
+  };
+
+  const passageNote: NoteWithRef = {
+    noteId: "passage-3" as Id<"notes">,
+    content: "",
+    tags: [],
+    verseRef: {
+      book: "Genesis",
+      chapter: 1,
+      startVerse: 3,
+      endVerse: 5,
+    },
+    createdAt: 0,
+  };
+
+  it("keeps only the most recently opened verse when focus mode is enabled", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        singleVerseNotes: new Map([
+          [1, [singleVerseNote]],
+          [
+            2,
+            [
+              {
+                ...singleVerseNote,
+                noteId: "single-2" as Id<"notes">,
+                verseRef: {
+                  ...singleVerseNote.verseRef,
+                  startVerse: 2,
+                  endVerse: 2,
+                },
+              },
+            ],
+          ],
+        ]),
+      }),
+    );
+
+    act(() => {
+      result.current.openVerseNotes(1);
+      result.current.openVerseNotes(2);
+    });
+
+    act(() => {
+      result.current.normalizeForFocusMode();
+    });
+
+    expect(result.current.openVerseKeys).toEqual(new Set([2]));
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.selectedVerses).toEqual(new Set([2]));
+  });
+
+  it("keeps only the most recently opened passage when focus mode is enabled", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        passageNotesByAnchor: new Map([
+          [3, [passageNote]],
+          [
+            7,
+            [
+              {
+                ...passageNote,
+                noteId: "passage-7" as Id<"notes">,
+                verseRef: {
+                  ...passageNote.verseRef,
+                  startVerse: 7,
+                  endVerse: 8,
+                },
+              },
+            ],
+          ],
+        ]),
+      }),
+    );
+
+    act(() => {
+      result.current.openPassageNotes(3);
+      result.current.openPassageNotes(7);
+    });
+
+    act(() => {
+      result.current.normalizeForFocusMode();
+    });
+
+    expect(result.current.openPassageKeys).toEqual(new Set([7]));
+    expect(result.current.openVerseKeys.size).toBe(0);
+    expect(result.current.selectedVerses).toEqual(new Set([7, 8]));
+  });
+
+  it("prefers the focused editor over a newer non-editor target", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        singleVerseNotes: new Map([
+          [1, [singleVerseNote]],
+          [
+            2,
+            [
+              {
+                ...singleVerseNote,
+                noteId: "single-2" as Id<"notes">,
+                verseRef: {
+                  ...singleVerseNote.verseRef,
+                  startVerse: 2,
+                  endVerse: 2,
+                },
+              },
+            ],
+          ],
+        ]),
+      }),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+
+    act(() => {
+      result.current.openVerseNotes(2);
+      result.current.handleEditorFocus("new:1:1");
+    });
+
+    act(() => {
+      result.current.normalizeForFocusMode();
+    });
+
+    expect(result.current.openEditors.has("new:1:1")).toBe(true);
+    expect(result.current.openEditors.size).toBe(1);
+    expect(result.current.openVerseKeys).toEqual(new Set([1]));
+    expect(result.current.selectedVerses).toEqual(new Set([1]));
+  });
+
+  it("prefers the current selection when no editor is focused", () => {
+    mockSelectionStart = 4;
+    mockSelectionEnd = 6;
+
+    const { result, rerender } = renderHook(() =>
+      usePassageNotesUiState(defaultOptions()),
+    );
+
+    act(() => {
+      result.current.openVerseNotes(2);
+    });
+
+    rerender();
+
+    act(() => {
+      result.current.normalizeForFocusMode();
+    });
+
+    expect(result.current.openPassageKeys).toEqual(new Set([4]));
+    expect(result.current.openVerseKeys.size).toBe(0);
+    expect(result.current.selectedVerses).toEqual(new Set([4, 5, 6]));
+  });
+
+  it("preserves dirty non-focused editors during normalization", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(defaultOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(1);
+      result.current.handleAddNote(2);
+    });
+
+    act(() => {
+      result.current.notifyEditorDirty("new:1:1", true);
+      result.current.notifyEditorDirty("new:2:2", true);
+      result.current.handleEditorFocus("new:2:2");
+    });
+
+    act(() => {
+      result.current.normalizeForFocusMode();
+    });
+
+    expect(result.current.openEditors.size).toBe(2);
+    expect(result.current.openEditors.has("new:1:1")).toBe(true);
+    expect(result.current.openEditors.has("new:2:2")).toBe(true);
+    expect(result.current.hasDirtyEditors).toBe(true);
+    expect(result.current.openVerseKeys).toEqual(new Set([2]));
+    expect(result.current.selectedVerses).toEqual(new Set([1, 2]));
+  });
+
+  it("retains the focused dirty editor during normalization", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(defaultOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(3);
+    });
+
+    act(() => {
+      result.current.notifyEditorDirty("new:3:3", true);
+      result.current.handleEditorFocus("new:3:3");
+    });
+
+    act(() => {
+      result.current.normalizeForFocusMode();
+    });
+
+    expect(result.current.openEditors.has("new:3:3")).toBe(true);
+    expect(result.current.hasDirtyEditors).toBe(true);
+    expect(result.current.selectedVerses).toEqual(new Set([3]));
+  });
+
   it("advances to the next verse draft after saving a single-verse note", async () => {
     const { result } = renderHook(() =>
       usePassageNotesUiState({

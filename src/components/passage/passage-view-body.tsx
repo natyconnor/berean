@@ -50,6 +50,7 @@ interface PassageViewBodyProps {
   passageNotesInteraction: PassageNotesInteraction;
   effectiveViewMode: PassageViewMode;
   isFocusMode: boolean;
+  focusGlowAmount: number;
   hasFocusRange: boolean;
   focusRange: { startVerse: number; endVerse: number } | null;
   reenteringFromGroup: Set<number>;
@@ -77,6 +78,7 @@ export function PassageViewBody({
   passageNotesInteraction,
   effectiveViewMode,
   isFocusMode,
+  focusGlowAmount,
   hasFocusRange,
   focusRange,
   reenteringFromGroup,
@@ -98,6 +100,7 @@ export function PassageViewBody({
     hoveredSingleBubble,
     openVerseKeys,
     openPassageKeys,
+    currentFocusTarget,
     newDraftsByAnchor,
     editingNoteIds,
     handleAddNote,
@@ -120,6 +123,7 @@ export function PassageViewBody({
     handleSaveNew,
     cancelEditor,
     notifyEditorDirty,
+    handleEditorFocus,
     startCreatingPassageNote,
   } = passageNotesInteraction;
 
@@ -131,26 +135,19 @@ export function PassageViewBody({
       openPassageKeys.size > 0 ||
       newDraftsByAnchor.size > 0;
     if (!hasAnythingOpen) return EMPTY_FOCUS_MAP;
+    if (!currentFocusTarget) return EMPTY_FOCUS_MAP;
 
-    let focusedIndex = -1;
-    for (let i = 0; i < filteredVerses.length; i++) {
-      const item = filteredVerses[i];
-      if (item.kind === "passageGroup") {
-        if (openPassageKeys.has(item.anchorVerse)) {
-          focusedIndex = i;
-          break;
-        }
-      } else {
-        if (
-          openVerseKeys.has(item.verseNumber) ||
-          openPassageKeys.has(item.verseNumber) ||
-          newDraftsByAnchor.has(item.verseNumber)
-        ) {
-          focusedIndex = i;
-          break;
-        }
+    const focusedIndex = filteredVerses.findIndex((item) => {
+      if (currentFocusTarget.kind === "passage") {
+        return item.kind === "passageGroup"
+          ? item.anchorVerse === currentFocusTarget.anchorVerse
+          : item.verseNumber === currentFocusTarget.anchorVerse;
       }
-    }
+      return (
+        item.kind === "single" &&
+        item.verseNumber === currentFocusTarget.verseNumber
+      );
+    });
 
     if (focusedIndex === -1) return EMPTY_FOCUS_MAP;
 
@@ -169,14 +166,33 @@ export function PassageViewBody({
     isFocusMode,
     openVerseKeys,
     openPassageKeys,
+    currentFocusTarget,
     newDraftsByAnchor,
     filteredVerses,
   ]);
 
+  const focusGlowStyle = useMemo(() => {
+    if (!isFocusMode || focusGlowAmount <= 0) return undefined;
+
+    const innerPercent = Math.round(10 + focusGlowAmount * 0.18);
+    const outerPercent = Math.round(5 + focusGlowAmount * 0.1);
+    const innerBlur = Math.round(10 + focusGlowAmount * 0.12);
+    const outerBlur = Math.round(20 + focusGlowAmount * 0.08);
+
+    return {
+      boxShadow: `inset 0 0 ${innerBlur}px color-mix(in oklab, var(--primary) ${innerPercent}%, transparent), inset 0 0 ${outerBlur}px color-mix(in oklab, var(--primary) ${outerPercent}%, transparent)`,
+    };
+  }, [focusGlowAmount, isFocusMode]);
+
   return (
     <div className="relative flex-1 min-h-0 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-20 transition-[box-shadow] duration-300"
+        style={focusGlowStyle}
+      />
       <ScrollArea
-        className={cn("h-full min-h-0 overflow-hidden")}
+        className={cn("relative z-10 h-full min-h-0 overflow-hidden")}
         viewportRef={viewportRef}
       >
         <motion.div
@@ -230,6 +246,7 @@ export function PassageViewBody({
                         onSaveNew={handleSaveNew}
                         onCancelEditor={cancelEditor}
                         onEditorDirtyChange={notifyEditorDirty}
+                        onEditorFocus={handleEditorFocus}
                         onStartCreatingPassageNote={startCreatingPassageNote}
                         onNoteDeleteCleanup={handleNoteDeleteCleanup}
                         onPassageBubbleMouseEnter={
@@ -329,6 +346,7 @@ export function PassageViewBody({
                       onSaveNew={handleSaveNew}
                       onCancelEditor={cancelEditor}
                       onEditorDirtyChange={notifyEditorDirty}
+                      onEditorFocus={handleEditorFocus}
                       onStartCreatingPassageNote={startCreatingPassageNote}
                       onNoteDeleteCleanup={handleNoteDeleteCleanup}
                       highlights={highlightsByVerse.get(item.verseNumber)}

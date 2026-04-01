@@ -74,6 +74,7 @@ export interface VerseRowWithNotesProps {
   ) => Promise<void>;
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
+  onEditorFocus: (key: string) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
   onNoteDeleteCleanup: (
     noteId: Id<"notes">,
@@ -131,6 +132,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onSaveNew,
   onCancelEditor,
   onEditorDirtyChange,
+  onEditorFocus,
   onStartCreatingPassageNote,
   onNoteDeleteCleanup,
   focusDistance = null,
@@ -360,6 +362,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                 onEditorDirtyChange={(noteId, isDirty) =>
                   onEditorDirtyChange(`edit:${noteId}`, isDirty)
                 }
+                onEditorFocus={(noteId) => onEditorFocus(`edit:${noteId}`)}
                 onOpen={() => onOpenVerseNotes(verseNumber)}
                 onClose={() => onCloseVerseNotes(verseNumber)}
                 onEdit={(noteId) => {
@@ -406,6 +409,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                     onDirtyChange={(isDirty) =>
                       onEditorDirtyChange(draftEditorKey, isDirty)
                     }
+                    onFocusWithin={() => onEditorFocus(draftEditorKey)}
                   />
                 </motion.div>
               );

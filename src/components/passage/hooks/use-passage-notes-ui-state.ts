@@ -49,6 +49,15 @@ export interface ExpandedPassageRange {
   endVerse: number;
 }
 
+export type FocusTarget =
+  | { kind: "verse"; verseNumber: number }
+  | {
+      kind: "passage";
+      anchorVerse: number;
+      startVerse: number;
+      endVerse: number;
+    };
+
 export interface PassageNotesUiState {
   selectedVerses: Set<number>;
   passageDraftVerses: Set<number>;
@@ -61,6 +70,7 @@ export interface PassageNotesUiState {
   openVerseKeys: Set<number>;
   openPassageKeys: Set<number>;
   openEditors: Map<string, EditorSlot>;
+  currentFocusTarget: FocusTarget | null;
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, VerseRef[]>;
   isPassageSelection: boolean;
@@ -104,6 +114,8 @@ export interface PassageNotesUiState {
     isPassage: boolean,
   ) => void;
   startCreatingPassageNote: (verseRef: VerseRef) => void;
+  handleEditorFocus: (key: string) => void;
+  normalizeForFocusMode: () => void;
   showDiscardConfirmation: boolean;
   confirmDiscard: () => void;
   cancelDiscard: () => void;
@@ -138,6 +150,108 @@ function getVerseRefLogDetails(verseRef: VerseRef): {
     endVerse: verseRef.endVerse,
     isPassage: verseRef.startVerse !== verseRef.endVerse,
   };
+}
+
+function createVerseTarget(verseNumber: number): FocusTarget {
+  return { kind: "verse", verseNumber };
+}
+
+function createPassageTarget(
+  anchorVerse: number,
+  startVerse: number,
+  endVerse: number,
+): FocusTarget {
+  return { kind: "passage", anchorVerse, startVerse, endVerse };
+}
+
+function targetFromVerseRef(ref: VerseRef): FocusTarget {
+  if (ref.startVerse === ref.endVerse) {
+    return createVerseTarget(ref.startVerse);
+  }
+  return createPassageTarget(ref.startVerse, ref.startVerse, ref.endVerse);
+}
+
+function targetFromSelection(
+  startVerse: number,
+  endVerse: number,
+  verseToPassageAnchor: Map<number, number>,
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+): FocusTarget {
+  if (startVerse === endVerse) {
+    const anchorVerse = verseToPassageAnchor.get(startVerse);
+    if (anchorVerse === startVerse) {
+      const verses = getPassageVersesForAnchor(
+        anchorVerse,
+        passageNotesByAnchor,
+      );
+      return createPassageTarget(
+        anchorVerse,
+        Math.min(...verses),
+        Math.max(...verses),
+      );
+    }
+    return createVerseTarget(startVerse);
+  }
+
+  return createPassageTarget(startVerse, startVerse, endVerse);
+}
+
+function getPassageVersesForAnchor(
+  anchorVerse: number,
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+): number[] {
+  const passageNotes = passageNotesByAnchor.get(anchorVerse) ?? [];
+  if (passageNotes.length === 0) return [anchorVerse];
+
+  const verses = new Set<number>();
+  for (const note of passageNotes) {
+    for (
+      let verse = note.verseRef.startVerse;
+      verse <= note.verseRef.endVerse;
+      verse += 1
+    ) {
+      verses.add(verse);
+    }
+  }
+  return Array.from(verses).sort((a, b) => a - b);
+}
+
+function targetMatchesEditorSlot(
+  target: FocusTarget,
+  slot: EditorSlot,
+): boolean {
+  if (target.kind === "verse") {
+    return (
+      slot.verseRef.startVerse === target.verseNumber &&
+      slot.verseRef.endVerse === target.verseNumber
+    );
+  }
+
+  return (
+    slot.verseRef.startVerse === target.anchorVerse &&
+    (slot.verseRef.endVerse > slot.verseRef.startVerse || slot.kind === "edit")
+  );
+}
+
+function getSelectedVersesForTarget(
+  target: FocusTarget,
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+): Set<number> {
+  if (target.kind === "verse") {
+    return new Set([target.verseNumber]);
+  }
+
+  const verses = getPassageVersesForAnchor(
+    target.anchorVerse,
+    passageNotesByAnchor,
+  );
+  if (verses.length === 1 && verses[0] === target.anchorVerse) {
+    for (let verse = target.startVerse; verse <= target.endVerse; verse += 1) {
+      verses.push(verse);
+    }
+    verses.shift();
+  }
+  return new Set(verses);
 }
 
 export function usePassageNotesUiState({
@@ -175,9 +289,13 @@ export function usePassageNotesUiState({
   );
   const [isPassageSelection, setIsPassageSelection] = useState(false);
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+  const [currentFocusTarget, setCurrentFocusTarget] =
+    useState<FocusTarget | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const suppressNextDocumentClickRef = useRef(false);
   const editorHasChangesRef = useRef<Set<string>>(new Set());
+  const activeEditorKeyRef = useRef<string | null>(null);
+  const lastActiveTargetRef = useRef<FocusTarget | null>(null);
   /** Anchors the user collapsed in read mode; skip auto-reopen until chapter change. */
   const readPassageAutoOpenSuppressedRef = useRef<Set<number>>(new Set());
   const pendingViewModeAfterDiscardRef = useRef<PassageViewMode | null>(null);
@@ -299,6 +417,14 @@ export function usePassageNotesUiState({
     editorHasChangesRef.current = editorHasChanges;
   }, [editorHasChanges]);
 
+  const markTargetActive = useCallback((target: FocusTarget) => {
+    lastActiveTargetRef.current = target;
+  }, []);
+
+  const clearActiveEditorFocus = useCallback(() => {
+    activeEditorKeyRef.current = null;
+  }, []);
+
   const selectedVerses = useMemo(() => {
     if (draftCoveredVerses.size === 0) return viewSelectedVerses;
     if (viewSelectedVerses.size === 0) return draftCoveredVerses;
@@ -312,6 +438,9 @@ export function usePassageNotesUiState({
   useEffect(() => {
     queueMicrotask(() => {
       readPassageAutoOpenSuppressedRef.current.clear();
+      activeEditorKeyRef.current = null;
+      lastActiveTargetRef.current = null;
+      setCurrentFocusTarget(null);
       setViewSelectedVerses(new Set());
       setHoveredVerse(null);
       setHoveredSingleBubble(null);
@@ -402,39 +531,37 @@ export function usePassageNotesUiState({
 
   const getSelectedVersesForPassageAnchor = useCallback(
     (anchorVerse: number) => {
-      const passageNotes = passageNotesByAnchor.get(anchorVerse) ?? [];
-      if (passageNotes.length === 0) {
-        return new Set([anchorVerse]);
-      }
-
-      const verses = new Set<number>();
-      for (const note of passageNotes) {
-        const { startVerse, endVerse } = note.verseRef;
-        for (let verse = startVerse; verse <= endVerse; verse += 1) {
-          verses.add(verse);
-        }
-      }
-      return verses;
+      return getSelectedVersesForTarget(
+        createPassageTarget(anchorVerse, anchorVerse, anchorVerse),
+        passageNotesByAnchor,
+      );
     },
     [passageNotesByAnchor],
   );
 
-  const addNewDraft = useCallback((ref: VerseRef) => {
-    const key = newEditorKey(ref);
-    if (openEditorsRef.current.has(key)) return;
-    logInteraction("notes", "editor-opened", {
-      mode: "create",
-      ...getVerseRefLogDetails(ref),
-    });
-    setOpenEditors((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Map(prev);
-      next.set(key, { kind: "new", verseRef: ref });
-      return next;
-    });
-  }, []);
+  const addNewDraft = useCallback(
+    (ref: VerseRef) => {
+      const key = newEditorKey(ref);
+      if (openEditorsRef.current.has(key)) return;
+      markTargetActive(targetFromVerseRef(ref));
+      logInteraction("notes", "editor-opened", {
+        mode: "create",
+        ...getVerseRefLogDetails(ref),
+      });
+      setOpenEditors((prev) => {
+        if (prev.has(key)) return prev;
+        const next = new Map(prev);
+        next.set(key, { kind: "new", verseRef: ref });
+        return next;
+      });
+    },
+    [markTargetActive],
+  );
 
   const removeEditor = useCallback((key: string) => {
+    if (activeEditorKeyRef.current === key) {
+      activeEditorKeyRef.current = null;
+    }
     setOpenEditors((prev) => {
       if (!prev.has(key)) return prev;
       const next = new Map(prev);
@@ -484,6 +611,16 @@ export function usePassageNotesUiState({
   const handleSelectionComplete = useCallback(
     (selection: { startVerse: number; endVerse: number }) => {
       const executeSelection = () => {
+        clearActiveEditorFocus();
+        markTargetActive(
+          targetFromSelection(
+            selection.startVerse,
+            selection.endVerse,
+            verseToPassageAnchor,
+            passageNotesByAnchor,
+          ),
+        );
+
         if (selection.startVerse === selection.endVerse) {
           const verseNumber = selection.startVerse;
           const singleNotes = singleVerseNotes.get(verseNumber) ?? [];
@@ -554,9 +691,12 @@ export function usePassageNotesUiState({
       addNewDraft,
       book,
       chapter,
+      clearActiveEditorFocus,
       gateReadModeEditor,
       getSelectedVersesForPassageAnchor,
       isFocusMode,
+      markTargetActive,
+      passageNotesByAnchor,
       singleVerseNotes,
       verseToPassageAnchor,
     ],
@@ -565,6 +705,8 @@ export function usePassageNotesUiState({
   // --- Mouse/selection ---
 
   const {
+    selectionStart,
+    selectionEnd,
     isInSelection,
     handleMouseDown,
     handleMouseEnter: handleSelectionMouseEnter,
@@ -574,10 +716,12 @@ export function usePassageNotesUiState({
 
   const handleVerseMouseDown = useCallback(
     (verseNumber: number) => {
+      clearActiveEditorFocus();
+      markTargetActive(createVerseTarget(verseNumber));
       if (selectedVerses.has(verseNumber)) return;
       handleMouseDown(verseNumber);
     },
-    [handleMouseDown, selectedVerses],
+    [clearActiveEditorFocus, handleMouseDown, markTargetActive, selectedVerses],
   );
 
   const handleMouseEnter = useCallback(
@@ -601,6 +745,9 @@ export function usePassageNotesUiState({
   }, [selectionHandleMouseUp]);
 
   const fullResetForModeSwitch = useCallback(() => {
+    activeEditorKeyRef.current = null;
+    lastActiveTargetRef.current = null;
+    setCurrentFocusTarget(null);
     setOpenVerseKeys(new Set());
     setOpenPassageKeys(new Set());
     setOpenEditors(new Map());
@@ -631,6 +778,8 @@ export function usePassageNotesUiState({
   const handleAddNote = useCallback(
     (verseNumber: number) => {
       gateReadModeEditor(() => {
+        clearActiveEditorFocus();
+        markTargetActive(createVerseTarget(verseNumber));
         if (isFocusMode) {
           setOpenPassageKeys(new Set());
         }
@@ -662,8 +811,10 @@ export function usePassageNotesUiState({
       addNewDraft,
       book,
       chapter,
+      clearActiveEditorFocus,
       gateReadModeEditor,
       isFocusMode,
+      markTargetActive,
       singleVerseNotes,
     ],
   );
@@ -684,6 +835,8 @@ export function usePassageNotesUiState({
 
   const focusModeAdvanceToVerse = useCallback(
     (verseNumber: number) => {
+      clearActiveEditorFocus();
+      markTargetActive(createVerseTarget(verseNumber));
       addNewDraft({
         book,
         chapter,
@@ -699,7 +852,14 @@ export function usePassageNotesUiState({
       setViewSelectedVerses(new Set([verseNumber]));
       setIsPassageSelection(false);
     },
-    [addNewDraft, book, chapter, singleVerseNotes],
+    [
+      addNewDraft,
+      book,
+      chapter,
+      clearActiveEditorFocus,
+      markTargetActive,
+      singleVerseNotes,
+    ],
   );
 
   const handleSaveNew = useCallback(
@@ -800,6 +960,9 @@ export function usePassageNotesUiState({
   );
 
   const handleClickAway = useCallback(() => {
+    activeEditorKeyRef.current = null;
+    lastActiveTargetRef.current = null;
+    setCurrentFocusTarget(null);
     setOpenVerseKeys(new Set());
     if (viewMode !== "read") {
       setOpenPassageKeys(new Set());
@@ -878,6 +1041,8 @@ export function usePassageNotesUiState({
 
   const openVerseNotes = useCallback(
     (verseNumber: number) => {
+      clearActiveEditorFocus();
+      markTargetActive(createVerseTarget(verseNumber));
       if (isFocusMode) {
         setOpenVerseKeys(new Set([verseNumber]));
         setOpenPassageKeys(new Set());
@@ -888,7 +1053,7 @@ export function usePassageNotesUiState({
       }
       setIsPassageSelection(false);
     },
-    [isFocusMode],
+    [clearActiveEditorFocus, isFocusMode, markTargetActive],
   );
 
   const closeVerseNotes = useCallback((verseNumber: number) => {
@@ -908,6 +1073,17 @@ export function usePassageNotesUiState({
     (verseNumber: number) => {
       readPassageAutoOpenSuppressedRef.current.delete(verseNumber);
       const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+      clearActiveEditorFocus();
+      const sortedPassageVerses = Array.from(passageVerses).sort(
+        (a, b) => a - b,
+      );
+      markTargetActive(
+        createPassageTarget(
+          verseNumber,
+          sortedPassageVerses[0] ?? verseNumber,
+          sortedPassageVerses[sortedPassageVerses.length - 1] ?? verseNumber,
+        ),
+      );
       if (isFocusMode) {
         setOpenPassageKeys(new Set([verseNumber]));
         setOpenVerseKeys(new Set());
@@ -929,7 +1105,12 @@ export function usePassageNotesUiState({
       }
       setIsPassageSelection(true);
     },
-    [getSelectedVersesForPassageAnchor, isFocusMode],
+    [
+      clearActiveEditorFocus,
+      getSelectedVersesForPassageAnchor,
+      isFocusMode,
+      markTargetActive,
+    ],
   );
 
   const closePassageNotes = useCallback(
@@ -979,6 +1160,16 @@ export function usePassageNotesUiState({
       gateReadModeEditor(() => {
         const key = editEditorKey(noteId);
         if (openEditorsRef.current.has(key)) return;
+        clearActiveEditorFocus();
+        markTargetActive(
+          isPassage
+            ? createPassageTarget(
+                verseNumber,
+                verseRef.startVerse,
+                verseRef.endVerse,
+              )
+            : createVerseTarget(verseNumber),
+        );
         logInteraction("notes", "editor-opened", {
           mode: "edit",
           noteId,
@@ -1007,17 +1198,24 @@ export function usePassageNotesUiState({
         }
       });
     },
-    [gateReadModeEditor, getSelectedVersesForPassageAnchor],
+    [
+      clearActiveEditorFocus,
+      gateReadModeEditor,
+      getSelectedVersesForPassageAnchor,
+      markTargetActive,
+    ],
   );
 
   const startCreatingPassageNote = useCallback(
     (verseRef: VerseRef) => {
       gateReadModeEditor(() => {
+        clearActiveEditorFocus();
+        markTargetActive(targetFromVerseRef(verseRef));
         addNewDraft(verseRef);
         setIsPassageSelection(true);
       });
     },
-    [addNewDraft, gateReadModeEditor],
+    [addNewDraft, clearActiveEditorFocus, gateReadModeEditor, markTargetActive],
   );
 
   const confirmDiscard = useCallback(() => {
@@ -1054,6 +1252,148 @@ export function usePassageNotesUiState({
     setShowDiscardConfirmation(false);
   }, []);
 
+  const resolveCurrentFocusTarget = useCallback((): FocusTarget | null => {
+    const activeEditorKey = activeEditorKeyRef.current;
+    if (activeEditorKey) {
+      const slot = openEditorsRef.current.get(activeEditorKey);
+      if (slot) {
+        return targetFromVerseRef(slot.verseRef);
+      }
+    }
+
+    if (selectionStart !== null && selectionEnd !== null) {
+      return targetFromSelection(
+        Math.min(selectionStart, selectionEnd),
+        Math.max(selectionStart, selectionEnd),
+        verseToPassageAnchor,
+        passageNotesByAnchor,
+      );
+    }
+
+    const lastActiveTarget = lastActiveTargetRef.current;
+    if (lastActiveTarget) {
+      if (
+        lastActiveTarget.kind === "verse" &&
+        (openVerseKeys.has(lastActiveTarget.verseNumber) ||
+          Array.from(openEditors.values()).some((slot) =>
+            targetMatchesEditorSlot(lastActiveTarget, slot),
+          ))
+      ) {
+        return lastActiveTarget;
+      }
+
+      if (
+        lastActiveTarget.kind === "passage" &&
+        (openPassageKeys.has(lastActiveTarget.anchorVerse) ||
+          Array.from(openEditors.values()).some((slot) =>
+            targetMatchesEditorSlot(lastActiveTarget, slot),
+          ))
+      ) {
+        return lastActiveTarget;
+      }
+    }
+
+    const fallbackTargets: FocusTarget[] = [];
+    for (const slot of openEditors.values()) {
+      fallbackTargets.push(targetFromVerseRef(slot.verseRef));
+    }
+    for (const verseNumber of openVerseKeys) {
+      fallbackTargets.push(createVerseTarget(verseNumber));
+    }
+    for (const anchorVerse of openPassageKeys) {
+      const passageVerses = Array.from(
+        getSelectedVersesForPassageAnchor(anchorVerse),
+      ).sort((a, b) => a - b);
+      fallbackTargets.push(
+        createPassageTarget(
+          anchorVerse,
+          passageVerses[0] ?? anchorVerse,
+          passageVerses[passageVerses.length - 1] ?? anchorVerse,
+        ),
+      );
+    }
+
+    if (fallbackTargets.length === 0) return null;
+
+    fallbackTargets.sort((a, b) => {
+      const aStart = a.kind === "verse" ? a.verseNumber : a.startVerse;
+      const bStart = b.kind === "verse" ? b.verseNumber : b.startVerse;
+      return aStart - bStart;
+    });
+    return fallbackTargets[0] ?? null;
+  }, [
+    getSelectedVersesForPassageAnchor,
+    openEditors,
+    openPassageKeys,
+    openVerseKeys,
+    passageNotesByAnchor,
+    selectionEnd,
+    selectionStart,
+    verseToPassageAnchor,
+  ]);
+
+  useEffect(() => {
+    setCurrentFocusTarget(resolveCurrentFocusTarget());
+  }, [resolveCurrentFocusTarget]);
+
+  const handleEditorFocus = useCallback(
+    (key: string) => {
+      if (!openEditorsRef.current.has(key)) return;
+      activeEditorKeyRef.current = key;
+      const slot = openEditorsRef.current.get(key);
+      if (!slot) return;
+      const target = targetFromVerseRef(slot.verseRef);
+      markTargetActive(target);
+      setCurrentFocusTarget(target);
+    },
+    [markTargetActive],
+  );
+
+  const normalizeForFocusMode = useCallback(() => {
+    const target = resolveCurrentFocusTarget();
+    if (!target) return;
+
+    const dirtyEditorKeys = editorHasChangesRef.current;
+    const nextEditors = new Map<string, EditorSlot>();
+    for (const [key, slot] of openEditorsRef.current) {
+      if (targetMatchesEditorSlot(target, slot) || dirtyEditorKeys.has(key)) {
+        nextEditors.set(key, slot);
+      }
+    }
+
+    const nextDirtyEditors = new Set<string>();
+    for (const key of dirtyEditorKeys) {
+      if (nextEditors.has(key)) {
+        nextDirtyEditors.add(key);
+      }
+    }
+
+    activeEditorKeyRef.current =
+      activeEditorKeyRef.current && nextEditors.has(activeEditorKeyRef.current)
+        ? activeEditorKeyRef.current
+        : null;
+    lastActiveTargetRef.current = target;
+    setCurrentFocusTarget(target);
+
+    setOpenEditors(nextEditors);
+    setEditorHasChanges(nextDirtyEditors);
+
+    if (target.kind === "verse") {
+      setOpenVerseKeys(new Set([target.verseNumber]));
+      setOpenPassageKeys(new Set());
+      setViewSelectedVerses(new Set([target.verseNumber]));
+      setIsPassageSelection(false);
+      return;
+    }
+
+    setOpenVerseKeys(new Set());
+    setOpenPassageKeys(new Set([target.anchorVerse]));
+    setViewSelectedVerses(
+      getSelectedVersesForTarget(target, passageNotesByAnchor),
+    );
+    setIsPassageSelection(true);
+  }, [passageNotesByAnchor, resolveCurrentFocusTarget]);
+
   return {
     selectedVerses,
     passageDraftVerses,
@@ -1066,6 +1406,7 @@ export function usePassageNotesUiState({
     openVerseKeys,
     openPassageKeys,
     openEditors,
+    currentFocusTarget,
     editingNoteIds,
     newDraftsByAnchor,
     isPassageSelection,
@@ -1092,6 +1433,8 @@ export function usePassageNotesUiState({
     closePassageNotes,
     startEditingNote,
     startCreatingPassageNote,
+    handleEditorFocus,
+    normalizeForFocusMode,
     showDiscardConfirmation,
     confirmDiscard,
     cancelDiscard,

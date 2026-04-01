@@ -41,6 +41,7 @@ interface NoteEditorProps {
   onSave: (body: NoteBody, tags: string[]) => void | Promise<void>;
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  onFocusWithin?: () => void;
 }
 
 export function NoteEditor({
@@ -54,6 +55,7 @@ export function NoteEditor({
   onSave,
   onCancel,
   onDirtyChange,
+  onFocusWithin,
 }: NoteEditorProps) {
   const [initialEditorBody] = useState<NoteBody>(() =>
     normalizeNoteBody(initialBody, initialContent),
@@ -161,6 +163,7 @@ export function NoteEditor({
             ),
       )}
       onKeyDown={handleKeyDown}
+      onFocusCapture={onFocusWithin}
     >
       {showEditorHeaderRow ? (
         <div

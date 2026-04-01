@@ -65,6 +65,7 @@ interface PassageGroupWithNotesProps {
   ) => Promise<void>;
   onCancelEditor: (key: string) => void;
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
+  onEditorFocus: (key: string) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
   onNoteDeleteCleanup: (
     noteId: Id<"notes">,
@@ -123,6 +124,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onSaveNew,
   onCancelEditor,
   onEditorDirtyChange,
+  onEditorFocus,
   onStartCreatingPassageNote,
   onNoteDeleteCleanup,
   onPassageBubbleMouseEnter,
@@ -257,6 +259,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                   onEditorDirtyChange={(noteId, isDirty) =>
                     onEditorDirtyChange(`edit:${noteId}`, isDirty)
                   }
+                  onEditorFocus={(noteId) => onEditorFocus(`edit:${noteId}`)}
                   onOpen={() => onOpenPassageNotes(anchorVerse)}
                   onClose={() => onClosePassageNotes(anchorVerse)}
                   onEdit={(noteId: Id<"notes">) => {
@@ -307,6 +310,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                         onDirtyChange={(isDirty) =>
                           onEditorDirtyChange(draftEditorKey, isDirty)
                         }
+                        onFocusWithin={() => onEditorFocus(draftEditorKey)}
                       />
                     </motion.div>
                   );

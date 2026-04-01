@@ -49,6 +49,7 @@ interface VerseNotesProps {
   ) => void | Promise<void>;
   onCancelEdit?: (noteId: Id<"notes">) => void;
   onEditorDirtyChange?: (noteId: Id<"notes">, isDirty: boolean) => void;
+  onEditorFocus?: (noteId: Id<"notes">) => void;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
@@ -70,6 +71,7 @@ export const VerseNotes = memo(function VerseNotes({
   onSaveEdit,
   onCancelEdit,
   onEditorDirtyChange,
+  onEditorFocus,
   onOpen,
   onClose,
   onEdit,
@@ -213,6 +215,11 @@ export const VerseNotes = memo(function VerseNotes({
                         onEditorDirtyChange
                           ? (isDirty) =>
                               onEditorDirtyChange(note.noteId, isDirty)
+                          : undefined
+                      }
+                      onFocusWithin={
+                        onEditorFocus
+                          ? () => onEditorFocus(note.noteId)
                           : undefined
                       }
                     />

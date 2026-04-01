@@ -51,6 +51,7 @@ interface PassageNotesBubbleProps {
   ) => void | Promise<void>;
   onCancelEdit?: (noteId: Id<"notes">) => void;
   onEditorDirtyChange?: (noteId: Id<"notes">, isDirty: boolean) => void;
+  onEditorFocus?: (noteId: Id<"notes">) => void;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
@@ -74,6 +75,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
   onSaveEdit,
   onCancelEdit,
   onEditorDirtyChange,
+  onEditorFocus,
   onOpen,
   onClose,
   onEdit,
@@ -238,6 +240,11 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                         onEditorDirtyChange
                           ? (isDirty) =>
                               onEditorDirtyChange(note.noteId, isDirty)
+                          : undefined
+                      }
+                      onFocusWithin={
+                        onEditorFocus
+                          ? () => onEditorFocus(note.noteId)
                           : undefined
                       }
                     />

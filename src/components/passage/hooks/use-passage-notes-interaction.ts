@@ -7,6 +7,7 @@ import {
   usePassageNotesUiState,
   type EditorSlot,
   type ExpandedPassageRange,
+  type FocusTarget,
 } from "./use-passage-notes-ui-state";
 
 export interface PassageNotesInteraction {
@@ -21,6 +22,7 @@ export interface PassageNotesInteraction {
   openVerseKeys: Set<number>;
   openPassageKeys: Set<number>;
   openEditors: Map<string, EditorSlot>;
+  currentFocusTarget: FocusTarget | null;
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, VerseRef[]>;
   isPassageSelection: boolean;
@@ -70,6 +72,8 @@ export interface PassageNotesInteraction {
     isPassage: boolean,
   ) => void;
   startCreatingPassageNote: (verseRef: VerseRef) => void;
+  handleEditorFocus: (key: string) => void;
+  normalizeForFocusMode: () => void;
   showDiscardConfirmation: boolean;
   confirmDiscard: () => void;
   cancelDiscard: () => void;
