@@ -23,7 +23,7 @@ Berean is a scripture notes app focused on verse by verse note taking, emphasizi
 
 1. Install dependencies.
    ```bash
-   pnpm install
+   pnpm install --frozen-lockfile
    ```
 1. Create or attach a Convex deployment.
    ```bash
