@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/natyconnor/berean/compare/v1.5.0...v1.5.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* use vercel headers to enforce proper refresh when refresh button is clicked ([#49](https://github.com/natyconnor/berean/issues/49)) ([e191e49](https://github.com/natyconnor/berean/commit/e191e495157958f909db2565d0d099051e3b5ab0))
+
 ## [1.5.0](https://github.com/natyconnor/berean/compare/v1.4.1...v1.5.0) (2026-04-02)
 
 
