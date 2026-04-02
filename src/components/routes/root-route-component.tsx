@@ -1,7 +1,8 @@
 import { Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import { useConvexAuth } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AppRefreshPrompt } from "@/components/app-refresh-prompt";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/components/login-page";
 import { TutorialProvider } from "@/components/tutorial/tutorial-provider";
@@ -10,6 +11,7 @@ import {
   readSuppressSettingsRedirectAfterSkip,
 } from "@/components/tutorial/tutorial-session";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAppVersionMonitor } from "@/hooks/use-app-version-monitor";
 import { usePreviewAutoSignIn } from "@/hooks/use-preview-auto-sign-in";
 import { logInteraction } from "@/lib/dev-log";
 import {
@@ -26,6 +28,8 @@ const PUBLIC_LEGAL_PATHS = new Set(["/privacy", "/terms"]);
 
 export function RootRouteComponent() {
   usePreviewAutoSignIn();
+  const { latestVersion, showRefreshPrompt, refreshToLatestVersion } =
+    useAppVersionMonitor();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const location = useLocation();
   const isPublicLegalPath = PUBLIC_LEGAL_PATHS.has(location.pathname);
@@ -123,20 +127,23 @@ export function RootRouteComponent() {
     });
   }, [location.pathname, shouldShowSettingsRedirect]);
 
+  const refreshPrompt =
+    showRefreshPrompt && latestVersion ? (
+      <AppRefreshPrompt onRefresh={refreshToLatestVersion} />
+    ) : null;
+
+  let content: ReactNode;
+
   if (isPublicLegalPath) {
-    return (
+    content = (
       <ThemeProvider>
         <Outlet />
       </ThemeProvider>
     );
-  }
-
-  if (!isReady || !isAuthenticated) {
-    return <LoginPage isLoading={!isReady} />;
-  }
-
-  if (tutorialStatus === undefined) {
-    return (
+  } else if (!isReady || !isAuthenticated) {
+    content = <LoginPage isLoading={!isReady} />;
+  } else if (tutorialStatus === undefined) {
+    content = (
       <div className="fixed inset-0">
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -148,14 +155,10 @@ export function RootRouteComponent() {
         />
       </div>
     );
-  }
-
-  if (shouldShowSettingsRedirect) {
-    return <Navigate to="/settings" replace />;
-  }
-
-  return (
-    <>
+  } else if (shouldShowSettingsRedirect) {
+    content = <Navigate to="/settings" replace />;
+  } else {
+    content = (
       <ThemeProvider>
         <TabProvider>
           <TooltipProvider>
@@ -167,12 +170,20 @@ export function RootRouteComponent() {
           </TooltipProvider>
         </TabProvider>
       </ThemeProvider>
+    );
+  }
+
+  return (
+    <>
+      {content}
 
       {__IS_PREVIEW__ && (
         <div className="fixed bottom-2 left-2 z-50 rounded bg-amber-500/90 px-2 py-1 text-xs font-medium text-black">
           Preview Mode
         </div>
       )}
+
+      {refreshPrompt}
 
       {!splashGone && (
         <div
