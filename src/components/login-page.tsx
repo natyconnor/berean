@@ -60,7 +60,18 @@ function slideDelay(ms: number): CSSProperties {
   return { "--slide-delay": `${ms}ms` } as CSSProperties;
 }
 
-export function LoginPage({ isLoading = false }: { isLoading?: boolean }) {
+type LoginPageProps = {
+  isLoading?: boolean;
+  /** True after auth bootstrap watchdog fires; show recovery affordance with sign-in UI. */
+  authBootstrapStalled?: boolean;
+  onRetryConnection?: () => void;
+};
+
+export function LoginPage({
+  isLoading = false,
+  authBootstrapStalled = false,
+  onRetryConnection,
+}: LoginPageProps) {
   const { signIn } = useAuthActions();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const parallaxRef = useMouseParallax();
@@ -112,6 +123,33 @@ export function LoginPage({ isLoading = false }: { isLoading?: boolean }) {
         </div>
       ) : (
         <>
+          {authBootstrapStalled && onRetryConnection ? (
+            <div
+              className="relative z-20 mx-auto mt-6 w-full max-w-md rounded-lg border border-white/25 bg-black/40 px-4 py-3 text-center backdrop-blur-sm"
+              role="status"
+            >
+              <p
+                className="text-sm text-white/80"
+                style={{
+                  fontFamily: "'Cormorant Garamond', serif",
+                  fontWeight: 500,
+                }}
+              >
+                Having trouble connecting. Try refreshing the page, or sign in
+                below.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  logInteraction("auth", "bootstrap-retry-clicked", {});
+                  onRetryConnection();
+                }}
+                className="mt-3 rounded-md border border-white/30 bg-white/15 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-white/25"
+              >
+                Refresh page
+              </button>
+            </div>
+          ) : null}
           <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
             <div
               className="relative z-10 flex w-full max-w-2xl flex-col items-center px-6 py-12 text-center"

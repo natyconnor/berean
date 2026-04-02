@@ -24,6 +24,8 @@ import { shouldRedirectToSettings } from "@/lib/tutorial-settings-redirect";
 import { api } from "../../../convex/_generated/api";
 
 const MIN_SPLASH_MS = 600;
+const AUTH_BOOTSTRAP_DIAGNOSTIC_MS = 10_000;
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 15_000;
 const PUBLIC_LEGAL_PATHS = new Set(["/privacy", "/terms"]);
 
 export function RootRouteComponent() {
@@ -52,6 +54,7 @@ export function RootRouteComponent() {
   const [splashGone, setSplashGone] = useState(
     () => alreadyReady && tutorialStatus !== undefined,
   );
+  const [authBootstrapTimedOut, setAuthBootstrapTimedOut] = useState(false);
 
   useEffect(() => {
     const el = document.getElementById("splash-bg");
@@ -71,7 +74,34 @@ export function RootRouteComponent() {
     return () => clearTimeout(timer);
   }, [minTimePassed]);
 
+  useEffect(() => {
+    if (isPublicLegalPath || !isLoading) return;
+
+    const slowId = window.setTimeout(() => {
+      if (isLoading) {
+        logInteraction("app", "auth-bootstrap-slow", {
+          ms: AUTH_BOOTSTRAP_DIAGNOSTIC_MS,
+        });
+      }
+    }, AUTH_BOOTSTRAP_DIAGNOSTIC_MS);
+    const timeoutId = window.setTimeout(() => {
+      if (isLoading) {
+        logInteraction("app", "auth-bootstrap-timeout", {
+          ms: AUTH_BOOTSTRAP_TIMEOUT_MS,
+        });
+        setAuthBootstrapTimedOut(true);
+      }
+    }, AUTH_BOOTSTRAP_TIMEOUT_MS);
+    return () => {
+      window.clearTimeout(slowId);
+      window.clearTimeout(timeoutId);
+      setAuthBootstrapTimedOut(false);
+    };
+  }, [isLoading, isPublicLegalPath]);
+
   const isReady = !isLoading && minTimePassed;
+  const authBootstrapShowingRecovery = authBootstrapTimedOut && isLoading;
+  const effectiveReady = isReady || authBootstrapShowingRecovery;
   const shouldShowSettingsRedirect = shouldRedirectToSettings({
     isSettingsRoute,
     needsStarterTagsSetup: tutorialStatus?.needsStarterTagsSetup,
@@ -127,6 +157,11 @@ export function RootRouteComponent() {
     });
   }, [location.pathname, shouldShowSettingsRedirect]);
 
+  const retryAuthBootstrap = () => {
+    logInteraction("app", "auth-bootstrap-retry-navigation", {});
+    window.location.reload();
+  };
+
   const refreshPrompt =
     showRefreshPrompt && latestVersion ? (
       <AppRefreshPrompt onRefresh={refreshToLatestVersion} />
@@ -140,8 +175,14 @@ export function RootRouteComponent() {
         <Outlet />
       </ThemeProvider>
     );
-  } else if (!isReady || !isAuthenticated) {
-    content = <LoginPage isLoading={!isReady} />;
+  } else if (!effectiveReady || !isAuthenticated) {
+    content = (
+      <LoginPage
+        isLoading={!effectiveReady}
+        authBootstrapStalled={authBootstrapShowingRecovery}
+        onRetryConnection={retryAuthBootstrap}
+      />
+    );
   } else if (tutorialStatus === undefined) {
     content = (
       <div className="fixed inset-0">
