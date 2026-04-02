@@ -183,34 +183,36 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
         <motion.div
           layout="position"
           transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
-          className="flex flex-col"
+          className="flex h-full min-h-0 flex-col self-stretch"
         >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={CROSSFADE_TRANSITION}
-            className="rounded-lg bg-amber-100/60 dark:bg-amber-900/20 cl-depth-2 cl-transition"
+            className="flex h-full min-h-0 flex-col justify-center rounded-lg bg-amber-100/60 dark:bg-amber-900/20 cl-depth-2 cl-transition"
           >
-            {verses.map((verse, index) => (
-              <VerseTextPane
-                key={verse.verseNumber}
-                verseNumber={verse.verseNumber}
-                text={verse.text}
-                selection={EMPTY_SELECTION}
-                noteIndicator={EMPTY_NOTE_INDICATOR}
-                hover={EMPTY_HOVER}
-                isExpanded={true}
-                variant="groupedPassage"
-                showCollapseControl={index === 0}
-                onCollapseVerse={handleCollapseGroup}
-                highlights={highlightsByVerse.get(verse.verseNumber)}
-                onCreateHighlight={onCreateHighlight}
-                onDeleteHighlight={onDeleteHighlight}
-                onRecolorHighlight={onRecolorHighlight}
-                handlers={NOOP_HANDLERS}
-              />
-            ))}
+            <div className="flex flex-col">
+              {verses.map((verse, index) => (
+                <VerseTextPane
+                  key={verse.verseNumber}
+                  verseNumber={verse.verseNumber}
+                  text={verse.text}
+                  selection={EMPTY_SELECTION}
+                  noteIndicator={EMPTY_NOTE_INDICATOR}
+                  hover={EMPTY_HOVER}
+                  isExpanded={true}
+                  variant="groupedPassage"
+                  showCollapseControl={index === 0}
+                  onCollapseVerse={handleCollapseGroup}
+                  highlights={highlightsByVerse.get(verse.verseNumber)}
+                  onCreateHighlight={onCreateHighlight}
+                  onDeleteHighlight={onDeleteHighlight}
+                  onRecolorHighlight={onRecolorHighlight}
+                  handlers={NOOP_HANDLERS}
+                />
+              ))}
+            </div>
           </motion.div>
         </motion.div>
 
