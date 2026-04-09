@@ -646,7 +646,6 @@ export function usePassageNotesUiState({
         if (selection.startVerse === selection.endVerse) {
           const verseNumber = selection.startVerse;
           const singleNotes = singleVerseNotes.get(verseNumber) ?? [];
-          const passageAnchor = verseToPassageAnchor.get(verseNumber);
 
           setIsPassageSelection(false);
 
@@ -658,21 +657,6 @@ export function usePassageNotesUiState({
             } else {
               setViewSelectedVerses((prev) => new Set(prev).add(verseNumber));
               setOpenVerseKeys((prev) => new Set(prev).add(verseNumber));
-            }
-          } else if (passageAnchor === verseNumber) {
-            const passageVerses =
-              getSelectedVersesForPassageAnchor(verseNumber);
-            if (isFocusMode) {
-              setOpenPassageKeys(new Set([verseNumber]));
-              setOpenVerseKeys(new Set());
-              setViewSelectedVerses(new Set(passageVerses));
-            } else {
-              setViewSelectedVerses((prev) => {
-                const next = new Set(prev);
-                for (const v of passageVerses) next.add(v);
-                return next;
-              });
-              setOpenPassageKeys((prev) => new Set(prev).add(verseNumber));
             }
           } else {
             if (isFocusMode) {
@@ -715,7 +699,6 @@ export function usePassageNotesUiState({
       chapter,
       clearActiveEditorFocus,
       gateReadModeEditor,
-      getSelectedVersesForPassageAnchor,
       isFocusMode,
       markTargetActive,
       passageNotesByAnchor,

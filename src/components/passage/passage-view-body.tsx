@@ -95,7 +95,6 @@ export function PassageViewBody({
     isInSelection,
     isPassageSelection,
     verseToPassageAnchor,
-    hoveredVerse,
     hoveredPassageBubble,
     hoveredSingleBubble,
     openVerseKeys,
@@ -266,11 +265,9 @@ export function PassageViewBody({
                 );
                 const isPassageRangeActive =
                   passageAnchor !== undefined &&
-                  (hoveredVerse === passageAnchor ||
-                    hoveredPassageBubble === passageAnchor);
+                  hoveredPassageBubble === passageAnchor;
                 const isNoteBubbleHovered =
-                  hoveredSingleBubble === item.verseNumber ||
-                  hoveredPassageBubble === item.verseNumber;
+                  hoveredSingleBubble === item.verseNumber;
                 const isReentering = reenteringFromGroup.has(item.verseNumber);
 
                 return (
