@@ -6,8 +6,8 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { motion } from "framer-motion";
-import { ChevronUp, Plus } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ChevronUp, Heart, Plus } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -49,6 +49,11 @@ export interface VerseInteractionHandlers {
   onMouseLeave: () => void;
 }
 
+export interface PassageHeartControl {
+  filled: boolean;
+  onToggle: () => void;
+}
+
 interface VerseRowLeftProps {
   verseNumber: number;
   text: string;
@@ -66,6 +71,8 @@ interface VerseRowLeftProps {
   forceAddButtonVisible?: boolean;
   addNoteTourId?: string;
   rowTourId?: string;
+  /** When set, shows a heart toggle (including when expanded, e.g. grouped passage). */
+  passageHeart?: PassageHeartControl | null;
   handlers: VerseInteractionHandlers;
   variant?: "default" | "groupedPassage";
   density?: "default" | "reading";
@@ -113,6 +120,160 @@ const GROUPED_EXPANDED = {
   verseNumberPaddingTop: "0.25rem",
 } as const;
 
+const HEART_BURST_SPARK_DEGREES = [0, 45, 90, 135, 180, 225, 270, 315] as const;
+const HEART_BURST_SPARK_DISTANCE_PX = 22;
+
+const PassageHeartAnimatedButton = memo(function PassageHeartAnimatedButton({
+  passageHeart,
+  shouldFlipTooltipBelow,
+}: {
+  passageHeart: PassageHeartControl;
+  shouldFlipTooltipBelow: boolean;
+}) {
+  const reduceMotion = useReducedMotion();
+  const [fxKey, setFxKey] = useState(0);
+  const [playHeartAnim, setPlayHeartAnim] = useState(false);
+  const [optimisticFilled, setOptimisticFilled] = useState(passageHeart.filled);
+  // Track server value so we can reset optimistic state when it changes.
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevServerFilled, setPrevServerFilled] = useState(passageHeart.filled);
+  if (passageHeart.filled !== prevServerFilled) {
+    setPrevServerFilled(passageHeart.filled);
+    setOptimisticFilled(passageHeart.filled);
+  }
+
+  return (
+    <div
+      className={cn(
+        "group/heart relative flex w-full min-h-8 items-center justify-center overflow-visible transition-opacity",
+        optimisticFilled ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+      )}
+    >
+      {fxKey > 0 && !reduceMotion ? (
+        <span
+          key={fxKey}
+          className="pointer-events-none absolute inset-0 overflow-visible"
+          aria-hidden
+        >
+          <span
+            className="absolute rounded-full bg-red-500/65 dark:bg-red-400/60"
+            style={{
+              width: 40,
+              height: 40,
+              top: "50%",
+              left: "50%",
+              marginLeft: -20,
+              marginTop: -20,
+              animation:
+                "heart-burst-puff 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards",
+            }}
+          />
+          {HEART_BURST_SPARK_DEGREES.map((deg, i) => {
+            const r = (deg * Math.PI) / 180;
+            const tx = Math.cos(r) * HEART_BURST_SPARK_DISTANCE_PX;
+            const ty = Math.sin(r) * HEART_BURST_SPARK_DISTANCE_PX;
+            return (
+              <span
+                key={deg}
+                className="absolute rounded-full bg-red-500 dark:bg-red-400"
+                style={
+                  {
+                    width: 6,
+                    height: 6,
+                    top: "50%",
+                    left: "50%",
+                    marginLeft: -3,
+                    marginTop: -3,
+                    "--spark-tx": `${tx}px`,
+                    "--spark-ty": `${ty}px`,
+                    animation: `heart-burst-spark 0.45s cubic-bezier(0.22, 1, 0.36, 1) ${i * 0.025}s forwards`,
+                  } as React.CSSProperties
+                }
+              />
+            );
+          })}
+        </span>
+      ) : null}
+      <motion.button
+        type="button"
+        aria-label={
+          optimisticFilled ? "Remove from hearted verses" : "Heart this verse"
+        }
+        aria-pressed={optimisticFilled}
+        className={cn(
+          "relative z-10 flex h-full min-h-9 min-w-9 items-center justify-center rounded px-2 hover:bg-primary/10",
+          optimisticFilled &&
+            "text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300",
+        )}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        disabled={playHeartAnim}
+        aria-busy={playHeartAnim}
+        onClick={(e) => {
+          e.stopPropagation();
+          const nextFilled = !optimisticFilled;
+          setOptimisticFilled(nextFilled);
+          if (nextFilled && !reduceMotion) {
+            setFxKey((k) => k + 1);
+            setPlayHeartAnim(true);
+          }
+          passageHeart.onToggle();
+        }}
+        whileTap={
+          reduceMotion
+            ? undefined
+            : {
+                scale: 0.92,
+                transition: { duration: 0.08, ease: [0.22, 1, 0.36, 1] },
+              }
+        }
+      >
+        <motion.span
+          className="inline-flex"
+          initial={false}
+          animate={
+            playHeartAnim
+              ? {
+                  y: [0, -6, -1.5, 0],
+                  scale: [1, 1.12, 1.04, 1],
+                }
+              : { y: 0, scale: 1 }
+          }
+          transition={
+            playHeartAnim
+              ? {
+                  duration: 0.45,
+                  times: [0, 0.32, 0.62, 1],
+                  ease: [0.22, 1, 0.36, 1],
+                }
+              : { duration: 0.15 }
+          }
+          onAnimationComplete={() => {
+            setPlayHeartAnim((p) => (p ? false : p));
+          }}
+        >
+          <Heart
+            className={cn(
+              "h-[18px] w-[18px]",
+              optimisticFilled ? "fill-current" : "text-primary",
+            )}
+          />
+        </motion.span>
+      </motion.button>
+      <span
+        className={cn(
+          "pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/heart:opacity-100",
+          shouldFlipTooltipBelow ? "top-full mt-1.5" : "bottom-full mb-1.5",
+        )}
+      >
+        {optimisticFilled ? "Unheart" : "Heart"}
+      </span>
+    </div>
+  );
+});
+
 export const VerseRowLeft = memo(function VerseRowLeft({
   verseNumber,
   text,
@@ -130,6 +291,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   forceAddButtonVisible = false,
   addNoteTourId,
   rowTourId,
+  passageHeart = null,
   handlers,
   variant = "default",
   density = "default",
@@ -387,7 +549,10 @@ export const VerseRowLeft = memo(function VerseRowLeft({
           <motion.span
             animate={{ paddingTop: sizes.verseNumberPaddingTop }}
             transition={VERSE_EXPAND_TRANSITION}
-            className="flex items-start gap-1 shrink-0 select-none"
+            className={cn(
+              "flex flex-col items-start shrink-0 select-none overflow-visible",
+              passageHeart && "w-9",
+            )}
           >
             {isExpanded && onCollapseVerse ? (
               <Tooltip>
@@ -418,7 +583,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                 <TooltipContent side="left">Collapse</TooltipContent>
               </Tooltip>
             ) : (
-              <>
+              <span className="flex items-start gap-1">
                 <span
                   style={{
                     fontSize: sizes.verseNumberFontSize,
@@ -440,7 +605,13 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                     <span className="mt-0.5 h-0.5 w-2 shrink-0 rounded bg-amber-300/70 dark:bg-amber-500/40 cl-ember-range" />
                   )}
                 </span>
-              </>
+              </span>
+            )}
+            {passageHeart && (
+              <PassageHeartAnimatedButton
+                passageHeart={passageHeart}
+                shouldFlipTooltipBelow={shouldFlipTooltipBelow}
+              />
             )}
           </motion.span>
           <div className="relative flex-1 min-w-0">
@@ -488,33 +659,36 @@ export const VerseRowLeft = memo(function VerseRowLeft({
           {!isExpanded && (
             <div
               className={cn(
-                "group/addbtn relative ml-3 flex min-w-8 shrink-0 self-stretch items-center justify-center transition-opacity",
+                "ml-3 flex min-w-8 shrink-0 self-stretch items-center justify-end transition-opacity",
                 forceAddButtonVisible
                   ? "opacity-100"
                   : "opacity-0 group-hover:opacity-100",
               )}
             >
-              <button
-                className="flex h-full w-full items-center justify-center rounded px-2 hover:bg-primary/10"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddNote(verseNumber);
-                }}
-                {...(addNoteTourId ? { "data-tour-id": addNoteTourId } : {})}
-              >
-                <Plus className="h-4 w-4 text-primary" />
-              </button>
-              <span
-                className={cn(
-                  "pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/addbtn:opacity-100",
-                  shouldFlipTooltipBelow
-                    ? "top-full mt-1.5"
-                    : "bottom-full mb-1.5",
-                )}
-              >
-                Add note
-              </span>
+              <div className="group/addbtn relative flex h-full min-w-8 items-center justify-center">
+                <button
+                  type="button"
+                  className="flex h-full min-h-9 w-full min-w-9 items-center justify-center rounded px-2 hover:bg-primary/10"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddNote(verseNumber);
+                  }}
+                  {...(addNoteTourId ? { "data-tour-id": addNoteTourId } : {})}
+                >
+                  <Plus className="h-[18px] w-[18px] text-primary" />
+                </button>
+                <span
+                  className={cn(
+                    "pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/addbtn:opacity-100",
+                    shouldFlipTooltipBelow
+                      ? "top-full mt-1.5"
+                      : "bottom-full mb-1.5",
+                  )}
+                >
+                  Add note
+                </span>
+              </div>
             </div>
           )}
         </div>

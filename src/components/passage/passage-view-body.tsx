@@ -17,6 +17,8 @@ import {
   FOCUS_MODE_SPOTLIGHT_VERSE_START,
 } from "@/components/tutorial/focus-mode-tour";
 import { cn } from "@/lib/utils";
+import { hasExactSavedSpan } from "@/lib/saved-verse-utils";
+import type { PassageHeartControl } from "./verse-row";
 
 const EMPTY_FOCUS_MAP = new Map<string, number | null>();
 
@@ -64,6 +66,10 @@ interface PassageViewBodyProps {
   ) => void;
   onDeleteHighlight: (highlightId: string) => void;
   onRecolorHighlight: (highlightId: string, color: string) => void;
+  savedVersesForChapter:
+    | Array<{ startVerse: number; endVerse: number }>
+    | undefined;
+  onToggleSaved: (startVerse: number, endVerse: number) => void;
 }
 
 export function PassageViewBody({
@@ -87,6 +93,8 @@ export function PassageViewBody({
   onCreateHighlight,
   onDeleteHighlight,
   onRecolorHighlight,
+  savedVersesForChapter,
+  onToggleSaved,
 }: PassageViewBodyProps) {
   const {
     containerRef,
@@ -126,6 +134,39 @@ export function PassageViewBody({
     handleEditorFocus,
     startCreatingPassageNote,
   } = passageNotesInteraction;
+
+  const savedSpans = savedVersesForChapter ?? [];
+
+  const multiVersePassageSelection =
+    isPassageSelection && selectedVerses.size > 1;
+  const passageSelectLo = multiVersePassageSelection
+    ? Math.min(...selectedVerses)
+    : null;
+  const passageSelectHi = multiVersePassageSelection
+    ? Math.max(...selectedVerses)
+    : null;
+
+  const passageHeartForSingleVerse = (
+    verseNumber: number,
+  ): PassageHeartControl | null => {
+    if (multiVersePassageSelection) {
+      if (
+        passageSelectLo === null ||
+        passageSelectHi === null ||
+        verseNumber !== passageSelectLo
+      ) {
+        return null;
+      }
+      return {
+        filled: hasExactSavedSpan(savedSpans, passageSelectLo, passageSelectHi),
+        onToggle: () => onToggleSaved(passageSelectLo, passageSelectHi),
+      };
+    }
+    return {
+      filled: hasExactSavedSpan(savedSpans, verseNumber, verseNumber),
+      onToggle: () => onToggleSaved(verseNumber, verseNumber),
+    };
+  };
 
   const focusDistanceByKey = useMemo(() => {
     if (!isFocusMode) return EMPTY_FOCUS_MAP;
@@ -209,6 +250,16 @@ export function PassageViewBody({
             <AnimatePresence initial={false} mode="popLayout">
               {filteredVerses.map((item) => {
                 if (item.kind === "passageGroup") {
+                  const gLo = item.verses[0]?.verseNumber ?? 0;
+                  const gHi =
+                    item.verses[item.verses.length - 1]?.verseNumber ?? gLo;
+                  const groupPassageHeart =
+                    item.verses.length > 0
+                      ? {
+                          filled: hasExactSavedSpan(savedSpans, gLo, gHi),
+                          onToggle: () => onToggleSaved(gLo, gHi),
+                        }
+                      : null;
                   return (
                     <motion.div
                       key={`passage-group-${item.anchorVerse}`}
@@ -223,6 +274,7 @@ export function PassageViewBody({
                         singleNotesByVerse={item.singleNotesByVerse}
                         viewMode={effectiveViewMode}
                         currentChapter={{ book, chapter }}
+                        groupPassageHeart={groupPassageHeart}
                         highlightsByVerse={highlightsByVerse}
                         onCreateHighlight={onCreateHighlight}
                         onDeleteHighlight={onDeleteHighlight}
@@ -365,6 +417,9 @@ export function PassageViewBody({
                           ? `passage-verse-${item.verseNumber}`
                           : undefined
                       }
+                      passageHeart={passageHeartForSingleVerse(
+                        item.verseNumber,
+                      )}
                     />
                   </motion.div>
                 );

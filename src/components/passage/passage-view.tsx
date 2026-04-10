@@ -64,6 +64,40 @@ export function PassageView({
     error,
     retry: retryPassage,
   } = useEsvPassage(book, chapter);
+  const savedVersesForChapter = useQuery(api.savedVerses.listForChapter, {
+    book,
+    chapter,
+  });
+  const toggleSavedMutation = useMutation(api.savedVerses.toggle);
+  const handleToggleSaved = useCallback(
+    (startVerse: number, endVerse: number) => {
+      void toggleSavedMutation({
+        book,
+        chapter,
+        startVerse,
+        endVerse,
+      })
+        .then((result) => {
+          logInteraction("savedVerses", "toggled", {
+            book,
+            chapter,
+            startVerse,
+            endVerse,
+            result,
+          });
+        })
+        .catch((err) => {
+          logInteraction("savedVerses", "toggle-failed", {
+            book,
+            chapter,
+            startVerse,
+            endVerse,
+            message: err instanceof Error ? err.message : "unknown-error",
+          });
+        });
+    },
+    [book, chapter, toggleSavedMutation],
+  );
   const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>("all");
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
@@ -597,6 +631,8 @@ export function PassageView({
         onCreateHighlight={handleCreateHighlight}
         onDeleteHighlight={handleDeleteHighlight}
         onRecolorHighlight={handleRecolorHighlight}
+        savedVersesForChapter={savedVersesForChapter}
+        onToggleSaved={handleToggleSaved}
       />
 
       <PassageViewDialogs

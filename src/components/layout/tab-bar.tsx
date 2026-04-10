@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
-import { LogOut, Search, Settings, TableOfContents, X } from "lucide-react";
+import {
+  Heart,
+  LogOut,
+  Search,
+  Settings,
+  TableOfContents,
+  X,
+} from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SearchDialog } from "@/components/notes/search-dialog";
 import { ThemeDropdown } from "./theme-dropdown";
@@ -30,6 +37,7 @@ export function TabBar() {
   const navigate = useNavigate();
   const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false);
   const isSearchRoute = location.pathname === "/search";
+  const isSavedRoute = location.pathname === "/saved";
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const savedSearchState = readSearchWorkspaceState();
   const tutorial = useOptionalTutorial();
@@ -119,7 +127,10 @@ export function TabBar() {
                 key={tab.id}
                 tab={tab}
                 isActive={
-                  !isSearchRoute && !isSettingsRoute && tab.id === activeTabId
+                  !isSearchRoute &&
+                  !isSavedRoute &&
+                  !isSettingsRoute &&
+                  tab.id === activeTabId
                 }
                 onActivate={() => setActiveTab(tab.id)}
                 onClose={() => closeTab(tab.id)}
@@ -152,6 +163,25 @@ export function TabBar() {
             onClick={() => logInteraction("toolbar", "search-workspace-opened")}
           >
             <Search className="h-4 w-4" />
+          </Link>
+        </TooltipButton>
+        <TooltipButton
+          asChild
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-8 w-8",
+            isSavedRoute &&
+              "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
+          )}
+          tooltip="Open hearted verses"
+          aria-label="Open hearted verses"
+        >
+          <Link
+            to="/saved"
+            onClick={() => logInteraction("toolbar", "saved-verses-opened")}
+          >
+            <Heart className="h-4 w-4" />
           </Link>
         </TooltipButton>
         <PassageNavigator

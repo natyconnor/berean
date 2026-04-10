@@ -25,6 +25,7 @@ import type * as lib_verseRefs from "../lib/verseRefs.js";
 import type * as noteTransfer from "../noteTransfer.js";
 import type * as noteVerseLinks from "../noteVerseLinks.js";
 import type * as notes from "../notes.js";
+import type * as savedVerses from "../savedVerses.js";
 import type * as seed from "../seed.js";
 import type * as tags from "../tags.js";
 import type * as userSettings from "../userSettings.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   noteTransfer: typeof noteTransfer;
   noteVerseLinks: typeof noteVerseLinks;
   notes: typeof notes;
+  savedVerses: typeof savedVerses;
   seed: typeof seed;
   tags: typeof tags;
   userSettings: typeof userSettings;

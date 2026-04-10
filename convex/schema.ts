@@ -109,6 +109,18 @@ export default defineSchema({
     .index("by_userId_verseRefId1", ["userId", "verseRefId1"])
     .index("by_userId_verseRefId2", ["userId", "verseRefId2"]),
 
+  savedVerses: defineTable({
+    userId: v.id("users"),
+    verseRefId: v.id("verseRefs"),
+    book: v.string(),
+    chapter: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"])
+    .index("by_userId_book_chapter", ["userId", "book", "chapter"])
+    .index("by_userId_createdAt", ["userId", "createdAt"]),
+
   highlights: defineTable({
     userId: v.id("users"),
     book: v.string(),

@@ -11,7 +11,10 @@ import { VerseTextPane } from "./verse-text-pane";
 import { PassageNotesBubble } from "../passage-notes-bubble";
 import { VerseNotesPill } from "../verse-notes";
 import { NoteEditor } from "@/components/notes/note-editor";
-import type { VerseInteractionHandlers } from "../verse-row";
+import type {
+  VerseInteractionHandlers,
+  PassageHeartControl,
+} from "../verse-row";
 import {
   LAYOUT_CORRECTION_TRANSITION,
   CROSSFADE_TRANSITION,
@@ -75,6 +78,7 @@ interface PassageGroupWithNotesProps {
   onPassageBubbleMouseEnter: (verseNumber: number) => void;
   onPassageBubbleMouseLeave: () => void;
   onCollapse: () => void;
+  groupPassageHeart: PassageHeartControl | null;
 }
 
 const NOOP_HANDLERS: VerseInteractionHandlers = {
@@ -130,6 +134,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onPassageBubbleMouseEnter,
   onPassageBubbleMouseLeave,
   onCollapse,
+  groupPassageHeart,
 }: PassageGroupWithNotesProps) {
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
   const anchorVerse = verses[0]?.verseNumber ?? 0;
@@ -209,6 +214,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                   onCreateHighlight={onCreateHighlight}
                   onDeleteHighlight={onDeleteHighlight}
                   onRecolorHighlight={onRecolorHighlight}
+                  passageHeart={index === 0 ? groupPassageHeart : null}
                   handlers={NOOP_HANDLERS}
                 />
               ))}

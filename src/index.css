@@ -783,3 +783,25 @@
     cursor: pointer;
   }
 }
+
+@keyframes heart-burst-puff {
+  from {
+    transform: scale(0.2);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+@keyframes heart-burst-spark {
+  from {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--spark-tx), var(--spark-ty));
+  }
+}

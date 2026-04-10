@@ -14,6 +14,7 @@ import {
   LAYOUT_CORRECTION_TRANSITION,
   NOTE_ENTER_TRANSITION,
 } from "../note-animation-config";
+import type { PassageHeartControl } from "../verse-row";
 
 export interface CurrentChapter {
   book: string;
@@ -94,6 +95,7 @@ export interface VerseRowWithNotesProps {
   forceAddButtonVisible?: boolean;
   addNoteTourId?: string;
   rowTourId?: string;
+  passageHeart?: PassageHeartControl | null;
 }
 
 export const VerseRowWithNotes = memo(function VerseRowWithNotes({
@@ -143,6 +145,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   forceAddButtonVisible = false,
   addNoteTourId,
   rowTourId,
+  passageHeart = null,
 }: VerseRowWithNotesProps) {
   const [isExitingSingleNote, setIsExitingSingleNote] = useState(false);
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
@@ -323,6 +326,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
             forceAddButtonVisible={forceAddButtonVisible}
             addNoteTourId={addNoteTourId}
             rowTourId={rowTourId}
+            passageHeart={passageHeart}
             handlers={{
               onAddNote,
               onMouseDown,
