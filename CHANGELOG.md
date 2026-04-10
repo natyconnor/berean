@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/natyconnor/berean/compare/v1.5.2...v1.6.0) (2026-04-10)
+
+
+### Features
+
+* create saved verses table and add heart interaction to save verses or passages as hearted. Still working on the UX for passages ([c9a7ecd](https://github.com/natyconnor/berean/commit/c9a7ecd4bd0e48926c4e17b3b0500154df2a70fc))
+
 ## [1.5.2](https://github.com/natyconnor/berean/compare/v1.5.1...v1.5.2) (2026-04-09)
 
 
