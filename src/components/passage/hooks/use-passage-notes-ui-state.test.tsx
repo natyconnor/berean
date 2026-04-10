@@ -316,6 +316,42 @@ describe("usePassageNotesUiState view mode switch", () => {
   });
 });
 
+describe("usePassageNotesUiState single-verse click behavior", () => {
+  const passageNote: NoteWithRef = {
+    noteId: "p1" as Id<"notes">,
+    content: "",
+    tags: [],
+    verseRef: {
+      book: "Genesis",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 3,
+    },
+    createdAt: 0,
+  };
+
+  it("does not auto-open passage notes when clicking a passage anchor verse", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        passageNotesByAnchor: new Map([[1, [passageNote]]]),
+        verseToPassageAnchor: new Map([
+          [1, 1],
+          [2, 1],
+          [3, 1],
+        ]),
+      }),
+    );
+
+    act(() => {
+      result.current.handleMouseUp();
+    });
+
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.openEditors.has("new:1:1")).toBe(true);
+  });
+});
+
 describe("usePassageNotesUiState read-mode single-editor gate", () => {
   function readModeOptions() {
     return {
