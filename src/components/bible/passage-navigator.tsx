@@ -40,6 +40,7 @@ export function PassageNavigator({
   const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
   const [search, setSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [chapterDigits, setChapterDigits] = useState("");
   const open = openProp ?? uncontrolledOpen;
   const { openTab } = useTabs();
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
@@ -56,12 +57,25 @@ export function PassageNavigator({
     [search],
   );
 
+  const highlightedChapter = useMemo(() => {
+    if (!selectedBook || !chapterDigits) return null;
+    const n = parseInt(chapterDigits, 10);
+    if (Number.isNaN(n) || n < 1 || n > selectedBook.chapters) {
+      return null;
+    }
+    return n;
+  }, [selectedBook, chapterDigits]);
+
+  const chapterInputInvalid =
+    chapterDigits.length > 0 && highlightedChapter === null;
+
   function selectBook(book: BookInfo) {
     if (book.chapters === 1) {
       selectChapter(book, 1);
     } else {
       setSelectedBook(book);
       setSearch("");
+      setChapterDigits("");
     }
   }
 
@@ -75,6 +89,7 @@ export function PassageNavigator({
     setSelectedBook(null);
     setSearch("");
     setHighlightedIndex(0);
+    setChapterDigits("");
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -193,13 +208,55 @@ export function PassageNavigator({
               exit="exitToRight"
               transition={{ duration: 0.15, ease: "easeOut" }}
             >
-              <div className="border-b p-2">
+              <div className="border-b p-2 space-y-2">
                 <button
                   className="text-sm text-muted-foreground hover:text-foreground cursor-pointer"
-                  onClick={() => setSelectedBook(null)}
+                  type="button"
+                  onClick={() => {
+                    setChapterDigits("");
+                    setSelectedBook(null);
+                  }}
                 >
                   &larr; {selectedBook.name}
                 </button>
+                <div className="space-y-1">
+                  <Input
+                    placeholder="Chapter number…"
+                    value={chapterDigits}
+                    onChange={(e) => {
+                      setChapterDigits(e.target.value.replace(/\D/g, ""));
+                    }}
+                    className="h-8"
+                    autoFocus
+                    aria-label="Chapter number"
+                    aria-invalid={chapterInputInvalid}
+                    aria-describedby={
+                      chapterInputInvalid
+                        ? "passage-navigator-chapter-error"
+                        : undefined
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (
+                          highlightedChapter !== null &&
+                          selectedBook !== null
+                        ) {
+                          selectChapter(selectedBook, highlightedChapter);
+                        }
+                      }
+                    }}
+                  />
+                  {chapterInputInvalid ? (
+                    <p
+                      id="passage-navigator-chapter-error"
+                      className="text-xs text-destructive"
+                      role="alert"
+                    >
+                      Invalid chapter number for this book.
+                    </p>
+                  ) : null}
+                </div>
               </div>
               <div className="p-3">
                 <div className="grid grid-cols-6 gap-1">
@@ -209,9 +266,12 @@ export function PassageNavigator({
                   ).map((ch) => (
                     <button
                       key={ch}
+                      type="button"
                       className={cn(
-                        "h-9 w-full rounded-sm text-sm font-medium hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer",
-                        "bg-muted",
+                        "h-9 w-full rounded-sm text-sm font-medium transition-colors cursor-pointer",
+                        ch === highlightedChapter
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted hover:bg-primary hover:text-primary-foreground",
                       )}
                       onClick={() => selectChapter(selectedBook, ch)}
                     >
