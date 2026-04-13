@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/natyconnor/berean/compare/v1.6.0...v1.6.1) (2026-04-13)
+
+
+### Bug Fixes
+
+* allow the user to type chapter numbers when navigating ([#60](https://github.com/natyconnor/berean/issues/60)) ([6a217a6](https://github.com/natyconnor/berean/commit/6a217a6c731810e85f218a3a1cfeaccdd504c716))
+
 ## [1.6.0](https://github.com/natyconnor/berean/compare/v1.5.2...v1.6.0) (2026-04-10)
 
 
