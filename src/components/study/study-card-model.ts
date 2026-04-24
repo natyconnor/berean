@@ -1,6 +1,7 @@
 import { devLog } from "@/lib/dev-log";
 import { studyTeachDebugEnabled } from "@/lib/debug-study-teach";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { verseRefKey } from "../../../shared/verse-ref-key";
 
 export type ActivityType = "verse-memory" | "teach";
 
@@ -91,7 +92,7 @@ export function collectPassageNotes(
 
 /** Stable id segment for a passage (matches queue/ref keys in the study deck). */
 export function referenceKey(ref: CardReference): string {
-  return `${ref.book}|${ref.chapter}|${ref.startVerse}|${ref.endVerse}`;
+  return verseRefKey(ref);
 }
 
 /**

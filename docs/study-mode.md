@@ -55,7 +55,7 @@ There is no separate "favorites" table. Hearted verses live in `savedVerses`; a 
 ### Convex API (`convex/studySessions.ts`)
 
 - `create({ scope, name? })` — creates a session for the current user.
-- `listMine()` — returns all of the caller's sessions **with live counts**: `savedVersesCount`, `notesCount`, and `teachPassagesCount` (distinct verse-linked passages implied by the notes). Backs the hub list.
+- `listMine({ paginationOpts })` — paginated via Convex `paginationOptsValidator`. Returns `{ page, isDone, continueCursor, ... }` where each page entry carries live counts: `savedVersesCount`, `notesCount`, and `teachPassagesCount` (distinct verse-linked passages implied by the notes). Ordered by `lastOpenedAt` desc. Backs the hub list via `usePaginatedQuery`.
 - `get({ id })` — returns `null` for "not found / not yours", the session otherwise. The client uses the `undefined` vs `null` distinction to separate loading from a missing session.
 - `resolveScope({ id })` — fully resolves the session's scope into the lists of `savedVerses` and `notes` needed to build activity cards. Returns `null` for not-found.
 - `previewCounts({ scope })` — same shape as the list counts, but for an unsaved scope. Powers the live counter in the scope builder.
@@ -66,7 +66,7 @@ All queries are safe to call unauthenticated and return `null` / `[]`.
 
 ### Hub (`/study`)
 
-- Lists sessions sorted by `lastOpenedAt` desc.
+- Lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist.
 - Each card shows title (name or auto-generated scope summary), scope-aware stats (hearted verses · notes · passages · last studied), any tag filters, and a "Last: {activity}" chip when the previous view was an activity (not Overview).
 - Delete button opens a confirmation dialog (`DeleteStudySessionDialog`).
 - Empty state has a CTA to `/study/new`.
@@ -118,10 +118,9 @@ A passive summary of what the scope contains: two columns (hearted verses, notes
 
 ## Known limitations (v1)
 
-- **`listMine` performance.** Counts are recomputed on every call: the query reads all of the user's `savedVerses` + `noteVerseLinks`, then `ctx.db.get`s every unique `verseRefId` and `noteId`, then filters per-session in memory. This is fine for hundreds of notes and tens of sessions but becomes quadratic-ish at scale. Likely replacements, in order of preference:
-  1. Render the hub without counts and resolve them lazily per visible card.
-  2. Denormalize counts onto the `studySessions` row and recompute in a scheduled mutation on relevant writes.
-  3. Paginate the hub and only compute counts for the visible page.
+- **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
+  1. Denormalize counts onto the `studySessions` row and recompute in a scheduled mutation on relevant writes.
+  2. Render the hub without counts and resolve them lazily per visible card.
 - **No spaced repetition.** Verse memory doesn't track streaks, due dates, or difficulty.
 - **No session editing.** You can delete a session but can't rename it, change its scope, or clone it after creation.
 - **No in-deck navigation back to `/passage/...`.** Cards show references but don't deep-link into the reader mid-activity.

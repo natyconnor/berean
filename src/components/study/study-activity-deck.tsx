@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import { RotateCcw, Shuffle, SkipForward, Timer } from "lucide-react";
+import { Shuffle, SkipForward, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { studyTeachDebugEnabled } from "@/lib/debug-study-teach";
-import { devLog } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { StudyTeachCard } from "./study-teach-card";
@@ -11,11 +9,16 @@ import { StudyVerseMemoryCard } from "./study-verse-memory-card";
 import {
   activityLabel,
   getCardKind,
+  referenceKey,
   type ActivityType,
-  type CardReference,
   type PassageNote,
   type StudyCard,
 } from "./study-card-model";
+import { useStudyActivityDeckDebug } from "./use-study-activity-deck-debug";
+import {
+  StudyDeckCompleteState,
+  StudyDeckEmptyState,
+} from "./study-activity-deck-views";
 
 interface StudyActivityDeckProps {
   cards: StudyCard[];
@@ -23,10 +26,6 @@ interface StudyActivityDeckProps {
 }
 
 const TEACH_TIMER_SECONDS = 300;
-
-function refKey(ref: CardReference): string {
-  return `${ref.book}|${ref.chapter}|${ref.startVerse}|${ref.endVerse}`;
-}
 
 /** Random order (Fisher–Yates); distinct from build-time deterministic shuffle. */
 function randomizeCardIds(cards: StudyCard[]): string[] {
@@ -150,85 +149,23 @@ export function StudyActivityDeck({
     [queue, position],
   );
 
-  const prevCardsLenRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!studyTeachDebugEnabled()) return;
-    const ids = cards.map((c) => c.id);
-    const uniqueIds = new Set(ids);
-    devLog.info("studyTeach", "deck-cards-prop", {
-      cardsLength: cards.length,
-      uniqueCardIds: uniqueIds.size,
-      duplicateCardIds: cards.length - uniqueIds.size,
-      prevCardsLength: prevCardsLenRef.current,
-    });
-    prevCardsLenRef.current = cards.length;
-  }, [cards]);
-
-  useEffect(() => {
-    if (!studyTeachDebugEnabled()) return;
-    devLog.info("studyTeach", "deck-initial-queue", {
-      cardsLength: cards.length,
-      initialQueueLength: initialQueue.length,
-      aligned: initialQueue.length === cards.length,
-    });
-  }, [cards, initialQueue]);
-
-  useEffect(() => {
-    if (!studyTeachDebugEnabled()) return;
-    if (queue.length + completedIds.size !== cards.length) {
-      devLog.warn("studyTeach", "queue-completed-mismatch", {
-        queueLength: queue.length,
-        cardsLength: cards.length,
-        completedSize: completedIds.size,
-        position,
-        queueHead: queue.slice(0, 8),
-      });
-    }
-    const uniqueInQueue = new Set(queue).size;
-    if (uniqueInQueue !== queue.length && queue.length === cards.length) {
-      devLog.warn("studyTeach", "queue-duplicate-ids-without-skips", {
-        queueLength: queue.length,
-        uniqueInQueue,
-      });
-    }
-  }, [cards.length, queue, position, completedIds.size]);
-
-  useEffect(() => {
-    if (!studyTeachDebugEnabled()) return;
-    if (
-      totalCards > 0 &&
-      currentCardId &&
-      !cards.some((c) => c.id === currentCardId)
-    ) {
-      devLog.warn("studyTeach", "missing-card-for-queue-id", {
-        currentCardId,
-        totalCards,
-      });
-    }
-  }, [totalCards, currentCardId, cards]);
-
-  function logTeachAdvance(action: "done" | "skip"): void {
-    if (!studyTeachDebugEnabled() || !currentCardId) return;
-    const card = cardsById.get(currentCardId);
-    const refLabel =
-      card?.type === "teach"
-        ? formatVerseRef(card.reference)
-        : card?.type === "verse-memory"
-          ? formatVerseRef(card.reference)
-          : null;
-    devLog.debug("studyTeach", `advance:${action}`, {
-      cardId: currentCardId,
-      cardType: card?.type ?? null,
-      ref: refLabel,
-      positionBefore: position,
-      queueLength: queue.length,
-      completedCount: completedIds.size,
-    });
-  }
+  const { logAdvance, logRestart, logShuffle } = useStudyActivityDeckDebug({
+    cards,
+    initialQueue,
+    queue,
+    position,
+    completedIdsSize: completedIds.size,
+    currentCardId,
+    cardsById,
+  });
 
   function handleCorrect() {
     if (!currentCardId) return;
-    logTeachAdvance("done");
+    logAdvance("done", {
+      position,
+      queueLength: queue.length,
+      completedCount: completedIds.size,
+    });
     setExitDirection("right");
     setCompletedIds((prev) => {
       const next = new Set(prev);
@@ -267,7 +204,11 @@ export function StudyActivityDeck({
 
   function handleSkip() {
     if (!currentCardId) return;
-    logTeachAdvance("skip");
+    logAdvance("skip", {
+      position,
+      queueLength: queue.length,
+      completedCount: completedIds.size,
+    });
     setExitDirection("left");
     const pos = position;
     const nextQueue = [...queue];
@@ -286,12 +227,10 @@ export function StudyActivityDeck({
   }
 
   function handleRestart() {
-    if (studyTeachDebugEnabled()) {
-      devLog.info("studyTeach", "deck-restart", {
-        cardsLength: cards.length,
-        initialQueueLength: initialQueue.length,
-      });
-    }
+    logRestart({
+      cardsLength: cards.length,
+      initialQueueLength: initialQueue.length,
+    });
     setQueue(initialQueue);
     setPosition(0);
     setFlipped(false);
@@ -307,11 +246,7 @@ export function StudyActivityDeck({
 
   function handleShuffle() {
     if (totalCards < 2) return;
-    if (studyTeachDebugEnabled()) {
-      devLog.info("studyTeach", "deck-shuffle", {
-        cardsLength: cards.length,
-      });
-    }
+    logShuffle({ cardsLength: cards.length });
     setQueue(randomizeCardIds(cards));
     setPosition(0);
     setFlipped(false);
@@ -330,7 +265,7 @@ export function StudyActivityDeck({
 
   function handlePassageNoteSaved(_cardId: string, note: PassageNote) {
     if (!currentCard || currentCard.type !== "teach") return;
-    const key = refKey(currentCard.reference);
+    const key = referenceKey(currentCard.reference);
     setExtraNotesByRef((prev) => {
       const existing = prev[key] ?? [];
       if (existing.some((n) => n.noteId === note.noteId)) return prev;
@@ -339,38 +274,17 @@ export function StudyActivityDeck({
   }
 
   if (totalCards === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-        <p className="text-sm text-muted-foreground">
-          No cards available for this activity.
-        </p>
-        <p className="max-w-sm text-xs text-muted-foreground">
-          Try switching activities or broadening your scope.
-        </p>
-      </div>
-    );
+    return <StudyDeckEmptyState />;
   }
 
   if (isComplete || !currentCard) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-        <h3 className="text-xl font-semibold">Session complete</h3>
-        <p className="max-w-md text-sm text-muted-foreground">
-          {buildCompletionMessage(cards, scopeLabel)}
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <Button onClick={handleRestart} variant="outline" className="gap-2">
-            <RotateCcw className="h-4 w-4" />
-            Restart deck
-          </Button>
-          {totalCards >= 2 && (
-            <Button onClick={handleShuffle} variant="outline" className="gap-2">
-              <Shuffle className="h-4 w-4" />
-              Shuffle
-            </Button>
-          )}
-        </div>
-      </div>
+      <StudyDeckCompleteState
+        cards={cards}
+        scopeLabel={scopeLabel}
+        onRestart={handleRestart}
+        onShuffle={handleShuffle}
+      />
     );
   }
 
@@ -464,7 +378,7 @@ export function StudyActivityDeck({
                         typedAnswer={currentTyped}
                         onTypedAnswerChange={handleTypedAnswerChange}
                         extraPassageNotes={
-                          extraNotesByRef[refKey(card.reference)] ?? []
+                          extraNotesByRef[referenceKey(card.reference)] ?? []
                         }
                         onPassageNoteSaved={handlePassageNoteSaved}
                       />
@@ -667,34 +581,6 @@ function ShuffleDealerCardFace({ card }: { card: StudyCard }) {
       </div>
     </div>
   );
-}
-
-function buildCompletionMessage(
-  cards: StudyCard[],
-  scopeLabel: string,
-): string {
-  const verseCount = cards.filter((c) => c.type === "verse-memory").length;
-  const noteCount = cards.filter((c) => c.type === "teach").length;
-
-  const parts: string[] = [];
-  if (verseCount > 0) {
-    parts.push(`${verseCount} hearted verse${verseCount !== 1 ? "s" : ""}`);
-  }
-  if (noteCount > 0) {
-    parts.push(`${noteCount} passage${noteCount !== 1 ? "s" : ""}`);
-  }
-
-  const subjects =
-    parts.length === 0
-      ? "your cards"
-      : parts.length === 1
-        ? parts[0]
-        : `${parts[0]} and ${parts[1]}`;
-
-  const scope = scopeLabel.trim();
-  return scope
-    ? `You reviewed ${subjects} in ${scope}.`
-    : `You reviewed ${subjects}.`;
 }
 
 function StudyDeckProgress({

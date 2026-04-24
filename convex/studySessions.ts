@@ -1,8 +1,10 @@
 import { query, mutation, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { matchesTagFilters, type TagMatchMode } from "./lib/tags";
+import { verseRefKey } from "../shared/verse-ref-key";
 
 const scopeValue = v.object({
   books: v.array(v.string()),
@@ -39,15 +41,6 @@ function refMatchesScope(scope: Scope, book: string, chapter: number): boolean {
   return chapter >= range.startChapter && chapter <= range.endChapter;
 }
 
-function referenceKeyStringForVerseRef(ref: {
-  book: string;
-  chapter: number;
-  startVerse: number;
-  endVerse: number;
-}): string {
-  return `${ref.book}|${ref.chapter}|${ref.startVerse}|${ref.endVerse}`;
-}
-
 function countDistinctTeachPassageKeysFromNotes(
   notes: Array<{
     refs: Array<{
@@ -61,7 +54,7 @@ function countDistinctTeachPassageKeysFromNotes(
   const keys = new Set<string>();
   for (const n of notes) {
     for (const r of n.refs) {
-      keys.add(referenceKeyStringForVerseRef(r));
+      keys.add(verseRefKey(r));
     }
   }
   return keys.size;
@@ -105,23 +98,41 @@ export const create = mutation({
 });
 
 export const listMine = query({
-  args: {},
-  returns: v.array(sessionListWithCountsItem),
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    page: v.array(sessionListWithCountsItem),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    splitCursor: v.optional(v.union(v.string(), v.null())),
+    pageStatus: v.optional(
+      v.union(
+        v.literal("SplitRecommended"),
+        v.literal("SplitRequired"),
+        v.null(),
+      ),
+    ),
+  }),
+  handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
-    if (!userId) return [];
+    if (!userId) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
 
-    const rows = await ctx.db
+    const paginated = await ctx.db
       .query("studySessions")
       .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
-      .collect();
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    rows.sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
+    if (paginated.page.length === 0) {
+      return { ...paginated, page: [] };
+    }
 
-    if (rows.length === 0) return [];
-
-    // Fetch user-scoped data once and filter per session. This avoids an N*M
-    // pattern where N is sessions and M is content documents.
+    // Full-table reads of the user's saved verses and note links remain here
+    // so per-session counts can be computed in one pass. Pagination bounds
+    // the session rows per response; counts are still O(verses + links) per
+    // request. Future optimization: denormalize counts onto studySessions
+    // or switch to approximate counts if this becomes a hot path.
     const savedVerses = await ctx.db
       .query("savedVerses")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -154,18 +165,16 @@ export const listMine = query({
       });
     }
 
-    const uniqueNoteIds = new Set(noteLinks.map((l) => String(l.noteId)));
     const noteMap = new Map<string, { tags: string[] }>();
     for (const link of noteLinks) {
       const key = String(link.noteId);
       if (noteMap.has(key)) continue;
-      if (!uniqueNoteIds.has(key)) continue;
       const note = await ctx.db.get(link.noteId);
       if (!note || note.userId !== userId) continue;
       noteMap.set(key, { tags: note.tags });
     }
 
-    return rows.map((r) => {
+    const page = paginated.page.map((r) => {
       const scope = r.scope;
 
       let savedVersesCount = 0;
@@ -188,10 +197,8 @@ export const listMine = query({
         ) {
           continue;
         }
-        teachPassageKeys.add(referenceKeyStringForVerseRef(vref));
-        if (!countedNotes.has(noteIdStr)) {
-          countedNotes.add(noteIdStr);
-        }
+        teachPassageKeys.add(verseRefKey(vref));
+        countedNotes.add(noteIdStr);
       }
 
       return {
@@ -206,6 +213,11 @@ export const listMine = query({
         teachPassagesCount: teachPassageKeys.size,
       };
     });
+
+    return {
+      ...paginated,
+      page,
+    };
   },
 });
 
@@ -247,7 +259,18 @@ export const remove = mutation({
 export const touch = mutation({
   args: {
     id: v.id("studySessions"),
-    lastView: v.optional(v.string()),
+    // Narrow union of the current + legacy persisted view names (see
+    // normalizeSessionView on the client). "explain" and "mixed-review" are
+    // accepted for older clients still running in the wild.
+    lastView: v.optional(
+      v.union(
+        v.literal("overview"),
+        v.literal("verse-memory"),
+        v.literal("teach"),
+        v.literal("explain"),
+        v.literal("mixed-review"),
+      ),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {

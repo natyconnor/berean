@@ -1,8 +1,7 @@
 import { useCallback, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
-import { useQuery } from "convex-helpers/react/cache";
-import { useMutation } from "convex/react";
+import { Loader2, Plus } from "lucide-react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -16,8 +15,15 @@ type DeleteCandidate = {
   title: string;
 };
 
+const INITIAL_PAGE_SIZE = 20;
+const LOAD_MORE_PAGE_SIZE = 20;
+
 export function StudyHub() {
-  const sessions = useQuery(api.studySessions.listMine, {});
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.studySessions.listMine,
+    {},
+    { initialNumItems: INITIAL_PAGE_SIZE },
+  );
   const removeSession = useMutation(api.studySessions.remove);
 
   const [deleteCandidate, setDeleteCandidate] =
@@ -51,6 +57,10 @@ export function StudyHub() {
     [cancelDelete],
   );
 
+  const isLoadingFirstPage = status === "LoadingFirstPage";
+  const isLoadingMore = status === "LoadingMore";
+  const canLoadMore = status === "CanLoadMore";
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
@@ -71,7 +81,11 @@ export function StudyHub() {
       </header>
       <ScrollArea className="flex-1 min-h-0">
         <div className="max-w-2xl mx-auto px-5 py-6">
-          {!sessions || sessions.length === 0 ? (
+          {isLoadingFirstPage ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : results.length === 0 ? (
             <div className="text-center py-16 px-4">
               <p className="text-sm text-muted-foreground mb-4">
                 No study sessions yet. Create one to get started.
@@ -84,29 +98,50 @@ export function StudyHub() {
               </Button>
             </div>
           ) : (
-            <ul className="space-y-2">
-              {sessions.map((session, index) => {
-                const title =
-                  session.name && session.name.length > 0
-                    ? session.name
-                    : formatScopeSummary(session.scope);
-                return (
-                  <StudySessionCard
-                    key={session._id}
-                    sessionId={session._id}
-                    index={index}
-                    name={session.name}
-                    scope={session.scope}
-                    lastOpenedAt={session.lastOpenedAt}
-                    savedVersesCount={session.savedVersesCount}
-                    notesCount={session.notesCount}
-                    teachPassagesCount={session.teachPassagesCount}
-                    lastView={session.lastView}
-                    onDelete={() => requestDelete({ id: session._id, title })}
-                  />
-                );
-              })}
-            </ul>
+            <>
+              <ul className="space-y-2">
+                {results.map((session, index) => {
+                  const title =
+                    session.name && session.name.length > 0
+                      ? session.name
+                      : formatScopeSummary(session.scope);
+                  return (
+                    <StudySessionCard
+                      key={session._id}
+                      sessionId={session._id}
+                      index={index}
+                      name={session.name}
+                      scope={session.scope}
+                      lastOpenedAt={session.lastOpenedAt}
+                      savedVersesCount={session.savedVersesCount}
+                      notesCount={session.notesCount}
+                      teachPassagesCount={session.teachPassagesCount}
+                      lastView={session.lastView}
+                      onDelete={() => requestDelete({ id: session._id, title })}
+                    />
+                  );
+                })}
+              </ul>
+              {(canLoadMore || isLoadingMore) && (
+                <div className="mt-4 flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadMore(LOAD_MORE_PAGE_SIZE)}
+                    disabled={!canLoadMore}
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </ScrollArea>

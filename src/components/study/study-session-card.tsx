@@ -12,6 +12,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
 import {
   activityLabel,
@@ -19,19 +20,6 @@ import {
 } from "@/components/study/study-card-model";
 
 import { formatScopeSummary, type StudyScope } from "./study-scope-summary";
-
-function formatRelativeTime(timestamp: number): string {
-  const diffMs = Date.now() - timestamp;
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString();
-}
 
 const KNOWN_ACTIVITIES = new Set<ActivityType>(["verse-memory", "teach"]);
 
