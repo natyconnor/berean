@@ -151,6 +151,30 @@ export default defineSchema({
     ),
   }).index("by_label", ["label"]),
 
+  studySessions: defineTable({
+    userId: v.id("users"),
+    name: v.optional(v.string()),
+    scope: v.object({
+      books: v.array(v.string()),
+      chapterRanges: v.optional(
+        v.array(
+          v.object({
+            book: v.string(),
+            startChapter: v.number(),
+            endChapter: v.number(),
+          }),
+        ),
+      ),
+      tags: v.array(v.string()),
+      tagMatchMode: v.union(v.literal("any"), v.literal("all")),
+    }),
+    // The last SessionView the user had open (overview | verse-memory | teach).
+    // Used to restore the view on reopen and to show a "Last: X" chip in the hub.
+    lastView: v.optional(v.string()),
+    createdAt: v.number(),
+    lastOpenedAt: v.number(),
+  }).index("by_userId_lastOpenedAt", ["userId", "lastOpenedAt"]),
+
   feedbackReports: defineTable({
     userId: v.id("users"),
     kind: v.union(v.literal("bug"), v.literal("feature")),

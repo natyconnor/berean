@@ -3,7 +3,7 @@ import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
 import {
-  Heart,
+  BookOpen,
   LogOut,
   Search,
   Settings,
@@ -37,7 +37,7 @@ export function TabBar() {
   const navigate = useNavigate();
   const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false);
   const isSearchRoute = location.pathname === "/search";
-  const isSavedRoute = location.pathname === "/saved";
+  const isStudyRoute = location.pathname.startsWith("/study");
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const savedSearchState = readSearchWorkspaceState();
   const tutorial = useOptionalTutorial();
@@ -128,7 +128,7 @@ export function TabBar() {
                 tab={tab}
                 isActive={
                   !isSearchRoute &&
-                  !isSavedRoute &&
+                  !isStudyRoute &&
                   !isSettingsRoute &&
                   tab.id === activeTabId
                 }
@@ -171,17 +171,17 @@ export function TabBar() {
           size="icon"
           className={cn(
             "h-8 w-8",
-            isSavedRoute &&
+            isStudyRoute &&
               "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
           )}
-          tooltip="Open hearted verses"
-          aria-label="Open hearted verses"
+          tooltip="Open study"
+          aria-label="Open study"
         >
           <Link
-            to="/saved"
-            onClick={() => logInteraction("toolbar", "saved-verses-opened")}
+            to="/study"
+            onClick={() => logInteraction("toolbar", "study-opened")}
           >
-            <Heart className="h-4 w-4" />
+            <BookOpen className="h-4 w-4" />
           </Link>
         </TooltipButton>
         <PassageNavigator
