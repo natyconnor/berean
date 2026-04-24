@@ -6,10 +6,13 @@ import type { JSX } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
+import { cn } from "@/lib/utils";
 import { formatVerseRef, toPassageId } from "@/lib/verse-ref-utils";
 
 import { FlipFaces } from "./flip-faces";
+import { classifyVerseAttempt } from "./study-attempt-quality";
 import type { VerseMemoryCard as VerseMemoryCardData } from "./study-card-model";
+import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
 const ESV_FADE_S = 0.3;
 
@@ -63,6 +66,10 @@ export function StudyVerseMemoryCard({
     trimmedTyped.length > 0 && data !== null && data !== undefined;
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
   const diffTokens = showAttempt ? diffWords(typedAnswer, versePlainText) : [];
+  const attemptQuality = classifyVerseAttempt(diffTokens);
+  // Used as a motion key so the feedback banner re-plays its entrance when
+  // the user tries a different attempt, but not on every keystroke.
+  const attemptKey = trimmedTyped;
 
   const front = (
     <div className="flex flex-col items-center gap-5 py-8 h-full w-full px-6 text-center">
@@ -88,14 +95,34 @@ export function StudyVerseMemoryCard({
         {refLabel}
       </h2>
 
-      {showAttempt && (
-        <div className="w-full max-w-xl mx-auto space-y-1 rounded-lg border bg-muted/30 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Your attempt
-          </p>
-          <p className="text-sm leading-relaxed">
-            {diffTokens.map((token, idx) => renderDiffToken(token, idx))}
-          </p>
+      {showAttempt && flipped && (
+        <div className="w-full max-w-xl mx-auto space-y-2">
+          {attemptQuality && attemptQuality !== "off" && (
+            <VerseMemoryFeedback
+              quality={attemptQuality}
+              attemptKey={attemptKey}
+            />
+          )}
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className={cn(
+              "space-y-1 rounded-lg border-2 px-3 py-2 shadow-sm",
+              attemptQuality === "exact"
+                ? "border-emerald-500/40 bg-emerald-500/5"
+                : attemptQuality === "close"
+                  ? "border-amber-500/40 bg-amber-500/5"
+                  : "border-primary/30 bg-primary/5",
+            )}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Your attempt
+            </p>
+            <p className="text-sm leading-relaxed">
+              {diffTokens.map((token, idx) => renderDiffToken(token, idx))}
+            </p>
+          </motion.div>
         </div>
       )}
 

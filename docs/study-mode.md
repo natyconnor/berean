@@ -97,11 +97,14 @@ A passive summary of what the scope contains: two columns (hearted verses, notes
 - One card per hearted verse in the scope.
 - Shows the reference; the body is revealed either by flipping the card or by typing the verse from memory.
 - Typed recall is scored with `src/lib/diff-words.ts` so near-matches get partial credit.
+- On the revealed side, the user's attempt is framed in a tinted "pop" panel so it's obvious where their input lives alongside the ESV text.
+- `classifyVerseAttempt` (in `study-attempt-quality.ts`) grades the diff as `exact` / `close` / `off`, and `VerseMemoryFeedback` renders a short celebration banner — a bouncy "Exactly right!" with a confetti burst for exact matches, a calmer "Good job — really close!" chip when only a word or two slipped. Both animations respect `prefers-reduced-motion`.
 
 #### Teach (`StudyTeachCard`)
 
 - One card per **distinct verse-linked passage** referenced by the scope's notes (`countDistinctTeachPassageRefs`).
 - Card front shows the passage reference; flipping reveals the user's notes on that passage plus ESV text.
+- On the revealed side, the "What you wrote" panel gets the same tinted pop styling as the verse memory attempt so the user's own teach point stands out next to the passage text and saved notes.
 - Optional 5-minute teaching timer built in.
 - A small dev-only debug flag (`localStorage.berean:debugStudyTeach` / `?debugStudyTeach=1`) adds instrumentation via `devLog`.
 

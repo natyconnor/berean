@@ -152,6 +152,7 @@ export function StudyTeachCard({
     </div>
   );
 
+  const hasPractice = typedAnswer.trim().length > 0;
   const practicePane = (
     <section
       className="flex flex-col gap-2"
@@ -163,12 +164,21 @@ export function StudyTeachCard({
       >
         What you wrote
       </p>
-      {typedAnswer.trim().length > 0 ? (
-        <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-            {typedAnswer}
-          </p>
-        </div>
+      {hasPractice ? (
+        // Mount-gate on `flipped` so the entrance animation fires when the
+        // card reveals, not silently while the back face is still hidden.
+        flipped ? (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-3 shadow-sm"
+          >
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+              {typedAnswer}
+            </p>
+          </motion.div>
+        ) : null
       ) : (
         <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3">
           <p className="text-sm italic text-muted-foreground">
