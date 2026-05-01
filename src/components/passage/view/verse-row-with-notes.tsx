@@ -396,10 +396,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           onSavedPassageHoverEnter &&
           onSavedPassageHoverLeave &&
           onToggleSavedPassage && (
-            <div
-              className="pointer-events-auto absolute top-1/2 right-full z-20 mr-2 flex -translate-y-1/2 flex-col items-end gap-1"
-              data-saved-passage-pill-slot
-            >
+            <div className="pointer-events-auto absolute top-1/2 right-full z-20 mr-2 flex -translate-y-1/2 flex-col items-end gap-1">
               {savedPassagesAtAnchor.map((span) => (
                 <SavedPassagePill
                   key={`${span.startVerse}-${span.endVerse}`}
