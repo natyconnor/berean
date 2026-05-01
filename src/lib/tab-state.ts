@@ -168,6 +168,33 @@ export function navigateCurrentTab(
   };
 }
 
+export function syncRoutePassageToCurrentTab(
+  store: TabStore,
+  routePassageId: string | null,
+): TabStore {
+  if (!routePassageId) return store;
+  if (store.tabs.some((tab) => tab.passageId === routePassageId)) {
+    return store;
+  }
+
+  const tabIds = new Set(store.tabs.map((tab) => tab.id));
+  const currentTabId =
+    [...store.history].reverse().find((tabId) => tabIds.has(tabId)) ??
+    store.tabs[0]?.id ??
+    null;
+
+  if (!currentTabId) return store;
+
+  const existingHistory = store.history.filter((tabId) => tabIds.has(tabId));
+
+  return {
+    tabs: store.tabs.map((tab) =>
+      tab.id === currentTabId ? createTab(tab.id, routePassageId) : tab,
+    ),
+    history: updateTabHistory(existingHistory, currentTabId),
+  };
+}
+
 export function activateTab(store: TabStore, tabId: string): TabStore {
   if (!store.tabs.some((tab) => tab.id === tabId)) {
     return {

@@ -25,6 +25,7 @@ import {
   navigateCurrentTab,
   openOrReuseTab,
   reorderTabs,
+  syncRoutePassageToCurrentTab,
 } from "./tab-state";
 import { logInteraction } from "./dev-log";
 
@@ -35,29 +36,33 @@ function TabProvider({ children }: { children: ReactNode }) {
   );
   const navigate = useNavigate();
   const routePassageId = getRoutePassageId(location.pathname);
+  const syncedStore = useMemo(
+    () => syncRoutePassageToCurrentTab(store, routePassageId),
+    [routePassageId, store],
+  );
 
   const tabs = useMemo(
-    () => ensureRouteTabVisible(store.tabs, routePassageId),
-    [routePassageId, store.tabs],
+    () => ensureRouteTabVisible(syncedStore.tabs, routePassageId),
+    [routePassageId, syncedStore.tabs],
   );
   const activeTabId = useMemo(
-    () => findActiveTabIdForRoute(store.tabs, location.pathname),
-    [location.pathname, store.tabs],
+    () => findActiveTabIdForRoute(syncedStore.tabs, location.pathname),
+    [location.pathname, syncedStore.tabs],
   );
   const searchModeActive = location.pathname === "/search";
 
   const backPassageId = useMemo(() => {
-    for (let i = store.history.length - 1; i >= 0; i--) {
-      const tabId = store.history[i];
-      const tab = store.tabs.find((t) => t.id === tabId);
+    for (let i = syncedStore.history.length - 1; i >= 0; i--) {
+      const tabId = syncedStore.history[i];
+      const tab = syncedStore.tabs.find((t) => t.id === tabId);
       if (tab) return tab.passageId;
     }
-    return store.tabs[0]?.passageId ?? "John-1";
-  }, [store.history, store.tabs]);
+    return syncedStore.tabs[0]?.passageId ?? "John-1";
+  }, [syncedStore.history, syncedStore.tabs]);
 
   useEffect(() => {
-    saveTabs(store.tabs);
-  }, [store.tabs]);
+    saveTabs(syncedStore.tabs);
+  }, [syncedStore.tabs]);
 
   const setSearchModeActive = useCallback((active: boolean) => {
     // Route state is the source of truth for search mode.
@@ -72,10 +77,14 @@ function TabProvider({ children }: { children: ReactNode }) {
     ) => {
       let didReuseExisting = false;
       setStore((currentStore) => {
-        didReuseExisting = currentStore.tabs.some(
+        const currentSyncedStore = syncRoutePassageToCurrentTab(
+          currentStore,
+          routePassageId,
+        );
+        didReuseExisting = currentSyncedStore.tabs.some(
           (tab) => tab.passageId === passageId,
         );
-        return openOrReuseTab(currentStore, {
+        return openOrReuseTab(currentSyncedStore, {
           passageId,
           label,
           createId: () => crypto.randomUUID(),
@@ -94,7 +103,7 @@ function TabProvider({ children }: { children: ReactNode }) {
         });
       });
     },
-    [navigate],
+    [navigate, routePassageId],
   );
 
   const navigateActiveTab = useCallback(
@@ -109,13 +118,16 @@ function TabProvider({ children }: { children: ReactNode }) {
         source: search.source ?? null,
       });
       setStore((currentStore) =>
-        navigateCurrentTab(currentStore, {
-          activeTabId,
-          routePassageId,
-          passageId,
-          label,
-          createId: () => crypto.randomUUID(),
-        }),
+        navigateCurrentTab(
+          syncRoutePassageToCurrentTab(currentStore, routePassageId),
+          {
+            activeTabId,
+            routePassageId,
+            passageId,
+            label,
+            createId: () => crypto.randomUUID(),
+          },
+        ),
       );
       startTransition(() => {
         void navigate({
@@ -133,12 +145,15 @@ function TabProvider({ children }: { children: ReactNode }) {
       let nextPassageId: string | null = null;
       const closingTab = tabs.find((tab) => tab.id === tabId) ?? null;
       setStore((currentStore) => {
-        const result = closeTabAndChooseFallback(currentStore, {
-          tabId,
-          activeTabId,
-          routePassageId,
-          createId: () => crypto.randomUUID(),
-        });
+        const result = closeTabAndChooseFallback(
+          syncRoutePassageToCurrentTab(currentStore, routePassageId),
+          {
+            tabId,
+            activeTabId,
+            routePassageId,
+            createId: () => crypto.randomUUID(),
+          },
+        );
         nextPassageId = result.navigationTarget?.passageId ?? null;
         return result.store;
       });
@@ -183,7 +198,12 @@ function TabProvider({ children }: { children: ReactNode }) {
         passageId: tab.passageId,
         label: tab.label,
       });
-      setStore((currentStore) => activateTab(currentStore, tabId));
+      setStore((currentStore) =>
+        activateTab(
+          syncRoutePassageToCurrentTab(currentStore, routePassageId),
+          tabId,
+        ),
+      );
       startTransition(() => {
         void navigate({
           to: "/passage/$passageId",
@@ -192,7 +212,7 @@ function TabProvider({ children }: { children: ReactNode }) {
         });
       });
     },
-    [tabs, navigate],
+    [tabs, navigate, routePassageId],
   );
 
   return (

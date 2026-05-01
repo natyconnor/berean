@@ -8,6 +8,7 @@ import {
   getRouteTabId,
   navigateCurrentTab,
   openOrReuseTab,
+  syncRoutePassageToCurrentTab,
 } from "./tab-state";
 
 describe("tab-state", () => {
@@ -96,5 +97,33 @@ describe("tab-state", () => {
       ["materialized", "Exodus-1"],
     ]);
     expect(result.history[result.history.length - 1]).toBe("materialized");
+  });
+
+  it("syncs a missing route passage into the current stored tab", () => {
+    const result = syncRoutePassageToCurrentTab(
+      {
+        tabs: [createTab("current", "Romans-8", "Romans 8")],
+        history: ["current"],
+      },
+      "John-1",
+    );
+
+    expect(result.tabs).toEqual([createTab("current", "John-1", "John 1")]);
+    expect(result.history).toEqual(["current"]);
+  });
+
+  it("uses the first stored tab when route history only references a synthetic tab", () => {
+    const result = syncRoutePassageToCurrentTab(
+      createInitialTabStore(
+        [createTab("john-1", "John-1", "John 1")],
+        "/passage/Genesis-1",
+      ),
+      "Genesis-1",
+    );
+
+    expect(result.tabs).toEqual([
+      createTab("john-1", "Genesis-1", "Genesis 1"),
+    ]);
+    expect(result.history).toEqual(["john-1"]);
   });
 });
