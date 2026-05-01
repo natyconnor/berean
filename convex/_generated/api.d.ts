@@ -27,6 +27,7 @@ import type * as noteVerseLinks from "../noteVerseLinks.js";
 import type * as notes from "../notes.js";
 import type * as savedVerses from "../savedVerses.js";
 import type * as seed from "../seed.js";
+import type * as studySessions from "../studySessions.js";
 import type * as tags from "../tags.js";
 import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   notes: typeof notes;
   savedVerses: typeof savedVerses;
   seed: typeof seed;
+  studySessions: typeof studySessions;
   tags: typeof tags;
   userSettings: typeof userSettings;
   users: typeof users;

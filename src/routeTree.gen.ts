@@ -12,10 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ThemeTestRouteImport } from './routes/theme-test'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SearchRouteImport } from './routes/search'
-import { Route as SavedRouteImport } from './routes/saved'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StudyIndexRouteImport } from './routes/study/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as StudyNewRouteImport } from './routes/study/new'
+import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
 import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
 import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
 
@@ -34,11 +36,6 @@ const SearchRoute = SearchRouteImport.update({
   path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SavedRoute = SavedRouteImport.update({
-  id: '/saved',
-  path: '/saved',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -49,9 +46,24 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudyIndexRoute = StudyIndexRouteImport.update({
+  id: '/study/',
+  path: '/study/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudyNewRoute = StudyNewRouteImport.update({
+  id: '/study/new',
+  path: '/study/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudySessionIdRoute = StudySessionIdRouteImport.update({
+  id: '/study/$sessionId',
+  path: '/study/$sessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsTagsRoute = SettingsTagsRouteImport.update({
@@ -68,83 +80,97 @@ const PassagePassageIdRoute = PassagePassageIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
-  '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
+  '/study/$sessionId': typeof StudySessionIdRoute
+  '/study/new': typeof StudyNewRoute
   '/settings/': typeof SettingsIndexRoute
+  '/study/': typeof StudyIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
-  '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
+  '/study/$sessionId': typeof StudySessionIdRoute
+  '/study/new': typeof StudyNewRoute
   '/settings': typeof SettingsIndexRoute
+  '/study': typeof StudyIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
-  '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
+  '/study/$sessionId': typeof StudySessionIdRoute
+  '/study/new': typeof StudyNewRoute
   '/settings/': typeof SettingsIndexRoute
+  '/study/': typeof StudyIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/privacy'
-    | '/saved'
     | '/search'
     | '/terms'
     | '/theme-test'
     | '/passage/$passageId'
     | '/settings/tags'
+    | '/study/$sessionId'
+    | '/study/new'
     | '/settings/'
+    | '/study/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/privacy'
-    | '/saved'
     | '/search'
     | '/terms'
     | '/theme-test'
     | '/passage/$passageId'
     | '/settings/tags'
+    | '/study/$sessionId'
+    | '/study/new'
     | '/settings'
+    | '/study'
   id:
     | '__root__'
     | '/'
     | '/privacy'
-    | '/saved'
     | '/search'
     | '/terms'
     | '/theme-test'
     | '/passage/$passageId'
     | '/settings/tags'
+    | '/study/$sessionId'
+    | '/study/new'
     | '/settings/'
+    | '/study/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PrivacyRoute: typeof PrivacyRoute
-  SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   TermsRoute: typeof TermsRoute
   ThemeTestRoute: typeof ThemeTestRoute
   PassagePassageIdRoute: typeof PassagePassageIdRoute
   SettingsTagsRoute: typeof SettingsTagsRoute
+  StudySessionIdRoute: typeof StudySessionIdRoute
+  StudyNewRoute: typeof StudyNewRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
+  StudyIndexRoute: typeof StudyIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -170,13 +196,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/saved': {
-      id: '/saved'
-      path: '/saved'
-      fullPath: '/saved'
-      preLoaderRoute: typeof SavedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
@@ -191,11 +210,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/study/': {
+      id: '/study/'
+      path: '/study'
+      fullPath: '/study/'
+      preLoaderRoute: typeof StudyIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings/': {
       id: '/settings/'
       path: '/settings'
       fullPath: '/settings/'
       preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study/new': {
+      id: '/study/new'
+      path: '/study/new'
+      fullPath: '/study/new'
+      preLoaderRoute: typeof StudyNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study/$sessionId': {
+      id: '/study/$sessionId'
+      path: '/study/$sessionId'
+      fullPath: '/study/$sessionId'
+      preLoaderRoute: typeof StudySessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/tags': {
@@ -218,13 +258,15 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PrivacyRoute: PrivacyRoute,
-  SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   TermsRoute: TermsRoute,
   ThemeTestRoute: ThemeTestRoute,
   PassagePassageIdRoute: PassagePassageIdRoute,
   SettingsTagsRoute: SettingsTagsRoute,
+  StudySessionIdRoute: StudySessionIdRoute,
+  StudyNewRoute: StudyNewRoute,
   SettingsIndexRoute: SettingsIndexRoute,
+  StudyIndexRoute: StudyIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
