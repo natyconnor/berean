@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/natyconnor/berean/compare/v1.6.1...v1.7.0) (2026-05-01)
+
+
+### Features
+
+* Nathanc/study mode v1 ([#65](https://github.com/natyconnor/berean/issues/65)) ([2ec9be3](https://github.com/natyconnor/berean/commit/2ec9be3912931608d264a70c1e2cd77488934d93))
+
 ## [1.6.1](https://github.com/natyconnor/berean/compare/v1.6.0...v1.6.1) (2026-04-13)
 
 
