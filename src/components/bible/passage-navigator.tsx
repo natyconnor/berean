@@ -29,12 +29,14 @@ interface PassageNavigatorProps {
   trigger?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onSelectPassage?: (passageId: string, label: string) => void;
 }
 
 export function PassageNavigator({
   trigger,
   open: openProp,
   onOpenChange,
+  onSelectPassage,
 }: PassageNavigatorProps = {}) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
@@ -81,7 +83,12 @@ export function PassageNavigator({
 
   function selectChapter(book: BookInfo, chapter: number) {
     const passageId = toPassageId(book.name, chapter);
-    openTab(passageId, `${book.name} ${chapter}`);
+    const label = `${book.name} ${chapter}`;
+    if (onSelectPassage) {
+      onSelectPassage(passageId, label);
+    } else {
+      openTab(passageId, label);
+    }
     handleOpenChange(false);
   }
 
