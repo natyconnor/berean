@@ -472,9 +472,10 @@ export function PassageView({
     ? "grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
     : "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5";
   const topGridClass = cn("grid", passageGridClass);
+  const passageContentGutterClass = isReadMode ? "pl-16 pr-6" : "pl-16 pr-5";
   const containerClass = isReadMode
-    ? "max-w-[1400px] mx-auto pl-24 pr-6 pb-16"
-    : "max-w-[1320px] mx-auto pl-24 pr-5 pb-16";
+    ? cn("max-w-[1400px] mx-auto pb-16", passageContentGutterClass)
+    : cn("max-w-[1320px] mx-auto pb-16", passageContentGutterClass);
   const focusStartVerse = focusRange?.startVerse;
   const focusEndVerse = focusRange?.endVerse;
   const focusRequestKey = hasFocusRange
@@ -580,8 +581,8 @@ export function PassageView({
   const passageKey = `${book}-${chapter}`;
 
   const headerInnerClass = isReadMode
-    ? "max-w-[1400px] mx-auto px-6"
-    : "max-w-[1320px] mx-auto px-5";
+    ? cn("max-w-[1400px] mx-auto", passageContentGutterClass)
+    : cn("max-w-[1320px] mx-auto", passageContentGutterClass);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
