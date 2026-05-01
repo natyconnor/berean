@@ -1,7 +1,8 @@
 import { TooltipButton } from "@/components/ui/tooltip-button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTabs } from "@/lib/use-tabs";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
+import { PassageNavigator } from "./passage-navigator";
 
 interface ChapterHeaderProps {
   book: string;
@@ -37,7 +38,24 @@ export function ChapterHeader({ book, chapter }: ChapterHeaderProps) {
         <ChevronLeft className="h-4 w-4" />
       </TooltipButton>
       <h1 className="text-2xl font-serif font-semibold tracking-tight">
-        {book} {chapter}
+        <PassageNavigator
+          onSelectPassage={(passageId, label) =>
+            navigateActiveTab(passageId, label)
+          }
+          trigger={
+            <TooltipButton
+              variant="ghost"
+              className="h-auto gap-1 rounded-md px-2 py-1 text-2xl font-serif font-semibold tracking-tight"
+              tooltip="Click to navigate to a specific Bible chapter"
+              aria-label="Navigate to a specific Bible chapter"
+            >
+              <span>
+                {book} {chapter}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            </TooltipButton>
+          }
+        />
       </h1>
       <TooltipButton
         variant="ghost"

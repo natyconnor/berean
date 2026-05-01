@@ -5,6 +5,7 @@ import { TabItem } from "./tab-item";
 import {
   Heart,
   LogOut,
+  Plus,
   Search,
   Settings,
   TableOfContents,
@@ -137,6 +138,21 @@ export function TabBar() {
               />
             ))}
           </AnimatePresence>
+          <div className="flex h-10 items-center border-r px-1">
+            <PassageNavigator
+              trigger={
+                <TooltipButton
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  tooltip="Open a new tab to a Bible chapter"
+                  aria-label="Open a new tab to a Bible chapter"
+                >
+                  <Plus className="h-4 w-4" />
+                </TooltipButton>
+              }
+            />
+          </div>
         </Reorder.Group>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
