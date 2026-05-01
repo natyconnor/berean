@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/natyconnor/berean/compare/v1.7.0...v1.7.1) (2026-05-01)
+
+
+### Bug Fixes
+
+* Align passage header with heart gutter ([#69](https://github.com/natyconnor/berean/issues/69)) ([99819ce](https://github.com/natyconnor/berean/commit/99819cef8fa24a93a081f002ba8f90770014fd43))
+
 ## [1.7.0](https://github.com/natyconnor/berean/compare/v1.6.1...v1.7.0) (2026-05-01)
 
 
