@@ -18,11 +18,12 @@ export interface StagedOnboardingValue {
   /**
    * `pending` means the trigger condition is reached and the hint has not
    * already been shown, completed, or dismissed. The display coordinator still
-   * decides which pending hint is allowed to render for this app load.
+   * decides which pending hint is allowed to render.
    */
   isHintPending: (hintId: FeatureHintId, trigger: boolean) => boolean;
   isHintDisplayActive: (hintId: FeatureHintId) => boolean;
-  requestHintDisplay: (hintId: FeatureHintId) => void;
+  requestHintDisplay: (hintId: FeatureHintId, eligible: boolean) => void;
+  releaseHintDisplay: (hintId: FeatureHintId) => void;
   markShown: (hintId: FeatureHintId) => void;
   complete: (hintId: FeatureHintId) => void;
   dismiss: (hintId: FeatureHintId) => void;

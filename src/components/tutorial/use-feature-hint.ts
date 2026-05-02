@@ -79,11 +79,20 @@ function useFeatureHintWithContext(
   const completed = ctx?.isHintCompleted(hintId) ?? false;
   const dismissed = ctx?.isHintDismissed(hintId) ?? false;
   const shown = ctx?.isHintShown(hintId) ?? false;
+  const requestHintDisplay = ctx?.requestHintDisplay;
+  const releaseHintDisplay = ctx?.releaseHintDisplay;
 
   useEffect(() => {
-    if (!ctx || !eligible || !useDisplayQueue) return;
-    ctx.requestHintDisplay(hintId);
-  }, [ctx, eligible, hintId, useDisplayQueue]);
+    if (!requestHintDisplay || !releaseHintDisplay || !useDisplayQueue) return;
+    requestHintDisplay(hintId, eligible);
+    return () => releaseHintDisplay(hintId);
+  }, [
+    eligible,
+    hintId,
+    releaseHintDisplay,
+    requestHintDisplay,
+    useDisplayQueue,
+  ]);
 
   if (!ctx) return NOOP_STATE;
 

@@ -21,3 +21,23 @@ export const FEATURE_HINTS = {
 } as const;
 
 export type FeatureHintId = (typeof FEATURE_HINTS)[keyof typeof FEATURE_HINTS];
+
+export const HINT_QUEUE_COOLDOWN_MS = 1 * 60 * 1000;
+
+export interface FeatureHintMetadata {
+  /**
+   * Higher-priority hints win when multiple eligible surfaces are mounted at
+   * the same time. Request order is used only as a tie-breaker.
+   */
+  priority: number;
+}
+
+export const FEATURE_HINT_METADATA: Record<FeatureHintId, FeatureHintMetadata> =
+  {
+    [FEATURE_HINTS.VERSE_LINKS_AFTER_NOTES]: { priority: 50 },
+    [FEATURE_HINTS.STARTER_TAGS_AFTER_FIRST_TAG]: { priority: 40 },
+    [FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART]: { priority: 80 },
+    [FEATURE_HINTS.STUDY_FIRST_OPEN_EXPLAINER]: { priority: 0 },
+    [FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY]: { priority: 70 },
+    [FEATURE_HINTS.READING_MODE_REVEAL]: { priority: 60 },
+  };

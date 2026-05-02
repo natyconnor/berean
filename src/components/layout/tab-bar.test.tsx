@@ -31,6 +31,7 @@ function StagedOnboardingTestProvider({ children }: { children: ReactNode }) {
         isHintPending: () => false,
         isHintDisplayActive: () => false,
         requestHintDisplay: () => {},
+        releaseHintDisplay: () => {},
         markShown: () => {},
         complete: () => {},
         dismiss: () => {},
