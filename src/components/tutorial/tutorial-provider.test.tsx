@@ -147,18 +147,23 @@ describe("TutorialProvider", () => {
     vi.unstubAllGlobals();
   });
 
-  it("walks through the trimmed two-step first-run tour and never opens settings", async () => {
+  it("walks through the first-run tour and never opens settings", async () => {
     const user = userEvent.setup();
 
     renderProvider();
 
+    expect(await screen.findByText("Welcome to Berean")).toBeInTheDocument();
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
     expect(await screen.findByText("Add your first note")).toBeInTheDocument();
-    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(await screen.findByText("Write what stood out")).toBeInTheDocument();
-    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    expect(screen.getByText("3 / 3")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Done" }));
 
@@ -177,7 +182,7 @@ describe("TutorialProvider", () => {
 
     renderProvider();
 
-    expect(await screen.findByText("Add your first note")).toBeInTheDocument();
+    expect(await screen.findByText("Welcome to Berean")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Skip" }));
 
@@ -189,6 +194,17 @@ describe("TutorialProvider", () => {
         ([args]) => (args as { to?: string }).to === "/settings",
       ),
     ).toBe(false);
+  });
+
+  it("waits for passage targets before showing the first-run tour", async () => {
+    renderProvider(<div>No passage content yet</div>);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Welcome to Berean")).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("Preparing this step..."),
+    ).not.toBeInTheDocument();
   });
 
   it("clears persisted search params after the search tutorial finishes", async () => {

@@ -41,6 +41,13 @@ interface TutorialStatus {
 
 const MAIN_TOUR_STEPS: TourStep[] = [
   {
+    id: "welcome",
+    title: "Welcome to Berean",
+    description:
+      "Berean helps you slow down with Scripture, capture what you notice, and build a searchable study library over time. Let's start with a simple note.",
+    targetIds: [],
+  },
+  {
     id: "add-note",
     title: "Add your first note",
     description:
@@ -132,9 +139,24 @@ function buildTargetSelector(targetIds: string[]): string {
 
 function getTargetElements(targetIds: string[]): HTMLElement[] {
   if (typeof document === "undefined") return [];
+  if (targetIds.length === 0) return [];
   return Array.from(
     document.querySelectorAll<HTMLElement>(buildTargetSelector(targetIds)),
   );
+}
+
+function stepRequiresTarget(step: TourStep): boolean {
+  return step.targetIds.length > 0;
+}
+
+function isStepTargetReady(step: TourStep): boolean {
+  if (!stepRequiresTarget(step)) return true;
+  return getUnionRect(getTargetElements(step.targetIds)) !== null;
+}
+
+function isTourReadyToStart(tour: TutorialTourName): boolean {
+  const firstTargetedStep = getStepList(tour).find(stepRequiresTarget);
+  return firstTargetedStep ? isStepTargetReady(firstTargetedStep) : true;
 }
 
 function getUnionRect(elements: HTMLElement[]): DOMRect | null {
@@ -225,16 +247,17 @@ export function TutorialProvider({
   const completeFocusModeTutorial = useMutation(
     api.userSettings.completeFocusModeTutorial,
   );
-  const [activeTour, setActiveTour] = useState<TutorialTourName | null>(() =>
+  const [activeTour, setActiveTour] = useState<TutorialTourName | null>(null);
+  const [pendingTour, setPendingTour] = useState<TutorialTourName | null>(() =>
     readActiveTutorialTour(),
   );
-  const [pendingTour, setPendingTour] = useState<TutorialTourName | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [locallyCompletedTours, setLocallyCompletedTours] = useState<
     Partial<Record<TutorialTourName, true>>
   >({});
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [cardAnchorRect, setCardAnchorRect] = useState<DOMRect | null>(null);
+  const [measuredStepId, setMeasuredStepId] = useState<string | null>(null);
   const finishingTourRef = useRef<TutorialTourName | null>(null);
 
   const isMainComplete =
@@ -252,13 +275,22 @@ export function TutorialProvider({
   const isSearchRoute = location.pathname === "/search";
 
   useEffect(() => {
+    if (pendingTour) return;
     writeActiveTutorialTour(activeTour);
-  }, [activeTour]);
+  }, [activeTour, pendingTour]);
 
   useEffect(() => {
     if (!activeStep) {
       setTargetRect(null);
       setCardAnchorRect(null);
+      setMeasuredStepId(null);
+      return;
+    }
+
+    if (!stepRequiresTarget(activeStep)) {
+      setTargetRect(null);
+      setCardAnchorRect(null);
+      setMeasuredStepId(activeStep.id);
       return;
     }
 
@@ -272,6 +304,7 @@ export function TutorialProvider({
       const elements = getTargetElements(targetIds);
       const rect = getUnionRect(elements);
       setTargetRect(rect);
+      setMeasuredStepId(activeStep.id);
 
       if (cardAnchorIds) {
         const anchorElements = getTargetElements(cardAnchorIds);
@@ -307,11 +340,9 @@ export function TutorialProvider({
 
     if (!isMainComplete) {
       writeActiveTutorialTour("main");
-      if (isPassageRoute) {
-        setActiveTour("main");
-        setStepIndex(0);
-      } else {
-        setPendingTour("main");
+      setPendingTour("main");
+      setStepIndex(0);
+      if (!isPassageRoute) {
         void navigate({
           to: "/passage/$passageId",
           params: { passageId: "John-1" },
@@ -350,21 +381,37 @@ export function TutorialProvider({
   useEffect(() => {
     if (!pendingTour) return;
 
-    if (pendingTour === "main" && isPassageRoute) {
-      setActiveTour("main");
-      if (activeTour !== "main") {
+    let frameId = 0;
+    const startWhenReady = () => {
+      if (pendingTour === "main") {
+        if (!isPassageRoute) {
+          void navigate({
+            to: "/passage/$passageId",
+            params: { passageId: "John-1" },
+            search: {},
+            replace: true,
+          });
+          return;
+        }
+      } else if (pendingTour === "search") {
+        if (!isSearchRoute) return;
+      }
+
+      if (!isTourReadyToStart(pendingTour)) {
+        frameId = window.requestAnimationFrame(startWhenReady);
+        return;
+      }
+
+      setActiveTour(pendingTour);
+      if (activeTour !== pendingTour) {
         setStepIndex(0);
       }
       setPendingTour(null);
-      return;
-    }
+    };
 
-    if (pendingTour === "search" && isSearchRoute) {
-      setActiveTour("search");
-      setStepIndex(0);
-      setPendingTour(null);
-    }
-  }, [activeTour, isPassageRoute, isSearchRoute, pendingTour]);
+    startWhenReady();
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeTour, isPassageRoute, isSearchRoute, navigate, pendingTour]);
 
   const finalizeTour = useCallback(
     async (
@@ -505,12 +552,24 @@ export function TutorialProvider({
     ],
   );
 
-  const spotlightStyle: CSSProperties | undefined = targetRect
+  const activeStepRequiresTarget =
+    activeStep !== null && stepRequiresTarget(activeStep);
+  const hasCurrentStepMeasurement =
+    activeStep !== null && measuredStepId === activeStep.id;
+  const currentTargetRect = hasCurrentStepMeasurement ? targetRect : null;
+  const currentCardAnchorRect = hasCurrentStepMeasurement
+    ? cardAnchorRect
+    : null;
+  const shouldRenderActiveStep =
+    activeStep !== null &&
+    (!activeStepRequiresTarget || currentTargetRect !== null);
+
+  const spotlightStyle: CSSProperties | undefined = currentTargetRect
     ? {
-        left: Math.max(0, targetRect.left - SPOTLIGHT_PADDING),
-        top: Math.max(0, targetRect.top - SPOTLIGHT_PADDING),
-        width: targetRect.width + SPOTLIGHT_PADDING * 2,
-        height: targetRect.height + SPOTLIGHT_PADDING * 2,
+        left: Math.max(0, currentTargetRect.left - SPOTLIGHT_PADDING),
+        top: Math.max(0, currentTargetRect.top - SPOTLIGHT_PADDING),
+        width: currentTargetRect.width + SPOTLIGHT_PADDING * 2,
+        height: currentTargetRect.height + SPOTLIGHT_PADDING * 2,
         boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.58)",
       }
     : undefined;
@@ -518,7 +577,7 @@ export function TutorialProvider({
   return (
     <TutorialContext.Provider value={contextValue}>
       {children}
-      {activeTour && activeStep ? (
+      {activeTour && activeStep && shouldRenderActiveStep ? (
         <>
           <div className="pointer-events-auto fixed inset-0 z-140 bg-transparent" />
           {spotlightStyle ? (
@@ -531,7 +590,7 @@ export function TutorialProvider({
           )}
           <section
             className="fixed z-142 rounded-xl border bg-card p-4 shadow-2xl"
-            style={getCardPosition(cardAnchorRect ?? targetRect)}
+            style={getCardPosition(currentCardAnchorRect ?? currentTargetRect)}
           >
             <div className="space-y-3">
               <div className="space-y-1">
@@ -548,7 +607,7 @@ export function TutorialProvider({
                 </p>
               </div>
 
-              {targetRect === null ? (
+              {activeStepRequiresTarget && currentTargetRect === null ? (
                 <p className="text-xs text-muted-foreground">
                   Preparing this step...
                 </p>
@@ -583,7 +642,9 @@ export function TutorialProvider({
                   <Button
                     size="sm"
                     onClick={handleNext}
-                    disabled={targetRect === null}
+                    disabled={
+                      activeStepRequiresTarget && currentTargetRect === null
+                    }
                   >
                     {stepIndex === activeSteps.length - 1 ? "Done" : "Next"}
                   </Button>
