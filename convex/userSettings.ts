@@ -27,8 +27,6 @@ async function getOrCreateUserSettings(
 }
 
 const tutorialStatusValue = v.object({
-  needsStarterTagsSetup: v.boolean(),
-  starterTagsSetupCompletedAt: v.optional(v.number()),
   mainTutorialCompletedAt: v.optional(v.number()),
   advancedSearchTutorialCompletedAt: v.optional(v.number()),
   focusModeTutorialCompletedAt: v.optional(v.number()),
@@ -50,31 +48,6 @@ export const getTutorialStatus = query({
       .first();
 
     return resolveTutorialStatus(settings);
-  },
-});
-
-export const completeStarterTagsSetup = mutation({
-  args: {},
-  returns: v.object({
-    completedAt: v.number(),
-  }),
-  handler: async (ctx) => {
-    const userId = await getCurrentUserId(ctx);
-    const now = Date.now();
-    const settings = await getOrCreateUserSettings(ctx, userId, now);
-
-    if (!settings) {
-      throw new Error("Unable to initialize user settings");
-    }
-
-    await ctx.db.patch(settings._id, {
-      starterTagsSetupCompletedAt: now,
-      updatedAt: now,
-    });
-
-    return {
-      completedAt: now,
-    };
   },
 });
 

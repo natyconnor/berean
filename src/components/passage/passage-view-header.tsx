@@ -10,6 +10,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { FEATURE_HINTS } from "@/lib/feature-hints";
+import { shouldRevealReadingMode } from "@/lib/staged-onboarding-thresholds";
+import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
+import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
+import { FeatureCallout } from "@/components/tutorial/feature-callout";
 
 type PassageViewMode = "compose" | "read";
 type NoteVisibility = "all" | "noted";
@@ -25,6 +30,10 @@ interface PassageViewHeaderProps {
   isFocusMode: boolean;
   hasAnyNotes: boolean;
   noteVisibility: NoteVisibility;
+  /** Number of single-verse notes in this chapter, used for reading-mode reveal trigger. */
+  chapterNotesCount: number;
+  /** Maximum single-verse note count on any one verse in this chapter. */
+  maxNotesPerVerse: number;
   setViewModeWithNotesReset: (next: PassageViewMode) => void;
   setNoteVisibility: (next: NoteVisibility) => void;
   onToggleFocusMode: () => void;
@@ -41,10 +50,32 @@ export function PassageViewHeader({
   isFocusMode,
   hasAnyNotes,
   noteVisibility,
+  chapterNotesCount,
+  maxNotesPerVerse,
   setViewModeWithNotesReset,
   setNoteVisibility,
   onToggleFocusMode,
 }: PassageViewHeaderProps) {
+  const stagedOnboarding = useOptionalStagedOnboarding();
+  const milestones = stagedOnboarding?.milestones;
+  const readingRevealReached = milestones
+    ? shouldRevealReadingMode(milestones, {
+        chapterNotesCount,
+        maxNotesPerVerse,
+      })
+    : false;
+  const readingHint = useFeatureHint(
+    FEATURE_HINTS.READING_MODE_REVEAL,
+    readingRevealReached,
+  );
+  // Soft-hide rule: only show the Compose/Read toggle once Wave 5 has fired,
+  // or once the user has acknowledged it. This way, restored state that puts
+  // a returning user in read mode keeps the toggle visible too.
+  const showViewModeToggle =
+    readingRevealReached ||
+    readingHint.completed ||
+    readingHint.dismissed ||
+    isReadMode;
   return (
     <div
       className={cn(
@@ -140,37 +171,84 @@ export function PassageViewHeader({
                   No notes for this chapter
                 </p>
               )}
-              <div
-                className="inline-flex items-center rounded-md border bg-background p-0.5"
-                data-tour-id="passage-view-mode-toggle"
-              >
-                <Button
-                  size="xs"
-                  variant={
-                    effectiveViewMode === "compose" ? "secondary" : "ghost"
-                  }
-                  onClick={() => setViewModeWithNotesReset("compose")}
-                  className="gap-1.5"
+              {showViewModeToggle ? (
+                <FeatureCallout
+                  state={readingHint}
+                  title="Try Reading Mode"
+                  description="This chapter has enough notes that Reading Mode can help you review them alongside the passage. Switch any time."
+                  primaryActionLabel="Switch to Read"
+                  onPrimaryAction={() => setViewModeWithNotesReset("read")}
+                  side="bottom"
+                  align="end"
                 >
-                  <Pencil className="h-3 w-3" />
-                  Compose
-                  <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
-                    C
-                  </kbd>
-                </Button>
-                <Button
-                  size="xs"
-                  variant={effectiveViewMode === "read" ? "secondary" : "ghost"}
-                  onClick={() => setViewModeWithNotesReset("read")}
-                  className="gap-1.5"
-                >
-                  <BookOpen className="h-3 w-3" />
-                  Read
-                  <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
-                    R
-                  </kbd>
-                </Button>
-              </div>
+                  <div
+                    className="inline-flex items-center rounded-md border bg-background p-0.5"
+                    data-tour-id="passage-view-mode-toggle"
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="xs"
+                          variant={
+                            effectiveViewMode === "compose"
+                              ? "secondary"
+                              : "ghost"
+                          }
+                          onClick={() => {
+                            setViewModeWithNotesReset("compose");
+                            if (
+                              !readingHint.completed &&
+                              !readingHint.dismissed
+                            ) {
+                              readingHint.complete();
+                            }
+                          }}
+                          className="gap-1.5"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Compose
+                          <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                            C
+                          </kbd>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Write and organize notes for the current passage.
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="xs"
+                          variant={
+                            effectiveViewMode === "read" ? "secondary" : "ghost"
+                          }
+                          onClick={() => {
+                            setViewModeWithNotesReset("read");
+                            if (
+                              !readingHint.completed &&
+                              !readingHint.dismissed
+                            ) {
+                              readingHint.complete();
+                            }
+                          }}
+                          className="gap-1.5"
+                        >
+                          <BookOpen className="h-3 w-3" />
+                          Read
+                          <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                            R
+                          </kbd>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Review your notes alongside the passage in a wider
+                        layout.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </FeatureCallout>
+              ) : null}
             </div>
           </div>
         </div>

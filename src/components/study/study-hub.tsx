@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { StudySessionCard } from "./study-session-card";
 import { DeleteStudySessionDialog } from "./delete-study-session-dialog";
 import { formatScopeSummary } from "./study-scope-summary";
+import { StudyModeExplainerDialog } from "./study-mode-explainer-dialog";
 
 type DeleteCandidate = {
   id: Id<"studySessions">;
@@ -152,6 +153,7 @@ export function StudyHub() {
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
       />
+      <StudyModeExplainerDialog />
     </div>
   );
 }

@@ -16,6 +16,15 @@ import {
 } from "@/lib/note-inline-content";
 import { InlineVerseEditor } from "@/components/notes/editor/inline-verse-editor";
 import { useNoteEditorTour } from "@/components/tutorial/use-note-editor-tour";
+import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
+import { InlineFeatureCallout } from "@/components/tutorial/inline-feature-callout";
+import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
+import { useNavigate } from "@tanstack/react-router";
+import { FEATURE_HINTS } from "@/lib/feature-hints";
+import {
+  shouldRevealStarterTags,
+  shouldRevealVerseLinks,
+} from "@/lib/staged-onboarding-thresholds";
 import {
   formatCommandOrControlShortcut,
   isApplePlatform,
@@ -67,6 +76,25 @@ export function NoteEditor({
   const catalog = useQuery(api.tags.listCatalog);
   const resolveTagStyle = useStarterTagBadgeStyle();
   const tour = useNoteEditorTour();
+  const stagedOnboarding = useOptionalStagedOnboarding();
+  const navigate = useNavigate();
+  const verseLinkRevealReached = stagedOnboarding
+    ? shouldRevealVerseLinks(stagedOnboarding.milestones)
+    : false;
+  const verseLinkHint = useFeatureHint(
+    FEATURE_HINTS.VERSE_LINKS_AFTER_NOTES,
+    verseLinkRevealReached,
+  );
+  const starterTagsRevealReached = stagedOnboarding
+    ? shouldRevealStarterTags(stagedOnboarding.milestones)
+    : false;
+  // Only nudge the user about starter tags after they've added at least one
+  // tag to this note in-session. This keeps the suggestion contextual to the
+  // tag picker workflow they're already engaged in.
+  const starterTagsHint = useFeatureHint(
+    FEATURE_HINTS.STARTER_TAGS_AFTER_FIRST_TAG,
+    starterTagsRevealReached && tags.length > 0,
+  );
 
   const availableTags = useMemo(
     () => (catalog ?? []).map((entry) => entry.tag),
@@ -172,6 +200,12 @@ export function NoteEditor({
         </TooltipButton>
       </div>
 
+      <InlineFeatureCallout
+        state={verseLinkHint}
+        title="Link to other verses with @"
+        description="Type @ followed by a reference like Genesis 1:1 to drop in a clickable verse link inside your note."
+      />
+
       <InlineVerseEditor
         initialBody={initialEditorBody}
         verseRef={verseRef}
@@ -244,6 +278,15 @@ export function NoteEditor({
               </TooltipButton>
             </>
           }
+        />
+        <InlineFeatureCallout
+          state={starterTagsHint}
+          title="Want a head start organizing themes?"
+          description="A curated starter tag library is available in Settings — you can pick categories that match how you study."
+          primaryActionLabel="Browse starter tags"
+          onPrimaryAction={() => {
+            void navigate({ to: "/settings" });
+          }}
         />
       </div>
 

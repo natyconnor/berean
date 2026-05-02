@@ -333,8 +333,6 @@ export function PassageView({
 
   const { forceAddButtonVisible, displaySingleVerseNotes } = usePassageViewTour(
     {
-      book,
-      chapter,
       effectiveViewMode,
       setViewMode: setViewModeWithNotesReset,
       singleVerseNotes,
@@ -366,6 +364,21 @@ export function PassageView({
   }, [displaySingleVerseNotes, passageNotesByAnchor]);
 
   const hasAnyNotes = noteById.size > 0;
+
+  const chapterNoteStats = useMemo(() => {
+    let chapterNotesCount = 0;
+    let maxNotesPerVerse = 0;
+    for (const notes of singleVerseNotes.values()) {
+      chapterNotesCount += notes.length;
+      if (notes.length > maxNotesPerVerse) {
+        maxNotesPerVerse = notes.length;
+      }
+    }
+    for (const notes of passageNotesByAnchor.values()) {
+      chapterNotesCount += notes.length;
+    }
+    return { chapterNotesCount, maxNotesPerVerse };
+  }, [passageNotesByAnchor, singleVerseNotes]);
 
   const filteredVerses = useMemo((): VerseItem[] => {
     if (!data) return [];
@@ -606,6 +619,8 @@ export function PassageView({
         isFocusMode={isFocusMode}
         hasAnyNotes={hasAnyNotes}
         noteVisibility={noteVisibility}
+        chapterNotesCount={chapterNoteStats.chapterNotesCount}
+        maxNotesPerVerse={chapterNoteStats.maxNotesPerVerse}
         setViewModeWithNotesReset={setViewModeWithNotesReset}
         setNoteVisibility={handleSetNoteVisibility}
         onToggleFocusMode={handleFocusModeToggle}

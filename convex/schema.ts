@@ -48,6 +48,18 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_updatedAt", ["userId", "updatedAt"]),
 
+  userFeatureHints: defineTable({
+    userId: v.id("users"),
+    hintId: v.string(),
+    shownAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    dismissedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_hintId", ["userId", "hintId"]),
+
   verseRefs: defineTable({
     userId: v.optional(v.id("users")),
     book: v.string(),

@@ -1,19 +1,12 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { FOCUS_MODE_CENTER_VERSE } from "@/components/tutorial/focus-mode-tour";
 import { useTutorial } from "@/components/tutorial/tutorial-context";
-import {
-  buildTutorialReadingNotes,
-  TUTORIAL_READING_BOOK,
-  TUTORIAL_READING_CHAPTER,
-} from "@/components/tutorial/tutorial-reading-notes";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { EditorSlot } from "./use-passage-notes-ui-state";
 
 type PassageViewMode = "compose" | "read";
 
 interface UsePassageViewTourParams {
-  book: string;
-  chapter: number;
   effectiveViewMode: PassageViewMode;
   setViewMode: (mode: PassageViewMode) => void;
   singleVerseNotes: Map<number, NoteWithRef[]>;
@@ -29,9 +22,13 @@ export interface PassageViewTourState {
   displaySingleVerseNotes: Map<number, NoteWithRef[]>;
 }
 
+/**
+ * Drives passage-view side effects required by the trimmed first-run tour
+ * (`add-note`, `note-body`) and the focus-mode tour. Reading-mode and
+ * verse-link step handling have been removed because those features are now
+ * taught contextually via staged onboarding hints.
+ */
 export function usePassageViewTour({
-  book,
-  chapter,
   effectiveViewMode,
   setViewMode,
   singleVerseNotes,
@@ -48,7 +45,6 @@ export function usePassageViewTour({
   const handleAddNoteRef = useRef(handleAddNote);
   const openVerseNotesRef = useRef(openVerseNotes);
   const openVerseKeysRef = useRef(openVerseKeys);
-  const readingTourEnteredRef = useRef(false);
 
   useEffect(() => {
     handleClickAwayRef.current = handleClickAway;
@@ -66,12 +62,7 @@ export function usePassageViewTour({
 
   const isAddNoteStep = activeTour === "main" && activeStep?.id === "add-note";
   const isNoteEditorStep =
-    activeTour === "main" &&
-    (activeStep?.id === "note-body" ||
-      activeStep?.id === "note-tags" ||
-      activeStep?.id === "inline-links");
-  const isReadingModeStep =
-    activeTour === "main" && activeStep?.id === "reading-mode";
+    activeTour === "main" && activeStep?.id === "note-body";
 
   useEffect(() => {
     if (activeTour !== "focusMode") return;
@@ -103,37 +94,8 @@ export function usePassageViewTour({
     }
   }, [openEditors, isNoteEditorStep]);
 
-  // Do not list handleClickAway/setViewMode as deps: handleClickAway always
-  // allocates new Sets, which recreates setViewModeWithNotesReset in the parent
-  // and would retrigger this effect forever (max update depth on reading-mode).
-  useEffect(() => {
-    if (!isReadingModeStep) {
-      readingTourEnteredRef.current = false;
-      return;
-    }
-    if (!readingTourEnteredRef.current) {
-      readingTourEnteredRef.current = true;
-      handleClickAwayRef.current();
-    }
-    if (effectiveViewMode !== "read") {
-      setViewModeRef.current("read");
-    }
-  }, [effectiveViewMode, isReadingModeStep]);
-
-  const tutorialReadingNotes =
-    isReadingModeStep &&
-    book === TUTORIAL_READING_BOOK &&
-    chapter === TUTORIAL_READING_CHAPTER
-      ? buildTutorialReadingNotes(book, chapter)
-      : null;
-
-  const displaySingleVerseNotes = useMemo(
-    () => tutorialReadingNotes ?? singleVerseNotes,
-    [tutorialReadingNotes, singleVerseNotes],
-  );
-
   return {
     forceAddButtonVisible: isAddNoteStep,
-    displaySingleVerseNotes,
+    displaySingleVerseNotes: singleVerseNotes,
   };
 }

@@ -22,7 +22,14 @@ import { readSearchWorkspaceState } from "@/lib/search-workspace-state";
 import { logInteraction } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
-import { useOptionalTutorial } from "@/components/tutorial/tutorial-context";
+import { FEATURE_HINTS } from "@/lib/feature-hints";
+import {
+  shouldRevealSearch,
+  shouldRevealStudy,
+} from "@/lib/staged-onboarding-thresholds";
+import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
+import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
+import { FeatureCallout } from "@/components/tutorial/feature-callout";
 
 export function TabBar() {
   const {
@@ -41,8 +48,27 @@ export function TabBar() {
   const isStudyRoute = location.pathname.startsWith("/study");
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const savedSearchState = readSearchWorkspaceState();
-  const tutorial = useOptionalTutorial();
-  const isToolbarStep = tutorial?.isStepActive("main", "toolbar") ?? false;
+  const stagedOnboarding = useOptionalStagedOnboarding();
+  const milestones = stagedOnboarding?.milestones;
+  const studyRevealReached = milestones ? shouldRevealStudy(milestones) : false;
+  const searchRevealReached = milestones
+    ? shouldRevealSearch(milestones)
+    : false;
+  const studyHint = useFeatureHint(
+    FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART,
+    studyRevealReached,
+  );
+  const searchHint = useFeatureHint(
+    FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY,
+    searchRevealReached,
+  );
+  // Soft-hide rule: only show Study/Search toolbar buttons once the user has
+  // reached the milestone, OR once they've already acknowledged the hint.
+  // The global hint queue prevents multiple reveal callouts from stacking.
+  const showStudyButton =
+    studyRevealReached || studyHint.completed || studyHint.dismissed;
+  const showSearchButton =
+    searchRevealReached || searchHint.completed || searchHint.dismissed;
   const searchShortcutLabel = formatCommandOrControlShortcut("K");
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
   const settingsShortcutLabel = formatCommandOrControlShortcut(",");
@@ -160,46 +186,92 @@ export function TabBar() {
         className="flex items-center gap-1 mx-1 shrink-0"
         data-tour-id="app-toolbar"
       >
-        <TooltipButton
-          asChild
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-8 w-8",
-            isSearchRoute &&
-              "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
-          )}
-          tooltip={`Open search workspace (${searchShortcutLabel})`}
-          aria-label="Open search workspace"
-          data-tour-id="app-search-button"
-        >
-          <Link
-            to="/search"
-            search={searchLinkState}
-            onClick={() => logInteraction("toolbar", "search-workspace-opened")}
+        {showSearchButton ? (
+          <FeatureCallout
+            state={searchHint}
+            title="Search your notes"
+            description="Your library is big enough to make searching useful. Open the search workspace to filter by tags or query text."
+            primaryActionLabel="Open search"
+            onPrimaryAction={() => {
+              logInteraction("toolbar", "search-workspace-opened", {
+                trigger: "reveal-callout",
+              });
+              void navigate({ to: "/search", search: searchLinkState });
+            }}
+            side="bottom"
+            align="end"
           >
-            <Search className="h-4 w-4" />
-          </Link>
-        </TooltipButton>
-        <TooltipButton
-          asChild
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-8 w-8",
-            isStudyRoute &&
-              "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
-          )}
-          tooltip="Open study"
-          aria-label="Open study"
-        >
-          <Link
-            to="/study"
-            onClick={() => logInteraction("toolbar", "study-opened")}
+            <TooltipButton
+              asChild
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8",
+                isSearchRoute &&
+                  "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
+              )}
+              tooltip={`Open search workspace (${searchShortcutLabel})`}
+              aria-label="Open search workspace"
+              data-tour-id="app-search-button"
+            >
+              <Link
+                to="/search"
+                search={searchLinkState}
+                onClick={() => {
+                  logInteraction("toolbar", "search-workspace-opened");
+                  // Tapping the revealed button counts as completing the hint,
+                  // even if the callout was already shown on an earlier load.
+                  if (!searchHint.completed && !searchHint.dismissed) {
+                    searchHint.complete();
+                  }
+                }}
+              >
+                <Search className="h-4 w-4" />
+              </Link>
+            </TooltipButton>
+          </FeatureCallout>
+        ) : null}
+        {showStudyButton ? (
+          <FeatureCallout
+            state={studyHint}
+            title="Study is now available"
+            description="You've hearted a verse, so Study can help you review hearted verses, summarize notes, and run practice activities."
+            primaryActionLabel="Open Study"
+            onPrimaryAction={() => {
+              logInteraction("toolbar", "study-opened", {
+                trigger: "reveal-callout",
+              });
+              void navigate({ to: "/study" });
+            }}
+            side="bottom"
+            align="end"
           >
-            <BookOpen className="h-4 w-4" />
-          </Link>
-        </TooltipButton>
+            <TooltipButton
+              asChild
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8",
+                isStudyRoute &&
+                  "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
+              )}
+              tooltip="Open study"
+              aria-label="Open study"
+            >
+              <Link
+                to="/study"
+                onClick={() => {
+                  logInteraction("toolbar", "study-opened");
+                  if (!studyHint.completed && !studyHint.dismissed) {
+                    studyHint.complete();
+                  }
+                }}
+              >
+                <BookOpen className="h-4 w-4" />
+              </Link>
+            </TooltipButton>
+          </FeatureCallout>
+        ) : null}
         <PassageNavigator
           open={passageNavigatorOpen}
           onOpenChange={handlePassageNavigatorOpenChange}
@@ -252,9 +324,6 @@ export function TabBar() {
                 <Settings className="h-4 w-4" />
               </Link>
             </TooltipButton>
-          )}
-          {isToolbarStep && (
-            <span className="pointer-events-none absolute -inset-1 animate-pulse rounded-full ring-2 ring-sky-400" />
           )}
         </div>
         <ThemeDropdown />
