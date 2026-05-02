@@ -16,6 +16,7 @@ import {
 } from "./study-scope-book-picker";
 import { formatScopeSummary, type StudyScope } from "./study-scope-summary";
 import type { TagMatchMode } from "@/lib/tag-utils";
+import { StudyModeExplainerDialog } from "./study-mode-explainer-dialog";
 
 export function StudyScopeBuilder() {
   const navigate = useNavigate();
@@ -229,6 +230,7 @@ export function StudyScopeBuilder() {
           </Button>
         </div>
       </footer>
+      <StudyModeExplainerDialog />
     </div>
   );
 }

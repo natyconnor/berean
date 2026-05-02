@@ -1,15 +1,12 @@
-import { Navigate, Outlet, useLocation } from "@tanstack/react-router";
+import { Outlet, useLocation } from "@tanstack/react-router";
 import { useConvexAuth } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppRefreshPrompt } from "@/components/app-refresh-prompt";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/components/login-page";
+import { StagedOnboardingProvider } from "@/components/tutorial/staged-onboarding-provider";
 import { TutorialProvider } from "@/components/tutorial/tutorial-provider";
-import {
-  readActiveTutorialTour,
-  readSuppressSettingsRedirectAfterSkip,
-} from "@/components/tutorial/tutorial-session";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppVersionMonitor } from "@/hooks/use-app-version-monitor";
 import { usePreviewAutoSignIn } from "@/hooks/use-preview-auto-sign-in";
@@ -20,7 +17,6 @@ import {
 } from "@/lib/hero-backdrop";
 import { TabProvider } from "@/lib/tab-context";
 import { ThemeProvider } from "@/lib/theme-provider";
-import { shouldRedirectToSettings } from "@/lib/tutorial-settings-redirect";
 import { api } from "../../../convex/_generated/api";
 
 const MIN_SPLASH_MS = 600;
@@ -35,17 +31,23 @@ export function RootRouteComponent() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const location = useLocation();
   const isPublicLegalPath = PUBLIC_LEGAL_PATHS.has(location.pathname);
-  const isSettingsRoute = location.pathname.startsWith("/settings");
-  const tutorialStatus = useQuery(
-    api.userSettings.getTutorialStatus,
+  const onboardingStatus = useQuery(
+    api.onboarding.getOnboardingStatus,
     isAuthenticated ? {} : "skip",
   );
-  const activeTutorialTour = readActiveTutorialTour();
-  const suppressSettingsRedirectAfterSkip =
-    readSuppressSettingsRedirectAfterSkip();
+  const tutorialStatus = useMemo(() => {
+    if (!onboardingStatus) return undefined;
+    return {
+      mainTutorialCompletedAt: onboardingStatus.mainTutorialCompletedAt,
+      advancedSearchTutorialCompletedAt:
+        onboardingStatus.advancedSearchTutorialCompletedAt,
+      focusModeTutorialCompletedAt:
+        onboardingStatus.focusModeTutorialCompletedAt,
+      categoryColors: onboardingStatus.categoryColors,
+    };
+  }, [onboardingStatus]);
   const lastAuthStateRef = useRef<string | null>(null);
   const lastRouteKeyRef = useRef<string | null>(null);
-  const lastSettingsRedirectPathRef = useRef<string | null>(null);
   const protectedShellReadyRef = useRef(false);
 
   const alreadyReady = !isLoading && isAuthenticated;
@@ -102,13 +104,6 @@ export function RootRouteComponent() {
   const isReady = !isLoading && minTimePassed;
   const authBootstrapShowingRecovery = authBootstrapTimedOut && isLoading;
   const effectiveReady = isReady || authBootstrapShowingRecovery;
-  const shouldShowSettingsRedirect = shouldRedirectToSettings({
-    isSettingsRoute,
-    needsStarterTagsSetup: tutorialStatus?.needsStarterTagsSetup,
-    mainTutorialCompletedAt: tutorialStatus?.mainTutorialCompletedAt,
-    activeTutorialTour,
-    suppressRedirectAfterSkip: suppressSettingsRedirectAfterSkip,
-  });
 
   useEffect(() => {
     const authState = isLoading
@@ -141,21 +136,8 @@ export function RootRouteComponent() {
     protectedShellReadyRef.current = true;
     logInteraction("app", "protected-shell-ready", {
       path: location.pathname,
-      needsStarterTagsSetup: tutorialStatus.needsStarterTagsSetup,
     });
   }, [isAuthenticated, isReady, location.pathname, tutorialStatus]);
-
-  useEffect(() => {
-    if (!shouldShowSettingsRedirect) {
-      lastSettingsRedirectPathRef.current = null;
-      return;
-    }
-    if (lastSettingsRedirectPathRef.current === location.pathname) return;
-    lastSettingsRedirectPathRef.current = location.pathname;
-    logInteraction("app", "redirect-to-settings", {
-      fromPath: location.pathname,
-    });
-  }, [location.pathname, shouldShowSettingsRedirect]);
 
   const retryAuthBootstrap = () => {
     logInteraction("app", "auth-bootstrap-retry-navigation", {});
@@ -183,7 +165,7 @@ export function RootRouteComponent() {
         onRetryConnection={retryAuthBootstrap}
       />
     );
-  } else if (tutorialStatus === undefined) {
+  } else if (tutorialStatus === undefined || onboardingStatus === undefined) {
     content = (
       <div className="fixed inset-0">
         <div
@@ -196,18 +178,22 @@ export function RootRouteComponent() {
         />
       </div>
     );
-  } else if (shouldShowSettingsRedirect) {
-    content = <Navigate to="/settings" replace />;
   } else {
     content = (
       <ThemeProvider>
         <TabProvider>
           <TooltipProvider>
-            <TutorialProvider tutorialStatus={tutorialStatus}>
-              <AppShell>
-                <Outlet />
-              </AppShell>
-            </TutorialProvider>
+            <StagedOnboardingProvider
+              milestones={onboardingStatus.milestones}
+              hints={onboardingStatus.hints}
+              isLoading={false}
+            >
+              <TutorialProvider tutorialStatus={tutorialStatus}>
+                <AppShell>
+                  <Outlet />
+                </AppShell>
+              </TutorialProvider>
+            </StagedOnboardingProvider>
           </TooltipProvider>
         </TabProvider>
       </ThemeProvider>

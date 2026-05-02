@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readSearchWorkspaceState } from "@/lib/search-workspace-state";
 import { TutorialProvider } from "./tutorial-provider";
-import { readSuppressSettingsRedirectAfterSkip } from "./tutorial-session";
 
 const mocks = vi.hoisted(() => {
   const location = { pathname: "/passage/John-1" };
@@ -68,26 +68,36 @@ function TutorialTargets() {
       <div data-tour-id="passage-verse-1">verse</div>
       <div data-tour-id="passage-add-note">add note</div>
       <div data-tour-id="note-editor-body">note body</div>
-      <div data-tour-id="note-editor-link-demo">link demo</div>
-      <div data-tour-id="note-editor-tags">tags</div>
-      <div data-tour-id="passage-view-mode-toggle">reading mode</div>
-      <div data-tour-id="app-toolbar">toolbar</div>
-      <div data-tour-id="settings-import-section">import notes</div>
-      <div data-tour-id="settings-starter-tags-section">starter tags</div>
-      <div data-tour-id="settings-add-all-starter-tags">add starter tags</div>
-      <div data-tour-id="settings-starter-tag-categories">
-        starter categories
-      </div>
     </>
   );
 }
 
-function renderProvider(children: ReactNode = <TutorialTargets />) {
+type TutorialProviderStatus = Parameters<
+  typeof TutorialProvider
+>[0]["tutorialStatus"];
+
+function SearchTutorialTargets() {
+  return (
+    <>
+      <input data-tour-id="search-query-input" aria-label="Search query" />
+      <div data-tour-id="search-tag-filter">tag filter</div>
+      <div data-tour-id="search-match-mode">match mode</div>
+      <div data-tour-id="search-demo-result">result</div>
+      <div data-tour-id="search-demo-scripture-context">context</div>
+      <div data-tour-id="search-demo-go-to-verse">go to verse</div>
+    </>
+  );
+}
+
+function renderProvider(
+  children: ReactNode = <TutorialTargets />,
+  tutorialStatus: Partial<TutorialProviderStatus> = {},
+) {
   return render(
     <TutorialProvider
       tutorialStatus={{
-        needsStarterTagsSetup: true,
         categoryColors: {},
+        ...tutorialStatus,
       }}
     >
       {children}
@@ -103,6 +113,7 @@ describe("TutorialProvider", () => {
     mocks.completeAdvancedSearchTutorial.mockClear();
     mocks.completeFocusModeTutorial.mockClear();
     window.sessionStorage.clear();
+    window.localStorage.clear();
 
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       () =>
@@ -136,19 +147,24 @@ describe("TutorialProvider", () => {
     vi.unstubAllGlobals();
   });
 
-  it("does not redirect to settings when the main tutorial is skipped", async () => {
+  it("walks through the trimmed two-step first-run tour and never opens settings", async () => {
     const user = userEvent.setup();
 
     renderProvider();
 
-    expect(await screen.findByText("Add notes")).toBeInTheDocument();
+    expect(await screen.findByText("Add your first note")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Skip" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Write what stood out")).toBeInTheDocument();
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Done" }));
 
     await waitFor(() => {
       expect(mocks.completeMainTutorial).toHaveBeenCalledWith({});
     });
-    expect(readSuppressSettingsRedirectAfterSkip()).toBe(true);
     expect(
       mocks.navigate.mock.calls.some(
         ([args]) => (args as { to?: string }).to === "/settings",
@@ -156,26 +172,54 @@ describe("TutorialProvider", () => {
     ).toBe(false);
   });
 
-  it("keeps the previous step when backing from settings to the passage view", async () => {
+  it("does not redirect to settings when the main tutorial is skipped", async () => {
     const user = userEvent.setup();
 
     renderProvider();
 
-    expect(await screen.findByText("Add notes")).toBeInTheDocument();
+    expect(await screen.findByText("Add your first note")).toBeInTheDocument();
 
-    for (let i = 0; i < 6; i += 1) {
-      await user.click(screen.getByRole("button", { name: "Next" }));
-    }
-
-    expect(await screen.findByText("Import your notes")).toBeInTheDocument();
-    expect(mocks.location.pathname).toBe("/settings");
-
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Skip" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Explore the toolbar")).toBeInTheDocument();
+      expect(mocks.completeMainTutorial).toHaveBeenCalledWith({});
     });
-    expect(mocks.location.pathname).toBe("/passage/John-1");
-    expect(screen.getByText("6 / 8")).toBeInTheDocument();
+    expect(
+      mocks.navigate.mock.calls.some(
+        ([args]) => (args as { to?: string }).to === "/settings",
+      ),
+    ).toBe(false);
+  });
+
+  it("clears persisted search params after the search tutorial finishes", async () => {
+    const user = userEvent.setup();
+    mocks.location.pathname = "/search";
+    window.localStorage.setItem(
+      "search_workspace_state_v1",
+      JSON.stringify({
+        params: { q: "jesus", tags: "love", mode: "any" },
+        scrollTop: 40,
+      }),
+    );
+
+    renderProvider(<SearchTutorialTargets />, {
+      mainTutorialCompletedAt: 1,
+    });
+
+    expect(await screen.findByText("Text search")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+
+    await waitFor(() => {
+      expect(mocks.completeAdvancedSearchTutorial).toHaveBeenCalledWith({});
+    });
+    expect(readSearchWorkspaceState().params).toEqual({});
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/search",
+      search: {},
+      replace: true,
+    });
   });
 });

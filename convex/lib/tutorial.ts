@@ -1,5 +1,4 @@
 interface UserSettingsStatusInput {
-  starterTagsSetupCompletedAt?: number;
   mainOnboardingCompletedAt?: number;
   advancedSearchOnboardingCompletedAt?: number;
   focusModeOnboardingCompletedAt?: number;
@@ -7,8 +6,6 @@ interface UserSettingsStatusInput {
 }
 
 export interface TutorialStatus {
-  needsStarterTagsSetup: boolean;
-  starterTagsSetupCompletedAt?: number;
   mainTutorialCompletedAt?: number;
   advancedSearchTutorialCompletedAt?: number;
   focusModeTutorialCompletedAt?: number;
@@ -19,8 +16,6 @@ export function resolveTutorialStatus(
   settings: UserSettingsStatusInput | null | undefined,
 ): TutorialStatus {
   return {
-    needsStarterTagsSetup: settings?.starterTagsSetupCompletedAt === undefined,
-    starterTagsSetupCompletedAt: settings?.starterTagsSetupCompletedAt,
     mainTutorialCompletedAt: settings?.mainOnboardingCompletedAt,
     advancedSearchTutorialCompletedAt:
       settings?.advancedSearchOnboardingCompletedAt,

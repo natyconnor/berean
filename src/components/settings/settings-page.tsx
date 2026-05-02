@@ -49,7 +49,6 @@ export function SettingsPage() {
   const removeCustomTagAndDetach = useMutation(
     api.tags.removeCustomTagAndDetach,
   );
-  const completeSetup = useMutation(api.userSettings.completeStarterTagsSetup);
   const setCategoryColor = useMutation(
     api.userSettings.setStarterTagCategoryColor,
   );
@@ -132,12 +131,6 @@ export function SettingsPage() {
   useEffect(() => {
     setDraftCategoryColors(categoryColors);
   }, [categoryColors]);
-
-  useEffect(() => {
-    if (setupStatus?.needsStarterTagsSetup) {
-      void completeSetup({});
-    }
-  }, [setupStatus?.needsStarterTagsSetup, completeSetup]);
 
   const selectedStarterCount = useMemo(() => {
     let count = 0;

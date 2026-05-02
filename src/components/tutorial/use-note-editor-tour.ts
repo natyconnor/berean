@@ -10,30 +10,26 @@ export interface NoteEditorTourState {
   tutorialAnimateTagPreview: boolean;
 }
 
+/**
+ * The trimmed first-run tour only spotlights the note body. Inline verse
+ * links and tags are now taught contextually via staged onboarding hints
+ * (see Wave 1 verse links and Wave 2 starter tags), so this hook no longer
+ * surfaces preview tags/queries from the main tour.
+ */
 export function useNoteEditorTour(): NoteEditorTourState {
   const tutorial = useOptionalTutorial();
 
-  const isInlineLinks = tutorial?.isStepActive("main", "inline-links") ?? false;
   const isNoteBody = tutorial?.isStepActive("main", "note-body") ?? false;
-  const isNoteTags = tutorial?.isStepActive("main", "note-tags") ?? false;
 
-  const bodyTourId = isInlineLinks
-    ? "note-editor-link-demo"
-    : isNoteBody
-      ? "note-editor-body"
-      : undefined;
-
-  const tutorialPreviewText =
-    isNoteBody || isInlineLinks
-      ? "The original Greek is Logos, literally meaning 'word' but also carrying with it cosmic meaning, ringing in echoes of..."
-      : undefined;
   return {
-    bodyTourId,
-    tagsTourId: isNoteTags ? "note-editor-tags" : undefined,
-    tutorialPreviewText,
+    bodyTourId: isNoteBody ? "note-editor-body" : undefined,
+    tagsTourId: undefined,
+    tutorialPreviewText: isNoteBody
+      ? "The original Greek is Logos, literally meaning 'word' but also carrying with it cosmic meaning, ringing in echoes of..."
+      : undefined,
     tutorialAnimateText: isNoteBody,
-    tutorialPreviewTags: isNoteTags || isInlineLinks ? ["greek"] : [],
-    tutorialPreviewQuery: isInlineLinks ? "Genesis 1:1" : undefined,
-    tutorialAnimateTagPreview: isNoteTags,
+    tutorialPreviewTags: [],
+    tutorialPreviewQuery: undefined,
+    tutorialAnimateTagPreview: false,
   };
 }

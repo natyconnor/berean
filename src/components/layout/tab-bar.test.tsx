@@ -4,7 +4,43 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { StagedOnboardingContext } from "@/components/tutorial/staged-onboarding-context";
+import {
+  SEARCH_MIN_NOTES_TOTAL,
+  STUDY_MIN_HEARTS,
+} from "@/lib/staged-onboarding-thresholds";
 import { TabBar } from "./tab-bar";
+
+function StagedOnboardingTestProvider({ children }: { children: ReactNode }) {
+  return (
+    <StagedOnboardingContext.Provider
+      value={{
+        milestones: {
+          notesCount: SEARCH_MIN_NOTES_TOTAL,
+          taggedNotesCount: 0,
+          distinctTagCount: 0,
+          heartsCount: STUDY_MIN_HEARTS,
+          hasInlineVerseLink: false,
+          hasExplicitVerseLink: false,
+          starterTagCount: 0,
+          customTagCount: 0,
+        },
+        isHintCompleted: () => false,
+        isHintDismissed: () => false,
+        isHintShown: () => false,
+        isHintPending: () => false,
+        isHintDisplayActive: () => false,
+        requestHintDisplay: () => {},
+        markShown: () => {},
+        complete: () => {},
+        dismiss: () => {},
+        isLoading: false,
+      }}
+    >
+      {children}
+    </StagedOnboardingContext.Provider>
+  );
+}
 
 const mocks = vi.hoisted(() => ({
   closeTab: vi.fn(),
@@ -78,13 +114,15 @@ describe("TabBar", () => {
     );
   });
 
-  it("shows the search shortcut in the tooltip", async () => {
+  it("shows the search shortcut in the tooltip once the milestone is reached", async () => {
     const user = userEvent.setup();
 
     render(
-      <TooltipProvider delayDuration={0}>
-        <TabBar />
-      </TooltipProvider>,
+      <StagedOnboardingTestProvider>
+        <TooltipProvider delayDuration={0}>
+          <TabBar />
+        </TooltipProvider>
+      </StagedOnboardingTestProvider>,
     );
 
     await user.hover(
@@ -95,6 +133,19 @@ describe("TabBar", () => {
         name: "Open search workspace (\u2318K)",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("hides the search and study buttons until the staged onboarding milestones fire", () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TabBar />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: "Open search workspace" }),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
   });
 
   it("shows the passage shortcut in the tooltip", async () => {

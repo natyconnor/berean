@@ -10,9 +10,9 @@ const useQueryMock = vi.fn<(...args: unknown[]) => unknown>();
 const addManyMock = vi.fn();
 const removeManyMock = vi.fn();
 const removeCustomTagAndDetachMock = vi.fn();
-const completeSetupMock = vi.fn();
 const setCategoryColorMock = vi.fn();
 const seedDevChapterNotesMock = vi.fn();
+const resetHintMock = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
@@ -58,12 +58,12 @@ vi.mock("convex/react", () => ({
         return removeManyMock;
       case "api.tags.removeCustomTagAndDetach":
         return removeCustomTagAndDetachMock;
-      case "api.userSettings.completeStarterTagsSetup":
-        return completeSetupMock;
       case "api.userSettings.setStarterTagCategoryColor":
         return setCategoryColorMock;
       case "api.seed.seedDevChapterNotes":
         return seedDevChapterNotesMock;
+      case "api.onboarding.resetHint":
+        return resetHintMock;
       case "api.users.deleteMyAccount":
         return vi.fn();
       default:
@@ -82,8 +82,10 @@ vi.mock("../../../convex/_generated/api", () => ({
     },
     userSettings: {
       getTutorialStatus: "api.userSettings.getTutorialStatus",
-      completeStarterTagsSetup: "api.userSettings.completeStarterTagsSetup",
       setStarterTagCategoryColor: "api.userSettings.setStarterTagCategoryColor",
+    },
+    onboarding: {
+      resetHint: "api.onboarding.resetHint",
     },
     seed: {
       seedDevChapterNotes: "api.seed.seedDevChapterNotes",
@@ -130,16 +132,15 @@ describe("SettingsPage", () => {
     addManyMock.mockReset();
     removeManyMock.mockReset();
     removeCustomTagAndDetachMock.mockReset();
-    completeSetupMock.mockReset();
     setCategoryColorMock.mockReset();
     seedDevChapterNotesMock.mockReset();
+    resetHintMock.mockReset();
   });
 
   it("runs the dev seed mutation and renders the returned summary", async () => {
     const user = userEvent.setup();
     const catalog: Array<{ tag: string }> = [];
     const setupStatus = {
-      needsStarterTagsSetup: false,
       categoryColors: {},
     };
     useQueryMock.mockImplementation((reference: unknown) => {

@@ -11,8 +11,11 @@ import { useMutation } from "convex/react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
+import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { logInteraction } from "@/lib/dev-log";
+import { writeSearchWorkspaceParams } from "@/lib/search-workspace-state";
 import { api } from "../../../convex/_generated/api";
+import { useOptionalStagedOnboarding } from "./staged-onboarding-context";
 import {
   TutorialContext,
   type TutorialContextValue,
@@ -26,84 +29,31 @@ import {
 import {
   readActiveTutorialTour,
   writeActiveTutorialTour,
-  writeSuppressSettingsRedirectAfterSkip,
   type TutorialTourName,
 } from "./tutorial-session";
 
 interface TutorialStatus {
-  needsStarterTagsSetup: boolean;
-  starterTagsSetupCompletedAt?: number;
   mainTutorialCompletedAt?: number;
   advancedSearchTutorialCompletedAt?: number;
   focusModeTutorialCompletedAt?: number;
   categoryColors: Record<string, string>;
 }
 
-const isMac =
-  typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-const modKey = isMac ? "⌘" : "Ctrl+";
-
 const MAIN_TOUR_STEPS: TourStep[] = [
   {
     id: "add-note",
-    title: "Add notes",
+    title: "Add your first note",
     description:
-      "Use the + button beside a verse to start a note. You can have multiple notes per verse, or even select multiple verses.",
+      "Tap the + beside a verse to start a note. You can have multiple notes per verse, or even select multiple verses.",
     targetIds: ["passage-verse-1"],
     cardAnchorIds: ["passage-add-note"],
   },
   {
     id: "note-body",
-    title: "Write a note",
+    title: "Write what stood out",
     description:
-      "Capture observations, questions, and study ideas in the editor.",
+      "Capture observations, questions, or study ideas. We'll point out the rest of the app as it becomes useful.",
     targetIds: ["note-editor-body"],
-  },
-  {
-    id: "inline-links",
-    title: "Create verse links",
-    description:
-      "Use @ to type a verse reference like Genesis 1:1 to insert a clickable verse link.",
-    targetIds: ["note-editor-link-demo"],
-  },
-  {
-    id: "note-tags",
-    title: "Tag your notes",
-    description:
-      "Tags help organize themes and make notes easier to search later.",
-    targetIds: ["note-editor-tags"],
-  },
-  {
-    id: "reading-mode",
-    title: "Switch to reading mode",
-    description:
-      "When you want to focus on reading your notes, switch to reading mode.",
-    targetIds: ["passage-view-mode-toggle"],
-  },
-  {
-    id: "toolbar",
-    title: "Explore the toolbar",
-    description: `Use the toolbar to search notes (${modKey}K), jump to a passage (${modKey}G), or open settings (${modKey},). We'll head to Settings next to finish setup.`,
-    targetIds: ["app-toolbar"],
-  },
-  {
-    id: "import-notes",
-    title: "Import your notes",
-    description:
-      "If you've been keeping notes in Excel spreadsheets, you can import them here so nothing is lost.",
-    targetIds: ["settings-import-section"],
-  },
-  {
-    id: "starter-tags",
-    title: "Starter tags",
-    description:
-      "If you want a head start, you can add a starter set of tags here.",
-    targetIds: [
-      "settings-starter-tags-section",
-      "settings-add-all-starter-tags",
-      "settings-starter-tag-categories",
-    ],
   },
 ];
 
@@ -265,6 +215,7 @@ export function TutorialProvider({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const stagedOnboarding = useOptionalStagedOnboarding();
   const completeMainTutorial = useMutation(
     api.userSettings.completeMainTutorial,
   );
@@ -371,7 +322,16 @@ export function TutorialProvider({
       return;
     }
 
-    if (!isSearchComplete && isSearchRoute) {
+    // The Search walkthrough is part of Wave 4: it should only auto-start
+    // after the user has been shown (and acted on) the Search reveal callout.
+    // Users who land on /search before reaching the threshold (e.g. via
+    // direct URL) get the basic search workspace without a forced tour.
+    const searchRevealActed =
+      stagedOnboarding === null ||
+      stagedOnboarding.isHintCompleted(
+        FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY,
+      );
+    if (!isSearchComplete && isSearchRoute && searchRevealActed) {
       writeActiveTutorialTour("search");
       setActiveTour("search");
       setStepIndex(0);
@@ -384,6 +344,7 @@ export function TutorialProvider({
     isSearchRoute,
     navigate,
     pendingTour,
+    stagedOnboarding,
   ]);
 
   useEffect(() => {
@@ -415,7 +376,7 @@ export function TutorialProvider({
       if (finishingTourRef.current === tour) return;
 
       const skipped = options?.skipped === true;
-      logInteraction("tutorial", "finished", { tour });
+      logInteraction("tutorial", "finished", { tour, skipped });
       finishingTourRef.current = tour;
       setLocallyCompletedTours((current) => ({
         ...current,
@@ -426,17 +387,16 @@ export function TutorialProvider({
       setStepIndex(0);
       writeActiveTutorialTour(null);
 
+      if (tour === "search") {
+        writeSearchWorkspaceParams({});
+        if (location.pathname === "/search") {
+          void navigate({ to: "/search", search: {}, replace: true });
+        }
+      }
+
       try {
         if (tour === "main") {
-          writeSuppressSettingsRedirectAfterSkip(skipped);
           await completeMainTutorial({});
-          if (
-            !skipped &&
-            tutorialStatus.needsStarterTagsSetup &&
-            location.pathname !== "/settings"
-          ) {
-            await navigate({ to: "/settings" });
-          }
         } else if (tour === "search") {
           await completeAdvancedSearchTutorial({});
         } else if (tour === "focusMode") {
@@ -452,7 +412,6 @@ export function TutorialProvider({
       completeMainTutorial,
       location.pathname,
       navigate,
-      tutorialStatus.needsStarterTagsSetup,
     ],
   );
 
@@ -464,7 +423,6 @@ export function TutorialProvider({
       writeActiveTutorialTour(tour);
 
       if (tour === "main") {
-        writeSuppressSettingsRedirectAfterSkip(false);
         setActiveTour(null);
         if (isPassageRoute) {
           setActiveTour("main");
@@ -511,10 +469,6 @@ export function TutorialProvider({
       tour: activeTour,
     });
     setStepIndex(nextIndex);
-
-    if (activeTour === "main" && nextStep.id === "import-notes") {
-      void navigate({ to: "/settings" });
-    }
   };
 
   const handleBack = () => {
@@ -527,15 +481,6 @@ export function TutorialProvider({
       tour: activeTour,
     });
     setStepIndex(nextIndex);
-
-    if (activeTour === "main" && nextIndex <= 5 && !isPassageRoute) {
-      setPendingTour("main");
-      void navigate({
-        to: "/passage/$passageId",
-        params: { passageId: "John-1" },
-        search: {},
-      });
-    }
   };
 
   const contextValue = useMemo<TutorialContextValue>(
