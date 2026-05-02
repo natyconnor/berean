@@ -1,9 +1,19 @@
 export type DiffStatus = "match" | "mismatch" | "missing" | "extra";
 
 export interface DiffToken {
-  /** The original visible text from either typed or actual (whichever this token represents). */
+  /** The original visible text from whichever side this token represents. */
   text: string;
+  /** The expected word when this token represents a typed word that differs. */
+  expectedText?: string;
   status: DiffStatus;
+}
+
+type AlignmentOperation = DiffStatus | null;
+
+interface AlignmentCell {
+  cost: number;
+  matches: number;
+  operation: AlignmentOperation;
 }
 
 const TRIM_PUNCT_PATTERN =
@@ -17,6 +27,16 @@ function tokenize(input: string): string[] {
   const trimmed = input.trim();
   if (trimmed.length === 0) return [];
   return trimmed.split(/\s+/);
+}
+
+function preferCandidate(
+  current: AlignmentCell,
+  candidate: AlignmentCell,
+): AlignmentCell {
+  if (candidate.cost < current.cost) return candidate;
+  if (candidate.cost > current.cost) return current;
+  if (candidate.matches > current.matches) return candidate;
+  return current;
 }
 
 export function diffWords(typed: string, actual: string): DiffToken[] {
@@ -34,59 +54,81 @@ export function diffWords(typed: string, actual: string): DiffToken[] {
     actualNorm.push(normalize(actualWords[j]));
   }
 
-  if (typedWords.length === actualWords.length) {
-    const tokens: DiffToken[] = [];
-    for (let i = 0; i < actualWords.length; i++) {
-      const status: DiffStatus =
-        typedNorm[i] === actualNorm[i] ? "match" : "mismatch";
-      tokens.push({ text: actualWords[i], status });
-    }
-    return tokens;
-  }
-
   const m = typedWords.length;
   const n = actualWords.length;
-  const dp: number[][] = [];
+
+  const dp: AlignmentCell[][] = [];
   for (let i = 0; i <= m; i++) {
-    const row: number[] = [];
+    const row: AlignmentCell[] = [];
     for (let j = 0; j <= n; j++) {
-      row.push(0);
+      row.push({ cost: 0, matches: 0, operation: null });
     }
     dp.push(row);
   }
+
+  for (let i = 1; i <= m; i++) {
+    dp[i][0] = { cost: i, matches: 0, operation: "extra" };
+  }
+  for (let j = 1; j <= n; j++) {
+    dp[0][j] = { cost: j, matches: 0, operation: "missing" };
+  }
+
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      if (typedNorm[i - 1] === actualNorm[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-      }
+      const isMatch = typedNorm[i - 1] === actualNorm[j - 1];
+      const diagonal = dp[i - 1][j - 1];
+      let best: AlignmentCell = {
+        cost: diagonal.cost + (isMatch ? 0 : 2),
+        matches: diagonal.matches + (isMatch ? 1 : 0),
+        operation: isMatch ? "match" : "mismatch",
+      };
+
+      const extra = dp[i - 1][j];
+      best = preferCandidate(best, {
+        cost: extra.cost + 1,
+        matches: extra.matches,
+        operation: "extra",
+      });
+
+      const missing = dp[i][j - 1];
+      best = preferCandidate(best, {
+        cost: missing.cost + 1,
+        matches: missing.matches,
+        operation: "missing",
+      });
+
+      dp[i][j] = best;
     }
   }
 
   const tokens: DiffToken[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < m && j < n) {
-    if (typedNorm[i] === actualNorm[j]) {
-      tokens.push({ text: actualWords[j], status: "match" });
-      i++;
-      j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      tokens.push({ text: typedWords[i], status: "extra" });
-      i++;
+  let i = m;
+  let j = n;
+  while (i > 0 || j > 0) {
+    const operation = dp[i][j].operation;
+    if (operation === "match") {
+      tokens.push({ text: actualWords[j - 1], status: "match" });
+      i--;
+      j--;
+    } else if (operation === "mismatch") {
+      tokens.push({
+        text: typedWords[i - 1],
+        expectedText: actualWords[j - 1],
+        status: "mismatch",
+      });
+      i--;
+      j--;
+    } else if (operation === "extra") {
+      tokens.push({ text: typedWords[i - 1], status: "extra" });
+      i--;
+    } else if (operation === "missing") {
+      tokens.push({ text: actualWords[j - 1], status: "missing" });
+      j--;
     } else {
-      tokens.push({ text: actualWords[j], status: "missing" });
-      j++;
+      break;
     }
   }
-  while (i < m) {
-    tokens.push({ text: typedWords[i], status: "extra" });
-    i++;
-  }
-  while (j < n) {
-    tokens.push({ text: actualWords[j], status: "missing" });
-    j++;
-  }
+
+  tokens.reverse();
   return tokens;
 }
