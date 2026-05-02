@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2](https://github.com/natyconnor/berean/compare/v1.7.1...v1.7.2) (2026-05-02)
+
+
+### Bug Fixes
+
+* fix up word by word comparison for showing diff, and make a nice design that more clearly shows what was wrong where ([#71](https://github.com/natyconnor/berean/issues/71)) ([084b466](https://github.com/natyconnor/berean/commit/084b4662860c8348b1fb8120651b9047d43ee4fc))
+
 ## [1.7.1](https://github.com/natyconnor/berean/compare/v1.7.0...v1.7.1) (2026-05-01)
 
 
