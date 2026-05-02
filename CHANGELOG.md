@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.3](https://github.com/natyconnor/berean/compare/v1.7.2...v1.7.3) (2026-05-02)
+
+
+### Bug Fixes
+
+* staged tutorial experience ([#73](https://github.com/natyconnor/berean/issues/73)) ([b9ec9f2](https://github.com/natyconnor/berean/commit/b9ec9f29d58f318feb2f3313d250bc3b8cdb6e80))
+
 ## [1.7.2](https://github.com/natyconnor/berean/compare/v1.7.1...v1.7.2) (2026-05-02)
 
 
