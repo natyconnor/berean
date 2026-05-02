@@ -23,27 +23,119 @@ interface StudyVerseMemoryCardProps {
   onTypedAnswerChange: (value: string) => void;
 }
 
-function renderDiffToken(token: DiffToken, idx: number): JSX.Element {
-  let className = "";
-  switch (token.status) {
-    case "match":
-      className = "text-foreground";
-      break;
-    case "mismatch":
-      className = "text-destructive line-through decoration-destructive/50";
-      break;
-    case "missing":
-      className = "text-destructive/70 underline decoration-dotted";
-      break;
-    case "extra":
-      className = "text-muted-foreground italic";
-      break;
+interface DiffSummary {
+  matches: number;
+  mistakes: number;
+}
+
+function summarizeDiff(tokens: ReadonlyArray<DiffToken>): DiffSummary {
+  let matches = 0;
+  let mistakes = 0;
+  for (const token of tokens) {
+    if (token.status === "match") {
+      matches += 1;
+    } else {
+      mistakes += 1;
+    }
   }
+  return { matches, mistakes };
+}
+
+const PLACEHOLDER = "\u00a0";
+
+function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
+  if (token.status === "match") {
+    return (
+      <span
+        key={idx}
+        className="inline-flex min-h-6 items-center rounded-md bg-emerald-500/10 px-1.5 text-emerald-700 ring-1 ring-inset ring-emerald-500/20 dark:text-emerald-300"
+      >
+        {token.text}
+      </span>
+    );
+  }
+
+  const typedText = token.status === "missing" ? PLACEHOLDER : token.text;
+  const expectedText =
+    token.status === "extra"
+      ? PLACEHOLDER
+      : token.status === "mismatch"
+        ? (token.expectedText ?? PLACEHOLDER)
+        : token.text;
+
+  const baseRow = "min-h-5 rounded-md px-1.5 text-center text-[13px] leading-5";
+
+  const typedClassName = cn(
+    baseRow,
+    (token.status === "mismatch" || token.status === "extra") &&
+      "bg-rose-500/10 text-rose-600 line-through decoration-rose-500/60 ring-1 ring-inset ring-rose-500/20 dark:text-rose-300",
+    token.status === "missing" &&
+      "border border-dashed border-amber-500/60 text-transparent",
+  );
+
+  const expectedClassName = cn(
+    baseRow,
+    (token.status === "mismatch" || token.status === "missing") &&
+      "bg-amber-500/15 text-amber-700 ring-1 ring-inset ring-amber-500/20 dark:text-amber-200",
+    token.status === "extra" &&
+      "border border-dashed border-rose-500/40 text-transparent",
+  );
+
+  const ariaLabel =
+    token.status === "missing"
+      ? `Missing word: ${token.text}`
+      : token.status === "extra"
+        ? `Extra word: ${token.text}`
+        : `Different word: ${token.text}${
+            token.expectedText ? `, expected ${token.expectedText}` : ""
+          }`;
+
   return (
-    <span key={idx} className={className}>
-      {idx > 0 ? " " : ""}
-      {token.text}
+    <span
+      key={idx}
+      className="inline-flex flex-col items-stretch gap-0.5 align-top"
+      aria-label={ariaLabel}
+      title={ariaLabel}
+    >
+      <span className={typedClassName}>{typedText}</span>
+      <span className={expectedClassName}>{expectedText}</span>
     </span>
+  );
+}
+
+function VerseAttemptDiff({
+  tokens,
+}: {
+  tokens: ReadonlyArray<DiffToken>;
+}): JSX.Element {
+  const summary = summarizeDiff(tokens);
+  const total = summary.matches + summary.mistakes;
+  const accuracy =
+    total === 0 ? 0 : Math.round((summary.matches / total) * 100);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        <span>{accuracy}% recalled</span>
+        <span className="flex items-center gap-2 font-medium normal-case tracking-normal">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-3 rounded-sm bg-emerald-500/40" />
+            correct
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-3 rounded-sm bg-rose-500/40" />
+            you
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-3 rounded-sm bg-amber-500/40" />
+            verse
+          </span>
+        </span>
+      </div>
+      <p className="flex flex-wrap gap-x-1.5 gap-y-2 text-[13px] leading-5">
+        {tokens.map((token, idx) => renderDiffChip(token, idx))}
+      </p>
+    </div>
   );
 }
 
@@ -106,22 +198,20 @@ export function StudyVerseMemoryCard({
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            transition={{ duration: 0.24, ease: "easeOut" }}
             className={cn(
-              "space-y-1 rounded-lg border-2 px-3 py-2 shadow-sm",
+              "space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
               attemptQuality === "exact"
-                ? "border-emerald-500/40 bg-emerald-500/5"
+                ? "border-emerald-500/40"
                 : attemptQuality === "close"
-                  ? "border-amber-500/40 bg-amber-500/5"
-                  : "border-primary/30 bg-primary/5",
+                  ? "border-amber-500/40"
+                  : "border-primary/25",
             )}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Your attempt
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              How you did
             </p>
-            <p className="text-sm leading-relaxed">
-              {diffTokens.map((token, idx) => renderDiffToken(token, idx))}
-            </p>
+            <VerseAttemptDiff tokens={diffTokens} />
           </motion.div>
         </div>
       )}

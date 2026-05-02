@@ -32,12 +32,67 @@ describe("diffWords", () => {
     ]);
   });
 
-  it("emits a mismatch (using actual text) when lengths match but a word differs", () => {
+  it("emits a mismatch using typed text when a word differs", () => {
     expect(diffWords("the quick red fox", "the quick brown fox")).toEqual([
       { text: "the", status: "match" },
       { text: "quick", status: "match" },
-      { text: "brown", status: "mismatch" },
+      { text: "red", expectedText: "brown", status: "mismatch" },
       { text: "fox", status: "match" },
+    ]);
+  });
+
+  it("keeps later words matched when typed omits words in the middle", () => {
+    expect(
+      diffWords(
+        "Moses and the prophets wrote Jesus of Nazareth",
+        "Moses in the Law and also the prophets wrote Jesus of Nazareth",
+      ),
+    ).toEqual([
+      { text: "Moses", status: "match" },
+      { text: "in", status: "missing" },
+      { text: "the", status: "missing" },
+      { text: "Law", status: "missing" },
+      { text: "and", status: "match" },
+      { text: "also", status: "missing" },
+      { text: "the", status: "match" },
+      { text: "prophets", status: "match" },
+      { text: "wrote", status: "match" },
+      { text: "Jesus", status: "match" },
+      { text: "of", status: "match" },
+      { text: "Nazareth", status: "match" },
+    ]);
+  });
+
+  it("keeps later words matched when typed adds a word in the middle", () => {
+    expect(
+      diffWords("the quick very brown fox", "the quick brown fox"),
+    ).toEqual([
+      { text: "the", status: "match" },
+      { text: "quick", status: "match" },
+      { text: "very", status: "extra" },
+      { text: "brown", status: "match" },
+      { text: "fox", status: "match" },
+    ]);
+  });
+
+  it("keeps later words matched in an equal-length shifted attempt", () => {
+    expect(
+      diffWords("one extra four five six", "one two three four five"),
+    ).toEqual([
+      { text: "one", status: "match" },
+      { text: "two", status: "missing" },
+      { text: "extra", expectedText: "three", status: "mismatch" },
+      { text: "four", status: "match" },
+      { text: "five", status: "match" },
+      { text: "six", status: "extra" },
+    ]);
+  });
+
+  it("renders the user's typo instead of striking through the correct word", () => {
+    expect(diffWords("Jesus answerd him", "Jesus answered him")).toEqual([
+      { text: "Jesus", status: "match" },
+      { text: "answerd", expectedText: "answered", status: "mismatch" },
+      { text: "him", status: "match" },
     ]);
   });
 
