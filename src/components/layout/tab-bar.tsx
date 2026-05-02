@@ -2,15 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
-import {
-  BookOpen,
-  LogOut,
-  Plus,
-  Search,
-  Settings,
-  TableOfContents,
-  X,
-} from "lucide-react";
+import { BookOpen, LogOut, Plus, Search, Settings, X } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SearchDialog } from "@/components/notes/search-dialog";
 import { ThemeDropdown } from "./theme-dropdown";
@@ -164,15 +156,18 @@ export function TabBar() {
               />
             ))}
           </AnimatePresence>
-          <div className="flex h-10 items-center border-r px-1">
+          <div className="flex h-10 items-center px-1">
             <PassageNavigator
+              open={passageNavigatorOpen}
+              onOpenChange={handlePassageNavigatorOpenChange}
               trigger={
                 <TooltipButton
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  tooltip="Open a new tab to a Bible chapter"
+                  tooltip={`Open a new tab to a Bible chapter (${passageShortcutLabel})`}
                   aria-label="Open a new tab to a Bible chapter"
+                  data-tour-id="app-book-selector"
                 >
                   <Plus className="h-4 w-4" />
                 </TooltipButton>
@@ -272,22 +267,6 @@ export function TabBar() {
             </TooltipButton>
           </FeatureCallout>
         ) : null}
-        <PassageNavigator
-          open={passageNavigatorOpen}
-          onOpenChange={handlePassageNavigatorOpenChange}
-          trigger={
-            <TooltipButton
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              tooltip={`Go to passage (${passageShortcutLabel})`}
-              aria-label="Go to passage"
-              data-tour-id="app-book-selector"
-            >
-              <TableOfContents className="h-4 w-4" />
-            </TooltipButton>
-          }
-        />
         <div className="relative">
           {isSettingsRoute ? (
             <TooltipButton

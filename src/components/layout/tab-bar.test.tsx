@@ -149,7 +149,7 @@ describe("TabBar", () => {
     expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
   });
 
-  it("shows the passage shortcut in the tooltip", async () => {
+  it("shows the passage shortcut in the new-tab tooltip", async () => {
     const user = userEvent.setup();
 
     render(
@@ -158,9 +158,13 @@ describe("TabBar", () => {
       </TooltipProvider>,
     );
 
-    await user.hover(screen.getByRole("button", { name: "Go to passage" }));
+    await user.hover(
+      screen.getByRole("button", { name: "Open a new tab to a Bible chapter" }),
+    );
     expect(
-      await screen.findByRole("tooltip", { name: "Go to passage (\u2318G)" }),
+      await screen.findByRole("tooltip", {
+        name: "Open a new tab to a Bible chapter (\u2318G)",
+      }),
     ).toBeInTheDocument();
   });
 
