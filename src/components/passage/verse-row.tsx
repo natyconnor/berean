@@ -567,7 +567,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         )}
         aria-hidden
       />
-      <div className="relative flex h-full items-center">
+      <div className="relative z-10 flex h-full items-center">
         <div className="flex w-full gap-2">
           <motion.span
             animate={{ paddingTop: sizes.verseNumberPaddingTop }}

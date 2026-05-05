@@ -5,14 +5,49 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
+let shouldOpenTooltipOnFocus = false;
+
 function TooltipProvider({
   delayDuration = 150,
+  // Radix keeps an open tooltip on pointer-leave when hoverable content is
+  // enabled, so the user can move onto the content. Our TooltipContent uses
+  // `pointer-events-none`, so that path never works and tooltips often stay
+  // open until the next click. Closing on trigger leave matches non-interactive
+  // bubbles and fixes "stuck" tooltips after hover/click.
+  disableHoverableContent = true,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+  React.useEffect(() => {
+    const disableFocusOpen = () => {
+      shouldOpenTooltipOnFocus = false;
+    };
+    const updateFocusIntent = (event: KeyboardEvent) => {
+      // Radix opens tooltips on focus. In this app many buttons open dialogs or
+      // navigate, and focus is then restored programmatically to the trigger
+      // after pointer clicks or Escape closes. Only Tab should make a focus
+      // event announce the tooltip; pointer hover still opens normally.
+      shouldOpenTooltipOnFocus = event.key === "Tab";
+    };
+
+    document.addEventListener("keydown", updateFocusIntent, { capture: true });
+    document.addEventListener("pointerdown", disableFocusOpen, {
+      capture: true,
+    });
+    return () => {
+      document.removeEventListener("keydown", updateFocusIntent, {
+        capture: true,
+      });
+      document.removeEventListener("pointerdown", disableFocusOpen, {
+        capture: true,
+      });
+    };
+  }, []);
+
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
       delayDuration={delayDuration}
+      disableHoverableContent={disableHoverableContent}
       {...props}
     />
   );
@@ -23,9 +58,22 @@ function Tooltip(props: React.ComponentProps<typeof TooltipPrimitive.Root>) {
 }
 
 function TooltipTrigger({
+  onFocus,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      {...props}
+      onFocus={(event) => {
+        onFocus?.(event);
+
+        if (!shouldOpenTooltipOnFocus) {
+          event.preventDefault();
+        }
+      }}
+    />
+  );
 }
 
 function TooltipContent({
