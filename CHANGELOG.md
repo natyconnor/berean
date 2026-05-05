@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.5](https://github.com/natyconnor/berean/compare/v1.7.4...v1.7.5) (2026-05-05)
+
+
+### Bug Fixes
+
+* Nathanc/clean up tooltips correctly ([#79](https://github.com/natyconnor/berean/issues/79)) ([c8fca95](https://github.com/natyconnor/berean/commit/c8fca955ffab0b4fb53493b43edc4f676a098c2b))
+
 ## [1.7.4](https://github.com/natyconnor/berean/compare/v1.7.3...v1.7.4) (2026-05-05)
 
 
