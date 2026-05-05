@@ -380,7 +380,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     <LayoutGroup id={`verse-row-${verseNumber}`}>
       <div
         className={cn(
-          "relative overflow-visible hover:z-10 focus-within:z-10",
+          "relative overflow-visible hover:z-30 focus-within:z-30",
           isReadMode
             ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
             : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start",
