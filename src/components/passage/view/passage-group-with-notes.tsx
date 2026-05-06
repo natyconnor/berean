@@ -274,42 +274,49 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
             )}
             <div className="flex-1 min-w-0 space-y-1.5">
               {(passageNotes.length > 0 || isExitingPassageNote) && (
-                <PassageNotesBubble
-                  notes={passageNotes}
-                  isOpen={isPassageOpen}
-                  isGlowing={false}
-                  viewMode={viewMode}
-                  currentChapter={currentChapter}
-                  editingNoteIds={editingNoteIds}
-                  onSaveEdit={onSaveEdit}
-                  onCancelEdit={(noteId) => onCancelEditor(`edit:${noteId}`)}
-                  onEditorDirtyChange={(noteId, isDirty) =>
-                    onEditorDirtyChange(`edit:${noteId}`, isDirty)
-                  }
-                  onEditorFocus={(noteId) => onEditorFocus(`edit:${noteId}`)}
-                  onOpen={() => onOpenPassageNotes(anchorVerse)}
-                  onClose={() => onClosePassageNotes(anchorVerse)}
-                  onEdit={(noteId: Id<"notes">) => {
-                    const note = passageNotes.find((n) => n.noteId === noteId);
-                    if (note)
-                      onEditNote(noteId, note.verseRef, anchorVerse, true);
-                  }}
-                  onDelete={onDelete}
-                  onAddNote={() =>
-                    onStartCreatingPassageNote({
-                      book: passageNotes[0].verseRef.book,
-                      chapter: passageNotes[0].verseRef.chapter,
-                      startVerse: passageNotes[0].verseRef.startVerse,
-                      endVerse: passageNotes[0].verseRef.endVerse,
-                    })
-                  }
-                  onLastNoteDeletedAfterExit={(noteId) =>
-                    onNoteDeleteCleanup(noteId, anchorVerse, true)
-                  }
-                  onExitingLastChange={setIsExitingPassageNote}
-                  onMouseEnter={() => onPassageBubbleMouseEnter(anchorVerse)}
-                  onMouseLeave={onPassageBubbleMouseLeave}
-                />
+                <motion.div
+                  layout="position"
+                  transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
+                >
+                  <PassageNotesBubble
+                    notes={passageNotes}
+                    isOpen={isPassageOpen}
+                    isGlowing={false}
+                    viewMode={viewMode}
+                    currentChapter={currentChapter}
+                    editingNoteIds={editingNoteIds}
+                    onSaveEdit={onSaveEdit}
+                    onCancelEdit={(noteId) => onCancelEditor(`edit:${noteId}`)}
+                    onEditorDirtyChange={(noteId, isDirty) =>
+                      onEditorDirtyChange(`edit:${noteId}`, isDirty)
+                    }
+                    onEditorFocus={(noteId) => onEditorFocus(`edit:${noteId}`)}
+                    onOpen={() => onOpenPassageNotes(anchorVerse)}
+                    onClose={() => onClosePassageNotes(anchorVerse)}
+                    onEdit={(noteId: Id<"notes">) => {
+                      const note = passageNotes.find(
+                        (n) => n.noteId === noteId,
+                      );
+                      if (note)
+                        onEditNote(noteId, note.verseRef, anchorVerse, true);
+                    }}
+                    onDelete={onDelete}
+                    onAddNote={() =>
+                      onStartCreatingPassageNote({
+                        book: passageNotes[0].verseRef.book,
+                        chapter: passageNotes[0].verseRef.chapter,
+                        startVerse: passageNotes[0].verseRef.startVerse,
+                        endVerse: passageNotes[0].verseRef.endVerse,
+                      })
+                    }
+                    onLastNoteDeletedAfterExit={(noteId) =>
+                      onNoteDeleteCleanup(noteId, anchorVerse, true)
+                    }
+                    onExitingLastChange={setIsExitingPassageNote}
+                    onMouseEnter={() => onPassageBubbleMouseEnter(anchorVerse)}
+                    onMouseLeave={onPassageBubbleMouseLeave}
+                  />
+                </motion.div>
               )}
 
               <AnimatePresence initial={false}>
