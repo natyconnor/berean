@@ -26,7 +26,7 @@ export function ChapterHeader({ book, chapter }: ChapterHeaderProps) {
   }
 
   return (
-    <div className="flex items-center justify-between py-4 px-2">
+    <div className="flex items-center justify-between py-4 px-2 gap-4">
       <TooltipButton
         variant="ghost"
         size="icon"
