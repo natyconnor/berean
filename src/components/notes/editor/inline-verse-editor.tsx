@@ -862,10 +862,6 @@ export function InlineVerseEditor({
     };
   }, [emitChange]);
 
-  const handleSelectSuggestion = useCallback((item: VerseSuggestionItem) => {
-    handleSelectSuggestionRef.current(item);
-  }, []);
-
   useEffect(() => {
     if (!editorRef.current) return;
     editorRef.current.innerHTML = "";
@@ -1118,7 +1114,7 @@ export function InlineVerseEditor({
             actionableSuggestions.length > 0
           ) {
             event.preventDefault();
-            handleSelectSuggestion(
+            handleSelectSuggestionRef.current(
               actionableSuggestions[activeHighlightedIndex] ??
                 actionableSuggestions[0],
             );
@@ -1197,7 +1193,7 @@ export function InlineVerseEditor({
                   onMouseDown={(event) => {
                     event.preventDefault();
                     setHighlightedIndex(index);
-                    handleSelectSuggestion(suggestion);
+                    handleSelectSuggestionRef.current(suggestion);
                   }}
                 >
                   {suggestion.kind === "reference" ? (
