@@ -51,8 +51,7 @@ class MockIntersectionObserver implements IntersectionObserver {
   }
 }
 
-globalThis.IntersectionObserver =
-  MockIntersectionObserver as typeof globalThis.IntersectionObserver;
+globalThis.IntersectionObserver = MockIntersectionObserver;
 
 afterEach(() => {
   cleanup();

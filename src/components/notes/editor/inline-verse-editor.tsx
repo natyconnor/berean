@@ -840,8 +840,12 @@ export function InlineVerseEditor({
     refreshQueryState();
   }, [onChange, refreshQueryState]);
 
-  const handleSelectSuggestion = useCallback(
-    (item: VerseSuggestionItem) => {
+  const handleSelectSuggestionRef = useRef<(item: VerseSuggestionItem) => void>(
+    () => {},
+  );
+
+  useEffect(() => {
+    handleSelectSuggestionRef.current = (item: VerseSuggestionItem) => {
       const match = activeQueryMatchRef.current;
       if (!match) return;
 
@@ -855,9 +859,12 @@ export function InlineVerseEditor({
 
       emitChange();
       editorRef.current?.focus();
-    },
-    [emitChange],
-  );
+    };
+  }, [emitChange]);
+
+  const handleSelectSuggestion = useCallback((item: VerseSuggestionItem) => {
+    handleSelectSuggestionRef.current(item);
+  }, []);
 
   useEffect(() => {
     if (!editorRef.current) return;

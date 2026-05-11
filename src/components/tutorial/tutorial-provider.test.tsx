@@ -127,7 +127,7 @@ describe("TutorialProvider", () => {
           width: 120,
           height: 24,
           toJSON: () => ({}),
-        }) as DOMRect,
+        }) satisfies DOMRect,
     );
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {

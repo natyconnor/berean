@@ -23,6 +23,12 @@ import { DeleteCustomTagDialog } from "@/components/settings/delete-custom-tag-d
 import { DeleteAccountSection } from "@/components/settings/delete-account-section";
 import { logInteraction } from "@/lib/dev-log";
 
+function starterPaletteFingerprint(record: Record<string, string>): string {
+  return JSON.stringify(
+    Object.entries(record).sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
 interface SeedResultSummary {
   seed: number;
   selectedChapters: number;
@@ -128,9 +134,17 @@ export function SettingsPage() {
     [setupStatus?.categoryColors],
   );
 
-  useEffect(() => {
+  const categoryFingerprint = useMemo(
+    () => starterPaletteFingerprint(categoryColors),
+    [categoryColors],
+  );
+
+  const [paletteSyncKey, setPaletteSyncKey] = useState(categoryFingerprint);
+
+  if (categoryFingerprint !== paletteSyncKey) {
+    setPaletteSyncKey(categoryFingerprint);
     setDraftCategoryColors(categoryColors);
-  }, [categoryColors]);
+  }
 
   const selectedStarterCount = useMemo(() => {
     let count = 0;
