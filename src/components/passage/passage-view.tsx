@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { useQuery } from "convex-helpers/react/cache";
 import { useMutation } from "convex/react";
 import { useEsvPassage } from "@/hooks/use-esv-passage";
@@ -50,7 +57,61 @@ type VerseItem =
       singleNotesByVerse: Map<number, NoteWithRef[]>;
     };
 
-export function PassageView({
+/** Verse columns that expanded passage ranges currently occupy in the prose column. */
+function groupedVerseNumbersFromExpanded(
+  ranges: Array<{ startVerse: number; endVerse: number }>,
+): ReadonlySet<number> {
+  const set = new Set<number>();
+  for (const range of ranges) {
+    for (let v = range.startVerse; v <= range.endVerse; v++) {
+      set.add(v);
+    }
+  }
+  return set;
+}
+
+function groupedSetsEqual(
+  a: ReadonlySet<number>,
+  b: ReadonlySet<number>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of b) if (!a.has(v)) return false;
+  return true;
+}
+
+type GroupBoundaryAnim = Readonly<{
+  prevGrouped: ReadonlySet<number>;
+  currentGrouped: ReadonlySet<number>;
+}>;
+
+function EMPTY_GROUP_BOUNDARY(): GroupBoundaryAnim {
+  return {
+    prevGrouped: new Set<number>(),
+    currentGrouped: new Set<number>(),
+  };
+}
+
+function groupedBoundaryReducer(
+  state: GroupBoundaryAnim,
+  nextGrouped: ReadonlySet<number>,
+): GroupBoundaryAnim {
+  if (groupedSetsEqual(state.currentGrouped, nextGrouped)) return state;
+  return {
+    prevGrouped: new Set(state.currentGrouped),
+    currentGrouped: new Set(nextGrouped),
+  };
+}
+
+export function PassageView(props: PassageViewProps) {
+  return (
+    <PassageViewChapterInner
+      key={`${props.book}-${props.chapter}`}
+      {...props}
+    />
+  );
+}
+
+function PassageViewChapterInner({
   book,
   chapter,
   focusRange = null,
@@ -454,32 +515,33 @@ export function PassageView({
     displaySingleVerseNotes,
   ]);
 
-  const currentGroupedVerses = useMemo(() => {
-    const set = new Set<number>();
-    for (const range of expandedPassageRanges) {
-      for (let v = range.startVerse; v <= range.endVerse; v++) {
-        set.add(v);
-      }
-    }
-    return set;
-  }, [expandedPassageRanges]);
-
-  const [previousGroupedVerses, setPreviousGroupedVerses] = useState(
-    () => new Set<number>(),
+  const currentGroupedVerses = useMemo(
+    () => groupedVerseNumbersFromExpanded(expandedPassageRanges),
+    [expandedPassageRanges],
   );
+
+  const [groupBoundaryAnim, dispatchGroupBoundaryAnim] = useReducer(
+    groupedBoundaryReducer,
+    undefined,
+    () => EMPTY_GROUP_BOUNDARY(),
+  );
+
+  /** Prior grouped prose-column verses for Motion “re-enter” styling; synced during render via reducer when grouping changes materially. */
+  if (
+    !groupedSetsEqual(groupBoundaryAnim.currentGrouped, currentGroupedVerses)
+  ) {
+    dispatchGroupBoundaryAnim(currentGroupedVerses);
+  }
+
   const reenteringFromGroup = useMemo(() => {
     const set = new Set<number>();
-    for (const v of previousGroupedVerses) {
-      if (!currentGroupedVerses.has(v)) {
+    for (const v of groupBoundaryAnim.prevGrouped) {
+      if (!groupBoundaryAnim.currentGrouped.has(v)) {
         set.add(v);
       }
     }
     return set;
-  }, [currentGroupedVerses, previousGroupedVerses]);
-
-  useEffect(() => {
-    setPreviousGroupedVerses(currentGroupedVerses);
-  }, [currentGroupedVerses]);
+  }, [groupBoundaryAnim]);
 
   const passageGridClass = isReadMode
     ? "grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"

@@ -87,9 +87,16 @@ export function useAppVersionMonitor() {
   }, [latestVersion?.buildId]);
 
   useEffect(() => {
-    void checkForUpdate();
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) void checkForUpdate();
+    });
 
-    if (hasDetectedNewBuild(__APP_BUILD_ID__, latestVersion?.buildId)) return;
+    if (hasDetectedNewBuild(__APP_BUILD_ID__, latestVersion?.buildId)) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const intervalId = window.setInterval(() => {
       void checkForUpdate();
@@ -108,6 +115,7 @@ export function useAppVersionMonitor() {
     window.addEventListener("online", handleOnline);
 
     return () => {
+      cancelled = true;
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);

@@ -84,7 +84,7 @@ export const DEFAULT_STARTER_TAG_CATEGORY_COLORS: Record<string, string> =
       category.id,
       category.defaultColor,
     ]),
-  ) as Record<string, string>;
+  );
 
 export const STARTER_TAG_CATEGORY_BY_TAG: Record<string, string> =
   STARTER_TAG_CATEGORIES.reduce<Record<string, string>>((acc, category) => {

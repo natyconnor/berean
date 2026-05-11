@@ -124,6 +124,8 @@ const TOUR_STEPS: Record<TutorialTourName, TourStep[]> = {
 const DEFAULT_CARD_WIDTH = 320;
 const CARD_MARGIN = 16;
 const SPOTLIGHT_PADDING = 10;
+/** Spotlight layout polling interval (RAF rarely flushes in Vitest/JSDOM). */
+const TUTORIAL_LAYOUT_POLL_MS = 32;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -281,26 +283,40 @@ export function TutorialProvider({
 
   useEffect(() => {
     if (!activeStep) {
-      setTargetRect(null);
-      setCardAnchorRect(null);
-      setMeasuredStepId(null);
-      return;
+      let cancelled = false;
+      void Promise.resolve().then(() => {
+        if (cancelled) return;
+        setTargetRect(null);
+        setCardAnchorRect(null);
+        setMeasuredStepId(null);
+      });
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (!stepRequiresTarget(activeStep)) {
-      setTargetRect(null);
-      setCardAnchorRect(null);
-      setMeasuredStepId(activeStep.id);
-      return;
+      let cancelled = false;
+      void Promise.resolve().then(() => {
+        if (cancelled) return;
+        setTargetRect(null);
+        setCardAnchorRect(null);
+        setMeasuredStepId(activeStep.id);
+      });
+      return () => {
+        cancelled = true;
+      };
     }
 
+    let scheduleId: number | undefined;
+    let cancelled = false;
     const { targetIds, cardAnchorIds, scrollIntoViewTargetId } = activeStep;
     const scrollIntoViewTargets: string[] | null =
       scrollIntoViewTargetId !== undefined ? [scrollIntoViewTargetId] : null;
 
-    let frameId = 0;
     let hasScrolled = false;
     const updateRect = () => {
+      if (cancelled) return;
       const elements = getTargetElements(targetIds);
       const rect = getUnionRect(elements);
       setTargetRect(rect);
@@ -328,45 +344,60 @@ export function TutorialProvider({
         }
       }
 
-      frameId = window.requestAnimationFrame(updateRect);
+      if (scheduleId !== undefined) window.clearTimeout(scheduleId);
+      scheduleId = window.setTimeout(updateRect, TUTORIAL_LAYOUT_POLL_MS);
     };
 
-    updateRect();
-    return () => window.cancelAnimationFrame(frameId);
+    if (scheduleId !== undefined) window.clearTimeout(scheduleId);
+    scheduleId = window.setTimeout(() => {
+      if (!cancelled) updateRect();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      if (scheduleId !== undefined) {
+        window.clearTimeout(scheduleId);
+      }
+    };
   }, [activeStep, location.pathname]);
 
   useEffect(() => {
     if (activeTour || pendingTour) return;
 
-    if (!isMainComplete) {
-      writeActiveTutorialTour("main");
-      setPendingTour("main");
-      setStepIndex(0);
-      if (!isPassageRoute) {
-        void navigate({
-          to: "/passage/$passageId",
-          params: { passageId: "John-1" },
-          search: {},
-          replace: true,
-        });
-      }
-      return;
-    }
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
 
-    // The Search walkthrough is part of Wave 4: it should only auto-start
-    // after the user has been shown (and acted on) the Search reveal callout.
-    // Users who land on /search before reaching the threshold (e.g. via
-    // direct URL) get the basic search workspace without a forced tour.
-    const searchRevealActed =
-      stagedOnboarding === null ||
-      stagedOnboarding.isHintCompleted(
-        FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY,
-      );
-    if (!isSearchComplete && isSearchRoute && searchRevealActed) {
-      writeActiveTutorialTour("search");
-      setActiveTour("search");
-      setStepIndex(0);
-    }
+      if (!isMainComplete) {
+        writeActiveTutorialTour("main");
+        setPendingTour("main");
+        setStepIndex(0);
+        if (!isPassageRoute) {
+          void navigate({
+            to: "/passage/$passageId",
+            params: { passageId: "John-1" },
+            search: {},
+            replace: true,
+          });
+        }
+        return;
+      }
+
+      const searchRevealActed =
+        stagedOnboarding === null ||
+        stagedOnboarding.isHintCompleted(
+          FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY,
+        );
+      if (!isSearchComplete && isSearchRoute && searchRevealActed) {
+        writeActiveTutorialTour("search");
+        setActiveTour("search");
+        setStepIndex(0);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     activeTour,
     isMainComplete,
@@ -381,8 +412,11 @@ export function TutorialProvider({
   useEffect(() => {
     if (!pendingTour) return;
 
-    let frameId = 0;
-    const startWhenReady = () => {
+    let scheduleId: number | undefined;
+    let cancelled = false;
+
+    const activateWhenReady = () => {
+      if (cancelled) return;
       if (pendingTour === "main") {
         if (!isPassageRoute) {
           void navigate({
@@ -398,7 +432,8 @@ export function TutorialProvider({
       }
 
       if (!isTourReadyToStart(pendingTour)) {
-        frameId = window.requestAnimationFrame(startWhenReady);
+        if (scheduleId !== undefined) window.clearTimeout(scheduleId);
+        scheduleId = window.setTimeout(activateWhenReady, 0);
         return;
       }
 
@@ -409,8 +444,16 @@ export function TutorialProvider({
       setPendingTour(null);
     };
 
-    startWhenReady();
-    return () => window.cancelAnimationFrame(frameId);
+    void Promise.resolve().then(() => {
+      if (!cancelled) activateWhenReady();
+    });
+
+    return () => {
+      cancelled = true;
+      if (scheduleId !== undefined) {
+        window.clearTimeout(scheduleId);
+      }
+    };
   }, [activeTour, isPassageRoute, isSearchRoute, navigate, pendingTour]);
 
   const finalizeTour = useCallback(

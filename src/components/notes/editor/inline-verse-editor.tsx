@@ -849,8 +849,8 @@ export function InlineVerseEditor({
         replaceTextInRange(match, `@${item.book} `);
       }
 
-      if (item.kind === "reference" && item.ref) {
-        replaceQueryWithPill(match, item.ref);
+      if (item.kind === "reference" && item.verseRef) {
+        replaceQueryWithPill(match, item.verseRef);
       }
 
       emitChange();

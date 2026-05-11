@@ -29,7 +29,8 @@ export interface VerseSuggestionItem {
   key: string;
   label: string;
   description?: string;
-  ref?: VerseRef;
+  /** Parsed reference when `kind === "reference"`. Named `verseRef` to avoid React ref heuristic false positives from linters. */
+  verseRef?: VerseRef;
   book?: string;
 }
 
@@ -185,7 +186,7 @@ export function buildVerseSuggestions(
       key: `ref:${formatVerseRef(parsedRef)}`,
       label: formatVerseRef(parsedRef),
       description: "Insert verse link",
-      ref: parsedRef,
+      verseRef: parsedRef,
     });
   }
 

@@ -36,7 +36,7 @@ class MockIntersectionObserver implements IntersectionObserver {
           intersectionRect: rect,
           rootBounds: null,
           time: Date.now(),
-        } as IntersectionObserverEntry,
+        } satisfies IntersectionObserverEntry,
       ],
       this,
     );
@@ -52,7 +52,7 @@ class MockIntersectionObserver implements IntersectionObserver {
 }
 
 globalThis.IntersectionObserver =
-  MockIntersectionObserver as unknown as typeof IntersectionObserver;
+  MockIntersectionObserver as typeof globalThis.IntersectionObserver;
 
 afterEach(() => {
   cleanup();
