@@ -102,4 +102,14 @@ describe("diffWords", () => {
       { text: "wept.", status: "match" },
     ]);
   });
+
+  it("treats straight and smart quotes as equivalent", () => {
+    expect(diffWords(`God's word`, `God\u2019s word`)).toEqual([
+      { text: `God\u2019s`, status: "match" },
+      { text: "word", status: "match" },
+    ]);
+    expect(diffWords(`"truth"`, `\u201Ctruth\u201D`)).toEqual([
+      { text: `\u201Ctruth\u201D`, status: "match" },
+    ]);
+  });
 });

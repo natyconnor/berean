@@ -18,9 +18,23 @@ interface AlignmentCell {
 
 const TRIM_PUNCT_PATTERN =
   /^[.,;:!?"'()[\]\u2018\u2019\u201C\u201D]+|[.,;:!?"'()[\]\u2018\u2019\u201C\u201D]+$/g;
+const SMART_PUNCT_PATTERN = /[\u2018\u2019\u201C\u201D]/g;
+const SMART_PUNCT_REPLACEMENTS: Readonly<Record<string, string>> = {
+  "\u2018": "'",
+  "\u2019": "'",
+  "\u201C": '"',
+  "\u201D": '"',
+};
 
 function normalize(word: string): string {
-  return word.toLowerCase().replace(TRIM_PUNCT_PATTERN, "");
+  return word
+    .normalize("NFKC")
+    .replace(
+      SMART_PUNCT_PATTERN,
+      (char) => SMART_PUNCT_REPLACEMENTS[char] ?? char,
+    )
+    .toLowerCase()
+    .replace(TRIM_PUNCT_PATTERN, "");
 }
 
 function tokenize(input: string): string[] {
