@@ -21,7 +21,7 @@
   "dependencies": {
     "@auth/core": "0.41.2",
     "@convex-dev/auth": "0.0.92",
-    "@tanstack/react-router": "1.169.1",
+    "@tanstack/react-router": "1.169.2",
     "@tanstack/router-plugin": "1.167.32",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
