@@ -351,7 +351,7 @@ export const create = mutation({
     const tags = normalizeTags(args.tags);
     const content = args.body
       ? noteBodyToPlainText(args.body)
-      : (args.content?.trim() ?? "");
+      : (args.content ?? "");
 
     if (content.trim().length === 0) {
       throw new Error("Note content is required");

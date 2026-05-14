@@ -11,6 +11,7 @@ import type { VerseRef } from "@/lib/verse-ref-utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import {
   normalizeNoteBody,
+  noteBodyHasSubstantiveContent,
   noteBodyToPlainText,
   type NoteBody,
 } from "@/lib/note-inline-content";
@@ -119,7 +120,7 @@ export function NoteEditor({
   useEffect(() => {
     if (!onDirtyChange) return;
     if (isNewNote) {
-      onDirtyChange(noteBodyToPlainText(body).trim().length > 0);
+      onDirtyChange(noteBodyHasSubstantiveContent(body));
     } else {
       const bodyChanged =
         noteBodyToPlainText(body) !== noteBodyToPlainText(initialEditorBody);
@@ -138,8 +139,7 @@ export function NoteEditor({
   ]);
 
   const handleSave = useCallback(async () => {
-    const content = noteBodyToPlainText(body).trim();
-    if (!content || isSaving) {
+    if (!noteBodyHasSubstantiveContent(body) || isSaving) {
       return;
     }
 
@@ -158,10 +158,9 @@ export function NoteEditor({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      const content = noteBodyToPlainText(body).trim();
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        if (content) {
+        if (noteBodyHasSubstantiveContent(body)) {
           void handleSave();
         }
       }
@@ -170,7 +169,7 @@ export function NoteEditor({
   );
 
   const isPassage = variant === "passage";
-  const plainText = noteBodyToPlainText(body).trim();
+  const canSave = noteBodyHasSubstantiveContent(body);
 
   return (
     <div
@@ -265,9 +264,9 @@ export function NoteEditor({
                 onClick={() => {
                   void handleSave();
                 }}
-                disabled={!plainText || isSaving}
+                disabled={!canSave || isSaving}
                 tooltip={
-                  !plainText
+                  !canSave
                     ? "Enter content to save"
                     : isSaving
                       ? "Saving note..."

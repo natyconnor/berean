@@ -54,14 +54,38 @@ describe("InlineVerseEditor", () => {
     expect(noteBodyToPlainText(latestBody)).toBe("Line one\nLine two");
   });
 
-  it("does not intercept Enter once @ text is no longer a verse query", () => {
-    const onChange = vi.fn();
+  it("preserves consecutive explicit line breaks", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
 
     render(
       <InlineVerseEditor
         initialBody={EMPTY_NOTE_BODY}
         verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
-        onChange={onChange}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    editor.innerHTML = "Line one<br><br>Line two";
+    act(() => {
+      fireEvent.input(editor);
+    });
+
+    expect(noteBodyToPlainText(latestBody)).toBe("Line one\n\nLine two");
+  });
+
+  it("inserts a single line break on Enter when @ verse query is not active", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
       />,
     );
 
@@ -76,18 +100,41 @@ describe("InlineVerseEditor", () => {
       fireEvent.input(editor);
     });
 
-    const enterEvent = new KeyboardEvent("keydown", {
-      key: "Enter",
-      bubbles: true,
-      cancelable: true,
+    act(() => {
+      fireEvent.keyDown(editor, { key: "Enter" });
+    });
+    expect(noteBodyToPlainText(latestBody)).toBe("@John 3:16 and more\n");
+  });
+
+  it("inserts one line break when pressing Enter after a line of text", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    editor.innerHTML = "This is line 1";
+    const textNode = editor.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected text node");
+    }
+    placeCaretAtEnd(textNode);
+    act(() => {
+      fireEvent.input(editor);
     });
 
-    let dispatchResult = false;
     act(() => {
-      dispatchResult = editor.dispatchEvent(enterEvent);
+      fireEvent.keyDown(editor, { key: "Enter" });
     });
-    expect(dispatchResult).toBe(true);
-    expect(enterEvent.defaultPrevented).toBe(false);
+
+    expect(noteBodyToPlainText(latestBody)).toBe("This is line 1\n");
   });
 
   it("still intercepts Enter for an active verse query", () => {
