@@ -93,7 +93,7 @@ export const importNotesBatch = mutation({
       .collect();
     const seenContents = new Set(
       existingNotes
-        .map((note) => note.content.replace(/\r\n/g, "\n").trim())
+        .map((note) => note.content.replace(/\r\n/g, "\n"))
         .filter((content) => content.length > 0),
     );
 
@@ -102,8 +102,8 @@ export const importNotesBatch = mutation({
     for (const importedNote of args.notes) {
       const tags = normalizeTags(importedNote.tags);
       const body = createPlainTextNoteBody(importedNote.content);
-      const content = noteBodyToPlainText(body).trim();
-      if (content.length === 0) {
+      const content = noteBodyToPlainText(body);
+      if (content.trim().length === 0) {
         continue;
       }
       if (seenContents.has(content)) {

@@ -105,10 +105,6 @@ export function normalizeNoteBody(
     }
 
     if (segment.type === "lineBreak") {
-      const previous = normalizedSegments[normalizedSegments.length - 1];
-      if (previous?.type === "lineBreak") {
-        continue;
-      }
       normalizedSegments.push({ type: "lineBreak" });
       continue;
     }
@@ -167,6 +163,14 @@ export function noteBodyToPlainText(
       return segment.label;
     })
     .join("");
+}
+
+/** True when the note has non-whitespace characters (save / empty-input checks). */
+export function noteBodyHasSubstantiveContent(
+  body: NoteBody | null | undefined,
+  fallbackText = "",
+): boolean {
+  return noteBodyToPlainText(body, fallbackText).trim().length > 0;
 }
 
 export function extractVerseRefsFromNoteBody(

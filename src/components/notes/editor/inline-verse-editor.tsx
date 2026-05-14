@@ -12,9 +12,11 @@ import {
   EMPTY_NOTE_BODY,
   createVerseRefSegment,
   normalizeNoteBody,
+  noteBodyToPlainText,
   type NoteBody,
   type NoteBodySegment,
 } from "@/lib/note-inline-content";
+import { devLog } from "@/lib/dev-log";
 import {
   buildVerseSuggestions,
   formatVerseRef,
@@ -308,8 +310,6 @@ function parseSegmentsFromNodeList(
   };
 
   const pushLineBreak = () => {
-    const previous = segments[segments.length - 1];
-    if (previous?.type === "lineBreak") return;
     segments.push({ type: "lineBreak" });
   };
 
@@ -411,6 +411,54 @@ function readBodyFromEditor(root: HTMLElement): NoteBody {
   return normalizeNoteBody({
     version: 1,
     segments: parseSegmentsFromNodeList(root.childNodes),
+  });
+}
+
+const NOTE_INLINE_DEBUG_CHANNEL = "noteInlineEditor";
+
+/** Top-level DOM shape for devLog (contenteditable quirks / DIV+BR). */
+function summarizeEditorDomSnapshot(root: HTMLElement, maxNodes = 28): string {
+  const parts: string[] = [];
+  let count = 0;
+  for (const node of Array.from(root.childNodes)) {
+    if (count >= maxNodes) {
+      parts.push("…");
+      break;
+    }
+    count += 1;
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(`T${(node as Text).data.length}`);
+      continue;
+    }
+    if (node instanceof HTMLElement) {
+      const pill = node.dataset.noteVersePill === "true" ? ":v" : "";
+      parts.push(`${node.tagName}${pill}`);
+      continue;
+    }
+    parts.push(node.nodeName);
+  }
+  return parts.join(",");
+}
+
+function logNoteInlineEditorParse(
+  seq: number,
+  source: string,
+  root: HTMLElement,
+  body: NoteBody,
+): void {
+  const plain = noteBodyToPlainText(body);
+  const lineBreakSegments = body.segments.filter(
+    (s) => s.type === "lineBreak",
+  ).length;
+  devLog.debug(NOTE_INLINE_DEBUG_CHANNEL, {
+    seq,
+    source,
+    plainLen: plain.length,
+    newlineCount: plain.split("\n").length - 1,
+    lineBreakSegments,
+    segmentCount: body.segments.length,
+    domSnapshot: summarizeEditorDomSnapshot(root),
+    preview: plain.length > 180 ? `${plain.slice(0, 180)}…` : plain,
   });
 }
 
@@ -565,6 +613,8 @@ export function InlineVerseEditor({
     null,
   );
   const activeQueryMatchRef = useRef<ActiveQueryMatch | null>(null);
+  /** Monotonic id for devLog correlation (note newline debugging). */
+  const noteInlineDebugSeqRef = useRef(0);
   const showTutorialText = !!tutorialPreviewText;
   const isTutorialLinkStep =
     !!tutorialPreviewText && !!tutorialPreviewQuery && !tutorialAnimateText;
@@ -832,13 +882,19 @@ export function InlineVerseEditor({
     });
   }, []);
 
-  const emitChange = useCallback(() => {
-    if (!editorRef.current) return;
-    const nextBody = readBodyFromEditor(editorRef.current);
-    setIsEmpty(nextBody.segments.length === 0);
-    onChange(nextBody);
-    refreshQueryState();
-  }, [onChange, refreshQueryState]);
+  const emitChange = useCallback(
+    (source: string) => {
+      if (!editorRef.current) return;
+      noteInlineDebugSeqRef.current += 1;
+      const seq = noteInlineDebugSeqRef.current;
+      const nextBody = readBodyFromEditor(editorRef.current);
+      logNoteInlineEditorParse(seq, source, editorRef.current, nextBody);
+      setIsEmpty(nextBody.segments.length === 0);
+      onChange(nextBody);
+      refreshQueryState();
+    },
+    [onChange, refreshQueryState],
+  );
 
   const handleSelectSuggestion = useCallback(
     (item: VerseSuggestionItem) => {
@@ -853,7 +909,7 @@ export function InlineVerseEditor({
         replaceQueryWithPill(match, item.ref);
       }
 
-      emitChange();
+      emitChange("verseSuggest");
       editorRef.current?.focus();
     },
     [emitChange],
@@ -866,7 +922,16 @@ export function InlineVerseEditor({
     const trailingTextNode = document.createTextNode("");
     editorRef.current.append(trailingTextNode);
     placeCaretAfterNode(trailingTextNode);
-    onChange(readBodyFromEditor(editorRef.current));
+    noteInlineDebugSeqRef.current += 1;
+    const seq = noteInlineDebugSeqRef.current;
+    const synced = readBodyFromEditor(editorRef.current);
+    logNoteInlineEditorParse(
+      seq,
+      "initialBodyEffect",
+      editorRef.current,
+      synced,
+    );
+    onChange(synced);
   }, [initialBody, onChange]);
 
   useEffect(() => {
@@ -979,7 +1044,7 @@ export function InlineVerseEditor({
             clearHoverPreview();
           }, 120);
         }}
-        onInput={() => emitChange()}
+        onInput={() => emitChange("input")}
         onKeyUp={() => refreshQueryState()}
         onMouseUp={() => refreshQueryState()}
         onPaste={(event) => {
@@ -988,7 +1053,7 @@ export function InlineVerseEditor({
             event.currentTarget,
             event.clipboardData.getData("text/plain"),
           );
-          emitChange();
+          emitChange("paste");
         }}
         onClick={(event) => {
           const target = event.target as HTMLElement;
@@ -1000,7 +1065,7 @@ export function InlineVerseEditor({
             event.stopPropagation();
             removeButton.closest("[data-note-verse-pill='true']")?.remove();
             clearHoverPreview();
-            emitChange();
+            emitChange("pillRemove");
             return;
           }
           const pill = target.closest<HTMLElement>(
@@ -1120,6 +1185,16 @@ export function InlineVerseEditor({
 
           if ((event.key === "Enter" || event.key === "Tab") && isQueryActive) {
             event.preventDefault();
+            return;
+          }
+
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            const editor = editorRef.current;
+            if (editor) {
+              insertPlainTextAtCursor(editor, "\n");
+              emitChange("enterKey");
+            }
             return;
           }
         }}
