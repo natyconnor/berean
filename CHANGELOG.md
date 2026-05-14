@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.8](https://github.com/natyconnor/berean/compare/v1.7.7...v1.7.8) (2026-05-14)
+
+
+### Bug Fixes
+
+* fix Enter doubling newlines; whitespace-only empty handling ([#88](https://github.com/natyconnor/berean/issues/88)) ([fe3b263](https://github.com/natyconnor/berean/commit/fe3b263afe485acba0f8a140db1aa4d691d8eda2))
+
 ## [1.7.7](https://github.com/natyconnor/berean/compare/v1.7.6...v1.7.7) (2026-05-11)
 
 
