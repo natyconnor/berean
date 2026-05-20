@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.9](https://github.com/natyconnor/berean/compare/v1.7.8...v1.7.9) (2026-05-20)
+
+
+### Bug Fixes
+
+* first enter press doesn't create a new line ([#93](https://github.com/natyconnor/berean/issues/93)) ([2a0b7f4](https://github.com/natyconnor/berean/commit/2a0b7f4027db47a47c1c94f7f43654457e7e254c))
+
 ## [1.7.8](https://github.com/natyconnor/berean/compare/v1.7.7...v1.7.8) (2026-05-14)
 
 
