@@ -305,18 +305,6 @@ export function StudyTeachCard({
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
           {refLabel}
         </h2>
-        <Link
-          to="/passage/$passageId"
-          params={{ passageId }}
-          search={{
-            startVerse: card.reference.startVerse,
-            endVerse: card.reference.endVerse,
-          }}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          Open in passage view
-          <ArrowUpRight className="h-3 w-3" />
-        </Link>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">

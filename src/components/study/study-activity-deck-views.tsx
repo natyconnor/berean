@@ -19,7 +19,7 @@ interface StudyDeckCompleteStateProps {
   cards: StudyCard[];
   scopeLabel: string;
   onRestart: () => void;
-  onShuffle: () => void;
+  onShuffle?: () => void;
   onRestoreOrder?: () => void;
 }
 
@@ -42,7 +42,7 @@ export function StudyDeckCompleteState({
           <RotateCcw className="h-4 w-4" />
           Restart deck
         </Button>
-        {totalCards >= 2 && (
+        {onShuffle && totalCards >= 2 && (
           <Button onClick={onShuffle} variant="outline" className="gap-2">
             <Shuffle className="h-4 w-4" />
             Shuffle

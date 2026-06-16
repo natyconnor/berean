@@ -23,6 +23,7 @@ import {
 interface StudyActivityDeckProps {
   cards: StudyCard[];
   scopeLabel: string;
+  controlledOrder?: { order: "shuffle" | "in-order"; nonce: number };
 }
 
 const TEACH_TIMER_SECONDS = 300;
@@ -78,8 +79,14 @@ const stackCardVariants: Variants = {
 export function StudyActivityDeck({
   cards,
   scopeLabel,
+  controlledOrder,
 }: StudyActivityDeckProps) {
-  const initialQueue = useMemo(() => cards.map((c) => c.id), [cards]);
+  const initialQueue = useMemo(() => {
+    if (controlledOrder?.order === "shuffle") {
+      return randomizeCardIds(cards);
+    }
+    return cards.map((c) => c.id);
+  }, [cards, controlledOrder]);
   const cardsById = useMemo(() => {
     const map = new Map<string, StudyCard>();
     for (const c of cards) map.set(c.id, c);
@@ -87,6 +94,7 @@ export function StudyActivityDeck({
   }, [cards]);
 
   const [queue, setQueue] = useState<string[]>(() => initialQueue);
+  const [queueSource, setQueueSource] = useState(initialQueue);
   const [position, setPosition] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
@@ -101,6 +109,18 @@ export function StudyActivityDeck({
   const [exitDirection, setExitDirection] = useState<ExitDirection | null>(
     null,
   );
+
+  if (queueSource !== initialQueue) {
+    setQueueSource(initialQueue);
+    setQueue(initialQueue);
+    setPosition(0);
+    setFlipped(false);
+    setCompletedIds(new Set());
+    setTypedById({});
+    setExitDirection(null);
+    setIsInitialShuffle(true);
+    setShuffleNonce((n) => n + 1);
+  }
 
   // Play the shuffle animation once per mount (and once per restart, via
   // `shuffleNonce`). The parent re-mounts this component on activity switch
@@ -289,14 +309,17 @@ export function StudyActivityDeck({
   }
 
   if (isComplete || !currentCard) {
+    const deckOwnsOrder = controlledOrder === undefined;
     return (
       <StudyDeckCompleteState
         cards={cards}
         scopeLabel={scopeLabel}
         onRestart={handleRestart}
-        onShuffle={handleShuffle}
+        onShuffle={deckOwnsOrder ? handleShuffle : undefined}
         onRestoreOrder={
-          cards[0]?.type === "verse-memory" ? handleRestoreOrder : undefined
+          deckOwnsOrder && cards[0]?.type === "verse-memory"
+            ? handleRestoreOrder
+            : undefined
         }
       />
     );
@@ -304,14 +327,17 @@ export function StudyActivityDeck({
 
   const currentCardActivity: ActivityType = currentCard.type;
   const isVerseMemoryDeck = cards[0]?.type === "verse-memory";
+  const deckOwnsOrder = controlledOrder === undefined;
 
   const isTeachRevealed = isTeachCard && flipped;
+  const deckContentMaxWidth =
+    controlledOrder !== undefined ? "max-w-full" : "max-w-2xl";
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="mx-auto w-full max-w-2xl space-y-2">
+      <div className={cn("mx-auto w-full space-y-2", deckContentMaxWidth)}>
         <div className="relative flex min-h-7 items-center justify-center">
-          {totalCards >= 2 && (
+          {totalCards >= 2 && deckOwnsOrder && (
             <div className="absolute left-0 flex items-center">
               <Button
                 type="button"
@@ -361,7 +387,7 @@ export function StudyActivityDeck({
           "relative mx-auto w-full",
           isTeachRevealed
             ? "max-w-5xl min-h-[680px]"
-            : "max-w-2xl min-h-[520px]",
+            : cn(deckContentMaxWidth, "min-h-[520px]"),
         )}
         transition={{ duration: 0.45, ease: "easeInOut" }}
       >
@@ -436,7 +462,7 @@ export function StudyActivityDeck({
         </AnimatePresence>
       </motion.div>
 
-      <div className="mx-auto w-full max-w-2xl pt-1">
+      <div className={cn("mx-auto w-full pt-1", deckContentMaxWidth)}>
         {!flipped ? (
           <div className="grid grid-cols-[auto_1fr] gap-2">
             <Button
@@ -592,7 +618,7 @@ function ShuffleDealerCardFace({ card }: { card: StudyCard }) {
           Can you recall this verse?
         </p>
         <div className="w-full max-w-xl min-h-[200px] rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-muted-foreground/50">
-          Type what you remember (optional)
+          Type what you remember
         </div>
       </div>
     );

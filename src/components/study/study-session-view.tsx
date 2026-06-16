@@ -6,6 +6,7 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import { formatScopeSummary } from "./study-scope-summary";
 import { sortByVerseRef } from "../../../shared/compare-verse-refs";
 import {
@@ -179,7 +180,12 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
               isResolved={resolved !== undefined}
             />
           ) : (
-            <div className="max-w-5xl mx-auto">
+            <div
+              className={cn(
+                "mx-auto w-full",
+                view === "verse-memory" ? "max-w-6xl" : "max-w-5xl",
+              )}
+            >
               <StudySessionActivityView
                 key={view}
                 activity={view}
