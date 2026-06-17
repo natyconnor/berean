@@ -1,16 +1,17 @@
-import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight } from "lucide-react";
 import type { JSX } from "react";
 
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { cn } from "@/lib/utils";
-import { formatVerseRef, toPassageId } from "@/lib/verse-ref-utils";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { FlipFaces } from "./flip-faces";
-import { classifyVerseAttempt } from "./study-attempt-quality";
+import {
+  classifyVerseAttempt,
+  verseAttemptAccuracy,
+} from "./study-attempt-quality";
 import type { VerseMemoryCard as VerseMemoryCardData } from "./study-card-model";
 import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
@@ -23,22 +24,10 @@ interface StudyVerseMemoryCardProps {
   onTypedAnswerChange: (value: string) => void;
 }
 
-interface DiffSummary {
-  matches: number;
-  mistakes: number;
-}
-
-function summarizeDiff(tokens: ReadonlyArray<DiffToken>): DiffSummary {
-  let matches = 0;
-  let mistakes = 0;
-  for (const token of tokens) {
-    if (token.status === "match") {
-      matches += 1;
-    } else {
-      mistakes += 1;
-    }
-  }
-  return { matches, mistakes };
+interface VerseAttemptResultProps {
+  typedAnswer: string;
+  versePlainText: string;
+  diffTokens?: ReadonlyArray<DiffToken>;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -108,10 +97,7 @@ function VerseAttemptDiff({
 }: {
   tokens: ReadonlyArray<DiffToken>;
 }): JSX.Element {
-  const summary = summarizeDiff(tokens);
-  const total = summary.matches + summary.mistakes;
-  const accuracy =
-    total === 0 ? 0 : Math.round((summary.matches / total) * 100);
+  const accuracy = verseAttemptAccuracy(tokens);
 
   return (
     <div className="space-y-3">
@@ -139,6 +125,48 @@ function VerseAttemptDiff({
   );
 }
 
+export function VerseAttemptResult({
+  typedAnswer,
+  versePlainText,
+  diffTokens: providedDiffTokens,
+}: VerseAttemptResultProps): JSX.Element | null {
+  const trimmedTyped = typedAnswer.trim();
+  if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
+
+  const diffTokens =
+    providedDiffTokens ?? diffWords(typedAnswer, versePlainText);
+  const attemptQuality = classifyVerseAttempt(diffTokens);
+  // Used as a motion key so the feedback banner re-plays its entrance when
+  // the user tries a different attempt, but not on every keystroke.
+  const attemptKey = trimmedTyped;
+
+  return (
+    <div className="w-full max-w-xl mx-auto space-y-2">
+      {attemptQuality && attemptQuality !== "off" && (
+        <VerseMemoryFeedback quality={attemptQuality} attemptKey={attemptKey} />
+      )}
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.24, ease: "easeOut" }}
+        className={cn(
+          "space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
+          attemptQuality === "exact"
+            ? "border-emerald-500/40"
+            : attemptQuality === "close"
+              ? "border-amber-500/40"
+              : "border-primary/25",
+        )}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          How you did
+        </p>
+        <VerseAttemptDiff tokens={diffTokens} />
+      </motion.div>
+    </div>
+  );
+}
+
 export function StudyVerseMemoryCard({
   card,
   flipped,
@@ -146,22 +174,13 @@ export function StudyVerseMemoryCard({
   onTypedAnswerChange,
 }: StudyVerseMemoryCardProps): JSX.Element {
   const refLabel = formatVerseRef(card.reference);
-  const passageId = toPassageId(card.reference.book, card.reference.chapter);
 
   // Fetch eagerly (not gated on `flipped`) so the verse text is cached and
   // ready the moment the user reveals the back of the card. The result is
   // only rendered on the back face, so this is pure prefetch.
   const { data, loading, error } = useEsvReference(card.reference);
 
-  const trimmedTyped = typedAnswer.trim();
-  const showAttempt =
-    trimmedTyped.length > 0 && data !== null && data !== undefined;
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
-  const diffTokens = showAttempt ? diffWords(typedAnswer, versePlainText) : [];
-  const attemptQuality = classifyVerseAttempt(diffTokens);
-  // Used as a motion key so the feedback banner re-plays its entrance when
-  // the user tries a different attempt, but not on every keystroke.
-  const attemptKey = trimmedTyped;
 
   const front = (
     <div className="flex flex-col items-center gap-5 py-8 h-full w-full px-6 text-center">
@@ -174,7 +193,7 @@ export function StudyVerseMemoryCard({
       <Textarea
         value={typedAnswer}
         onChange={(e) => onTypedAnswerChange(e.target.value)}
-        placeholder="Type what you remember (optional)"
+        placeholder="Type what you remember"
         className="w-full max-w-xl min-h-[200px] resize-none"
         aria-label="Your recalled verse"
       />
@@ -187,33 +206,11 @@ export function StudyVerseMemoryCard({
         {refLabel}
       </h2>
 
-      {showAttempt && flipped && (
-        <div className="w-full max-w-xl mx-auto space-y-2">
-          {attemptQuality && attemptQuality !== "off" && (
-            <VerseMemoryFeedback
-              quality={attemptQuality}
-              attemptKey={attemptKey}
-            />
-          )}
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: "easeOut" }}
-            className={cn(
-              "space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
-              attemptQuality === "exact"
-                ? "border-emerald-500/40"
-                : attemptQuality === "close"
-                  ? "border-amber-500/40"
-                  : "border-primary/25",
-            )}
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              How you did
-            </p>
-            <VerseAttemptDiff tokens={diffTokens} />
-          </motion.div>
-        </div>
+      {flipped && (
+        <VerseAttemptResult
+          typedAnswer={typedAnswer}
+          versePlainText={versePlainText}
+        />
       )}
 
       <div className="w-full max-w-xl mx-auto space-y-2 text-left text-base leading-relaxed text-foreground">
@@ -262,21 +259,6 @@ export function StudyVerseMemoryCard({
             </motion.div>
           ) : null}
         </AnimatePresence>
-      </div>
-
-      <div className="w-full max-w-xl mx-auto pt-2 text-center">
-        <Link
-          to="/passage/$passageId"
-          params={{ passageId }}
-          search={{
-            startVerse: card.reference.startVerse,
-            endVerse: card.reference.endVerse,
-          }}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          Open in passage view
-          <ArrowUpRight className="h-3 w-3" />
-        </Link>
       </div>
     </div>
   );

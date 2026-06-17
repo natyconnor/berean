@@ -6,7 +6,9 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import { formatScopeSummary } from "./study-scope-summary";
+import { sortByVerseRef } from "../../../shared/compare-verse-refs";
 import {
   countDistinctTeachPassageRefs,
   type ActivityType,
@@ -71,7 +73,10 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
     }
   }
 
-  const savedVerses = useMemo(() => resolved?.savedVerses ?? [], [resolved]);
+  const savedVerses = useMemo(
+    () => sortByVerseRef(resolved?.savedVerses ?? []),
+    [resolved],
+  );
   const notes = useMemo(() => resolved?.notes ?? [], [resolved]);
   const teachPassagesCount = useMemo(() => {
     if (resolved?.teachPassagesCount !== undefined) {
@@ -130,7 +135,7 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Study
+            Back to Study Sessions
           </Link>
         </div>
       </div>
@@ -147,7 +152,7 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Study
+          Back to Study Sessions
         </Link>
         <h1 className="text-lg font-semibold tracking-tight">{summaryText}</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
@@ -175,7 +180,12 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
               isResolved={resolved !== undefined}
             />
           ) : (
-            <div className="max-w-5xl mx-auto">
+            <div
+              className={cn(
+                "mx-auto w-full",
+                view === "verse-memory" ? "max-w-6xl" : "max-w-5xl",
+              )}
+            >
               <StudySessionActivityView
                 key={view}
                 activity={view}

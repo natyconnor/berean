@@ -4,6 +4,7 @@ import { paginationOptsValidator } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { matchesTagFilters, type TagMatchMode } from "./lib/tags";
+import { sortByVerseRef } from "../shared/compare-verse-refs";
 import { verseRefKey } from "../shared/verse-ref-key";
 
 const scopeValue = v.object({
@@ -324,7 +325,7 @@ async function collectSavedVersesForScope(
     });
   }
 
-  return results;
+  return sortByVerseRef(results);
 }
 
 async function collectNotesForScope(

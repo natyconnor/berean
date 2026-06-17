@@ -21,6 +21,16 @@ const ERROR_STATUSES: ReadonlySet<DiffToken["status"]> = new Set([
 const MAX_CLOSE_ERRORS = 3;
 const MIN_CLOSE_MATCH_RATIO = 0.8;
 
+export function verseAttemptAccuracy(tokens: ReadonlyArray<DiffToken>): number {
+  if (tokens.length === 0) return 0;
+
+  let matches = 0;
+  for (const token of tokens) {
+    if (token.status === "match") matches += 1;
+  }
+  return Math.round((matches / tokens.length) * 100);
+}
+
 /**
  * Classify a typed verse-memory attempt based on its diff tokens.
  *

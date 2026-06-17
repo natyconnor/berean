@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { countDistinctTeachPassageRefs } from "./study-card-model";
+import {
+  buildStudyCards,
+  countDistinctTeachPassageRefs,
+} from "./study-card-model";
 
 describe("countDistinctTeachPassageRefs", () => {
   it("dedupes the same ref across multiple notes and within one note", () => {
@@ -44,5 +47,31 @@ describe("countDistinctTeachPassageRefs", () => {
   it("returns 0 for empty notes or notes with no refs", () => {
     expect(countDistinctTeachPassageRefs([])).toBe(0);
     expect(countDistinctTeachPassageRefs([{ refs: [] }])).toBe(0);
+  });
+});
+
+describe("buildStudyCards verse-memory", () => {
+  it("orders cards by canonical verse reference, not input order", () => {
+    const cards = buildStudyCards(
+      [
+        {
+          _id: "late",
+          book: "John",
+          chapter: 3,
+          startVerse: 16,
+          endVerse: 16,
+        },
+        {
+          _id: "early",
+          book: "Genesis",
+          chapter: 1,
+          startVerse: 1,
+          endVerse: 1,
+        },
+      ],
+      [],
+      "verse-memory",
+    );
+    expect(cards.map((c) => c.id)).toEqual(["vm:early", "vm:late"]);
   });
 });

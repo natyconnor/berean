@@ -4,6 +4,7 @@ import { diffWords } from "@/lib/diff-words";
 import {
   classifyVerseAttempt,
   hasAttemptErrors,
+  verseAttemptAccuracy,
 } from "./study-attempt-quality";
 
 describe("classifyVerseAttempt", () => {
@@ -58,5 +59,21 @@ describe("hasAttemptErrors", () => {
   it("returns true when at least one token is a mismatch/missing/extra", () => {
     const tokens = diffWords("Jesus cried", "Jesus wept");
     expect(hasAttemptErrors(tokens)).toBe(true);
+  });
+});
+
+describe("verseAttemptAccuracy", () => {
+  it("returns 0 when there are no tokens", () => {
+    expect(verseAttemptAccuracy([])).toBe(0);
+  });
+
+  it("returns 100 for an exact attempt", () => {
+    const tokens = diffWords("Jesus wept.", "Jesus wept.");
+    expect(verseAttemptAccuracy(tokens)).toBe(100);
+  });
+
+  it("rounds the matched token percentage", () => {
+    const tokens = diffWords("Jesus cried loudly", "Jesus wept");
+    expect(verseAttemptAccuracy(tokens)).toBe(33);
   });
 });

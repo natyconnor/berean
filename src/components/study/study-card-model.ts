@@ -1,6 +1,7 @@
 import { devLog } from "@/lib/dev-log";
 import { studyTeachDebugEnabled } from "@/lib/debug-study-teach";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { sortByVerseRef } from "../../../shared/compare-verse-refs";
 import { verseRefKey } from "../../../shared/verse-ref-key";
 
 export type ActivityType = "verse-memory" | "teach";
@@ -51,7 +52,7 @@ export interface ResolvedNote {
 function buildVerseMemoryCards(
   savedVerses: ResolvedSavedVerse[],
 ): VerseMemoryCard[] {
-  return savedVerses.map((sv) => ({
+  return sortByVerseRef(savedVerses).map((sv) => ({
     type: "verse-memory" as const,
     id: `vm:${sv._id}`,
     reference: {

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { StudyActivityDeck } from "./study-activity-deck";
 import { buildStudyCards, type ActivityType } from "./study-card-model";
+import { StudyVerseMemoryView } from "./study-verse-memory-view";
 
 interface StudySessionActivityViewProps {
   activity: ActivityType;
@@ -64,6 +65,10 @@ export function StudySessionActivityView({
     () => [...new Set(cards.map((c) => c.id))].sort().join("\u0000"),
     [cards],
   );
+
+  if (activity === "verse-memory") {
+    return <StudyVerseMemoryView cards={cards} scopeLabel={scopeLabel} />;
+  }
 
   return (
     <StudyActivityDeck key={deckKey} cards={cards} scopeLabel={scopeLabel} />

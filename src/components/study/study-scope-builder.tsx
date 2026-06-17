@@ -139,7 +139,7 @@ export function StudyScopeBuilder() {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-1"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Study
+          Back to Study Sessions
         </Link>
         <h1 className="text-lg font-semibold tracking-tight">
           New Study Session
