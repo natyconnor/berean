@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/natyconnor/berean/compare/v1.7.9...v1.8.0) (2026-06-17)
+
+
+### Features
+
+* Nathanc/order memory verses ([#104](https://github.com/natyconnor/berean/issues/104)) ([9867d05](https://github.com/natyconnor/berean/commit/9867d057bc9f56f1ca18157eca00b0a6ceda8ab1))
+
 ## [1.7.9](https://github.com/natyconnor/berean/compare/v1.7.8...v1.7.9) (2026-05-20)
 
 
