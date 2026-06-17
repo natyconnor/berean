@@ -12,20 +12,24 @@ This file is the canonical, repository-wide instruction set for coding agents.
 
 1. Read the relevant files before editing.
 2. Keep edits focused and self-explanatory.
-3. After any code changes, run `pnpm run agent:check`.
+3. After any code changes, run `pnpm run agent:check` before finishing the task.
 4. If checks fail, fix the issues and rerun the command.
 5. Do not treat the task as complete while checks are failing unless the user explicitly says to skip them.
 
 ## Validation
 
-- Main post-change command: `pnpm run agent:check`
+Validation is required, not optional. A Cursor **stop hook** (`.cursor/hooks/agent-check-on-stop.sh`) also runs `pnpm run agent:check` automatically when source files changed and will loop the agent back with failures until checks pass.
+
+- Main post-change command: `pnpm run agent:check` (format → lint → typecheck)
+- CI also runs: `format:check`, `test`, and `build` — run these when the change is broad or touches build/test paths
 - Individual commands:
-  - `pnpm run format`
+  - `pnpm run format` (Prettier, write)
+  - `pnpm run format:check` (Prettier, CI parity)
   - `pnpm run lint`
   - `pnpm run typecheck`
   - `pnpm test`
 
-Run targeted tests when the change is risky, nearby tests already exist, or the user asks for them.
+Run `pnpm test` when the change is risky, nearby tests already exist, or the user asks for them.
 
 ## Safety
 

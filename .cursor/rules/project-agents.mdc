@@ -7,4 +7,4 @@ alwaysApply: true
 
 Read and follow `AGENTS.md` at the repository root for project-wide workflow, validation, and safety guidance.
 
-After code changes, run `pnpm run agent:check` unless the user explicitly tells you not to.
+After code changes, run `pnpm run agent:check` before finishing the task unless the user explicitly tells you not to. Do not skip this step — a Cursor stop hook will re-run the same checks and loop back with failures if they were missed.
