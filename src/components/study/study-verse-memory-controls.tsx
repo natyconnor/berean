@@ -1,4 +1,4 @@
-import { BookOpen, ListOrdered, Shuffle, Sprout, Target } from "lucide-react";
+import { BookOpen, ListOrdered, Shuffle, Sprout } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";

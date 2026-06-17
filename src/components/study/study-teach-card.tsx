@@ -1,6 +1,5 @@
-import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight, Check, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useMutation } from "convex/react";
 import { useState, type JSX } from "react";
 
@@ -12,7 +11,7 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
 import { createPlainTextNoteBody } from "@/lib/note-inline-content";
 import { cn } from "@/lib/utils";
-import { formatVerseRef, toPassageId } from "@/lib/verse-ref-utils";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { FlipFaces } from "./flip-faces";
 import type {
@@ -41,7 +40,6 @@ export function StudyTeachCard({
 }: StudyTeachCardProps): JSX.Element {
   const resolveTagStyle = useStarterTagBadgeStyle();
   const refLabel = formatVerseRef(card.reference);
-  const passageId = toPassageId(card.reference.book, card.reference.chapter);
 
   const { data, loading, error } = useEsvReference(card.reference);
 

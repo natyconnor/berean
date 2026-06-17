@@ -1,5 +1,4 @@
-import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, CheckCircle2, RotateCcw } from "lucide-react";
+import { CheckCircle2, RotateCcw } from "lucide-react";
 import { type KeyboardEvent, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,7 @@ import {
   type HintToken,
   maskVerseText,
 } from "@/lib/verse-hint";
-import { formatVerseRef, toPassageId } from "@/lib/verse-ref-utils";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { verseAttemptAccuracy } from "./study-attempt-quality";
 import type { VerseMemoryCard } from "./study-card-model";
@@ -64,7 +63,6 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
   const refLabel = formatVerseRef(card.reference);
-  const passageId = toPassageId(card.reference.book, card.reference.chapter);
   const { data, loading, error } = useEsvReference(card.reference);
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
   const tokens = useMemo(

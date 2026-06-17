@@ -1,13 +1,11 @@
-import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight } from "lucide-react";
 import type { JSX } from "react";
 
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { cn } from "@/lib/utils";
-import { formatVerseRef, toPassageId } from "@/lib/verse-ref-utils";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { FlipFaces } from "./flip-faces";
 import {
@@ -176,7 +174,6 @@ export function StudyVerseMemoryCard({
   onTypedAnswerChange,
 }: StudyVerseMemoryCardProps): JSX.Element {
   const refLabel = formatVerseRef(card.reference);
-  const passageId = toPassageId(card.reference.book, card.reference.chapter);
 
   // Fetch eagerly (not gated on `flipped`) so the verse text is cached and
   // ready the moment the user reveals the back of the card. The result is
