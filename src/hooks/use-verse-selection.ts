@@ -8,6 +8,7 @@ interface VerseSelection {
 interface UseVerseSelectionResult {
   selectionStart: number | null;
   selectionEnd: number | null;
+  isDragging: boolean;
   isSelecting: boolean;
   isInSelection: (verseNumber: number) => boolean;
   handleMouseDown: (verseNumber: number) => void;
@@ -77,6 +78,7 @@ export function useVerseSelection(
   return {
     selectionStart,
     selectionEnd,
+    isDragging,
     isSelecting,
     isInSelection,
     handleMouseDown,

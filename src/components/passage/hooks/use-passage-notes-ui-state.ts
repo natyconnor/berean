@@ -75,6 +75,7 @@ export interface PassageNotesUiState {
   newDraftsByAnchor: Map<number, VerseRef[]>;
   isPassageSelection: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  isDragging: boolean;
   isInSelection: (verseNumber: number) => boolean;
   handleVerseMouseDown: (verseNumber: number) => void;
   handleMouseEnter: (verseNumber: number) => void;
@@ -712,6 +713,7 @@ export function usePassageNotesUiState({
   const {
     selectionStart,
     selectionEnd,
+    isDragging,
     isInSelection,
     handleMouseDown,
     handleMouseEnter: handleSelectionMouseEnter,
@@ -1412,6 +1414,7 @@ export function usePassageNotesUiState({
     newDraftsByAnchor,
     isPassageSelection,
     containerRef,
+    isDragging,
     isInSelection,
     handleVerseMouseDown,
     handleMouseEnter,

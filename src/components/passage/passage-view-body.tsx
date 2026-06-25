@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { hasExactSavedSpan } from "@/lib/saved-verse-utils";
 import type { PassageHeartControl } from "./verse-row";
+import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 
 const EMPTY_FOCUS_MAP = new Map<string, number | null>();
 
@@ -100,6 +101,7 @@ export function PassageViewBody({
     containerRef,
     selectedVerses,
     passageDraftVerses,
+    isDragging,
     isInSelection,
     isPassageSelection,
     verseToPassageAnchor,
@@ -133,6 +135,12 @@ export function PassageViewBody({
     handleEditorFocus,
     startCreatingPassageNote,
   } = passageNotesInteraction;
+
+  useDragAutoScroll({
+    viewportRef,
+    isActive: isDragging,
+    onPointerOverVerse: handleMouseEnter,
+  });
 
   const savedSpans = useMemo(
     () => savedVersesForChapter ?? [],
