@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/natyconnor/berean/compare/v1.8.0...v1.9.0) (2026-06-26)
+
+
+### Features
+
+* add edge auto-scroll for verse drag selection ([#109](https://github.com/natyconnor/berean/issues/109)) ([42512e8](https://github.com/natyconnor/berean/commit/42512e8319dc08c716c5494d42ac6839b184efcd))
+
 ## [1.8.0](https://github.com/natyconnor/berean/compare/v1.7.9...v1.8.0) (2026-06-17)
 
 
