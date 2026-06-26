@@ -32,6 +32,7 @@ export interface PassageNotesInteraction {
   verseToPassageAnchor: Map<number, number>;
 
   containerRef: React.RefObject<HTMLDivElement | null>;
+  isDragging: boolean;
   isInSelection: (verseNumber: number) => boolean;
 
   handleVerseMouseDown: (verseNumber: number) => void;
