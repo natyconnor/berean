@@ -3,11 +3,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
-import {
-  deriveActiveStatus,
-  findVerseMemory,
-  getOrCreateVerseMemory,
-} from "./lib/verseMemory";
+import { findVerseMemory, getOrCreateVerseMemory } from "./lib/verseMemory";
 import { scheduleNext } from "../src/lib/memory-scheduler";
 import {
   bucketAccuracyAverages,
@@ -37,7 +33,6 @@ const statusValidator = v.union(
   v.literal("learning"),
   v.literal("reviewing"),
   v.literal("mastered"),
-  v.literal("suspended"),
 );
 
 const qualityValidator = v.union(
@@ -50,6 +45,7 @@ const modeValidator = v.union(
   v.literal("learn"),
   v.literal("review"),
   v.literal("deck"),
+  v.literal("practice"),
 );
 
 /** The 7-field schedule returned by the pure scheduler. */
@@ -118,8 +114,10 @@ function toRowView(row: Doc<"verseMemory">) {
 /**
  * Verses due for study at `now` (soonest first), joined to their verse ref.
  *
- * Suspended verses are excluded. `now` is passed in by the caller so the query
- * stays deterministic/cacheable.
+ * Heart-aware: only verses that are currently hearted (have a `savedVerses`
+ * row) are returned. A verse un-hearted after review keeps its `verseMemory`
+ * row as durable history, but drops out of the live due queue until re-hearted.
+ * `now` is passed in by the caller so the query stays deterministic/cacheable.
  */
 export const dueQueue = query({
   args: { now: v.number(), limit: v.optional(v.number()) },
@@ -160,7 +158,14 @@ export const dueQueue = query({
 
     for (const row of dueRows) {
       if (items.length >= limit) break;
-      if (row.status === "suspended") continue;
+
+      const saved = await ctx.db
+        .query("savedVerses")
+        .withIndex("by_userId_verseRefId", (q) =>
+          q.eq("userId", userId).eq("verseRefId", row.verseRefId),
+        )
+        .unique();
+      if (!saved) continue;
 
       const ref = await ctx.db.get(row.verseRefId);
       if (!ref || ref.userId !== userId) continue;
@@ -188,7 +193,10 @@ export const dueQueue = query({
   },
 });
 
-/** Cheap count of verses due at `now` (excludes suspended). Drives the dock badge. */
+/**
+ * Cheap count of verses due at `now`. Heart-aware: only currently-hearted
+ * verses (with a `savedVerses` row) are counted. Drives the dock badge.
+ */
 export const dueCount = query({
   args: { now: v.number() },
   returns: v.number(),
@@ -207,7 +215,13 @@ export const dueCount = query({
 
     let count = 0;
     for (const row of dueRows) {
-      if (row.status !== "suspended") count += 1;
+      const saved = await ctx.db
+        .query("savedVerses")
+        .withIndex("by_userId_verseRefId", (q) =>
+          q.eq("userId", userId).eq("verseRefId", row.verseRefId),
+        )
+        .unique();
+      if (saved) count += 1;
     }
     return count;
   },
@@ -313,61 +327,22 @@ export const getOrCreateForVerse = mutation({
   },
 });
 
-/**
- * Suspend or un-suspend a verse. Suspending removes it from the due queue and
- * records the active status in `previousStatus`; un-suspending restores that
- * status exactly (falling back to a schedule-derived status for legacy rows
- * that predate `previousStatus`).
- *
- * Returns the resulting status, or `null` when the user has no memory row for
- * the verse yet.
- */
-export const setSuspended = mutation({
-  args: { verseRefId: v.id("verseRefs"), suspended: v.boolean() },
-  returns: v.union(statusValidator, v.null()),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-
-    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
-    if (!memory) {
-      return null;
-    }
-
-    if (args.suspended) {
-      if (memory.status === "suspended") {
-        return "suspended" as const;
-      }
-      await ctx.db.patch(memory._id, {
-        status: "suspended",
-        previousStatus: memory.status,
-      });
-      return "suspended" as const;
-    }
-
-    if (memory.status !== "suspended") {
-      return memory.status;
-    }
-
-    const restored = memory.previousStatus ?? deriveActiveStatus(memory);
-    await ctx.db.patch(memory._id, {
-      status: restored,
-      previousStatus: undefined,
-    });
-    return restored;
-  },
-});
-
 const memoryStatsValidator = v.object({
   new: v.number(),
   learning: v.number(),
   reviewing: v.number(),
   mastered: v.number(),
-  suspended: v.number(),
   total: v.number(),
   due: v.number(),
 });
 
-/** Per-status counts for the current user, plus a due-now tally. */
+/**
+ * Per-status counts for the current user, plus a due-now tally.
+ *
+ * Heart-aware: the canonical in-Memory set is the user's hearted verses
+ * (`savedVerses`), so we iterate those and join each to its `verseMemory` row.
+ * A verse un-hearted after review keeps its memory row but is not counted here.
+ */
 export const memoryStats = query({
   args: { now: v.number() },
   returns: memoryStatsValidator,
@@ -377,7 +352,6 @@ export const memoryStats = query({
       learning: 0,
       reviewing: 0,
       mastered: 0,
-      suspended: 0,
       total: 0,
       due: 0,
     };
@@ -387,16 +361,18 @@ export const memoryStats = query({
       return empty;
     }
 
-    const rows = await ctx.db
-      .query("verseMemory")
-      .withIndex("by_userId_status", (q) => q.eq("userId", userId))
+    const saved = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
 
     const stats = { ...empty };
-    for (const row of rows) {
-      stats[row.status] += 1;
+    for (const row of saved) {
+      const memory = await findVerseMemory(ctx, userId, row.verseRefId);
+      if (!memory) continue;
+      stats[memory.status] += 1;
       stats.total += 1;
-      if (row.status !== "suspended" && row.dueAt <= args.now) {
+      if (memory.dueAt <= args.now) {
         stats.due += 1;
       }
     }
@@ -495,7 +471,8 @@ export const accuracyTrend = query({
 /**
  * Count of verses due per upcoming day over the next `days` (default 30).
  *
- * Overdue verses are folded into today (day 0). Suspended verses are excluded.
+ * Overdue verses are folded into today (day 0). Heart-aware: un-hearted verses
+ * (no `savedVerses` row) are skipped even though their memory row survives.
  * Reads through `by_userId_dueAt`, bounded above by the end of the window; the
  * result set is at most the user's verse-memory corpus (same bound as
  * `memoryStats`).
@@ -526,7 +503,13 @@ export const reviewForecast = query({
 
     const dueAts: number[] = [];
     for (const row of rows) {
-      if (row.status === "suspended") continue;
+      const saved = await ctx.db
+        .query("savedVerses")
+        .withIndex("by_userId_verseRefId", (q) =>
+          q.eq("userId", userId).eq("verseRefId", row.verseRefId),
+        )
+        .unique();
+      if (!saved) continue;
       dueAts.push(row.dueAt);
     }
 
@@ -540,11 +523,16 @@ const masteryDistributionValidator = v.object({
   learning: v.number(),
   reviewing: v.number(),
   mastered: v.number(),
-  suspended: v.number(),
   total: v.number(),
 });
 
-/** Counts of verses by lifecycle status for the current user. */
+/**
+ * Counts of verses by lifecycle status for the current user.
+ *
+ * Heart-aware: iterates the user's hearted verses (`savedVerses`) and joins
+ * each to its `verseMemory` row, so un-hearted verses (whose memory row
+ * survives as history) don't inflate the distribution.
+ */
 export const masteryDistribution = query({
   args: { now: v.number() },
   returns: masteryDistributionValidator,
@@ -554,7 +542,6 @@ export const masteryDistribution = query({
       learning: 0,
       reviewing: 0,
       mastered: 0,
-      suspended: 0,
       total: 0,
     };
 
@@ -563,14 +550,16 @@ export const masteryDistribution = query({
       return empty;
     }
 
-    const rows = await ctx.db
-      .query("verseMemory")
-      .withIndex("by_userId_status", (q) => q.eq("userId", userId))
+    const saved = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
 
     const stats = { ...empty };
-    for (const row of rows) {
-      stats[row.status] += 1;
+    for (const row of saved) {
+      const memory = await findVerseMemory(ctx, userId, row.verseRefId);
+      if (!memory) continue;
+      stats[memory.status] += 1;
       stats.total += 1;
     }
     return stats;
@@ -899,7 +888,7 @@ export const verseDetail = query({
       endVerse: ref.endVerse,
       isHearted: saved !== null,
       heartedAt: saved?.createdAt ?? null,
-      isDue: memory.status !== "suspended" && memory.dueAt <= args.now,
+      isDue: memory.dueAt <= args.now,
       status: memory.status,
       learnStage: memory.learnStage,
       ease: memory.ease,

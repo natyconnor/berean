@@ -10,7 +10,6 @@ import { MASTERED_INTERVAL_DAYS, type MemoryStatus } from "./memory-scheduler";
  * - `reviewing` → 0.5…0.9 — a half that grows with the interval, scaled linearly
  *   from just-graduated up to {@link MASTERED_INTERVAL_DAYS}.
  * - `mastered` → 1 (full) — interval has reached the mastered threshold.
- * - `suspended` → 0 — opted out of scheduling, so no progress is implied.
  */
 export function masteryRingFraction(
   status: MemoryStatus,
@@ -26,7 +25,6 @@ export function masteryRingFraction(
     case "learning":
       return 0.25;
     case "new":
-    case "suspended":
       return 0;
     default:
       return 0;

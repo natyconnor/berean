@@ -3,9 +3,8 @@ import { masteryRingFraction } from "./mastery-ring";
 import { MASTERED_INTERVAL_DAYS } from "./memory-scheduler";
 
 describe("masteryRingFraction", () => {
-  it("shows no ring for new and suspended verses", () => {
+  it("shows no ring for new verses", () => {
     expect(masteryRingFraction("new", 0)).toBe(0);
-    expect(masteryRingFraction("suspended", 12)).toBe(0);
   });
 
   it("shows a quarter ring while learning", () => {

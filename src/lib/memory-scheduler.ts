@@ -13,12 +13,7 @@
  */
 
 /** Verse-memory lifecycle status. */
-export type MemoryStatus =
-  | "new"
-  | "learning"
-  | "reviewing"
-  | "mastered"
-  | "suspended";
+export type MemoryStatus = "new" | "learning" | "reviewing" | "mastered";
 
 export interface MemorySchedule {
   status: MemoryStatus;
@@ -33,7 +28,7 @@ export interface MemorySchedule {
 export interface ReviewInput {
   quality: "exact" | "close" | "off";
   accuracy: number;
-  mode: "learn" | "review" | "deck";
+  mode: "learn" | "review" | "deck" | "practice";
   now: number; // pass `now` IN (Convex forbids Date.now() in queries)
 }
 
@@ -191,8 +186,6 @@ export function scheduleNext(
   s: MemorySchedule,
   r: ReviewInput,
 ): MemorySchedule {
-  // A suspended verse is opted out of scheduling; attempts never touch it.
-  if (s.status === "suspended") return s;
   if (isLearningPhase(s.status)) {
     return scheduleLearning(s, r);
   }

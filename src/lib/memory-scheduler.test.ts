@@ -195,23 +195,6 @@ describe("mastery threshold", () => {
   });
 });
 
-describe("suspended verses", () => {
-  it("returns the schedule unchanged for every grade", () => {
-    const suspended: MemorySchedule = {
-      status: "suspended",
-      learnStage: 2,
-      ease: 2.1,
-      intervalDays: 12,
-      dueAt: NOW + 12 * DAY_MS,
-      consecutiveCorrect: 5,
-      lapses: 1,
-    };
-    for (const quality of ["exact", "close", "off"] as const) {
-      expect(scheduleNext(suspended, review({ quality }))).toEqual(suspended);
-    }
-  });
-});
-
 describe("interval fuzz", () => {
   it("is deterministic for identical input", () => {
     const s = reviewing({ intervalDays: 10, ease: 2.3 });

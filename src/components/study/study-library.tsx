@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
-import { useMutation, usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -30,18 +29,12 @@ const STATUS_STYLES: Record<MemoryStatus, { label: string; dot: string }> = {
   learning: { label: "Learning", dot: "bg-[var(--chart-4)]" },
   reviewing: { label: "Reviewing", dot: "bg-[var(--chart-1)]" },
   mastered: { label: "Mastered", dot: "bg-[var(--chart-2)]" },
-  suspended: { label: "Suspended", dot: "bg-muted-foreground" },
 };
 
 const INITIAL_PAGE_SIZE = 20;
 const LOAD_MORE_PAGE_SIZE = 20;
 
-function formatDueLabel(
-  dueAt: number,
-  now: number,
-  suspended: boolean,
-): string {
-  if (suspended) return "Suspended";
+function formatDueLabel(dueAt: number, now: number): string {
   const diff = dueAt - now;
   if (diff <= 0) return "Due now";
   const days = Math.round(diff / (24 * 60 * 60 * 1000));
@@ -53,7 +46,7 @@ function formatDueLabel(
 /**
  * The Library: every hearted verse with its memory state and next-due date,
  * sortable + paginated (`usePaginatedQuery` over `verseMemory.listLibrary`),
- * with a per-verse suspend toggle and a drill-down dialog.
+ * with a drill-down dialog.
  *
  * Search is client-side over the loaded pages' reference labels (it does not
  * fetch unloaded pages) — a documented v1 limitation.
@@ -67,14 +60,6 @@ export function StudyLibrary({ now }: { now: number }) {
     api.verseMemory.listLibrary,
     { sort },
     { initialNumItems: INITIAL_PAGE_SIZE },
-  );
-  const setSuspended = useMutation(api.verseMemory.setSuspended);
-
-  const onToggleSuspend = useCallback(
-    (verseRefId: Id<"verseRefs">, suspended: boolean) => {
-      void setSuspended({ verseRefId, suspended });
-    },
-    [setSuspended],
   );
 
   const filtered = useMemo(() => {
@@ -188,7 +173,6 @@ export function StudyLibrary({ now }: { now: number }) {
           <ul className="space-y-1.5">
             {filtered.map((row) => {
               const style = STATUS_STYLES[row.status];
-              const suspended = row.status === "suspended";
               return (
                 <li key={row.verseMemoryId}>
                   <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
@@ -209,28 +193,10 @@ export function StudyLibrary({ now }: { now: number }) {
                           {formatVerseRef(row)}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          {style.label} ·{" "}
-                          {formatDueLabel(row.dueAt, now, suspended)}
+                          {style.label} · {formatDueLabel(row.dueAt, now)}
                         </span>
                       </span>
                     </button>
-                    <label
-                      className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Suspend
-                      <Switch
-                        checked={suspended}
-                        onCheckedChange={(checked) =>
-                          onToggleSuspend(row.verseRefId, checked)
-                        }
-                        aria-label={
-                          suspended
-                            ? `Un-suspend ${formatVerseRef(row)}`
-                            : `Suspend ${formatVerseRef(row)}`
-                        }
-                      />
-                    </label>
                   </div>
                 </li>
               );

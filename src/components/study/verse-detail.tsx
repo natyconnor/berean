@@ -1,9 +1,7 @@
-import { useCallback, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Switch } from "@/components/ui/switch";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
@@ -15,7 +13,6 @@ const STATUS_LABELS: Record<MemoryStatus, string> = {
   learning: "Learning",
   reviewing: "Reviewing",
   mastered: "Mastered",
-  suspended: "Suspended",
 };
 
 const SPARK_W = 280;
@@ -23,12 +20,7 @@ const SPARK_H = 64;
 const SPARK_PAD = 6;
 
 /** Human "next due" label relative to `now`. */
-function formatDueLabel(
-  dueAt: number,
-  now: number,
-  suspended: boolean,
-): string {
-  if (suspended) return "Suspended";
+function formatDueLabel(dueAt: number, now: number): string {
   const diff = dueAt - now;
   if (diff <= 0) return "Due now";
   const days = Math.round(diff / (24 * 60 * 60 * 1000));
@@ -39,8 +31,8 @@ function formatDueLabel(
 
 /**
  * Per-verse drill-down: the live schedule, a stage journey, an attempt
- * sparkline (accuracy over time), a derived difficulty signal, and a suspend
- * toggle. Fetches its own data via `verseMemory.verseDetail`.
+ * sparkline (accuracy over time), and a derived difficulty signal. Fetches its
+ * own data via `verseMemory.verseDetail`.
  */
 export function VerseDetail({
   verseRefId,
@@ -50,20 +42,6 @@ export function VerseDetail({
   now: number;
 }) {
   const detail = useQuery(api.verseMemory.verseDetail, { verseRefId, now });
-  const setSuspended = useMutation(api.verseMemory.setSuspended);
-  const [pendingSuspend, setPendingSuspend] = useState(false);
-
-  const onToggleSuspend = useCallback(
-    async (suspended: boolean) => {
-      setPendingSuspend(true);
-      try {
-        await setSuspended({ verseRefId, suspended });
-      } finally {
-        setPendingSuspend(false);
-      }
-    },
-    [setSuspended, verseRefId],
-  );
 
   if (detail === undefined) {
     return (
@@ -87,7 +65,6 @@ export function VerseDetail({
     startVerse: detail.startVerse,
     endVerse: detail.endVerse,
   });
-  const isSuspended = detail.status === "suspended";
 
   // Attempts arrive newest-first; reverse for a left-to-right time axis.
   const chronological = [...detail.attempts].reverse();
@@ -113,19 +90,9 @@ export function VerseDetail({
             {reference}
           </h3>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {STATUS_LABELS[detail.status]} ·{" "}
-            {formatDueLabel(detail.dueAt, now, isSuspended)}
+            {STATUS_LABELS[detail.status]} · {formatDueLabel(detail.dueAt, now)}
           </p>
         </div>
-        <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-          Suspend
-          <Switch
-            checked={isSuspended}
-            disabled={pendingSuspend}
-            onCheckedChange={(checked) => void onToggleSuspend(checked)}
-            aria-label={isSuspended ? "Un-suspend verse" : "Suspend verse"}
-          />
-        </label>
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center">

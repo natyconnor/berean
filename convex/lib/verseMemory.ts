@@ -1,10 +1,6 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import {
-  initialSchedule,
-  MASTERED_INTERVAL_DAYS,
-  type MemoryStatus,
-} from "../../src/lib/memory-scheduler";
+import { initialSchedule } from "../../src/lib/memory-scheduler";
 
 /**
  * Look up the single `verseMemory` row for a (user, verse) pair, if any.
@@ -77,23 +73,4 @@ export async function getOrCreateVerseMemory(
     throw new Error("Failed to create verse memory row");
   }
   return created;
-}
-
-/**
- * Derive the active (non-suspended) status implied by a row's schedule.
- *
- * Fallback for un-suspending legacy rows that predate the `previousStatus`
- * field (see `setSuspended`, which now restores the persisted status directly).
- * Note this cannot distinguish `new` from `learning` when both `intervalDays`
- * and `learnStage` are 0 — it returns `new` — which is exactly why
- * `previousStatus` is persisted for rows suspended going forward.
- */
-export function deriveActiveStatus(row: {
-  intervalDays: number;
-  learnStage: number;
-}): Exclude<MemoryStatus, "suspended"> {
-  if (row.intervalDays >= MASTERED_INTERVAL_DAYS) return "mastered";
-  if (row.intervalDays > 0) return "reviewing";
-  if (row.learnStage > 0) return "learning";
-  return "new";
 }

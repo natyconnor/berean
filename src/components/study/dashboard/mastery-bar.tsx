@@ -5,7 +5,6 @@ export interface MasteryDistribution {
   learning: number;
   reviewing: number;
   mastered: number;
-  suspended: number;
   total: number;
 }
 
@@ -21,7 +20,6 @@ const SEGMENTS: Segment[] = [
   { key: "learning", label: "Learning", color: chartColor(4) },
   { key: "reviewing", label: "Reviewing", color: chartColor(1) },
   { key: "mastered", label: "Mastered", color: chartColor(2) },
-  { key: "suspended", label: "Suspended", color: "var(--muted-foreground)" },
 ];
 
 /** Horizontal stacked bar of verses by lifecycle status. */

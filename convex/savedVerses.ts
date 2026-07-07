@@ -18,7 +18,6 @@ const savedMemoryValidator = v.object({
     v.literal("learning"),
     v.literal("reviewing"),
     v.literal("mastered"),
-    v.literal("suspended"),
   ),
   intervalDays: v.number(),
   dueAt: v.number(),
