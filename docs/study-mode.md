@@ -74,7 +74,18 @@ All functions validate `args` + `returns`, check auth via `getCurrentUser*`, ver
 - `recordAttempt({ verseRefId, quality, accuracy, stage, mode, durationMs?, now })` — appends a `verseMemoryReviews` row, loads/seeds the `verseMemory` row, applies `scheduleNext`, and patches the row (including `lastReviewedAt = now`, `createdAt` unchanged) in one atomic mutation. Returns the new `MemorySchedule`.
 - `getOrCreateForVerse({ verseRefId, now })` — idempotent upsert via `by_userId_verseRefId`; returns the full row.
 - `setSuspended({ verseRefId, suspended })` — toggles `status` to/from `suspended`. Suspending records the current active status in `previousStatus`; un-suspending restores it exactly (falling back to a schedule-derived status via `deriveActiveStatus` only for legacy rows without `previousStatus`). Returns the resulting status, or `null` if the user has no row for that verse.
-- `memoryStats({ now })` — per-status counts (`new`/`learning`/`reviewing`/`mastered`/`suspended`), plus `total` and a due-now `due` tally. Used later by the dashboard/hub.
+- `memoryStats({ now })` — per-status counts (`new`/`learning`/`reviewing`/`mastered`/`suspended`), plus `total` and a due-now `due` tally. Used by the hub for the "due today" number.
+
+#### Dashboard aggregate queries
+
+Four read-only aggregate queries back the [progress dashboard](#progress-dashboard-study). All follow the same rules as the rest of the module (args + returns validators, auth + ownership, `.withIndex` only, `now` passed in — never `Date.now()`), and delegate their day-bucketing to the pure, framework-free helpers in `src/lib/dashboard-buckets.ts` (shared so the buckets are unit-tested independently of Convex).
+
+- `reviewHeatmap({ now, days? })` — per-day review counts over the last `days` (default 30). Reads `verseMemoryReviews` through `by_userId_createdAt`, **bounded by the window** via a `gte("createdAt", windowStart)` index range (never an unbounded scan of the whole log). Returns `[{ dayStart, count }]`, oldest first, one entry per day.
+- `accuracyTrend({ now, days? })` — per-day **average** `accuracy` over the last `days` (default 30), same bounded `by_userId_createdAt` range. Returns `[{ dayStart, average, count }]`; days with no reviews report `average: null` (not 0) so charts can skip them.
+- `reviewForecast({ now, days? })` — count of verses **due per upcoming day** over the next `days` (default 30). Reads `verseMemory` through `by_userId_dueAt`, bounded above by the end of the window; suspended verses are excluded. Day 0 ("Today") counts only verses **actually due now** (`dueAt <= now`) — the same definition used by `memoryStats.due`, `dueQueue`, and the Start review button — so overdue verses fold into Today but a verse scheduled for later today does **not** inflate the Today bar (and, having no matching upcoming calendar bucket, isn't shown). Returns `[{ dayStart, count }]`, today first.
+- `masteryDistribution({ now })` — counts by status (`new`/`learning`/`reviewing`/`mastered`/`suspended`) plus `total`, via `by_userId_status`. A slimmer sibling of `memoryStats` used by the mastery bar and the "in memory" KPI. (`now` is accepted for signature consistency with the other dashboard queries but is not needed to compute a pure status tally.)
+
+`days` is clamped server-side to `1..366`. **Timezone simplification:** all bucketing uses **UTC days** (a day boundary is midnight UTC, not the viewer's local midnight). This keeps the queries deterministic/cacheable; it's an accepted v1 tradeoff for a coarse growth dashboard and is documented at the top of `src/lib/dashboard-buckets.ts`.
 
 ### Convex API (`convex/studySessions.ts`)
 
@@ -88,11 +99,20 @@ All functions validate `args` + `returns`, check auth via `getCurrentUser*`, ver
 
 All queries are safe to call unauthenticated and return `null` / `[]`.
 
-### Today queue (`/study`)
+### Progress dashboard (`/study`)
 
-The hub now leads with a **Today** section that **decouples reviews from sessions**: instead of picking a saved collection to drill, the learner reviews the single global due queue across _every_ hearted verse, then falls back to sessions as curated collections.
+The hub now leads with a **progress dashboard** (`StudyDashboard`, `src/components/study/dashboard/dashboard.tsx`) that **decouples reviews from sessions** and makes growth visible. Instead of picking a saved collection to drill, the learner reviews the single global due queue across _every_ hearted verse; the dashboard then visualizes their practice history and upcoming load, and sessions fall back to curated collections below.
 
-- **Hub Today card** (`StudyTodaySection` in `study-hub.tsx`) shows **"N due today"** (from `memoryStats.due`), a **Start review** button (disabled when nothing is due), and per-status totals (learning = `new + learning`, reviewing, mastered). `now` comes from a shared `useLiveNow()` hook (`src/hooks/use-live-now.ts`) that refreshes on a coarse ~60s interval and is passed as a query arg, so verses whose `dueAt` lands after the tab was opened get counted (both the headline and the disabled state stay live) — Convex still never calls `Date.now()` itself.
+The dashboard is built from **inline SVG/CSS only** — there is **no charting library dependency**. All chart color comes from the theme's `--chart-1..5` tokens (referenced via `var(--chart-N)` / `color-mix(...)`, since the tokens are OKLCH values, not HSL), so every chart tracks light/dark theme automatically. Shared path/scale helpers live in `src/components/study/dashboard/svg-chart-helpers.ts`.
+
+- **Today hero** — keeps the original **"N due today"** headline + **Start review** button (disabled when nothing is due) reachable at the top of the dashboard.
+- **KPI row** (`kpi-row.tsx`) — four headline numbers: **due today** (`memoryStats.due`), **day streak**, **in memory** (`learning + reviewing + mastered` from `masteryDistribution`), and **30d accuracy** (overall mean accuracy across `accuracyTrend`, or `—` when there are no reviews). **Streak = consecutive days ending today with ≥ 1 review**, computed client-side from the heatmap counts via `computeStreak` (so it drops to 0 once a UTC day passes with no review).
+- **Practice heatmap** (`practice-heatmap.tsx`) — a GitHub-style 12-week grid (weekday rows, week columns) of daily review counts, cell intensity via `color-mix` on `--chart-1`.
+- **Mastery bar** (`mastery-bar.tsx`) — a horizontal stacked bar of verses by lifecycle status with a legend.
+- **Accuracy trend** (`accuracy-trend.tsx`) — a line/area chart of daily average accuracy over 30 days (days with no reviews are skipped, not drawn as 0).
+- **Review forecast** (`review-forecast.tsx`) — rounded bars of verses due per day over the next 14 days. The "Today" bar (tinted with a distinct token) counts only verses actually due now (`dueAt <= now`), matching the hero's "due today"; overdue folds in, later-today does not.
+- **Accessibility & empty states** — every chart is a `role="img"` with a descriptive `aria-label` summarizing its data, and each renders a graceful empty/zero state ("No reviews yet", "Nothing scheduled", etc.) rather than an empty axis.
+- `now` comes from the shared `useLiveNow()` hook (`src/hooks/use-live-now.ts`) that refreshes on a coarse ~60s interval and is passed as a query arg, so the numbers stay live as verses fall due — Convex still never calls `Date.now()` itself.
 - **The player** (`StudyTodayQueue`, `study-today-queue.tsx`) is an **orchestrator** that reuses the existing deck + learn UIs unchanged:
   - It reads `dueQueue({ now })` and **snapshots** the result on entry so cards don't vanish mid-run as attempts reschedule verses out of the live due set.
   - It maps each due row (a `verseMemory` row joined to its `verseRefs`) into the **verse-memory card model** the deck/learn consume — `{ type: "verse-memory", id: "vm:<memoryId>", reference: { book, chapter, startVerse, endVerse } }`.
@@ -103,7 +123,7 @@ The hub now leads with a **Today** section that **decouples reviews from session
 
 ### Hub (`/study`)
 
-- Below the Today section, lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist. Sessions are unchanged by the Today queue — they remain saved collections.
+- Below the dashboard, lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist. Sessions are unchanged by the Today queue — they remain saved collections.
 - Each card shows title (name or auto-generated scope summary), scope-aware stats (hearted verses · notes · passages · last studied), any tag filters, and a "Last: {activity}" chip when the previous view was an activity (not Overview).
 - Delete button opens a confirmation dialog (`DeleteStudySessionDialog`).
 - Empty state has a CTA to `/study/new`.
@@ -185,7 +205,7 @@ A single floating pill, bottom-center, is the app's only new persistent chrome. 
 - **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
   1. Denormalize counts onto the `studySessions` row and recompute in a scheduled mutation on relevant writes.
   2. Render the hub without counts and resolve them lazily per visible card.
-- **No full schedule/streak dashboard yet.** The Today queue surfaces due work on the hub and the Mode Dock now shows a live due badge, but there is still no full schedule/streak dashboard — that comes in a later PR. (A streak/flame on the dock was left out of this pass since it isn't trivially available yet.)
+- **Dashboard bucketing is UTC-day based.** The progress dashboard (heatmap, accuracy trend, forecast, streak) buckets by UTC day rather than the viewer's local day, so day boundaries and the streak roll over at midnight UTC (see `src/lib/dashboard-buckets.ts`). Per-user local-day bucketing would require threading a UTC offset through the aggregate queries.
 - **No session editing.** You can delete a session but can't rename it, change its scope, or clone it after creation.
 - **No in-deck navigation back to `/passage/...`.** Cards show references but don't deep-link into the reader mid-activity.
 - **Counts recompute on every scope edit.** `previewCounts` is a full query; it's fine but noticeably chatty on slow connections.
@@ -234,7 +254,8 @@ Rough, in priority order. Nothing here blocks v1.
 - Mode Dock: `src/components/layout/mode-dock.tsx`, mounted in `src/components/layout/app-shell.tsx`; preference control in `src/components/settings/mode-dock-section.tsx`; Convex get/set in `convex/userSettings.ts` (`modeDock` field in `convex/schema.ts`).
 - Feature components: `src/components/study/*.tsx`.
 - Card model + deck: `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
-- Today queue: `src/components/study/study-today-queue.tsx` (orchestrator), `study-session-summary.tsx` (end-of-run card), and the `StudyTodaySection` in `study-hub.tsx`.
+- Today queue: `src/components/study/study-today-queue.tsx` (orchestrator), `study-session-summary.tsx` (end-of-run card).
+- Progress dashboard: `src/components/study/dashboard/*` (`dashboard.tsx`, `kpi-row.tsx`, `practice-heatmap.tsx`, `mastery-bar.tsx`, `accuracy-trend.tsx`, `review-forecast.tsx`, `svg-chart-helpers.ts`), rendered at the top of `study-hub.tsx`; pure buckets + tests in `src/lib/dashboard-buckets.ts`.
 - Attempt persistence bridge: `src/components/study/use-record-verse-attempt.ts` (used by `study-verse-learn.tsx` and `study-verse-memory-card.tsx`).
 - Scope summary helper: `src/components/study/study-scope-summary.ts`.
 

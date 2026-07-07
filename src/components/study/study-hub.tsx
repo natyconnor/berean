@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Loader2, Play, Plus } from "lucide-react";
-import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { Loader2, Plus } from "lucide-react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { DeleteStudySessionDialog } from "./delete-study-session-dialog";
 import { formatScopeSummary } from "./study-scope-summary";
 import { StudyModeExplainerDialog } from "./study-mode-explainer-dialog";
 import { StudyTodayQueue } from "./study-today-queue";
+import { StudyDashboard } from "./dashboard/dashboard";
 import { useLiveNow } from "@/hooks/use-live-now";
 
 type DeleteCandidate = {
@@ -94,7 +95,10 @@ export function StudyHub() {
       </header>
       <ScrollArea className="flex-1 min-h-0">
         <div className="max-w-2xl mx-auto px-5 py-6 space-y-8">
-          <StudyTodaySection now={now} onStart={() => setIsReviewing(true)} />
+          <StudyDashboard
+            now={now}
+            onStartReview={() => setIsReviewing(true)}
+          />
           <section className="space-y-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Sessions
@@ -175,73 +179,5 @@ export function StudyHub() {
       />
       <StudyModeExplainerDialog />
     </div>
-  );
-}
-
-function StudyTodaySection({
-  now,
-  onStart,
-}: {
-  now: number;
-  onStart: () => void;
-}) {
-  const stats = useQuery(api.verseMemory.memoryStats, { now });
-
-  if (stats === undefined) {
-    return (
-      <section className="rounded-xl border bg-card p-5 shadow-sm">
-        <div className="flex justify-center py-4">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      </section>
-    );
-  }
-
-  const due = stats.due;
-  const learning = stats.new + stats.learning;
-
-  return (
-    <section className="rounded-xl border bg-card p-5 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Today
-          </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-            {due > 0 ? `${due} due today` : "All caught up"}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {due > 0
-              ? "Review your hearted verses across every session."
-              : "No verses are due for review right now."}
-          </p>
-        </div>
-        <Button
-          size="lg"
-          onClick={onStart}
-          disabled={due === 0}
-          className="gap-1.5"
-        >
-          <Play className="h-4 w-4" />
-          Start review
-        </Button>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <TodayStat label="Learning" value={learning} />
-        <TodayStat label="Reviewing" value={stats.reviewing} />
-        <TodayStat label="Mastered" value={stats.mastered} />
-      </div>
-    </section>
-  );
-}
-
-function TodayStat({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground">
-      <span className="font-semibold tabular-nums text-foreground">
-        {value}
-      </span>
-      {label}
-    </span>
   );
 }

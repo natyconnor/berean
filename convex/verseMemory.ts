@@ -8,6 +8,26 @@ import {
   getOrCreateVerseMemory,
 } from "./lib/verseMemory";
 import { scheduleNext } from "../src/lib/memory-scheduler";
+import {
+  bucketAccuracyAverages,
+  bucketForecastCounts,
+  bucketReviewCounts,
+  DAY_MS,
+  startOfUtcDay,
+  utcDayStarts,
+} from "../src/lib/dashboard-buckets";
+
+/** Clamp a caller-supplied day count to a sane bounded window. */
+const DEFAULT_WINDOW_DAYS = 30;
+const MAX_WINDOW_DAYS = 366;
+
+function normalizeDays(days: number | undefined): number {
+  if (days === undefined || !Number.isFinite(days)) return DEFAULT_WINDOW_DAYS;
+  const rounded = Math.floor(days);
+  if (rounded < 1) return 1;
+  if (rounded > MAX_WINDOW_DAYS) return MAX_WINDOW_DAYS;
+  return rounded;
+}
 
 const DEFAULT_DUE_LIMIT = 50;
 
@@ -378,6 +398,179 @@ export const memoryStats = query({
       if (row.status !== "suspended" && row.dueAt <= args.now) {
         stats.due += 1;
       }
+    }
+    return stats;
+  },
+});
+
+const dayCountValidator = v.object({
+  dayStart: v.number(),
+  count: v.number(),
+});
+
+/**
+ * Per-day review counts over the last `days` (default 30, UTC day buckets).
+ *
+ * Bounded by the time window via the `by_userId_createdAt` index range on
+ * `createdAt`, so it never scans the whole log. `now` is passed in to keep the
+ * query deterministic; see `dashboard-buckets.ts` for the UTC-day simplification.
+ */
+export const reviewHeatmap = query({
+  args: { now: v.number(), days: v.optional(v.number()) },
+  returns: v.array(dayCountValidator),
+  handler: async (ctx, args) => {
+    const days = normalizeDays(args.days);
+    const dayStarts = utcDayStarts(args.now, days);
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return dayStarts.map((dayStart) => ({ dayStart, count: 0 }));
+    }
+
+    const windowStart = dayStarts[0];
+    const rows = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_createdAt", (q) =>
+        q.eq("userId", userId).gte("createdAt", windowStart),
+      )
+      .collect();
+
+    const counts = bucketReviewCounts(
+      rows.map((row) => row.createdAt),
+      args.now,
+      days,
+    );
+    return dayStarts.map((dayStart, i) => ({ dayStart, count: counts[i] }));
+  },
+});
+
+const dayAccuracyValidator = v.object({
+  dayStart: v.number(),
+  average: v.union(v.number(), v.null()),
+  count: v.number(),
+});
+
+/**
+ * Per-day average accuracy over the last `days` (default 30, UTC day buckets).
+ *
+ * Days with no reviews report `average: null` (not 0). Bounded by the window
+ * via the `by_userId_createdAt` index range on `createdAt`.
+ */
+export const accuracyTrend = query({
+  args: { now: v.number(), days: v.optional(v.number()) },
+  returns: v.array(dayAccuracyValidator),
+  handler: async (ctx, args) => {
+    const days = normalizeDays(args.days);
+    const dayStarts = utcDayStarts(args.now, days);
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return dayStarts.map((dayStart) => ({
+        dayStart,
+        average: null,
+        count: 0,
+      }));
+    }
+
+    const windowStart = dayStarts[0];
+    const rows = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_createdAt", (q) =>
+        q.eq("userId", userId).gte("createdAt", windowStart),
+      )
+      .collect();
+
+    const buckets = bucketAccuracyAverages(
+      rows.map((row) => ({ createdAt: row.createdAt, accuracy: row.accuracy })),
+      args.now,
+      days,
+    );
+    return dayStarts.map((dayStart, i) => ({
+      dayStart,
+      average: buckets[i].average,
+      count: buckets[i].count,
+    }));
+  },
+});
+
+/**
+ * Count of verses due per upcoming day over the next `days` (default 30).
+ *
+ * Overdue verses are folded into today (day 0). Suspended verses are excluded.
+ * Reads through `by_userId_dueAt`, bounded above by the end of the window; the
+ * result set is at most the user's verse-memory corpus (same bound as
+ * `memoryStats`).
+ */
+export const reviewForecast = query({
+  args: { now: v.number(), days: v.optional(v.number()) },
+  returns: v.array(dayCountValidator),
+  handler: async (ctx, args) => {
+    const days = normalizeDays(args.days);
+    const todayStart = startOfUtcDay(args.now);
+    const dayStarts: number[] = [];
+    for (let i = 0; i < days; i += 1) {
+      dayStarts.push(todayStart + i * DAY_MS);
+    }
+
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return dayStarts.map((dayStart) => ({ dayStart, count: 0 }));
+    }
+
+    const windowEnd = todayStart + days * DAY_MS;
+    const rows = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_dueAt", (q) =>
+        q.eq("userId", userId).lt("dueAt", windowEnd),
+      )
+      .collect();
+
+    const dueAts: number[] = [];
+    for (const row of rows) {
+      if (row.status === "suspended") continue;
+      dueAts.push(row.dueAt);
+    }
+
+    const counts = bucketForecastCounts(dueAts, args.now, days);
+    return dayStarts.map((dayStart, i) => ({ dayStart, count: counts[i] }));
+  },
+});
+
+const masteryDistributionValidator = v.object({
+  new: v.number(),
+  learning: v.number(),
+  reviewing: v.number(),
+  mastered: v.number(),
+  suspended: v.number(),
+  total: v.number(),
+});
+
+/** Counts of verses by lifecycle status for the current user. */
+export const masteryDistribution = query({
+  args: { now: v.number() },
+  returns: masteryDistributionValidator,
+  handler: async (ctx) => {
+    const empty = {
+      new: 0,
+      learning: 0,
+      reviewing: 0,
+      mastered: 0,
+      suspended: 0,
+      total: 0,
+    };
+
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return empty;
+    }
+
+    const rows = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_status", (q) => q.eq("userId", userId))
+      .collect();
+
+    const stats = { ...empty };
+    for (const row of rows) {
+      stats[row.status] += 1;
+      stats.total += 1;
     }
     return stats;
   },
