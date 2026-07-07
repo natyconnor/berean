@@ -16,6 +16,7 @@ import {
 } from "@/lib/starter-tags";
 import { normalizeTag } from "@/lib/tag-utils";
 import { CustomTagsSection } from "@/components/settings/custom-tags-section";
+import { ModeDockSection } from "@/components/settings/mode-dock-section";
 import { StarterTagsSection } from "@/components/settings/starter-tags-section";
 import { DevSeedSection } from "@/components/settings/dev-seed-section";
 import { TutorialActionsSection } from "@/components/settings/tutorial-actions-section";
@@ -359,6 +360,8 @@ export function SettingsPage() {
             onToggleTag={handleToggleTag}
           />
         </section>
+
+        <ModeDockSection />
 
         <DevSeedSection
           isDev={isDev}

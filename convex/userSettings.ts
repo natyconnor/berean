@@ -26,6 +26,54 @@ async function getOrCreateUserSettings(
   return await ctx.db.get(settingsId);
 }
 
+const modeDockPreferenceValidator = v.union(
+  v.literal("auto-hide"),
+  v.literal("always"),
+  v.literal("off"),
+);
+
+const DEFAULT_MODE_DOCK_PREFERENCE = "auto-hide" as const;
+
+/** The user's Mode Dock behavior preference (defaults to "auto-hide"). */
+export const getModeDockPreference = query({
+  args: {},
+  returns: modeDockPreferenceValidator,
+  handler: async (ctx) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return DEFAULT_MODE_DOCK_PREFERENCE;
+    }
+
+    const settings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .first();
+
+    return settings?.modeDock ?? DEFAULT_MODE_DOCK_PREFERENCE;
+  },
+});
+
+export const setModeDockPreference = mutation({
+  args: { mode: modeDockPreferenceValidator },
+  returns: modeDockPreferenceValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const now = Date.now();
+    const settings = await getOrCreateUserSettings(ctx, userId, now);
+
+    if (!settings) {
+      throw new Error("Unable to initialize user settings");
+    }
+
+    await ctx.db.patch(settings._id, {
+      modeDock: args.mode,
+      updatedAt: now,
+    });
+
+    return args.mode;
+  },
+});
+
 const tutorialStatusValue = v.object({
   mainTutorialCompletedAt: v.optional(v.number()),
   advancedSearchTutorialCompletedAt: v.optional(v.number()),

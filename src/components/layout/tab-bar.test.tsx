@@ -136,7 +136,7 @@ describe("TabBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides the search and study buttons until the staged onboarding milestones fire", () => {
+  it("hides the search button until the staged onboarding milestone fires but keeps Study as a permanent fallback", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <TabBar />
@@ -146,7 +146,11 @@ describe("TabBar", () => {
     expect(
       screen.queryByRole("link", { name: "Open search workspace" }),
     ).toBeNull();
-    expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
+    // Study is no longer soft-hidden — the Mode Dock owns its reveal, and the
+    // toolbar icon is always available as a fallback.
+    expect(
+      screen.getByRole("link", { name: "Open study" }),
+    ).toBeInTheDocument();
   });
 
   it("shows the passage shortcut in the new-tab tooltip", async () => {

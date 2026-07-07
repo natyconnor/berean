@@ -42,23 +42,27 @@ export function TabBar() {
   const savedSearchState = readSearchWorkspaceState();
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
-  const studyRevealReached = milestones ? shouldRevealStudy(milestones) : false;
   const searchRevealReached = milestones
     ? shouldRevealSearch(milestones)
     : false;
-  const studyHint = useFeatureHint(
-    FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART,
-    studyRevealReached,
-  );
   const searchHint = useFeatureHint(
     FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY,
     searchRevealReached,
   );
-  // Soft-hide rule: only show Study/Search toolbar buttons once the user has
+  const studyRevealReached = milestones ? shouldRevealStudy(milestones) : false;
+  // The Mode Dock owns the Study reveal *callout* (and the display queue). The
+  // permanent toolbar Study link is the documented fallback, so it opts out of
+  // the display queue (`useDisplayQueue: false`) to avoid pinning the queue with
+  // no UI, but still completes the reveal when the user opens Study this way.
+  const studyHint = useFeatureHint(
+    FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART,
+    studyRevealReached,
+    { useDisplayQueue: false },
+  );
+  // Soft-hide rule: only show the Search toolbar button once the user has
   // reached the milestone, OR once they've already acknowledged the hint.
   // The global hint queue prevents multiple reveal callouts from stacking.
-  const showStudyButton =
-    studyRevealReached || studyHint.completed || studyHint.dismissed;
+  // Study is a permanent toolbar fallback — the Mode Dock owns its reveal.
   const showSearchButton =
     searchRevealReached || searchHint.completed || searchHint.dismissed;
   const searchShortcutLabel = formatCommandOrControlShortcut("K");
@@ -226,47 +230,34 @@ export function TabBar() {
             </TooltipButton>
           </FeatureCallout>
         ) : null}
-        {showStudyButton ? (
-          <FeatureCallout
-            state={studyHint}
-            title="Study is now available"
-            description="You've hearted a verse, so Study can help you review hearted verses, summarize notes, and run practice activities."
-            primaryActionLabel="Open Study"
-            onPrimaryAction={() => {
-              logInteraction("toolbar", "study-opened", {
-                trigger: "reveal-callout",
-              });
-              void navigate({ to: "/study" });
+        <TooltipButton
+          asChild
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-8 w-8",
+            isStudyRoute &&
+              "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
+          )}
+          tooltip="Open study"
+          aria-label="Open study"
+        >
+          <Link
+            to="/study"
+            onClick={() => {
+              logInteraction("toolbar", "study-opened");
+              // Fallback completion: opening Study from the toolbar resolves the
+              // reveal so the hint queue always progresses, even if the user
+              // never saw the dock callout. `complete()` is idempotent, so the
+              // dock callout path and this path complete the hint exactly once.
+              if (studyHint.pending) {
+                studyHint.complete();
+              }
             }}
-            side="bottom"
-            align="end"
           >
-            <TooltipButton
-              asChild
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-8 w-8",
-                isStudyRoute &&
-                  "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
-              )}
-              tooltip="Open study"
-              aria-label="Open study"
-            >
-              <Link
-                to="/study"
-                onClick={() => {
-                  logInteraction("toolbar", "study-opened");
-                  if (!studyHint.completed && !studyHint.dismissed) {
-                    studyHint.complete();
-                  }
-                }}
-              >
-                <BookOpen className="h-4 w-4" />
-              </Link>
-            </TooltipButton>
-          </FeatureCallout>
-        ) : null}
+            <BookOpen className="h-4 w-4" />
+          </Link>
+        </TooltipButton>
         <div className="relative">
           {isSettingsRoute ? (
             <TooltipButton

@@ -164,15 +164,28 @@ Every graded verse attempt is now logged to spaced repetition, fire-and-forget, 
 
 ### Toolbar & routing integration
 
-- Study is reachable from the app toolbar (`TabBar`), which highlights when the active route starts with `/study`.
+- Study is reachable from the app toolbar (`TabBar`), which highlights when the active route starts with `/study`. The toolbar Study icon is now a **permanent fallback** (no longer soft-hidden behind the first-heart reveal); the reveal callout has moved to the Mode Dock.
 - Three TanStack Router routes under `src/routes/study/` (`index.tsx`, `new.tsx`, `$sessionId.tsx`), each delegating to a thin page component in `src/components/routes/` that renders the real feature component.
+
+### Mode Dock (`src/components/layout/mode-dock.tsx`)
+
+A single floating pill, bottom-center, is the app's only new persistent chrome. It has two segments — **Notes** and **Study** — and is `position: fixed`, so it adds **zero layout cost** and stays thumb-reachable on mobile.
+
+- **Navigation.** "Notes" routes to the passage workspace (`/passage/$passageId` using the last-viewed passage from `useTabs().backPassageId`); "Study" routes to `/study`. The active segment reflects the current route (`aria-current="page"`). _Simplification:_ rather than tracking a distinct "last passage" concept, Notes reuses the existing `backPassageId` (the most recent passage tab), which is the app's default passage target.
+- **Live badge.** The Study segment shows `verseMemory.dueCount({ now })` (with `now` from `useLiveNow()`), so it updates as verses fall due or get reviewed. The badge is **absent entirely when the count is zero** (never cry wolf) and carries an `aria-label` like "7 verses due for review".
+- **Mounted** in `AppShell` fixed at the bottom center, above content, below dialogs/splash.
+- **Auto-hide.** Slides down after ~24px of downward scroll (listening to scroll capture across the app's nested scroll containers), and returns on upward scroll or when scrolling stops (~500ms idle). It also hides while a note editor/textarea is focused. _Simplification:_ the app's Focus mode is currently passage-local React state (`useFocusMode`) and isn't observable from the app shell, so full Focus-mode integration is **deferred**; hiding on editor focus covers the "disappear while you work" intent for now.
+- **Keyboard.** `⌘J` / `Ctrl+J` toggles between Notes and Study, wired the same ad-hoc way `TabBar` wires `⌘G` (a document `keydown` listener); tooltips use `formatCommandOrControlShortcut`.
+- **A11y & motion.** `<nav aria-label="Mode">` with focusable segments and visible focus rings; `prefers-reduced-motion` swaps the slide for a fade (via `useReducedMotion`).
+- **Reveal.** The one-time reveal on first heart reuses `useFeatureHint` + `FeatureCallout` + `FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART` (the same hint the toolbar used before) — no new onboarding path. The dock forces itself visible while that callout is pending. The dock only **claims** the hint in the global display queue while it can actually render the callout (i.e. `modeDock !== "off"`); when the dock is off, the toolbar Study link is the fallback that **completes** the reveal on open, so the queue is never pinned by an eligible-but-unrendered callout and always progresses. `complete()` is idempotent, so whichever path the user takes (dock callout or toolbar) resolves the hint exactly once.
+- **Preference.** `userSettings.modeDock` (`"auto-hide"` | `"always"` | `"off"`, default `"auto-hide"`) persists the behavior via `userSettings.getModeDockPreference` / `setModeDockPreference`. `"always"` disables auto-hide (dock always visible); `"off"` hides the dock entirely (the toolbar Study icon remains the escape hatch). A control in Settings (`ModeDockSection`) toggles it. Only this preference is persisted — scroll/focus visibility is local component state.
 
 ## Known limitations (v1)
 
 - **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
   1. Denormalize counts onto the `studySessions` row and recompute in a scheduled mutation on relevant writes.
   2. Render the hub without counts and resolve them lazily per visible card.
-- **No due badge / dashboard yet.** The Today queue (below) surfaces due work on the hub, but there is still no dock badge or full schedule/streak dashboard — those come in later PRs.
+- **No full schedule/streak dashboard yet.** The Today queue surfaces due work on the hub and the Mode Dock now shows a live due badge, but there is still no full schedule/streak dashboard — that comes in a later PR. (A streak/flame on the dock was left out of this pass since it isn't trivially available yet.)
 - **No session editing.** You can delete a session but can't rename it, change its scope, or clone it after creation.
 - **No in-deck navigation back to `/passage/...`.** Cards show references but don't deep-link into the reader mid-activity.
 - **Counts recompute on every scope edit.** `previewCounts` is a full query; it's fine but noticeably chatty on slow connections.
@@ -218,6 +231,7 @@ Rough, in priority order. Nothing here blocks v1.
 - Data / server: `convex/schema.ts` (`studySessions`, `verseMemory`, `verseMemoryReviews`), `convex/studySessions.ts`, `convex/verseMemory.ts`, `convex/lib/verseMemory.ts`, `convex/migrations.ts`.
 - Scheduler: `src/lib/memory-scheduler.ts` (pure, framework-free).
 - Routes: `src/routes/study/index.tsx`, `src/routes/study/new.tsx`, `src/routes/study/$sessionId.tsx`.
+- Mode Dock: `src/components/layout/mode-dock.tsx`, mounted in `src/components/layout/app-shell.tsx`; preference control in `src/components/settings/mode-dock-section.tsx`; Convex get/set in `convex/userSettings.ts` (`modeDock` field in `convex/schema.ts`).
 - Feature components: `src/components/study/*.tsx`.
 - Card model + deck: `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
 - Today queue: `src/components/study/study-today-queue.tsx` (orchestrator), `study-session-summary.tsx` (end-of-run card), and the `StudyTodaySection` in `study-hub.tsx`.
