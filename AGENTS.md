@@ -37,6 +37,15 @@ Run `pnpm test` when the change is risky, nearby tests already exist, or the use
 - Never add secrets, API keys, or `.env` contents to source control.
 - Ask before making broad refactors or destructive changes.
 
+## Running a multi-PR implementation plan
+
+When asked to auto-build a numbered-PR plan (e.g. one in `docs/proposals/`), use
+the `run-implementation-plan` skill (`.cursor/skills/run-implementation-plan/`).
+Deploy one subagent per PR, in order; gate each with `pnpm run agent:check` (and
+`pnpm test` where relevant) before advancing. Checkpoint each PR as a local
+commit but **never push or open a PR** — the user tests the finished branch and
+delivers it themselves.
+
 ## Repo Notes
 
 - Dev server: `pnpm dev`

@@ -30,6 +30,7 @@ lerna-debug.log*
 !.cursor/hooks.json
 !.cursor/hooks/
 !.cursor/hooks/**
+!.cursor/skills/
 .claude
 .DS_Store
 *.suo
