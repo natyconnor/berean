@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
+import { seedVerseMemory } from "./lib/verseMemory";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 
 const savedVerseListItem = v.object({
@@ -158,17 +159,25 @@ export const toggle = mutation({
       .unique();
 
     if (existing) {
+      // Un-hearting removes the bookmark but intentionally leaves any
+      // `verseMemory` row untouched, so spaced-repetition progress and review
+      // history survive a heart toggle. See docs/study-mode.md.
       await ctx.db.delete(existing._id);
       return "removed" as const;
     }
 
+    const now = Date.now();
     await ctx.db.insert("savedVerses", {
       userId,
       verseRefId,
       book: args.book,
       chapter: args.chapter,
-      createdAt: Date.now(),
+      createdAt: now,
     });
+
+    // Hearting a verse seeds its memory record (idempotent: a re-heart after
+    // un-hearting reuses the existing row rather than creating a duplicate).
+    await seedVerseMemory(ctx, userId, verseRefId, now);
 
     return "added" as const;
   },

@@ -52,6 +52,30 @@ One new Convex table, `studySessions`, holds a per-user session:
 
 There is no separate "favorites" table. Hearted verses live in `savedVerses`; a session's scope filters them alongside notes.
 
+### Verse-memory data model (spaced repetition)
+
+Spaced repetition is backed by two per-user Convex tables plus a framework-free scheduler (`src/lib/memory-scheduler.ts`). As of this layer the surface is **server-only** — there is no user-facing UI change yet.
+
+| Table                | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verseMemory`        | One row per (`userId`, `verseRefId`) tracking the live schedule: `status` (`new`/`learning`/`reviewing`/`mastered`/`suspended`), `previousStatus?` (the active status captured on suspend, so un-suspend restores it exactly), `learnStage` (0..3), `ease`, `intervalDays`, `dueAt`, `consecutiveCorrect`, `lapses`, `lastReviewedAt?`, `createdAt`. Indexed `by_userId_dueAt`, `by_userId_status`, `by_userId_verseRefId`. |
+| `verseMemoryReviews` | Append-only log of graded attempts: `verseMemoryId`, `quality` (`exact`/`close`/`off`), `accuracy`, `stage`, `mode` (`learn`/`review`/`deck`), `durationMs?`, `createdAt`. Indexed `by_userId_createdAt`.                                                                                                                                                                                                                   |
+
+**Hearts as seed.** Hearting a verse (`savedVerses.toggle`) now also seeds a `verseMemory` row (`status: "new"`, `dueAt = now`) via the shared `seedVerseMemory` helper if none exists. Seeding is idempotent, so re-hearting never creates a duplicate. **Un-hearting deletes only the `savedVerses` bookmark and intentionally leaves the `verseMemory` row untouched** — this is the least-surprising behavior for a spaced-repetition system: a verse you've begun memorizing keeps its progress and review history even if the heart is toggled off, and re-hearting reuses the same row. (Suspending a verse to remove it from the due queue is a separate, explicit action via `setSuspended`.)
+
+**Backfill.** `internal.migrations.backfillVerseMemory` (an `internalMutation`, kicked off with no args from the dashboard / `convex run`) creates one `verseMemory` row for every existing `savedVerses` row lacking one. It is **batched**: each invocation paginates one bounded batch (`batchSize`, default 200) via `.paginate(...)`, then self-schedules the next batch with `ctx.scheduler.runAfter(0, ...)` until the table is exhausted — so it stays safe on large datasets. Running totals are threaded through the chain and returned alongside `isDone`/`continueCursor`. It is idempotent and safe to run twice (already-seeded pairs are skipped).
+
+### Verse-memory Convex API (`convex/verseMemory.ts`)
+
+All functions validate `args` + `returns`, check auth via `getCurrentUser*`, verify per-row ownership, query through indexes (never `.filter`), and take `now` as an argument (never `Date.now()` in a query). Query/mutation wrappers stay thin; shared logic lives in `convex/lib/verseMemory.ts`.
+
+- `dueQueue({ now, limit? })` — verses with `dueAt <= now` (soonest first, `suspended` excluded), joined to their `verseRefs`. `limit` defaults to 50. Returns `[]` when unauthenticated.
+- `dueCount({ now })` — cheap count of due-now verses (excludes suspended); backs the dock badge.
+- `recordAttempt({ verseRefId, quality, accuracy, stage, mode, durationMs?, now })` — appends a `verseMemoryReviews` row, loads/seeds the `verseMemory` row, applies `scheduleNext`, and patches the row (including `lastReviewedAt = now`, `createdAt` unchanged) in one atomic mutation. Returns the new `MemorySchedule`.
+- `getOrCreateForVerse({ verseRefId, now })` — idempotent upsert via `by_userId_verseRefId`; returns the full row.
+- `setSuspended({ verseRefId, suspended })` — toggles `status` to/from `suspended`. Suspending records the current active status in `previousStatus`; un-suspending restores it exactly (falling back to a schedule-derived status via `deriveActiveStatus` only for legacy rows without `previousStatus`). Returns the resulting status, or `null` if the user has no row for that verse.
+- `memoryStats({ now })` — per-status counts (`new`/`learning`/`reviewing`/`mastered`/`suspended`), plus `total` and a due-now `due` tally. Used later by the dashboard/hub.
+
 ### Convex API (`convex/studySessions.ts`)
 
 - `create({ scope, name? })` — creates a session for the current user.
@@ -124,7 +148,7 @@ A passive summary of what the scope contains: two columns (hearted verses, notes
 - **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
   1. Denormalize counts onto the `studySessions` row and recompute in a scheduled mutation on relevant writes.
   2. Render the hub without counts and resolve them lazily per visible card.
-- **No spaced repetition.** Verse memory doesn't track streaks, due dates, or difficulty.
+- **Spaced repetition is server-only so far.** The `verseMemory`/`verseMemoryReviews` tables, scheduler, hearts-as-seed, and the `convex/verseMemory.ts` API exist (see "Verse-memory data model"), but the deck/learn UI does not yet call `recordAttempt`, so due dates and streaks aren't surfaced to the user.
 - **No session editing.** You can delete a session but can't rename it, change its scope, or clone it after creation.
 - **No in-deck navigation back to `/passage/...`.** Cards show references but don't deep-link into the reader mid-activity.
 - **Counts recompute on every scope edit.** `previewCounts` is a full query; it's fine but noticeably chatty on slow connections.
@@ -167,7 +191,8 @@ Rough, in priority order. Nothing here blocks v1.
 
 ## Related code
 
-- Data / server: `convex/schema.ts` (`studySessions`), `convex/studySessions.ts`.
+- Data / server: `convex/schema.ts` (`studySessions`, `verseMemory`, `verseMemoryReviews`), `convex/studySessions.ts`, `convex/verseMemory.ts`, `convex/lib/verseMemory.ts`, `convex/migrations.ts`.
+- Scheduler: `src/lib/memory-scheduler.ts` (pure, framework-free).
 - Routes: `src/routes/study/index.tsx`, `src/routes/study/new.tsx`, `src/routes/study/$sessionId.tsx`.
 - Feature components: `src/components/study/*.tsx`.
 - Card model + deck: `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.

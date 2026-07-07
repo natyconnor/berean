@@ -22,7 +22,9 @@ import type * as lib_publicValues from "../lib/publicValues.js";
 import type * as lib_seed_devSeedSupport from "../lib/seed/devSeedSupport.js";
 import type * as lib_tags from "../lib/tags.js";
 import type * as lib_tutorial from "../lib/tutorial.js";
+import type * as lib_verseMemory from "../lib/verseMemory.js";
 import type * as lib_verseRefs from "../lib/verseRefs.js";
+import type * as migrations from "../migrations.js";
 import type * as noteTransfer from "../noteTransfer.js";
 import type * as noteVerseLinks from "../noteVerseLinks.js";
 import type * as notes from "../notes.js";
@@ -34,6 +36,7 @@ import type * as tags from "../tags.js";
 import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 import type * as verseLinks from "../verseLinks.js";
+import type * as verseMemory from "../verseMemory.js";
 import type * as verseRefs from "../verseRefs.js";
 
 import type {
@@ -57,7 +60,9 @@ declare const fullApi: ApiFromModules<{
   "lib/seed/devSeedSupport": typeof lib_seed_devSeedSupport;
   "lib/tags": typeof lib_tags;
   "lib/tutorial": typeof lib_tutorial;
+  "lib/verseMemory": typeof lib_verseMemory;
   "lib/verseRefs": typeof lib_verseRefs;
+  migrations: typeof migrations;
   noteTransfer: typeof noteTransfer;
   noteVerseLinks: typeof noteVerseLinks;
   notes: typeof notes;
@@ -69,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   userSettings: typeof userSettings;
   users: typeof users;
   verseLinks: typeof verseLinks;
+  verseMemory: typeof verseMemory;
   verseRefs: typeof verseRefs;
 }>;
 

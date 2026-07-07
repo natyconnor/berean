@@ -210,6 +210,17 @@ export default defineSchema({
       v.literal("mastered"),
       v.literal("suspended"),
     ),
+    // The active status captured right before suspending, so un-suspending can
+    // restore it exactly (avoids losing the new/learning distinction). Only
+    // meaningful while status === "suspended".
+    previousStatus: v.optional(
+      v.union(
+        v.literal("new"),
+        v.literal("learning"),
+        v.literal("reviewing"),
+        v.literal("mastered"),
+      ),
+    ),
     learnStage: v.number(), // 0..3 -> full|first-letters|cloze|hidden
     ease: v.number(), // 1.3 .. 2.8, starts 2.3
     intervalDays: v.number(),

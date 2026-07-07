@@ -1,0 +1,384 @@
+import { query, mutation } from "./_generated/server";
+import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
+import {
+  deriveActiveStatus,
+  findVerseMemory,
+  getOrCreateVerseMemory,
+} from "./lib/verseMemory";
+import { scheduleNext } from "../src/lib/memory-scheduler";
+
+const DEFAULT_DUE_LIMIT = 50;
+
+const statusValidator = v.union(
+  v.literal("new"),
+  v.literal("learning"),
+  v.literal("reviewing"),
+  v.literal("mastered"),
+  v.literal("suspended"),
+);
+
+const qualityValidator = v.union(
+  v.literal("exact"),
+  v.literal("close"),
+  v.literal("off"),
+);
+
+const modeValidator = v.union(
+  v.literal("learn"),
+  v.literal("review"),
+  v.literal("deck"),
+);
+
+/** The 7-field schedule returned by the pure scheduler. */
+const memoryScheduleValidator = v.object({
+  status: statusValidator,
+  learnStage: v.number(),
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+});
+
+/** A full `verseMemory` row (system `_creationTime` omitted). */
+const verseMemoryValidator = v.object({
+  _id: v.id("verseMemory"),
+  userId: v.id("users"),
+  verseRefId: v.id("verseRefs"),
+  status: statusValidator,
+  learnStage: v.number(),
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  lastReviewedAt: v.optional(v.number()),
+  createdAt: v.number(),
+});
+
+/** A due row joined to its resolved verse reference. */
+const dueQueueItem = v.object({
+  _id: v.id("verseMemory"),
+  verseRefId: v.id("verseRefs"),
+  status: statusValidator,
+  learnStage: v.number(),
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  lastReviewedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+});
+
+function toRowView(row: Doc<"verseMemory">) {
+  return {
+    _id: row._id,
+    userId: row.userId,
+    verseRefId: row.verseRefId,
+    status: row.status,
+    learnStage: row.learnStage,
+    ease: row.ease,
+    intervalDays: row.intervalDays,
+    dueAt: row.dueAt,
+    consecutiveCorrect: row.consecutiveCorrect,
+    lapses: row.lapses,
+    lastReviewedAt: row.lastReviewedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+/**
+ * Verses due for study at `now` (soonest first), joined to their verse ref.
+ *
+ * Suspended verses are excluded. `now` is passed in by the caller so the query
+ * stays deterministic/cacheable.
+ */
+export const dueQueue = query({
+  args: { now: v.number(), limit: v.optional(v.number()) },
+  returns: v.array(dueQueueItem),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return [];
+    }
+
+    const limit = args.limit ?? DEFAULT_DUE_LIMIT;
+
+    const dueRows = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_dueAt", (q) =>
+        q.eq("userId", userId).lte("dueAt", args.now),
+      )
+      .order("asc")
+      .collect();
+
+    const items: Array<{
+      _id: Id<"verseMemory">;
+      verseRefId: Id<"verseRefs">;
+      status: Doc<"verseMemory">["status"];
+      learnStage: number;
+      ease: number;
+      intervalDays: number;
+      dueAt: number;
+      consecutiveCorrect: number;
+      lapses: number;
+      lastReviewedAt?: number;
+      createdAt: number;
+      book: string;
+      chapter: number;
+      startVerse: number;
+      endVerse: number;
+    }> = [];
+
+    for (const row of dueRows) {
+      if (items.length >= limit) break;
+      if (row.status === "suspended") continue;
+
+      const ref = await ctx.db.get(row.verseRefId);
+      if (!ref || ref.userId !== userId) continue;
+
+      items.push({
+        _id: row._id,
+        verseRefId: row.verseRefId,
+        status: row.status,
+        learnStage: row.learnStage,
+        ease: row.ease,
+        intervalDays: row.intervalDays,
+        dueAt: row.dueAt,
+        consecutiveCorrect: row.consecutiveCorrect,
+        lapses: row.lapses,
+        lastReviewedAt: row.lastReviewedAt,
+        createdAt: row.createdAt,
+        book: ref.book,
+        chapter: ref.chapter,
+        startVerse: ref.startVerse,
+        endVerse: ref.endVerse,
+      });
+    }
+
+    return items;
+  },
+});
+
+/** Cheap count of verses due at `now` (excludes suspended). Drives the dock badge. */
+export const dueCount = query({
+  args: { now: v.number() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return 0;
+    }
+
+    const dueRows = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_dueAt", (q) =>
+        q.eq("userId", userId).lte("dueAt", args.now),
+      )
+      .collect();
+
+    let count = 0;
+    for (const row of dueRows) {
+      if (row.status !== "suspended") count += 1;
+    }
+    return count;
+  },
+});
+
+/**
+ * Log a graded attempt and reschedule the verse in one atomic mutation.
+ *
+ * Appends a `verseMemoryReviews` row, loads (or seeds) the `verseMemory` row,
+ * applies the pure `scheduleNext`, and patches the row. Returns the new
+ * schedule so callers can reflect the updated `dueAt`/status immediately.
+ */
+export const recordAttempt = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    stage: v.number(),
+    mode: modeValidator,
+    durationMs: v.optional(v.number()),
+    now: v.number(),
+  },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+
+    const memory = await getOrCreateVerseMemory(
+      ctx,
+      userId,
+      args.verseRefId,
+      args.now,
+    );
+
+    await ctx.db.insert("verseMemoryReviews", {
+      userId,
+      verseRefId: args.verseRefId,
+      verseMemoryId: memory._id,
+      quality: args.quality,
+      accuracy: args.accuracy,
+      stage: args.stage,
+      mode: args.mode,
+      durationMs: args.durationMs,
+      createdAt: args.now,
+    });
+
+    const next = scheduleNext(
+      {
+        status: memory.status,
+        learnStage: memory.learnStage,
+        ease: memory.ease,
+        intervalDays: memory.intervalDays,
+        dueAt: memory.dueAt,
+        consecutiveCorrect: memory.consecutiveCorrect,
+        lapses: memory.lapses,
+      },
+      {
+        quality: args.quality,
+        accuracy: args.accuracy,
+        mode: args.mode,
+        now: args.now,
+      },
+    );
+
+    await ctx.db.patch(memory._id, {
+      status: next.status,
+      learnStage: next.learnStage,
+      ease: next.ease,
+      intervalDays: next.intervalDays,
+      dueAt: next.dueAt,
+      consecutiveCorrect: next.consecutiveCorrect,
+      lapses: next.lapses,
+      lastReviewedAt: args.now,
+    });
+
+    return next;
+  },
+});
+
+/** Idempotent upsert of the verse-memory row for a verse the user owns. */
+export const getOrCreateForVerse = mutation({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: verseMemoryValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+
+    const memory = await getOrCreateVerseMemory(
+      ctx,
+      userId,
+      args.verseRefId,
+      args.now,
+    );
+    return toRowView(memory);
+  },
+});
+
+/**
+ * Suspend or un-suspend a verse. Suspending removes it from the due queue and
+ * records the active status in `previousStatus`; un-suspending restores that
+ * status exactly (falling back to a schedule-derived status for legacy rows
+ * that predate `previousStatus`).
+ *
+ * Returns the resulting status, or `null` when the user has no memory row for
+ * the verse yet.
+ */
+export const setSuspended = mutation({
+  args: { verseRefId: v.id("verseRefs"), suspended: v.boolean() },
+  returns: v.union(statusValidator, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
+    if (!memory) {
+      return null;
+    }
+
+    if (args.suspended) {
+      if (memory.status === "suspended") {
+        return "suspended" as const;
+      }
+      await ctx.db.patch(memory._id, {
+        status: "suspended",
+        previousStatus: memory.status,
+      });
+      return "suspended" as const;
+    }
+
+    if (memory.status !== "suspended") {
+      return memory.status;
+    }
+
+    const restored = memory.previousStatus ?? deriveActiveStatus(memory);
+    await ctx.db.patch(memory._id, {
+      status: restored,
+      previousStatus: undefined,
+    });
+    return restored;
+  },
+});
+
+const memoryStatsValidator = v.object({
+  new: v.number(),
+  learning: v.number(),
+  reviewing: v.number(),
+  mastered: v.number(),
+  suspended: v.number(),
+  total: v.number(),
+  due: v.number(),
+});
+
+/** Per-status counts for the current user, plus a due-now tally. */
+export const memoryStats = query({
+  args: { now: v.number() },
+  returns: memoryStatsValidator,
+  handler: async (ctx, args) => {
+    const empty = {
+      new: 0,
+      learning: 0,
+      reviewing: 0,
+      mastered: 0,
+      suspended: 0,
+      total: 0,
+      due: 0,
+    };
+
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return empty;
+    }
+
+    const rows = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_status", (q) => q.eq("userId", userId))
+      .collect();
+
+    const stats = { ...empty };
+    for (const row of rows) {
+      stats[row.status] += 1;
+      stats.total += 1;
+      if (row.status !== "suspended" && row.dueAt <= args.now) {
+        stats.due += 1;
+      }
+    }
+    return stats;
+  },
+});
