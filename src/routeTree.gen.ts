@@ -16,6 +16,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudyIndexRouteImport } from './routes/study/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as MemoryIndexRouteImport } from './routes/memory/index'
 import { Route as StudyNewRouteImport } from './routes/study/new'
 import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
 import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
@@ -56,6 +57,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/settings/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryIndexRoute = MemoryIndexRouteImport.update({
+  id: '/memory/',
+  path: '/memory/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudyNewRoute = StudyNewRouteImport.update({
   id: '/study/new',
   path: '/study/new',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
   '/study/new': typeof StudyNewRoute
+  '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
 }
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
   '/study/new': typeof StudyNewRoute
+  '/memory': typeof MemoryIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/study': typeof StudyIndexRoute
 }
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
   '/study/new': typeof StudyNewRoute
+  '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
 }
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/settings/tags'
     | '/study/$sessionId'
     | '/study/new'
+    | '/memory/'
     | '/settings/'
     | '/study/'
   fileRoutesByTo: FileRoutesByTo
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/settings/tags'
     | '/study/$sessionId'
     | '/study/new'
+    | '/memory'
     | '/settings'
     | '/study'
   id:
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/settings/tags'
     | '/study/$sessionId'
     | '/study/new'
+    | '/memory/'
     | '/settings/'
     | '/study/'
   fileRoutesById: FileRoutesById
@@ -169,6 +181,7 @@ export interface RootRouteChildren {
   SettingsTagsRoute: typeof SettingsTagsRoute
   StudySessionIdRoute: typeof StudySessionIdRoute
   StudyNewRoute: typeof StudyNewRoute
+  MemoryIndexRoute: typeof MemoryIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
   StudyIndexRoute: typeof StudyIndexRoute
 }
@@ -224,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/': {
+      id: '/memory/'
+      path: '/memory'
+      fullPath: '/memory/'
+      preLoaderRoute: typeof MemoryIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/study/new': {
       id: '/study/new'
       path: '/study/new'
@@ -265,6 +285,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsTagsRoute: SettingsTagsRoute,
   StudySessionIdRoute: StudySessionIdRoute,
   StudyNewRoute: StudyNewRoute,
+  MemoryIndexRoute: MemoryIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   StudyIndexRoute: StudyIndexRoute,
 }

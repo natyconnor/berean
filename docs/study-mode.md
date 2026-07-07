@@ -36,6 +36,7 @@ Study is shipped as a first-class workspace reachable from the app toolbar (Book
 - `/study` — the **hub**, listing your saved sessions.
 - `/study/new` — the **scope builder**, which creates a session from books + chapter ranges + tag filters.
 - `/study/$sessionId` — the **session view**, with Overview / Verse memory / Teach tabs.
+- `/memory` — the **Memory** workspace: the progress dashboard, library, and due-queue Review (see [Memory mode](#memory-mode-memory)).
 
 ### Data model
 
@@ -104,13 +105,22 @@ Four read-only aggregate queries back the [progress dashboard](#progress-dashboa
 
 All queries are safe to call unauthenticated and return `null` / `[]`.
 
-### Progress dashboard (`/study`)
+## Memory mode (`/memory`)
 
-The hub now leads with a **progress dashboard** (`StudyDashboard`, `src/components/study/dashboard/dashboard.tsx`) that **decouples reviews from sessions** and makes growth visible. Instead of picking a saved collection to drill, the learner reviews the single global due queue across _every_ hearted verse; the dashboard then visualizes their practice history and upcoming load, and sessions fall back to curated collections below.
+The verse-memory experience — the progress dashboard (with its Review hero), the library and per-verse drill-down, and the due-queue Review player + summary — lives in its own **Memory** workspace at `/memory`, separate from Study. Study (`/study`) is now just the saved-session list.
 
-The dashboard is built from **inline SVG/CSS only** — there is **no charting library dependency**. All chart color comes from the theme's `--chart-1..5` tokens (referenced via `var(--chart-N)` / `color-mix(...)`, since the tokens are OKLCH values, not HSL), so every chart tracks light/dark theme automatically. Shared path/scale helpers live in `src/components/study/dashboard/svg-chart-helpers.ts`.
+- **Route + page** follow the standard file-route + thin page pattern: `src/routes/memory/index.tsx` → `MemoryHomePage` (`src/components/routes/memory-home-page.tsx`) → `<MemoryHome/>` (`src/components/memory/memory-home.tsx`).
+- **`MemoryHome`** composes the dashboard + library and owns the `isReviewing` toggle: Review is an **in-page surface** (state), not a route, mirroring the old `study-hub` Today-queue toggle. It reuses `useLiveNow()` for the `now` query arg.
+- **Review is one verb.** The single **Review** action (formerly "Start review" / "Today's review") plays the heart-filtered `dueQueue({ now })` through the learn ladder / deck. Suspend was removed in an earlier PR.
+- **Shared primitives stay in `src/components/study/`** and are imported across: `study-verse-learn.tsx`, `study-activity-deck.tsx`, `study-verse-memory-card.tsx`, `use-record-verse-attempt.ts`, `study-card-model.ts`, and `verse-memory-feedback.tsx`. Memory-only surfaces moved into `src/components/memory/` (`dashboard/*`, `memory-library.tsx`, `verse-detail.tsx`, `review-player.tsx`, `review-summary.tsx`).
 
-- **Today hero** — keeps the original **"N due today"** headline + **Start review** button (disabled when nothing is due) reachable at the top of the dashboard.
+### Progress dashboard (`/memory`)
+
+Memory home leads with a **progress dashboard** (`MemoryDashboard`, `src/components/memory/dashboard/dashboard.tsx`) that **decouples reviews from sessions** and makes growth visible. Instead of picking a saved collection to drill, the learner reviews the single global due queue across _every_ hearted verse; the dashboard then visualizes their practice history and upcoming load, and the library sits below.
+
+The dashboard is built from **inline SVG/CSS only** — there is **no charting library dependency**. All chart color comes from the theme's `--chart-1..5` tokens (referenced via `var(--chart-N)` / `color-mix(...)`, since the tokens are OKLCH values, not HSL), so every chart tracks light/dark theme automatically. Shared path/scale helpers live in `src/components/memory/dashboard/svg-chart-helpers.ts`.
+
+- **Review hero** — the **"N due today"** headline + a single **Review** button (disabled when nothing is due) at the top of the dashboard.
 - **KPI row** (`kpi-row.tsx`) — four headline numbers: **due today** (`memoryStats.due`), **day streak**, **in memory** (`learning + reviewing + mastered` from `masteryDistribution`), and **30d accuracy** (overall mean accuracy across `accuracyTrend`, or `—` when there are no reviews). **Streak = consecutive days ending today with ≥ 1 review**, computed client-side from the heatmap counts via `computeStreak` (so it drops to 0 once a UTC day passes with no review).
 - **Practice heatmap** (`practice-heatmap.tsx`) — a GitHub-style 12-week grid (weekday rows, week columns) of daily review counts, cell intensity via `color-mix` on `--chart-1`.
 - **Mastery bar** (`mastery-bar.tsx`) — a horizontal stacked bar of verses by lifecycle status with a legend.
@@ -118,30 +128,30 @@ The dashboard is built from **inline SVG/CSS only** — there is **no charting l
 - **Review forecast** (`review-forecast.tsx`) — rounded bars of verses due per day over the next 14 days. The "Today" bar (tinted with a distinct token) counts only verses actually due now (`dueAt <= now`), matching the hero's "due today"; overdue folds in, later-today does not.
 - **Accessibility & empty states** — every chart is a `role="img"` with a descriptive `aria-label` summarizing its data, and each renders a graceful empty/zero state ("No reviews yet", "Nothing scheduled", etc.) rather than an empty axis.
 - `now` comes from the shared `useLiveNow()` hook (`src/hooks/use-live-now.ts`) that refreshes on a coarse ~60s interval and is passed as a query arg, so the numbers stay live as verses fall due — Convex still never calls `Date.now()` itself.
-- **The player** (`StudyTodayQueue`, `study-today-queue.tsx`) is an **orchestrator** that reuses the existing deck + learn UIs unchanged:
+- **The player** (`ReviewPlayer`, `src/components/memory/review-player.tsx`) is an **orchestrator** that reuses the existing deck + learn UIs unchanged:
   - It reads `dueQueue({ now })` and **snapshots** the result on entry so cards don't vanish mid-run as attempts reschedule verses out of the live due set.
   - It maps each due row (a `verseMemory` row joined to its `verseRefs`) into the **verse-memory card model** the deck/learn consume — `{ type: "verse-memory", id: "vm:<memoryId>", reference: { book, chapter, startVerse, endVerse } }`.
   - **New/learning** verses play one at a time through the **learn ladder** (`StudyVerseLearn`), with an orchestrator-owned "Next verse" control to advance. **Reviewing/mastered** verses play through the **deck** (`StudyActivityDeck`) for hidden recall.
   - Because both sub-components record every graded attempt via `useRecordVerseAttempt` → `recordAttempt`, **each completed card reschedules the verse**; a just-reviewed verse's `dueAt` moves into the future and it **leaves the live due queue** (verifiable via the reactive `dueQueue`). The orchestrator watches the live queue to know when the review phase is finished.
-- **Session summary** (`StudySessionSummary`, `study-session-summary.tsx`) ends the run: **verses reviewed**, **cleared** (left today's queue), and **stage-ups** (advanced a learn stage) are derived client-side by diffing the entry snapshot against the live due set, while **remaining** (the caught-up/streak status and whether "Keep reviewing" is offered) reads the uncapped `memoryStats.due` — not the capped `dueQueue` length — so it stays accurate when more than 50 verses are due. "Keep reviewing" re-runs against the next batch of still-due verses. No new Convex functions were added.
-- **Empty / caught-up state** is handled both on the hub card ("All caught up") and inside the player.
+- **Review summary** (`ReviewSummary`, `src/components/memory/review-summary.tsx`) ends the run: **verses reviewed**, **cleared** (left today's queue), and **stage-ups** (advanced a learn stage) are derived client-side by diffing the entry snapshot against the live due set, while **remaining** (the caught-up/streak status and whether "Keep reviewing" is offered) reads the uncapped `memoryStats.due` — not the capped `dueQueue` length — so it stays accurate when more than 50 verses are due. "Keep reviewing" re-runs against the next batch of still-due verses. No new Convex functions were added.
+- **Empty / caught-up state** is handled both on the Memory dashboard ("All caught up") and inside the player.
 
 ### Hub (`/study`)
 
-- Below the dashboard, lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist. Sessions are unchanged by the Today queue — they remain saved collections.
+- Lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist. Sessions remain saved collections; the dashboard, library, and Review now live in Memory (`/memory`).
 - Each card shows title (name or auto-generated scope summary), scope-aware stats (hearted verses · notes · passages · last studied), any tag filters, and a "Last: {activity}" chip when the previous view was an activity (not Overview).
 - Delete button opens a confirmation dialog (`DeleteStudySessionDialog`).
 - Empty state has a CTA to `/study/new`.
 
-### Library, drill-down & heart rings (`/study`)
+### Library, drill-down & heart rings (`/memory`)
 
-Between the dashboard and the Sessions list, the hub renders a **Library** section (`StudyLibrary`, `src/components/study/study-library.tsx`) that makes the collection tangible — every hearted verse with its memory state and next-due date.
+Below the dashboard, Memory home renders a **Library** section (`MemoryLibrary`, `src/components/memory/memory-library.tsx`) that makes the collection tangible — every hearted verse with its memory state and next-due date.
 
 - **List** — paginated via `usePaginatedQuery(api.verseMemory.listLibrary, { sort }, …)` with a **Load more** button, styled to match the Sessions section. Each row shows the reference, a status dot + label, and a relative next-due label ("Due now" / "Tomorrow" / "In N days").
 - **Sort** — three modes (`Due` / `Status` / `Recent`) map to `listLibrary`'s `sort` arg. Changing the sort re-keys the paginated query, resetting to the first page.
 - **Search** — a client-side filter over the **loaded** pages' reference labels only (it does not fetch unloaded pages). This is a documented v1 limitation (see below).
 - **Empty state** — "No hearted verses yet…" when the user has none; a separate "no matches" message when a search filters everything out.
-- **Drill-down** — clicking a row opens a dialog with `VerseDetail` (`src/components/study/verse-detail.tsx`), driven by `verseMemory.verseDetail`: the schedule (interval / ease / lapses), a **stage journey** (full → first-letters → cloze → hidden, current rung highlighted), a **recent-accuracy sparkline** (reusing `linePath`/`scaleLinear` from `dashboard/svg-chart-helpers.ts`, attempts reversed to a left-to-right time axis), the derived **difficulty** signal, and a **next-due** line. Every chart/SVG carries a descriptive `aria-label`.
+- **Drill-down** — clicking a row opens a dialog with `VerseDetail` (`src/components/memory/verse-detail.tsx`), driven by `verseMemory.verseDetail`: the schedule (interval / ease / lapses), a **stage journey** (full → first-letters → cloze → hidden, current rung highlighted), a **recent-accuracy sparkline** (reusing `linePath`/`scaleLinear` from `dashboard/svg-chart-helpers.ts`, attempts reversed to a left-to-right time axis), the derived **difficulty** signal, and a **next-due** line. Every chart/SVG carries a descriptive `aria-label`.
 
 #### Heart mastery ring (reader)
 
@@ -327,13 +337,14 @@ Rough, in priority order. Nothing here blocks v1.
 - Data / server: `convex/schema.ts` (`studySessions`, `verseMemory`, `verseMemoryReviews`, `packs`, `packVerses`), `convex/studySessions.ts`, `convex/verseMemory.ts`, `convex/lib/verseMemory.ts`, `convex/migrations.ts`.
 - Packs: `convex/packs.ts` + `convex/lib/packs.ts`; pure scope matching in `src/lib/verse-scope-match.ts` (`verseMatchesScope`, unit-tested), shared with `convex/studySessions.ts`.
 - Scheduler: `src/lib/memory-scheduler.ts` (pure, framework-free).
-- Routes: `src/routes/study/index.tsx`, `src/routes/study/new.tsx`, `src/routes/study/$sessionId.tsx`.
+- Routes: `src/routes/study/index.tsx`, `src/routes/study/new.tsx`, `src/routes/study/$sessionId.tsx`, `src/routes/memory/index.tsx`.
 - Mode Dock: `src/components/layout/mode-dock.tsx`, mounted in `src/components/layout/app-shell.tsx`; preference control in `src/components/settings/mode-dock-section.tsx`; Convex get/set in `convex/userSettings.ts` (`modeDock` field in `convex/schema.ts`).
-- Feature components: `src/components/study/*.tsx`.
-- Card model + deck: `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
-- Today queue: `src/components/study/study-today-queue.tsx` (orchestrator), `study-session-summary.tsx` (end-of-run card).
-- Progress dashboard: `src/components/study/dashboard/*` (`dashboard.tsx`, `kpi-row.tsx`, `practice-heatmap.tsx`, `mastery-bar.tsx`, `accuracy-trend.tsx`, `review-forecast.tsx`, `svg-chart-helpers.ts`), rendered at the top of `study-hub.tsx`; pure buckets + tests in `src/lib/dashboard-buckets.ts`.
-- Library + drill-down: `src/components/study/study-library.tsx` and `src/components/study/verse-detail.tsx` (rendered from `study-hub.tsx`), backed by `verseMemory.listLibrary` / `verseMemory.verseDetail`.
+- Feature components: `src/components/study/*.tsx` (Study), `src/components/memory/*.tsx` (Memory).
+- Memory home: `src/components/memory/memory-home.tsx`, rendered via `src/components/routes/memory-home-page.tsx`.
+- Card model + deck (shared, in `study/`): `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
+- Review player: `src/components/memory/review-player.tsx` (orchestrator), `review-summary.tsx` (end-of-run card).
+- Progress dashboard: `src/components/memory/dashboard/*` (`dashboard.tsx`, `kpi-row.tsx`, `practice-heatmap.tsx`, `mastery-bar.tsx`, `accuracy-trend.tsx`, `review-forecast.tsx`, `svg-chart-helpers.ts`), rendered at the top of `memory-home.tsx`; pure buckets + tests in `src/lib/dashboard-buckets.ts`.
+- Library + drill-down: `src/components/memory/memory-library.tsx` and `src/components/memory/verse-detail.tsx` (rendered from `memory-home.tsx`), backed by `verseMemory.listLibrary` / `verseMemory.verseDetail`.
 - Heart mastery ring: pure mapping + tests in `src/lib/mastery-ring.ts` (`masteryRingFraction`), rendered in `src/components/passage/verse-row.tsx` and wired via `src/components/passage/passage-view-body.tsx`; memory status joined by `convex/savedVerses.ts` (`listForChapter`).
 - Attempt persistence bridge: `src/components/study/use-record-verse-attempt.ts` (used by `study-verse-learn.tsx` and `study-verse-memory-card.tsx`).
 - Scope summary helper: `src/components/study/study-scope-summary.ts`.

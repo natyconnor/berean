@@ -14,15 +14,15 @@ const TREND_DAYS = 30;
 const FORECAST_DAYS = 14;
 
 /**
- * The Study progress dashboard: a "Today" hero (keeping Start review reachable),
+ * The Memory progress dashboard: a "Today" hero (keeping Review reachable),
  * a KPI row, and inline SVG/CSS charts. All data is real and reactive; `now` is
  * supplied by the caller (never `Date.now()` inside Convex).
  *
- * Each section loads independently — the Today hero + Start review render as
+ * Each section loads independently — the Today hero + Review render as
  * soon as `memoryStats` (the due count) resolves, so the primary review action
  * is never blocked on the heatmap/trend/forecast/distribution aggregates.
  */
-export function StudyDashboard({
+export function MemoryDashboard({
   now,
   onStartReview,
 }: {
@@ -143,7 +143,7 @@ function TodayHero({
           className="gap-1.5"
         >
           <Play className="h-4 w-4" />
-          Start review
+          Review
         </Button>
       </div>
     </section>

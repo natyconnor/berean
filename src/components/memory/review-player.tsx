@@ -8,18 +8,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
 
 import { api } from "../../../convex/_generated/api";
-import type { VerseMemoryCard } from "./study-card-model";
-import { StudyActivityDeck } from "./study-activity-deck";
-import { StudySessionSummary } from "./study-session-summary";
-import { StudyVerseLearn } from "./study-verse-learn";
+import type { VerseMemoryCard } from "../study/study-card-model";
+import { StudyActivityDeck } from "../study/study-activity-deck";
+import { ReviewSummary } from "./review-summary";
+import { StudyVerseLearn } from "../study/study-verse-learn";
 
 /** A single row from `verseMemory.dueQueue` (memory row joined to its ref). */
 type DueItem = FunctionReturnType<typeof api.verseMemory.dueQueue>[number];
 
 type Phase = "learn" | "review" | "summary";
 
-interface StudyTodayQueueProps {
-  /** Return to the study hub. */
+interface ReviewPlayerProps {
+  /** Return to the memory home. */
   onExit: () => void;
 }
 
@@ -42,7 +42,7 @@ function toCard(item: DueItem): VerseMemoryCard {
 }
 
 /**
- * Orchestrates the global Today review: the due queue across every hearted
+ * Orchestrates the global Review: the due queue across every hearted
  * verse, played through the existing learn ladder (new/learning verses) and
  * the deck (reviewing/mastered verses), ending in a summary.
  *
@@ -51,7 +51,7 @@ function toCard(item: DueItem): VerseMemoryCard {
  * still observed to detect when the review phase is finished and to compute the
  * end-of-run summary (verses cleared, stage-ups, verses still due).
  */
-export function StudyTodayQueue({ onExit }: StudyTodayQueueProps): JSX.Element {
+export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
   // Live `now` (coarse, ~60s) so late-due verses are reflected while the run is
   // open. Passed as a query arg; never Date.now() inside Convex.
   const now = useLiveNow();
@@ -161,7 +161,7 @@ export function StudyTodayQueue({ onExit }: StudyTodayQueueProps): JSX.Element {
   if (effectivePhase === "summary") {
     return (
       <TodayQueueShell onExit={onExit}>
-        <StudySessionSummary
+        <ReviewSummary
           reviewed={summary.reviewed}
           cleared={summary.cleared}
           stageUps={summary.stageUps}
@@ -181,7 +181,7 @@ export function StudyTodayQueue({ onExit }: StudyTodayQueueProps): JSX.Element {
           <StudyActivityDeck
             key="today-review"
             cards={reviewCards}
-            scopeLabel="today's review"
+            scopeLabel="review"
           />
           <div className="mx-auto flex w-full max-w-2xl justify-end">
             <Button
@@ -243,11 +243,9 @@ function TodayQueueShell({
             className="-ml-2 gap-1.5"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
-            Study
+            Memory
           </Button>
-          <h1 className="text-lg font-semibold tracking-tight">
-            Today&rsquo;s review
-          </h1>
+          <h1 className="text-lg font-semibold tracking-tight">Review</h1>
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">
@@ -278,7 +276,7 @@ function CaughtUp({ onExit }: { onExit: () => void }): JSX.Element {
         </p>
       </div>
       <Button variant="outline" onClick={onExit}>
-        Back to study
+        Back to memory
       </Button>
     </div>
   );

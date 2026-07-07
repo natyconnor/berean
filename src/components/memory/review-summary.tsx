@@ -4,7 +4,7 @@ import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-interface StudySessionSummaryProps {
+interface ReviewSummaryProps {
   /** Verses that made progress this session (cleared or stepped up a stage). */
   reviewed: number;
   /** Verses that left today's due queue (rescheduled into the future). */
@@ -19,17 +19,17 @@ interface StudySessionSummaryProps {
 }
 
 /**
- * End-of-queue card shown after a Today review run: what got reviewed, what
+ * End-of-queue card shown after a Review run: what got reviewed, what
  * cleared, stage-ups earned, and whether the learner is fully caught up.
  */
-export function StudySessionSummary({
+export function ReviewSummary({
   reviewed,
   cleared,
   stageUps,
   remaining,
   onDone,
   onContinue,
-}: StudySessionSummaryProps): JSX.Element {
+}: ReviewSummaryProps): JSX.Element {
   const caughtUp = remaining === 0;
 
   return (
@@ -71,7 +71,7 @@ export function StudySessionSummary({
             onClick={onDone}
             className="w-full"
           >
-            Back to study
+            Back to memory
           </Button>
         </div>
       </CardContent>

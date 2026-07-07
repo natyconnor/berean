@@ -10,10 +10,6 @@ import { StudySessionCard } from "./study-session-card";
 import { DeleteStudySessionDialog } from "./delete-study-session-dialog";
 import { formatScopeSummary } from "./study-scope-summary";
 import { StudyModeExplainerDialog } from "./study-mode-explainer-dialog";
-import { StudyTodayQueue } from "./study-today-queue";
-import { StudyDashboard } from "./dashboard/dashboard";
-import { StudyLibrary } from "./study-library";
-import { useLiveNow } from "@/hooks/use-live-now";
 
 type DeleteCandidate = {
   id: Id<"studySessions">;
@@ -30,12 +26,6 @@ export function StudyHub() {
     { initialNumItems: INITIAL_PAGE_SIZE },
   );
   const removeSession = useMutation(api.studySessions.remove);
-
-  // Refreshes on an interval so the due count stays live while the tab is open
-  // (verses whose dueAt lands after mount get counted). Passed as a query arg;
-  // never Date.now() inside Convex.
-  const now = useLiveNow();
-  const [isReviewing, setIsReviewing] = useState(false);
 
   const [deleteCandidate, setDeleteCandidate] =
     useState<DeleteCandidate | null>(null);
@@ -72,10 +62,6 @@ export function StudyHub() {
   const isLoadingMore = status === "LoadingMore";
   const canLoadMore = status === "CanLoadMore";
 
-  if (isReviewing) {
-    return <StudyTodayQueue onExit={() => setIsReviewing(false)} />;
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
@@ -96,11 +82,6 @@ export function StudyHub() {
       </header>
       <ScrollArea className="flex-1 min-h-0">
         <div className="max-w-2xl mx-auto px-5 py-6 space-y-8">
-          <StudyDashboard
-            now={now}
-            onStartReview={() => setIsReviewing(true)}
-          />
-          <StudyLibrary now={now} />
           <section className="space-y-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Sessions

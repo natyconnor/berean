@@ -51,7 +51,7 @@ function formatDueLabel(dueAt: number, now: number): string {
  * Search is client-side over the loaded pages' reference labels (it does not
  * fetch unloaded pages) — a documented v1 limitation.
  */
-export function StudyLibrary({ now }: { now: number }) {
+export function MemoryLibrary({ now }: { now: number }) {
   const [sort, setSort] = useState<LibrarySort>("dueAt");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Id<"verseRefs"> | null>(null);
