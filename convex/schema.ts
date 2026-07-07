@@ -191,6 +191,43 @@ export default defineSchema({
     lastOpenedAt: v.number(),
   }).index("by_userId_lastOpenedAt", ["userId", "lastOpenedAt"]),
 
+  packs: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    kind: v.union(v.literal("scope"), v.literal("custom")),
+    // Present iff kind === "scope"; identical shape to studySessions.scope.
+    scope: v.optional(
+      v.object({
+        books: v.array(v.string()),
+        chapterRanges: v.optional(
+          v.array(
+            v.object({
+              book: v.string(),
+              startChapter: v.number(),
+              endChapter: v.number(),
+            }),
+          ),
+        ),
+        tags: v.array(v.string()),
+        tagMatchMode: v.union(v.literal("any"), v.literal("all")),
+      }),
+    ),
+    createdAt: v.number(),
+    lastOpenedAt: v.number(),
+  }).index("by_userId_lastOpenedAt", ["userId", "lastOpenedAt"]),
+
+  packVerses: defineTable({
+    // Custom-pack membership (ordered).
+    userId: v.id("users"),
+    packId: v.id("packs"),
+    verseRefId: v.id("verseRefs"),
+    order: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_userId_packId_order", ["userId", "packId", "order"])
+    .index("by_packId", ["packId"])
+    .index("by_userId_packId_verseRefId", ["userId", "packId", "verseRefId"]),
+
   feedbackReports: defineTable({
     userId: v.id("users"),
     kind: v.union(v.literal("bug"), v.literal("feature")),

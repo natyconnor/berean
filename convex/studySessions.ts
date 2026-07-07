@@ -6,6 +6,7 @@ import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { matchesTagFilters, type TagMatchMode } from "./lib/tags";
 import { sortByVerseRef } from "../shared/compare-verse-refs";
 import { verseRefKey } from "../shared/verse-ref-key";
+import { verseMatchesScope } from "../src/lib/verse-scope-match";
 
 const scopeValue = v.object({
   books: v.array(v.string()),
@@ -32,15 +33,6 @@ type Scope = {
   tags: string[];
   tagMatchMode: TagMatchMode;
 };
-
-function refMatchesScope(scope: Scope, book: string, chapter: number): boolean {
-  if (scope.books.length === 0) return true;
-  if (!scope.books.includes(book)) return false;
-
-  const range = scope.chapterRanges?.find((r) => r.book === book);
-  if (!range) return true;
-  return chapter >= range.startChapter && chapter <= range.endChapter;
-}
 
 function countDistinctTeachPassageKeysFromNotes(
   notes: Array<{
@@ -180,7 +172,8 @@ export const listMine = query({
 
       let savedVersesCount = 0;
       for (const sv of savedVerses) {
-        if (refMatchesScope(scope, sv.book, sv.chapter)) savedVersesCount++;
+        if (verseMatchesScope({ book: sv.book, chapter: sv.chapter }, scope))
+          savedVersesCount++;
       }
 
       const countedNotes = new Set<string>();
@@ -188,7 +181,10 @@ export const listMine = query({
       for (const link of noteLinks) {
         const vref = verseRefMap.get(String(link.verseRefId));
         if (!vref) continue;
-        if (!refMatchesScope(scope, vref.book, vref.chapter)) continue;
+        if (
+          !verseMatchesScope({ book: vref.book, chapter: vref.chapter }, scope)
+        )
+          continue;
         const noteIdStr = String(link.noteId);
         const note = noteMap.get(noteIdStr);
         if (!note) continue;
@@ -315,7 +311,8 @@ async function collectSavedVersesForScope(
   for (const row of rows) {
     const ref = await ctx.db.get(row.verseRefId);
     if (!ref || ref.userId !== userId) continue;
-    if (!refMatchesScope(scope, ref.book, ref.chapter)) continue;
+    if (!verseMatchesScope({ book: ref.book, chapter: ref.chapter }, scope))
+      continue;
     results.push({
       _id: row._id,
       book: ref.book,
@@ -358,7 +355,8 @@ async function collectNotesForScope(
   for (const link of noteLinks) {
     const ref = await ctx.db.get(link.verseRefId);
     if (!ref || ref.userId !== userId) continue;
-    if (!refMatchesScope(scope, ref.book, ref.chapter)) continue;
+    if (!verseMatchesScope({ book: ref.book, chapter: ref.chapter }, scope))
+      continue;
 
     const noteIdStr = String(link.noteId);
     if (!noteMap.has(noteIdStr)) {

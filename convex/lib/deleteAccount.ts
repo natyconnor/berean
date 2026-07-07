@@ -93,6 +93,20 @@ export async function deleteAllDataForUser(
     await ctx.db.delete(row._id);
   }
 
+  for (const row of await ctx.db
+    .query("packVerses")
+    .withIndex("by_userId_packId_order", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
+    .query("packs")
+    .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
   const sessions = await ctx.db
     .query("authSessions")
     .withIndex("userId", (q) => q.eq("userId", userId))

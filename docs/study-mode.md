@@ -230,6 +230,48 @@ A single floating pill, bottom-center, is the app's only new persistent chrome. 
 - **Reveal.** The one-time reveal on first heart reuses `useFeatureHint` + `FeatureCallout` + `FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART` (the same hint the toolbar used before) — no new onboarding path. The dock forces itself visible while that callout is pending. The dock only **claims** the hint in the global display queue while it can actually render the callout (i.e. `modeDock !== "off"`); when the dock is off, the toolbar Study link is the fallback that **completes** the reveal on open, so the queue is never pinned by an eligible-but-unrendered callout and always progresses. `complete()` is idempotent, so whichever path the user takes (dock callout or toolbar) resolves the hint exactly once.
 - **Preference.** `userSettings.modeDock` (`"auto-hide"` | `"always"` | `"off"`, default `"auto-hide"`) persists the behavior via `userSettings.getModeDockPreference` / `setModeDockPreference`. `"always"` disables auto-hide (dock always visible); `"off"` hides the dock entirely (the toolbar Study icon remains the escape hatch). A control in Settings (`ModeDockSection`) toggles it. Only this preference is persisted — scroll/focus visibility is local component state.
 
+## Packs
+
+A **pack** is a per-user, named verse set — a lightweight collection you can drill as a unit. There are two kinds, and the distinction is where the membership lives:
+
+- **Scope packs** store a `scope` (the **exact same shape** as `studySessions.scope`) and resolve their members **live** from `savedVerses` ∩ scope every read. They never store membership rows, so hearting or un-hearting a verse in-scope automatically adds/removes it from the pack.
+- **Custom packs** store **explicit, ordered** membership rows in `packVerses`. Membership is independent of the live heart set (it survives un-hearting), and can be reordered.
+
+Both kinds share one invariant: **pack members are hearted.** Adding a verse to a pack hearts it (inserts a `savedVerses` row if absent) and seeds its `verseMemory` row, so every member participates in spaced repetition. Members always join to their live `verseMemory` schedule.
+
+### Scope matching (`src/lib/verse-scope-match.ts`)
+
+The book/chapter-range matching that decides whether a verse falls inside a scope is a single pure, unit-tested function, `verseMatchesScope(ref, scope)`, extracted from `studySessions.resolveScope` so sessions and packs share one source of truth:
+
+- An empty `books` list matches **every** verse (the "whole corpus" scope).
+- Otherwise the verse's `book` must be listed, **and** — when a `chapterRanges` entry exists for that book — its `chapter` must fall within `[startChapter, endChapter]`. A book listed **without** a range matches all of its chapters.
+- `tags` / `tagMatchMode` are deliberately **out of scope** for this helper: they filter NOTES, not verses. `studySessions.resolveScope` still applies tag filtering separately when collecting notes; its verse matching now delegates to `verseMatchesScope` (behavior unchanged).
+
+### Packs data model
+
+Two new per-user Convex tables:
+
+| Table        | Purpose                                                                                                                                                                                                                                                                                                                                            |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packs`      | One row per pack: `userId`, `name`, `kind` (`"scope"` \| `"custom"`), optional `scope` (present iff `kind === "scope"`, identical shape to `studySessions.scope`), `createdAt`, `lastOpenedAt`. Indexed `by_userId_lastOpenedAt` (hub list order).                                                                                                 |
+| `packVerses` | Custom-pack membership (ordered): `userId`, `packId`, `verseRefId`, `order`, `createdAt`. Indexed `by_userId_packId_order` (ordered read + append), `by_packId` (cascade delete), and `by_userId_packId_verseRefId` (membership lookup / dedupe). Scope packs store **no** rows here — their members are resolved live from `savedVerses` ∩ scope. |
+
+### Packs Convex API (`convex/packs.ts`)
+
+All functions validate `args` + `returns`, check auth via `getCurrentUser*`, verify per-row ownership, and query through `.withIndex(...)` (never `.filter`). Queries take `now` as an argument (never `Date.now()` in a query); mutations may use `Date.now()`. Query/mutation wrappers stay thin — shared logic lives in `convex/lib/packs.ts` (`loadOwnedPack`, `loadHeartedMembers`, `filterScopeMembers`, `loadCustomMembers`, `nextPackOrder`). Queries are safe to call unauthenticated and return `[]` / `0` / `null`.
+
+- `create({ name, kind, scope? })` — creates a pack. Scope packs require a `scope`; custom packs must omit it (both enforced). Returns the new `Id<"packs">`.
+- `listMine({ paginationOpts, now })` — **paginated** (`paginationOptsValidator` + `.paginate()` on `by_userId_lastOpenedAt`, newest-opened first). Each page entry carries live `verseCount` + `dueCount` (`dueAt <= now`). The user's hearted set is loaded **once per page** and reused across every scope pack (bounded by the hearted set); custom packs read their own membership rows (bounded by pack size).
+- `get({ id })` — returns the pack (incl. `scope` for scope packs) or `null` for not-found / not-yours.
+- `rename({ id, name })` — renames a pack the user owns.
+- `remove({ id })` — deletes the pack **and its `packVerses` rows** (via `by_packId`). **Never** deletes `savedVerses` hearts or `verseMemory` progress.
+- `touch({ id })` — bumps `lastOpenedAt` (drives hub ordering).
+- `addVerse({ id, book, chapter, startVerse, endVerse })` — validates bounds, find/creates the `verseRef`, **hearts** it (inserts `savedVerses` if absent) and seeds `verseMemory` (idempotent). For **custom** packs it also appends a `packVerses` row (idempotent via `by_userId_packId_verseRefId`, `order` from `nextPackOrder`); **scope** packs need no membership row.
+- `removeVerse({ id, verseRefId })` — **custom only**; deletes the membership row. Does **not** un-heart the verse (it stays in Memory).
+- `reorder({ id, orderedVerseRefIds })` — **custom only**; rewrites each membership row's `order` to its index in the supplied list.
+- `resolveMembers({ id, now })` — the pack's members joined to their live `verseMemory` schedule (`status`, `learnStage`, `intervalDays`, `dueAt`) plus an `isDue` flag (`dueAt <= now`). **Scope** packs resolve from `savedVerses` ∩ scope in canonical Bible order; **custom** packs read `packVerses` in explicit `order`. Both join to `verseMemory`; rows whose memory seed is missing (legacy) are skipped rather than fabricated.
+- `previewScopeCount({ scope, now })` — a live `{ verseCount, dueCount }` for a (possibly unsaved) scope, computed from `savedVerses` ∩ scope. Powers the scope-pack creation counter.
+
 ## Known limitations (v1)
 
 - **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
@@ -282,7 +324,8 @@ Rough, in priority order. Nothing here blocks v1.
 
 ## Related code
 
-- Data / server: `convex/schema.ts` (`studySessions`, `verseMemory`, `verseMemoryReviews`), `convex/studySessions.ts`, `convex/verseMemory.ts`, `convex/lib/verseMemory.ts`, `convex/migrations.ts`.
+- Data / server: `convex/schema.ts` (`studySessions`, `verseMemory`, `verseMemoryReviews`, `packs`, `packVerses`), `convex/studySessions.ts`, `convex/verseMemory.ts`, `convex/lib/verseMemory.ts`, `convex/migrations.ts`.
+- Packs: `convex/packs.ts` + `convex/lib/packs.ts`; pure scope matching in `src/lib/verse-scope-match.ts` (`verseMatchesScope`, unit-tested), shared with `convex/studySessions.ts`.
 - Scheduler: `src/lib/memory-scheduler.ts` (pure, framework-free).
 - Routes: `src/routes/study/index.tsx`, `src/routes/study/new.tsx`, `src/routes/study/$sessionId.tsx`.
 - Mode Dock: `src/components/layout/mode-dock.tsx`, mounted in `src/components/layout/app-shell.tsx`; preference control in `src/components/settings/mode-dock-section.tsx`; Convex get/set in `convex/userSettings.ts` (`modeDock` field in `convex/schema.ts`).

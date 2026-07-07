@@ -1,0 +1,446 @@
+import { query, mutation } from "./_generated/server";
+import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
+import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
+import { findOrCreateVerseRefId } from "./lib/verseRefs";
+import { seedVerseMemory } from "./lib/verseMemory";
+import {
+  filterScopeMembers,
+  loadCustomMembers,
+  loadHeartedMembers,
+  loadOwnedPack,
+  nextPackOrder,
+  type PackMember,
+} from "./lib/packs";
+import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
+
+/**
+ * A pack is a per-user named verse set. `scope` packs resolve their members
+ * LIVE from `savedVerses` ∩ scope; `custom` packs store explicit ordered
+ * membership rows in `packVerses`. See docs/study-mode.md.
+ */
+
+const kindValidator = v.union(v.literal("scope"), v.literal("custom"));
+
+const statusValidator = v.union(
+  v.literal("new"),
+  v.literal("learning"),
+  v.literal("reviewing"),
+  v.literal("mastered"),
+);
+
+// Identical shape to studySessions.scope (verbatim). Present only on scope packs.
+const scopeValidator = v.object({
+  books: v.array(v.string()),
+  chapterRanges: v.optional(
+    v.array(
+      v.object({
+        book: v.string(),
+        startChapter: v.number(),
+        endChapter: v.number(),
+      }),
+    ),
+  ),
+  tags: v.array(v.string()),
+  tagMatchMode: v.union(v.literal("any"), v.literal("all")),
+});
+
+const packValidator = v.object({
+  _id: v.id("packs"),
+  name: v.string(),
+  kind: kindValidator,
+  scope: v.optional(scopeValidator),
+  createdAt: v.number(),
+  lastOpenedAt: v.number(),
+});
+
+const packListItem = v.object({
+  _id: v.id("packs"),
+  name: v.string(),
+  kind: kindValidator,
+  verseCount: v.number(),
+  dueCount: v.number(),
+  lastOpenedAt: v.number(),
+});
+
+const packMemberValidator = v.object({
+  verseRefId: v.id("verseRefs"),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  status: statusValidator,
+  learnStage: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  isDue: v.boolean(),
+});
+
+export const create = mutation({
+  args: {
+    name: v.string(),
+    kind: kindValidator,
+    scope: v.optional(scopeValidator),
+  },
+  returns: v.id("packs"),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    if (args.kind === "scope" && !args.scope) {
+      throw new Error("Scope packs require a scope");
+    }
+    if (args.kind === "custom" && args.scope) {
+      throw new Error("Custom packs cannot have a scope");
+    }
+
+    const now = Date.now();
+    return await ctx.db.insert("packs", {
+      userId,
+      name: args.name,
+      kind: args.kind,
+      scope: args.kind === "scope" ? args.scope : undefined,
+      createdAt: now,
+      lastOpenedAt: now,
+    });
+  },
+});
+
+export const listMine = query({
+  args: { paginationOpts: paginationOptsValidator, now: v.number() },
+  returns: v.object({
+    page: v.array(packListItem),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    splitCursor: v.optional(v.union(v.string(), v.null())),
+    pageStatus: v.optional(
+      v.union(
+        v.literal("SplitRecommended"),
+        v.literal("SplitRequired"),
+        v.null(),
+      ),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const paginated = await ctx.db
+      .query("packs")
+      .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    if (paginated.page.length === 0) {
+      return { ...paginated, page: [] };
+    }
+
+    // Scope packs all resolve against the same hearted set, so load it once
+    // and reuse it across every scope pack in this page (bounded by the
+    // user's hearted set); custom packs read their own membership rows.
+    const hearted = await loadHeartedMembers(ctx, userId);
+
+    const page = [];
+    for (const pack of paginated.page) {
+      let members: PackMember[];
+      if (pack.kind === "scope" && pack.scope) {
+        members = filterScopeMembers(hearted, pack.scope);
+      } else {
+        members = await loadCustomMembers(ctx, userId, pack._id);
+      }
+
+      let dueCount = 0;
+      for (const m of members) {
+        if (m.dueAt <= args.now) dueCount += 1;
+      }
+
+      page.push({
+        _id: pack._id,
+        name: pack.name,
+        kind: pack.kind,
+        verseCount: members.length,
+        dueCount,
+        lastOpenedAt: pack.lastOpenedAt,
+      });
+    }
+
+    return { ...paginated, page };
+  },
+});
+
+export const get = query({
+  args: { id: v.id("packs") },
+  returns: v.union(packValidator, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return null;
+
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) return null;
+
+    return {
+      _id: pack._id,
+      name: pack.name,
+      kind: pack.kind,
+      scope: pack.scope,
+      createdAt: pack.createdAt,
+      lastOpenedAt: pack.lastOpenedAt,
+    };
+  },
+});
+
+export const rename = mutation({
+  args: { id: v.id("packs"), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+    await ctx.db.patch(args.id, { name: args.name });
+    return null;
+  },
+});
+
+export const remove = mutation({
+  args: { id: v.id("packs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+
+    // Delete the pack and its membership rows only. Hearts (`savedVerses`) and
+    // spaced-repetition progress (`verseMemory`) are intentionally preserved.
+    const members = await ctx.db
+      .query("packVerses")
+      .withIndex("by_packId", (q) => q.eq("packId", args.id))
+      .collect();
+    for (const member of members) {
+      await ctx.db.delete(member._id);
+    }
+    await ctx.db.delete(args.id);
+    return null;
+  },
+});
+
+export const touch = mutation({
+  args: { id: v.id("packs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) return null;
+    await ctx.db.patch(args.id, { lastOpenedAt: Date.now() });
+    return null;
+  },
+});
+
+export const addVerse = mutation({
+  args: {
+    id: v.id("packs"),
+    book: v.string(),
+    chapter: v.number(),
+    startVerse: v.number(),
+    endVerse: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+
+    const boundsError = getVerseRefBoundsErrorMessage({
+      book: args.book,
+      chapter: args.chapter,
+      startVerse: args.startVerse,
+      endVerse: args.endVerse,
+    });
+    if (boundsError) {
+      throw new Error(boundsError);
+    }
+
+    const verseRefId = await findOrCreateVerseRefId(ctx, userId, {
+      book: args.book,
+      chapter: args.chapter,
+      startVerse: args.startVerse,
+      endVerse: args.endVerse,
+    });
+    const now = Date.now();
+
+    // Invariant: pack members are hearted. Heart the verse if not already, and
+    // seed its memory row (idempotent) so it participates in spaced repetition.
+    const existingSaved = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId_verseRefId", (q) =>
+        q.eq("userId", userId).eq("verseRefId", verseRefId),
+      )
+      .unique();
+    if (!existingSaved) {
+      await ctx.db.insert("savedVerses", {
+        userId,
+        verseRefId,
+        book: args.book,
+        chapter: args.chapter,
+        createdAt: now,
+      });
+    }
+    await seedVerseMemory(ctx, userId, verseRefId, now);
+
+    // Scope packs resolve members live, so they need no membership row. Custom
+    // packs append the verse to their explicit ordered membership (idempotent).
+    if (pack.kind === "custom") {
+      const existingMember = await ctx.db
+        .query("packVerses")
+        .withIndex("by_userId_packId_verseRefId", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("packId", args.id)
+            .eq("verseRefId", verseRefId),
+        )
+        .unique();
+      if (!existingMember) {
+        const order = await nextPackOrder(ctx, userId, args.id);
+        await ctx.db.insert("packVerses", {
+          userId,
+          packId: args.id,
+          verseRefId,
+          order,
+          createdAt: now,
+        });
+      }
+    }
+
+    return null;
+  },
+});
+
+export const removeVerse = mutation({
+  args: { id: v.id("packs"), verseRefId: v.id("verseRefs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+    if (pack.kind !== "custom") {
+      throw new Error("Can only remove verses from custom packs");
+    }
+
+    // Removes membership only; the verse stays hearted (and in Memory).
+    const member = await ctx.db
+      .query("packVerses")
+      .withIndex("by_userId_packId_verseRefId", (q) =>
+        q
+          .eq("userId", userId)
+          .eq("packId", args.id)
+          .eq("verseRefId", args.verseRefId),
+      )
+      .unique();
+    if (member) {
+      await ctx.db.delete(member._id);
+    }
+    return null;
+  },
+});
+
+export const reorder = mutation({
+  args: {
+    id: v.id("packs"),
+    orderedVerseRefIds: v.array(v.id("verseRefs")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+    if (pack.kind !== "custom") {
+      throw new Error("Can only reorder custom packs");
+    }
+
+    // Load the pack's current membership in its existing order so any row the
+    // caller omits keeps its prior relative order.
+    const rows = await ctx.db
+      .query("packVerses")
+      .withIndex("by_userId_packId_order", (q) =>
+        q.eq("userId", userId).eq("packId", args.id),
+      )
+      .order("asc")
+      .collect();
+
+    const rowByRef = new Map(rows.map((row) => [String(row.verseRefId), row]));
+
+    // Every provided id must belong to the pack.
+    for (const verseRefId of args.orderedVerseRefIds) {
+      if (!rowByRef.has(String(verseRefId))) {
+        throw new Error("Verse is not a member of this pack");
+      }
+    }
+
+    // Sequence the provided ids first (in caller order, de-duplicated), then
+    // any remaining members in their prior relative order. Re-numbering every
+    // row keeps the final `order` values contiguous (0..n-1) with no
+    // duplicates, which is what `loadCustomMembers` sorts on.
+    const sequenced: typeof rows = [];
+    const seen = new Set<string>();
+    for (const verseRefId of args.orderedVerseRefIds) {
+      const key = String(verseRefId);
+      if (seen.has(key)) continue;
+      const row = rowByRef.get(key);
+      if (!row) continue;
+      seen.add(key);
+      sequenced.push(row);
+    }
+    for (const row of rows) {
+      if (seen.has(String(row.verseRefId))) continue;
+      sequenced.push(row);
+    }
+
+    for (let i = 0; i < sequenced.length; i += 1) {
+      const row = sequenced[i];
+      if (row.order !== i) {
+        await ctx.db.patch(row._id, { order: i });
+      }
+    }
+    return null;
+  },
+});
+
+export const resolveMembers = query({
+  args: { id: v.id("packs"), now: v.number() },
+  returns: v.array(packMemberValidator),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) return [];
+
+    let members: PackMember[];
+    if (pack.kind === "scope" && pack.scope) {
+      const hearted = await loadHeartedMembers(ctx, userId);
+      members = filterScopeMembers(hearted, pack.scope);
+    } else {
+      members = await loadCustomMembers(ctx, userId, args.id);
+    }
+
+    return members.map((m) => ({ ...m, isDue: m.dueAt <= args.now }));
+  },
+});
+
+export const previewScopeCount = query({
+  args: { scope: scopeValidator, now: v.number() },
+  returns: v.object({ verseCount: v.number(), dueCount: v.number() }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return { verseCount: 0, dueCount: 0 };
+
+    const hearted = await loadHeartedMembers(ctx, userId);
+    const members = filterScopeMembers(hearted, args.scope);
+
+    let dueCount = 0;
+    for (const m of members) {
+      if (m.dueAt <= args.now) dueCount += 1;
+    }
+    return { verseCount: members.length, dueCount };
+  },
+});
