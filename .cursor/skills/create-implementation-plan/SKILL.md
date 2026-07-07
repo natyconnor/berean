@@ -25,7 +25,7 @@ subagents. The quality of that build depends entirely on this document being
 `run-implementation-plan` reads the newest `docs/proposals/*.html` with numbered
 PR anchors and extracts, in order: each PR's **number, title, dependencies, file
 list, steps, and acceptance criteria**, plus the shared **architecture** and
-**conventions** sections which it pastes verbatim into *every* subagent. So the
+**conventions** sections which it pastes verbatim into _every_ subagent. So the
 plan MUST have:
 
 1. **Location & format.** `docs/proposals/<feature>-implementation-plan.html`
@@ -33,7 +33,7 @@ plan MUST have:
    by these anchors). Use `template.html` in this skill folder.
 2. **A shared Architecture section** — every table shape, interface signature,
    and data-flow fact any PR relies on. If it lives only inside one PR block, a
-   subagent building a *different* PR will not see it.
+   subagent building a _different_ PR will not see it.
 3. **A shared Conventions section** — the repo's hard rules (validation, auth,
    `pnpm run agent:check`, `pnpm run codegen`, no `Date.now()` in queries, etc.).
 4. **Per PR:** dependencies (`Depends on` / `Unblocks`), full file list,
@@ -64,7 +64,7 @@ ghosts. Before writing anything:
 - Confirm the build/validation commands from `AGENTS.md` (`pnpm run agent:check`,
   `pnpm test`, `pnpm run codegen`, `pnpm dev`).
 - If a source proposal/spec exists, read it fully and reconcile contradictions
-  *before* planning — do not pass ambiguity downstream.
+  _before_ planning — do not pass ambiguity downstream.
 
 Every path in the "Assets to reuse" and PR "Files" lists must be real (or
 explicitly tagged `(new)`).
@@ -89,7 +89,7 @@ rather than guessing. Otherwise pick a sensible default and record it.
 This is the core skill. Ordering rules:
 
 - **Dependency-ordered & sequential.** Later PRs may depend on earlier ones;
-  none may depend on a *later* one. State `Depends on` / `Unblocks` explicitly.
+  none may depend on a _later_ one. State `Depends on` / `Unblocks` explicitly.
 - **Each PR ends green on its own.** The runner gates every PR with
   `pnpm run agent:check` (and `pnpm test`) and commits it before advancing — so
   a PR may not leave the tree broken or rely on a future PR to compile/pass.
