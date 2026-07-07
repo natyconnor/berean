@@ -18,8 +18,20 @@ import {
 } from "@/components/tutorial/focus-mode-tour";
 import { cn } from "@/lib/utils";
 import { hasExactSavedSpan } from "@/lib/saved-verse-utils";
+import { masteryRingFraction } from "@/lib/mastery-ring";
+import type { MemoryStatus } from "@/lib/memory-scheduler";
 import type { PassageHeartControl } from "./verse-row";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
+
+type SavedSpan = {
+  startVerse: number;
+  endVerse: number;
+  memory?: {
+    status: MemoryStatus;
+    intervalDays: number;
+    dueAt: number;
+  };
+};
 
 const EMPTY_FOCUS_MAP = new Map<string, number | null>();
 
@@ -67,9 +79,7 @@ interface PassageViewBodyProps {
   ) => void;
   onDeleteHighlight: (highlightId: string) => void;
   onRecolorHighlight: (highlightId: string, color: string) => void;
-  savedVersesForChapter:
-    | Array<{ startVerse: number; endVerse: number }>
-    | undefined;
+  savedVersesForChapter: SavedSpan[] | undefined;
   onToggleSaved: (startVerse: number, endVerse: number) => void;
 }
 
@@ -147,6 +157,20 @@ export function PassageViewBody({
     [savedVersesForChapter],
   );
 
+  // Mastery-ring fraction for the exact (lo, hi) span, if it's hearted and has
+  // a memory row. Read from the same per-chapter saved-verses query (no extra
+  // per-verse fetch), so the ring adds zero query round-trips.
+  const spanMasteryFraction = useCallback(
+    (startVerse: number, endVerse: number): number => {
+      const span = savedSpans.find(
+        (s) => s.startVerse === startVerse && s.endVerse === endVerse,
+      );
+      if (!span?.memory) return 0;
+      return masteryRingFraction(span.memory.status, span.memory.intervalDays);
+    },
+    [savedSpans],
+  );
+
   const savedPassagesByAnchor = useMemo(() => {
     const map = new Map<
       number,
@@ -209,11 +233,13 @@ export function PassageViewBody({
         filled: hasExactSavedSpan(savedSpans, passageSelectLo, passageSelectHi),
         onToggle: () => onToggleSaved(passageSelectLo, passageSelectHi),
         alwaysVisible: true,
+        masteryFraction: spanMasteryFraction(passageSelectLo, passageSelectHi),
       };
     }
     return {
       filled: hasExactSavedSpan(savedSpans, verseNumber, verseNumber),
       onToggle: () => onToggleSaved(verseNumber, verseNumber),
+      masteryFraction: spanMasteryFraction(verseNumber, verseNumber),
     };
   };
 
@@ -307,6 +333,7 @@ export function PassageViewBody({
                       ? {
                           filled: hasExactSavedSpan(savedSpans, gLo, gHi),
                           onToggle: () => onToggleSaved(gLo, gHi),
+                          masteryFraction: spanMasteryFraction(gLo, gHi),
                         }
                       : null;
                   return (

@@ -12,6 +12,7 @@ import { formatScopeSummary } from "./study-scope-summary";
 import { StudyModeExplainerDialog } from "./study-mode-explainer-dialog";
 import { StudyTodayQueue } from "./study-today-queue";
 import { StudyDashboard } from "./dashboard/dashboard";
+import { StudyLibrary } from "./study-library";
 import { useLiveNow } from "@/hooks/use-live-now";
 
 type DeleteCandidate = {
@@ -99,6 +100,7 @@ export function StudyHub() {
             now={now}
             onStartReview={() => setIsReviewing(true)}
           />
+          <StudyLibrary now={now} />
           <section className="space-y-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Sessions

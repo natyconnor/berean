@@ -75,6 +75,10 @@ All functions validate `args` + `returns`, check auth via `getCurrentUser*`, ver
 - `getOrCreateForVerse({ verseRefId, now })` — idempotent upsert via `by_userId_verseRefId`; returns the full row.
 - `setSuspended({ verseRefId, suspended })` — toggles `status` to/from `suspended`. Suspending records the current active status in `previousStatus`; un-suspending restores it exactly (falling back to a schedule-derived status via `deriveActiveStatus` only for legacy rows without `previousStatus`). Returns the resulting status, or `null` if the user has no row for that verse.
 - `memoryStats({ now })` — per-status counts (`new`/`learning`/`reviewing`/`mastered`/`suspended`), plus `total` and a due-now `due` tally. Used by the hub for the "due today" number.
+- `listLibrary({ paginationOpts, sort })` — **paginated** (`paginationOptsValidator` + `.paginate()`) list of the user's hearted verses, each joined to its live memory schedule + `verseRefs` (reference, `status`, `dueAt`, `intervalDays`, `learnStage`, `ease`, `lapses`, `lastReviewedAt?`, `heartedAt`). `sort` picks the index the page is read through so ordering is stable across pages: `"dueAt"` (soonest-due first, `by_userId_dueAt`), `"status"` (grouped by status via `by_userId_status` — **index order, which is alphabetical, not lifecycle order**), or `"recent"` (most-recently-hearted first, `savedVerses.by_userId_createdAt`). The canonical set is the user's _hearted_ verses: for the memory-indexed sorts, rows without a matching `savedVerses` heart are filtered out of the page (a verse un-hearted after review keeps its memory row, so it must be excluded here), and a hearted verse still awaiting its `verseMemory` seed is skipped rather than fabricated. Filtering can shrink a page but keeps cursors correct (per Convex pagination guidance).
+- `verseDetail({ verseRefId, now })` — per-verse drill-down. Returns the live schedule (`status`, `intervalDays`, `dueAt`, `ease`, `lapses`, `learnStage`, `consecutiveCorrect`, `lastReviewedAt?`), whether it's currently hearted (`isHearted` + `heartedAt`), `isDue` (the only use of `now`), the **last 20** graded attempts (newest-first, from `verseMemoryReviews` via `by_userId_createdAt`), and a derived `difficulty` signal. Because the reviews log is only indexed `by_userId_createdAt` (no per-verse index), attempts are gathered by walking the user's log newest-first, matching on `verseRefId`, and stopping at 20 matches or a 500-row scan cap. Returns `null` when the user has no memory row for the verse. **Difficulty is derived only from what is stored** — per-token diffs are _not_ persisted (only `quality` + `accuracy` per attempt), so an exact "hardest phrase" is not derivable; `difficulty` instead reports `attemptCount`, `averageAccuracy`, `worstAccuracy`, and `hardestStage` (the learn stage with the lowest mean accuracy).
+
+Additionally, `savedVerses.listForChapter` (and the shared saved-verse item shape) now joins each saved verse's `verseMemory` row into an optional `memory: { status, intervalDays, dueAt }` field. This is what powers the reader's **heart mastery ring** without any per-verse follow-up query — the join happens inside the single per-chapter query the reader already runs.
 
 #### Dashboard aggregate queries
 
@@ -127,6 +131,33 @@ The dashboard is built from **inline SVG/CSS only** — there is **no charting l
 - Each card shows title (name or auto-generated scope summary), scope-aware stats (hearted verses · notes · passages · last studied), any tag filters, and a "Last: {activity}" chip when the previous view was an activity (not Overview).
 - Delete button opens a confirmation dialog (`DeleteStudySessionDialog`).
 - Empty state has a CTA to `/study/new`.
+
+### Library, drill-down & heart rings (`/study`)
+
+Between the dashboard and the Sessions list, the hub renders a **Library** section (`StudyLibrary`, `src/components/study/study-library.tsx`) that makes the collection tangible — every hearted verse with its memory state and next-due date.
+
+- **List** — paginated via `usePaginatedQuery(api.verseMemory.listLibrary, { sort }, …)` with a **Load more** button, styled to match the Sessions section. Each row shows the reference, a status dot + label, and a relative next-due label ("Due now" / "Tomorrow" / "In N days" / "Suspended"), plus an inline **suspend** `Switch`.
+- **Sort** — three modes (`Due` / `Status` / `Recent`) map to `listLibrary`'s `sort` arg. Changing the sort re-keys the paginated query, resetting to the first page.
+- **Search** — a client-side filter over the **loaded** pages' reference labels only (it does not fetch unloaded pages). This is a documented v1 limitation (see below).
+- **Suspend** — the per-row toggle and the drill-down's toggle both call `setSuspended({ verseRefId, suspended })` (from PR 2). The reactive list reflects the status change immediately.
+- **Empty state** — "No hearted verses yet…" when the user has none; a separate "no matches" message when a search filters everything out.
+- **Drill-down** — clicking a row opens a dialog with `VerseDetail` (`src/components/study/verse-detail.tsx`), driven by `verseMemory.verseDetail`: the schedule (interval / ease / lapses), a **stage journey** (full → first-letters → cloze → hidden, current rung highlighted), a **recent-accuracy sparkline** (reusing `linePath`/`scaleLinear` from `dashboard/svg-chart-helpers.ts`, attempts reversed to a left-to-right time axis), the derived **difficulty** signal, a **next-due** line, and a **suspend** control. Every chart/SVG carries a descriptive `aria-label`.
+
+#### Heart mastery ring (reader)
+
+The reader's heart (`PassageHeartAnimatedButton` in `src/components/passage/verse-row.tsx`) is decorated with a **subtle mastery ring** — no new element, just a progress arc around the existing heart. It only renders when the verse is hearted and its ring fraction is > 0, is `position: absolute` + `pointer-events-none` (so it **never shifts layout**), inherits the heart's `currentColor`, and is fully static (no animation), so it's reduced-motion friendly by construction.
+
+The ring fraction is a pure function of the verse's memory state (`masteryRingFraction`, `src/lib/mastery-ring.ts`, unit-tested):
+
+| Status      | Ring                                                                                            |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| `new`       | 0 — no ring ("saved, not yet started")                                                          |
+| `learning`  | 0.25 (a quarter)                                                                                |
+| `reviewing` | 0.5 → 0.9, scaled linearly by `intervalDays` from just-graduated up to `MASTERED_INTERVAL_DAYS` |
+| `mastered`  | 1 (full)                                                                                        |
+| `suspended` | 0 — opted out of scheduling, so no progress is implied                                          |
+
+**Avoiding N+1 for the rings.** The reader does not add a per-verse query. `savedVerses.listForChapter` — the single query the reader already runs per chapter — now joins each saved verse's memory row into an optional `memory` field. `PassageViewBody` reads that back through `savedSpans` and computes the ring fraction with `masteryRingFraction` for the exact `(startVerse, endVerse)` span backing each heart control, passing it as `PassageHeartControl.masteryFraction`.
 
 ### Scope builder (`/study/new`, `StudyScopeBuilder`)
 
@@ -209,6 +240,10 @@ A single floating pill, bottom-center, is the app's only new persistent chrome. 
 - **No session editing.** You can delete a session but can't rename it, change its scope, or clone it after creation.
 - **No in-deck navigation back to `/passage/...`.** Cards show references but don't deep-link into the reader mid-activity.
 - **Counts recompute on every scope edit.** `previewCounts` is a full query; it's fine but noticeably chatty on slow connections.
+- **Library search is client-side over loaded pages.** The Library's filter box matches only the reference labels already fetched (the current + any "Load more" pages), not the full corpus. A server-side reference search would need a searchable index on `verseRefs`.
+- **Library "Status" sort is index order, not lifecycle order.** Sorting by status reads through `by_userId_status`, whose ordering is alphabetical (`learning`, `mastered`, `new`, `reviewing`, `suspended`), not the memorization lifecycle. It groups verses by status but doesn't order those groups new → mastered.
+- **`verseDetail` attempts use a bounded scan.** `verseMemoryReviews` is only indexed `by_userId_createdAt`, so the drill-down gathers a verse's attempts by walking the log newest-first until it has 20 matches or scans 500 rows. On a very active user the oldest attempts for a rarely-reviewed verse can fall outside the scan window. A `by_userId_verseRefId_createdAt` index would make this exact.
+- **No persisted per-token diffs.** Because only `quality` + `accuracy` are stored per attempt, the drill-down surfaces a derived difficulty signal (average/worst accuracy, hardest stage) rather than a literal "hardest phrase".
 
 ## Roadmap
 
@@ -256,6 +291,8 @@ Rough, in priority order. Nothing here blocks v1.
 - Card model + deck: `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
 - Today queue: `src/components/study/study-today-queue.tsx` (orchestrator), `study-session-summary.tsx` (end-of-run card).
 - Progress dashboard: `src/components/study/dashboard/*` (`dashboard.tsx`, `kpi-row.tsx`, `practice-heatmap.tsx`, `mastery-bar.tsx`, `accuracy-trend.tsx`, `review-forecast.tsx`, `svg-chart-helpers.ts`), rendered at the top of `study-hub.tsx`; pure buckets + tests in `src/lib/dashboard-buckets.ts`.
+- Library + drill-down: `src/components/study/study-library.tsx` and `src/components/study/verse-detail.tsx` (rendered from `study-hub.tsx`), backed by `verseMemory.listLibrary` / `verseMemory.verseDetail`.
+- Heart mastery ring: pure mapping + tests in `src/lib/mastery-ring.ts` (`masteryRingFraction`), rendered in `src/components/passage/verse-row.tsx` and wired via `src/components/passage/passage-view-body.tsx`; memory status joined by `convex/savedVerses.ts` (`listForChapter`).
 - Attempt persistence bridge: `src/components/study/use-record-verse-attempt.ts` (used by `study-verse-learn.tsx` and `study-verse-memory-card.tsx`).
 - Scope summary helper: `src/components/study/study-scope-summary.ts`.
 

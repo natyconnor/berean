@@ -53,6 +53,11 @@ export interface PassageHeartControl {
   filled: boolean;
   onToggle: () => void;
   alwaysVisible?: boolean;
+  /**
+   * Mastery-ring fill fraction (0..1) drawn subtly around the heart to reflect
+   * spaced-repetition progress. Absent/0 = no ring. See `masteryRingFraction`.
+   */
+  masteryFraction?: number;
 }
 
 interface VerseRowLeftProps {
@@ -126,6 +131,11 @@ const GROUPED_EXPANDED = {
 const HEART_BURST_SPARK_DEGREES = [0, 45, 90, 135, 180, 225, 270, 315] as const;
 const HEART_BURST_SPARK_DISTANCE_PX = 22;
 
+// Mastery ring geometry (in the SVG's 36-unit viewBox). Circumference is used
+// to convert a 0..1 fill fraction into a stroke-dashoffset.
+const MASTERY_RING_RADIUS = 15;
+const MASTERY_RING_CIRCUMFERENCE = 2 * Math.PI * MASTERY_RING_RADIUS;
+
 export const PassageHeartAnimatedButton = memo(
   function PassageHeartAnimatedButton({
     passageHeart,
@@ -153,6 +163,12 @@ export const PassageHeartAnimatedButton = memo(
       setPrevServerFilled(passageHeart.filled);
       setOptimisticFilled(passageHeart.filled);
     }
+
+    const masteryFraction = Math.max(
+      0,
+      Math.min(1, passageHeart.masteryFraction ?? 0),
+    );
+    const showMasteryRing = optimisticFilled && masteryFraction > 0;
 
     return (
       <div
@@ -244,6 +260,42 @@ export const PassageHeartAnimatedButton = memo(
                 }
           }
         >
+          {showMasteryRing ? (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            >
+              <svg
+                viewBox="0 0 36 36"
+                className={size === "large" ? "h-8 w-8" : "h-7 w-7"}
+              >
+                <circle
+                  cx="18"
+                  cy="18"
+                  r={MASTERY_RING_RADIUS}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  className="opacity-15"
+                />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r={MASTERY_RING_RADIUS}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  className="opacity-70"
+                  strokeDasharray={MASTERY_RING_CIRCUMFERENCE}
+                  strokeDashoffset={
+                    MASTERY_RING_CIRCUMFERENCE * (1 - masteryFraction)
+                  }
+                  transform="rotate(-90 18 18)"
+                />
+              </svg>
+            </span>
+          ) : null}
           <motion.span
             className="inline-flex"
             initial={false}

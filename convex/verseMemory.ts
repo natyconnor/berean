@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
@@ -573,5 +574,342 @@ export const masteryDistribution = query({
       stats.total += 1;
     }
     return stats;
+  },
+});
+
+// ---------- Library + drill-down (PR 7) ----------
+
+const librarySortValidator = v.union(
+  v.literal("dueAt"),
+  v.literal("status"),
+  v.literal("recent"),
+);
+
+/** One hearted verse: its live memory schedule joined to its reference. */
+const libraryItemValidator = v.object({
+  verseMemoryId: v.id("verseMemory"),
+  verseRefId: v.id("verseRefs"),
+  savedVerseId: v.id("savedVerses"),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  status: statusValidator,
+  learnStage: v.number(),
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  lapses: v.number(),
+  lastReviewedAt: v.optional(v.number()),
+  heartedAt: v.number(),
+});
+
+type LibraryItem = {
+  verseMemoryId: Id<"verseMemory">;
+  verseRefId: Id<"verseRefs">;
+  savedVerseId: Id<"savedVerses">;
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
+  status: Doc<"verseMemory">["status"];
+  learnStage: number;
+  ease: number;
+  intervalDays: number;
+  dueAt: number;
+  lapses: number;
+  lastReviewedAt?: number;
+  heartedAt: number;
+};
+
+function toLibraryItem(
+  memory: Doc<"verseMemory">,
+  ref: Doc<"verseRefs">,
+  saved: Doc<"savedVerses">,
+): LibraryItem {
+  return {
+    verseMemoryId: memory._id,
+    verseRefId: memory.verseRefId,
+    savedVerseId: saved._id,
+    book: ref.book,
+    chapter: ref.chapter,
+    startVerse: ref.startVerse,
+    endVerse: ref.endVerse,
+    status: memory.status,
+    learnStage: memory.learnStage,
+    ease: memory.ease,
+    intervalDays: memory.intervalDays,
+    dueAt: memory.dueAt,
+    lapses: memory.lapses,
+    lastReviewedAt: memory.lastReviewedAt,
+    heartedAt: saved.createdAt,
+  };
+}
+
+/**
+ * A page of the user's hearted verses, each joined to its live memory schedule
+ * and verse reference. Paginated via `paginationOptsValidator`/`.paginate()`.
+ *
+ * `sort` picks the index the page is read through so ordering is stable across
+ * pages (never a cross-page in-memory sort):
+ * - `"dueAt"` — verses by next-due soonest first (`by_userId_dueAt`).
+ * - `"status"` — verses grouped by lifecycle status (`by_userId_status`, index
+ *   order — alphabetical, not lifecycle order; documented in study-mode.md).
+ * - `"recent"` — most recently hearted first (`savedVerses.by_userId_createdAt`).
+ *
+ * The canonical set is the user's *hearted* verses (`savedVerses`). For the
+ * memory-indexed sorts, rows without a matching heart are filtered out (a verse
+ * un-hearted after review keeps its memory row, so we must exclude it here). A
+ * hearted verse still awaiting its `verseMemory` seed (legacy, pre-backfill) is
+ * skipped rather than fabricated. Filtering shrinks a page but keeps cursors
+ * correct, per the Convex pagination guidance.
+ */
+export const listLibrary = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    sort: librarySortValidator,
+  },
+  returns: v.object({
+    page: v.array(libraryItemValidator),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    splitCursor: v.optional(v.union(v.string(), v.null())),
+    pageStatus: v.optional(
+      v.union(
+        v.literal("SplitRecommended"),
+        v.literal("SplitRequired"),
+        v.null(),
+      ),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    if (args.sort === "recent") {
+      const paginated = await ctx.db
+        .query("savedVerses")
+        .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
+        .order("desc")
+        .paginate(args.paginationOpts);
+
+      const page: LibraryItem[] = [];
+      for (const saved of paginated.page) {
+        const ref = await ctx.db.get(saved.verseRefId);
+        if (!ref || ref.userId !== userId) continue;
+        const memory = await findVerseMemory(ctx, userId, saved.verseRefId);
+        if (!memory) continue;
+        page.push(toLibraryItem(memory, ref, saved));
+      }
+      return { ...paginated, page };
+    }
+
+    const memoryQuery =
+      args.sort === "dueAt"
+        ? ctx.db
+            .query("verseMemory")
+            .withIndex("by_userId_dueAt", (q) => q.eq("userId", userId))
+            .order("asc")
+        : ctx.db
+            .query("verseMemory")
+            .withIndex("by_userId_status", (q) => q.eq("userId", userId))
+            .order("asc");
+
+    const paginated = await memoryQuery.paginate(args.paginationOpts);
+
+    const page: LibraryItem[] = [];
+    for (const memory of paginated.page) {
+      const saved = await ctx.db
+        .query("savedVerses")
+        .withIndex("by_userId_verseRefId", (q) =>
+          q.eq("userId", userId).eq("verseRefId", memory.verseRefId),
+        )
+        .unique();
+      if (!saved) continue;
+      const ref = await ctx.db.get(memory.verseRefId);
+      if (!ref || ref.userId !== userId) continue;
+      page.push(toLibraryItem(memory, ref, saved));
+    }
+    return { ...paginated, page };
+  },
+});
+
+/** How many recent attempts the drill-down shows. */
+const VERSE_DETAIL_ATTEMPT_LIMIT = 20;
+/**
+ * Upper bound on log rows scanned while gathering one verse's recent attempts.
+ * `verseMemoryReviews` is only indexed `by_userId_createdAt` (no per-verse
+ * index), so we walk the user's log newest-first and stop once we have enough
+ * matches or hit this cap — keeping the read bounded on very active users.
+ */
+const VERSE_DETAIL_SCAN_LIMIT = 500;
+
+const attemptValidator = v.object({
+  quality: qualityValidator,
+  accuracy: v.number(),
+  stage: v.number(),
+  mode: modeValidator,
+  durationMs: v.optional(v.number()),
+  createdAt: v.number(),
+});
+
+/**
+ * A difficulty signal derived purely from what IS stored. The per-token diffs
+ * are not persisted (only `quality` + `accuracy` per attempt), so a literal
+ * "hardest phrase" is not derivable; instead we surface the lowest-accuracy
+ * signals and the learn stage that has been missed hardest.
+ */
+const difficultyValidator = v.object({
+  attemptCount: v.number(),
+  averageAccuracy: v.number(),
+  worstAccuracy: v.number(),
+  hardestStage: v.union(v.number(), v.null()),
+});
+
+const verseDetailValidator = v.object({
+  verseRefId: v.id("verseRefs"),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  isHearted: v.boolean(),
+  heartedAt: v.union(v.number(), v.null()),
+  isDue: v.boolean(),
+  status: statusValidator,
+  learnStage: v.number(),
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  lapses: v.number(),
+  consecutiveCorrect: v.number(),
+  lastReviewedAt: v.optional(v.number()),
+  attempts: v.array(attemptValidator),
+  difficulty: v.union(difficultyValidator, v.null()),
+});
+
+type Attempt = {
+  quality: Doc<"verseMemoryReviews">["quality"];
+  accuracy: number;
+  stage: number;
+  mode: Doc<"verseMemoryReviews">["mode"];
+  durationMs?: number;
+  createdAt: number;
+};
+
+/**
+ * Derive a difficulty signal from the collected attempts. Returns `null` when
+ * there are no attempts. `hardestStage` is the learn stage with the lowest mean
+ * accuracy (ties broken toward the higher — harder — stage).
+ */
+function deriveDifficulty(attempts: Attempt[]): {
+  attemptCount: number;
+  averageAccuracy: number;
+  worstAccuracy: number;
+  hardestStage: number | null;
+} | null {
+  if (attempts.length === 0) return null;
+
+  let sum = 0;
+  let worst = attempts[0].accuracy;
+  const byStage = new Map<number, { sum: number; count: number }>();
+  for (const a of attempts) {
+    sum += a.accuracy;
+    if (a.accuracy < worst) worst = a.accuracy;
+    const bucket = byStage.get(a.stage) ?? { sum: 0, count: 0 };
+    bucket.sum += a.accuracy;
+    bucket.count += 1;
+    byStage.set(a.stage, bucket);
+  }
+
+  let hardestStage: number | null = null;
+  let hardestAvg = Number.POSITIVE_INFINITY;
+  for (const [stage, { sum: s, count }] of byStage) {
+    const avg = s / count;
+    if (
+      avg < hardestAvg ||
+      (avg === hardestAvg && stage > (hardestStage ?? -1))
+    ) {
+      hardestAvg = avg;
+      hardestStage = stage;
+    }
+  }
+
+  return {
+    attemptCount: attempts.length,
+    averageAccuracy: sum / attempts.length,
+    worstAccuracy: worst,
+    hardestStage,
+  };
+}
+
+/**
+ * Per-verse drill-down: the live schedule, the last N graded attempts, and a
+ * derived difficulty signal. Returns `null` when the current user has no memory
+ * row for the verse (never seeded / not theirs). `now` is passed in (never
+ * `Date.now()` in a query) and only used to flag whether the verse is due now.
+ */
+export const verseDetail = query({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: v.union(verseDetailValidator, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return null;
+
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) return null;
+
+    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
+    if (!memory) return null;
+
+    const saved = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId_verseRefId", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .unique();
+
+    const attempts: Attempt[] = [];
+    let scanned = 0;
+    for await (const row of ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
+      .order("desc")) {
+      scanned += 1;
+      if (row.verseRefId === args.verseRefId) {
+        attempts.push({
+          quality: row.quality,
+          accuracy: row.accuracy,
+          stage: row.stage,
+          mode: row.mode,
+          durationMs: row.durationMs,
+          createdAt: row.createdAt,
+        });
+        if (attempts.length >= VERSE_DETAIL_ATTEMPT_LIMIT) break;
+      }
+      if (scanned >= VERSE_DETAIL_SCAN_LIMIT) break;
+    }
+
+    return {
+      verseRefId: args.verseRefId,
+      book: ref.book,
+      chapter: ref.chapter,
+      startVerse: ref.startVerse,
+      endVerse: ref.endVerse,
+      isHearted: saved !== null,
+      heartedAt: saved?.createdAt ?? null,
+      isDue: memory.status !== "suspended" && memory.dueAt <= args.now,
+      status: memory.status,
+      learnStage: memory.learnStage,
+      ease: memory.ease,
+      intervalDays: memory.intervalDays,
+      dueAt: memory.dueAt,
+      lapses: memory.lapses,
+      consecutiveCorrect: memory.consecutiveCorrect,
+      lastReviewedAt: memory.lastReviewedAt,
+      attempts,
+      difficulty: deriveDifficulty(attempts),
+    };
   },
 });
