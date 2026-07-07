@@ -1,6 +1,15 @@
 import { CheckCircle2, RotateCcw } from "lucide-react";
-import { type KeyboardEvent, useMemo, useState } from "react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useMutation } from "convex/react";
 
+import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
+import { devLog } from "@/lib/dev-log";
 import { diffWords } from "@/lib/diff-words";
 import { cn } from "@/lib/utils";
 import {
@@ -22,6 +32,7 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { verseAttemptAccuracy } from "./study-attempt-quality";
 import type { VerseMemoryCard } from "./study-card-model";
+import { useRecordVerseAttempt } from "./use-record-verse-attempt";
 import { VerseAttemptResult } from "./study-verse-memory-card";
 
 interface StudyVerseLearnProps {
@@ -56,7 +67,9 @@ const STAGES: readonly StageInfo[] = [
     description: "Type it from memory.",
   },
 ] as const;
-const PASS_THRESHOLD = 85;
+
+// Bounded retries for the one-shot rung restore on transient read failures.
+const RESTORE_MAX_ATTEMPTS = 3;
 
 export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const [stage, setStage] = useState<HintStage>("full");
@@ -64,6 +77,51 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const [checked, setChecked] = useState(false);
   const refLabel = formatVerseRef(card.reference);
   const { data, loading, error } = useEsvReference(card.reference);
+
+  const { record, resolveVerseRefId } = useRecordVerseAttempt();
+  const getOrCreateForVerse = useMutation(api.verseMemory.getOrCreateForVerse);
+  const verseRefId = resolveVerseRefId(card.reference);
+  // `learnStage` on the server is the single source of truth for the ladder
+  // rung: the scheduler advances/drops it based on attempt quality. The UI
+  // adopts it on open (restore) and after every graded check, so the DB and
+  // the visible rung can never drift.
+  const restoredRef = useRef(false);
+  const interactedRef = useRef(false);
+  // Invalidation token so a slow in-flight adoption can't clobber a rung the
+  // learner has since changed (manual tab / try again).
+  const attemptSeqRef = useRef(0);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+
+  const applyLearnStage = useCallback((learnStage: number) => {
+    const index = Math.min(
+      Math.max(Math.trunc(learnStage), 0),
+      STAGES.length - 1,
+    );
+    setStage(STAGES[index].stage);
+  }, []);
+
+  // Resume the learner at their persisted rung on (re)open. Only mark the
+  // restore done on success, and retry a bounded number of times on transient
+  // failure so a flaky first read doesn't strand the user at "Full".
+  useEffect(() => {
+    if (!verseRefId || restoredRef.current) return;
+    if (restoreAttempt >= RESTORE_MAX_ATTEMPTS) return;
+    let cancelled = false;
+    void getOrCreateForVerse({ verseRefId, now: Date.now() })
+      .then((row) => {
+        if (cancelled) return;
+        restoredRef.current = true;
+        if (interactedRef.current) return;
+        applyLearnStage(row.learnStage);
+      })
+      .catch((restoreError: unknown) => {
+        devLog.warn("verseMemory", "learnStage restore failed", restoreError);
+        if (!cancelled) setRestoreAttempt((n) => n + 1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [verseRefId, getOrCreateForVerse, restoreAttempt, applyLearnStage]);
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
   const tokens = useMemo(
     () => maskVerseText(versePlainText, stage),
@@ -71,27 +129,24 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   );
   const stageIndex = STAGES.findIndex((item) => item.stage === stage);
   const currentStage = STAGES[stageIndex] ?? STAGES[0];
-  const canAdvance = stageIndex >= 0 && stageIndex < STAGES.length - 1;
   const canCheckAnswer = !loading && !error;
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
-  const passed = checked && checkedAccuracy >= PASS_THRESHOLD;
 
   function selectStage(nextStage: HintStage) {
+    interactedRef.current = true;
+    // Supersede any in-flight adoption so it can't override this choice.
+    attemptSeqRef.current += 1;
     setStage(nextStage);
     setTypedAnswer("");
     setChecked(false);
   }
 
-  function advanceStage() {
-    if (!canAdvance) return;
-    selectStage(STAGES[stageIndex + 1].stage);
-  }
-
   function resetAttempt() {
+    attemptSeqRef.current += 1;
     setTypedAnswer("");
     setChecked(false);
   }
@@ -99,6 +154,23 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   function checkAnswer() {
     if (!canCheckAnswer) return;
     setChecked(true);
+
+    // Only a non-empty, gradable answer counts as an interaction / attempt.
+    if (typedAnswer.trim().length === 0 || versePlainText.length === 0) return;
+    interactedRef.current = true;
+
+    const seq = (attemptSeqRef.current += 1);
+    void record({
+      reference: card.reference,
+      tokens: diffWords(typedAnswer, versePlainText),
+      stage: stageIndex,
+      mode: "learn",
+    }).then((schedule) => {
+      // Adopt the server rung (source of truth) unless the learner has since
+      // moved on (manual tab / try again), which bumps the token.
+      if (!schedule || attemptSeqRef.current !== seq) return;
+      applyLearnStage(schedule.learnStage);
+    });
   }
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -169,6 +241,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
         <Textarea
           value={typedAnswer}
           onChange={(event) => {
+            interactedRef.current = true;
             setTypedAnswer(event.target.value);
             setChecked(false);
           }}
@@ -186,11 +259,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               diffTokens={checkedDiffTokens}
             />
             <p className="text-center text-sm text-muted-foreground">
-              {passed
-                ? canAdvance
-                  ? `${checkedAccuracy}% recalled. Ready for a harder level.`
-                  : `${checkedAccuracy}% recalled. Memorized!`
-                : `${checkedAccuracy}% recalled. Reach ${PASS_THRESHOLD}% to level up.`}
+              {`${checkedAccuracy}% recalled.`}
             </p>
             <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -231,16 +300,6 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
             >
               <CheckCircle2 className="h-4 w-4" aria-hidden />
               Check answer
-            </Button>
-          )}
-          {passed && canAdvance && (
-            <Button
-              type="button"
-              className="flex-1 sm:flex-none"
-              onClick={advanceStage}
-              disabled={loading || !!error}
-            >
-              Next Level
             </Button>
           )}
         </div>

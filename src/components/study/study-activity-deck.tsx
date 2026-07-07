@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { ListOrdered, Shuffle, SkipForward, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -110,6 +110,10 @@ export function StudyActivityDeck({
     null,
   );
 
+  // The active verse-memory card publishes its "persist this attempt" callback
+  // here. The deck owns no scheduling logic; it just fires this on completion.
+  const recordAttemptRef = useRef<(() => void) | null>(null);
+
   if (queueSource !== initialQueue) {
     setQueueSource(initialQueue);
     setQueue(initialQueue);
@@ -181,6 +185,9 @@ export function StudyActivityDeck({
 
   function handleCorrect() {
     if (!currentCardId) return;
+    // Persist the just-completed attempt before the card unmounts. No-op for
+    // teach cards (which never register a callback).
+    recordAttemptRef.current?.();
     logAdvance("done", {
       position,
       queueLength: queue.length,
@@ -427,6 +434,7 @@ export function StudyActivityDeck({
                         flipped={flipped}
                         typedAnswer={currentTyped}
                         onTypedAnswerChange={handleTypedAnswerChange}
+                        recordRef={recordAttemptRef}
                       />
                     ) : (
                       <StudyTeachCard

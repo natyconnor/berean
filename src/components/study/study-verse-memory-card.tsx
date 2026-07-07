@@ -1,9 +1,16 @@
 import { AnimatePresence, motion } from "framer-motion";
-import type { JSX } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type JSX,
+  type MutableRefObject,
+} from "react";
 
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
+import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
@@ -13,6 +20,7 @@ import {
   verseAttemptAccuracy,
 } from "./study-attempt-quality";
 import type { VerseMemoryCard as VerseMemoryCardData } from "./study-card-model";
+import { useRecordVerseAttempt } from "./use-record-verse-attempt";
 import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
 const ESV_FADE_S = 0.3;
@@ -22,6 +30,12 @@ interface StudyVerseMemoryCardProps {
   flipped: boolean;
   typedAnswer: string;
   onTypedAnswerChange: (value: string) => void;
+  /**
+   * When provided, the card publishes a "record this attempt" callback here so
+   * the deck can persist the attempt (mode `"deck"`) on completion without
+   * owning any scheduling logic itself.
+   */
+  recordRef?: MutableRefObject<(() => void) | null>;
 }
 
 interface VerseAttemptResultProps {
@@ -172,6 +186,7 @@ export function StudyVerseMemoryCard({
   flipped,
   typedAnswer,
   onTypedAnswerChange,
+  recordRef,
 }: StudyVerseMemoryCardProps): JSX.Element {
   const refLabel = formatVerseRef(card.reference);
 
@@ -181,6 +196,53 @@ export function StudyVerseMemoryCard({
   const { data, loading, error } = useEsvReference(card.reference);
 
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
+
+  const { record } = useRecordVerseAttempt();
+  // Holds a completed-but-ungradable typed answer (Done tapped before the ESV
+  // text arrived) so the flush effect can persist it once text is available.
+  const pendingDeckTypedRef = useRef<string | null>(null);
+
+  // Persist a deck recall. Deck recall is always the fully-hidden rung, so it
+  // is logged as such. Returns whether it actually fired (needs verse text).
+  const recordDeckAttempt = useCallback(
+    (typed: string): boolean => {
+      if (typed.trim().length === 0 || versePlainText.length === 0) {
+        return false;
+      }
+      void record({
+        reference: card.reference,
+        tokens: diffWords(typed, versePlainText),
+        stage: MAX_LEARN_STAGE,
+        mode: "deck",
+      });
+      return true;
+    },
+    [record, card.reference, versePlainText],
+  );
+
+  useEffect(() => {
+    if (!recordRef) return;
+    recordRef.current = () => {
+      if (typedAnswer.trim().length === 0) return;
+      // If the ESV text isn't ready yet, stash the answer and let it flush once
+      // text arrives (the card stays mounted through its exit animation) rather
+      // than silently dropping a completed attempt.
+      if (!recordDeckAttempt(typedAnswer)) {
+        pendingDeckTypedRef.current = typedAnswer;
+      }
+    };
+    return () => {
+      recordRef.current = null;
+    };
+  }, [recordRef, recordDeckAttempt, typedAnswer]);
+
+  // Flush a deferred completion once the verse text loads.
+  useEffect(() => {
+    const pendingTyped = pendingDeckTypedRef.current;
+    if (pendingTyped === null || versePlainText.length === 0) return;
+    pendingDeckTypedRef.current = null;
+    recordDeckAttempt(pendingTyped);
+  }, [versePlainText, recordDeckAttempt]);
 
   const front = (
     <div className="flex flex-col items-center gap-5 py-8 h-full w-full px-6 text-center">

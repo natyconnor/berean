@@ -124,6 +124,16 @@ A passive summary of what the scope contains: two columns (hearted verses, notes
 - On the revealed side, the user's attempt is framed in a tinted "pop" panel so it's obvious where their input lives alongside the ESV text.
 - `classifyVerseAttempt` (in `study-attempt-quality.ts`) grades the diff as `exact` / `close` / `off`, and `VerseMemoryFeedback` renders a short celebration banner — a bouncy "Exactly right!" with a confetti burst for exact matches, a calmer "Good job — really close!" chip when only a word or two slipped. Both animations respect `prefers-reduced-motion`.
 
+#### Persisted attempts
+
+Every graded verse attempt is now logged to spaced repetition, fire-and-forget, with **zero visible UX change**:
+
+- The **learn ladder** (`StudyVerseLearn`) records each check with `mode: "learn"` and the current rung as `stage`.
+- The **deck** (`StudyVerseMemoryCard`) records the typed recall with `mode: "deck"` (logged at the fully-hidden `MAX_LEARN_STAGE`) when a card is completed.
+- Both go through the shared `useRecordVerseAttempt` hook, which resolves the card's `reference` to its `verseRefId` from the user's hearted verses (`savedVerses.listAll`), skips the write when the verse genuinely isn't a hearted verse, and swallows any mutation failure to `devLog` so scheduling never blocks or perturbs the UI. `record` returns the new schedule on success (so callers can adopt the authoritative `learnStage`). Attempts made in the brief window before the hearted-verse list has loaded are **deferred and flushed** once it resolves rather than dropped, and a deck completion tapped before the ESV text has loaded is stashed and flushed when the text arrives.
+
+**`learnStage` has one source of truth: the server.** The scheduler (`scheduleNext`) owns rung progression — an `exact` attempt advances the rung, `close` holds it, `off` drops it — driven by `classifyVerseAttempt`, _not_ by a client-side accuracy threshold. The learn ladder adopts the server rung both on open (restore, via `getOrCreateForVerse`, retried a bounded number of times on transient failure) and after every graded check (from the schedule `recordAttempt` returns), so the persisted rung and the visible rung can never drift and reopen-restore is always correct. Consequently there is **no manual "Next Level" button** anymore: progression is earned by recall quality. The stage tabs remain for freely previewing any hint level; a manual tab change or "Try again" supersedes an in-flight adoption so it never clobbers a rung the learner just chose.
+
 #### Teach (`StudyTeachCard`)
 
 - One card per **distinct verse-linked passage** referenced by the scope's notes (`countDistinctTeachPassageRefs`).
@@ -137,6 +147,7 @@ A passive summary of what the scope contains: two columns (hearted verses, notes
 - Fisher–Yates randomization, swipe left/right with a stacked-card motion, initial "dealer" shuffle animation.
 - Progress tracking (`completedIds`), restart, and skip-forward.
 - Reduced-motion aware via Framer Motion.
+- Owns **no scheduling logic**: the active verse-memory card publishes a "record this attempt" callback through a ref, and the deck fires it on completion (`Done`) so the attempt is persisted before the card unmounts. Teach cards never register a callback, so completing them is a no-op here.
 
 ### Toolbar & routing integration
 
@@ -148,7 +159,7 @@ A passive summary of what the scope contains: two columns (hearted verses, notes
 - **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
   1. Denormalize counts onto the `studySessions` row and recompute in a scheduled mutation on relevant writes.
   2. Render the hub without counts and resolve them lazily per visible card.
-- **Spaced repetition is server-only so far.** The `verseMemory`/`verseMemoryReviews` tables, scheduler, hearts-as-seed, and the `convex/verseMemory.ts` API exist (see "Verse-memory data model"), but the deck/learn UI does not yet call `recordAttempt`, so due dates and streaks aren't surfaced to the user.
+- **Spaced repetition runs silently.** The learn ladder and the verse-memory deck now call `recordAttempt` on every graded attempt (see "Persisted attempts"), so schedules and review history accumulate as you study. What's still missing is any _surfacing_ of that state: there is no Today/due queue, no due badge, and no streak/schedule UI yet — due dates advance in the background only.
 - **No session editing.** You can delete a session but can't rename it, change its scope, or clone it after creation.
 - **No in-deck navigation back to `/passage/...`.** Cards show references but don't deep-link into the reader mid-activity.
 - **Counts recompute on every scope edit.** `previewCounts` is a full query; it's fine but noticeably chatty on slow connections.
@@ -196,6 +207,7 @@ Rough, in priority order. Nothing here blocks v1.
 - Routes: `src/routes/study/index.tsx`, `src/routes/study/new.tsx`, `src/routes/study/$sessionId.tsx`.
 - Feature components: `src/components/study/*.tsx`.
 - Card model + deck: `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
+- Attempt persistence bridge: `src/components/study/use-record-verse-attempt.ts` (used by `study-verse-learn.tsx` and `study-verse-memory-card.tsx`).
 - Scope summary helper: `src/components/study/study-scope-summary.ts`.
 
 ---
