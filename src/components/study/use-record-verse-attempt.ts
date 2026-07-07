@@ -15,7 +15,7 @@ import {
 } from "./study-attempt-quality";
 import type { CardReference } from "./study-card-model";
 
-export type VerseAttemptMode = "learn" | "review" | "deck";
+export type VerseAttemptMode = "learn" | "review" | "deck" | "practice";
 
 interface RecordVerseAttemptInput {
   reference: CardReference;

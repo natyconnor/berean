@@ -136,6 +136,21 @@ The dashboard is built from **inline SVG/CSS only** — there is **no charting l
 - **Review summary** (`ReviewSummary`, `src/components/memory/review-summary.tsx`) ends the run: **verses reviewed**, **cleared** (left today's queue), and **stage-ups** (advanced a learn stage) are derived client-side by diffing the entry snapshot against the live due set, while **remaining** (the caught-up/streak status and whether "Keep reviewing" is offered) reads the uncapped `memoryStats.due` — not the capped `dueQueue` length — so it stays accurate when more than 50 verses are due. "Keep reviewing" re-runs against the next batch of still-due verses. No new Convex functions were added.
 - **Empty / caught-up state** is handled both on the Memory dashboard ("All caught up") and inside the player.
 
+### Practice (`/memory`)
+
+Alongside Review, Memory home exposes a **Practice** surface — a focused, **self-directed** drill over a chosen verse set. Where Review plays the due queue on the scheduler's terms, Practice lets the learner pick _what_ order and _which_ masking rung to work at, with no due-date gating.
+
+- **Entry point.** A **Practice** button in the Memory-home header launches `PracticeBoard` (`src/components/memory/practice/practice-board.tsx`) as an **in-page surface** (state, not a route), mirroring the Review toggle. It is disabled until the user has at least one hearted verse. The v1 practice set is **every hearted verse** (`savedVerses.listAll`, sharing the cached subscription with the attempt recorder); pack- and verse-specific entry points come in a later PR.
+- **The board.** One verse card at a time with:
+  - a **verse rail** (`practice-verse-rail.tsx`, modeled on `StudyVerseMemoryControls`' verse list) to jump directly to any verse,
+  - a **Shuffle / In-order** toggle, and
+  - a manual **stage selector** — Full · Letters · Blanks · Hidden — mapping index `0..3` onto the four `maskVerseText` stages (`src/lib/verse-hint.ts`).
+  - **prev / next** controls that wrap around the set.
+- **Ordering is pure + tested.** Sequence math lives in `src/lib/practice-order.ts` (`buildPracticeOrder`, `nextIndex`, `prevIndex`) with a small seeded PRNG (`createSeededRandom`, mulberry32) so a shuffle is **deterministic for a given seed** — stable across re-renders and unit-testable (`practice-order.test.ts`) without `Math.random()`. Re-selecting Shuffle bumps the seed to reshuffle.
+- **Grading + persistence.** Typed recall is graded with `diffWords` + `classifyVerseAttempt` / `verseAttemptAccuracy` (reusing the same check → diff → grade flow as the learn ladder and the shared `VerseAttemptResult` panel). **Only the Hidden stage is scored:** an attempt at the hardest rung (`stageIndex === MAX_LEARN_STAGE`) records **fire-and-forget** via `useRecordVerseAttempt().record(…, mode: "practice")` and runs the same `scheduleNext`, so it appears in the dashboard heatmap and can move the verse's due date exactly like Review. The easier stages (Full · Letters · Blanks) are **unscored practice** — the learner still sees the diff/accuracy feedback, but nothing is logged or scheduled. A small caption on the card marks whether the current stage counts. A single typed answer records **at most once**: after a check, a fresh attempt is required (Try again / re-type), and changing the current verse or stage resets the checked state so a stale answer can't be re-submitted.
+- **Set snapshot.** The practice set is **captured once when the board opens** (a `useState` initializer over the initial `verses` prop, mirroring how `ReviewPlayer` freezes its due queue). Mid-session heart changes therefore can't mutate the active set or reorder it under the current index — most importantly under Shuffle.
+- **Motion & a11y.** The card entrance uses Framer Motion and honors `prefers-reduced-motion` (via `useReducedMotion`); the rail toggles and stage selector are `aria-pressed` buttons.
+
 ### Hub (`/study`)
 
 - Lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist. Sessions remain saved collections; the dashboard, library, and Review now live in Memory (`/memory`).
@@ -343,6 +358,7 @@ Rough, in priority order. Nothing here blocks v1.
 - Memory home: `src/components/memory/memory-home.tsx`, rendered via `src/components/routes/memory-home-page.tsx`.
 - Card model + deck (shared, in `study/`): `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
 - Review player: `src/components/memory/review-player.tsx` (orchestrator), `review-summary.tsx` (end-of-run card).
+- Practice board: `src/components/memory/practice/practice-board.tsx` + `practice-verse-rail.tsx`, launched from `memory-home.tsx`; pure ordering + tests in `src/lib/practice-order.ts` / `practice-order.test.ts`.
 - Progress dashboard: `src/components/memory/dashboard/*` (`dashboard.tsx`, `kpi-row.tsx`, `practice-heatmap.tsx`, `mastery-bar.tsx`, `accuracy-trend.tsx`, `review-forecast.tsx`, `svg-chart-helpers.ts`), rendered at the top of `memory-home.tsx`; pure buckets + tests in `src/lib/dashboard-buckets.ts`.
 - Library + drill-down: `src/components/memory/memory-library.tsx` and `src/components/memory/verse-detail.tsx` (rendered from `memory-home.tsx`), backed by `verseMemory.listLibrary` / `verseMemory.verseDetail`.
 - Heart mastery ring: pure mapping + tests in `src/lib/mastery-ring.ts` (`masteryRingFraction`), rendered in `src/components/passage/verse-row.tsx` and wired via `src/components/passage/passage-view-body.tsx`; memory status joined by `convex/savedVerses.ts` (`listForChapter`).
