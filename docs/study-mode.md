@@ -88,9 +88,22 @@ All functions validate `args` + `returns`, check auth via `getCurrentUser*`, ver
 
 All queries are safe to call unauthenticated and return `null` / `[]`.
 
+### Today queue (`/study`)
+
+The hub now leads with a **Today** section that **decouples reviews from sessions**: instead of picking a saved collection to drill, the learner reviews the single global due queue across _every_ hearted verse, then falls back to sessions as curated collections.
+
+- **Hub Today card** (`StudyTodaySection` in `study-hub.tsx`) shows **"N due today"** (from `memoryStats.due`), a **Start review** button (disabled when nothing is due), and per-status totals (learning = `new + learning`, reviewing, mastered). `now` comes from a shared `useLiveNow()` hook (`src/hooks/use-live-now.ts`) that refreshes on a coarse ~60s interval and is passed as a query arg, so verses whose `dueAt` lands after the tab was opened get counted (both the headline and the disabled state stay live) — Convex still never calls `Date.now()` itself.
+- **The player** (`StudyTodayQueue`, `study-today-queue.tsx`) is an **orchestrator** that reuses the existing deck + learn UIs unchanged:
+  - It reads `dueQueue({ now })` and **snapshots** the result on entry so cards don't vanish mid-run as attempts reschedule verses out of the live due set.
+  - It maps each due row (a `verseMemory` row joined to its `verseRefs`) into the **verse-memory card model** the deck/learn consume — `{ type: "verse-memory", id: "vm:<memoryId>", reference: { book, chapter, startVerse, endVerse } }`.
+  - **New/learning** verses play one at a time through the **learn ladder** (`StudyVerseLearn`), with an orchestrator-owned "Next verse" control to advance. **Reviewing/mastered** verses play through the **deck** (`StudyActivityDeck`) for hidden recall.
+  - Because both sub-components record every graded attempt via `useRecordVerseAttempt` → `recordAttempt`, **each completed card reschedules the verse**; a just-reviewed verse's `dueAt` moves into the future and it **leaves the live due queue** (verifiable via the reactive `dueQueue`). The orchestrator watches the live queue to know when the review phase is finished.
+- **Session summary** (`StudySessionSummary`, `study-session-summary.tsx`) ends the run: **verses reviewed**, **cleared** (left today's queue), and **stage-ups** (advanced a learn stage) are derived client-side by diffing the entry snapshot against the live due set, while **remaining** (the caught-up/streak status and whether "Keep reviewing" is offered) reads the uncapped `memoryStats.due` — not the capped `dueQueue` length — so it stays accurate when more than 50 verses are due. "Keep reviewing" re-runs against the next batch of still-due verses. No new Convex functions were added.
+- **Empty / caught-up state** is handled both on the hub card ("All caught up") and inside the player.
+
 ### Hub (`/study`)
 
-- Lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist.
+- Below the Today section, lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist. Sessions are unchanged by the Today queue — they remain saved collections.
 - Each card shows title (name or auto-generated scope summary), scope-aware stats (hearted verses · notes · passages · last studied), any tag filters, and a "Last: {activity}" chip when the previous view was an activity (not Overview).
 - Delete button opens a confirmation dialog (`DeleteStudySessionDialog`).
 - Empty state has a CTA to `/study/new`.
@@ -159,7 +172,7 @@ Every graded verse attempt is now logged to spaced repetition, fire-and-forget, 
 - **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
   1. Denormalize counts onto the `studySessions` row and recompute in a scheduled mutation on relevant writes.
   2. Render the hub without counts and resolve them lazily per visible card.
-- **Spaced repetition runs silently.** The learn ladder and the verse-memory deck now call `recordAttempt` on every graded attempt (see "Persisted attempts"), so schedules and review history accumulate as you study. What's still missing is any _surfacing_ of that state: there is no Today/due queue, no due badge, and no streak/schedule UI yet — due dates advance in the background only.
+- **No due badge / dashboard yet.** The Today queue (below) surfaces due work on the hub, but there is still no dock badge or full schedule/streak dashboard — those come in later PRs.
 - **No session editing.** You can delete a session but can't rename it, change its scope, or clone it after creation.
 - **No in-deck navigation back to `/passage/...`.** Cards show references but don't deep-link into the reader mid-activity.
 - **Counts recompute on every scope edit.** `previewCounts` is a full query; it's fine but noticeably chatty on slow connections.
@@ -207,6 +220,7 @@ Rough, in priority order. Nothing here blocks v1.
 - Routes: `src/routes/study/index.tsx`, `src/routes/study/new.tsx`, `src/routes/study/$sessionId.tsx`.
 - Feature components: `src/components/study/*.tsx`.
 - Card model + deck: `src/components/study/study-card-model.ts`, `study-activity-deck.tsx`.
+- Today queue: `src/components/study/study-today-queue.tsx` (orchestrator), `study-session-summary.tsx` (end-of-run card), and the `StudyTodaySection` in `study-hub.tsx`.
 - Attempt persistence bridge: `src/components/study/use-record-verse-attempt.ts` (used by `study-verse-learn.tsx` and `study-verse-memory-card.tsx`).
 - Scope summary helper: `src/components/study/study-scope-summary.ts`.
 
