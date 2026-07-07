@@ -1,0 +1,586 @@
+<!doctype html>
+<!--
+  IMPLEMENTATION PLAN TEMPLATE — for consumption by the run-implementation-plan skill.
+  Fill every {{PLACEHOLDER}} and every <!-- FILL: ... -->
+region, then delete the comments. Save as docs/proposals/<feature
+  >-implementation-plan.html. Rules: - Keep the PR anchors sequential: id="pr1",
+  id="pr2", ... (the runner locates PRs by these). - Every PR MUST have: Depends
+  on/Unblocks, Files, Implementation steps, Acceptance criteria. - Keep the
+  Architecture and Conventions sections complete — they are pasted verbatim into
+  every implementer subagent, so nothing they need may live only inside a single
+  PR. - Duplicate the "<!-- PR TEMPLATE -->" block once per PR. -->
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="color-scheme" content="light" />
+      <title>
+        {{PROJECT}} · {{FEATURE}} — Implementation Plan (for an LLM agent)
+      </title>
+      <style>
+        :root {
+          --page: #f6f1e6;
+          --surface: #fdfbf7;
+          --surface-2: #f1ece1;
+          --ink: #241d12;
+          --ink-2: #6b6151;
+          --ink-3: #948a76;
+          --hairline: #e4dcc9;
+          --grid: #ece5d4;
+          --accent: #84621e;
+          --accent-deep: #664a12;
+          --accent-soft: #f0e4c6;
+          --good: #1e6b2e;
+          --bad: #a03d2e;
+          --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+          --serif: Georgia, "Times New Roman", serif;
+        }
+        * {
+          box-sizing: border-box;
+        }
+        html {
+          scroll-behavior: smooth;
+        }
+        body {
+          margin: 0;
+          background: var(--page);
+          color: var(--ink);
+          font-family: var(--sans);
+          font-size: 15.5px;
+          line-height: 1.62;
+        }
+        .wrap {
+          max-width: 1000px;
+          margin: 0 auto;
+          padding: 0 24px 120px;
+        }
+        h1,
+        h2,
+        h3,
+        h4 {
+          font-family: var(--serif);
+          line-height: 1.18;
+          color: var(--ink);
+        }
+        h1 {
+          font-size: 42px;
+          margin: 10px 0 8px;
+        }
+        h2 {
+          font-size: 28px;
+          margin: 0 0 4px;
+        }
+        h3 {
+          font-size: 20px;
+          margin: 22px 0 6px;
+        }
+        h4 {
+          font-size: 16px;
+          margin: 16px 0 4px;
+          font-family: var(--sans);
+          font-weight: 700;
+        }
+        p {
+          margin: 10px 0;
+        }
+        a {
+          color: var(--accent-deep);
+        }
+        .eyebrow {
+          font-size: 11px;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--accent);
+          font-weight: 700;
+        }
+        .lede {
+          font-size: 18px;
+          color: var(--ink-2);
+          font-family: var(--serif);
+          font-style: italic;
+        }
+        .muted {
+          color: var(--ink-2);
+        }
+        .small {
+          font-size: 13px;
+        }
+        code,
+        pre {
+          font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        }
+        code {
+          background: var(--surface-2);
+          border: 1px solid var(--hairline);
+          border-radius: 4px;
+          padding: 1px 5px;
+          font-size: 12.5px;
+        }
+        pre {
+          background: #2b2416;
+          color: #ede4d0;
+          border-radius: 10px;
+          padding: 16px 18px;
+          overflow-x: auto;
+          font-size: 12.5px;
+          line-height: 1.55;
+        }
+        pre code {
+          background: none;
+          border: none;
+          padding: 0;
+          color: inherit;
+        }
+        pre .c {
+          color: #9d9077;
+        }
+        pre .k {
+          color: #d3ab5e;
+        }
+        pre .s {
+          color: #a8c49a;
+        }
+        header.hero {
+          padding: 60px 0 20px;
+        }
+        .chip {
+          display: inline-block;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          border-radius: 999px;
+          padding: 3px 10px;
+          background: var(--accent-soft);
+          color: var(--accent-deep);
+          border: 1px solid #e3d2a6;
+        }
+        .chip.ghost {
+          background: transparent;
+          color: var(--ink-3);
+          border-color: var(--hairline);
+        }
+        .meta {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 14px;
+        }
+        section {
+          padding: 40px 0 4px;
+        }
+        .rule {
+          border: 0;
+          border-top: 1px solid var(--hairline);
+          margin: 36px 0 0;
+        }
+        .card {
+          background: var(--surface);
+          border: 1px solid var(--hairline);
+          border-radius: 12px;
+          padding: 18px 20px;
+          box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+        }
+        .grid-2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+        @media (max-width: 760px) {
+          .grid-2 {
+            grid-template-columns: 1fr;
+          }
+        }
+        table {
+          border-collapse: collapse;
+          width: 100%;
+          font-size: 13.5px;
+          margin-top: 6px;
+        }
+        th {
+          text-align: left;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          color: var(--ink-3);
+          font-weight: 700;
+          padding: 8px 10px;
+          border-bottom: 1px solid var(--hairline);
+        }
+        td {
+          padding: 8px 10px;
+          border-bottom: 1px solid var(--grid);
+          vertical-align: top;
+        }
+        tr:last-child td {
+          border-bottom: none;
+        }
+        .fileref {
+          font-family: ui-monospace, Menlo, monospace;
+          font-size: 12px;
+          color: var(--accent-deep);
+        }
+        .callout {
+          border-left: 3px solid var(--accent);
+          background: var(--surface);
+          border-radius: 0 10px 10px 0;
+          padding: 12px 16px;
+          margin: 16px 0;
+        }
+        ul.clean {
+          margin: 8px 0;
+          padding-left: 20px;
+        }
+        ul.clean li {
+          margin: 5px 0;
+        }
+        ul.acc {
+          list-style: none;
+          padding-left: 0;
+          margin: 8px 0;
+        }
+        ul.acc li {
+          position: relative;
+          padding-left: 26px;
+          margin: 6px 0;
+        }
+        ul.acc li::before {
+          content: "\2713";
+          position: absolute;
+          left: 2px;
+          color: var(--good);
+          font-weight: 800;
+        }
+        .pr {
+          border: 1px solid var(--hairline);
+          border-radius: 14px;
+          margin: 20px 0;
+          overflow: hidden;
+          background: var(--surface);
+        }
+        .pr > .pr-head {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 16px 20px;
+          background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+          border-bottom: 1px solid var(--hairline);
+        }
+        .pr .num {
+          flex: 0 0 auto;
+          width: 40px;
+          height: 40px;
+          border-radius: 999px;
+          background: var(--accent);
+          color: #fdf9ef;
+          font-family: var(--serif);
+          font-size: 20px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .pr .pr-title {
+          margin: 0;
+          font-size: 20px;
+        }
+        .pr .pr-sub {
+          font-size: 12px;
+          color: var(--ink-3);
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          font-weight: 700;
+        }
+        .pr-body {
+          padding: 8px 20px 20px;
+        }
+        .dep {
+          font-size: 12.5px;
+          color: var(--ink-2);
+          margin: 6px 0 0;
+        }
+        .toc {
+          columns: 2;
+          column-gap: 30px;
+          font-size: 14px;
+        }
+        @media (max-width: 640px) {
+          .toc {
+            columns: 1;
+          }
+        }
+        .toc a {
+          display: block;
+          padding: 3px 0;
+        }
+        footer {
+          padding: 50px 0 20px;
+          color: var(--ink-3);
+          font-size: 13px;
+          text-align: center;
+        }
+        .tag-new {
+          color: var(--accent-deep);
+          font-weight: 700;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <header class="hero">
+          <span class="eyebrow"
+            >Implementation Plan · for an LLM coding agent</span
+          >
+          <h1>{{FEATURE}}</h1>
+          <p class="lede">{{ONE_SENTENCE_OUTCOME}}</p>
+          <div class="meta">
+            <span class="chip">{{N}} pull requests</span>
+            <span class="chip ghost"
+              >{{DEP_NOTE e.g. no new runtime deps}}</span
+            >
+          </div>
+          <div class="callout">
+            <strong>How to use this document.</strong> Each numbered block below
+            is <em>one pull request</em>. Do them in order. Do not start the
+            next PR until the current one is green: implement only what that PR
+            lists, run <code>pnpm run agent:check</code>, satisfy the PR's
+            acceptance criteria, then stop.
+          </div>
+        </header>
+
+        <hr class="rule" />
+
+        <!-- ============ DECISIONS (optional but recommended) ============ -->
+        <section id="decisions">
+          <div class="eyebrow">Settled decisions</div>
+          <h2>Decisions locked before implementation</h2>
+          <p>
+            Fixed constraints resolved with the product owner. Treat as
+            non-negotiable.
+          </p>
+          <div class="card">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 30%">Decision</th>
+                  <th>Resolution</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- FILL: one row per locked decision -->
+                <tr>
+                  <td><b>{{DECISION}}</b></td>
+                  <td>{{RESOLUTION}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <hr class="rule" />
+
+        <!-- ============ CODEBASE GROUNDING ============ -->
+        <section id="grounding">
+          <div class="eyebrow">What already exists</div>
+          <h2>Assets to reuse (verified in the codebase)</h2>
+          <p>
+            Do not rebuild these — reuse them. Every path here must be confirmed
+            to exist before writing the plan.
+          </p>
+          <div class="card">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 42%">Existing asset</th>
+                  <th>Role in the new system</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- FILL: one row per real file/module the plan builds on -->
+                <tr>
+                  <td class="fileref">{{path/to/file.ts &rarr; symbol}}</td>
+                  <td>{{how it is reused}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout small">
+            <strong>Gaps to be aware of.</strong> {{Missing
+            primitives/registries the plan must add explicitly, and which PR
+            adds them.}}
+          </div>
+        </section>
+
+        <hr class="rule" />
+
+        <!-- ============ ARCHITECTURE (pasted into EVERY subagent) ============ -->
+        <section id="architecture">
+          <div class="eyebrow">Shared architecture</div>
+          <h2>Data model &amp; core contracts (referenced by every PR)</h2>
+          <!-- FILL: schema/table shapes, key interfaces, and data flow. Use <pre><code> for code. -->
+          <h3>{{Data model / tables}}</h3>
+          <pre><code><span class="c">// FILL: exact table/type shapes so PRs don't diverge</span></code></pre>
+          <h3>{{Key module / function contracts}}</h3>
+          <pre><code><span class="c">// FILL: signatures of the shared functions PRs must implement/consume</span></code></pre>
+          <h3>Data flow</h3>
+          <p class="muted">
+            {{One paragraph: how a user action moves through the system end to
+            end.}}
+          </p>
+        </section>
+
+        <hr class="rule" />
+
+        <!-- ============ CONVENTIONS (pasted into EVERY subagent) ============ -->
+        <section id="conventions">
+          <div class="eyebrow">Rules for the agent</div>
+          <h2>Conventions every PR must follow</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h4>Workflow</h4>
+              <ul class="clean small">
+                <li>One PR at a time, in order. Read files before editing.</li>
+                <li>
+                  After code changes run
+                  <code>pnpm run agent:check</code> (format &rarr; lint &rarr;
+                  typecheck).
+                </li>
+                <li>
+                  Run <code>pnpm test</code> for any PR that adds/edits a
+                  <code>*.test.ts</code>.
+                </li>
+                <li>
+                  Regenerate Convex types with
+                  <code>pnpm run codegen</code> after schema/function changes.
+                </li>
+                <li>Never commit or push unless explicitly asked.</li>
+                <li>
+                  <!-- FILL: docs the PR must update when the model changes -->
+                </li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4>{{Domain rules — e.g. Convex rules enforced by lint}}</h4>
+              <ul class="clean small">
+                <!-- FILL: project-specific hard rules subagents must obey -->
+                <li>
+                  Every public query/mutation has <code>args</code> <b>and</b>
+                  <code>returns</code> validators.
+                </li>
+                <li>
+                  Check auth via <code>getCurrentUser</code>; verify ownership
+                  on every row.
+                </li>
+                <li>
+                  Never call <code>Date.now()</code> inside a query — pass
+                  <code>now</code> in.
+                </li>
+                <li>
+                  Query with <code>.withIndex(...)</code>, never
+                  <code>.filter(...)</code>. <code>await</code> every promise.
+                </li>
+                <li>
+                  No <code>any</code>; use generated <code>Doc&lt;&gt;</code> /
+                  <code>Id&lt;&gt;</code> types.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <hr class="rule" />
+
+        <!-- ============ TOC ============ -->
+        <section id="prs">
+          <div class="eyebrow">The build</div>
+          <h2>{{N}} pull requests</h2>
+          <div class="card toc">
+            <!-- FILL: one line per PR; anchor must match the PR block id -->
+            <a href="#pr1"
+              ><b>PR 1</b> — {{title}}
+              <span class="chip ghost">{{phase}}</span></a
+            >
+          </div>
+        </section>
+
+        <!-- ============ PR TEMPLATE — duplicate once per PR, keep ids sequential ============ -->
+        <div class="pr" id="pr1">
+          <div class="pr-head">
+            <div class="num">1</div>
+            <div>
+              <div class="pr-sub">
+                {{phase · one-line character, e.g. "ships silently ·
+                foundation"}}
+              </div>
+              <h3 class="pr-title">{{PR title}}</h3>
+            </div>
+          </div>
+          <div class="pr-body">
+            <p class="dep">
+              <b>Depends on:</b> {{nothing | PR X}}. <b>Unblocks:</b> {{PR Y,
+              Z}}.
+            </p>
+            <h4>Goal</h4>
+            <p>
+              {{1–3 sentences: what this PR delivers and why it is
+              self-contained.}}
+            </p>
+            <h4>Files</h4>
+            <ul class="clean small">
+              <!-- FILL: every file touched; mark new files with the tag below -->
+              <li>
+                <span class="fileref">{{path/to/file.ts}}</span>
+                <span class="tag-new">(new)</span> — {{what changes here}}.
+              </li>
+            </ul>
+            <h4>Implementation steps</h4>
+            <ul class="clean small">
+              <!-- FILL: ordered, concrete steps — enough for a subagent to execute without guessing -->
+              <li>{{step}}</li>
+            </ul>
+            <h4>Acceptance criteria</h4>
+            <ul class="acc small">
+              <!-- FILL: mechanically verifiable first, then flag behavioral/visual ones for manual test -->
+              <li>
+                <code>pnpm run agent:check</code> passes; no existing test
+                breaks.
+              </li>
+              <li>{{criterion the runner's gates or tests can prove}}</li>
+            </ul>
+          </div>
+        </div>
+        <!-- ============ END PR TEMPLATE ============ -->
+
+        <hr class="rule" />
+
+        <!-- ============ RISKS (optional) ============ -->
+        <section id="risks">
+          <div class="eyebrow">Eyes open</div>
+          <h2>Risks &amp; how the plan answers them</h2>
+          <div class="card">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 30%">Risk</th>
+                  <th>Mitigation (baked into the PR sequence)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- FILL: one row per real risk, naming the PR that mitigates it -->
+                <tr>
+                  <td>{{risk}}</td>
+                  <td>{{mitigation (PR N)}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer>
+          {{PROJECT}} · {{FEATURE}} implementation plan · grounded in the
+          current codebase.
+        </footer>
+      </div>
+    </body>
+  </html>
+</feature>
