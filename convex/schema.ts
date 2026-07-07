@@ -199,4 +199,40 @@ export default defineSchema({
   })
     .index("by_createdAt", ["createdAt"])
     .index("by_userId", ["userId"]),
+
+  verseMemory: defineTable({
+    userId: v.id("users"),
+    verseRefId: v.id("verseRefs"),
+    status: v.union(
+      v.literal("new"),
+      v.literal("learning"),
+      v.literal("reviewing"),
+      v.literal("mastered"),
+      v.literal("suspended"),
+    ),
+    learnStage: v.number(), // 0..3 -> full|first-letters|cloze|hidden
+    ease: v.number(), // 1.3 .. 2.8, starts 2.3
+    intervalDays: v.number(),
+    dueAt: v.number(), // drives "due today" + dock badge
+    consecutiveCorrect: v.number(),
+    lapses: v.number(),
+    lastReviewedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_userId_dueAt", ["userId", "dueAt"]) // Today queue + badge
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"]), // upsert on heart
+
+  verseMemoryReviews: defineTable({
+    // append-only log
+    userId: v.id("users"),
+    verseRefId: v.id("verseRefs"),
+    verseMemoryId: v.id("verseMemory"),
+    quality: v.union(v.literal("exact"), v.literal("close"), v.literal("off")), // from classifyVerseAttempt
+    accuracy: v.number(), // 0..100 from verseAttemptAccuracy
+    stage: v.number(), // learnStage at time of attempt
+    mode: v.union(v.literal("learn"), v.literal("review"), v.literal("deck")),
+    durationMs: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_userId_createdAt", ["userId", "createdAt"]),
 });
