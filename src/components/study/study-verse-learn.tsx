@@ -1,4 +1,4 @@
-import { CheckCircle2, RotateCcw } from "lucide-react";
+import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent,
   useCallback,
@@ -30,7 +30,10 @@ import {
 } from "@/lib/verse-hint";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
-import { verseAttemptAccuracy } from "./study-attempt-quality";
+import {
+  classifyVerseAttempt,
+  verseAttemptAccuracy,
+} from "./study-attempt-quality";
 import type { VerseMemoryCard } from "./study-card-model";
 import { useRecordVerseAttempt } from "./use-record-verse-attempt";
 import { VerseAttemptResult } from "./study-verse-memory-card";
@@ -72,47 +75,55 @@ const STAGES: readonly StageInfo[] = [
 const RESTORE_MAX_ATTEMPTS = 3;
 
 export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
-  const [stage, setStage] = useState<HintStage>("full");
+  const [learnStage, setLearnStage] = useState<number | null>(null);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
   const refLabel = formatVerseRef(card.reference);
   const { data, loading, error } = useEsvReference(card.reference);
 
-  const { record, resolveVerseRefId } = useRecordVerseAttempt();
+  const { record, resolveVerseRefId, heartedVersesReady } =
+    useRecordVerseAttempt();
   const getOrCreateForVerse = useMutation(api.verseMemory.getOrCreateForVerse);
   const verseRefId = resolveVerseRefId(card.reference);
   // `learnStage` on the server is the single source of truth for the ladder
   // rung: the scheduler advances/drops it based on attempt quality. The UI
-  // adopts it on open (restore) and after every graded check, so the DB and
-  // the visible rung can never drift.
+  // adopts it on open (restore) and when the learner leaves review, so the
+  // review state never changes underneath them.
   const restoredRef = useRef(false);
   const interactedRef = useRef(false);
-  // Invalidation token so a slow in-flight adoption can't clobber a rung the
-  // learner has since changed (manual tab / try again).
+  // Invalidation token so a slow in-flight schedule can't affect a newer
+  // attempt after the learner has already continued.
   const attemptSeqRef = useRef(0);
+  const pendingLearnStageRef = useRef<number | null>(null);
+  const answerInputRef = useRef<HTMLTextAreaElement>(null);
+  const reviewActionRef = useRef<HTMLButtonElement>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
 
-  const applyLearnStage = useCallback((learnStage: number) => {
-    const index = Math.min(
-      Math.max(Math.trunc(learnStage), 0),
-      STAGES.length - 1,
+  const applyLearnStage = useCallback((nextLearnStage: number) => {
+    setLearnStage(
+      Math.min(Math.max(Math.trunc(nextLearnStage), 0), STAGES.length - 1),
     );
-    setStage(STAGES[index].stage);
   }, []);
 
-  // Resume the learner at their persisted rung on (re)open. Only mark the
-  // restore done on success, and retry a bounded number of times on transient
-  // failure so a flaky first read doesn't strand the user at "Full".
+  const stageReady =
+    heartedVersesReady &&
+    (verseRefId === null ||
+      learnStage !== null ||
+      restoreAttempt >= RESTORE_MAX_ATTEMPTS);
+
+  // Resume the learner at their persisted rung on (re)open. Hold the stage UI
+  // until restore finishes so we never flash the default "Full" rung.
   useEffect(() => {
-    if (!verseRefId || restoredRef.current) return;
+    if (!heartedVersesReady || !verseRefId) return;
+    if (learnStage !== null || restoredRef.current) return;
     if (restoreAttempt >= RESTORE_MAX_ATTEMPTS) return;
+
     let cancelled = false;
     void getOrCreateForVerse({ verseRefId, now: Date.now() })
       .then((row) => {
         if (cancelled) return;
         restoredRef.current = true;
-        if (interactedRef.current) return;
-        applyLearnStage(row.learnStage);
+        if (!interactedRef.current) applyLearnStage(row.learnStage);
       })
       .catch((restoreError: unknown) => {
         devLog.warn("verseMemory", "learnStage restore failed", restoreError);
@@ -121,38 +132,65 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     return () => {
       cancelled = true;
     };
-  }, [verseRefId, getOrCreateForVerse, restoreAttempt, applyLearnStage]);
+  }, [
+    verseRefId,
+    heartedVersesReady,
+    learnStage,
+    getOrCreateForVerse,
+    restoreAttempt,
+    applyLearnStage,
+  ]);
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
+  const stageIndex = learnStage ?? 0;
+  const stage = STAGES[stageIndex]?.stage ?? STAGES[0].stage;
   const tokens = useMemo(
     () => maskVerseText(versePlainText, stage),
     [stage, versePlainText],
   );
-  const stageIndex = STAGES.findIndex((item) => item.stage === stage);
   const currentStage = STAGES[stageIndex] ?? STAGES[0];
-  const canCheckAnswer = !loading && !error;
+  const canCheckAnswer =
+    !loading &&
+    !error &&
+    typedAnswer.trim().length > 0 &&
+    versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
+  const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
 
-  function selectStage(nextStage: HintStage) {
-    interactedRef.current = true;
-    // Supersede any in-flight adoption so it can't override this choice.
-    attemptSeqRef.current += 1;
-    setStage(nextStage);
-    setTypedAnswer("");
-    setChecked(false);
+  useEffect(() => {
+    if (!checked) return;
+    reviewActionRef.current?.focus();
+  }, [checked]);
+
+  function focusAnswerInput() {
+    window.requestAnimationFrame(() => {
+      answerInputRef.current?.focus();
+    });
   }
 
-  function resetAttempt() {
+  function predictedLearnStage() {
+    if (checkedQuality === "exact") {
+      return Math.min(stageIndex + 1, STAGES.length - 1);
+    }
+    if (checkedQuality === "off") return Math.max(stageIndex - 1, 0);
+    return stageIndex;
+  }
+
+  function continueAfterReview() {
     attemptSeqRef.current += 1;
+    applyLearnStage(pendingLearnStageRef.current ?? predictedLearnStage());
+    pendingLearnStageRef.current = null;
     setTypedAnswer("");
     setChecked(false);
+    focusAnswerInput();
   }
 
   function checkAnswer() {
     if (!canCheckAnswer) return;
+    pendingLearnStageRef.current = null;
     setChecked(true);
 
     // Only a non-empty, gradable answer counts as an interaction / attempt.
@@ -166,10 +204,10 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
       stage: stageIndex,
       mode: "learn",
     }).then((schedule) => {
-      // Adopt the server rung (source of truth) unless the learner has since
-      // moved on (manual tab / try again), which bumps the token.
+      // Keep the review stable; adopt the authoritative rung only after the
+      // learner continues to the next input phase.
       if (!schedule || attemptSeqRef.current !== seq) return;
-      applyLearnStage(schedule.learnStage);
+      pendingLearnStageRef.current = schedule.learnStage;
     });
   }
 
@@ -190,66 +228,86 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
             {refLabel}
           </CardTitle>
         </div>
-        <div className="mx-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-lg bg-muted p-1">
-          {STAGES.map((item, index) => (
-            <button
-              key={item.stage}
-              type="button"
-              className={cn(
-                "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                item.stage === stage
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => selectStage(item.stage)}
-              aria-current={item.stage === stage ? "step" : undefined}
-            >
-              <span className="sr-only">Stage {index + 1}: </span>
-              {item.label}
-            </button>
-          ))}
-        </div>
+        {!stageReady ? (
+          <div
+            className="mx-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-lg bg-muted p-1"
+            aria-hidden
+          >
+            {STAGES.map((item) => (
+              <div
+                key={item.stage}
+                className="h-8 animate-pulse rounded-md bg-background/60"
+              />
+            ))}
+          </div>
+        ) : (
+          <ol className="mx-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-lg bg-muted p-1">
+            {STAGES.map((item, index) => (
+              <li
+                key={item.stage}
+                className={cn(
+                  "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                  item.stage === stage
+                    ? "bg-background text-foreground shadow-sm"
+                    : index < stageIndex
+                      ? "text-foreground/80"
+                      : "text-muted-foreground",
+                )}
+                aria-current={item.stage === stage ? "step" : undefined}
+              >
+                <span className="sr-only">Stage {index + 1}: </span>
+                {item.label}
+              </li>
+            ))}
+          </ol>
+        )}
         <p className="text-sm text-muted-foreground">
-          {currentStage.description}
+          {stageReady ? currentStage.description : "\u00a0"}
         </p>
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <div className="min-h-[180px] rounded-xl border bg-background px-4 py-4 text-left text-lg leading-8">
-          {loading ? (
-            <div className="space-y-3 py-2">
-              <div className="h-4 w-full animate-pulse rounded bg-muted" />
-              <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
-              <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
+        {!checked && (
+          <>
+            <div className="min-h-[180px] rounded-xl border bg-background px-4 py-4 text-left text-lg leading-8">
+              {!stageReady || loading ? (
+                <div className="space-y-3 py-2">
+                  <div className="h-4 w-full animate-pulse rounded bg-muted" />
+                  <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
+                  <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
+                </div>
+              ) : error ? (
+                <p className="text-sm text-destructive">
+                  Could not load verse text.
+                </p>
+              ) : stage === "hidden" ? (
+                <div className="flex h-full min-h-[140px] items-center justify-center text-center">
+                  <p className="max-w-sm text-sm text-muted-foreground">
+                    No hint text. Type the verse from memory, then check your
+                    answer.
+                  </p>
+                </div>
+              ) : (
+                <HintTokenText tokens={tokens} />
+              )}
             </div>
-          ) : error ? (
-            <p className="text-sm text-destructive">
-              Could not load verse text.
-            </p>
-          ) : stage === "hidden" ? (
-            <div className="flex h-full min-h-[140px] items-center justify-center text-center">
-              <p className="max-w-sm text-sm text-muted-foreground">
-                No hint text. Type the verse from memory, then check your
-                answer.
-              </p>
-            </div>
-          ) : (
-            <HintTokenText tokens={tokens} />
-          )}
-        </div>
 
-        <Textarea
-          value={typedAnswer}
-          onChange={(event) => {
-            interactedRef.current = true;
-            setTypedAnswer(event.target.value);
-            setChecked(false);
-          }}
-          onKeyDown={handleAnswerKeyDown}
-          placeholder="Type what you remember"
-          className="min-h-[150px] resize-none"
-          aria-label="Your recalled verse"
-        />
+            <Textarea
+              ref={answerInputRef}
+              value={typedAnswer}
+              onChange={(event) => {
+                interactedRef.current = true;
+                setTypedAnswer(event.target.value);
+                setChecked(false);
+              }}
+              onKeyDown={handleAnswerKeyDown}
+              placeholder="Type what you remember"
+              className="min-h-[150px] resize-none"
+              aria-label="Your recalled verse"
+              disabled={!stageReady}
+            />
+          </>
+        )}
 
         {checked && (
           <div className="space-y-4">
@@ -285,10 +343,15 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               type="button"
               variant="outline"
               className="flex-1 sm:flex-none"
-              onClick={resetAttempt}
+              onClick={continueAfterReview}
+              ref={reviewActionRef}
             >
-              <RotateCcw className="h-4 w-4" aria-hidden />
-              Try again
+              {checkedQuality === "exact" ? (
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              ) : (
+                <RotateCcw className="h-4 w-4" aria-hidden />
+              )}
+              {checkedQuality === "exact" ? "Continue" : "Try again"}
             </Button>
           ) : (
             <Button
@@ -296,7 +359,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               variant="default"
               className="flex-1 sm:flex-none"
               onClick={checkAnswer}
-              disabled={!canCheckAnswer}
+              disabled={!stageReady || !canCheckAnswer}
             >
               <CheckCircle2 className="h-4 w-4" aria-hidden />
               Check answer

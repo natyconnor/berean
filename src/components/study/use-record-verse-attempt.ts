@@ -32,6 +32,8 @@ interface PendingAttempt {
 }
 
 interface RecordVerseAttempt {
+  /** True once the user's hearted-verse list has loaded. */
+  heartedVersesReady: boolean;
   /**
    * Fire-and-forget persistence of a graded verse attempt.
    *
@@ -141,5 +143,9 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
     }
   }, [savedVerses, resolveVerseRefId, performRecord]);
 
-  return { record, resolveVerseRefId };
+  return {
+    record,
+    resolveVerseRefId,
+    heartedVersesReady: savedVerses !== undefined,
+  };
 }
