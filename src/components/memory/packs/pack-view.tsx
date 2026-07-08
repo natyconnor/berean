@@ -108,6 +108,7 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
           endVerse: m.endVerse,
         },
         learnStage: m.learnStage,
+        stageReps: m.stageReps ?? 0,
       })),
     [members],
   );

@@ -20,6 +20,7 @@ export type PackMember = {
   endVerse: number;
   status: Doc<"verseMemory">["status"];
   learnStage: number;
+  stageReps: number;
   intervalDays: number;
   dueAt: number;
 };
@@ -47,6 +48,8 @@ function toMember(
     endVerse: ref.endVerse,
     status: memory.status,
     learnStage: memory.learnStage,
+    // Schema-optional (always written now); default legacy rows defensively.
+    stageReps: memory.stageReps ?? 0,
     intervalDays: memory.intervalDays,
     dueAt: memory.dueAt,
   };

@@ -12,6 +12,7 @@ interface RailVerse {
   id: string;
   reference: CardReference;
   learnStage: number;
+  stageReps: number;
 }
 
 interface PracticeVerseRailProps {
@@ -21,17 +22,18 @@ interface PracticeVerseRailProps {
   order: PracticeOrder;
   onOrderChange: (order: PracticeOrder) => void;
   shuffleNonce: number;
-  stageIndex: number;
-  /** Highest selectable rung: the verse's achieved level (no skipping ahead). */
-  maxStageIndex: number;
-  onStageChange: (stageIndex: number) => void;
+  /** The active verse's live band (0..3) driven by the server schedule. */
+  currentLearnStage: number;
+  /** The active verse's live reps banked on the current band. */
+  currentStageReps: number;
   className?: string;
 }
 
 /**
- * The Practice sidebar: a Shuffle / In-order toggle, a manual stage selector
- * (Full · Letters · Blanks · Hidden), and the clickable verse list used to jump
- * around the set.
+ * The Practice sidebar: a Shuffle / In-order toggle, a read-only progress
+ * indicator for the active verse (current band + rep count — never a manual
+ * stage selector, so the learner can't skip ahead of the schedule), and the
+ * clickable verse list used to jump around the set.
  */
 export function PracticeVerseRail({
   verses,
@@ -40,12 +42,17 @@ export function PracticeVerseRail({
   order,
   onOrderChange,
   shuffleNonce,
-  stageIndex,
-  maxStageIndex,
-  onStageChange,
+  currentLearnStage,
+  currentStageReps,
   className,
 }: PracticeVerseRailProps) {
   const canReorder = verses.length >= 2;
+  const currentStage = PRACTICE_STAGES[currentLearnStage] ?? PRACTICE_STAGES[0];
+  const currentRequiredReps = currentStage.requiredReps;
+  const currentRepLabel =
+    currentRequiredReps > 1
+      ? `rep ${Math.min(currentStageReps + 1, currentRequiredReps)} of ${currentRequiredReps}`
+      : null;
 
   return (
     <div className={cn("rounded-xl border bg-card p-4 shadow-sm", className)}>
@@ -102,48 +109,29 @@ export function PracticeVerseRail({
 
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Stage
+            Progress
           </p>
           <div
-            className="grid grid-cols-4 gap-1 rounded-lg bg-muted p-1"
-            role="group"
-            aria-label="Practice stage"
+            className={cn(
+              "flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5",
+              currentStage.color.railActive,
+            )}
           >
-            {PRACTICE_STAGES.map((item, index) => {
-              const selected = index === stageIndex;
-              const locked = index > maxStageIndex;
-              return (
-                <button
-                  key={item.stage}
-                  type="button"
-                  className={cn(
-                    "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                    selected
-                      ? item.color.selectedButton
-                      : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
-                    locked &&
-                      "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground",
-                  )}
-                  onClick={() => onStageChange(index)}
-                  disabled={locked}
-                  aria-pressed={selected}
-                  title={
-                    locked
-                      ? `Reach ${item.label} through review before practicing it`
-                      : undefined
-                  }
-                >
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 shrink-0 rounded-full",
-                      item.color.dot,
-                    )}
-                    aria-hidden
-                  />
-                  {item.label}
-                </button>
-              );
-            })}
+            <span className="inline-flex items-center gap-2 text-sm font-medium">
+              <span
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  currentStage.color.dot,
+                )}
+                aria-hidden
+              />
+              {currentStage.label}
+            </span>
+            {currentRepLabel && (
+              <span className="text-xs font-medium tabular-nums">
+                {currentRepLabel}
+              </span>
+            )}
           </div>
         </div>
 
@@ -170,7 +158,7 @@ export function PracticeVerseRail({
                     )}
                     onClick={() => onSelectVerse(verse.id)}
                     aria-current={active ? "true" : undefined}
-                    aria-label={`${formatVerseRef(verse.reference)} (${stage.label} stage)`}
+                    aria-label={`${formatVerseRef(verse.reference)} (${stage.label} band)`}
                     title={`${formatVerseRef(verse.reference)} · ${stage.label}`}
                     transition={{ layout: { duration: 0.28, ease: "easeOut" } }}
                   >

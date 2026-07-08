@@ -72,7 +72,7 @@ export const SUPPORT_BANDS: readonly SupportBand[] = [
 ];
 
 /** Exact reps needed to clear the band at `stage`. */
-function requiredRepsFor(stage: number): number {
+export function requiredRepsFor(stage: number): number {
   return SUPPORT_BANDS[stage].requiredReps;
 }
 

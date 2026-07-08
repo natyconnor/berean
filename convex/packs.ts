@@ -71,6 +71,7 @@ const packMemberValidator = v.object({
   endVerse: v.number(),
   status: statusValidator,
   learnStage: v.number(),
+  stageReps: v.number(),
   intervalDays: v.number(),
   dueAt: v.number(),
   isDue: v.boolean(),

@@ -21,6 +21,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
+import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
 import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
 import {
@@ -30,7 +31,11 @@ import {
   prevIndex,
 } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
-import { type HintToken, maskVerseText } from "@/lib/verse-hint";
+import {
+  type HintToken,
+  hintForProgress,
+  maskVerseText,
+} from "@/lib/verse-hint";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -45,6 +50,12 @@ export interface PracticeVerse {
   reference: CardReference;
   /** Server-authoritative memory rung for this verse (0..3). */
   learnStage: number;
+  /**
+   * Server-authoritative exact reps banked on the current band. Optional so
+   * callers that don't (yet) surface it fall back to a fresh band; read
+   * defensively via `stageReps ?? 0`.
+   */
+  stageReps?: number;
 }
 
 interface PracticeBoardProps {
@@ -54,10 +65,17 @@ interface PracticeBoardProps {
   onExit: () => void;
 }
 
+/** Live learning progress the board tracks per verse this session. */
+interface VerseProgress {
+  learnStage: number;
+  stageReps: number;
+}
+
 interface OrderedVerse {
   id: string;
   reference: CardReference;
   learnStage: number;
+  stageReps: number;
 }
 
 const SHUFFLE_DURATION_MS = 750;
@@ -71,16 +89,23 @@ function normalizeStageIndex(stage: number): number {
   return Math.min(MAX_LEARN_STAGE, Math.max(0, Math.trunc(stage)));
 }
 
+function normalizeReps(reps: number): number {
+  if (!Number.isFinite(reps)) return 0;
+  return Math.max(0, Math.trunc(reps));
+}
+
 /**
  * The Practice board: a focused, self-directed surface. One verse card at a
- * time, a verse rail to jump around, a Shuffle / In-order toggle, prev/next
- * navigation, and a manual stage selector (Full · Letters · Blanks · Hidden).
+ * time, a verse rail to jump around, a Shuffle / In-order toggle, and prev/next
+ * navigation.
  *
- * Practice counts fully: every checked attempt records with `mode: "practice"`
- * and reschedules exactly like Review. The scheduler is stage-aware, so nailing
- * an easier rung (`exact`) advances the verse's `learnStage`, which lifts the
- * stage ceiling in-session and unlocks the next rung — guiding the learner
- * Full → Letters → Blanks → Hidden until Hidden recall masters the verse.
+ * Practice counts fully: every attempt records with `mode: "practice"` and
+ * reschedules exactly like Review. The card is driven entirely by the server's
+ * `learnStage` + `stageReps`: a Read prime, then the fading support bands
+ * (Guided → Challenge → From Memory) that re-randomize and thin their hints per
+ * rep. Each recorded attempt adopts the returned `learnStage`/`stageReps`, so
+ * the dial advances (exact), holds (close), or steps support back up (off)
+ * live in-session.
  */
 export function PracticeBoard({
   verses,
@@ -106,41 +131,52 @@ export function PracticeBoard({
       id: verseRefKey(verse.reference),
       reference: verse.reference,
       learnStage: normalizeStageIndex(verse.learnStage),
+      stageReps: normalizeReps(verse.stageReps ?? 0),
     })),
   );
 
-  const [stageByVerseId, setStageByVerseId] = useState<Record<string, number>>(
-    () =>
-      Object.fromEntries(
-        baseVerses.map((verse) => [verse.id, verse.learnStage]),
-      ),
+  // Live per-verse learning progress. Seeded from the frozen snapshot, then
+  // advanced by adopting the server-authoritative `learnStage`/`stageReps`
+  // returned by each recorded attempt, so the fade dial moves in-session.
+  const [progressByVerseId, setProgressByVerseId] = useState<
+    Record<string, VerseProgress>
+  >(() =>
+    Object.fromEntries(
+      baseVerses.map((verse) => [
+        verse.id,
+        { learnStage: verse.learnStage, stageReps: verse.stageReps },
+      ]),
+    ),
   );
 
-  // The per-verse stage ceiling (highest reached rung). Seeded from the frozen
-  // snapshot, but — unlike `baseVerses` — it rises as attempts recorded this
-  // session advance the server-authoritative `learnStage`, so a verse learned
-  // during the session immediately unlocks its next rung.
-  const [reachedStageByVerseId, setReachedStageByVerseId] = useState<
-    Record<string, number>
-  >(() =>
-    Object.fromEntries(baseVerses.map((verse) => [verse.id, verse.learnStage])),
-  );
+  // Per-verse attempt bookkeeping for out-of-order resolution. `attemptSeq`
+  // assigns a monotonic id at send time; `appliedSeq` records the newest attempt
+  // whose result we actually adopted. A settled response updates progress only
+  // when it carries a schedule (non-null) and is newer than the last adopted
+  // one — so neither a slower earlier attempt nor a newer *failed* (null)
+  // attempt can strand the dial behind the server.
+  const attemptSeqByVerseId = useRef<Map<string, number>>(new Map());
+  const appliedSeqByVerseId = useRef<Map<string, number>>(new Map());
 
   const orderedVerses = useMemo(
     () => buildPracticeOrder(baseVerses, order, seed),
     [baseVerses, order, seed],
   );
 
-  // The rail (and shuffle overlay) need each verse's *live* stage — the
-  // frozen `baseVerses.learnStage` never moves, so without this the rail dot
-  // would stay stuck at whatever rung the verse was at when Practice opened.
+  // The rail (and shuffle overlay) need each verse's *live* progress — the
+  // frozen `baseVerses` never moves, so without this the rail dot would stay
+  // stuck at whatever band the verse was at when Practice opened.
   const railVerses = useMemo(
     () =>
-      orderedVerses.map((verse) => ({
-        ...verse,
-        learnStage: reachedStageByVerseId[verse.id] ?? verse.learnStage,
-      })),
-    [orderedVerses, reachedStageByVerseId],
+      orderedVerses.map((verse) => {
+        const progress = progressByVerseId[verse.id];
+        return {
+          ...verse,
+          learnStage: progress?.learnStage ?? verse.learnStage,
+          stageReps: progress?.stageReps ?? verse.stageReps,
+        };
+      }),
+    [orderedVerses, progressByVerseId],
   );
 
   const boundedIndex =
@@ -148,16 +184,12 @@ export function PracticeBoard({
       ? 0
       : Math.min(currentIndex, orderedVerses.length - 1);
   const currentVerse = orderedVerses[boundedIndex] ?? null;
-  // The verse's achieved rung is the ceiling: the learner can drop back to
-  // practice easier stages, but can't skip ahead of what they've worked
-  // towards. The ceiling rises as recorded attempts advance `learnStage`, so
-  // nailing a rung unlocks the next one without leaving Practice.
-  const maxStageIndex = currentVerse
-    ? (reachedStageByVerseId[currentVerse.id] ?? currentVerse.learnStage)
-    : 0;
-  const stageIndex = currentVerse
-    ? Math.min(stageByVerseId[currentVerse.id] ?? maxStageIndex, maxStageIndex)
-    : 0;
+  const currentProgress: VerseProgress = currentVerse
+    ? (progressByVerseId[currentVerse.id] ?? {
+        learnStage: currentVerse.learnStage,
+        stageReps: currentVerse.stageReps,
+      })
+    : { learnStage: 0, stageReps: 0 };
 
   useEffect(() => {
     if (!isShuffling) return;
@@ -189,16 +221,6 @@ export function PracticeBoard({
     setCurrentIndex(index);
   }
 
-  function handleStageChange(nextStageIndex: number) {
-    if (!currentVerse) return;
-    // Clamp to the verse's ceiling so a locked (ahead) rung can never be set.
-    const capped = Math.min(normalizeStageIndex(nextStageIndex), maxStageIndex);
-    setStageByVerseId((prev) => ({
-      ...prev,
-      [currentVerse.id]: capped,
-    }));
-  }
-
   if (orderedVerses.length === 0 || !currentVerse) {
     return (
       <PracticeShell onExit={onExit}>
@@ -220,32 +242,40 @@ export function PracticeBoard({
             <PracticeCard
               key={currentVerse.id}
               reference={currentVerse.reference}
-              stageIndex={stageIndex}
-              maxStageIndex={maxStageIndex}
+              learnStage={currentProgress.learnStage}
+              stageReps={currentProgress.stageReps}
               position={boundedIndex}
               total={orderedVerses.length}
               onRecord={(tokens) => {
                 const verseId = currentVerse.id;
-                void record({
+                const seq = (attemptSeqByVerseId.current.get(verseId) ?? 0) + 1;
+                attemptSeqByVerseId.current.set(verseId, seq);
+                return record({
                   reference: currentVerse.reference,
                   tokens,
-                  stage: stageIndex,
+                  stage: currentProgress.learnStage,
                   mode: "practice",
                 }).then((schedule) => {
                   if (!schedule) return;
-                  // Adopt the server-authoritative rung as the new ceiling
-                  // (monotonic within the session) so a nailed rung unlocks the
-                  // next stage even after a lapse elsewhere drops `learnStage`.
-                  setReachedStageByVerseId((prev) => ({
+                  // Adopt only the newest *successful* result. A failed/no-op
+                  // attempt resolves to null and never advances `appliedSeq`, so
+                  // a slower earlier success can't be discarded by it; and once
+                  // a newer success has landed, this older one is dropped.
+                  const applied = appliedSeqByVerseId.current.get(verseId) ?? 0;
+                  if (seq <= applied) return;
+                  appliedSeqByVerseId.current.set(verseId, seq);
+                  // Adopt the server-authoritative band + reps so the dial
+                  // advances (exact), holds (close), or steps support back up
+                  // (off) live in-session.
+                  setProgressByVerseId((prev) => ({
                     ...prev,
-                    [verseId]: Math.max(
-                      prev[verseId] ?? 0,
-                      normalizeStageIndex(schedule.learnStage),
-                    ),
+                    [verseId]: {
+                      learnStage: normalizeStageIndex(schedule.learnStage),
+                      stageReps: normalizeReps(schedule.stageReps),
+                    },
                   }));
                 });
               }}
-              onAdvanceStage={() => handleStageChange(stageIndex + 1)}
               onPrev={() =>
                 goToIndex(prevIndex(boundedIndex, orderedVerses.length))
               }
@@ -275,9 +305,8 @@ export function PracticeBoard({
             order={order}
             onOrderChange={handleOrderChange}
             shuffleNonce={shuffleNonce}
-            stageIndex={stageIndex}
-            maxStageIndex={maxStageIndex}
-            onStageChange={handleStageChange}
+            currentLearnStage={currentProgress.learnStage}
+            currentStageReps={currentProgress.stageReps}
           />
         </div>
       </div>
@@ -287,69 +316,77 @@ export function PracticeBoard({
 
 interface PracticeCardProps {
   reference: CardReference;
-  stageIndex: number;
-  /** Highest currently-unlocked rung for this verse (the stage ceiling). */
-  maxStageIndex: number;
+  /** Server-authoritative band for this verse (0..3). */
+  learnStage: number;
+  /** Server-authoritative exact reps banked on the current band. */
+  stageReps: number;
   position: number;
   total: number;
-  onRecord: (tokens: ReturnType<typeof diffWords>) => void;
-  /** Advance the selected stage to the next unlocked rung. */
-  onAdvanceStage: () => void;
+  onRecord: (tokens: ReturnType<typeof diffWords>) => Promise<void>;
   onPrev: () => void;
   onNext: () => void;
 }
 
 function PracticeCard({
   reference,
-  stageIndex,
-  maxStageIndex,
+  learnStage,
+  stageReps,
   position,
   total,
   onRecord,
-  onAdvanceStage,
   onPrev,
   onNext,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
-  // The stage the current check result belongs to, or `null` when unchecked.
-  // Deriving `checked` from it (rather than a boolean + effect) means changing
-  // the scaffold mid-attempt drops the stale diff without a setState-in-effect.
-  const [checkedStage, setCheckedStage] = useState<number | null>(null);
+  // Whether the current answer has been checked (and thus recorded). Persists
+  // through the resulting band/rep change so the feedback stays visible until
+  // the learner continues.
+  const [checked, setChecked] = useState(false);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Track the stage the current answer belongs to. When the selected stage
-  // changes, a checked/graded answer is dropped and the input cleared so a
-  // stale attempt can't be re-submitted at a new rung — a fresh attempt is
-  // required after a check. Adjusting state during render (the sanctioned
-  // pattern here, as in ReviewPlayer) avoids a setState-in-effect; verse
-  // changes reset everything via the card `key`.
-  const [answerStage, setAnswerStage] = useState(stageIndex);
-  if (answerStage !== stageIndex) {
-    setAnswerStage(stageIndex);
-    if (checkedStage !== null) {
-      setCheckedStage(null);
-      setTypedAnswer("");
-    }
-  }
+  // Serializes attempt submission for this card: the synchronous in-flight lock
+  // collapses same-tick double activations (double-tap, touch+mouse, Enter +
+  // click) into a single recorded attempt, and `submitPending` disables the
+  // control while it's in flight. One lock suffices because only one submit
+  // path (Read prime *or* check-answer) is mounted at a time.
+  const { submit, pending: submitPending } = useSubmitLock();
 
   const refLabel = formatVerseRef(reference);
   const { data, loading, error } = useEsvReference(reference);
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
 
-  const stage = PRACTICE_STAGES[stageIndex] ?? PRACTICE_STAGES[0];
-  const stageColor = stage.color;
+  const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
+  const stageColor = stageInfo.color;
+  const {
+    stage: hintStage,
+    density,
+    seed,
+  } = hintForProgress(learnStage, stageReps);
   const tokens = useMemo(
-    () => maskVerseText(versePlainText, stage.stage),
-    [versePlainText, stage.stage],
+    () => maskVerseText(versePlainText, hintStage, { density, seed }),
+    [versePlainText, hintStage, density, seed],
   );
 
-  const checked = checkedStage === stageIndex;
+  const isReadPrime = hintStage === "full";
+  const requiredReps = stageInfo.requiredReps;
+  // Only the multi-rep fading bands (Guided, Challenge) show a rep counter; the
+  // single-rep Read prime and From Memory recall don't.
+  const repLabel =
+    requiredReps > 1
+      ? `rep ${Math.min(stageReps + 1, requiredReps)} of ${requiredReps}`
+      : null;
+  const promptLine = isReadPrime
+    ? "Read it through, then continue"
+    : hintStage === "hidden"
+      ? "Recall the verse from memory"
+      : (repLabel ?? "Type what you remember");
+
   const canCheckAnswer =
     !loading &&
     !error &&
     typedAnswer.trim().length > 0 &&
     versePlainText !== "";
+  const canContinueRead = !loading && !error && versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
@@ -357,18 +394,29 @@ function PracticeCard({
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
 
   function checkAnswer() {
-    if (!canCheckAnswer) return;
-    // Guard against a single typed answer recording twice: once checked, a
-    // fresh attempt (Try again / re-type / verse or stage change) is required.
-    if (checked) return;
-    const diffTokens = diffWords(typedAnswer, versePlainText);
-    setCheckedStage(stageIndex);
-    // Practice counts fully: every stage records and reschedules.
-    onRecord(diffTokens);
+    if (!canCheckAnswer || checked) return;
+    // Practice counts fully: every checked attempt records and reschedules. The
+    // lock keeps a double-tap from recording twice before the result view
+    // (driven by `checked`) mounts and replaces this button.
+    submit(() => {
+      setChecked(true);
+      return onRecord(diffWords(typedAnswer, versePlainText));
+    });
   }
 
-  function tryAgain() {
-    setCheckedStage(null);
+  function continueRead() {
+    if (!canContinueRead) return;
+    // Submitting the shown (full) text banks the single Read rep, advancing the
+    // scheduler to the first fading band. The lock collapses same-tick double
+    // activations; it releases whatever the outcome, so a null/unchanged result
+    // (mutation error, verse not hearted) re-enables Continue rather than
+    // stranding it. On the normal success path the band advances and this
+    // button is unmounted.
+    submit(() => onRecord(diffWords(versePlainText, versePlainText)));
+  }
+
+  function continueAttempt() {
+    setChecked(false);
     setTypedAnswer("");
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
@@ -398,7 +446,7 @@ function PracticeCard({
                 className={cn("h-2 w-2 rounded-full", stageColor.dot)}
                 aria-hidden
               />
-              Practice · {stage.label}
+              Practice · {stageInfo.label}
             </p>
             <CardTitle className="mt-2 text-3xl tracking-tight">
               {refLabel}
@@ -407,10 +455,8 @@ function PracticeCard({
           <p className="text-sm text-muted-foreground">
             Verse {position + 1} of {total}
           </p>
-          <p className={cn("text-xs", stageColor.text)}>
-            {stageIndex === MAX_LEARN_STAGE
-              ? "Hidden stage · nail this to master the verse"
-              : "Get it exact to unlock the next stage"}
+          <p className={cn("text-xs font-medium", stageColor.text)}>
+            {promptLine}
           </p>
         </CardHeader>
 
@@ -433,7 +479,7 @@ function PracticeCard({
                   <p className="text-sm text-destructive">
                     Could not load verse text.
                   </p>
-                ) : stage.stage === "hidden" ? (
+                ) : hintStage === "hidden" ? (
                   <div className="flex h-full min-h-[140px] items-center justify-center text-center">
                     <p className="max-w-sm text-sm text-muted-foreground">
                       No hint text. Type the verse from memory, then check your
@@ -445,15 +491,17 @@ function PracticeCard({
                 )}
               </div>
 
-              <Textarea
-                ref={answerInputRef}
-                value={typedAnswer}
-                onChange={(event) => setTypedAnswer(event.target.value)}
-                onKeyDown={handleAnswerKeyDown}
-                placeholder="Type what you remember"
-                className="min-h-[170px] resize-none bg-background/80"
-                aria-label="Your recalled verse"
-              />
+              {!isReadPrime && (
+                <Textarea
+                  ref={answerInputRef}
+                  value={typedAnswer}
+                  onChange={(event) => setTypedAnswer(event.target.value)}
+                  onKeyDown={handleAnswerKeyDown}
+                  placeholder="Type what you remember"
+                  className="min-h-[170px] resize-none bg-background/80"
+                  aria-label="Your recalled verse"
+                />
+              )}
             </>
           )}
 
@@ -509,28 +557,31 @@ function PracticeCard({
           </div>
           <div className="flex w-full gap-2 sm:w-auto">
             {checked ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 sm:flex-none"
-                  onClick={tryAgain}
-                >
-                  <RotateCcw className="h-4 w-4" aria-hidden />
-                  Try again
-                </Button>
-                {stageIndex < maxStageIndex && (
-                  <Button
-                    type="button"
-                    variant="default"
-                    className="flex-1 sm:flex-none"
-                    onClick={onAdvanceStage}
-                  >
-                    Next stage
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Button>
-                )}
-              </>
+              <Button
+                type="button"
+                variant="default"
+                className="flex-1 sm:flex-none"
+                onClick={continueAttempt}
+                // Hold until the attempt settles: this both keeps the submit
+                // lock from swallowing the next check (resetting the question
+                // mid-flight would strand it) and ensures the adopted band/reps
+                // land before the next rep renders, so it can't re-record stale.
+                disabled={submitPending}
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden />
+                Continue
+              </Button>
+            ) : isReadPrime ? (
+              <Button
+                type="button"
+                variant="default"
+                className="flex-1 sm:flex-none"
+                onClick={continueRead}
+                disabled={!canContinueRead || submitPending}
+              >
+                Continue
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </Button>
             ) : (
               <Button
                 type="button"
