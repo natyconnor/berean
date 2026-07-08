@@ -1,0 +1,1290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>
+      Berean · Memory as a First-Class Mode — UX Proposal (rev 3, final)
+    </title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --blue: #2f5d80;
+        --blue-soft: #dce8f1;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .chip.blue {
+        background: var(--blue-soft);
+        color: var(--blue);
+        border-color: #bcd3e4;
+      }
+      .chip.green {
+        background: #e7efe7;
+        color: var(--good);
+        border-color: #c9e0cb;
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2,
+        .grid-3 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      .callout.bad {
+        border-left-color: var(--bad);
+      }
+      .callout.good {
+        border-left-color: var(--good);
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      /* Proposal blocks */
+      .prop {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .prop > .prop-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .prop.spotlight > .prop-head {
+        background: linear-gradient(180deg, #eef5ee, #e2eee3);
+      }
+      .prop .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 18px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .prop.spotlight .num {
+        background: var(--good);
+      }
+      .prop .prop-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .prop .prop-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .prop-body {
+        padding: 8px 20px 20px;
+      }
+      /* Option cards */
+      .option {
+        border: 1px solid var(--hairline);
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin: 10px 0;
+        background: var(--surface-2);
+      }
+      .option.rec {
+        border-color: #bcd8bf;
+        background: #f2f8f1;
+      }
+      .option.dim {
+        opacity: 0.6;
+      }
+      .option .opt-label {
+        font-weight: 700;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tag-rec {
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 800;
+        color: var(--good);
+        border: 1px solid #bcd8bf;
+        background: #e5f2e6;
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .tag-chosen {
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 800;
+        color: #fdf9ef;
+        border: 1px solid var(--good);
+        background: var(--good);
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .tag-locked {
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 800;
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+        background: var(--accent-soft);
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+      /* IA diagram */
+      .ia {
+        display: grid;
+        gap: 10px;
+        margin: 12px 0;
+      }
+      .ia-row {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 12px;
+        align-items: stretch;
+      }
+      .ia-mode {
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 13px;
+        padding: 10px;
+        text-align: center;
+      }
+      .ia-mode.notes {
+        background: #efe7d5;
+        color: var(--accent-deep);
+        border: 1px solid #e0d3b4;
+      }
+      .ia-mode.memory {
+        background: #e7efe7;
+        color: var(--good);
+        border: 1px solid #c9e0cb;
+      }
+      .ia-mode.study {
+        background: var(--blue-soft);
+        color: var(--blue);
+        border: 1px solid #bcd3e4;
+      }
+      .ia-contents {
+        border: 1px dashed var(--hairline);
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: var(--surface);
+        font-size: 13px;
+      }
+      .pillrow {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 6px;
+      }
+      .pill {
+        font-size: 12px;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        color: var(--ink-2);
+      }
+      .pill.strong {
+        background: var(--good);
+        color: #fdf9ef;
+        border-color: var(--good);
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      .wire {
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 14px;
+        font-size: 12.5px;
+        color: var(--ink-2);
+      }
+      .wire .bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .wire .btn {
+        border: 1px solid var(--hairline);
+        border-radius: 8px;
+        padding: 4px 10px;
+        background: var(--surface-2);
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .wire .btn.pri {
+        background: var(--good);
+        color: #fdf9ef;
+        border-color: var(--good);
+      }
+      .wire .body {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 12px;
+      }
+      .wire .rail {
+        border: 1px dashed var(--hairline);
+        border-radius: 8px;
+        padding: 8px;
+        display: grid;
+        gap: 5px;
+      }
+      .wire .rail .v {
+        border-radius: 6px;
+        padding: 4px 8px;
+        background: var(--surface-2);
+      }
+      .wire .rail .v.active {
+        background: var(--good);
+        color: #fdf9ef;
+        font-weight: 700;
+      }
+      .wire .stage {
+        border: 1px dashed var(--hairline);
+        border-radius: 8px;
+        padding: 18px;
+        text-align: center;
+        color: var(--ink-3);
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow">UX Proposal · rev 3 · all decisions locked</span>
+        <h1>Make Memory its own mode</h1>
+        <p class="lede">
+          Verse memory graduates out of the broad "Study" paradigm into a
+          first-class <b>Memory</b> mode with its own review loop, a
+          self-directed <b>Practice</b> intention, and its own <b>Packs</b>.
+          Study slims down to note review. Each mode answers exactly one
+          question.
+        </p>
+        <div class="meta">
+          <span class="chip green">All decisions locked</span>
+          <span class="chip">Ready to plan</span>
+          <span class="chip ghost">rev 3</span>
+          <span class="chip ghost">no code yet</span>
+        </div>
+        <div class="callout good">
+          <strong>Status.</strong> Every direction call and every clarification
+          is settled and folded in below (marked
+          <span class="tag-locked">Locked</span>). This doc is now the agreed
+          design and the source of truth for the implementation plan that
+          follows it.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <!-- LOCKED -->
+      <section id="locked">
+        <div class="eyebrow">Settled</div>
+        <h2>Locked decisions</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 32%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Three modes</b></td>
+                <td>
+                  <b>Notes · Memory · Study.</b> Memory is first-class; Study is
+                  notes-only and bare.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Navigation</b></td>
+                <td>
+                  <b>Three-segment Mode Dock</b> (Notes / Memory / Study), due
+                  badge on <b>Memory</b>. Revealed progressively.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Collections model</b></td>
+                <td>
+                  <b>Option C — a Pack is either</b> a <b>scope</b> pack (same
+                  picker as study sessions) <b>or</b> a
+                  <b>custom</b> hand-picked pack.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Scope packs</b></td>
+                <td>
+                  <b>Live.</b> Newly-hearted verses matching the scope join
+                  automatically. Custom packs are static, ordered lists.
+                </td>
+              </tr>
+              <tr>
+                <td><b>One review verb</b></td>
+                <td>
+                  <b>Yes.</b> Drop the "Review all / Learn" toggle; there is one
+                  <b>Review</b>. "Learning" is just Review meeting a new verse.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Practice mode</b></td>
+                <td>
+                  <b>Included — the "Practice board" (Option 2):</b> verse rail
+                  + order toggle + manual stage selector.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Practice &amp; the schedule</b></td>
+                <td>
+                  <b>Practice counts fully (D3).</b> It logs and reschedules
+                  exactly like Review — Practice is a different
+                  <em>intention</em>, not a different engine.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Heart = memorize</b></td>
+                <td>
+                  <b>Single meaning.</b> Heart on = in Memory; heart off = out.
+                  <b>Suspend removed.</b> Un-hearting keeps progress
+                  <b>inactive &amp; resumable</b> on re-heart.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Slim Study + bridge</b></td>
+                <td>
+                  <b>Yes.</b> Note collections only; "Memorize verses in this
+                  scope" spins up a live scope Pack.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Progressive reveal</b></td>
+                <td>
+                  Memory reveals on the <b>first heart</b>; Study reveals after
+                  <b>4 notes</b>. No dock until a second mode unlocks.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Names</b></td>
+                <td>Mode = <b>Memory</b>; verse set = <b>Pack</b>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- CURRENT -->
+      <section id="current">
+        <div class="eyebrow">Where we are</div>
+        <h2>The problem this fixes (recap)</h2>
+        <p>
+          The engine (hearts → <code>verseMemory</code>, a pure scheduler, an
+          append-only review log, dashboard + global queue + library) is strong.
+          The <em>architecture</em> is what's tangled: one workspace named
+          "Study" tries to do memorization, note review, and teaching at once,
+          and offers <b>three different ways to practice a verse</b> under three
+          names ("Start review" / "Review all" / "Learn"). And a
+          <code>studySession</code> welds notes and verses into one object.
+        </p>
+        <div class="callout bad small">
+          Both confusions you named trace to the same root: memorization has no
+          home of its own, so it borrows Study's page, vocabulary, and
+          "create-a-session-first" gate. This proposal gives it a home.
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- PRINCIPLES -->
+      <section id="principles">
+        <div class="eyebrow">North stars</div>
+        <h2>Design principles</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>1 · One mode, one question</h4>
+            <p class="small muted">
+              Notes = "capture." Memory = "get verses into my head." Study =
+              "revisit my notes." No screen is ambiguous about which mode it is.
+            </p>
+          </div>
+          <div class="card">
+            <h4>2 · No gate before practice</h4>
+            <p class="small muted">
+              Heart a verse → it's in Memory. Opening Memory always has a
+              "what's due" answer. Packs focus you; they're never required.
+            </p>
+          </div>
+          <div class="card">
+            <h4>3 · One engine, two intentions</h4>
+            <p class="small muted">
+              Review is the app's suggested cadence (the due queue). Practice is
+              you choosing what to work on now. Both feed the same schedule and
+              stats — Practice is an intention, not a parallel system.
+            </p>
+          </div>
+          <div class="card">
+            <h4>4 · Reveal modes as they're earned</h4>
+            <p class="small muted">
+              The app starts as just Notes. Memory appears on the first heart;
+              Study appears after a few notes. Nothing empty is ever shown.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- TOC -->
+      <section id="props">
+        <div class="eyebrow">The design</div>
+        <h2>Six proposals</h2>
+        <div class="card toc">
+          <a href="#p1"><b>1</b> — Three modes + the dock (with reveal)</a>
+          <a href="#p2"><b>2</b> — Memory home &amp; the Review loop</a>
+          <a href="#p3"><b>3</b> — Practice: the self-directed intention</a>
+          <a href="#p4"><b>4</b> — Packs: scope <em>or</em> custom</a>
+          <a href="#p5"><b>5</b> — Study slimmed + the bridge</a>
+          <a href="#p6"><b>6</b> — Heart = memorize, naming &amp; reveal</a>
+        </div>
+      </section>
+
+      <!-- P1 -->
+      <div class="prop" id="p1">
+        <div class="prop-head">
+          <div class="num">1</div>
+          <div>
+            <div class="prop-sub">Information architecture · navigation</div>
+            <h3 class="prop-title">
+              Three modes + a three-segment dock
+              <span class="tag-locked">Locked</span>
+            </h3>
+          </div>
+        </div>
+        <div class="prop-body">
+          <div class="ia">
+            <div class="ia-row">
+              <div class="ia-mode notes">
+                Notes<br /><span class="small">/passage</span>
+              </div>
+              <div class="ia-contents">
+                Read scripture, write notes, heart verses, highlight.
+                <b>Unchanged.</b> This is capture.
+              </div>
+            </div>
+            <div class="ia-row">
+              <div class="ia-mode memory">
+                Memory<br /><span class="small">/memory</span>
+              </div>
+              <div class="ia-contents">
+                Due hero + <b>Review</b> · dashboard · Library · <b>Packs</b> ·
+                <b>Practice</b>.
+                <div class="pillrow">
+                  <span class="pill strong">Review</span>
+                  <span class="pill">Practice</span>
+                  <span class="pill">Packs</span>
+                  <span class="pill">Dashboard</span>
+                  <span class="pill">Library</span>
+                </div>
+              </div>
+            </div>
+            <div class="ia-row">
+              <div class="ia-mode study">
+                Study<br /><span class="small">/study</span>
+              </div>
+              <div class="ia-contents">
+                Note <b>collections</b> (scoped by book/tag) → browse + Teach.
+                No verse memory, no badge.
+              </div>
+            </div>
+          </div>
+
+          <h4>The dock</h4>
+          <p class="small">
+            A three-segment pill —
+            <span class="pill">Notes</span>
+            <span class="pill strong">Memory</span>
+            <span class="pill">Study</span> — with the live due badge on
+            <b>Memory</b>. On narrow phones, segments collapse to icons (badge
+            stays). The dock is <b>revealed progressively</b> (Principle 4):
+          </p>
+          <ul class="clean small">
+            <li>
+              <b>Fresh user (Notes only):</b> no dock at all — nothing to switch
+              to yet.
+            </li>
+            <li>
+              <b>After first heart:</b> Memory unlocks; the dock appears as
+              <span class="pill">Notes</span>
+              <span class="pill strong">Memory</span> and the reveal callout
+              points at it (P6).
+            </li>
+            <li>
+              <b>After 4 notes:</b> Study unlocks; the dock grows its third
+              segment with its own one-time callout.
+            </li>
+          </ul>
+          <p class="small muted">
+            Keyboard: <code>⌘J</code> cycles Notes → Memory → Study across
+            currently-unlocked modes; toolbar icons mirror the same gating.
+          </p>
+        </div>
+      </div>
+
+      <!-- P2 -->
+      <div class="prop" id="p2">
+        <div class="prop-head">
+          <div class="num">2</div>
+          <div>
+            <div class="prop-sub">Memory mode · the daily driver</div>
+            <h3 class="prop-title">
+              Memory home &amp; the Review loop
+              <span class="tag-locked">Locked</span>
+            </h3>
+          </div>
+        </div>
+        <div class="prop-body">
+          <h4>Home layout (top → bottom)</h4>
+          <ol class="clean small">
+            <li>
+              <b>Due hero</b> — "N due today" + one primary <b>Review</b> button
+              (today's "Start review", relabeled). "All caught up" at zero.
+            </li>
+            <li>
+              <b>Dashboard</b> — the existing KPI row + heatmap + mastery bar +
+              accuracy trend + forecast, moved here verbatim.
+            </li>
+            <li>
+              <b>Packs</b> — your packs, each with a due count +
+              <b>Review</b> and <b>Practice</b> actions; plus
+              <b>New pack</b> (P4).
+            </li>
+            <li>
+              <b>Library</b> — every verse with status + next-due, moved here
+              verbatim (minus the suspend switch — P6).
+            </li>
+          </ol>
+
+          <h4>Review: the suggested cadence</h4>
+          <p class="small">
+            <b>Review</b> plays the due queue — the app's answer to "what should
+            I work on today." The engine auto-selects the learn ladder for
+            new/learning verses and the deck for reviewing ones, so the manual
+            <b>"Review all / Learn" toggle is deleted</b>. What changes is only
+            the <em>set</em>:
+          </p>
+          <div class="card small">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 32%">Entry</th>
+                  <th>Set played (due-only)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Memory home → <b>Review</b></td>
+                  <td>Global due queue across all verses. The default.</td>
+                </tr>
+                <tr>
+                  <td>A pack → <b>Review</b></td>
+                  <td>The due verses within that pack.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small muted">
+            When you want to work off the suggested cadence — a specific verse,
+            a whole pack, ahead of schedule — that's <b>Practice</b> (P3), the
+            same engine with a different intention.
+          </p>
+        </div>
+      </div>
+
+      <!-- P3 — PRACTICE (chosen: Option 2, D3) -->
+      <div class="prop spotlight" id="p3">
+        <div class="prop-head">
+          <div class="num">3</div>
+          <div>
+            <div class="prop-sub">Memory mode · self-directed</div>
+            <h3 class="prop-title">
+              Practice: work whatever you want
+              <span class="tag-locked">Locked</span>
+            </h3>
+          </div>
+        </div>
+        <div class="prop-body">
+          <p>
+            <b>Practice</b> is for working verses on <em>your</em> terms —
+            drilling a single stubborn verse, running a whole pack before a
+            recital, or getting ahead on a light day so a future day isn't
+            slammed with 20 due verses. It is the <b>same engine as Review</b>:
+            attempts log and reschedule identically. The only difference is who
+            chose the set — the app (Review) or you (Practice).
+          </p>
+
+          <h4>The Practice board</h4>
+          <p class="small">
+            A focused surface: one big verse card, a <b>verse rail</b> to jump
+            to any verse in the set (the affordance you liked from today's Learn
+            controls,
+            <span class="fileref">study-verse-memory-controls.tsx</span>), a
+            <b>Shuffle / In-order</b> toggle, prev/next, and a
+            <b>manual stage selector</b> — Full · Letters · Blanks · Hidden —
+            you set freely.
+          </p>
+          <div class="wire" style="margin: 10px 0 6px">
+            <div class="bar">
+              <span class="btn pri">Practice: Psalm 23</span>
+              <span class="btn">Shuffle ▾</span>
+              <span class="btn">Full · Letters · <b>Blanks</b> · Hidden</span>
+            </div>
+            <div class="body">
+              <div class="rail">
+                <div class="v active">Ps 23:1</div>
+                <div class="v">Ps 23:2</div>
+                <div class="v">Ps 23:3</div>
+                <div class="v">Ps 23:4</div>
+              </div>
+              <div class="stage">
+                “The Lord is my ____; I shall not ____.”<br /><span
+                  class="small"
+                  >type your answer · ‹ prev · next ›</span
+                >
+              </div>
+            </div>
+          </div>
+
+          <h4>Why "it counts" is the right call</h4>
+          <ul class="clean small">
+            <li>
+              <b>Freedom to shape your own schedule.</b> Nailing a verse at the
+              Hidden stage during Practice pushes its next-due out, so a
+              diligent user genuinely flattens future pile-ups instead of being
+              stuck with the app's exact cadence.
+            </li>
+            <li>
+              <b>No confusing asymmetry.</b> Because Practice affects the
+              schedule, having it also feed streak/heatmap/accuracy is the only
+              consistent story — "Practice counts, full stop."
+            </li>
+            <li>
+              <b>The scheduler is stage-aware, so it stays honest.</b>
+              Practicing at an easy stage only nudges the rung; real progress
+              requires recall at Hidden. You can't cheat to mastery on easy
+              mode.
+            </li>
+          </ul>
+          <div class="callout small">
+            <b>Accepted trade-off:</b> a miss during Practice reschedules like
+            any miss (it can lapse a verse). The same forgiving SR framing
+            applies — a lapse just means "see it sooner," and the streak is
+            participation-based so it never breaks on a wrong answer. We are
+            <em>not</em> adding a "Practice can only help" guard; keeping it
+            pure preserves the one-sentence mental model.
+          </div>
+
+          <h4>Fast-follow (not now)</h4>
+          <p class="small muted">
+            Selectable drill <em>styles</em> — Flip card, First-letters,
+            Reference → text / text → reference, word-bank — layer onto this
+            same board later. Out of scope for the first cut.
+          </p>
+        </div>
+      </div>
+
+      <!-- P4 — PACKS Option C -->
+      <div class="prop" id="p4">
+        <div class="prop-head">
+          <div class="num">4</div>
+          <div>
+            <div class="prop-sub">Collections · Option C</div>
+            <h3 class="prop-title">
+              Packs: scope <em>or</em> custom
+              <span class="tag-locked">Locked</span>
+            </h3>
+          </div>
+        </div>
+        <div class="prop-body">
+          <p>
+            A <b>Pack</b> is a named set of verses you're memorizing, living in
+            Memory. When creating one, you pick <b>how it's populated</b>:
+          </p>
+          <div class="grid-2">
+            <div class="card">
+              <h4>Scope pack</h4>
+              <p class="small muted">
+                Built from a Bible scope using the
+                <b>same picker as study sessions today</b> (books + chapter
+                ranges + tags). It gathers the hearted verses that match.
+              </p>
+              <p class="small">
+                <b>Live:</b> as you heart new verses in that scope, they join
+                automatically. Great for "everything I'm memorizing in Romans."
+              </p>
+            </div>
+            <div class="card">
+              <h4>Custom pack</h4>
+              <p class="small muted">
+                A hand-picked, <b>ordered</b> list. Add verses from the reader's
+                heart menu, the Library (multi-select), or by searching a
+                reference.
+              </p>
+              <p class="small">
+                <b>Static:</b> exactly what you put in it, in your order. Great
+                for "my Fighter Verses" or a sequential passage.
+              </p>
+            </div>
+          </div>
+
+          <h4>Creation flow</h4>
+          <p class="small">
+            "New pack" → name it → choose <b>Scope</b> or <b>Custom</b>. Scope
+            reuses <span class="fileref">StudyScopeBuilder</span> (presets, book
+            picker, tag filter, live preview counts). Custom opens an add-verses
+            picker. Either way you land in the pack with <b>Review</b> /
+            <b>Practice</b> actions.
+          </p>
+
+          <div class="callout small">
+            <b>Invariant:</b> a pack only ever contains <em>hearted</em>
+            (in-memory) verses. Adding a not-yet-hearted verse to a custom pack
+            hearts it (heart = memorize, P6), so "pack membership" and "in
+            Memory" never drift apart.
+          </div>
+
+          <h4>Data sketch</h4>
+          <p class="small muted">
+            A <code>packs</code> table (<code>userId</code>, <code>name</code>,
+            <code>kind: "scope" | "custom"</code>, optional
+            <code>scope</code> for scope packs, <code>createdAt</code>). Custom
+            membership + ordering in
+            <code>packVerses</code> (<code>packId</code>,
+            <code>verseRefId</code>, <code>order</code>). Scope packs resolve
+            members live from <code>savedVerses</code> ∩ scope — no membership
+            rows.
+          </p>
+        </div>
+      </div>
+
+      <!-- P5 — Study slimmed + bridge -->
+      <div class="prop" id="p5">
+        <div class="prop-head">
+          <div class="num">5</div>
+          <div>
+            <div class="prop-sub">Study mode · the quiet room</div>
+            <h3 class="prop-title">
+              Study slimmed + the bridge
+              <span class="tag-locked">Locked</span>
+            </h3>
+          </div>
+        </div>
+        <div class="prop-body">
+          <h4>What Study becomes</h4>
+          <p class="small">
+            <code>/study</code> loses the dashboard, global review, library, and
+            the Verse Memory tab (all now in Memory). What's left:
+          </p>
+          <ul class="clean small">
+            <li>
+              A list of <b>note collections</b> (the existing scoped sessions),
+              created with the existing scope builder.
+            </li>
+            <li>
+              A collection <b>is</b> its note list (Overview), with a
+              <b>Teach</b> button that launches the teach-back deck. The tab
+              switcher is dropped — "still pretty bare bones," as intended.
+            </li>
+          </ul>
+
+          <h4>The bridge to Memory</h4>
+          <p class="small">
+            Because a note collection is scoped by book/tag, it overlaps verses
+            worth memorizing. A <b>"Memorize verses in this scope"</b> action
+            creates (or opens) a matching <b>live scope Pack</b> in Memory.
+            One-directional, optional — the modes stay separate but acknowledge
+            they touch.
+          </p>
+        </div>
+      </div>
+
+      <!-- P6 — heart = memorize + naming + reveal -->
+      <div class="prop" id="p6">
+        <div class="prop-head">
+          <div class="num">6</div>
+          <div>
+            <div class="prop-sub">On-ramp &amp; words</div>
+            <h3 class="prop-title">
+              Heart = memorize, naming &amp; reveal
+              <span class="tag-locked">Locked</span>
+            </h3>
+          </div>
+        </div>
+        <div class="prop-body">
+          <h4>Heart has one meaning</h4>
+          <p class="small">
+            Heart <b>on</b> = the verse is in Memory (being memorized). Heart
+            <b>off</b> = it's not. <b>Suspend is removed</b> — the
+            <code>suspended</code> status, <code>setSuspended</code>, the
+            Library suspend switch, and the drill-down suspend control all go
+            away. Un-hearting keeps the verse's history
+            <b>inactive and resumable</b>, so re-hearting picks up exactly where
+            it left off — but the user only ever sees "in Memory / not in
+            Memory," never a third state.
+          </p>
+
+          <h4>Vocabulary</h4>
+          <div class="card">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 34%">Concept</th>
+                  <th>Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Verse memorization mode</td>
+                  <td><b>Memory</b></td>
+                </tr>
+                <tr>
+                  <td>Suggested-cadence action</td>
+                  <td><b>Review</b></td>
+                </tr>
+                <tr>
+                  <td>Self-directed drilling</td>
+                  <td><b>Practice</b></td>
+                </tr>
+                <tr>
+                  <td>Verse set</td>
+                  <td><b>Pack</b> (scope or custom)</td>
+                </tr>
+                <tr>
+                  <td>Note review mode</td>
+                  <td><b>Study</b></td>
+                </tr>
+                <tr>
+                  <td>Scoped note set</td>
+                  <td><b>Collection</b> / session</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Progressive reveal &amp; onboarding</h4>
+          <ul class="clean small">
+            <li>
+              <b>Memory</b> is hidden from the dock/toolbar until the
+              <b>first heart</b>. On that heart, the dock appears with a
+              callout: <b>"This verse is now in Memory"</b> pointing at the new
+              segment + badge (repurposes the existing
+              <code>STUDY_REVEAL_AFTER_FIRST_HEART</code> hint).
+            </li>
+            <li>
+              <b>Study</b> is hidden until <b>4 notes</b> exist. On crossing
+              that line, the Study segment appears with its own callout:
+              <b>"Your notes, grouped for review."</b> (new milestone +
+              <code>FeatureCallout</code>).
+            </li>
+            <li>
+              First open of Memory: a one-card explainer — "Heart verses to add
+              them here · Review what's due each day · Make packs to focus."
+              Replaces the old three-bullet Study welcome.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- MIGRATION -->
+      <section id="migration">
+        <div class="eyebrow">Practicalities</div>
+        <h2>Data &amp; migration implications</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 34%">Area</th>
+                <th>Impact</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <b>Verse memory engine</b> (<span class="fileref"
+                    >verseMemory.ts</span
+                  >, scheduler, reviews log)
+                </td>
+                <td>
+                  <b>Kept.</b> Re-homed in the UI; scheduler + append-only log
+                  unchanged. Practice attempts flow through the same
+                  <code>recordAttempt</code> (optionally tagged
+                  <code>mode: "practice"</code> for analytics only — no special
+                  filtering, since Practice counts fully).
+                </td>
+              </tr>
+              <tr>
+                <td><b>Suspend removal</b></td>
+                <td>
+                  Drop the <code>suspended</code> status,
+                  <code>previousStatus</code>, <code>setSuspended</code>, and
+                  the suspend UI. Migration re-derives an active status for any
+                  currently-suspended row.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Un-heart → inactive</b></td>
+                <td>
+                  Un-hearting keeps the <code>verseMemory</code> row but marks
+                  it inactive (out of the due queue / counts); re-hearting
+                  reactivates it in place. No history is destroyed.
+                </td>
+              </tr>
+              <tr>
+                <td><b>New: Packs</b></td>
+                <td>
+                  <code>packs</code> (+ <code>packVerses</code> for custom).
+                  Scope packs reuse the session scope shape and resolve live.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <b>Existing <code>studySessions</code></b>
+                </td>
+                <td>
+                  Become <b>note collections</b> as-is (they already carry a
+                  note scope). No verse data migrates into packs.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Routes</b></td>
+                <td>
+                  Add <code>/memory</code> (+ <code>/memory/pack/$id</code>, +
+                  Practice). Keep <code>/study</code> (slimmed). Redirect old
+                  dashboard deep-links → <code>/memory</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Move, don't rewrite</b></td>
+                <td>
+                  <span class="fileref">dashboard/*</span>,
+                  <span class="fileref">study-library.tsx</span>,
+                  <span class="fileref">study-today-queue.tsx</span>,
+                  <span class="fileref">verse-detail.tsx</span> → a new
+                  <code>memory/</code> folder. Delete the session verse-memory
+                  path; strip the "Review all / Learn" toggle.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">
+          Net: mostly re-homing + re-labeling, plus one new collection type
+          (Packs) and one new surface (Practice). The risky engine work is done
+          and stays put.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- SCOPE -->
+      <section id="scope">
+        <div class="eyebrow">Guardrails</div>
+        <h2>Preserved &amp; out of scope</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Preserved</h4>
+            <ul class="acc small">
+              <li>The spaced-repetition scheduler + append-only log</li>
+              <li>Learn ladder + deck mechanics + grading pipeline</li>
+              <li>Dashboard charts + Library</li>
+              <li>Hearts-as-seed + mastery ring</li>
+              <li>The Notes/reader experience</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Not in this proposal</h4>
+            <ul class="clean small">
+              <li>Changing the scheduler math / FSRS migration</li>
+              <li>Practice drill <em>styles</em> (fast-follow)</li>
+              <li>Local-day (vs UTC) dashboard bucketing</li>
+              <li>Collection renaming / editing (existing roadmap)</li>
+              <li>Reading plans / smart scopes beyond scope packs</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- NEXT -->
+      <section id="next">
+        <div class="eyebrow">Next</div>
+        <h2>From here</h2>
+        <p>
+          The design is settled. The next artifact is a
+          <b>numbered-PR implementation plan</b> in
+          <code>docs/proposals/</code>, in the established house style,
+          sequenced so each PR is independently green (<code
+            >pnpm run agent:check</code
+          >) and small enough to review — schema/data first (Packs, suspend
+          removal, un-heart semantics), then Memory mode + Review, then
+          Practice, then the slimmed Study + bridge, then the three-segment dock
+          + progressive reveal.
+        </p>
+      </section>
+
+      <footer>
+        Berean · Memory-first UX proposal · rev 3 (final) · grounded in the
+        current branch (<span class="fileref">study-mode-build</span>):
+        <span class="fileref">study-hub.tsx</span>,
+        <span class="fileref">mode-dock.tsx</span>,
+        <span class="fileref">studySessions.ts</span>,
+        <span class="fileref">verseMemory.ts</span>,
+        <span class="fileref">docs/study-mode.md</span>.
+      </footer>
+    </div>
+  </body>
+</html>

@@ -19,6 +19,7 @@ const savedMemoryValidator = v.object({
     v.literal("reviewing"),
     v.literal("mastered"),
   ),
+  learnStage: v.number(),
   intervalDays: v.number(),
   dueAt: v.number(),
 });
@@ -44,6 +45,7 @@ type SavedVerseListItem = {
   createdAt: number;
   memory?: {
     status: Doc<"verseMemory">["status"];
+    learnStage: number;
     intervalDays: number;
     dueAt: number;
   };
@@ -70,6 +72,7 @@ async function toListItem(
     memory: memory
       ? {
           status: memory.status,
+          learnStage: memory.learnStage,
           intervalDays: memory.intervalDays,
           dueAt: memory.dueAt,
         }

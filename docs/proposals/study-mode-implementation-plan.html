@@ -1,0 +1,1472 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Berean · Study Mode — Implementation Plan (for an LLM agent)</title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      pre {
+        background: #2b2416;
+        color: #ede4d0;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+      }
+      pre .c {
+        color: #9d9077;
+      }
+      pre .k {
+        color: #d3ab5e;
+      }
+      pre .s {
+        color: #a8c49a;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2,
+        .grid-3 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      /* PR blocks */
+      .pr {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .pr > .pr-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .pr .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pr .pr-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .pr .pr-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .pr-body {
+        padding: 8px 20px 20px;
+      }
+      .dep {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin: 6px 0 0;
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow"
+          >Implementation Plan · for an LLM coding agent</span
+        >
+        <h1>Study Mode &amp; Verse Memory</h1>
+        <p class="lede">
+          Turn Berean's hidden, forgetful practice surface into a persistent,
+          habit-forming memorization engine — shipped as a sequence of small,
+          independently reviewable pull requests.
+        </p>
+        <div class="meta">
+          <span class="chip">8 pull requests</span>
+          <span class="chip">4 delivery phases</span>
+          <span class="chip ghost">no new runtime deps</span>
+          <span class="chip ghost">reconciled from 2 proposals</span>
+        </div>
+        <div class="callout">
+          <strong>How to use this document.</strong> Each numbered block below
+          is <em>one pull request</em>. Do them in order. Do not start the next
+          PR until the current one is merged: implement only what that PR lists,
+          run <code>pnpm run agent:check</code>, satisfy the PR's acceptance
+          criteria, then stop. This scoping is deliberate — it keeps each change
+          small enough to review and revert.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <!-- ============ DECISIONS ============ -->
+      <section id="decisions">
+        <div class="eyebrow">Settled decisions</div>
+        <h2>Decisions locked before implementation</h2>
+        <p>
+          These were reconciled from the two source proposals (<span
+            class="fileref"
+            >docs/study-mode-proposal.html</span
+          >
+          and
+          <span class="fileref">docs/proposals/study-mode-proposal.html</span>)
+          and confirmed with the product owner. Treat them as fixed constraints.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Rollout order</b></td>
+                <td>
+                  <b>Queue first, then dock.</b> Persist &rarr; Today queue
+                  &rarr; Dock &rarr; Dashboard. The dock's due badge must point
+                  at a real working review flow on day one.
+                </td>
+              </tr>
+              <tr>
+                <td><b>How verses enter memory</b></td>
+                <td>
+                  <b>Hearts auto-seed.</b> Every hearted verse
+                  (<code>savedVerses</code>) gets a
+                  <code>verseMemory</code> record. A per-verse
+                  <code>suspended</code> state covers "saved but not
+                  memorizing." One gesture.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Dock scope</b></td>
+                <td>
+                  <b>Two segments: "Notes" and "Study".</b> "Notes" = the
+                  existing passage reading/note-writing workspace (NOT "Read" —
+                  the primary mode is note-focused, not generic reading). Search
+                  stays in the top toolbar.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Schema key</b></td>
+                <td>
+                  Reference verses via
+                  <code>verseRefId: v.id("verseRefs")</code>, matching how
+                  <code>savedVerses</code> already links. No embedded reference
+                  object.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Lifecycle states</b></td>
+                <td>
+                  Five:
+                  <code
+                    >new &middot; learning &middot; reviewing &middot; mastered
+                    &middot; suspended</code
+                  >.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Scheduler</b></td>
+                <td>
+                  Transparent SM-2 variant as a pure TS lib with vitest. FSRS
+                  deferred; the append-only log keeps that option open.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Charts</b></td>
+                <td>
+                  Hand-rolled inline SVG/CSS on existing
+                  <code>--chart-1..5</code> theme tokens. No charting library.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Toolbar icon</b></td>
+                <td>
+                  The existing <code>BookOpen</code> Study icon stays as a
+                  permanent fallback; the dock does not replace it.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ CODEBASE GROUNDING ============ -->
+      <section id="grounding">
+        <div class="eyebrow">What already exists</div>
+        <h2>Assets to reuse (verified in the codebase)</h2>
+        <p>
+          This plan is mostly
+          <em>wiring persistence and presentation around proven mechanics</em>.
+          Do not rebuild these — reuse them.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 42%">Existing asset</th>
+                <th>Role in the new system</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fileref">
+                  convex/schema.ts &rarr; verseRefs, savedVerses
+                </td>
+                <td>
+                  <code>verseRefs</code> is the verse identity;
+                  <code>savedVerses</code> is the "heart." Both keyed by
+                  <code>verseRefId</code>. New tables link to
+                  <code>verseRefs</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/diff-words.ts + study-attempt-quality.ts
+                </td>
+                <td>
+                  <code>diffWords</code>,
+                  <code>verseAttemptAccuracy</code> (0&ndash;100), and
+                  <code>classifyVerseAttempt</code> &rarr;
+                  <code>"exact"|"close"|"off"</code>. This is the grading
+                  pipeline &mdash; unchanged.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">src/lib/verse-hint.ts (maskVerseText)</td>
+                <td>
+                  4 stages: <code>full | first-letters | cloze | hidden</code>.
+                  Becomes the persisted <code>learnStage</code> (0..3).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/study-verse-learn.tsx
+                </td>
+                <td>
+                  The 4-stage ladder, <code>PASS_THRESHOLD = 85</code>.
+                  Currently all React-local state &mdash; gains persistence + an
+                  attempt-record call.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/study-activity-deck.tsx
+                </td>
+                <td>
+                  Shuffle/skip/requeue deck. Becomes the review player for the
+                  Today queue; gains one mutation call per card.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">convex/studySessions.ts + study-hub.tsx</td>
+                <td>
+                  Sessions stay as saved collections. The Today queue is added
+                  <em>above</em> them; sessions are untouched.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  tab-bar.tsx + staged-onboarding-thresholds.ts +
+                  use-feature-hint + FeatureCallout + userFeatureHints
+                </td>
+                <td>
+                  The dock's first-reveal reuses the existing
+                  <code>STUDY_REVEAL_AFTER_FIRST_HEART</code> milestone &amp;
+                  callout system. Do not invent a new onboarding path.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">userSettings table</td>
+                <td>
+                  Holds the dock preference (<code
+                    >auto-hide | always | off</code
+                  >).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout small">
+          <strong>Gaps to be aware of.</strong> There is <em>no</em> central
+          keyboard-shortcut registry (<span class="fileref"
+            >keyboard-shortcuts.ts</span
+          >
+          only has platform helpers; shortcuts are wired ad hoc in
+          <span class="fileref">tab-bar.tsx</span>). There is
+          <em>no</em> bottom-sheet primitive and <em>no</em>
+          <code>useMediaQuery</code> hook. PRs that need these must add them
+          explicitly (see PR 8).
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ ARCHITECTURE ============ -->
+      <section id="architecture">
+        <div class="eyebrow">Shared architecture</div>
+        <h2>Data model &amp; scheduler (referenced by every PR)</h2>
+
+        <h3>Two new Convex tables</h3>
+        <p>
+          A per-verse <b>state</b> table answers "what's due?"; an append-only
+          <b>log</b> answers everything else (charts, history, future scheduler
+          upgrades). Nothing about existing tables changes shape.
+        </p>
+        <pre><code><span class="c">// convex/schema.ts — additions</span>
+<span class="k">verseMemory:</span> defineTable({
+  userId: v.id(<span class="s">"users"</span>),
+  verseRefId: v.id(<span class="s">"verseRefs"</span>),
+  status: v.union(
+    v.literal(<span class="s">"new"</span>), v.literal(<span class="s">"learning"</span>),
+    v.literal(<span class="s">"reviewing"</span>), v.literal(<span class="s">"mastered"</span>),
+    v.literal(<span class="s">"suspended"</span>)),
+  learnStage: v.number(),            <span class="c">// 0..3 -> full|first-letters|cloze|hidden</span>
+  ease: v.number(),                  <span class="c">// 1.3 .. 2.8, starts 2.3</span>
+  intervalDays: v.number(),
+  dueAt: v.number(),                 <span class="c">// drives "due today" + dock badge</span>
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  lastReviewedAt: v.optional(v.number()),
+  createdAt: v.number(),
+})
+  .index(<span class="s">"by_userId_dueAt"</span>, [<span class="s">"userId"</span>, <span class="s">"dueAt"</span>])      <span class="c">// Today queue + badge</span>
+  .index(<span class="s">"by_userId_status"</span>, [<span class="s">"userId"</span>, <span class="s">"status"</span>])
+  .index(<span class="s">"by_userId_verseRefId"</span>, [<span class="s">"userId"</span>, <span class="s">"verseRefId"</span>]),  <span class="c">// upsert on heart</span>
+
+<span class="k">verseMemoryReviews:</span> defineTable({        <span class="c">// append-only log</span>
+  userId: v.id(<span class="s">"users"</span>),
+  verseRefId: v.id(<span class="s">"verseRefs"</span>),
+  verseMemoryId: v.id(<span class="s">"verseMemory"</span>),
+  quality: v.union(v.literal(<span class="s">"exact"</span>), v.literal(<span class="s">"close"</span>), v.literal(<span class="s">"off"</span>)), <span class="c">// from classifyVerseAttempt</span>
+  accuracy: v.number(),              <span class="c">// 0..100 from verseAttemptAccuracy</span>
+  stage: v.number(),                 <span class="c">// learnStage at time of attempt</span>
+  mode: v.union(v.literal(<span class="s">"learn"</span>), v.literal(<span class="s">"review"</span>), v.literal(<span class="s">"deck"</span>)),
+  durationMs: v.optional(v.number()),
+  createdAt: v.number(),
+}).index(<span class="s">"by_userId_createdAt"</span>, [<span class="s">"userId"</span>, <span class="s">"createdAt"</span>]),</code></pre>
+
+        <h3>The scheduler (pure function over one attempt)</h3>
+        <p>
+          Lives at
+          <span class="fileref">src/lib/memory-scheduler.ts</span> &mdash; no
+          Convex imports, fully unit-testable. Explainable in one sentence:
+          <em
+            >"get it right and the gap grows; miss it and it comes back
+            tomorrow."</em
+          >
+        </p>
+        <pre><code><span class="c">// src/lib/memory-scheduler.ts</span>
+<span class="k">export interface</span> MemorySchedule {
+  status: <span class="s">"new"</span>|<span class="s">"learning"</span>|<span class="s">"reviewing"</span>|<span class="s">"mastered"</span>|<span class="s">"suspended"</span>;
+  learnStage: number; ease: number; intervalDays: number;
+  dueAt: number; consecutiveCorrect: number; lapses: number;
+}
+<span class="k">export interface</span> ReviewInput {
+  quality: <span class="s">"exact"</span>|<span class="s">"close"</span>|<span class="s">"off"</span>; accuracy: number;
+  mode: <span class="s">"learn"</span>|<span class="s">"review"</span>|<span class="s">"deck"</span>; now: number;  <span class="c">// pass now IN (Convex rule)</span>
+}
+<span class="k">export function</span> scheduleNext(s: MemorySchedule, r: ReviewInput): MemorySchedule</code></pre>
+        <div class="card small">
+          <b>Rules the scheduler encodes</b> (spec for the unit tests):
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 20%">Grade</th>
+                <th>While learning (stages 0&ndash;3)</th>
+                <th>While reviewing (hidden)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>exact</b></td>
+                <td>
+                  advance a stage; at hidden stage &rarr; graduate to
+                  <code>reviewing</code>, interval 1d
+                </td>
+                <td>
+                  interval &times; ease; ease +0.05; consecutiveCorrect++;
+                  interval &ge; 30d &rarr; <code>mastered</code>
+                </td>
+              </tr>
+              <tr>
+                <td><b>close</b></td>
+                <td>stay on stage (retry in session)</td>
+                <td>interval &times; ease &times; 0.8; ease unchanged</td>
+              </tr>
+              <tr>
+                <td><b>off</b></td>
+                <td>drop one stage (min 0)</td>
+                <td>
+                  lapse: interval &rarr; 1d, ease &minus;0.2 (floor 1.3),
+                  lapses++, back to <code>learning</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          Interval fuzz (&plusmn;10&percnt;) is applied to spread review load.
+          <code>mastered</code> verses still resurface (maintained, not
+          archived).
+        </div>
+
+        <h3>Data flow</h3>
+        <p class="muted">
+          Heart a verse &rarr; <code>verseMemory</code> row created
+          (<code>new</code>, due now). &nbsp; Finish a card &rarr;
+          <code>recordAttempt</code> mutation logs to
+          <code>verseMemoryReviews</code> and applies
+          <code>scheduleNext</code> to the row. &nbsp;
+          <code>dueQueue</code> reads
+          <code>by_userId_dueAt &le; now</code> &rarr; feeds the Today queue,
+          the dock badge, and the dashboard.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ CONVENTIONS ============ -->
+      <section id="conventions">
+        <div class="eyebrow">Rules for the agent</div>
+        <h2>Conventions every PR must follow</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Workflow</h4>
+            <ul class="clean small">
+              <li>One PR at a time, in order. Read files before editing.</li>
+              <li>
+                After code changes run <code>pnpm run agent:check</code> (format
+                &rarr; lint &rarr; typecheck). A stop hook re-runs it.
+              </li>
+              <li>
+                Run <code>pnpm test</code> for any PR that adds/edits a
+                <code>*.test.ts</code>.
+              </li>
+              <li>
+                Regenerate Convex types with <code>pnpm run codegen</code> after
+                schema/function changes.
+              </li>
+              <li>Never commit or push unless explicitly asked.</li>
+              <li>
+                Update <span class="fileref">docs/study-mode.md</span> in the
+                same PR when the data/scope/activity model changes.
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Convex rules (enforced by lint)</h4>
+            <ul class="clean small">
+              <li>
+                Every public query/mutation has <code>args</code> <b>and</b>
+                <code>returns</code> validators.
+              </li>
+              <li>
+                Check auth via the project's existing
+                <code>getCurrentUser</code> helper; verify ownership on every
+                row.
+              </li>
+              <li>
+                Never call <code>Date.now()</code> inside a query &mdash; pass
+                <code>now</code> in as an arg.
+              </li>
+              <li>
+                Query with <code>.withIndex(...)</code>, never
+                <code>.filter(...)</code>. <code>await</code> every promise.
+              </li>
+              <li>
+                Schedule only <code>internal.*</code> functions (backfill
+                migration).
+              </li>
+              <li>
+                No <code>any</code>; use <code>Doc&lt;&gt;</code> /
+                <code>Id&lt;&gt;</code> generated types.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ TOC ============ -->
+      <section id="prs">
+        <div class="eyebrow">The build</div>
+        <h2>Eight pull requests</h2>
+        <div class="card toc">
+          <a href="#pr1"
+            ><b>PR 1</b> — Foundation: tables + pure scheduler + tests
+            <span class="chip ghost">Phase 1</span></a
+          >
+          <a href="#pr2"
+            ><b>PR 2</b> — Convex API + hearts-as-seed + backfill
+            <span class="chip ghost">Phase 1</span></a
+          >
+          <a href="#pr3"
+            ><b>PR 3</b> — Wire recordAttempt into learn + deck
+            <span class="chip ghost">Phase 1</span></a
+          >
+          <a href="#pr4"
+            ><b>PR 4</b> — Today queue + session summary
+            <span class="chip ghost">Phase 2</span></a
+          >
+          <a href="#pr5"
+            ><b>PR 5</b> — The Mode Dock (Notes / Study)
+            <span class="chip ghost">Phase 3</span></a
+          >
+          <a href="#pr6"
+            ><b>PR 6</b> — Dashboard (heatmap, trend, forecast)
+            <span class="chip ghost">Phase 4</span></a
+          >
+          <a href="#pr7"
+            ><b>PR 7</b> — Library tab + per-verse drill-down + heart rings
+            <span class="chip ghost">Phase 4</span></a
+          >
+          <a href="#pr8"
+            ><b>PR 8</b> — Ladder polish + mobile primitives
+            <span class="chip ghost">Phase 4+</span></a
+          >
+        </div>
+      </section>
+
+      <!-- PR 1 -->
+      <div class="pr" id="pr1">
+        <div class="pr-head">
+          <div class="num">1</div>
+          <div>
+            <div class="pr-sub">Phase 1 · ships silently · foundation</div>
+            <h3 class="pr-title">Data model &amp; pure scheduler</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> everything.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add the two tables and the pure scheduler library with full unit
+            coverage. No UI, no wiring, no behavior change. This PR is entirely
+            inert but establishes the contracts every later PR builds on.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/schema.ts</span> — add
+              <code>verseMemory</code> + <code>verseMemoryReviews</code> (exact
+              shapes in <a href="#architecture">Architecture</a>).
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-scheduler.ts</span>
+              <span class="tag-new">(new)</span> — pure
+              <code>scheduleNext</code>, plus
+              <code>initialSchedule(now)</code> for freshly-seeded verses and a
+              <code>MASTERED_INTERVAL_DAYS = 30</code> constant.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-scheduler.test.ts</span>
+              <span class="tag-new">(new)</span> — vitest.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Add the tables and indexes exactly as specified. Run
+              <code>pnpm run codegen</code>.
+            </li>
+            <li>
+              Implement <code>scheduleNext</code> to satisfy the grade table in
+              Architecture, including: stage advance/drop, graduation to
+              <code>reviewing</code>, lapse handling, <code>ease</code> floor
+              1.3 / ceil 2.8, mastery at interval &ge; 30d, and
+              &plusmn;10&percnt; deterministic interval fuzz (seed off the input
+              so tests are stable).
+            </li>
+            <li>Keep it framework-free (no Convex, no React imports).</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code> and
+              <code>pnpm run agent:check</code> pass.
+            </li>
+            <li>
+              Unit tests cover: new&rarr;learning graduation path;
+              exact/close/off at each state; lapse resets interval &amp; drops
+              to learning; ease clamping; mastery threshold; fuzz stays within
+              &plusmn;10&percnt;.
+            </li>
+            <li>No existing test breaks; no UI diff.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 2 -->
+      <div class="pr" id="pr2">
+        <div class="pr-head">
+          <div class="num">2</div>
+          <div>
+            <div class="pr-sub">Phase 1 · ships silently · server API</div>
+            <h3 class="pr-title">Convex API, hearts-as-seed &amp; backfill</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 1. <b>Unblocks:</b> PR 3, 4.</p>
+          <h4>Goal</h4>
+          <p>
+            Create the server surface for verse memory, make hearting a verse
+            auto-seed a memory record, and backfill records for every existing
+            hearted verse. Still no user-facing UI change.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span>
+              <span class="tag-new">(new)</span> — queries &amp; mutations (all
+              with <code>args</code>+<code>returns</code> validators, auth +
+              ownership checks):
+              <ul class="clean">
+                <li>
+                  <code>dueQueue({ now, limit? })</code> — reads
+                  <code>by_userId_dueAt</code> where
+                  <code>dueAt &le; now</code>, excludes <code>suspended</code>.
+                  Returns rows joined to their <code>verseRefs</code>.
+                </li>
+                <li>
+                  <code>dueCount({ now })</code> — cheap count for the dock
+                  badge.
+                </li>
+                <li>
+                  <code
+                    >recordAttempt({ verseRefId, quality, accuracy, stage, mode,
+                    durationMs?, now })</code
+                  >
+                  — inserts a <code>verseMemoryReviews</code> row, loads the
+                  <code>verseMemory</code> row, applies
+                  <code>scheduleNext</code>, patches it. Returns the updated
+                  schedule.
+                </li>
+                <li>
+                  <code>getOrCreateForVerse({ verseRefId, now })</code> —
+                  idempotent upsert via <code>by_userId_verseRefId</code>.
+                </li>
+                <li><code>setSuspended({ verseRefId, suspended })</code>.</li>
+                <li>
+                  <code>memoryStats({ now })</code> — counts by status (used
+                  later by dashboard/hub).
+                </li>
+              </ul>
+            </li>
+            <li>
+              <span class="fileref">convex/lib/verseMemory.ts</span>
+              <span class="tag-new">(new, optional)</span> — thin shared helpers
+              (keep the query/mutation wrappers thin per repo rules).
+            </li>
+            <li>
+              Heart write path (find where <code>savedVerses</code> rows are
+              inserted, e.g. <span class="fileref">convex/savedVerses.ts</span>)
+              — after inserting a heart, call the internal seed helper to create
+              a <code>verseMemory</code> row (<code>status: "new"</code>,
+              <code>dueAt = now</code>) if none exists. When a heart is removed,
+              leave the memory row (do not delete history); optionally mark
+              <code>suspended</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/migrations.ts</span> or an
+              <code>internalMutation</code> — backfill one
+              <code>verseMemory</code> per existing <code>savedVerses</code> row
+              lacking one.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              Hearting a verse creates exactly one <code>verseMemory</code> row
+              (idempotent; no dupes on re-heart).
+            </li>
+            <li>Backfill is idempotent and safe to run twice.</li>
+            <li>
+              <code>recordAttempt</code> both logs and reschedules atomically;
+              <code>dueQueue</code> reflects the new <code>dueAt</code>.
+            </li>
+            <li>
+              All functions validate args + returns, check auth, use indexes (no
+              <code>.filter</code>), and contain no <code>Date.now()</code> in
+              queries.
+            </li>
+            <li>
+              Update <span class="fileref">docs/study-mode.md</span> data-model
+              section.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 3 -->
+      <div class="pr" id="pr3">
+        <div class="pr-head">
+          <div class="num">3</div>
+          <div>
+            <div class="pr-sub">Phase 1 · ships silently · wiring</div>
+            <h3 class="pr-title">Persist every attempt</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 2. <b>Completes Phase 1.</b></p>
+          <h4>Goal</h4>
+          <p>
+            Make the existing learn ladder and deck call
+            <code>recordAttempt</code> so progress stops being thrown away.
+            Fire-and-forget; zero visible UX change.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/study/study-verse-learn.tsx</span
+              >
+              — in <code>checkAnswer</code>, after computing
+              <code>checkedDiffTokens</code>: derive
+              <code>quality = classifyVerseAttempt(tokens)</code> and
+              <code>accuracy = verseAttemptAccuracy(tokens)</code>, then call
+              <code
+                >recordAttempt({ verseRefId, quality, accuracy, stage:
+                stageIndex, mode: "learn", now: Date.now() })</code
+              >. On pass/level-up, persist the new <code>learnStage</code> via
+              the schedule the mutation returns (do not keep it purely
+              React-local).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-verse-memory-card.tsx</span
+              >
+              — record the flip/typed attempt with <code>mode: "deck"</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-activity-deck.tsx</span
+              >
+              — no scheduling logic here; just ensure completing a card triggers
+              the card's record call.
+            </li>
+          </ul>
+          <h4>Implementation notes</h4>
+          <ul class="clean small">
+            <li>
+              Attempts are fire-and-forget: never block the UI on the mutation;
+              swallow errors to a <code>devLog</code>.
+            </li>
+            <li>
+              Resolve <code>verseRefId</code> from the card model (cards already
+              carry a <code>reference</code>; map it to the verse's
+              <code>verseRefId</code> — reuse whatever lookup
+              <code>savedVerses</code> uses).
+            </li>
+            <li>Guard against unauthenticated users (no-op).</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              Completing a learn stage or a deck card writes a
+              <code>verseMemoryReviews</code> row and updates the verse's
+              schedule.
+            </li>
+            <li>
+              Learn-ladder stage is restored from <code>learnStage</code> on
+              reopen (resume at your rung).
+            </li>
+            <li>
+              No visible change to timing, animations, or layout;
+              <code>agent:check</code> passes.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 4 -->
+      <div class="pr" id="pr4">
+        <div class="pr-head">
+          <div class="num">4</div>
+          <div>
+            <div class="pr-sub">Phase 2 · the routine</div>
+            <h3 class="pr-title">The Today queue + session summary</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 3. <b>Unblocks:</b> PR 5 (badge needs a real
+            destination).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Give <code>/study</code> a <b>Today</b> section at the top: the
+            global due queue across all hearted verses, played through the
+            existing deck + learn UIs, ending in a summary card. Sessions remain
+            below as collections, untouched.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/components/study/study-hub.tsx</span> —
+              add a Today section above the existing session list. Show due
+              count, "Start review", learning-in-progress, and mastered totals
+              from <code>dueQueue</code>/<code>memoryStats</code> (pass
+              <code>now</code> from the client).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-today-queue.tsx</span
+              >
+              <span class="tag-new">(new)</span> — builds cards from
+              <code>dueQueue</code> and plays them through
+              <code>StudyActivityDeck</code> + <code>StudyVerseLearn</code>. New
+              verses use the learn ladder; reviewing verses go straight to
+              hidden recall.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-session-summary.tsx</span
+              >
+              <span class="tag-new">(new)</span> — end-of-queue card: verses
+              reviewed, accuracy, stage-ups, streak status.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              Opening <code>/study</code> shows "N due today" and starting a
+              review plays exactly the due verses, then shows the summary.
+            </li>
+            <li>
+              Each completed card advances the schedule (verifiable: a
+              just-reviewed verse leaves the queue).
+            </li>
+            <li>Existing sessions still render and function below Today.</li>
+            <li>
+              Empty state ("all caught up") is handled. Update
+              <span class="fileref">docs/study-mode.md</span> (Today queue
+              decouples reviews from sessions).
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 5 -->
+      <div class="pr" id="pr5">
+        <div class="pr-head">
+          <div class="num">5</div>
+          <div>
+            <div class="pr-sub">Phase 3 · the cue</div>
+            <h3 class="pr-title">The Mode Dock — Notes / Study</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 4. <b>Unblocks:</b> nothing (independent after
+            this).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            A single floating pill, bottom-center, two segments —
+            <b>Notes</b> and <b>Study</b> — with a live due badge. It is the
+            only new persistent chrome and is engineered to disappear while you
+            work.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/components/layout/mode-dock.tsx</span>
+              <span class="tag-new">(new)</span> — the pill. "Notes" routes to
+              the passage workspace (the current default route / last passage
+              tab); "Study" routes to <code>/study</code>. Badge =
+              <code>dueCount({ now })</code> reactive query (absent when zero —
+              never cry wolf). Optional streak/flame.
+            </li>
+            <li>
+              App shell (find the root layout that renders
+              <span class="fileref">tab-bar.tsx</span>, e.g. an
+              <code>app-shell</code>/root route) — mount the dock fixed,
+              bottom-center, <code>z-index</code> above content, zero layout
+              cost.
+            </li>
+            <li>
+              <span class="fileref">src/components/layout/tab-bar.tsx</span> —
+              stop soft-hiding the Study icon behind the reveal milestone (icon
+              becomes a permanent fallback). Keep it functional.
+            </li>
+            <li>
+              Settings surface + <span class="fileref">convex/schema.ts</span>
+              <code>userSettings</code> — add
+              <code>modeDock: "auto-hide" | "always" | "off"</code> (default
+              <code>auto-hide</code>) with a get/set mutation.
+            </li>
+            <li>
+              Reuse <code>useFeatureHint</code> + <code>FeatureCallout</code> +
+              <code>STUDY_REVEAL_AFTER_FIRST_HEART</code> for the one-time dock
+              reveal on first heart.
+            </li>
+          </ul>
+          <h4>Behavior spec</h4>
+          <ul class="clean small">
+            <li>
+              <b>Auto-hide:</b> slide down after ~24px downward scroll; return
+              on upward scroll or when scrolling stops; always hidden while a
+              note editor is focused and in Focus mode.
+            </li>
+            <li>
+              <b>Keyboard:</b> add a <code>&#8984;J</code> /
+              <code>Ctrl+J</code> toggle between Notes and Study (wire it the
+              same ad-hoc way <code>tab-bar.tsx</code> handles
+              <code>&#8984;G</code>; use
+              <code>formatCommandOrControlShortcut</code> for the tooltip).
+            </li>
+            <li>
+              <b>A11y &amp; motion:</b>
+              <code>&lt;nav aria-label="Mode"&gt;</code>, focusable segments,
+              visible focus rings, badge <code>aria-label</code> ("7 verses due
+              for review"); <code>prefers-reduced-motion</code> &rarr; fade
+              instead of slide.
+            </li>
+            <li>
+              <b>Escape hatch:</b> the <code>off</code> setting hides the dock
+              entirely; the toolbar icon remains.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              Dock switches Notes&harr;Study, shows a live badge that updates as
+              verses fall due / get reviewed.
+            </li>
+            <li>
+              Auto-hide behaves per spec; reduced-motion honored; setting
+              toggles work; toolbar icon still navigates.
+            </li>
+            <li>
+              No layout reflow from the dock; mobile thumb-reachable.
+              <code>agent:check</code> passes.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 6 -->
+      <div class="pr" id="pr6">
+        <div class="pr-head">
+          <div class="num">6</div>
+          <div>
+            <div class="pr-sub">Phase 4 · the reward</div>
+            <h3 class="pr-title">Progress dashboard</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 4 (data). Independent of PR 5.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Turn the top of <code>/study</code> into a dashboard that makes
+            growth visible. All charts are inline SVG/CSS on
+            <code>--chart-1..5</code> tokens; no charting library.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> — add read-only
+              aggregate queries: <code>reviewHeatmap({ now, days })</code>,
+              <code>accuracyTrend({ now, days })</code>,
+              <code>reviewForecast({ now, days })</code>,
+              <code>masteryDistribution({ now })</code>. Paginate/aggregate over
+              <code>by_userId_createdAt</code> and <code>by_userId_dueAt</code>;
+              pass <code>now</code> in.
+            </li>
+            <li>
+              <span class="fileref">src/components/study/dashboard/</span>
+              <span class="tag-new">(new dir)</span> —
+              <code>dashboard.tsx</code>, <code>kpi-row.tsx</code>,
+              <code>practice-heatmap.tsx</code>, <code>mastery-bar.tsx</code>,
+              <code>accuracy-trend.tsx</code>, <code>review-forecast.tsx</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/dashboard/svg-chart-helpers.ts</span
+              >
+              <span class="tag-new">(new)</span> — shared SVG helpers (rounded
+              bars, axis lines, seeded layout).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              KPIs (due today, streak, in-memory, 30d accuracy), heatmap,
+              mastery distribution, accuracy trend, and review forecast all
+              render from real data.
+            </li>
+            <li>
+              Each chart has an accessible fallback (a
+              <code>&lt;details&gt;</code> "view as table" or
+              <code>role="img"</code> + <code>aria-label</code>).
+            </li>
+            <li>
+              Charts respect light/dark theme tokens; no new dependency added.
+              <code>agent:check</code> passes.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 7 -->
+      <div class="pr" id="pr7">
+        <div class="pr-head">
+          <div class="num">7</div>
+          <div>
+            <div class="pr-sub">Phase 4 · tangibility</div>
+            <h3 class="pr-title">Library, drill-down &amp; heart rings</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 6.</p>
+          <h4>Goal</h4>
+          <p>
+            Make the collection tangible: a searchable/sortable Library of every
+            hearted verse with its state and next-due date, a per-verse
+            drill-down, and a subtle mastery ring on hearts in the reader.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> —
+              <code>listLibrary({ paginationOpts, sort })</code> (paginated, per
+              pagination rule) and
+              <code>verseDetail({ verseRefId, now })</code> (schedule + last-N
+              attempts + hardest-phrase from stored diffs).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-library.tsx</span
+              >
+              <span class="tag-new">(new)</span> — Library tab on the hub.
+              <span class="fileref">src/components/study/verse-detail.tsx</span>
+              <span class="tag-new">(new)</span> — drill-down with stage journey
+              + attempt sparkline.
+            </li>
+            <li>
+              Reader verse row / heart component — add a small mastery ring
+              (quarter/half/full) driven by the verse's
+              <code>status</code>/interval. Zero added chrome.
+            </li>
+            <li>
+              Add per-verse <b>suspend</b> control (uses
+              <code>setSuspended</code> from PR 2).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              Library lists hearted verses with state + next-due, sortable and
+              paginated; suspend works.
+            </li>
+            <li>Drill-down shows accurate per-verse history.</li>
+            <li>
+              Heart ring reflects mastery in the reader without disrupting
+              reading. <code>agent:check</code> passes.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 8 -->
+      <div class="pr" id="pr8">
+        <div class="pr-head">
+          <div class="num">8</div>
+          <div>
+            <div class="pr-sub">
+              Phase 4+ · polish (optional / can split further)
+            </div>
+            <h3 class="pr-title">Ladder polish &amp; mobile primitives</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 3 (ladder). Independent of 5&ndash;7.
+            <b>Note:</b> each bullet below may itself become its own PR if
+            large.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Make learning brand-new verses genuinely robust, and pay down mobile
+            debt the dock exposed.
+          </p>
+          <h4>Scope (split as needed)</h4>
+          <ul class="clean small">
+            <li>
+              <b>Word-bank / tap-to-arrange</b> recall variant for phones (no
+              keyboard) &mdash; a new cloze interaction in
+              <span class="fileref">study-verse-learn.tsx</span>.
+            </li>
+            <li>
+              <b>Read-aloud</b> via the Web Speech API (graceful no-op where
+              unsupported).
+            </li>
+            <li>
+              <b>Confidence check</b> &mdash; one-tap "how sure were you?"
+              refining scheduling beyond raw accuracy (feeds an optional signal
+              into <code>scheduleNext</code>).
+            </li>
+            <li><b>Reference &harr; text</b> drills (both directions).</li>
+            <li>
+              <b>Primitives</b> currently missing: a
+              <code>useMediaQuery</code> hook and a bottom-sheet component
+              (<span class="fileref">src/hooks/use-media-query.ts</span>,
+              <span class="fileref">src/components/ui/bottom-sheet.tsx</span>),
+              for mobile-friendly review surfaces.
+            </li>
+            <li>
+              <b>Mastery celebrations</b> when a verse crosses into
+              <code>mastered</code> (reduced-motion aware, reuse
+              <code>VerseMemoryFeedback</code> style).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              Each shipped sub-feature is behind its own PR with its own tests
+              where logic is non-trivial (e.g. word-bank tokenization).
+            </li>
+            <li>
+              No regression to the core review loop;
+              <code>agent:check</code> passes for each.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ============ RISKS ============ -->
+      <section id="risks">
+        <div class="eyebrow">Eyes open</div>
+        <h2>Risks &amp; how the plan answers them</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Risk</th>
+                <th>Mitigation (baked into the PR sequence)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Dock annoys readers</td>
+                <td>
+                  Auto-hide on scroll/typing/Focus mode; badge only when work
+                  exists; <code>off</code> setting; toolbar icon never removed
+                  (PR 5).
+                </td>
+              </tr>
+              <tr>
+                <td>Scheduler gets it wrong</td>
+                <td>
+                  Pure function + append-only log &rarr; tune or swap to FSRS
+                  and recompute from history. Intervals are user-visible (PR 1,
+                  6/7).
+                </td>
+              </tr>
+              <tr>
+                <td>Guilt mechanics</td>
+                <td>
+                  Streak = any day with &ge;1 review; Today caps the visible
+                  pile ("7 due" not "63 overdue"); no red-badge nagging.
+                </td>
+              </tr>
+              <tr>
+                <td>Review pile-ups</td>
+                <td>
+                  Interval fuzz (PR 1) spreads load; forecast chart (PR 6)
+                  surfaces it; optional daily new-verse cap.
+                </td>
+              </tr>
+              <tr>
+                <td>Query cost</td>
+                <td>
+                  <code>by_userId_dueAt</code> keeps "due" cheap; dashboards
+                  paginate the log.
+                </td>
+              </tr>
+              <tr>
+                <td>Scope creep</td>
+                <td>
+                  Every PR is independently shippable; PR 1&ndash;3 are worth
+                  doing even if 4&ndash;8 slipped.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        Berean · Study Mode implementation plan · reconciled from two proposals
+        and grounded in the current codebase (<span class="fileref"
+          >convex/schema.ts</span
+        >, <span class="fileref">savedVerses</span>/<span class="fileref"
+          >verseRefs</span
+        >, <span class="fileref">study-*</span>,
+        <span class="fileref">tab-bar.tsx</span>,
+        <span class="fileref">docs/study-mode.md</span>).
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,1340 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>
+      Berean · Fade-Dial Learning Model — Implementation Plan (for an LLM agent)
+    </title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      pre {
+        background: #2b2416;
+        color: #ede4d0;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+      }
+      pre .c {
+        color: #9d9077;
+      }
+      pre .k {
+        color: #d3ab5e;
+      }
+      pre .s {
+        color: #a8c49a;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      .pr {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .pr > .pr-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .pr .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pr .pr-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .pr .pr-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .pr-body {
+        padding: 8px 20px 20px;
+      }
+      .dep {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin: 6px 0 0;
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow"
+          >Implementation Plan · for an LLM coding agent</span
+        >
+        <h1>Fade-Dial Learning Model</h1>
+        <p class="lede">
+          Turn "learning" a verse from one-exact-per-rung into a rep-gated
+          support dial that fades from full hints to none in a single session,
+          leaving the 30-day learned-to-mastered spaced-repetition arc intact.
+        </p>
+        <div class="meta">
+          <span class="chip">5 pull requests</span>
+          <span class="chip ghost">no new runtime deps</span>
+          <span class="chip ghost">one Convex schema field</span>
+        </div>
+        <div class="callout">
+          <strong>How to use this document.</strong> Each numbered block below
+          is <em>one pull request</em>. Do them in order. Do not start the next
+          PR until the current one is green: implement only what that PR lists,
+          run <code>pnpm run agent:check</code> (and
+          <code>pnpm test</code> where the PR touches a <code>*.test.ts</code>),
+          satisfy the PR's acceptance criteria, then stop.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <!-- ============ DECISIONS ============ -->
+      <section id="decisions">
+        <div class="eyebrow">Settled decisions</div>
+        <h2>Decisions locked before implementation</h2>
+        <p>
+          Fixed constraints resolved with the product owner. Treat as
+          non-negotiable.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Learning is one session</b></td>
+                <td>
+                  <code>new &rarr; learned</code> is the whole support dial,
+                  done within a session. Reaching zero support and landing the
+                  from-memory rep graduates the verse to <code>reviewing</code>
+                  (= "learned").
+                </td>
+              </tr>
+              <tr>
+                <td><b>Learned &rarr; mastered unchanged</b></td>
+                <td>
+                  The existing reviewing-phase interval growth is untouched; a
+                  verse becomes <code>mastered</code> once its interval reaches
+                  <code>MASTERED_INTERVAL_DAYS</code> (30). Reviews are always
+                  from memory.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Discrete bands, increasing reps</b></td>
+                <td>
+                  Four bands map 1:1 onto today's <code>learnStage</code> 0..3.
+                  Required exact reps per band: <code>Read 1</code>,
+                  <code>Guided 5</code>, <code>Challenge 8</code>,
+                  <code>From Memory 1</code> (graduate). Tunable via one config
+                  array.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Miss handling</b></td>
+                <td>
+                  <code>close</code> repeats the same band (no rep banked);
+                  <code>off</code> bumps support up one band and resets that
+                  band's rep counter.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Progress persists</b></td>
+                <td>
+                  A new <code>stageReps</code> field is saved on every attempt
+                  so leaving mid-band resumes in place rather than restarting.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Hints re-randomize and fade</b></td>
+                <td>
+                  Each rep reseeds which words show a first-letter hint; within
+                  the Challenge band the hint density fades across its reps
+                  ("fewer and fewer first letters").
+                </td>
+              </tr>
+              <tr>
+                <td><b>Naming</b></td>
+                <td>
+                  Retire mechanism labels (Full/Letters/Blanks/Hidden) for
+                  <code
+                    >Read &rarr; Guided &rarr; Challenge &rarr; From
+                    Memory</code
+                  >. "Mastery" is deliberately avoided as a level name so it
+                  stops colliding with the <code>mastered</code> status.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ CODEBASE GROUNDING ============ -->
+      <section id="grounding">
+        <div class="eyebrow">What already exists</div>
+        <h2>Assets to reuse (verified in the codebase)</h2>
+        <p>
+          Do not rebuild these — reuse them. Every path here was confirmed to
+          exist.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 46%">Existing asset</th>
+                <th>Role in the new system</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fileref">
+                  src/lib/memory-scheduler.ts &rarr; scheduleNext /
+                  scheduleLearning / MemorySchedule
+                </td>
+                <td>
+                  Pure, framework-free scheduler. The learning-phase branch is
+                  rewritten for rep gating; the reviewing branch is untouched.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/verse-hint.ts &rarr; maskVerseText /
+                  getClozeFirstLetterIndices
+                </td>
+                <td>
+                  Masking engine. Already re-selects a random 25-50%
+                  first-letter subset for <code>cloze</code>, seeded only by
+                  verse text — we add a per-rep seed and a density input.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/schema.ts &rarr; verseMemory table
+                </td>
+                <td>
+                  Holds <code>learnStage</code> 0..3 already. We add one
+                  <code>stageReps</code> field.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/verseMemory.ts &rarr; recordAttempt + validators
+                </td>
+                <td>
+                  Logs each attempt and applies <code>scheduleNext</code>.
+                  Threads the new <code>stageReps</code> through in/out.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/lib/verseMemory.ts &rarr; seedVerseMemory /
+                  getOrCreateVerseMemory
+                </td>
+                <td>
+                  Seeds new rows; needs <code>stageReps: 0</code> default.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/practice/ (practice-board.tsx,
+                  practice-verse-rail.tsx, practice-stages.ts)
+                </td>
+                <td>
+                  Self-directed Practice surface. Reworked to drive off
+                  <code>learnStage</code> + <code>stageReps</code> and show rep
+                  progress.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/study-verse-learn.tsx
+                </td>
+                <td>
+                  The Review player's learn-phase card (mode
+                  <code>"learn"</code>). Gets the same band + rep + fade
+                  progression.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/use-record-verse-attempt.ts &rarr;
+                  record()
+                </td>
+                <td>
+                  Bridge from UI to <code>recordAttempt</code>. Already returns
+                  the new schedule; callers additionally read
+                  <code>stageReps</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/mastery-ring.ts &rarr; masteryRingFraction
+                </td>
+                <td>
+                  Maps status to a heart ring fraction. Optionally enriched to
+                  grow with dial progress during <code>learning</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/study-attempt-quality.ts &rarr;
+                  classifyVerseAttempt
+                </td>
+                <td>
+                  Produces <code>exact | close | off</code>. Unchanged — it
+                  already yields exactly the three grades the dial needs.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout small">
+          <strong>Gaps to be aware of.</strong> There is no per-band rep counter
+          today (<code>consecutiveCorrect</code> is global and cosmetic); PR 1
+          adds <code>stageReps</code> and the <code>SUPPORT_BANDS</code> config.
+          There is no density/seed parameter on masking; PR 2 adds it plus a
+          shared <code>hintForProgress</code> helper. The Practice "stage
+          ceiling" logic (<code>reachedStageByVerseId</code>) is replaced by
+          server-authoritative <code>learnStage</code> + <code>stageReps</code>
+          in PR 3.
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ ARCHITECTURE ============ -->
+      <section id="architecture">
+        <div class="eyebrow">Shared architecture</div>
+        <h2>Data model &amp; core contracts (referenced by every PR)</h2>
+
+        <h3>Support bands (single source of truth, in the scheduler)</h3>
+        <pre><code><span class="c">// src/lib/memory-scheduler.ts — index === learnStage (0..3)</span>
+<span class="k">export interface</span> SupportBand {
+  key: <span class="s">"read"</span> | <span class="s">"guided"</span> | <span class="s">"challenge"</span> | <span class="s">"memory"</span>;
+  label: string;              <span class="c">// "Read" | "Guided" | "Challenge" | "From Memory"</span>
+  requiredReps: number;       <span class="c">// exact reps to clear this band</span>
+  densityStart: number | null; <span class="c">// first-letter hint fraction at rep 0; null = full text</span>
+  densityEnd: number | null;   <span class="c">// hint fraction at the last rep (fades within a band)</span>
+}
+
+<span class="k">export const</span> SUPPORT_BANDS: <span class="k">readonly</span> SupportBand[] = [
+  { key: <span class="s">"read"</span>,      label: <span class="s">"Read"</span>,        requiredReps: 1, densityStart: null, densityEnd: null },
+  { key: <span class="s">"guided"</span>,    label: <span class="s">"Guided"</span>,      requiredReps: 5, densityStart: 1.0,  densityEnd: 1.0  },
+  { key: <span class="s">"challenge"</span>, label: <span class="s">"Challenge"</span>,   requiredReps: 8, densityStart: 0.5,  densityEnd: 0.15 },
+  { key: <span class="s">"memory"</span>,    label: <span class="s">"From Memory"</span>, requiredReps: 1, densityStart: 0.0,  densityEnd: 0.0  },
+];
+<span class="k">export const</span> MAX_LEARN_STAGE = 3; <span class="c">// unchanged</span></code></pre>
+
+        <h3>MemorySchedule (one new field: stageReps)</h3>
+        <pre><code><span class="k">export interface</span> MemorySchedule {
+  status: MemoryStatus;       <span class="c">// "new" | "learning" | "reviewing" | "mastered"</span>
+  learnStage: number;         <span class="c">// 0..3 band index (unchanged meaning)</span>
+  stageReps: number;          <span class="c">// NEW: exact reps banked at the current band</span>
+  ease: number;
+  intervalDays: number;
+  dueAt: number;
+  consecutiveCorrect: number;
+  lapses: number;
+}</code></pre>
+
+        <h3>Learning-phase transition (rep-gated)</h3>
+        <pre><code><span class="c">// scheduleLearning(s, r): only the learning branch changes.</span>
+<span class="k">if</span> (r.quality === <span class="s">"exact"</span>) {
+  <span class="k">const</span> reps = s.stageReps + 1;
+  <span class="k">if</span> (reps &gt;= SUPPORT_BANDS[s.learnStage].requiredReps) {
+    <span class="k">if</span> (s.learnStage &gt;= MAX_LEARN_STAGE) {
+      <span class="c">// graduate: reviewing, interval 1d (existing computeDueAt), stageReps 0</span>
+    } <span class="k">else</span> {
+      <span class="c">// advance band: learnStage+1, stageReps 0, intervalDays 0, dueAt now</span>
+    }
+  } <span class="k">else</span> {
+    <span class="c">// bank a rep: same learnStage, stageReps = reps, intervalDays 0, dueAt now</span>
+  }
+} <span class="k">else if</span> (r.quality === <span class="s">"close"</span>) {
+  <span class="c">// hold: same learnStage, stageReps unchanged, dueAt now</span>
+} <span class="k">else</span> { <span class="c">// "off"</span>
+  <span class="c">// bump up: learnStage = max(0, learnStage-1), stageReps 0, consecutiveCorrect 0</span>
+}</code></pre>
+
+        <h3>Masking contract (density + per-rep seed)</h3>
+        <pre><code><span class="c">// src/lib/verse-hint.ts</span>
+<span class="k">export interface</span> MaskOptions {
+  density?: number; <span class="c">// 0..1 fraction of words that keep a first-letter hint</span>
+  seed?: number;    <span class="c">// per-rep seed so the hinted subset differs each rep</span>
+}
+<span class="k">export function</span> maskVerseText(text: string, stage: HintStage, options?: MaskOptions): HintToken[];
+
+<span class="c">// Shared mapping used by BOTH learn surfaces:</span>
+<span class="k">export function</span> hintForProgress(learnStage: number, stageReps: number):
+  { stage: HintStage; density: number; seed: number };
+<span class="c">// read -&gt; {full}; guided -&gt; {first-letters, density 1}; challenge -&gt; {cloze,</span>
+<span class="c">// density lerp(0.5..0.15) across reps, seed = stageReps}; memory -&gt; {hidden}.</span></code></pre>
+
+        <h3>Data flow</h3>
+        <p class="muted">
+          A learner opens Practice or the Review learn card, which restores the
+          verse's server-authoritative <code>learnStage</code> +
+          <code>stageReps</code> (via <code>getOrCreateForVerse</code> / the
+          hearted-verses list). The card calls
+          <code>hintForProgress(learnStage, stageReps)</code> and feeds the
+          result into <code>maskVerseText</code> to render the current rung of
+          the dial. The learner types and checks;
+          <code>classifyVerseAttempt</code> grades the diff as
+          <code>exact | close | off</code>; <code>record()</code> calls
+          <code>verseMemory.recordAttempt</code>, which logs a
+          <code>verseMemoryReviews</code> row and runs the pure
+          <code>scheduleNext</code>. The returned schedule (now including
+          <code>stageReps</code>) is persisted and adopted by the UI, advancing
+          the dial, banking a rep, holding, or bumping support up. When the
+          from-memory rep at the last band lands <code>exact</code>, the verse
+          graduates to <code>reviewing</code> ("learned") and the existing
+          interval-growth path carries it to <code>mastered</code>.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ CONVENTIONS ============ -->
+      <section id="conventions">
+        <div class="eyebrow">Rules for the agent</div>
+        <h2>Conventions every PR must follow</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Workflow</h4>
+            <ul class="clean small">
+              <li>One PR at a time, in order. Read files before editing.</li>
+              <li>
+                After code changes run <code>pnpm run agent:check</code>
+                (format &rarr; lint &rarr; typecheck).
+              </li>
+              <li>
+                Run <code>pnpm test</code> for any PR that adds/edits a
+                <code>*.test.ts</code> (PRs 1 and 2 at minimum).
+              </li>
+              <li>
+                Run <code>pnpm run codegen</code> after the schema/validator
+                change in PR 1 so <code>convex/_generated</code> stays in sync.
+              </li>
+              <li>
+                Make the smallest correct change; preserve existing behavior not
+                named by the PR. Do not revert unrelated working-tree changes.
+              </li>
+              <li>Never commit or push unless explicitly asked.</li>
+              <li>
+                When the model changes, update
+                <span class="fileref">docs/study-mode.md</span>
+                (done in PR 5).
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Domain rules (Convex + TS, enforced by lint/typecheck)</h4>
+            <ul class="clean small">
+              <li>
+                Every public query/mutation keeps <code>args</code> <b>and</b>
+                <code>returns</code> validators; add <code>stageReps</code> to
+                the relevant validators, not just the types.
+              </li>
+              <li>
+                Preserve auth/ownership checks already present; do not weaken
+                <code>getCurrentUser</code>/ownership guards.
+              </li>
+              <li>
+                Never call <code>Date.now()</code> inside a query —
+                <code>now</code>
+                is passed in. The scheduler stays pure (no Convex, no React, no
+                <code>Date.now()</code>).
+              </li>
+              <li>
+                Query with <code>.withIndex(...)</code>, never
+                <code>.filter(...)</code>; <code>await</code> every promise.
+              </li>
+              <li>
+                No <code>any</code>; use generated <code>Doc</code> /
+                <code>Id</code> types. Read legacy rows defensively (<code
+                  >row.stageReps ?? 0</code
+                >).
+              </li>
+              <li>
+                <code>stageReps</code> is schema-optional (backfill safety) but
+                always written going forward.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ TOC ============ -->
+      <section id="prs">
+        <div class="eyebrow">The build</div>
+        <h2>5 pull requests</h2>
+        <div class="card toc">
+          <a href="#pr1"
+            ><b>PR 1</b> — Rep-gated scheduler + stageReps data model
+            <span class="chip ghost">ships silently · foundation</span></a
+          >
+          <a href="#pr2"
+            ><b>PR 2</b> — Fading, re-randomized hints
+            <span class="chip ghost">ships silently · pure lib</span></a
+          >
+          <a href="#pr3"
+            ><b>PR 3</b> — Practice surface rework + naming
+            <span class="chip ghost">UI</span></a
+          >
+          <a href="#pr4"
+            ><b>PR 4</b> — Review learn card rework
+            <span class="chip ghost">UI</span></a
+          >
+          <a href="#pr5"
+            ><b>PR 5</b> — Progress surfacing, labels, docs
+            <span class="chip ghost">polish</span></a
+          >
+        </div>
+      </section>
+
+      <!-- ============ PR 1 ============ -->
+      <div class="pr" id="pr1">
+        <div class="pr-head">
+          <div class="num">1</div>
+          <div>
+            <div class="pr-sub">ships silently · foundation</div>
+            <h3 class="pr-title">Rep-gated scheduler + stageReps data model</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> PR 2, 3, 4, 5.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add the per-band rep counter end to end and rewrite the
+            learning-phase scheduler so a band only advances after its required
+            reps, with <code>close</code> holding and <code>off</code> bumping
+            support up. Pure logic + Convex plumbing only; the existing UI keeps
+            reading <code>learnStage</code> and stays green.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/memory-scheduler.ts</span> — add
+              <code>SupportBand</code>/<code>SUPPORT_BANDS</code>, add
+              <code>stageReps</code> to <code>MemorySchedule</code> and
+              <code>initialSchedule</code>, rewrite
+              <code>scheduleLearning</code> per the Architecture contract. Keep
+              <code>scheduleReviewing</code>, ease, fuzz,
+              <code>MASTERED_INTERVAL_DAYS</code>, and
+              <code>MAX_LEARN_STAGE</code> unchanged.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-scheduler.test.ts</span> —
+              update fixtures (<code>learningAt</code>,
+              <code>reviewing</code> now carry <code>stageReps</code>) and
+              rewrite the learning-phase expectations; keep
+              reviewing/ease/fuzz/mastery tests.
+            </li>
+            <li>
+              <span class="fileref">convex/schema.ts</span> — add
+              <code>stageReps: v.optional(v.number())</code> to
+              <code>verseMemory</code>; update the trailing comment to describe
+              the band + rep model.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> — add
+              <code>stageReps</code> to <code>memoryScheduleValidator</code>,
+              <code>verseMemoryValidator</code>, <code>dueQueueItem</code>,
+              <code>toRowView</code>, the <code>recordAttempt</code> input (read
+              <code>memory.stageReps ?? 0</code>) and patch, and
+              <code>verseDetail</code>'s return.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/verseMemory.ts</span> — write
+              <code>stageReps: schedule.stageReps</code> in
+              <code>seedVerseMemory</code>'s insert.
+            </li>
+            <li>
+              <span class="fileref">convex/savedVerses.ts</span> — add
+              <code>stageReps</code> to <code>savedMemoryValidator</code> and
+              <code>toListItem</code>'s <code>memory</code> object (file is
+              already modified in the working tree; extend it, don't revert it).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Add the <code>SUPPORT_BANDS</code> config and export it; derive a
+              small <code>requiredRepsFor(stage)</code> helper.
+            </li>
+            <li>
+              Add <code>stageReps: 0</code> to <code>initialSchedule</code> and
+              the <code>MemorySchedule</code> interface.
+            </li>
+            <li>
+              Rewrite the <code>exact</code>/<code>close</code>/<code>off</code>
+              branches of <code>scheduleLearning</code> exactly as the
+              Architecture snippet describes; on graduation reuse the current
+              <code>computeDueAt</code> + interval-1 logic and set
+              <code>stageReps: 0</code>.
+            </li>
+            <li>
+              Thread <code>stageReps</code> through every validator, the
+              <code>recordAttempt</code> read/patch, the seed insert, and the
+              <code>savedVerses</code> list mapping.
+            </li>
+            <li>
+              Run <code>pnpm run codegen</code>, then
+              <code>pnpm run agent:check</code> and <code>pnpm test</code>.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass;
+              no existing test breaks.
+            </li>
+            <li>
+              New scheduler tests prove: <code>Guided</code> needs 5 exacts
+              (reps 1-4 stay on the band with rising <code>stageReps</code>, the
+              5th advances to <code>Challenge</code> with
+              <code>stageReps 0</code>); <code>Challenge</code> needs 8;
+              <code>close</code> holds the band and <code>stageReps</code>;
+              <code>off</code> drops one band and resets <code>stageReps</code>;
+              an exact at <code>From Memory</code> graduates to
+              <code>reviewing</code> with a 1-day interval.
+            </li>
+            <li>
+              <code>initialSchedule</code> includes <code>stageReps: 0</code>;
+              the reviewing-phase, ease-clamp, fuzz, and mastery tests still
+              pass unchanged in intent.
+            </li>
+            <li>
+              All Convex public functions still validate <code>args</code> and
+              <code>returns</code>; <code>pnpm run codegen</code> leaves no
+              diff.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 2 ============ -->
+      <div class="pr" id="pr2">
+        <div class="pr-head">
+          <div class="num">2</div>
+          <div>
+            <div class="pr-sub">ships silently · pure lib</div>
+            <h3 class="pr-title">Fading, re-randomized hints</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1 (for <code>SUPPORT_BANDS</code>).
+            <b>Unblocks:</b> PR 3, 4.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Make masking parameterizable so each rep shows a different,
+            progressively sparser set of first-letter hints, and add the shared
+            <code>hintForProgress</code> mapping both learn surfaces will use.
+            No UI wiring yet, so nothing visibly changes.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/verse-hint.ts</span> — add the
+              <code>MaskOptions</code> (<code>density</code>, <code>seed</code>)
+              parameter to <code>maskVerseText</code>; fold both into
+              <code>getClozeFirstLetterIndices</code> so the hinted subset is
+              chosen by <code>density</code> and reshuffled by
+              <code>seed</code>; add and export
+              <code>hintForProgress(learnStage, stageReps)</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/verse-hint.test.ts</span> — add
+              coverage for density + seed behavior and
+              <code>hintForProgress</code>; keep the existing
+              full/first-letters/cloze/hidden cases green (default behavior with
+              no options must be unchanged).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Keep the current call shape working:
+              <code>maskVerseText(text, stage)</code> with no options behaves
+              exactly as today (cloze stays deterministic on verse text).
+            </li>
+            <li>
+              When <code>density</code>/<code>seed</code> are supplied for
+              <code>cloze</code>, select roughly
+              <code>density * wordCount</code>
+              first-letter hints, ranking words by a hash of
+              <code>(text, index, seed)</code> so a new seed yields a different
+              subset while a repeated seed is deterministic.
+            </li>
+            <li>
+              Implement <code>hintForProgress</code> from
+              <code>SUPPORT_BANDS</code>: <code>read &rarr; full</code>;
+              <code>guided &rarr; first-letters, density 1</code>;
+              <code>challenge &rarr; cloze</code> with
+              <code
+                >density = lerp(densityStart, densityEnd,
+                stageReps/(requiredReps-1))</code
+              >
+              and <code>seed = stageReps</code>;
+              <code>memory &rarr; hidden</code>.
+            </li>
+            <li>
+              Run <code>pnpm run agent:check</code> and <code>pnpm test</code>.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass;
+              existing <code>maskVerseText</code> tests remain green unchanged.
+            </li>
+            <li>
+              Tests prove: two different seeds at the same density produce
+              different hinted subsets, each deterministic for a fixed seed; a
+              lower density yields fewer first-letter hints; every word token is
+              still masked (never the plain word) and punctuation/spacing is
+              preserved.
+            </li>
+            <li>
+              <code>hintForProgress</code> returns the expected
+              stage/density/seed for representative
+              <code>(learnStage, stageReps)</code> inputs across all four bands.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 3 ============ -->
+      <div class="pr" id="pr3">
+        <div class="pr-head">
+          <div class="num">3</div>
+          <div>
+            <div class="pr-sub">UI · self-directed practice</div>
+            <h3 class="pr-title">Practice surface rework + naming</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1, PR 2. <b>Unblocks:</b> PR 5.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Drive the Practice card off server <code>learnStage</code> +
+            <code>stageReps</code>: a Read prime step, rep progress on the
+            fading bands, re-randomized/faded hints, and the new level names.
+            Replace the old client-side "stage ceiling" model.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/practice/practice-stages.ts</span
+              >
+              — rename labels to
+              <code>Read / Guided / Challenge / From Memory</code>
+              and retune colors; source required reps from
+              <code>SUPPORT_BANDS</code> rather than duplicating them.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/practice/practice-board.tsx</span
+              >
+              — carry <code>stageReps</code> alongside
+              <code>learnStage</code> in the frozen snapshot and the per-verse
+              live state; render the current band via
+              <code>hintForProgress</code> + <code>maskVerseText</code>; show
+              rep progress (e.g. "rep 3 of 5"); add the Read prime step (full
+              text with a Continue that submits the shown text so the scheduler
+              records the single Read rep); adopt the returned
+              <code>learnStage</code> + <code>stageReps</code> after each
+              attempt; remove <code>reachedStageByVerseId</code>/ceiling logic.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/practice/practice-verse-rail.tsx</span
+              >
+              — convert the manual Full/Letters/Blanks/Hidden selector into a
+              read-only progress indicator of the current band + reps
+              (optionally a single "need more help" step-back), never allowing
+              skipping ahead; update the rail dot/labels to the new names.
+            </li>
+            <li>
+              <span class="fileref">src/components/memory/memory-home.tsx</span>
+              — extend the <code>PracticeVerse</code> mapping to pass
+              <code>stageReps</code> from <code>verse.memory</code>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Extend <code>PracticeVerse</code>/<code>OrderedVerse</code> and
+              the snapshot to include <code>stageReps</code>; seed live state
+              from the server values.
+            </li>
+            <li>
+              Compute masking from
+              <code>hintForProgress(learnStage, stageReps)</code>; at the Read
+              band show full text + a Continue button; on the fading bands show
+              the faded hint text and the rep counter.
+            </li>
+            <li>
+              In the <code>onRecord</code> callback, adopt both
+              <code>schedule.learnStage</code> and
+              <code>schedule.stageReps</code>
+              so the dial advances/holds/bumps correctly in-session.
+            </li>
+            <li>
+              Update the rail to reflect progress instead of free stage
+              selection; keep Shuffle/In-order and verse jumping intact.
+            </li>
+            <li>Run <code>pnpm run agent:check</code>.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes; no existing test breaks.
+            </li>
+            <li>
+              <b>Manual test:</b> practicing a fresh verse shows Read &rarr;
+              Guided (5 reps) &rarr; Challenge (8 reps, visibly fewer hints each
+              rep) &rarr; From Memory; a <code>close</code> repeats the band, an
+              <code>off</code> steps support back up; the rep counter and band
+              labels read correctly.
+            </li>
+            <li>
+              <b>Manual test:</b> leaving Practice mid-band and returning
+              resumes at the same band and rep count (persistence via
+              <code>stageReps</code>).
+            </li>
+            <li>
+              No level is labeled with a mechanism name (Full/Letters/Blanks/
+              Hidden) or "Mastery" anywhere in the Practice UI.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 4 ============ -->
+      <div class="pr" id="pr4">
+        <div class="pr-head">
+          <div class="num">4</div>
+          <div>
+            <div class="pr-sub">UI · review learn phase</div>
+            <h3 class="pr-title">Review learn card rework</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1, PR 2 (independent of PR 3).
+            <b>Unblocks:</b> PR 5.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Bring the Review player's learn-phase card to the same fade dial:
+            Read prime, rep-gated bands, faded/re-randomized hints, and the new
+            names, while keeping its server-authoritative restore and
+            stable-during- review behavior.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/study/study-verse-learn.tsx</span
+              >
+              — replace the local <code>STAGES</code> array + single
+              <code>learnStage</code> tab model with band + rep progress;
+              restore <code>stageReps</code> alongside
+              <code>learnStage</code> from <code>getOrCreateForVerse</code>;
+              render via <code>hintForProgress</code> +
+              <code>maskVerseText</code>; update
+              <code>predictedLearnStage</code>/continue logic to also track
+              <code>stageReps</code>; add the Read prime step.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/review-player.tsx</span
+              >
+              — the summary counts stage-ups via
+              <code>live.learnStage &gt; it.learnStage</code>; keep that working
+              (optionally also count rep progress). No behavior regression.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Read the restored row's <code>stageReps</code> and hold both
+              values in local state; keep the "adopt authoritative rung only
+              after the learner continues" pattern, extended to
+              <code>stageReps</code>.
+            </li>
+            <li>
+              Swap the 4-tab header for a band + rep indicator using the shared
+              band labels; render the Read prime and faded hints exactly as
+              Practice does.
+            </li>
+            <li>
+              Confirm the reviewing-phase deck path (<code
+                >StudyActivityDeck</code
+              >
+              for reviewing/mastered verses) is untouched and still recalls from
+              memory.
+            </li>
+            <li>Run <code>pnpm run agent:check</code>.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes; no existing test breaks.
+            </li>
+            <li>
+              <b>Manual test:</b> a Review run with new/learning verses walks
+              the same Read &rarr; Guided(5) &rarr; Challenge(8) &rarr; From
+              Memory dial with rep gating and faded hints; the "verses to learn"
+              and stage-up summary still make sense.
+            </li>
+            <li>
+              <b>Manual test:</b> reviewing/mastered verses still play through
+              the from-memory deck unchanged; the end-of-run summary is not
+              broken.
+            </li>
+            <li>
+              Practice and Review learn cards share identical band behavior.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 5 ============ -->
+      <div class="pr" id="pr5">
+        <div class="pr-head">
+          <div class="num">5</div>
+          <div>
+            <div class="pr-sub">polish · surfacing + docs</div>
+            <h3 class="pr-title">Progress surfacing, labels, docs</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1-4. <b>Unblocks:</b> nothing (final).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Make the dial legible outside the learn cards: optionally grow the
+            heart's mastery ring with dial progress during learning, update any
+            remaining stage labels, and document the model.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/mastery-ring.ts</span> — optionally
+              replace the flat <code>learning &rarr; 0.25</code> with a fraction
+              that grows across the dial from <code>learnStage</code> +
+              <code>stageReps</code> (0 up to just below the reviewing band,
+              ~0.5), keeping reviewing/mastered mapping intact.
+            </li>
+            <li>
+              <span class="fileref">src/lib/mastery-ring.test.ts</span> — if the
+              learning mapping changes, update/extend its assertions.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/verse-detail.tsx</span
+              >
+              — update the stage-progress display (currently keyed off
+              <code>detail.learnStage</code>) to the new band names and, if
+              useful, show rep progress.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+              — update any stage label text to the new names (it already
+              forwards
+              <code>learnStage</code> to the review player; no data change
+              needed).
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — document the
+              fade dial: bands, required reps, close/off handling, persistence
+              via <code>stageReps</code>, naming, and that learned =
+              <code>reviewing</code>, mastered = 30-day interval.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Decide the learning ring curve (a simple linear map over
+              <code>learnStage + stageReps/requiredReps</code> is fine) and
+              update the ring + its test.
+            </li>
+            <li>Sweep remaining UI for old stage labels and rename them.</li>
+            <li>Write the docs section; keep it concise and accurate.</li>
+            <li>
+              Run <code>pnpm run agent:check</code> and <code>pnpm test</code>.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              No mechanism-style or "Mastery" level labels remain in Memory UI;
+              <code>docs/study-mode.md</code> describes the new model.
+            </li>
+            <li>
+              <b>Manual test:</b> the heart ring reflects learning progress and
+              still reads full for mastered verses.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ============ RISKS ============ -->
+      <section id="risks">
+        <div class="eyebrow">Eyes open</div>
+        <h2>Risks &amp; how the plan answers them</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Risk</th>
+                <th>Mitigation (baked into the PR sequence)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Legacy <code>verseMemory</code> rows lack
+                  <code>stageReps</code>.
+                </td>
+                <td>
+                  Field is <code>v.optional</code> and read as
+                  <code>?? 0</code> everywhere; a mid-ladder learner simply
+                  starts the current band's reps at 0 (PR 1).
+                </td>
+              </tr>
+              <tr>
+                <td>Scheduler change also affects the Review learn phase.</td>
+                <td>
+                  Intended (one model). Both surfaces are updated (PR 3, PR 4)
+                  and the reviewing-phase deck stays from-memory and untouched.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Read prime has no natural graded attempt to advance the server
+                  band.
+                </td>
+                <td>
+                  The Continue action submits the shown full text as the single
+                  Read rep, so the server stays authoritative with no new
+                  mutation (PR 3, PR 4).
+                </td>
+              </tr>
+              <tr>
+                <td>Grindy feel from 5 + 8 reps in one sitting.</td>
+                <td>
+                  Rep counts live in one <code>SUPPORT_BANDS</code> array and
+                  are trivially tunable; hints re-randomize and fade so reps do
+                  not feel identical (PR 1, PR 2).
+                </td>
+              </tr>
+              <tr>
+                <td>Two progress vocabularies confuse the UX.</td>
+                <td>
+                  Practice's manual stage selector becomes progress-only; status
+                  stays the one lifecycle concept, surfaced consistently in the
+                  ring/labels (PR 3, PR 5).
+                </td>
+              </tr>
+              <tr>
+                <td>Validator/type drift across the Convex surface.</td>
+                <td>
+                  PR 1 threads <code>stageReps</code> through every validator
+                  and runs <code>pnpm run codegen</code>;
+                  <code>agent:check</code>
+                  gates each PR.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        Berean · Fade-Dial Learning Model implementation plan · grounded in the
+        current codebase.
+      </footer>
+    </div>
+  </body>
+</html>

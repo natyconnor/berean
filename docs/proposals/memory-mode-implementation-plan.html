@@ -1,0 +1,1773 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Berean · Memory Mode — Implementation Plan (for an LLM agent)</title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      pre {
+        background: #2b2416;
+        color: #ede4d0;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+      }
+      pre .c {
+        color: #9d9077;
+      }
+      pre .k {
+        color: #d3ab5e;
+      }
+      pre .s {
+        color: #a8c49a;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      .pr {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .pr > .pr-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .pr .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pr .pr-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .pr .pr-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .pr-body {
+        padding: 8px 20px 20px;
+      }
+      .dep {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin: 6px 0 0;
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow"
+          >Implementation Plan · for an LLM coding agent</span
+        >
+        <h1>Memory Mode &amp; Packs</h1>
+        <p class="lede">
+          Split the tangled "Study" workspace into a first-class
+          <b>Memory</b> mode (verse memorization: Review + Practice + Packs) and
+          a slim <b>Study</b> mode (note collections) — shipped as a sequence of
+          small, independently green pull requests.
+        </p>
+        <div class="meta">
+          <span class="chip">7 pull requests</span>
+          <span class="chip ghost">no new runtime deps</span>
+          <span class="chip ghost">reuses existing engine</span>
+        </div>
+        <div class="callout">
+          <strong>How to use this document.</strong> Each numbered block below
+          is <em>one pull request</em>. Do them in order. Do not start the next
+          PR until the current one is green: implement only what that PR lists,
+          run <code>pnpm run agent:check</code> (and
+          <code>pnpm test</code> where a PR touches a <code>*.test.ts</code>),
+          satisfy the PR's acceptance criteria, then stop. The
+          <a href="#architecture">Architecture</a> and
+          <a href="#conventions">Conventions</a> sections are shared context for
+          every PR.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <!-- DECISIONS -->
+      <section id="decisions">
+        <div class="eyebrow">Settled decisions</div>
+        <h2>Decisions locked before implementation</h2>
+        <p>
+          Reconciled with the product owner in
+          <span class="fileref"
+            >docs/proposals/memory-first-ux-proposal.html</span
+          >
+          (rev 3). Treat as fixed constraints.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Three modes</b></td>
+                <td>
+                  <b>Notes · Memory · Study.</b> Memory is first-class; Study is
+                  notes-only and bare.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Navigation</b></td>
+                <td>
+                  <b>Three-segment Mode Dock</b> (Notes / Memory / Study), due
+                  badge on <b>Memory</b>, revealed progressively.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Heart = memorize</b></td>
+                <td>
+                  Single meaning: a verse is "in Memory"
+                  <b>iff it is hearted</b>
+                  (<code>savedVerses</code>). Un-hearting keeps its
+                  <code>verseMemory</code> history
+                  <b>inactive &amp; resumable</b> (row untouched); re-hearting
+                  resumes it. <b>Suspend is removed.</b>
+                </td>
+              </tr>
+              <tr>
+                <td><b>One review verb</b></td>
+                <td>
+                  <b>Review</b> plays the due queue (auto-picks ladder/deck).
+                  The "Review all / Learn" toggle is deleted.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Practice</b></td>
+                <td>
+                  A self-directed board (verse rail + order toggle + manual
+                  stage selector). <b>Counts fully (D3):</b> logs and
+                  reschedules exactly like Review — same engine, different
+                  intention.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Packs (Option C)</b></td>
+                <td>
+                  A Pack is a named verse set that is either a <b>scope</b> pack
+                  (live, reuses the session scope picker) or a
+                  <b>custom</b> pack (static ordered list). A pack only ever
+                  contains hearted verses.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Study slimmed + bridge</b></td>
+                <td>
+                  Sessions become note-only (Overview + Teach; no tab switcher).
+                  "Memorize verses in this scope" spins up a live scope Pack.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Progressive reveal</b></td>
+                <td>
+                  Memory reveals on the <b>first heart</b>; Study reveals after
+                  <b>4 notes</b>. No dock until a second mode unlocks.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Names</b></td>
+                <td>Mode = <b>Memory</b>; verse set = <b>Pack</b>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- GROUNDING -->
+      <section id="grounding">
+        <div class="eyebrow">What already exists</div>
+        <h2>Assets to reuse (verified in the codebase)</h2>
+        <p>
+          This is largely a <em>re-homing + re-labeling</em> exercise around a
+          working engine plus two new concepts (Packs, Practice). Do not rebuild
+          these — reuse them.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 44%">Existing asset</th>
+                <th>Role in the new system</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fileref">src/lib/memory-scheduler.ts</td>
+                <td>
+                  Pure SM-2 scheduler (<code>scheduleNext</code>,
+                  <code>initialSchedule</code>, <code>MAX_LEARN_STAGE</code>,
+                  <code>MASTERED_INTERVAL_DAYS</code>). <b>Unchanged.</b> Note
+                  it already ignores <code>mode</code>, so Practice reschedules
+                  identically (D3).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/verseMemory.ts + convex/lib/verseMemory.ts
+                </td>
+                <td>
+                  Queries/mutations (<code>dueQueue</code>,
+                  <code>dueCount</code>, <code>recordAttempt</code>,
+                  <code>memoryStats</code>, dashboard aggregates,
+                  <code>listLibrary</code>, <code>verseDetail</code>) + helpers
+                  (<code>findVerseMemory</code>,
+                  <code>getOrCreateVerseMemory</code>,
+                  <code>seedVerseMemory</code>). PR 1 makes the reads
+                  heart-aware and removes the suspend machinery
+                  (<code>setSuspended</code>, <code>previousStatus</code>,
+                  <code>deriveActiveStatus</code>).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">convex/savedVerses.ts &rarr; toggle</td>
+                <td>
+                  The single heart write path. Already seeds
+                  <code>verseMemory</code> on heart and leaves the row on
+                  un-heart. Extended by Packs (custom-add hearts a verse).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">convex/studySessions.ts</td>
+                <td>
+                  Note collections stay here (Study). Its
+                  <code>scope</code> object shape is reused verbatim for scope
+                  Packs; <code>resolveScope</code>'s matching logic is extracted
+                  into a pure helper (PR 2).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/study-scope-builder.tsx (+
+                  study-scope-presets / -book-picker / TagFilterControl)
+                </td>
+                <td>
+                  The scope-selection UX. PR 5 extracts its form into a reusable
+                  component shared by Study sessions and scope Packs.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/study-verse-learn.tsx,
+                  study-activity-deck.tsx, study-verse-memory-card.tsx,
+                  study-today-queue.tsx, study-session-summary.tsx
+                </td>
+                <td>
+                  Learn ladder, deck, verse card, Today-queue orchestrator, and
+                  summary — moved into <code>src/components/memory/</code> and
+                  reused by Review (PR 3) and Practice (PR 4).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/dashboard/*, study-library.tsx,
+                  verse-detail.tsx
+                </td>
+                <td>
+                  Dashboard charts, Library, and drill-down — moved to the
+                  Memory home (PR 3). Suspend controls stripped.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/study/use-record-verse-attempt.ts
+                </td>
+                <td>
+                  Bridge UI &rarr; <code>recordAttempt</code>. Practice calls it
+                  with the new <code>mode: "practice"</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/verse-hint.ts &rarr; maskVerseText
+                </td>
+                <td>
+                  4 masking stages (full | first-letters | cloze | hidden) — the
+                  Practice manual stage selector maps directly onto these.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/staged-onboarding-thresholds.ts,
+                  src/lib/feature-hints.ts, convex/onboarding.ts,
+                  use-feature-hint.ts, feature-callout.tsx
+                </td>
+                <td>
+                  The reveal system. PR 7 adds Memory/Study reveal thresholds +
+                  hints and gates the dock/toolbar with them.
+                  <code>getOnboardingStatus</code> already returns
+                  <code>heartsCount</code> and <code>notesCount</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/layout/app-shell.tsx, tab-bar.tsx,
+                  mode-dock.tsx
+                </td>
+                <td>
+                  Shell chrome. The dock gains a third segment; the toolbar
+                  gains gated Memory/Study icons (PR 7).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/routes/study/*.tsx + src/components/routes/*-page.tsx
+                </td>
+                <td>
+                  TanStack file-route + thin-page pattern. New
+                  <code>src/routes/memory/*</code> mirror it (PR 3, 5).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/mastery-ring.ts &rarr; masteryRingFraction
+                </td>
+                <td>
+                  Reader heart ring. PR 1 drops its now-dead
+                  <code>suspended</code> branch (and the matching test line)
+                  when the status is removed.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout small">
+          <strong>Gaps to be aware of.</strong> (1) There is <em>no</em>
+          <code>convex-test</code> harness — Convex functions are not
+          unit-tested; push mechanically-checkable logic into
+          <b>pure libs</b> with vitest (<span class="fileref"
+            >src/**/*.test.ts</span
+          >) and flag server/UI behavior for the user's manual pass. (2) The
+          scope-selection form is currently embedded in
+          <span class="fileref">study-scope-builder.tsx</span> and must be
+          <b>extracted</b> before Packs can reuse it (PR 5). (3) There is no
+          reusable "verse picker" for adding verses to a custom pack — PR 5 adds
+          a minimal one. (4) The test/dev database has
+          <b>no <code>suspended</code> rows</b> (owner-confirmed), so PR 1
+          <b>narrows</b> the <code>verseMemory.status</code> union and deletes
+          the suspend machinery outright — no migration needed. This is the one
+          sanctioned narrowing; see Conventions.
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ARCHITECTURE -->
+      <section id="architecture">
+        <div class="eyebrow">Shared architecture</div>
+        <h2>Data model &amp; core contracts (referenced by every PR)</h2>
+
+        <h3>Two new Convex tables (Packs)</h3>
+        <p>
+          A pack is a per-user named verse set. <b>Scope</b> packs store a
+          <code>scope</code> (identical shape to
+          <code>studySessions.scope</code>) and resolve their members
+          <em>live</em> from <code>savedVerses</code> &cap; scope.
+          <b>Custom</b> packs store explicit ordered membership rows.
+        </p>
+        <pre><code><span class="c">// convex/schema.ts — additions</span>
+<span class="k">packs:</span> defineTable({
+  userId: v.id(<span class="s">"users"</span>),
+  name: v.string(),
+  kind: v.union(v.literal(<span class="s">"scope"</span>), v.literal(<span class="s">"custom"</span>)),
+  scope: v.optional(v.object({          <span class="c">// present iff kind === "scope"; same shape as studySessions.scope</span>
+    books: v.array(v.string()),
+    chapterRanges: v.optional(v.array(v.object({
+      book: v.string(), startChapter: v.number(), endChapter: v.number(),
+    }))),
+    tags: v.array(v.string()),
+    tagMatchMode: v.union(v.literal(<span class="s">"any"</span>), v.literal(<span class="s">"all"</span>)),
+  })),
+  createdAt: v.number(),
+  lastOpenedAt: v.number(),
+}).index(<span class="s">"by_userId_lastOpenedAt"</span>, [<span class="s">"userId"</span>, <span class="s">"lastOpenedAt"</span>]),
+
+<span class="k">packVerses:</span> defineTable({       <span class="c">// custom-pack membership (ordered)</span>
+  userId: v.id(<span class="s">"users"</span>),
+  packId: v.id(<span class="s">"packs"</span>),
+  verseRefId: v.id(<span class="s">"verseRefs"</span>),
+  order: v.number(),
+  createdAt: v.number(),
+})
+  .index(<span class="s">"by_userId_packId_order"</span>, [<span class="s">"userId"</span>, <span class="s">"packId"</span>, <span class="s">"order"</span>])
+  .index(<span class="s">"by_packId"</span>, [<span class="s">"packId"</span>])
+  .index(<span class="s">"by_userId_packId_verseRefId"</span>, [<span class="s">"userId"</span>, <span class="s">"packId"</span>, <span class="s">"verseRefId"</span>]),</code></pre>
+
+        <h3>Schema changes to existing tables</h3>
+        <pre><code><span class="c">// verseMemoryReviews.mode — WIDEN the union to add "practice":</span>
+mode: v.union(v.literal(<span class="s">"learn"</span>), v.literal(<span class="s">"review"</span>),
+             v.literal(<span class="s">"deck"</span>), v.literal(<span class="s">"practice"</span>)),
+
+<span class="c">// verseMemory.status — NARROW: remove the "suspended" literal AND drop the</span>
+<span class="c">// previousStatus field entirely. Owner confirmed the test/dev DB has zero</span>
+<span class="c">// suspended rows, so this narrowing is safe with NO migration.</span>
+status: v.union(v.literal(<span class="s">"new"</span>), v.literal(<span class="s">"learning"</span>),
+               v.literal(<span class="s">"reviewing"</span>), v.literal(<span class="s">"mastered"</span>)),
+<span class="c">// previousStatus: REMOVED. src/lib/memory-scheduler.ts MemoryStatus also</span>
+<span class="c">// drops "suspended"; scheduleNext's suspended short-circuit is deleted.</span></code></pre>
+
+        <h3>The "in Memory = hearted" contract</h3>
+        <p>
+          A verse is <b>active/in-Memory</b> exactly when a
+          <code>savedVerses</code> row exists for it. The
+          <code>verseMemory</code> row is durable history and may outlive the
+          heart. Therefore
+          <b
+            >every read that reports the live memory set must filter to hearted
+            verses</b
+          >: <code>dueQueue</code>, <code>dueCount</code>,
+          <code>memoryStats</code>, <code>masteryDistribution</code>,
+          <code>reviewForecast</code> (and <code>listLibrary</code>, already
+          hearted-aware). Un-heart therefore needs no write change; re-heart
+          resumes automatically because the row is untouched. There is no
+          suspended state to reconcile — it is removed in PR 1.
+        </p>
+
+        <h3>Pure scope-match helper</h3>
+        <pre><code><span class="c">// src/lib/verse-scope-match.ts (new, unit-tested) — extracted from</span>
+<span class="c">// studySessions.resolveScope's book/chapter-range matching logic.</span>
+<span class="k">export interface</span> VerseScope {
+  books: string[];
+  chapterRanges?: { book: string; startChapter: number; endChapter: number }[];
+  <span class="c">// tags/tagMatchMode exist on the scope but only filter NOTES, not verses.</span>
+}
+<span class="k">export function</span> verseMatchesScope(
+  ref: { book: string; chapter: number },
+  scope: VerseScope,
+): boolean;  <span class="c">// empty books => matches all; else book in books AND (no range for book OR chapter in range)</span></code></pre>
+
+        <h3>Packs Convex API (contract for PR 2, consumed by PR 5/6)</h3>
+        <pre><code><span class="c">// convex/packs.ts — all args+returns validated, auth+ownership checked</span>
+create({ name, kind, scope? }) -> Id&lt;"packs"&gt;
+listMine({ paginationOpts, now }) -> page of { _id, name, kind, verseCount, dueCount, lastOpenedAt }
+get({ id }) -> pack | null
+rename({ id, name }) -> null
+remove({ id }) -> null                <span class="c">// deletes pack + its packVerses; never deletes verseMemory/hearts</span>
+touch({ id }) -> null                 <span class="c">// bump lastOpenedAt</span>
+addVerse({ id, book, chapter, startVerse, endVerse }) -> null
+                                      <span class="c">// find/create verseRef, HEART it (savedVerses + seed), append packVerses if custom</span>
+removeVerse({ id, verseRefId }) -> null   <span class="c">// custom only; does NOT un-heart</span>
+reorder({ id, orderedVerseRefIds }) -> null   <span class="c">// custom only</span>
+resolveMembers({ id, now }) -> array of { verseRefId, book, chapter, startVerse, endVerse,
+                                          status, learnStage, intervalDays, dueAt, isDue }
+                                      <span class="c">// scope: savedVerses ∩ scope; custom: packVerses order; both joined to verseMemory</span>
+previewScopeCount({ scope, now }) -> { verseCount, dueCount }   <span class="c">// live counter for scope-pack creation</span></code></pre>
+
+        <h3>Routes added</h3>
+        <pre><code><span class="c">// mirror src/routes/study/* + src/components/routes/*-page.tsx</span>
+src/routes/memory/index.tsx        -> MemoryHomePage    -> &lt;MemoryHome/&gt;         (PR 3)
+src/routes/memory/new.tsx          -> MemoryPackNewPage -> &lt;PackBuilder/&gt;        (PR 5)
+src/routes/memory/$packId.tsx      -> MemoryPackPage    -> &lt;PackView packId/&gt;    (PR 5)
+<span class="c">// Review and Practice are in-page surfaces (state), like today's StudyTodayQueue toggle — no routes.</span></code></pre>
+
+        <h3>Reveal thresholds (PR 7)</h3>
+        <pre><code><span class="c">// src/lib/staged-onboarding-thresholds.ts</span>
+MEMORY_MIN_HEARTS = 1;   shouldRevealMemory(m) = m.heartsCount &gt;= 1
+STUDY_MIN_NOTES  = 4;    shouldRevealStudy(m)  = m.notesCount  &gt;= 4   <span class="c">// (was hearts-based)</span></code></pre>
+
+        <h3>Data flow</h3>
+        <p class="muted">
+          Heart a verse (Notes) &rarr; <code>savedVerses.toggle</code> inserts +
+          <code>seedVerseMemory</code> &rarr; the verse is in Memory. Open
+          Memory &rarr; <code>dueQueue({now})</code> (heart-filtered) drives the
+          Review hero/badge; <b>Review</b> plays the due set through the learn
+          ladder / deck, each card calling <code>recordAttempt</code> which logs
+          + <code>scheduleNext</code>. <b>Practice</b> plays any chosen set (a
+          pack, or picked verses) through the Practice board, recording with
+          <code>mode:"practice"</code> — identical scheduling. <b>Packs</b>
+          organize verses: scope packs resolve live from
+          <code>savedVerses</code> &cap; scope; custom packs from
+          <code>packVerses</code>. A Study collection's "Memorize verses in this
+          scope" calls <code>packs.create({kind:"scope", scope})</code>.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- CONVENTIONS -->
+      <section id="conventions">
+        <div class="eyebrow">Rules for the agent</div>
+        <h2>Conventions every PR must follow</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Workflow</h4>
+            <ul class="clean small">
+              <li>One PR at a time, in order. Read files before editing.</li>
+              <li>
+                After code changes run <code>pnpm run agent:check</code> (format
+                &rarr; lint &rarr; typecheck). A stop hook re-runs it.
+              </li>
+              <li>
+                Run <code>pnpm test</code> for any PR that adds/edits a
+                <code>*.test.ts</code>.
+              </li>
+              <li>
+                Run <code>pnpm run codegen</code> after any schema/function
+                change (regenerates <code>convex/_generated</code>).
+              </li>
+              <li>Never commit or push unless explicitly asked.</li>
+              <li>
+                Update <span class="fileref">docs/study-mode.md</span> in the
+                same PR whenever the data/scope/activity model or naming
+                changes.
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Convex &amp; TypeScript rules (enforced by lint)</h4>
+            <ul class="clean small">
+              <li>
+                Every public query/mutation has <code>args</code> <b>and</b>
+                <code>returns</code> validators.
+              </li>
+              <li>
+                Auth via <code>getCurrentUserId</code> /
+                <code>getCurrentUserIdOrNull</code> (<span class="fileref"
+                  >convex/lib/auth.ts</span
+                >); verify per-row ownership. Queries safe to call
+                unauthenticated return
+                <code>[]</code>/<code>0</code>/<code>null</code>.
+              </li>
+              <li>
+                Never call <code>Date.now()</code> in a query — pass
+                <code>now</code> in (client uses <code>useLiveNow()</code>).
+                Mutations may use <code>Date.now()</code>.
+              </li>
+              <li>
+                Query with <code>.withIndex(...)</code>, never
+                <code>.filter(...)</code>; <code>await</code> every promise;
+                paginate unbounded lists (<code>paginationOptsValidator</code>).
+              </li>
+              <li>
+                Schedule only <code>internal.*</code> functions (migrations); no
+                <code>any</code> — use generated
+                <code>Doc&lt;&gt;</code>/<code>Id&lt;&gt;</code>.
+              </li>
+              <li>
+                <b
+                  >Only narrow a schema union after verifying no existing row
+                  uses the removed member</b
+                >
+                (a narrowing otherwise fails the push). PR 1 narrows
+                <code>verseMemory.status</code> to drop <code>suspended</code> —
+                sanctioned because the DB has none. Widening (e.g.
+                <code>mode += "practice"</code>) is always safe.
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout small">
+          <b>UI conventions.</b> Tailwind 4 + shadcn primitives (<span
+            class="fileref"
+            >src/components/ui/*</span
+          >), lucide icons, framer-motion (honor
+          <code>prefers-reduced-motion</code>). New routes use the file-route +
+          thin
+          <span class="fileref">src/components/routes/*-page.tsx</span> pattern.
+          Reuse <code>useLiveNow()</code> for any <code>now</code> arg. Fire
+          attempt writes fire-and-forget via
+          <code>useRecordVerseAttempt</code> (never block UI).
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- TOC -->
+      <section id="prs">
+        <div class="eyebrow">The build</div>
+        <h2>Seven pull requests</h2>
+        <div class="card toc">
+          <a href="#pr1"
+            ><b>PR 1</b> — Heart-aware reads + practice mode + remove suspend
+            <span class="chip ghost">Phase 1 · server</span></a
+          >
+          <a href="#pr2"
+            ><b>PR 2</b> — Packs: schema + Convex API + scope-match tests
+            <span class="chip ghost">Phase 1 · server</span></a
+          >
+          <a href="#pr3"
+            ><b>PR 3</b> — Memory mode: route + home (Review, dashboard,
+            library) <span class="chip ghost">Phase 2 · UI</span></a
+          >
+          <a href="#pr4"
+            ><b>PR 4</b> — Practice board
+            <span class="chip ghost">Phase 2 · UI</span></a
+          >
+          <a href="#pr5"
+            ><b>PR 5</b> — Packs UI (list, builder, pack view)
+            <span class="chip ghost">Phase 3 · UI</span></a
+          >
+          <a href="#pr6"
+            ><b>PR 6</b> — Slim Study + the bridge
+            <span class="chip ghost">Phase 3 · UI</span></a
+          >
+          <a href="#pr7"
+            ><b>PR 7</b> — Three-segment dock + progressive reveal
+            <span class="chip ghost">Phase 4 · chrome</span></a
+          >
+        </div>
+      </section>
+
+      <!-- PR 1 -->
+      <div class="pr" id="pr1">
+        <div class="pr-head">
+          <div class="num">1</div>
+          <div>
+            <div class="pr-sub">Phase 1 · ships silently · server</div>
+            <h3 class="pr-title">
+              Heart-aware reads, practice mode &amp; suspend removal
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> PR 3, PR 4.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Align the verse-memory data model to "heart = memorize": make every
+            live-set read filter to hearted verses, add the
+            <code>"practice"</code> review mode, and
+            <b>delete the suspend concept entirely</b>. The owner has confirmed
+            the test/dev DB has no <code>suspended</code> rows, so the status
+            union is narrowed with no migration. No visible UI change beyond
+            removing the (rarely-used) suspend control.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/schema.ts</span> — widen
+              <code>verseMemoryReviews.mode</code> to add
+              <code>v.literal("practice")</code>; <b>narrow</b>
+              <code>verseMemory.status</code> to drop <code>suspended</code> and
+              <b>remove the <code>previousStatus</code> field</b>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-scheduler.ts</span> — remove
+              <code>"suspended"</code> from <code>MemoryStatus</code> and delete
+              the suspended short-circuit at the top of
+              <code>scheduleNext</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-scheduler.test.ts</span> +
+              <span class="fileref">src/lib/mastery-ring.ts</span> +
+              <span class="fileref">src/lib/mastery-ring.test.ts</span> — remove
+              the now-dead <code>suspended</code> cases/assertions.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> — make
+              <code>dueQueue</code>, <code>dueCount</code>,
+              <code>memoryStats</code>, <code>masteryDistribution</code>,
+              <code>reviewForecast</code> <b>heart-aware</b> (only count verses
+              with a <code>savedVerses</code> row); widen
+              <code>recordAttempt</code>'s <code>modeValidator</code> to accept
+              <code>"practice"</code>; remove <code>setSuspended</code>, the
+              <code>suspended</code> literal from every status validator, and
+              the <code>suspended</code> field from the
+              <code>memoryStats</code> / <code>masteryDistribution</code> return
+              objects.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/verseMemory.ts</span> — delete
+              <code>deriveActiveStatus</code> (only existed for un-suspend).
+            </li>
+            <li>
+              <span class="fileref">convex/savedVerses.ts</span> — drop
+              <code>suspended</code> from <code>savedMemoryValidator</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-library.tsx</span
+              >
+              and
+              <span class="fileref">src/components/study/verse-detail.tsx</span>
+              — remove the suspend <code>Switch</code>/control and its
+              <code>setSuspended</code> call (these screens move to Memory in PR
+              3; strip suspend now so the tree stays green after the mutation is
+              deleted).
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — document the
+              heart-aware read contract and the new <code>practice</code> mode;
+              delete the suspend documentation.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Update the pure scheduler + its tests first (drop
+              <code>suspended</code>), then <code>mastery-ring</code> + test.
+              Run <code>pnpm test</code>.
+            </li>
+            <li>
+              Edit the schema (widen <code>mode</code>, narrow
+              <code>status</code>, remove <code>previousStatus</code>) and run
+              <code>pnpm run codegen</code>.
+            </li>
+            <li>
+              Remove all suspend machinery from
+              <code>convex/verseMemory.ts</code>,
+              <code>convex/lib/verseMemory.ts</code>,
+              <code>convex/savedVerses.ts</code>, and the two Study screens;
+              grep the repo to confirm no <code>suspended</code> /
+              <code>setSuspended</code> / <code>previousStatus</code> references
+              remain.
+            </li>
+            <li>
+              For <code>dueQueue</code>/<code>dueCount</code>: after loading a
+              due row, look up its heart via
+              <code>savedVerses by_userId_verseRefId</code>; skip rows with no
+              heart. For
+              <code>memoryStats</code>/<code>masteryDistribution</code>: iterate
+              <code>savedVerses</code> (the canonical in-Memory set) and join
+              each to its <code>verseMemory</code> via
+              <code>findVerseMemory</code>. For <code>reviewForecast</code>:
+              keep the <code>by_userId_dueAt</code>
+              window but skip un-hearted rows.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass; no existing test breaks.
+            </li>
+            <li>
+              No <code>suspended</code>, <code>setSuspended</code>, or
+              <code>previousStatus</code> references remain anywhere (verify by
+              search).
+            </li>
+            <li>
+              <code>recordAttempt</code> accepts <code>mode:"practice"</code>
+              (typechecks against generated API).
+            </li>
+            <li>
+              <b>Behavioral (manual):</b> an un-hearted-but-previously-reviewed
+              verse no longer appears in <code>dueQueue</code>/badge/stats;
+              re-hearting brings it back with its prior schedule intact.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 2 -->
+      <div class="pr" id="pr2">
+        <div class="pr-head">
+          <div class="num">2</div>
+          <div>
+            <div class="pr-sub">Phase 1 · ships silently · server</div>
+            <h3 class="pr-title">
+              Packs: schema, Convex API &amp; scope-match
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing (independent of PR 1).
+            <b>Unblocks:</b> PR 5, PR 6.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add the <code>packs</code> + <code>packVerses</code> tables and the
+            full Packs server API (exact contract in
+            <a href="#architecture">Architecture</a>), plus a pure, unit-tested
+            scope-match helper. No UI.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/schema.ts</span> — add
+              <code>packs</code> + <code>packVerses</code> tables + indexes
+              exactly as specified in Architecture.
+            </li>
+            <li>
+              <span class="fileref">src/lib/verse-scope-match.ts</span>
+              <span class="tag-new">(new)</span> — pure
+              <code>verseMatchesScope(ref, scope)</code> extracted from
+              <code>studySessions.resolveScope</code>'s book/chapter-range
+              logic.
+            </li>
+            <li>
+              <span class="fileref">src/lib/verse-scope-match.test.ts</span>
+              <span class="tag-new">(new)</span> — vitest.
+            </li>
+            <li>
+              <span class="fileref">convex/packs.ts</span>
+              <span class="tag-new">(new)</span> — the API contract from
+              Architecture. <code>addVerse</code> reuses
+              <code>findOrCreateVerseRefId</code> (<span class="fileref"
+                >convex/lib/verseRefs.ts</span
+              >) + <code>seedVerseMemory</code> and inserts a
+              <code>savedVerses</code> heart if absent (invariant: pack members
+              are hearted). <code>resolveMembers</code> uses
+              <code>verseMatchesScope</code> for scope packs.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/packs.ts</span>
+              <span class="tag-new">(new, optional)</span> — thin shared helpers
+              (keep wrappers thin per repo rules).
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — add a Packs
+              data-model + API section.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Add tables; <code>pnpm run codegen</code>. Reuse the
+              <code>studySessions.scope</code> object shape verbatim for
+              <code>packs.scope</code>.
+            </li>
+            <li>
+              Extract <code>verseMatchesScope</code> and refactor
+              <code>studySessions.resolveScope</code> to call it (keeps one
+              source of truth; verify session behavior unchanged).
+            </li>
+            <li>
+              Implement <code>packs.ts</code>: all functions validate
+              args+returns, check auth+ownership, use indexes.
+              <code>listMine</code> computes <code>verseCount</code>/<code
+                >dueCount</code
+              >
+              per pack (bounded by pack size / hearted set);
+              <code>resolveMembers</code> returns members joined to their live
+              <code>verseMemory</code> schedule with an <code>isDue</code> flag
+              (<code>dueAt &le; now</code>).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              <code>verse-scope-match.test.ts</code> covers: empty
+              <code>books</code> matches all; book membership; chapter-range
+              in/out; multiple ranges; book present without a range.
+            </li>
+            <li>
+              All <code>packs.ts</code> functions validate args + returns, check
+              auth/ownership, and use <code>.withIndex</code> (no
+              <code>.filter</code>); <code>listMine</code> paginates.
+            </li>
+            <li>
+              <code>studySessions.resolveScope</code> still returns the same
+              results after the extraction (no existing session test breaks).
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 3 -->
+      <div class="pr" id="pr3">
+        <div class="pr-head">
+          <div class="num">3</div>
+          <div>
+            <div class="pr-sub">Phase 2 · the mode</div>
+            <h3 class="pr-title">Memory mode: route + home</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1. <b>Unblocks:</b> PR 4, PR 5, PR 6, PR 7.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Create <code>/memory</code> and move the verse-memory experience
+            (Review hero, dashboard, library, drill-down, Today-queue player,
+            summary) out of <code>/study</code> into it. Collapse review to one
+            <b>Review</b> verb. (Suspend is already gone as of PR 1.)
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/routes/memory/index.tsx</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref"
+                >src/components/routes/memory-home-page.tsx</span
+              >
+              <span class="tag-new">(new)</span> — file-route + thin page &rarr;
+              <code>&lt;MemoryHome/&gt;</code>.
+            </li>
+            <li>
+              <span class="fileref">src/components/memory/</span>
+              <span class="tag-new">(new dir)</span> — move here:
+              <code>dashboard/*</code>, <code>study-library.tsx</code> &rarr;
+              <code>memory-library.tsx</code>, <code>verse-detail.tsx</code>,
+              <code>study-today-queue.tsx</code> &rarr;
+              <code>review-player.tsx</code>,
+              <code>study-session-summary.tsx</code> &rarr;
+              <code>review-summary.tsx</code>. Update imports.
+              <b>Do not</b> move the reusable primitives still shared with Study
+              (<code>study-verse-learn.tsx</code>,
+              <code>study-activity-deck.tsx</code>,
+              <code>study-verse-memory-card.tsx</code>,
+              <code>use-record-verse-attempt.ts</code>,
+              <code>study-card-model.ts</code>,
+              <code>verse-memory-feedback.tsx</code>) — leave them in
+              <code>src/components/study/</code> and import across, or move to a
+              neutral shared location; pick one and be consistent.
+            </li>
+            <li>
+              <span class="fileref">src/components/memory/memory-home.tsx</span>
+              <span class="tag-new">(new)</span> — composes: Review hero
+              (relabel "Start review" &rarr; "Review", "Today's review" &rarr;
+              "Review"), dashboard, library. Reuses <code>useLiveNow()</code> +
+              <code>isReviewing</code> toggle pattern from the old
+              <code>study-hub.tsx</code>.
+            </li>
+            <li>
+              <span class="fileref">src/components/study/study-hub.tsx</span> —
+              remove the dashboard + library sections and the review toggle;
+              temporarily leaves the Sessions list (fully slimmed in PR 6).
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — Memory-mode
+              section; note review relabeling.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Scaffold the route/page mirroring
+              <span class="fileref">src/routes/study/index.tsx</span> +
+              <span class="fileref"
+                >src/components/routes/study-hub-page.tsx</span
+              >; let the router plugin regenerate
+              <code>routeTree.gen.ts</code> (run <code>pnpm dev</code>/build
+              once).
+            </li>
+            <li>
+              Move files, fix imports, relabel copy. Keep the Today-queue
+              orchestration logic intact (only rename + re-home).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes; no existing test breaks
+              (update any test importing moved paths).
+            </li>
+            <li>
+              <b>Behavioral (manual):</b> <code>/memory</code> shows the due
+              hero, dashboard, and library; <b>Review</b> plays the due queue
+              and ends in the summary. <code>/study</code> still loads (sessions
+              only).
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 4 -->
+      <div class="pr" id="pr4">
+        <div class="pr-head">
+          <div class="num">4</div>
+          <div>
+            <div class="pr-sub">Phase 2 · self-directed</div>
+            <h3 class="pr-title">Practice board</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1 (practice mode), PR 3 (Memory home).
+            <b>Unblocks:</b> PR 5 (pack Practice entry).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            A focused Practice surface: one verse card, a verse rail to jump
+            around, a Shuffle / In-order toggle, prev/next, and a manual stage
+            selector (Full · Letters · Blanks · Hidden). Attempts record with
+            <code>mode:"practice"</code> and reschedule like Review (D3).
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/practice-order.ts</span>
+              <span class="tag-new">(new)</span> — pure helpers: build an
+              ordered practice set from a verse list (in-order or deterministic
+              shuffle; seedable so tests are stable) + next/prev index math.
+            </li>
+            <li>
+              <span class="fileref">src/lib/practice-order.test.ts</span>
+              <span class="tag-new">(new)</span> — vitest.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/practice/practice-board.tsx</span
+              >
+              <span class="tag-new">(new)</span> — the surface. Props:
+              <code>{ verses: {reference}[]; onExit }</code>. Uses
+              <code>maskVerseText</code> (<span class="fileref"
+                >src/lib/verse-hint.ts</span
+              >) for the selected stage, <code>diffWords</code> +
+              <code>classifyVerseAttempt</code>/<code
+                >verseAttemptAccuracy</code
+              >
+              for grading, and
+              <code
+                >useRecordVerseAttempt().record(&hellip;, mode:"practice")</code
+              >
+              to persist (fire-and-forget).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/practice/practice-verse-rail.tsx</span
+              >
+              <span class="tag-new">(new)</span> — the clickable verse list
+              (modeled on
+              <span class="fileref">study-verse-memory-controls.tsx</span>'s
+              verse list) + Shuffle/In-order toggle + stage selector.
+            </li>
+            <li>
+              <span class="fileref">src/components/memory/memory-home.tsx</span>
+              — add a <b>Practice</b> entry (pick a pack or a few verses to
+              practice); launch <code>PracticeBoard</code> as an in-page surface
+              (like the Review toggle).
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — Practice section
+              (self-directed, counts fully).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Implement <code>practice-order.ts</code> first (pure + tested).
+            </li>
+            <li>
+              Build the board reusing existing masking + grading; the stage
+              selector maps 0..3 &rarr; the four <code>maskVerseText</code>
+              stages. Record every graded attempt with
+              <code>stage</code> = selected stage and
+              <code>mode:"practice"</code>.
+            </li>
+            <li>
+              Wire the Memory-home Practice entry. Verse/pack-specific entry
+              points from the Library and pack view come in PR 5.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass;
+              <code>practice-order.test.ts</code> covers in-order, shuffle
+              determinism (same seed &rarr; same order), and next/prev wrap.
+            </li>
+            <li>
+              <b>Behavioral (manual):</b> selecting a stage changes the masking;
+              jumping via the rail switches verses; Shuffle vs In-order changes
+              sequence; a practice attempt appears in the dashboard heatmap and
+              can move the verse's due date (D3), and honors
+              <code>prefers-reduced-motion</code>.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 5 -->
+      <div class="pr" id="pr5">
+        <div class="pr-head">
+          <div class="num">5</div>
+          <div>
+            <div class="pr-sub">Phase 3 · collections</div>
+            <h3 class="pr-title">Packs UI</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 2 (API), PR 3 (home), PR 4 (Practice).
+            <b>Unblocks:</b> PR 6 (bridge target exists).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Make Packs usable: a Packs section on the Memory home, a builder
+            that chooses Scope vs Custom, and a pack view with Review + Practice
+            + member management.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/components/study/scope-form.tsx</span>
+              <span class="tag-new">(new)</span> — extract the reusable scope
+              form (presets + book picker + tag filter + live preview) out of
+              <span class="fileref">study-scope-builder.tsx</span>; refactor the
+              builder to consume it (no behavior change for Study).
+            </li>
+            <li>
+              <span class="fileref">src/routes/memory/new.tsx</span> +
+              <span class="fileref">src/routes/memory/$packId.tsx</span>
+              <span class="tag-new">(new)</span> + matching
+              <span class="fileref">src/components/routes/*-page.tsx</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-builder.tsx</span
+              >
+              <span class="tag-new">(new)</span> — name + kind toggle
+              (Scope/Custom); Scope embeds <code>ScopeForm</code> +
+              <code>packs.previewScopeCount</code>; Custom opens a verse picker;
+              calls <code>packs.create</code> then navigates to the pack.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+              <span class="tag-new">(new)</span> — header + counts, member list
+              (from <code>packs.resolveMembers</code>), <b>Review</b> (due
+              subset) and <b>Practice</b> (whole set &rarr;
+              <code>PracticeBoard</code>) actions, custom-pack
+              add/remove/reorder.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-list.tsx</span
+              >
+              <span class="tag-new">(new)</span> — Packs section for the Memory
+              home (via <code>usePaginatedQuery(api.packs.listMine)</code>) with
+              a <b>New pack</b> CTA; each row shows verse + due counts.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/add-to-pack.tsx</span
+              >
+              <span class="tag-new">(new)</span> — a small control to add a
+              verse to a custom pack (used from the Library; reader entry
+              optional/defer).
+            </li>
+            <li>
+              <span class="fileref">src/components/memory/memory-home.tsx</span>
+              — mount <code>PackList</code>.
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — Packs UI
+              section.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Extract <code>ScopeForm</code> and verify Study's builder is
+              unchanged in behavior.
+            </li>
+            <li>
+              Build the routes/pages, then <code>PackList</code>,
+              <code>PackBuilder</code>, <code>PackView</code>. Review reuses the
+              <code>review-player.tsx</code> against the pack's due members;
+              Practice reuses <code>PracticeBoard</code> against all members.
+            </li>
+            <li>
+              Custom add/remove/reorder call the PR 2 mutations; adding a verse
+              hearts it (server-side invariant).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes; no existing test breaks
+              (Study builder still works after the extraction).
+            </li>
+            <li>
+              <b>Behavioral (manual):</b> create a scope pack (members update
+              live as you heart matching verses) and a custom pack
+              (add/remove/reorder; adding hearts the verse); Review plays the
+              pack's due subset, Practice plays all members; deleting a pack
+              leaves hearts + memory history intact.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 6 -->
+      <div class="pr" id="pr6">
+        <div class="pr-head">
+          <div class="num">6</div>
+          <div>
+            <div class="pr-sub">Phase 3 · the quiet room</div>
+            <h3 class="pr-title">Slim Study + the bridge</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 2 (packs API), PR 3. <b>Unblocks:</b> PR 7.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Reduce Study to note collections only — remove the Verse Memory
+            activity and the tab switcher — and add the one-way
+            <b>"Memorize verses in this scope"</b> bridge that creates a live
+            scope Pack.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/study/study-activity-options.ts</span
+              >
+              — remove <code>"verse-memory"</code> from the options (and its
+              disabled logic); update <code>SessionView</code>/<code
+                >ActivityType</code
+              >
+              usage.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-card-model.ts</span
+              >
+              — drop <code>"verse-memory"</code> from
+              <code>ActivityType</code> and its card builder (keep the
+              verse-memory <em>card</em> component, still used by the Memory
+              deck).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-session-view.tsx</span
+              >
+              — drop <code>StudyActivitySwitcher</code>; render Overview with a
+              <b>Teach</b> button (launches the teach deck). Simplify
+              <code>normalizeSessionView</code> to Overview/Teach.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-session-activity-view.tsx</span
+              >
+              — remove the <code>StudyVerseMemoryView</code> branch.
+            </li>
+            <li>
+              Delete
+              <span class="fileref"
+                >src/components/study/study-verse-memory-view.tsx</span
+              >
+              and
+              <span class="fileref"
+                >src/components/study/study-verse-memory-controls.tsx</span
+              >
+              (session-scoped verse memory is gone).
+            </li>
+            <li>
+              <span class="fileref">src/components/study/study-hub.tsx</span> —
+              header/copy for a note-only Study; add the bridge action on
+              collections/session view: "Memorize verses in this scope" &rarr;
+              <code>packs.create({kind:"scope", scope})</code> &rarr; navigate
+              to the pack.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-activity-switcher.tsx</span
+              >
+              — delete if now unused.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/study/study-activity-options.test.ts</span
+              >
+              — update to the note-only option set.
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — rewrite Study as
+              note-only; document the bridge.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Remove the verse-memory activity from options/model/session views;
+              delete the now-orphaned components (grep to confirm no imports
+              remain).
+            </li>
+            <li>
+              Add the bridge control; it calls <code>packs.create</code> with
+              the session's <code>scope</code> and navigates to
+              <code>/memory/$packId</code>.
+            </li>
+            <li>Update the activity-options test to the new set.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass;
+              <code>study-activity-options.test.ts</code> reflects note-only
+              options.
+            </li>
+            <li>
+              No remaining imports of the deleted verse-memory session
+              components.
+            </li>
+            <li>
+              <b>Behavioral (manual):</b> a session shows Overview + Teach only;
+              the bridge creates a scope pack from the session scope and lands
+              on it in Memory.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 7 -->
+      <div class="pr" id="pr7">
+        <div class="pr-head">
+          <div class="num">7</div>
+          <div>
+            <div class="pr-sub">Phase 4 · chrome &amp; onboarding</div>
+            <h3 class="pr-title">Three-segment dock + progressive reveal</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 3 (Memory route), PR 6 (Study slimmed).
+            <b>Completes the feature.</b>
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Turn the two-segment dock into Notes / Memory / Study with the badge
+            on Memory, gate each new mode behind a reveal threshold, hide the
+            dock until a second mode unlocks, and wire the first-heart /
+            first-notes reveal callouts + a Memory first-open explainer.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/lib/staged-onboarding-thresholds.ts</span
+              >
+              — add <code>MEMORY_MIN_HEARTS = 1</code> +
+              <code>shouldRevealMemory</code>; repoint
+              <code>shouldRevealStudy</code> to
+              <code>notesCount &ge; STUDY_MIN_NOTES (4)</code>. Keep helper
+              names stable where possible.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/lib/staged-onboarding-thresholds.test.ts</span
+              >
+              — cover the new/changed thresholds.
+            </li>
+            <li>
+              <span class="fileref">src/lib/feature-hints.ts</span> — add
+              <code>MEMORY_REVEAL_AFTER_FIRST_HEART</code>,
+              <code>STUDY_REVEAL_AFTER_NOTES</code>,
+              <code>MEMORY_FIRST_OPEN_EXPLAINER</code> ids +
+              metadata/priorities.
+            </li>
+            <li>
+              <span class="fileref">src/components/layout/mode-dock.tsx</span> —
+              third segment; badge on Memory; render nothing until &ge; 2 modes
+              are unlocked; gate each segment by its reveal predicate;
+              <code>⌘J</code> cycles unlocked modes; per-mode reveal callouts;
+              add <code>/memory</code> to active-route checks.
+            </li>
+            <li>
+              <span class="fileref">src/components/layout/tab-bar.tsx</span> —
+              add a gated Memory toolbar icon; repoint the Study icon to the new
+              notes-based reveal; keep both as fallbacks.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/memory-first-open-dialog.tsx</span
+              >
+              <span class="tag-new">(new)</span> — first-open explainer ("Heart
+              verses to add them here · Review what's due · Make packs to
+              focus").
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/layout/tab-bar.test.tsx</span
+              >
+              — update gating expectations (Memory gated by hearts; Study by
+              notes).
+            </li>
+            <li>
+              <span class="fileref">docs/study-mode.md</span> — document the
+              three-segment dock + reveal thresholds.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>Update thresholds + tests first (pure).</li>
+            <li>
+              Add hint ids; wire dock/tab-bar gating with
+              <code>useFeatureHint</code> +
+              <code>FeatureCallout</code> mirroring the existing Search pattern.
+              Compute "unlocked mode count" from the reveal predicates to decide
+              whether to render the dock at all.
+            </li>
+            <li>
+              Add the Memory first-open dialog (reuse the
+              <code>StudyModeExplainerDialog</code> pattern).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass;
+              threshold + tab-bar tests updated and green.
+            </li>
+            <li>
+              <b>Behavioral (manual):</b> a brand-new account sees no dock;
+              after the first heart the dock appears with Notes + Memory and the
+              "in Memory" callout; after 4 notes the Study segment appears with
+              its callout; the badge sits on Memory; <code>⌘J</code> cycles only
+              unlocked modes; reduced-motion honored.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- RISKS -->
+      <section id="risks">
+        <div class="eyebrow">Eyes open</div>
+        <h2>Risks &amp; how the plan answers them</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 32%">Risk</th>
+                <th>Mitigation (baked into the sequence)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Schema union narrowing breaks the push</td>
+                <td>
+                  Narrowing <code>status</code> to drop <code>suspended</code>
+                  is safe only because the owner confirmed zero
+                  <code>suspended</code> rows; PR 1 removes the literal + field
+                  with no migration. All other changes only widen (<code
+                    >mode += "practice"</code
+                  >).
+                </td>
+              </tr>
+              <tr>
+                <td>Convex logic can't be unit-tested</td>
+                <td>
+                  Extract testable logic into pure libs
+                  (<code>verse-scope-match</code>, <code>practice-order</code>)
+                  and flag server/UI behavior for the user's manual pass.
+                </td>
+              </tr>
+              <tr>
+                <td>Un-hearted verses still surfacing in review</td>
+                <td>
+                  PR 1 makes every live-set read heart-aware; "in Memory =
+                  hearted" is the single contract.
+                </td>
+              </tr>
+              <tr>
+                <td>File moves breaking imports mid-sequence</td>
+                <td>
+                  PR 3 keeps shared primitives in place and only re-homes
+                  Memory-specific screens; each PR ends green with
+                  <code>agent:check</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>Pack ↔ heart drift</td>
+                <td>
+                  Server invariant: adding a verse to a pack hearts it; scope
+                  packs resolve live from <code>savedVerses</code>; delete-pack
+                  never touches hearts/history (PR 2/5).
+                </td>
+              </tr>
+              <tr>
+                <td>Practice distorting stats unexpectedly</td>
+                <td>
+                  D3 is deliberate and documented; the stage-aware scheduler
+                  keeps easy-stage practice from cheating to mastery (PR 4).
+                </td>
+              </tr>
+              <tr>
+                <td>Reveal regressions (existing Study/Search hints)</td>
+                <td>
+                  Reuse the proven <code>useFeatureHint</code>/<code
+                    >FeatureCallout</code
+                  >
+                  system; keep hint ids stable; cover thresholds with tests (PR
+                  7).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        Berean · Memory Mode implementation plan · grounded in the current
+        branch (<span class="fileref">study-mode-build</span>) and
+        <span class="fileref"
+          >docs/proposals/memory-first-ux-proposal.html</span
+        >
+        (rev 3).
+      </footer>
+    </div>
+  </body>
+</html>

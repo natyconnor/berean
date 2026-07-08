@@ -2,12 +2,13 @@ import {
   type JSX,
   type KeyboardEvent,
   type ReactNode,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +43,8 @@ import { PracticeVerseRail } from "./practice-verse-rail";
 
 export interface PracticeVerse {
   reference: CardReference;
+  /** Server-authoritative memory rung for this verse (0..3). */
+  learnStage: number;
 }
 
 interface PracticeBoardProps {
@@ -54,6 +57,18 @@ interface PracticeBoardProps {
 interface OrderedVerse {
   id: string;
   reference: CardReference;
+  learnStage: number;
+}
+
+const SHUFFLE_DURATION_MS = 750;
+const DEAL_COUNT = 6;
+const DEAL_STAGGER_S = 0.08;
+const DEAL_FLY_IN_S = 0.16;
+const DEAL_FADE_OUT_S = 0.12;
+
+function normalizeStageIndex(stage: number): number {
+  if (!Number.isFinite(stage)) return 0;
+  return Math.min(MAX_LEARN_STAGE, Math.max(0, Math.trunc(stage)));
 }
 
 /**
@@ -61,22 +76,24 @@ interface OrderedVerse {
  * time, a verse rail to jump around, a Shuffle / In-order toggle, prev/next
  * navigation, and a manual stage selector (Full · Letters · Blanks · Hidden).
  *
- * Only Hidden-stage recall is scored: an attempt at the hardest rung
- * (`stageIndex === MAX_LEARN_STAGE`) records with `mode: "practice"` and
- * reschedules the verse. The easier stages (Full · Letters · Blanks) are pure,
- * unscored practice — the learner still gets diff/accuracy feedback, but
- * nothing is logged or scheduled.
+ * Practice counts fully: every checked attempt records with `mode: "practice"`
+ * and reschedules exactly like Review. The scheduler is stage-aware, so nailing
+ * an easier rung (`exact`) advances the verse's `learnStage`, which lifts the
+ * stage ceiling in-session and unlocks the next rung — guiding the learner
+ * Full → Letters → Blanks → Hidden until Hidden recall masters the verse.
  */
 export function PracticeBoard({
   verses,
   onExit,
 }: PracticeBoardProps): JSX.Element {
+  const reduceMotion = useReducedMotion();
   const [order, setOrder] = useState<PracticeOrder>("in-order");
   // Bumped each time the user (re-)selects Shuffle so repeated presses reshuffle
   // deterministically without depending on Math.random().
   const [seed, setSeed] = useState(0);
+  const [shuffleNonce, setShuffleNonce] = useState(0);
+  const [isShuffling, setIsShuffling] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [stageIndex, setStageIndex] = useState(0);
 
   const { record } = useRecordVerseAttempt();
 
@@ -88,7 +105,25 @@ export function PracticeBoard({
     verses.map((verse) => ({
       id: verseRefKey(verse.reference),
       reference: verse.reference,
+      learnStage: normalizeStageIndex(verse.learnStage),
     })),
+  );
+
+  const [stageByVerseId, setStageByVerseId] = useState<Record<string, number>>(
+    () =>
+      Object.fromEntries(
+        baseVerses.map((verse) => [verse.id, verse.learnStage]),
+      ),
+  );
+
+  // The per-verse stage ceiling (highest reached rung). Seeded from the frozen
+  // snapshot, but — unlike `baseVerses` — it rises as attempts recorded this
+  // session advance the server-authoritative `learnStage`, so a verse learned
+  // during the session immediately unlocks its next rung.
+  const [reachedStageByVerseId, setReachedStageByVerseId] = useState<
+    Record<string, number>
+  >(() =>
+    Object.fromEntries(baseVerses.map((verse) => [verse.id, verse.learnStage])),
   );
 
   const orderedVerses = useMemo(
@@ -96,19 +131,52 @@ export function PracticeBoard({
     [baseVerses, order, seed],
   );
 
-  // Only the hardest rung (Hidden) is scored: an attempt there records and
-  // reschedules; easier stages are pure practice.
-  const recordsToSchedule = stageIndex === MAX_LEARN_STAGE;
+  // The rail (and shuffle overlay) need each verse's *live* stage — the
+  // frozen `baseVerses.learnStage` never moves, so without this the rail dot
+  // would stay stuck at whatever rung the verse was at when Practice opened.
+  const railVerses = useMemo(
+    () =>
+      orderedVerses.map((verse) => ({
+        ...verse,
+        learnStage: reachedStageByVerseId[verse.id] ?? verse.learnStage,
+      })),
+    [orderedVerses, reachedStageByVerseId],
+  );
 
   const boundedIndex =
     orderedVerses.length === 0
       ? 0
       : Math.min(currentIndex, orderedVerses.length - 1);
   const currentVerse = orderedVerses[boundedIndex] ?? null;
+  // The verse's achieved rung is the ceiling: the learner can drop back to
+  // practice easier stages, but can't skip ahead of what they've worked
+  // towards. The ceiling rises as recorded attempts advance `learnStage`, so
+  // nailing a rung unlocks the next one without leaving Practice.
+  const maxStageIndex = currentVerse
+    ? (reachedStageByVerseId[currentVerse.id] ?? currentVerse.learnStage)
+    : 0;
+  const stageIndex = currentVerse
+    ? Math.min(stageByVerseId[currentVerse.id] ?? maxStageIndex, maxStageIndex)
+    : 0;
+
+  useEffect(() => {
+    if (!isShuffling) return;
+    const timer = window.setTimeout(
+      () => setIsShuffling(false),
+      SHUFFLE_DURATION_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [isShuffling, shuffleNonce]);
 
   function handleOrderChange(nextOrder: PracticeOrder) {
     setOrder(nextOrder);
-    if (nextOrder === "shuffle") setSeed((value) => value + 1);
+    if (nextOrder === "shuffle") {
+      setSeed((value) => value + 1);
+      setShuffleNonce((value) => value + 1);
+      if (!reduceMotion) setIsShuffling(true);
+    } else {
+      setIsShuffling(false);
+    }
     setCurrentIndex(0);
   }
 
@@ -119,6 +187,16 @@ export function PracticeBoard({
 
   function goToIndex(index: number) {
     setCurrentIndex(index);
+  }
+
+  function handleStageChange(nextStageIndex: number) {
+    if (!currentVerse) return;
+    // Clamp to the verse's ceiling so a locked (ahead) rung can never be set.
+    const capped = Math.min(normalizeStageIndex(nextStageIndex), maxStageIndex);
+    setStageByVerseId((prev) => ({
+      ...prev,
+      [currentVerse.id]: capped,
+    }));
   }
 
   if (orderedVerses.length === 0 || !currentVerse) {
@@ -136,40 +214,70 @@ export function PracticeBoard({
 
   return (
     <PracticeShell onExit={onExit}>
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="order-2 md:order-1">
-          <PracticeCard
-            key={currentVerse.id}
-            reference={currentVerse.reference}
-            stageIndex={stageIndex}
-            recordsToSchedule={recordsToSchedule}
-            position={boundedIndex}
-            total={orderedVerses.length}
-            onRecord={(tokens) =>
-              void record({
-                reference: currentVerse.reference,
-                tokens,
-                stage: stageIndex,
-                mode: "practice",
-              })
-            }
-            onPrev={() =>
-              goToIndex(prevIndex(boundedIndex, orderedVerses.length))
-            }
-            onNext={() =>
-              goToIndex(nextIndex(boundedIndex, orderedVerses.length))
-            }
-          />
+          <div className="relative">
+            <PracticeCard
+              key={currentVerse.id}
+              reference={currentVerse.reference}
+              stageIndex={stageIndex}
+              maxStageIndex={maxStageIndex}
+              position={boundedIndex}
+              total={orderedVerses.length}
+              onRecord={(tokens) => {
+                const verseId = currentVerse.id;
+                void record({
+                  reference: currentVerse.reference,
+                  tokens,
+                  stage: stageIndex,
+                  mode: "practice",
+                }).then((schedule) => {
+                  if (!schedule) return;
+                  // Adopt the server-authoritative rung as the new ceiling
+                  // (monotonic within the session) so a nailed rung unlocks the
+                  // next stage even after a lapse elsewhere drops `learnStage`.
+                  setReachedStageByVerseId((prev) => ({
+                    ...prev,
+                    [verseId]: Math.max(
+                      prev[verseId] ?? 0,
+                      normalizeStageIndex(schedule.learnStage),
+                    ),
+                  }));
+                });
+              }}
+              onAdvanceStage={() => handleStageChange(stageIndex + 1)}
+              onPrev={() =>
+                goToIndex(prevIndex(boundedIndex, orderedVerses.length))
+              }
+              onNext={() =>
+                goToIndex(nextIndex(boundedIndex, orderedVerses.length))
+              }
+            />
+            <AnimatePresence>
+              {isShuffling && (
+                <PracticeShuffleOverlay
+                  key={`practice-shuffle-${shuffleNonce}`}
+                  verses={railVerses}
+                  firstVerse={
+                    railVerses.find((v) => v.id === currentVerse.id) ??
+                    currentVerse
+                  }
+                />
+              )}
+            </AnimatePresence>
+          </div>
         </div>
         <div className="order-1 md:order-2">
           <PracticeVerseRail
-            verses={orderedVerses}
+            verses={railVerses}
             activeId={currentVerse.id}
             onSelectVerse={handleSelectVerse}
             order={order}
             onOrderChange={handleOrderChange}
+            shuffleNonce={shuffleNonce}
             stageIndex={stageIndex}
-            onStageChange={setStageIndex}
+            maxStageIndex={maxStageIndex}
+            onStageChange={handleStageChange}
           />
         </div>
       </div>
@@ -180,11 +288,13 @@ export function PracticeBoard({
 interface PracticeCardProps {
   reference: CardReference;
   stageIndex: number;
-  /** Whether an attempt at this stage records + reschedules (Hidden only). */
-  recordsToSchedule: boolean;
+  /** Highest currently-unlocked rung for this verse (the stage ceiling). */
+  maxStageIndex: number;
   position: number;
   total: number;
   onRecord: (tokens: ReturnType<typeof diffWords>) => void;
+  /** Advance the selected stage to the next unlocked rung. */
+  onAdvanceStage: () => void;
   onPrev: () => void;
   onNext: () => void;
 }
@@ -192,10 +302,11 @@ interface PracticeCardProps {
 function PracticeCard({
   reference,
   stageIndex,
-  recordsToSchedule,
+  maxStageIndex,
   position,
   total,
   onRecord,
+  onAdvanceStage,
   onPrev,
   onNext,
 }: PracticeCardProps): JSX.Element {
@@ -227,6 +338,7 @@ function PracticeCard({
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
 
   const stage = PRACTICE_STAGES[stageIndex] ?? PRACTICE_STAGES[0];
+  const stageColor = stage.color;
   const tokens = useMemo(
     () => maskVerseText(versePlainText, stage.stage),
     [versePlainText, stage.stage],
@@ -251,8 +363,8 @@ function PracticeCard({
     if (checked) return;
     const diffTokens = diffWords(typedAnswer, versePlainText);
     setCheckedStage(stageIndex);
-    // Only the Hidden stage is scored; easier stages stay pure practice.
-    if (recordsToSchedule) onRecord(diffTokens);
+    // Practice counts fully: every stage records and reschedules.
+    onRecord(diffTokens);
   }
 
   function tryAgain() {
@@ -273,10 +385,19 @@ function PracticeCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduceMotion ? 0 : 0.2 }}
     >
-      <Card className="mx-auto w-full overflow-hidden">
+      <Card className={cn("mx-auto w-full overflow-hidden", stageColor.panel)}>
         <CardHeader className="gap-3 text-center">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <p
+              className={cn(
+                "inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]",
+                stageColor.text,
+              )}
+            >
+              <span
+                className={cn("h-2 w-2 rounded-full", stageColor.dot)}
+                aria-hidden
+              />
               Practice · {stage.label}
             </p>
             <CardTitle className="mt-2 text-3xl tracking-tight">
@@ -286,17 +407,22 @@ function PracticeCard({
           <p className="text-sm text-muted-foreground">
             Verse {position + 1} of {total}
           </p>
-          <p className="text-xs text-muted-foreground/80">
-            {recordsToSchedule
-              ? "Hidden stage · this attempt counts toward your schedule"
-              : "Practice only · switch to Hidden to log recall"}
+          <p className={cn("text-xs", stageColor.text)}>
+            {stageIndex === MAX_LEARN_STAGE
+              ? "Hidden stage · nail this to master the verse"
+              : "Get it exact to unlock the next stage"}
           </p>
         </CardHeader>
 
         <CardContent className="space-y-5">
           {!checked && (
             <>
-              <div className="min-h-[180px] rounded-xl border bg-background px-4 py-4 text-left text-lg leading-8">
+              <div
+                className={cn(
+                  "min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
+                  stageColor.panel,
+                )}
+              >
                 {loading ? (
                   <div className="space-y-3 py-2">
                     <div className="h-4 w-full animate-pulse rounded bg-muted" />
@@ -325,7 +451,7 @@ function PracticeCard({
                 onChange={(event) => setTypedAnswer(event.target.value)}
                 onKeyDown={handleAnswerKeyDown}
                 placeholder="Type what you remember"
-                className="min-h-[150px] resize-none"
+                className="min-h-[170px] resize-none bg-background/80"
                 aria-label="Your recalled verse"
               />
             </>
@@ -383,15 +509,28 @@ function PracticeCard({
           </div>
           <div className="flex w-full gap-2 sm:w-auto">
             {checked ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1 sm:flex-none"
-                onClick={tryAgain}
-              >
-                <RotateCcw className="h-4 w-4" aria-hidden />
-                Try again
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 sm:flex-none"
+                  onClick={tryAgain}
+                >
+                  <RotateCcw className="h-4 w-4" aria-hidden />
+                  Try again
+                </Button>
+                {stageIndex < maxStageIndex && (
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="flex-1 sm:flex-none"
+                    onClick={onAdvanceStage}
+                  >
+                    Next stage
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </Button>
+                )}
+              </>
             ) : (
               <Button
                 type="button"
@@ -408,6 +547,132 @@ function PracticeCard({
         </CardFooter>
       </Card>
     </motion.div>
+  );
+}
+
+function PracticeShuffleOverlay({
+  verses,
+  firstVerse,
+}: {
+  verses: ReadonlyArray<OrderedVerse>;
+  firstVerse: OrderedVerse;
+}): JSX.Element {
+  const samples = useMemo<OrderedVerse[]>(() => {
+    const others = verses.filter((verse) => verse.id !== firstVerse.id);
+    const leadIns: OrderedVerse[] = [];
+    for (let i = 0; i < DEAL_COUNT - 1; i += 1) {
+      const pick =
+        others.length > 0 ? others[(i * 3 + 1) % others.length] : firstVerse;
+      leadIns.push(pick ?? firstVerse);
+    }
+    return [...leadIns, firstVerse];
+  }, [verses, firstVerse]);
+
+  return (
+    <motion.div
+      className="pointer-events-none absolute inset-0"
+      style={{ zIndex: 50 }}
+      initial={{ opacity: 1 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.25, ease: "easeOut" } }}
+    >
+      {samples.map((sample, index) => (
+        <PracticeShuffleCard
+          key={`${index}-${sample.id}`}
+          index={index}
+          verse={sample}
+          isLast={index === samples.length - 1}
+        />
+      ))}
+    </motion.div>
+  );
+}
+
+function PracticeShuffleCard({
+  index,
+  verse,
+  isLast,
+}: {
+  index: number;
+  verse: OrderedVerse;
+  isLast: boolean;
+}): JSX.Element {
+  const fromLeft = index % 2 === 0;
+  const startX = fromLeft ? -360 : 360;
+  const startRotate = fromLeft ? -10 : 10;
+  const delay = index * DEAL_STAGGER_S;
+  const totalDuration = isLast
+    ? DEAL_FLY_IN_S
+    : DEAL_FLY_IN_S + DEAL_FADE_OUT_S;
+  const flyInFrac = DEAL_FLY_IN_S / totalDuration;
+
+  return (
+    <motion.div
+      className="absolute inset-0 overflow-hidden rounded-xl border bg-card shadow-md"
+      style={{ zIndex: 50 + index }}
+      initial={{ x: startX, y: 0, rotate: startRotate, opacity: 0 }}
+      animate={
+        isLast
+          ? { x: 0, y: 0, rotate: 0, opacity: 1 }
+          : {
+              x: [startX, 0, 0],
+              y: [0, 0, 6],
+              rotate: [startRotate, 0, 0],
+              opacity: [0, 1, 0],
+            }
+      }
+      transition={{
+        delay,
+        duration: totalDuration,
+        times: isLast ? undefined : [0, flyInFrac, 1],
+        ease: "easeOut",
+      }}
+    >
+      <PracticeShuffleCardFace verse={verse} />
+    </motion.div>
+  );
+}
+
+function PracticeShuffleCardFace({
+  verse,
+}: {
+  verse: OrderedVerse;
+}): JSX.Element {
+  const refLabel = formatVerseRef(verse.reference);
+  const stage = PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
+  const stageColor = stage.color;
+
+  return (
+    <div
+      className={cn(
+        "flex h-full w-full flex-col items-center gap-5 px-6 py-8 text-center",
+        stageColor.panel,
+      )}
+    >
+      <div>
+        <p
+          className={cn(
+            "inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]",
+            stageColor.text,
+          )}
+        >
+          <span
+            className={cn("h-2 w-2 rounded-full", stageColor.dot)}
+            aria-hidden
+          />
+          Practice · {stage.label}
+        </p>
+        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+          {refLabel}
+        </h2>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Shuffling your practice order
+      </p>
+      <div className="min-h-[200px] w-full max-w-xl rounded-md border border-input bg-background/80 px-3 py-2 text-left text-sm text-muted-foreground/50">
+        Type what you remember
+      </div>
+    </div>
   );
 }
 
@@ -452,7 +717,7 @@ function PracticeShell({
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-3xl px-5 py-6">{children}</div>
+        <div className="mx-auto max-w-6xl px-5 py-6">{children}</div>
       </ScrollArea>
     </div>
   );

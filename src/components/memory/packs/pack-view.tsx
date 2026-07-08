@@ -107,6 +107,7 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
           startVerse: m.startVerse,
           endVerse: m.endVerse,
         },
+        learnStage: m.learnStage,
       })),
     [members],
   );

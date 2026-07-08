@@ -1,4 +1,5 @@
 import { ListOrdered, Shuffle } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
@@ -10,6 +11,7 @@ import { PRACTICE_STAGES } from "./practice-stages";
 interface RailVerse {
   id: string;
   reference: CardReference;
+  learnStage: number;
 }
 
 interface PracticeVerseRailProps {
@@ -18,7 +20,10 @@ interface PracticeVerseRailProps {
   onSelectVerse: (id: string) => void;
   order: PracticeOrder;
   onOrderChange: (order: PracticeOrder) => void;
+  shuffleNonce: number;
   stageIndex: number;
+  /** Highest selectable rung: the verse's achieved level (no skipping ahead). */
+  maxStageIndex: number;
   onStageChange: (stageIndex: number) => void;
   className?: string;
 }
@@ -34,7 +39,9 @@ export function PracticeVerseRail({
   onSelectVerse,
   order,
   onOrderChange,
+  shuffleNonce,
   stageIndex,
+  maxStageIndex,
   onStageChange,
   className,
 }: PracticeVerseRailProps) {
@@ -64,7 +71,16 @@ export function PracticeVerseRail({
               disabled={!canReorder}
               aria-pressed={order === "shuffle"}
             >
-              <Shuffle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <motion.span
+                key={shuffleNonce}
+                aria-hidden
+                initial={{ rotate: 0 }}
+                animate={{ rotate: order === "shuffle" ? 360 : 0 }}
+                transition={{ duration: 0.45, ease: "easeOut" }}
+                className="inline-flex"
+              >
+                <Shuffle className="h-3.5 w-3.5 shrink-0" />
+              </motion.span>
               Shuffle
             </button>
             <button
@@ -93,22 +109,41 @@ export function PracticeVerseRail({
             role="group"
             aria-label="Practice stage"
           >
-            {PRACTICE_STAGES.map((item, index) => (
-              <button
-                key={item.stage}
-                type="button"
-                className={cn(
-                  "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                  index === stageIndex
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => onStageChange(index)}
-                aria-pressed={index === stageIndex}
-              >
-                {item.label}
-              </button>
-            ))}
+            {PRACTICE_STAGES.map((item, index) => {
+              const selected = index === stageIndex;
+              const locked = index > maxStageIndex;
+              return (
+                <button
+                  key={item.stage}
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                    selected
+                      ? item.color.selectedButton
+                      : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+                    locked &&
+                      "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground",
+                  )}
+                  onClick={() => onStageChange(index)}
+                  disabled={locked}
+                  aria-pressed={selected}
+                  title={
+                    locked
+                      ? `Reach ${item.label} through review before practicing it`
+                      : undefined
+                  }
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      item.color.dot,
+                    )}
+                    aria-hidden
+                  />
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -117,27 +152,42 @@ export function PracticeVerseRail({
             Verses
           </p>
           <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1">
-            {verses.map((verse) => {
-              const active = verse.id === activeId;
-              return (
-                <button
-                  key={verse.id}
-                  type="button"
-                  className={cn(
-                    "inline-flex w-full items-center rounded-full border px-2.5 py-1 text-left text-[11px] font-medium transition-colors",
-                    active
-                      ? "border-transparent bg-primary text-primary-foreground"
-                      : "border-border/60 bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                  onClick={() => onSelectVerse(verse.id)}
-                  aria-current={active ? "true" : undefined}
-                >
-                  <span className="truncate">
-                    {formatVerseRef(verse.reference)}
-                  </span>
-                </button>
-              );
-            })}
+            <AnimatePresence initial={false}>
+              {verses.map((verse) => {
+                const active = verse.id === activeId;
+                const stage =
+                  PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
+                return (
+                  <motion.button
+                    layout
+                    key={verse.id}
+                    type="button"
+                    className={cn(
+                      "inline-flex w-full items-center gap-2 rounded-full border px-2.5 py-1 text-left text-[11px] font-medium transition-colors",
+                      active
+                        ? stage.color.railActive
+                        : "border-border/60 bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                    onClick={() => onSelectVerse(verse.id)}
+                    aria-current={active ? "true" : undefined}
+                    aria-label={`${formatVerseRef(verse.reference)} (${stage.label} stage)`}
+                    title={`${formatVerseRef(verse.reference)} · ${stage.label}`}
+                    transition={{ layout: { duration: 0.28, ease: "easeOut" } }}
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full ring-1 ring-background/80",
+                        stage.color.dot,
+                      )}
+                      aria-hidden
+                    />
+                    <span className="truncate">
+                      {formatVerseRef(verse.reference)}
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </AnimatePresence>
           </div>
         </div>
       </div>

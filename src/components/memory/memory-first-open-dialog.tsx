@@ -18,12 +18,12 @@ export function MemoryFirstOpenDialog() {
     <FeatureInfoDialog
       state={memoryFirstOpenHint}
       title="Welcome to Memory"
-      description="Memory turns your hearted verses into a spaced-repetition practice you can grow over time."
+      description="Memory helps you store up your hearted verses and carry them with you."
       body={
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Heart verses to add them here.</li>
-          <li>Review what's due to keep them fresh.</li>
-          <li>Make packs to focus on a set.</li>
+          <li>Heart verses to see them here.</li>
+          <li>Review verses to master them over time.</li>
+          <li>Build packs of verses to focus on sections or themes.</li>
         </ul>
       }
     />

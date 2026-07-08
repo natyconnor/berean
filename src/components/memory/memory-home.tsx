@@ -41,6 +41,7 @@ export function MemoryHome() {
           startVerse: verse.startVerse,
           endVerse: verse.endVerse,
         },
+        learnStage: verse.memory?.learnStage ?? 0,
       })),
     [savedVerses],
   );
