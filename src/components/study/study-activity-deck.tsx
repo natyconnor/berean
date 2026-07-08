@@ -10,7 +10,6 @@ import {
   activityLabel,
   getCardKind,
   referenceKey,
-  type ActivityType,
   type PassageNote,
   type StudyCard,
 } from "./study-card-model";
@@ -332,7 +331,7 @@ export function StudyActivityDeck({
     );
   }
 
-  const currentCardActivity: ActivityType = currentCard.type;
+  const currentCardActivity = currentCard.type;
   const isVerseMemoryDeck = cards[0]?.type === "verse-memory";
   const deckOwnsOrder = controlledOrder === undefined;
 

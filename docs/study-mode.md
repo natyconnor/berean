@@ -25,7 +25,7 @@ Study separates two questions:
   An empty scope (no books selected, no tags) covers your whole corpus.
 
 2. **Activity — "How am I studying?"**
-   The interaction pattern run over the cards produced from the current scope. Today's activities are **Verse memory** and **Teach** (see [Activities](#activities)). A third "view" — **Overview** — is also selectable, but it's a passive summary rather than an activity.
+   The interaction pattern run over the cards produced from the current scope. Study is now **note-only**: its single activity is **Teach** (see [Activities](#activities)), alongside the passive **Overview** summary. Verse memorization is no longer a Study activity — it lives entirely in [Memory](#memory-mode-memory), reached from a session via the [Memorize-scope bridge](#the-memory-bridge-memorize-verses-in-this-scope).
 
 This split is the extensibility seam: new data sources usually become **scope inputs**, **card builders**, or **activities** rather than a new workspace.
 
@@ -35,21 +35,21 @@ Study is shipped as a first-class workspace reachable from the app toolbar (Book
 
 - `/study` — the **hub**, listing your saved sessions.
 - `/study/new` — the **scope builder**, which creates a session from books + chapter ranges + tag filters.
-- `/study/$sessionId` — the **session view**, with Overview / Verse memory / Teach tabs.
+- `/study/$sessionId` — the **session view**: an Overview with a **Teach** button, plus a bridge that sends the scope to Memory.
 - `/memory` — the **Memory** workspace: the progress dashboard, library, and due-queue Review (see [Memory mode](#memory-mode-memory)).
 
 ### Data model
 
 One new Convex table, `studySessions`, holds a per-user session:
 
-| Field          | Type                                            | Notes                                                                                                             |
-| -------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `userId`       | `Id<"users">`                                   | Owner. Indexed via `by_userId_lastOpenedAt`.                                                                      |
-| `name`         | optional `string`                               | User-given label; currently not editable post-create.                                                             |
-| `scope`        | `{ books, chapterRanges?, tags, tagMatchMode }` | See "Core model" above.                                                                                           |
-| `lastView`     | optional `string` (a `SessionView`)             | Remembers which tab the user was on (`overview` / `verse-memory` / `teach`) so reopening the session lands there. |
-| `createdAt`    | `number`                                        | Creation timestamp.                                                                                               |
-| `lastOpenedAt` | `number`                                        | Bumped on `touch`; used to sort the hub list.                                                                     |
+| Field          | Type                                            | Notes                                                                                                                                                                                   |
+| -------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userId`       | `Id<"users">`                                   | Owner. Indexed via `by_userId_lastOpenedAt`.                                                                                                                                            |
+| `name`         | optional `string`                               | User-given label; currently not editable post-create.                                                                                                                                   |
+| `scope`        | `{ books, chapterRanges?, tags, tagMatchMode }` | See "Core model" above.                                                                                                                                                                 |
+| `lastView`     | optional `string` (a `SessionView`)             | Remembers which view the user was on (`overview` / `teach`) so reopening the session lands there. Legacy verse-memory values (`verse-memory` / `mixed-review`) fall back to `overview`. |
+| `createdAt`    | `number`                                        | Creation timestamp.                                                                                                                                                                     |
+| `lastOpenedAt` | `number`                                        | Bumped on `touch`; used to sort the hub list.                                                                                                                                           |
 
 There is no separate "favorites" table. Hearted verses live in `savedVerses`; a session's scope filters them alongside notes.
 
@@ -142,7 +142,7 @@ Alongside Review, Memory home exposes a **Practice** surface — a focused, **se
 
 - **Entry point.** A **Practice** button in the Memory-home header launches `PracticeBoard` (`src/components/memory/practice/practice-board.tsx`) as an **in-page surface** (state, not a route), mirroring the Review toggle. It is disabled until the user has at least one hearted verse. The v1 practice set is **every hearted verse** (`savedVerses.listAll`, sharing the cached subscription with the attempt recorder); pack- and verse-specific entry points come in a later PR.
 - **The board.** One verse card at a time with:
-  - a **verse rail** (`practice-verse-rail.tsx`, modeled on `StudyVerseMemoryControls`' verse list) to jump directly to any verse,
+  - a **verse rail** (`practice-verse-rail.tsx`) to jump directly to any verse,
   - a **Shuffle / In-order** toggle, and
   - a manual **stage selector** — Full · Letters · Blanks · Hidden — mapping index `0..3` onto the four `maskVerseText` stages (`src/lib/verse-hint.ts`).
   - **prev / next** controls that wrap around the set.
@@ -154,9 +154,10 @@ Alongside Review, Memory home exposes a **Practice** surface — a focused, **se
 ### Hub (`/study`)
 
 - Lists sessions sorted by `lastOpenedAt` desc, fetched in pages via `usePaginatedQuery` with a **Load more** button when more pages exist. Sessions remain saved collections; the dashboard, library, and Review now live in Memory (`/memory`).
-- Each card shows title (name or auto-generated scope summary), scope-aware stats (hearted verses · notes · passages · last studied), any tag filters, and a "Last: {activity}" chip when the previous view was an activity (not Overview).
+- Each card shows title (name or auto-generated scope summary), scope-aware stats (hearted verses · notes · passages · last studied), any tag filters, and a "Last: Teach" chip when the previous view was the Teach activity (not Overview). Study is note-only, so Teach is the only activity that can appear here.
 - Delete button opens a confirmation dialog (`DeleteStudySessionDialog`).
 - Empty state has a CTA to `/study/new`.
+- Header copy frames Study as **note collections to review and teach** — verse memorization is Memory's job, reached via the per-session bridge.
 
 ### Library, drill-down & heart rings (`/memory`)
 
@@ -194,7 +195,8 @@ The ring fraction is a pure function of the verse's memory state (`masteryRingFr
 ### Session view (`/study/$sessionId`, `StudySessionView`)
 
 - Header shows the session title (name or scope summary) and a one-line stats strip.
-- `StudyActivitySwitcher` exposes three "views": **Overview**, **Verse memory**, **Teach**. Activities are disabled (with a tooltip explaining why) when the scope has no cards for them.
+- The session opens on the **Overview** with a single **Teach** button that launches the teach deck (and a "Back to overview" control inside it). The Teach button is disabled (with a tooltip explaining why) when the scope has no teach passages. There is no longer an activity tab switcher — Study is note-only.
+- A header action, **"Memorize verses in this scope"**, is the one-way bridge to Memory (see [The Memory bridge](#the-memory-bridge-memorize-verses-in-this-scope)).
 - **Loading vs not-found**: `useQuery(api.studySessions.get)` returns `undefined` while loading and `null` when the id is invalid or the session belongs to a different user. The component shows a loading state for `undefined` and a dedicated "Session not found" panel (with a link back to `/study`) for `null`, so bad links don't spin forever.
 - When a view is changed, the client calls `touch` with the new `lastView` so the session reopens on the same tab next time.
 
@@ -202,15 +204,13 @@ The ring fraction is a pure function of the verse's memory state (`masteryRingFr
 
 #### Overview
 
-A passive summary of what the scope contains: two columns (hearted verses, notes), each card linking back to the passage reader. No card deck; no progression.
+A passive summary of what the scope contains: two columns (hearted verses, notes), each card linking back to the passage reader. No card deck; no progression. A **Teach** button sits above the columns; a **"Memorize verses in this scope"** action lives in the session header.
 
-#### Verse memory (`StudyVerseMemoryCard`)
+#### The Memory bridge ("Memorize verses in this scope")
 
-- One card per hearted verse in the scope.
-- Shows the reference; the body is revealed either by flipping the card or by typing the verse from memory.
-- Typed recall is scored with `src/lib/diff-words.ts` so near-matches get partial credit.
-- On the revealed side, the user's attempt is framed in a tinted "pop" panel so it's obvious where their input lives alongside the ESV text.
-- `classifyVerseAttempt` (in `study-attempt-quality.ts`) grades the diff as `exact` / `close` / `off`, and `VerseMemoryFeedback` renders a short celebration banner — a bouncy "Exactly right!" with a confetti burst for exact matches, a calmer "Good job — really close!" chip when only a word or two slipped. Both animations respect `prefers-reduced-motion`.
+The one place Study reaches into verse memorization is a **one-way bridge** on the session view. The header button calls `packs.create({ name, kind: "scope", scope })` with the **session's own `scope`** (read client-side from `api.studySessions.get`, whose `scope` shape is byte-for-byte identical to `packs.scope`) and then navigates to the created **scope pack** at `/memory/$packId`. Because the pack is a _scope_ pack, its membership resolves live from `savedVerses` ∩ scope — hearting or un-hearting a verse in that scope automatically adds/removes it from the pack. Study itself stores nothing new; it just spawns a Memory pack and hands the user off. The button disables while the create+navigate is in flight.
+
+> Note: the verse-memory _card_ component (`study-verse-memory-card.tsx`) and the shared deck/learn primitives still live in `src/components/study/`, but they are consumed exclusively by **Memory** now (the Review player and Practice board). Study no longer builds verse-memory cards — the session-scoped verse-memory view and its controls were removed with this slim-down.
 
 #### Persisted attempts
 

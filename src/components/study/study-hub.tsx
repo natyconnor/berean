@@ -69,7 +69,7 @@ export function StudyHub() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Study</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Your study sessions
+              Note collections to review and teach
             </p>
           </div>
           <Button asChild size="sm">

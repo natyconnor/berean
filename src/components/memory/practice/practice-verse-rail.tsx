@@ -26,7 +26,7 @@ interface PracticeVerseRailProps {
 /**
  * The Practice sidebar: a Shuffle / In-order toggle, a manual stage selector
  * (Full · Letters · Blanks · Hidden), and the clickable verse list used to jump
- * around the set. Modeled on `StudyVerseMemoryControls`' verse list.
+ * around the set.
  */
 export function PracticeVerseRail({
   verses,

@@ -18,10 +18,10 @@ export function StudyModeExplainerDialog() {
     <FeatureInfoDialog
       state={studyFirstOpenHint}
       title="Welcome to Study"
-      description="Study turns the verses you've hearted and the notes you've taken into focused review sessions."
+      description="Study turns the notes you've taken into focused sessions you can review and teach."
       body={
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Review the verses you've hearted with Verse Memory.</li>
+          <li>Browse everything in a scope — your notes and hearted verses.</li>
           <li>Summarize the notes you've taken on a passage.</li>
           <li>Practice teaching what you've learned.</li>
         </ul>
