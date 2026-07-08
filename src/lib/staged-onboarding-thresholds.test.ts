@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MEMORY_MIN_HEARTS,
   READING_MIN_CHAPTER_NOTES,
   READING_MIN_NOTES_PER_VERSE,
   READING_MIN_TOTAL_NOTES,
@@ -8,8 +9,9 @@ import {
   SEARCH_MIN_NOTES_TOTAL,
   SEARCH_MIN_NOTES_WITH_TAGS,
   STARTER_TAGS_MIN_TAGGED_NOTES,
-  STUDY_MIN_HEARTS,
+  STUDY_MIN_NOTES,
   VERSE_LINKS_MIN_NOTES,
+  shouldRevealMemory,
   shouldRevealReadingMode,
   shouldRevealSearch,
   shouldRevealStarterTags,
@@ -73,11 +75,24 @@ describe("staged onboarding thresholds", () => {
     ).toBe(false);
   });
 
-  it("reveals Study after the first hearted verse", () => {
+  it("reveals Memory after the first hearted verse", () => {
     expect(
-      shouldRevealStudy(milestones({ heartsCount: STUDY_MIN_HEARTS })),
+      shouldRevealMemory(milestones({ heartsCount: MEMORY_MIN_HEARTS })),
     ).toBe(true);
-    expect(shouldRevealStudy(milestones({ heartsCount: 0 }))).toBe(false);
+    expect(shouldRevealMemory(milestones({ heartsCount: 0 }))).toBe(false);
+  });
+
+  it("reveals Study once enough notes exist (not hearts-based)", () => {
+    expect(shouldRevealStudy(milestones({ notesCount: STUDY_MIN_NOTES }))).toBe(
+      true,
+    );
+    expect(
+      shouldRevealStudy(milestones({ notesCount: STUDY_MIN_NOTES - 1 })),
+    ).toBe(false);
+    // Hearts alone no longer unlock Study.
+    expect(
+      shouldRevealStudy(milestones({ heartsCount: 10, notesCount: 0 })),
+    ).toBe(false);
   });
 
   it("reveals Search by total notes or by a smaller tagged library", () => {

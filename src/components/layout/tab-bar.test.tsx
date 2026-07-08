@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StagedOnboardingContext } from "@/components/tutorial/staged-onboarding-context";
 import {
+  MEMORY_MIN_HEARTS,
   SEARCH_MIN_NOTES_TOTAL,
-  STUDY_MIN_HEARTS,
 } from "@/lib/staged-onboarding-thresholds";
 import { TabBar } from "./tab-bar";
 
@@ -16,10 +16,12 @@ function StagedOnboardingTestProvider({ children }: { children: ReactNode }) {
     <StagedOnboardingContext.Provider
       value={{
         milestones: {
+          // Above the Search + Study (notes) thresholds and at the Memory
+          // (hearts) threshold, so all three toolbar fallbacks are revealed.
           notesCount: SEARCH_MIN_NOTES_TOTAL,
           taggedNotesCount: 0,
           distinctTagCount: 0,
-          heartsCount: STUDY_MIN_HEARTS,
+          heartsCount: MEMORY_MIN_HEARTS,
           hasInlineVerseLink: false,
           hasExplicitVerseLink: false,
           starterTagCount: 0,
@@ -136,8 +138,9 @@ describe("TabBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides the search button until the staged onboarding milestone fires but keeps Study as a permanent fallback", () => {
-    render(
+  it("gates the Memory (hearts) and Study (notes) toolbar fallbacks behind their reveals", () => {
+    // No staged-onboarding provider → no milestones → nothing revealed yet.
+    const { unmount } = render(
       <TooltipProvider delayDuration={0}>
         <TabBar />
       </TooltipProvider>,
@@ -146,8 +149,23 @@ describe("TabBar", () => {
     expect(
       screen.queryByRole("link", { name: "Open search workspace" }),
     ).toBeNull();
-    // Study is no longer soft-hidden — the Mode Dock owns its reveal, and the
-    // toolbar icon is always available as a fallback.
+    expect(screen.queryByRole("link", { name: "Open memory" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
+    unmount();
+
+    // Once the hearts (Memory) and notes (Study) milestones are reached, both
+    // toolbar fallbacks appear. The Mode Dock still owns their reveal callouts.
+    render(
+      <StagedOnboardingTestProvider>
+        <TooltipProvider delayDuration={0}>
+          <TabBar />
+        </TooltipProvider>
+      </StagedOnboardingTestProvider>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Open memory" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Open study" }),
     ).toBeInTheDocument();

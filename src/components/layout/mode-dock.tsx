@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
-import { BookOpen, NotebookPen } from "lucide-react";
+import { Brain, BookOpen, NotebookPen } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { api } from "../../../convex/_generated/api";
@@ -11,7 +11,10 @@ import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useTabs } from "@/lib/use-tabs";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
-import { shouldRevealStudy } from "@/lib/staged-onboarding-thresholds";
+import {
+  shouldRevealMemory,
+  shouldRevealStudy,
+} from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
@@ -24,6 +27,9 @@ const SCROLL_HIDE_THRESHOLD = 24;
 /** Idle time (ms) after scrolling stops before the dock returns. */
 const SCROLL_IDLE_MS = 500;
 
+/** The three navigable modes, in dock order. */
+type Mode = "notes" | "memory" | "study";
+
 function isEditorElement(element: Element | null): boolean {
   if (!element) return false;
   const tag = element.tagName;
@@ -35,9 +41,11 @@ function isEditorElement(element: Element | null): boolean {
 }
 
 /**
- * The Mode Dock: a floating bottom-center pill with two segments (Notes /
- * Study) and a live due-count badge. It's `position: fixed` so it never affects
- * layout flow, and it's engineered to slide out of the way while you work.
+ * The Mode Dock: a floating bottom-center pill with up to three segments (Notes
+ * / Memory / Study) and a live due-count badge on Memory. It's `position: fixed`
+ * so it never affects layout flow, and it's engineered to slide out of the way
+ * while you work. Each mode beyond Notes is revealed progressively, and the dock
+ * stays hidden until at least two modes are unlocked.
  */
 export function ModeDock() {
   const location = useLocation();
@@ -50,8 +58,9 @@ export function ModeDock() {
   const preference =
     useQuery(api.userSettings.getModeDockPreference) ?? "auto-hide";
 
-  const isStudyRoute = location.pathname.startsWith("/study");
   const isNotesRoute = location.pathname.startsWith("/passage");
+  const isMemoryRoute = location.pathname.startsWith("/memory");
+  const isStudyRoute = location.pathname.startsWith("/study");
 
   // Local-only visibility state (never persisted): scroll + editor focus.
   const [scrollHidden, setScrollHidden] = useState(false);
@@ -60,17 +69,32 @@ export function ModeDock() {
   const dockEnabled = preference !== "off";
   const autoHide = preference === "auto-hide";
 
-  // One-time reveal after the first heart, reusing the shared hint system.
-  // Only claim the hint while the dock can actually render its callout — when
-  // the dock is off, the toolbar Study link is the fallback that completes the
-  // reveal (see tab-bar.tsx), so the global hint queue is never pinned by an
-  // eligible-but-unrendered callout.
+  // Progressive reveal. Notes is always unlocked; Memory unlocks on the first
+  // heart, Study once enough notes exist. The dock only renders once a *second*
+  // mode is unlocked (a single Notes segment isn't worth the chrome).
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
-  const studyRevealReached = milestones ? shouldRevealStudy(milestones) : false;
+  const memoryUnlocked = milestones ? shouldRevealMemory(milestones) : false;
+  const studyUnlocked = milestones ? shouldRevealStudy(milestones) : false;
+  const unlockedModes = useMemo<Mode[]>(() => {
+    const modes: Mode[] = ["notes"];
+    if (memoryUnlocked) modes.push("memory");
+    if (studyUnlocked) modes.push("study");
+    return modes;
+  }, [memoryUnlocked, studyUnlocked]);
+
+  // One-time reveal callouts, reusing the shared hint system. Only claim a hint
+  // while the dock can actually render its callout — when the dock is off, the
+  // toolbar links are the fallbacks that complete the reveals (see tab-bar.tsx),
+  // so the global hint queue is never pinned by an eligible-but-unrendered
+  // callout.
+  const memoryHint = useFeatureHint(
+    FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
+    memoryUnlocked && dockEnabled,
+  );
   const studyHint = useFeatureHint(
-    FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART,
-    studyRevealReached && dockEnabled,
+    FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES,
+    studyUnlocked && dockEnabled,
   );
 
   useEffect(() => {
@@ -145,13 +169,41 @@ export function ModeDock() {
     };
   }, [autoHide]);
 
-  const revealPending = studyHint.pending;
-  // Keep the dock on screen while the one-time reveal callout is showing so its
+  const goToMode = useCallback(
+    (mode: Mode, trigger: string) => {
+      if (mode === "notes") {
+        logInteraction("mode-dock", "notes-opened", { trigger });
+        void navigate({
+          to: "/passage/$passageId",
+          params: { passageId: backPassageId },
+        });
+        return;
+      }
+      if (mode === "memory") {
+        logInteraction("mode-dock", "memory-opened", { trigger });
+        void navigate({ to: "/memory" });
+        return;
+      }
+      logInteraction("mode-dock", "study-opened", { trigger });
+      void navigate({ to: "/study" });
+    },
+    [navigate, backPassageId],
+  );
+
+  const activeMode: Mode = isStudyRoute
+    ? "study"
+    : isMemoryRoute
+      ? "memory"
+      : "notes";
+
+  const revealPending = memoryHint.pending || studyHint.pending;
+  // Keep the dock on screen while a one-time reveal callout is showing so its
   // anchor stays visible.
   const hidden = autoHide && !revealPending && (scrollHidden || editorFocused);
 
   useEffect(() => {
     if (!dockEnabled) return;
+    if (unlockedModes.length < 2) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
@@ -160,29 +212,23 @@ export function ModeDock() {
       if (event.key.toLowerCase() !== "j") return;
 
       event.preventDefault();
-      const goingToStudy = !location.pathname.startsWith("/study");
-      logInteraction(
-        "mode-dock",
-        goingToStudy ? "study-opened" : "notes-opened",
-        {
-          trigger: "keyboard",
-        },
-      );
-      if (goingToStudy) {
-        void navigate({ to: "/study" });
-      } else {
-        void navigate({
-          to: "/passage/$passageId",
-          params: { passageId: backPassageId },
-        });
-      }
+      // Cycle only through the modes the user has unlocked. When the current
+      // route maps to a mode that isn't unlocked (indexOf === -1), jump to the
+      // first unlocked mode rather than skipping past it.
+      const currentIndex = unlockedModes.indexOf(activeMode);
+      const nextMode =
+        currentIndex === -1
+          ? unlockedModes[0]
+          : unlockedModes[(currentIndex + 1) % unlockedModes.length];
+      goToMode(nextMode, "keyboard");
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [dockEnabled, location.pathname, navigate, backPassageId]);
+  }, [dockEnabled, unlockedModes, activeMode, goToMode]);
 
-  if (!dockEnabled) {
+  // A lone Notes segment isn't worth the chrome — wait for a second mode.
+  if (!dockEnabled || unlockedModes.length < 2) {
     return null;
   }
 
@@ -198,70 +244,109 @@ export function ModeDock() {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center">
-      <FeatureCallout
-        state={studyHint}
-        title="Study lives here now"
-        description="You've hearted a verse. Use this dock to jump into Study and review your verses — a badge appears when reviews are due."
-        primaryActionLabel="Open Study"
-        onPrimaryAction={() => {
-          logInteraction("mode-dock", "study-opened", {
-            trigger: "reveal-callout",
-          });
-          void navigate({ to: "/study" });
-        }}
-        side="top"
-        align="center"
+      <motion.nav
+        aria-label="Mode"
+        initial={false}
+        {...motionProps}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className={cn(
+          "pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-card/95 p-1 shadow-lg backdrop-blur",
+          hidden && "pointer-events-none",
+        )}
       >
-        <motion.nav
-          aria-label="Mode"
-          initial={false}
-          {...motionProps}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-          className={cn(
-            "pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-card/95 p-1 shadow-lg backdrop-blur",
-            hidden && "pointer-events-none",
-          )}
+        <Link
+          to="/passage/$passageId"
+          params={{ passageId: backPassageId }}
+          title={`Notes (${toggleShortcutLabel} cycles)`}
+          aria-label="Notes"
+          aria-current={isNotesRoute ? "page" : undefined}
+          onClick={() =>
+            logInteraction("mode-dock", "notes-opened", { trigger: "click" })
+          }
+          className={segmentClassName(isNotesRoute)}
         >
-          <Link
-            to="/passage/$passageId"
-            params={{ passageId: backPassageId }}
-            title={`Notes (${toggleShortcutLabel} toggles)`}
-            aria-label="Notes"
-            aria-current={isNotesRoute ? "page" : undefined}
-            onClick={() =>
-              logInteraction("mode-dock", "notes-opened", { trigger: "click" })
-            }
-            className={segmentClassName(isNotesRoute)}
-          >
-            <NotebookPen className="h-4 w-4" />
-            <span>Notes</span>
-          </Link>
-          <Link
-            to="/study"
-            title={`Study (${toggleShortcutLabel} toggles)`}
-            aria-label="Study"
-            aria-current={isStudyRoute ? "page" : undefined}
-            onClick={() => {
-              logInteraction("mode-dock", "study-opened", { trigger: "click" });
-              if (!studyHint.completed && !studyHint.dismissed) {
-                studyHint.complete();
-              }
+          <NotebookPen className="h-4 w-4" />
+          <span>Notes</span>
+        </Link>
+        {memoryUnlocked ? (
+          <FeatureCallout
+            state={memoryHint}
+            title="Memory lives here now"
+            description="You've hearted a verse — it's now in Memory. Use this dock to review and grow your verses. A badge appears when reviews are due."
+            primaryActionLabel="Open Memory"
+            onPrimaryAction={() => {
+              logInteraction("mode-dock", "memory-opened", {
+                trigger: "reveal-callout",
+              });
+              void navigate({ to: "/memory" });
             }}
-            className={segmentClassName(isStudyRoute)}
+            side="top"
+            align="center"
           >
-            <BookOpen className="h-4 w-4" />
-            <span>Study</span>
-            {showBadge ? (
-              <span
-                aria-label={badgeLabel}
-                className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-destructive-foreground"
-              >
-                {dueCount}
-              </span>
-            ) : null}
-          </Link>
-        </motion.nav>
-      </FeatureCallout>
+            <Link
+              to="/memory"
+              title={`Memory (${toggleShortcutLabel} cycles)`}
+              aria-label="Memory"
+              aria-current={isMemoryRoute ? "page" : undefined}
+              onClick={() => {
+                logInteraction("mode-dock", "memory-opened", {
+                  trigger: "click",
+                });
+                if (!memoryHint.completed && !memoryHint.dismissed) {
+                  memoryHint.complete();
+                }
+              }}
+              className={segmentClassName(isMemoryRoute)}
+            >
+              <Brain className="h-4 w-4" />
+              <span>Memory</span>
+              {showBadge ? (
+                <span
+                  aria-label={badgeLabel}
+                  className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-destructive-foreground"
+                >
+                  {dueCount}
+                </span>
+              ) : null}
+            </Link>
+          </FeatureCallout>
+        ) : null}
+        {studyUnlocked ? (
+          <FeatureCallout
+            state={studyHint}
+            title="Study lives here now"
+            description="You've written enough notes to start studying. Jump into Study to review and teach what you've captured."
+            primaryActionLabel="Open Study"
+            onPrimaryAction={() => {
+              logInteraction("mode-dock", "study-opened", {
+                trigger: "reveal-callout",
+              });
+              void navigate({ to: "/study" });
+            }}
+            side="top"
+            align="center"
+          >
+            <Link
+              to="/study"
+              title={`Study (${toggleShortcutLabel} cycles)`}
+              aria-label="Study"
+              aria-current={isStudyRoute ? "page" : undefined}
+              onClick={() => {
+                logInteraction("mode-dock", "study-opened", {
+                  trigger: "click",
+                });
+                if (!studyHint.completed && !studyHint.dismissed) {
+                  studyHint.complete();
+                }
+              }}
+              className={segmentClassName(isStudyRoute)}
+            >
+              <BookOpen className="h-4 w-4" />
+              <span>Study</span>
+            </Link>
+          </FeatureCallout>
+        ) : null}
+      </motion.nav>
     </div>
   );
 }

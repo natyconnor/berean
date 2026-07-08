@@ -20,10 +20,18 @@ export const VERSE_LINKS_MIN_NOTES = 2;
 export const STARTER_TAGS_MIN_TAGGED_NOTES = 1;
 
 /**
- * Minimum hearted verses before revealing Study in the toolbar. Verse Memory is
- * powered by hearts, so the first heart unlocks the entire Study workspace.
+ * Minimum hearted verses before revealing Memory. Verse memory is powered by
+ * hearts, so the first heart unlocks the entire Memory workspace (and, with
+ * Notes, makes the Mode Dock worth showing).
  */
-export const STUDY_MIN_HEARTS = 1;
+export const MEMORY_MIN_HEARTS = 1;
+
+/**
+ * Minimum total notes before revealing Study. Study drills the notes you've
+ * already captured, so it only becomes meaningful once there are a few notes to
+ * review and teach. (This reveal used to be hearts-based; it now keys on notes.)
+ */
+export const STUDY_MIN_NOTES = 4;
 
 /**
  * Note library thresholds for revealing Search in the toolbar. Search becomes
@@ -78,9 +86,14 @@ export function shouldRevealStarterTags(
   );
 }
 
-/** Was Wave 3 (Study reveal) reached based on library state? */
+/** Was the Memory reveal reached (first hearted verse)? */
+export function shouldRevealMemory(milestones: OnboardingMilestones): boolean {
+  return milestones.heartsCount >= MEMORY_MIN_HEARTS;
+}
+
+/** Was the Study reveal reached (enough notes to drill)? */
 export function shouldRevealStudy(milestones: OnboardingMilestones): boolean {
-  return milestones.heartsCount >= STUDY_MIN_HEARTS;
+  return milestones.notesCount >= STUDY_MIN_NOTES;
 }
 
 /** Was Wave 4 (Search reveal) reached based on library state? */

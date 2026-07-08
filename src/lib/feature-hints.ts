@@ -10,8 +10,18 @@ export const FEATURE_HINTS = {
   VERSE_LINKS_AFTER_NOTES: "verse-links-after-notes",
   /** Wave 2 starter tag library suggestion after first tag use. */
   STARTER_TAGS_AFTER_FIRST_TAG: "starter-tags-after-first-tag",
-  /** Wave 3 reveal callout pointing at the now-visible Study toolbar button. */
+  /**
+   * Legacy first-heart Study reveal. Study now reveals on notes
+   * (`STUDY_REVEAL_AFTER_NOTES`); this id is retained so any persisted
+   * dismissals stay valid, but it is no longer surfaced.
+   */
   STUDY_REVEAL_AFTER_FIRST_HEART: "study-reveal-after-first-heart",
+  /** Memory reveal callout pointing at the Memory segment after the first heart. */
+  MEMORY_REVEAL_AFTER_FIRST_HEART: "memory-reveal-after-first-heart",
+  /** Study reveal callout pointing at the Study segment once enough notes exist. */
+  STUDY_REVEAL_AFTER_NOTES: "study-reveal-after-notes",
+  /** Follow-up explanation shown the first time Memory is opened. */
+  MEMORY_FIRST_OPEN_EXPLAINER: "memory-first-open-explainer",
   /** Wave 3 follow-up explanation shown the first time Study is opened. */
   STUDY_FIRST_OPEN_EXPLAINER: "study-first-open-explainer",
   /** Wave 4 reveal callout pointing at the now-visible Search toolbar button. */
@@ -37,6 +47,9 @@ export const FEATURE_HINT_METADATA: Record<FeatureHintId, FeatureHintMetadata> =
     [FEATURE_HINTS.VERSE_LINKS_AFTER_NOTES]: { priority: 50 },
     [FEATURE_HINTS.STARTER_TAGS_AFTER_FIRST_TAG]: { priority: 40 },
     [FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART]: { priority: 80 },
+    [FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART]: { priority: 85 },
+    [FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES]: { priority: 75 },
+    [FEATURE_HINTS.MEMORY_FIRST_OPEN_EXPLAINER]: { priority: 0 },
     [FEATURE_HINTS.STUDY_FIRST_OPEN_EXPLAINER]: { priority: 0 },
     [FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY]: { priority: 70 },
     [FEATURE_HINTS.READING_MODE_REVEAL]: { priority: 60 },
