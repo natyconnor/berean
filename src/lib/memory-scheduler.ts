@@ -18,11 +18,62 @@ export type MemoryStatus = "new" | "learning" | "reviewing" | "mastered";
 export interface MemorySchedule {
   status: MemoryStatus;
   learnStage: number;
+  stageReps: number;
   ease: number;
   intervalDays: number;
   dueAt: number;
   consecutiveCorrect: number;
   lapses: number;
+}
+
+/**
+ * A learning-phase support band. `index === learnStage` (0..3): index 0 is the
+ * most support (Read), index 3 is the least (From Memory). A band only clears
+ * after {@link SupportBand.requiredReps} exact reps are banked.
+ */
+export interface SupportBand {
+  key: "read" | "guided" | "challenge" | "memory";
+  label: string;
+  requiredReps: number;
+  densityStart: number | null; // first-letter hint fraction at rep 0; null = full text
+  densityEnd: number | null; // hint fraction at the last rep (fades within a band)
+}
+
+/** Single source of truth for the learning-phase bands; index === learnStage. */
+export const SUPPORT_BANDS: readonly SupportBand[] = [
+  {
+    key: "read",
+    label: "Read",
+    requiredReps: 1,
+    densityStart: null,
+    densityEnd: null,
+  },
+  {
+    key: "guided",
+    label: "Guided",
+    requiredReps: 5,
+    densityStart: 1.0,
+    densityEnd: 1.0,
+  },
+  {
+    key: "challenge",
+    label: "Challenge",
+    requiredReps: 8,
+    densityStart: 0.5,
+    densityEnd: 0.15,
+  },
+  {
+    key: "memory",
+    label: "From Memory",
+    requiredReps: 1,
+    densityStart: 0.0,
+    densityEnd: 0.0,
+  },
+];
+
+/** Exact reps needed to clear the band at `stage`. */
+function requiredRepsFor(stage: number): number {
+  return SUPPORT_BANDS[stage].requiredReps;
 }
 
 export interface ReviewInput {
@@ -85,23 +136,40 @@ function isLearningPhase(status: MemoryStatus): boolean {
 
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   if (r.quality === "exact") {
-    // Nailed the hidden stage -> graduate into the reviewing phase.
-    if (s.learnStage >= MAX_LEARN_STAGE) {
-      const intervalDays = 1;
+    const reps = s.stageReps + 1;
+    if (reps >= requiredRepsFor(s.learnStage)) {
+      // Cleared this band on its required reps.
+      if (s.learnStage >= MAX_LEARN_STAGE) {
+        // Graduate into the reviewing phase with a fresh 1-day interval.
+        const intervalDays = 1;
+        return {
+          status: "reviewing",
+          learnStage: MAX_LEARN_STAGE,
+          stageReps: 0,
+          ease: s.ease,
+          intervalDays,
+          dueAt: computeDueAt(r, s.intervalDays, intervalDays),
+          consecutiveCorrect: s.consecutiveCorrect + 1,
+          lapses: s.lapses,
+        };
+      }
+      // Advance to the next (lower-support) band; retry again this session.
       return {
-        status: "reviewing",
-        learnStage: MAX_LEARN_STAGE,
+        status: "learning",
+        learnStage: s.learnStage + 1,
+        stageReps: 0,
         ease: s.ease,
-        intervalDays,
-        dueAt: computeDueAt(r, s.intervalDays, intervalDays),
+        intervalDays: 0,
+        dueAt: r.now,
         consecutiveCorrect: s.consecutiveCorrect + 1,
         lapses: s.lapses,
       };
     }
-    // Advance to the next display stage; retry again this session.
+    // Bank a rep on this band and try it again this session.
     return {
       status: "learning",
-      learnStage: s.learnStage + 1,
+      learnStage: s.learnStage,
+      stageReps: reps,
       ease: s.ease,
       intervalDays: 0,
       dueAt: r.now,
@@ -111,10 +179,11 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   }
 
   if (r.quality === "close") {
-    // Stay on the current stage and try it again this session.
+    // Hold the band and its banked reps; try it again this session.
     return {
       status: "learning",
       learnStage: s.learnStage,
+      stageReps: s.stageReps,
       ease: s.ease,
       intervalDays: 0,
       dueAt: r.now,
@@ -123,10 +192,12 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     };
   }
 
-  // off: drop back a stage (floored at 0) and reset the streak.
+  // off: bump up support (lower band index, floored at 0), reset that band's
+  // rep counter and the streak.
   return {
     status: "learning",
     learnStage: Math.max(0, s.learnStage - 1),
+    stageReps: 0,
     ease: s.ease,
     intervalDays: 0,
     dueAt: r.now,
@@ -142,6 +213,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     return {
       status: "learning",
       learnStage: 0,
+      stageReps: 0,
       ease: clampEase(s.ease - 0.2),
       intervalDays,
       dueAt: computeDueAt(r, s.intervalDays, intervalDays),
@@ -156,6 +228,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     return {
       status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
       learnStage: s.learnStage,
+      stageReps: s.stageReps,
       ease: s.ease,
       intervalDays,
       dueAt: computeDueAt(r, s.intervalDays, intervalDays),
@@ -169,6 +242,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   return {
     status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
     learnStage: s.learnStage,
+    stageReps: s.stageReps,
     ease: clampEase(s.ease + 0.05),
     intervalDays,
     dueAt: computeDueAt(r, s.intervalDays, intervalDays),
@@ -200,6 +274,7 @@ export function initialSchedule(now: number): MemorySchedule {
   return {
     status: "new",
     learnStage: 0,
+    stageReps: 0,
     ease: EASE_START,
     intervalDays: 0,
     dueAt: now,

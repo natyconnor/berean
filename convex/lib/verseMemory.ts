@@ -44,6 +44,7 @@ export async function seedVerseMemory(
     verseRefId,
     status: schedule.status,
     learnStage: schedule.learnStage,
+    stageReps: schedule.stageReps,
     ease: schedule.ease,
     intervalDays: schedule.intervalDays,
     dueAt: schedule.dueAt,

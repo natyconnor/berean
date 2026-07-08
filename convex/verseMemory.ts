@@ -52,6 +52,7 @@ const modeValidator = v.union(
 const memoryScheduleValidator = v.object({
   status: statusValidator,
   learnStage: v.number(),
+  stageReps: v.number(),
   ease: v.number(),
   intervalDays: v.number(),
   dueAt: v.number(),
@@ -66,6 +67,7 @@ const verseMemoryValidator = v.object({
   verseRefId: v.id("verseRefs"),
   status: statusValidator,
   learnStage: v.number(),
+  stageReps: v.optional(v.number()),
   ease: v.number(),
   intervalDays: v.number(),
   dueAt: v.number(),
@@ -81,6 +83,7 @@ const dueQueueItem = v.object({
   verseRefId: v.id("verseRefs"),
   status: statusValidator,
   learnStage: v.number(),
+  stageReps: v.optional(v.number()),
   ease: v.number(),
   intervalDays: v.number(),
   dueAt: v.number(),
@@ -101,6 +104,7 @@ function toRowView(row: Doc<"verseMemory">) {
     verseRefId: row.verseRefId,
     status: row.status,
     learnStage: row.learnStage,
+    stageReps: row.stageReps,
     ease: row.ease,
     intervalDays: row.intervalDays,
     dueAt: row.dueAt,
@@ -143,6 +147,7 @@ export const dueQueue = query({
       verseRefId: Id<"verseRefs">;
       status: Doc<"verseMemory">["status"];
       learnStage: number;
+      stageReps?: number;
       ease: number;
       intervalDays: number;
       dueAt: number;
@@ -175,6 +180,7 @@ export const dueQueue = query({
         verseRefId: row.verseRefId,
         status: row.status,
         learnStage: row.learnStage,
+        stageReps: row.stageReps,
         ease: row.ease,
         intervalDays: row.intervalDays,
         dueAt: row.dueAt,
@@ -276,6 +282,7 @@ export const recordAttempt = mutation({
       {
         status: memory.status,
         learnStage: memory.learnStage,
+        stageReps: memory.stageReps ?? 0,
         ease: memory.ease,
         intervalDays: memory.intervalDays,
         dueAt: memory.dueAt,
@@ -293,6 +300,7 @@ export const recordAttempt = mutation({
     await ctx.db.patch(memory._id, {
       status: next.status,
       learnStage: next.learnStage,
+      stageReps: next.stageReps,
       ease: next.ease,
       intervalDays: next.intervalDays,
       dueAt: next.dueAt,
@@ -768,6 +776,7 @@ const verseDetailValidator = v.object({
   isDue: v.boolean(),
   status: statusValidator,
   learnStage: v.number(),
+  stageReps: v.optional(v.number()),
   ease: v.number(),
   intervalDays: v.number(),
   dueAt: v.number(),
@@ -891,6 +900,7 @@ export const verseDetail = query({
       isDue: memory.dueAt <= args.now,
       status: memory.status,
       learnStage: memory.learnStage,
+      stageReps: memory.stageReps,
       ease: memory.ease,
       intervalDays: memory.intervalDays,
       dueAt: memory.dueAt,

@@ -6,6 +6,7 @@ import {
   EASE_START,
   MASTERED_INTERVAL_DAYS,
   MAX_LEARN_STAGE,
+  SUPPORT_BANDS,
   initialSchedule,
   scheduleNext,
   type MemorySchedule,
@@ -25,10 +26,11 @@ function review(overrides: Partial<ReviewInput> = {}): ReviewInput {
   };
 }
 
-function learningAt(stage: number): MemorySchedule {
+function learningAt(stage: number, stageReps = 0): MemorySchedule {
   return {
     status: "learning",
     learnStage: stage,
+    stageReps,
     ease: EASE_START,
     intervalDays: 0,
     dueAt: NOW,
@@ -41,6 +43,7 @@ function reviewing(overrides: Partial<MemorySchedule> = {}): MemorySchedule {
   return {
     status: "reviewing",
     learnStage: MAX_LEARN_STAGE,
+    stageReps: 0,
     ease: EASE_START,
     intervalDays: 5,
     dueAt: NOW,
@@ -60,6 +63,7 @@ describe("initialSchedule", () => {
     expect(initialSchedule(NOW)).toEqual({
       status: "new",
       learnStage: 0,
+      stageReps: 0,
       ease: EASE_START,
       intervalDays: 0,
       dueAt: NOW,
@@ -79,47 +83,91 @@ describe("new -> learning graduation path", () => {
     expect(next.learnStage).toBe(1);
   });
 
-  it("walks all four stages then graduates to reviewing with a 1-day interval", () => {
+  it("walks every band by its required reps then graduates to reviewing", () => {
     let s = initialSchedule(NOW);
-    // Stages 0 -> 1 -> 2 -> 3 (each exact advances a stage, staying in learning).
-    for (const expectedStage of [1, 2, 3]) {
+    // Each band only clears after its required exact reps; walk them all.
+    for (let stage = 0; stage <= MAX_LEARN_STAGE; stage += 1) {
+      const required = SUPPORT_BANDS[stage].requiredReps;
+      // Reps 1..required-1 bank on the band with a rising stageReps counter.
+      for (let rep = 1; rep < required; rep += 1) {
+        s = scheduleNext(s, review({ quality: "exact" }));
+        expect(s.status).toBe("learning");
+        expect(s.learnStage).toBe(stage);
+        expect(s.stageReps).toBe(rep);
+        expect(s.intervalDays).toBe(0);
+        expect(s.dueAt).toBe(NOW);
+      }
+      // The required-th rep clears the band.
       s = scheduleNext(s, review({ quality: "exact" }));
-      expect(s.status).toBe("learning");
-      expect(s.learnStage).toBe(expectedStage);
-      expect(s.intervalDays).toBe(0);
-      expect(s.dueAt).toBe(NOW);
+      if (stage < MAX_LEARN_STAGE) {
+        expect(s.status).toBe("learning");
+        expect(s.learnStage).toBe(stage + 1);
+        expect(s.stageReps).toBe(0);
+        expect(s.intervalDays).toBe(0);
+        expect(s.dueAt).toBe(NOW);
+      }
     }
-    // Exact at the hidden stage graduates into reviewing.
-    s = scheduleNext(s, review({ quality: "exact" }));
+    // The final band's clearing rep graduates into reviewing.
     expect(s.status).toBe("reviewing");
     expect(s.learnStage).toBe(MAX_LEARN_STAGE);
+    expect(s.stageReps).toBe(0);
     expect(s.intervalDays).toBe(1);
-    expect(s.consecutiveCorrect).toBe(4);
   });
 });
 
 describe("learning phase grades", () => {
-  it("exact advances a stage", () => {
-    const next = scheduleNext(learningAt(1), review({ quality: "exact" }));
-    expect(next.learnStage).toBe(2);
-    expect(next.status).toBe("learning");
-    expect(next.consecutiveCorrect).toBe(1);
+  it("Guided needs 5 exacts: reps 1-4 hold the band, the 5th advances", () => {
+    let s = learningAt(1);
+    for (let rep = 1; rep <= 4; rep += 1) {
+      s = scheduleNext(s, review({ quality: "exact" }));
+      expect(s.status).toBe("learning");
+      expect(s.learnStage).toBe(1);
+      expect(s.stageReps).toBe(rep);
+    }
+    // Fifth exact clears Guided and advances to Challenge with a reset counter.
+    s = scheduleNext(s, review({ quality: "exact" }));
+    expect(s.status).toBe("learning");
+    expect(s.learnStage).toBe(2);
+    expect(s.stageReps).toBe(0);
+    expect(s.consecutiveCorrect).toBe(5);
   });
 
-  it("close stays on the current stage", () => {
-    const next = scheduleNext(learningAt(2), review({ quality: "close" }));
+  it("Challenge needs 8 exacts before advancing to From Memory", () => {
+    let s = learningAt(2);
+    for (let rep = 1; rep <= 7; rep += 1) {
+      s = scheduleNext(s, review({ quality: "exact" }));
+      expect(s.learnStage).toBe(2);
+      expect(s.stageReps).toBe(rep);
+    }
+    s = scheduleNext(s, review({ quality: "exact" }));
+    expect(s.learnStage).toBe(3);
+    expect(s.stageReps).toBe(0);
+  });
+
+  it("close holds the band and its banked reps", () => {
+    const next = scheduleNext(learningAt(2, 3), review({ quality: "close" }));
     expect(next.learnStage).toBe(2);
+    expect(next.stageReps).toBe(3);
     expect(next.status).toBe("learning");
     expect(next.dueAt).toBe(NOW);
   });
 
-  it("off drops one stage but never below 0", () => {
-    expect(
-      scheduleNext(learningAt(2), review({ quality: "off" })).learnStage,
-    ).toBe(1);
-    expect(
-      scheduleNext(learningAt(0), review({ quality: "off" })).learnStage,
-    ).toBe(0);
+  it("off drops one band, resets stageReps, but never below band 0", () => {
+    const dropped = scheduleNext(learningAt(2, 4), review({ quality: "off" }));
+    expect(dropped.learnStage).toBe(1);
+    expect(dropped.stageReps).toBe(0);
+    expect(dropped.consecutiveCorrect).toBe(0);
+    const floored = scheduleNext(learningAt(0, 0), review({ quality: "off" }));
+    expect(floored.learnStage).toBe(0);
+    expect(floored.stageReps).toBe(0);
+  });
+
+  it("an exact at From Memory graduates to reviewing with a 1-day interval", () => {
+    const next = scheduleNext(learningAt(3, 0), review({ quality: "exact" }));
+    expect(next.status).toBe("reviewing");
+    expect(next.learnStage).toBe(MAX_LEARN_STAGE);
+    expect(next.stageReps).toBe(0);
+    expect(next.intervalDays).toBe(1);
   });
 });
 

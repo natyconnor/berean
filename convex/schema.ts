@@ -250,7 +250,8 @@ export default defineSchema({
       v.literal("reviewing"),
       v.literal("mastered"),
     ),
-    learnStage: v.number(), // 0..3 -> full|first-letters|cloze|hidden
+    learnStage: v.number(), // 0..3 support band index -> Read|Guided|Challenge|From Memory
+    stageReps: v.optional(v.number()), // exact reps banked at the current band; a band clears only after its required reps (schema-optional for backfill, always written going forward)
     ease: v.number(), // 1.3 .. 2.8, starts 2.3
     intervalDays: v.number(),
     dueAt: v.number(), // drives "due today" + dock badge
