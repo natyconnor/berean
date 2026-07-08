@@ -1,4 +1,16 @@
-import { MASTERED_INTERVAL_DAYS, type MemoryStatus } from "./memory-scheduler";
+import {
+  MASTERED_INTERVAL_DAYS,
+  MAX_LEARN_STAGE,
+  requiredRepsFor,
+  type MemoryStatus,
+} from "./memory-scheduler";
+
+/**
+ * The learning phase fills the ring from 0 up to (but not reaching) this
+ * ceiling; the reviewing band takes over from 0.5 upward, so a graduating verse
+ * flows continuously from learning into reviewing.
+ */
+const LEARNING_RING_CEILING = 0.5;
 
 /**
  * Map a verse's memory state to a mastery-ring fill fraction in `[0, 1]`, used
@@ -6,14 +18,22 @@ import { MASTERED_INTERVAL_DAYS, type MemoryStatus } from "./memory-scheduler";
  *
  * Mapping (documented in docs/study-mode.md):
  * - `new` → 0 — no ring; the heart reads as "saved, not yet started".
- * - `learning` → 0.25 (a quarter) — in the learn ladder but not yet reviewing.
+ * - `learning` → 0…<0.5 — grows across the learn ladder as bands clear and reps
+ *   bank, using `learnStage` + `stageReps` against each band's required reps
+ *   ({@link requiredRepsFor}) so it approaches, but stays below, the reviewing
+ *   floor.
  * - `reviewing` → 0.5…0.9 — a half that grows with the interval, scaled linearly
  *   from just-graduated up to {@link MASTERED_INTERVAL_DAYS}.
  * - `mastered` → 1 (full) — interval has reached the mastered threshold.
+ *
+ * Pure: no React, no `Date.now()`. `learnStage` / `stageReps` default to 0 so
+ * callers without that data (or with legacy rows) degrade gracefully.
  */
 export function masteryRingFraction(
   status: MemoryStatus,
   intervalDays: number,
+  learnStage = 0,
+  stageReps = 0,
 ): number {
   switch (status) {
     case "mastered":
@@ -22,8 +42,16 @@ export function masteryRingFraction(
       const t = Math.max(0, Math.min(1, intervalDays / MASTERED_INTERVAL_DAYS));
       return 0.5 + t * 0.4;
     }
-    case "learning":
-      return 0.25;
+    case "learning": {
+      // Each of the (MAX_LEARN_STAGE + 1) bands owns an equal slice of the
+      // learning arc; reps banked fill the current band's slice.
+      const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
+      const required = Math.max(1, requiredRepsFor(clampedStage));
+      const withinBand = Math.max(0, Math.min(1, stageReps / required));
+      const bandCount = MAX_LEARN_STAGE + 1;
+      const progress = (clampedStage + withinBand) / bandCount;
+      return Math.max(0, Math.min(1, progress)) * LEARNING_RING_CEILING;
+    }
     case "new":
       return 0;
     default:

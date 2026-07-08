@@ -6,8 +6,14 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
 import { AddToPack } from "./packs/add-to-pack";
+import { PRACTICE_STAGES } from "./practice/practice-stages";
 
-const STAGE_LABELS = ["Full", "First letters", "Cloze", "Hidden"] as const;
+/**
+ * Learn-band labels, sourced from the shared support bands (Read / Guided /
+ * Challenge / From Memory) so the drill-down never drifts from the scheduler's
+ * naming.
+ */
+const STAGE_LABELS = PRACTICE_STAGES.map((s) => s.label);
 
 const STATUS_LABELS: Record<MemoryStatus, string> = {
   new: "New",
@@ -149,9 +155,14 @@ export function VerseDetail({
         </ol>
         {detail.status === "reviewing" || detail.status === "mastered" ? (
           <p className="text-xs text-muted-foreground">
-            Graduated to review — recalled from hidden.
+            Graduated to review — recalled from memory.
           </p>
-        ) : null}
+        ) : (
+          <RepProgress
+            learnStage={detail.learnStage}
+            stageReps={detail.stageReps}
+          />
+        )}
       </section>
 
       <section className="space-y-2">
@@ -245,6 +256,32 @@ export function VerseDetail({
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Reps banked toward clearing the current learn band, e.g. "Challenge · 3 / 8
+ * reps banked". Reads the band's label + required reps from the shared bands.
+ */
+function RepProgress({
+  learnStage,
+  stageReps,
+}: {
+  learnStage: number;
+  stageReps?: number;
+}) {
+  const band =
+    PRACTICE_STAGES[Math.min(Math.max(learnStage, 0), MAX_LEARN_STAGE)] ??
+    PRACTICE_STAGES[0];
+  const banked = stageReps ?? 0;
+  return (
+    <p className="text-xs text-muted-foreground">
+      {band.label} ·{" "}
+      <span className="tabular-nums text-foreground">
+        {Math.min(banked, band.requiredReps)} / {band.requiredReps}
+      </span>{" "}
+      reps banked
+    </p>
   );
 }
 

@@ -28,6 +28,8 @@ type SavedSpan = {
   endVerse: number;
   memory?: {
     status: MemoryStatus;
+    learnStage: number;
+    stageReps?: number;
     intervalDays: number;
     dueAt: number;
   };
@@ -166,7 +168,12 @@ export function PassageViewBody({
         (s) => s.startVerse === startVerse && s.endVerse === endVerse,
       );
       if (!span?.memory) return 0;
-      return masteryRingFraction(span.memory.status, span.memory.intervalDays);
+      return masteryRingFraction(
+        span.memory.status,
+        span.memory.intervalDays,
+        span.memory.learnStage,
+        span.memory.stageReps ?? 0,
+      );
     },
     [savedSpans],
   );
