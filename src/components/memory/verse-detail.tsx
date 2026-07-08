@@ -5,6 +5,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
+import { AddToPack } from "./packs/add-to-pack";
 
 const STAGE_LABELS = ["Full", "First letters", "Cloze", "Hidden"] as const;
 
@@ -93,6 +94,15 @@ export function VerseDetail({
             {STATUS_LABELS[detail.status]} · {formatDueLabel(detail.dueAt, now)}
           </p>
         </div>
+        <AddToPack
+          reference={{
+            book: detail.book,
+            chapter: detail.chapter,
+            startVerse: detail.startVerse,
+            endVerse: detail.endVerse,
+          }}
+          now={now}
+        />
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center">

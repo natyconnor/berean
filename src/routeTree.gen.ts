@@ -21,6 +21,8 @@ import { Route as StudyNewRouteImport } from './routes/study/new'
 import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
 import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
 import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
+import { Route as MemoryNewRouteImport } from './routes/memory/new'
+import { Route as MemoryPackIdRouteImport } from './routes/memory/$packId'
 
 const ThemeTestRoute = ThemeTestRouteImport.update({
   id: '/theme-test',
@@ -82,6 +84,16 @@ const PassagePassageIdRoute = PassagePassageIdRouteImport.update({
   path: '/passage/$passageId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryNewRoute = MemoryNewRouteImport.update({
+  id: '/memory/new',
+  path: '/memory/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryPackIdRoute = MemoryPackIdRouteImport.update({
+  id: '/memory/$packId',
+  path: '/memory/$packId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -89,6 +101,8 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
+  '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/new': typeof MemoryNewRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -103,6 +117,8 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
+  '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/new': typeof MemoryNewRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -118,6 +134,8 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
+  '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/new': typeof MemoryNewRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -134,6 +152,8 @@ export interface FileRouteTypes {
     | '/search'
     | '/terms'
     | '/theme-test'
+    | '/memory/$packId'
+    | '/memory/new'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -148,6 +168,8 @@ export interface FileRouteTypes {
     | '/search'
     | '/terms'
     | '/theme-test'
+    | '/memory/$packId'
+    | '/memory/new'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -162,6 +184,8 @@ export interface FileRouteTypes {
     | '/search'
     | '/terms'
     | '/theme-test'
+    | '/memory/$packId'
+    | '/memory/new'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -177,6 +201,8 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   TermsRoute: typeof TermsRoute
   ThemeTestRoute: typeof ThemeTestRoute
+  MemoryPackIdRoute: typeof MemoryPackIdRoute
+  MemoryNewRoute: typeof MemoryNewRoute
   PassagePassageIdRoute: typeof PassagePassageIdRoute
   SettingsTagsRoute: typeof SettingsTagsRoute
   StudySessionIdRoute: typeof StudySessionIdRoute
@@ -272,6 +298,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PassagePassageIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/new': {
+      id: '/memory/new'
+      path: '/memory/new'
+      fullPath: '/memory/new'
+      preLoaderRoute: typeof MemoryNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory/$packId': {
+      id: '/memory/$packId'
+      path: '/memory/$packId'
+      fullPath: '/memory/$packId'
+      preLoaderRoute: typeof MemoryPackIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -281,6 +321,8 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   TermsRoute: TermsRoute,
   ThemeTestRoute: ThemeTestRoute,
+  MemoryPackIdRoute: MemoryPackIdRoute,
+  MemoryNewRoute: MemoryNewRoute,
   PassagePassageIdRoute: PassagePassageIdRoute,
   SettingsTagsRoute: SettingsTagsRoute,
   StudySessionIdRoute: StudySessionIdRoute,

@@ -1,37 +1,68 @@
 import { type JSX, type ReactNode, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
+import type { MemoryStatus } from "@/lib/memory-scheduler";
 
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import type { VerseMemoryCard } from "../study/study-card-model";
 import { StudyActivityDeck } from "../study/study-activity-deck";
 import { ReviewSummary } from "./review-summary";
 import { StudyVerseLearn } from "../study/study-verse-learn";
 
-/** A single row from `verseMemory.dueQueue` (memory row joined to its ref). */
-type DueItem = FunctionReturnType<typeof api.verseMemory.dueQueue>[number];
+/**
+ * The minimal per-verse shape the player needs to sequence a run. Satisfied by
+ * both the global `verseMemory.dueQueue` rows and a pack's due members
+ * (`packs.resolveMembers`), so the same player can be driven by either source.
+ */
+export interface ReviewItem {
+  verseRefId: Id<"verseRefs">;
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
+  status: MemoryStatus;
+  learnStage: number;
+}
+
+/**
+ * An explicit due source (e.g. a pack's due members) that overrides the global
+ * due queue. `dueItems === undefined` means still loading; `[]` means caught up.
+ */
+export interface ReviewSource {
+  dueItems: ReviewItem[] | undefined;
+  remainingDue: number | undefined;
+}
 
 type Phase = "learn" | "review" | "summary";
 
 interface ReviewPlayerProps {
-  /** Return to the memory home. */
+  /** Return to the memory home (or pack view). */
   onExit: () => void;
+  /** Header title. Defaults to "Review". */
+  title?: string;
+  /** Back-button label. Defaults to "Memory". */
+  backLabel?: string;
+  /**
+   * When provided, drives the run from this reactive due set instead of the
+   * global `verseMemory.dueQueue`. Used to play a single pack's due subset.
+   */
+  source?: ReviewSource;
 }
 
-function isLearnStatus(status: DueItem["status"]): boolean {
+function isLearnStatus(status: MemoryStatus): boolean {
   return status === "new" || status === "learning";
 }
 
-/** Map a due-queue row into the verse-memory card shape the deck/learn expect. */
-function toCard(item: DueItem): VerseMemoryCard {
+/** Map a due row into the verse-memory card shape the deck/learn expect. */
+function toCard(item: ReviewItem): VerseMemoryCard {
   return {
     type: "verse-memory",
-    id: `vm:${item._id}`,
+    id: `vm:${item.verseRefId}`,
     reference: {
       book: item.book,
       chapter: item.chapter,
@@ -51,16 +82,37 @@ function toCard(item: DueItem): VerseMemoryCard {
  * still observed to detect when the review phase is finished and to compute the
  * end-of-run summary (verses cleared, stage-ups, verses still due).
  */
-export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
+export function ReviewPlayer({
+  onExit,
+  title = "Review",
+  backLabel = "Memory",
+  source,
+}: ReviewPlayerProps): JSX.Element {
   // Live `now` (coarse, ~60s) so late-due verses are reflected while the run is
   // open. Passed as a query arg; never Date.now() inside Convex.
   const now = useLiveNow();
-  const dueItems = useQuery(api.verseMemory.dueQueue, { now });
+  // With an explicit `source` (a pack's due subset), skip the global queries and
+  // let the caller supply the reactive due list + remaining total instead.
+  const globalDue = useQuery(
+    api.verseMemory.dueQueue,
+    source ? "skip" : { now },
+  );
   // `dueQueue` is capped (<=50 rows); `memoryStats.due` counts *all* due verses,
   // so it — not the capped queue length — is the true remaining total.
-  const stats = useQuery(api.verseMemory.memoryStats, { now });
+  const globalStats = useQuery(
+    api.verseMemory.memoryStats,
+    source ? "skip" : { now },
+  );
+  // Driven by a pack (`source`) → returning lands on the pack, not memory home.
+  const doneLabel = source ? "Back to pack" : "Back to memory";
+  const dueItems: ReviewItem[] | undefined = source
+    ? source.dueItems
+    : globalDue;
+  const remainingDue: number | undefined = source
+    ? source.remainingDue
+    : globalStats?.due;
 
-  const [snapshot, setSnapshot] = useState<DueItem[] | null>(null);
+  const [snapshot, setSnapshot] = useState<ReviewItem[] | null>(null);
   if (dueItems !== undefined && snapshot === null) {
     setSnapshot(dueItems);
   }
@@ -96,7 +148,7 @@ export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
     [liveDue],
   );
   const liveByRef = useMemo(() => {
-    const map = new Map<DueItem["verseRefId"], DueItem>();
+    const map = new Map<Id<"verseRefs">, ReviewItem>();
     for (const it of liveDue) map.set(it.verseRefId, it);
     return map;
   }, [liveDue]);
@@ -126,10 +178,10 @@ export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
       stageUps,
       reviewed: cleared + stageUps,
       // True outstanding count across *all* due verses (uncapped), falling back
-      // to the queue length only until stats resolve.
-      remaining: stats?.due ?? liveDue.length,
+      // to the queue length only until the remaining total resolves.
+      remaining: remainingDue ?? liveDue.length,
     };
-  }, [snapshot, liveByRef, liveDue.length, stats?.due]);
+  }, [snapshot, liveByRef, liveDue.length, remainingDue]);
 
   function advanceLearn() {
     if (learnIndex + 1 < learnItems.length) {
@@ -152,15 +204,19 @@ export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
   if (dueItems === undefined || snapshot === null || effectivePhase === null) {
     const caughtUp = snapshot !== null && snapshot.length === 0;
     return (
-      <TodayQueueShell onExit={onExit}>
-        {caughtUp ? <CaughtUp onExit={onExit} /> : <LoadingState />}
+      <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
+        {caughtUp ? (
+          <CaughtUp onExit={onExit} doneLabel={doneLabel} />
+        ) : (
+          <LoadingState />
+        )}
       </TodayQueueShell>
     );
   }
 
   if (effectivePhase === "summary") {
     return (
-      <TodayQueueShell onExit={onExit}>
+      <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
         <ReviewSummary
           reviewed={summary.reviewed}
           cleared={summary.cleared}
@@ -168,6 +224,7 @@ export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
           remaining={summary.remaining}
           onDone={onExit}
           onContinue={summary.remaining > 0 ? handleContinue : undefined}
+          doneLabel={doneLabel}
         />
       </TodayQueueShell>
     );
@@ -176,7 +233,7 @@ export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
   if (effectivePhase === "review") {
     const reviewCards = reviewItems.map(toCard);
     return (
-      <TodayQueueShell onExit={onExit}>
+      <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
         <div className="space-y-4">
           <StudyActivityDeck
             key="today-review"
@@ -208,7 +265,7 @@ export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
       : "Finish";
 
   return (
-    <TodayQueueShell onExit={onExit}>
+    <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
       <div className="space-y-4">
         <StudyVerseLearn key={learnCard.id} card={learnCard} />
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3">
@@ -227,9 +284,13 @@ export function ReviewPlayer({ onExit }: ReviewPlayerProps): JSX.Element {
 
 function TodayQueueShell({
   onExit,
+  title,
+  backLabel,
   children,
 }: {
   onExit: () => void;
+  title: string;
+  backLabel: string;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -243,9 +304,9 @@ function TodayQueueShell({
             className="-ml-2 gap-1.5"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
-            Memory
+            {backLabel}
           </Button>
-          <h1 className="text-lg font-semibold tracking-tight">Review</h1>
+          <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">
@@ -263,7 +324,13 @@ function LoadingState(): JSX.Element {
   );
 }
 
-function CaughtUp({ onExit }: { onExit: () => void }): JSX.Element {
+function CaughtUp({
+  onExit,
+  doneLabel,
+}: {
+  onExit: () => void;
+  doneLabel: string;
+}): JSX.Element {
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -276,7 +343,7 @@ function CaughtUp({ onExit }: { onExit: () => void }): JSX.Element {
         </p>
       </div>
       <Button variant="outline" onClick={onExit}>
-        Back to memory
+        {doneLabel}
       </Button>
     </div>
   );

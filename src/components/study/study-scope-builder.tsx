@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
@@ -7,113 +7,34 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
-import { TagFilterControl } from "@/components/search/tag-filter-control";
-import { StudyScopePresets } from "./study-scope-presets";
-import {
-  StudyScopeBookPicker,
-  type ChapterRange,
-} from "./study-scope-book-picker";
-import { formatScopeSummary, type StudyScope } from "./study-scope-summary";
-import type { TagMatchMode } from "@/lib/tag-utils";
+import { ScopeForm } from "./scope-form";
+import { useScopeForm } from "./use-scope-form";
 import { StudyModeExplainerDialog } from "./study-mode-explainer-dialog";
 
 export function StudyScopeBuilder() {
   const navigate = useNavigate();
-  const resolveTagStyle = useStarterTagBadgeStyle();
-  const catalog = useQuery(api.tags.listCatalog);
   const createSession = useMutation(api.studySessions.create);
-
-  const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
-  const [chapterRanges, setChapterRanges] = useState<Map<string, ChapterRange>>(
-    new Map(),
-  );
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any");
   const [isCreating, setIsCreating] = useState(false);
 
-  const availableTags = useMemo(
-    () => (catalog ?? []).map((entry) => entry.tag),
-    [catalog],
-  );
-
-  const scope: StudyScope = useMemo(
-    () => ({
-      books: selectedBooks,
-      chapterRanges:
-        chapterRanges.size > 0
-          ? Array.from(chapterRanges.entries()).map(([book, r]) => ({
-              book,
-              startChapter: r.start,
-              endChapter: r.end,
-            }))
-          : undefined,
-      tags: selectedTags,
-      tagMatchMode,
-    }),
-    [selectedBooks, chapterRanges, selectedTags, tagMatchMode],
-  );
-
-  const scopeForPreview = useMemo(
-    () => ({
-      books: scope.books,
-      chapterRanges: scope.chapterRanges ?? [],
-      tags: scope.tags,
-      tagMatchMode: scope.tagMatchMode,
-    }),
-    [scope],
-  );
+  const {
+    selectedBooks,
+    chapterRanges,
+    selectedTags,
+    tagMatchMode,
+    onToggleBook,
+    onSetBooks,
+    onSetChapterRange,
+    onSelectPreset,
+    onToggleTag,
+    onClearTags,
+    onSetTagMatchMode,
+    scopeForPreview,
+    summaryText,
+  } = useScopeForm();
 
   const preview = useQuery(api.studySessions.previewCounts, {
     scope: scopeForPreview,
   });
-
-  const summaryText = formatScopeSummary(scope);
-
-  const handleToggleBook = useCallback((bookName: string) => {
-    setSelectedBooks((prev) =>
-      prev.includes(bookName)
-        ? prev.filter((b) => b !== bookName)
-        : [...prev, bookName],
-    );
-  }, []);
-
-  const handleSetBooks = useCallback((books: string[]) => {
-    setSelectedBooks(books);
-    setChapterRanges(new Map());
-  }, []);
-
-  const handleSetChapterRange = useCallback(
-    (book: string, range: ChapterRange | null) => {
-      setChapterRanges((prev) => {
-        const next = new Map(prev);
-        if (range) {
-          next.set(book, range);
-        } else {
-          next.delete(book);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-
-  const handleSelectPreset = useCallback(
-    (books: string[]) => {
-      handleSetBooks(books);
-    },
-    [handleSetBooks],
-  );
-
-  const handleToggleTag = useCallback((tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
-  }, []);
-
-  const handleClearTags = useCallback(() => {
-    setSelectedTags([]);
-  }, []);
 
   const handleCreate = useCallback(async () => {
     setIsCreating(true);
@@ -148,64 +69,19 @@ export function StudyScopeBuilder() {
 
       <ScrollArea className="flex-1 min-h-0">
         <div className="max-w-2xl mx-auto px-5 py-6 space-y-8">
-          <section className="space-y-3">
-            <div className="space-y-1">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Passage Scope
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Choose which books and chapters to study.
-              </p>
-            </div>
-            <StudyScopePresets
-              selectedBooks={selectedBooks}
-              onSelectPreset={handleSelectPreset}
-            />
-            <StudyScopeBookPicker
-              selectedBooks={selectedBooks}
-              chapterRanges={chapterRanges}
-              onToggleBook={handleToggleBook}
-              onSetBooks={handleSetBooks}
-              onSetChapterRange={handleSetChapterRange}
-            />
-          </section>
-
-          <section className="space-y-3">
-            <div className="space-y-1">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Tags
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Optionally filter to notes with specific tags.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex gap-1">
-                <Button
-                  size="xs"
-                  variant={tagMatchMode === "any" ? "secondary" : "outline"}
-                  onClick={() => setTagMatchMode("any")}
-                >
-                  Any
-                </Button>
-                <Button
-                  size="xs"
-                  variant={tagMatchMode === "all" ? "secondary" : "outline"}
-                  onClick={() => setTagMatchMode("all")}
-                >
-                  All
-                </Button>
-              </div>
-              <TagFilterControl
-                availableTags={availableTags}
-                selectedTags={selectedTags}
-                onToggleTag={handleToggleTag}
-                onClear={handleClearTags}
-                resolveTagStyle={resolveTagStyle}
-              />
-            </div>
-          </section>
+          <ScopeForm
+            selectedBooks={selectedBooks}
+            chapterRanges={chapterRanges}
+            selectedTags={selectedTags}
+            tagMatchMode={tagMatchMode}
+            onToggleBook={onToggleBook}
+            onSetBooks={onSetBooks}
+            onSetChapterRange={onSetChapterRange}
+            onSelectPreset={onSelectPreset}
+            onToggleTag={onToggleTag}
+            onClearTags={onClearTags}
+            onSetTagMatchMode={onSetTagMatchMode}
+          />
         </div>
       </ScrollArea>
 

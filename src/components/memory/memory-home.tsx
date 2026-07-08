@@ -9,6 +9,7 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { api } from "../../../convex/_generated/api";
 import { MemoryDashboard } from "./dashboard/dashboard";
 import { MemoryLibrary } from "./memory-library";
+import { PackList } from "./packs/pack-list";
 import { PracticeBoard, type PracticeVerse } from "./practice/practice-board";
 import { ReviewPlayer } from "./review-player";
 
@@ -86,6 +87,7 @@ export function MemoryHome() {
             now={now}
             onStartReview={() => setIsReviewing(true)}
           />
+          <PackList now={now} />
           <MemoryLibrary now={now} />
         </div>
       </ScrollArea>

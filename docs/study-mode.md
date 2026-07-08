@@ -297,6 +297,25 @@ All functions validate `args` + `returns`, check auth via `getCurrentUser*`, ver
 - `resolveMembers({ id, now })` — the pack's members joined to their live `verseMemory` schedule (`status`, `learnStage`, `intervalDays`, `dueAt`) plus an `isDue` flag (`dueAt <= now`). **Scope** packs resolve from `savedVerses` ∩ scope in canonical Bible order; **custom** packs read `packVerses` in explicit `order`. Both join to `verseMemory`; rows whose memory seed is missing (legacy) are skipped rather than fabricated.
 - `previewScopeCount({ scope, now })` — a live `{ verseCount, dueCount }` for a (possibly unsaved) scope, computed from `savedVerses` ∩ scope. Powers the scope-pack creation counter.
 
+### Packs UI (`/memory`, `/memory/new`, `/memory/$packId`)
+
+Packs are surfaced entirely inside Memory mode. Routes use the same thin file-route → `src/components/routes/*-page.tsx` → feature-component pattern as the rest of the app:
+
+| Route             | Page wrapper        | Component                                                      |
+| ----------------- | ------------------- | -------------------------------------------------------------- |
+| `/memory/new`     | `MemoryPackNewPage` | `PackBuilder` (`src/components/memory/packs/pack-builder.tsx`) |
+| `/memory/$packId` | `MemoryPackPage`    | `PackView` (`src/components/memory/packs/pack-view.tsx`)       |
+
+- **Packs section (`PackList`).** Mounted on the Memory home between the dashboard and the Library. Reads `usePaginatedQuery(api.packs.listMine, { now }, …)`; each row links to the pack view and shows kind + live verse/due counts, with a **New pack** CTA to `/memory/new`.
+- **Builder (`PackBuilder`).** A name field plus a **Scope / Custom** kind toggle. Scope embeds the shared `ScopeForm` (with `showTagFilter={false}` — see below) and a live `packs.previewScopeCount` footer; Custom hand-picks from hearted verses (`savedVerses.listAll`) via the shared `HeartedVersePicker`. Create calls `packs.create` (then `packs.addVerse` for each staged verse on custom packs) and navigates to `/memory/$packId`. Because the pack exists the moment `create` resolves, the staged-verse loop is fault-tolerant: if any `addVerse` fails it surfaces a non-blocking inline notice ("some verses couldn't be added") but **still navigates** to the pack so the user is never stranded, where they can finish adding. The create button is disabled while a create+add sequence is in flight to prevent duplicate submissions.
+  - **Scope packs don't filter by tags.** Scope-pack membership is matched by book/chapter only (`verseMatchesScope`); `tags`/`tagMatchMode` filter _notes_ in Study, not pack verses. So the builder hides the tag-filter section for packs (it would falsely imply tags narrow membership); the scope still carries the schema-required `tags: []` / `tagMatchMode` defaults.
+- **Pack view (`PackView`).** Header with counts + rename/delete, the resolved member list (`packs.resolveMembers`), and two actions: **Review** plays the pack's **due subset** and **Practice** plays **all** members. Custom packs additionally get add (`HeartedVersePicker` dialog) / remove / reorder (up-down) wired to `packs.addVerse` / `removeVerse` / `reorder`. Deleting a pack keeps hearts + memory history (server invariant).
+- **`AddToPack`.** A small popover control (rendered in the Library drill-down, `VerseDetail`) that adds the current verse to one of the user's custom packs via `packs.addVerse` — which hearts the verse server-side, so no client heart is needed.
+
+**Shared `ScopeForm` (`src/components/study/scope-form.tsx`).** The presets + book/chapter picker + tag filter were extracted from `StudyScopeBuilder` into a `ScopeForm` presentational component plus a `useScopeForm` state hook, so the Study session builder and the scope-pack builder share one implementation. The extraction is behavior-preserving for Study (the builder renders the same two sections and footer preview). An optional `showTagFilter` prop (default `true`) lets a caller drop the Tags section; Study leaves it on (tags filter notes) while the pack builder passes `false` (tags don't filter pack membership).
+
+**`ReviewPlayer` pack source.** `ReviewPlayer` gained optional `title` / `backLabel` and a `source` prop (`{ dueItems, remainingDue }`). Without `source` it plays the global `verseMemory.dueQueue` exactly as before; with it (fed a pack's due members) it plays that reactive subset instead — the global queries are skipped. Its verse-card id keys on `verseRefId` so both the global queue and pack members drive it uniformly. The end-of-run `ReviewSummary` (and the caught-up state) take a `doneLabel` derived from `source`: "Back to pack" when playing a pack, "Back to memory" for the global queue, so the primary action matches where `onExit` actually returns.
+
 ## Known limitations (v1)
 
 - **`listMine` performance.** Pagination bounds the number of session rows per response, but counts still require reading all of the user's `savedVerses` + `noteVerseLinks` plus `ctx.db.get`s for every unique `verseRefId` and `noteId` referenced by those links — these are O(user corpus) each call. Likely future improvements, in order of preference:
@@ -310,6 +329,7 @@ All functions validate `args` + `returns`, check auth via `getCurrentUser*`, ver
 - **Library "Status" sort is index order, not lifecycle order.** Sorting by status reads through `by_userId_status`, whose ordering is alphabetical (`learning`, `mastered`, `new`, `reviewing`), not the memorization lifecycle. It groups verses by status but doesn't order those groups new → mastered.
 - **`verseDetail` attempts use a bounded scan.** `verseMemoryReviews` is only indexed `by_userId_createdAt`, so the drill-down gathers a verse's attempts by walking the log newest-first until it has 20 matches or scans 500 rows. On a very active user the oldest attempts for a rarely-reviewed verse can fall outside the scan window. A `by_userId_verseRefId_createdAt` index would make this exact.
 - **No persisted per-token diffs.** Because only `quality` + `accuracy` are stored per attempt, the drill-down surfaces a derived difficulty signal (average/worst accuracy, hardest stage) rather than a literal "hardest phrase".
+- **Custom-pack verse picker draws from hearted verses only.** The builder + pack-view add flows pick from the user's existing hearted verses (`savedVerses.listAll`) rather than an arbitrary reference input. Adding still hearts the verse (a no-op for an already-hearted one), so the invariant holds; adding a brand-new, never-hearted reference from these surfaces isn't supported yet (heart it in the reader first). Reorder uses up/down controls rather than drag-and-drop.
 
 ## Roadmap
 

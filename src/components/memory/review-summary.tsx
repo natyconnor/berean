@@ -16,6 +16,8 @@ interface ReviewSummaryProps {
   onDone: () => void;
   /** Offered only when there is still due work to keep going on. */
   onContinue?: () => void;
+  /** Label for the primary "done" action. Defaults to "Back to memory". */
+  doneLabel?: string;
 }
 
 /**
@@ -29,6 +31,7 @@ export function ReviewSummary({
   remaining,
   onDone,
   onContinue,
+  doneLabel = "Back to memory",
 }: ReviewSummaryProps): JSX.Element {
   const caughtUp = remaining === 0;
 
@@ -71,7 +74,7 @@ export function ReviewSummary({
             onClick={onDone}
             className="w-full"
           >
-            Back to memory
+            {doneLabel}
           </Button>
         </div>
       </CardContent>
