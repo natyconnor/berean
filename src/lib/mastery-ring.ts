@@ -21,13 +21,19 @@ const LEARNING_RING_CEILING = 0.5;
  * is length-adjusted via {@link requiredRepsFor}, so the bar matches the card
  * and the server exactly.
  *
+ * Graduating out of learning (`reviewing` / `mastered`) is a full journey: the
+ * scheduler resets `stageReps` to 0 on graduation while leaving `learnStage` at
+ * From Memory, so without `status` the bar would incorrectly stick at 75%.
+ *
  * Pure: no React, no `Date.now()`.
  */
 export function learningJourneyFraction(
   learnStage: number,
   stageReps: number,
   wordCount?: number,
+  status?: MemoryStatus,
 ): number {
+  if (status === "reviewing" || status === "mastered") return 1;
   const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
   const required = Math.max(1, requiredRepsFor(clampedStage, wordCount));
   const withinBand = Math.max(0, Math.min(1, stageReps / required));

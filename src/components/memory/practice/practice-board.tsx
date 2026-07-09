@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
-import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
+import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import {
@@ -56,6 +56,11 @@ export interface PracticeVerse {
    * defensively via `stageReps ?? 0`.
    */
   stageReps?: number;
+  /**
+   * Lifecycle status. Needed so a verse that has already graduated to
+   * reviewing/mastered shows a full journey bar instead of From Memory at 75%.
+   */
+  status?: MemoryStatus;
 }
 
 interface PracticeBoardProps {
@@ -69,6 +74,7 @@ interface PracticeBoardProps {
 interface VerseProgress {
   learnStage: number;
   stageReps: number;
+  status: MemoryStatus;
 }
 
 interface OrderedVerse {
@@ -76,6 +82,7 @@ interface OrderedVerse {
   reference: CardReference;
   learnStage: number;
   stageReps: number;
+  status: MemoryStatus;
 }
 
 const SHUFFLE_DURATION_MS = 750;
@@ -92,6 +99,19 @@ function normalizeStageIndex(stage: number): number {
 function normalizeReps(reps: number): number {
   if (!Number.isFinite(reps)) return 0;
   return Math.max(0, Math.trunc(reps));
+}
+
+function normalizeStatus(status: MemoryStatus | undefined): MemoryStatus {
+  if (
+    status === "new" ||
+    status === "learning" ||
+    status === "reviewing" ||
+    status === "mastered"
+  ) {
+    return status;
+  }
+  // Absent status (legacy callers / no memory row yet) → still learning.
+  return "learning";
 }
 
 /**
@@ -132,19 +152,25 @@ export function PracticeBoard({
       reference: verse.reference,
       learnStage: normalizeStageIndex(verse.learnStage),
       stageReps: normalizeReps(verse.stageReps ?? 0),
+      status: normalizeStatus(verse.status),
     })),
   );
 
   // Live per-verse learning progress. Seeded from the frozen snapshot, then
-  // advanced by adopting the server-authoritative `learnStage`/`stageReps`
-  // returned by each recorded attempt, so the fade dial moves in-session.
+  // advanced by adopting the server-authoritative `learnStage`/`stageReps`/
+  // `status` returned by each recorded attempt, so the fade dial moves
+  // in-session (and graduation fills the journey bar to 100%).
   const [progressByVerseId, setProgressByVerseId] = useState<
     Record<string, VerseProgress>
   >(() =>
     Object.fromEntries(
       baseVerses.map((verse) => [
         verse.id,
-        { learnStage: verse.learnStage, stageReps: verse.stageReps },
+        {
+          learnStage: verse.learnStage,
+          stageReps: verse.stageReps,
+          status: verse.status,
+        },
       ]),
     ),
   );
@@ -174,6 +200,7 @@ export function PracticeBoard({
           ...verse,
           learnStage: progress?.learnStage ?? verse.learnStage,
           stageReps: progress?.stageReps ?? verse.stageReps,
+          status: progress?.status ?? verse.status,
         };
       }),
     [orderedVerses, progressByVerseId],
@@ -188,8 +215,9 @@ export function PracticeBoard({
     ? (progressByVerseId[currentVerse.id] ?? {
         learnStage: currentVerse.learnStage,
         stageReps: currentVerse.stageReps,
+        status: currentVerse.status,
       })
-    : { learnStage: 0, stageReps: 0 };
+    : { learnStage: 0, stageReps: 0, status: "learning" };
 
   // Fetch the active verse's text (cache-shared with PracticeCard) so the rail
   // and card can show a length-accurate journey bar via learningJourneyFraction.
@@ -253,6 +281,7 @@ export function PracticeBoard({
               reference={currentVerse.reference}
               learnStage={currentProgress.learnStage}
               stageReps={currentProgress.stageReps}
+              status={currentProgress.status}
               position={boundedIndex}
               total={orderedVerses.length}
               onRecord={(tokens, wordCount) => {
@@ -274,14 +303,15 @@ export function PracticeBoard({
                   const applied = appliedSeqByVerseId.current.get(verseId) ?? 0;
                   if (seq <= applied) return;
                   appliedSeqByVerseId.current.set(verseId, seq);
-                  // Adopt the server-authoritative band + reps so the dial
-                  // advances (exact), holds (close), or steps support back up
-                  // (off) live in-session.
+                  // Adopt the server-authoritative band + reps + status so the
+                  // dial advances (exact), holds (close), steps support back up
+                  // (off), or fills to 100% on graduation live in-session.
                   setProgressByVerseId((prev) => ({
                     ...prev,
                     [verseId]: {
                       learnStage: normalizeStageIndex(schedule.learnStage),
                       stageReps: normalizeReps(schedule.stageReps),
+                      status: normalizeStatus(schedule.status),
                     },
                   }));
                 });
@@ -311,6 +341,7 @@ export function PracticeBoard({
             shuffleNonce={shuffleNonce}
             currentLearnStage={currentProgress.learnStage}
             currentStageReps={currentProgress.stageReps}
+            currentStatus={currentProgress.status}
             currentWordCount={currentWordCount}
           />
         </div>
@@ -325,6 +356,8 @@ interface PracticeCardProps {
   learnStage: number;
   /** Server-authoritative exact reps banked on the current band. */
   stageReps: number;
+  /** Lifecycle status — fills the journey bar on graduation. */
+  status: MemoryStatus;
   position: number;
   total: number;
   onRecord: (
@@ -337,6 +370,7 @@ function PracticeCard({
   reference,
   learnStage,
   stageReps,
+  status,
   position,
   total,
   onRecord,
@@ -510,6 +544,7 @@ function PracticeCard({
             learnStage={learnStage}
             stageReps={stageReps}
             wordCount={wordCount}
+            status={status}
           />
         </CardHeader>
 

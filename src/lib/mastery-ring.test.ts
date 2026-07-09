@@ -88,6 +88,16 @@ describe("learningJourneyFraction", () => {
     expect(learningJourneyFraction(3, fromMemoryRequired)).toBeCloseTo(1);
   });
 
+  it("graduating to reviewing fills the journey to 1 even with stageReps reset", () => {
+    // Scheduler resets stageReps to 0 on graduation while leaving learnStage at
+    // From Memory — without status the bar would stick at 0.75.
+    expect(learningJourneyFraction(3, 0, undefined, "reviewing")).toBe(1);
+    expect(learningJourneyFraction(3, 0, undefined, "mastered")).toBe(1);
+    expect(learningJourneyFraction(3, 0, undefined, "learning")).toBeCloseTo(
+      0.75,
+    );
+  });
+
   it("length-adjusted Guided reps shift the fraction correctly", () => {
     // 24-word verse: Guided needs 7 reps (max). One rep = 1/7 of the Guided slice.
     const longWordCount = 24;

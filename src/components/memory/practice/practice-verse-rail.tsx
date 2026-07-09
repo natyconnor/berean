@@ -1,6 +1,7 @@
 import { ListOrdered, Shuffle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import type { MemoryStatus } from "@/lib/memory-scheduler";
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
@@ -14,6 +15,7 @@ interface RailVerse {
   reference: CardReference;
   learnStage: number;
   stageReps: number;
+  status: MemoryStatus;
 }
 
 interface PracticeVerseRailProps {
@@ -27,6 +29,8 @@ interface PracticeVerseRailProps {
   currentLearnStage: number;
   /** The active verse's live reps banked on the current band. */
   currentStageReps: number;
+  /** Lifecycle status — fills the journey bar once graduated. */
+  currentStatus: MemoryStatus;
   /**
    * Word count of the active verse's text. When provided, the rep label uses
    * the length-adjusted required-rep count via {@link requiredRepsFor} so it
@@ -51,6 +55,7 @@ export function PracticeVerseRail({
   shuffleNonce,
   currentLearnStage,
   currentStageReps,
+  currentStatus,
   currentWordCount,
   className,
 }: PracticeVerseRailProps) {
@@ -124,6 +129,7 @@ export function PracticeVerseRail({
               learnStage={currentLearnStage}
               stageReps={currentStageReps}
               wordCount={currentWordCount}
+              status={currentStatus}
             />
           </div>
         </div>

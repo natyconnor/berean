@@ -23,7 +23,11 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { diffWords } from "@/lib/diff-words";
-import { MAX_LEARN_STAGE, requiredRepsFor } from "@/lib/memory-scheduler";
+import {
+  MAX_LEARN_STAGE,
+  requiredRepsFor,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import {
   type HintToken,
@@ -52,6 +56,7 @@ interface StudyVerseLearnProps {
 interface VerseProgress {
   learnStage: number;
   stageReps: number;
+  status: MemoryStatus;
 }
 
 // Bounded retries for the one-shot rung restore on transient read failures.
@@ -78,32 +83,38 @@ function predictLearning(
   reps: number,
   quality: VerseAttemptQuality,
   wordCount?: number,
+  status: MemoryStatus = "learning",
 ): VerseProgress {
   if (quality === "exact") {
     const nextReps = reps + 1;
     if (nextReps >= requiredRepsFor(stage, wordCount)) {
       if (stage >= MAX_LEARN_STAGE) {
-        return { learnStage: MAX_LEARN_STAGE, stageReps: 0 };
+        return {
+          learnStage: MAX_LEARN_STAGE,
+          stageReps: 0,
+          status: "reviewing",
+        };
       }
-      return { learnStage: stage + 1, stageReps: 0 };
+      return { learnStage: stage + 1, stageReps: 0, status: "learning" };
     }
-    return { learnStage: stage, stageReps: nextReps };
+    return { learnStage: stage, stageReps: nextReps, status: "learning" };
   }
   if (quality === "off") {
     if (reps > 0) {
-      return { learnStage: stage, stageReps: reps - 1 };
+      return { learnStage: stage, stageReps: reps - 1, status: "learning" };
     }
     if (stage > 0) {
       const prevStage = stage - 1;
       return {
         learnStage: prevStage,
         stageReps: Math.max(0, requiredRepsFor(prevStage, wordCount) - 1),
+        status: "learning",
       };
     }
-    return { learnStage: 0, stageReps: 0 };
+    return { learnStage: 0, stageReps: 0, status: "learning" };
   }
   // close: hold the band and its banked reps.
-  return { learnStage: stage, stageReps: reps };
+  return { learnStage: stage, stageReps: reps, status };
 }
 
 export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
@@ -142,6 +153,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     setProgress({
       learnStage: clampStage(next.learnStage),
       stageReps: clampReps(next.stageReps),
+      status: next.status,
     });
   }, []);
 
@@ -167,6 +179,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
           applyProgress({
             learnStage: row.learnStage,
             stageReps: row.stageReps ?? 0,
+            status: row.status,
           });
         }
       })
@@ -189,6 +202,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
   const stageIndex = progress?.learnStage ?? 0;
   const repsIndex = progress?.stageReps ?? 0;
+  const status = progress?.status ?? "learning";
   const stageInfo = PRACTICE_STAGES[stageIndex] ?? PRACTICE_STAGES[0];
   const stageColor = stageInfo.color;
   const { hintStage, tokens, wordCount } = useMemo(() => {
@@ -293,8 +307,18 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
       }).then((schedule) => {
         applyProgress(
           schedule
-            ? { learnStage: schedule.learnStage, stageReps: schedule.stageReps }
-            : predictLearning(stageIndex, repsIndex, "exact", wordCount),
+            ? {
+                learnStage: schedule.learnStage,
+                stageReps: schedule.stageReps,
+                status: schedule.status,
+              }
+            : predictLearning(
+                stageIndex,
+                repsIndex,
+                "exact",
+                wordCount,
+                status,
+              ),
         );
         setTypedAnswer("");
         setChecked(false);
@@ -320,7 +344,11 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
         wordCount,
       }).then((schedule) => {
         pendingProgressRef.current = schedule
-          ? { learnStage: schedule.learnStage, stageReps: schedule.stageReps }
+          ? {
+              learnStage: schedule.learnStage,
+              stageReps: schedule.stageReps,
+              status: schedule.status,
+            }
           : null;
       });
     });
@@ -334,6 +362,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
           repsIndex,
           checkedQuality ?? "close",
           wordCount,
+          status,
         ),
     );
     pendingProgressRef.current = null;
@@ -388,6 +417,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
             learnStage={stageIndex}
             stageReps={repsIndex}
             wordCount={wordCount}
+            status={status}
           />
         )}
       </CardHeader>

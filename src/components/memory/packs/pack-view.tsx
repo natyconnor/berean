@@ -109,6 +109,7 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
         },
         learnStage: m.learnStage,
         stageReps: m.stageReps ?? 0,
+        status: m.status,
       })),
     [members],
   );

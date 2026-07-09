@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 
 import { learningJourneyFraction } from "@/lib/mastery-ring";
-import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
+import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
 import { PRACTICE_STAGES } from "./practice-stages";
@@ -16,6 +16,12 @@ interface LearningJourneyBarProps {
    * are length-adjusted so the bar matches the card and the server exactly.
    */
   wordCount?: number;
+  /**
+   * Lifecycle status. Graduated verses (`reviewing` / `mastered`) fill the bar
+   * to 100% — the scheduler resets `stageReps` on graduation, so stage alone
+   * would incorrectly leave the track at From Memory's 75% floor.
+   */
+  status?: MemoryStatus;
   className?: string;
 }
 
@@ -24,26 +30,37 @@ interface LearningJourneyBarProps {
  * that advances monotonically across all four bands (Read → Guided → Challenge
  * → From Memory). Fill fraction is {@link learningJourneyFraction}, keeping it
  * in sync with the mastery heart ring.
+ *
+ * Graduated verses keep the From Memory palette so the bar stays visually
+ * continuous with the card chrome; only the label and fill change.
  */
 export function LearningJourneyBar({
   learnStage,
   stageReps,
   wordCount,
+  status,
   className,
 }: LearningJourneyBarProps): JSX.Element {
+  const graduated = status === "reviewing" || status === "mastered";
   const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
   const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
+  const label = graduated
+    ? status === "mastered"
+      ? "Mastered"
+      : "Reviewing"
+    : stage.label;
   const fraction = learningJourneyFraction(
     learnStage,
     stageReps ?? 0,
     wordCount,
+    status,
   );
   const pct = Math.round(fraction * 100);
 
   return (
     <div
       className={cn("space-y-1", className)}
-      aria-label={`Learning journey: ${stage.label} · ${pct}%`}
+      aria-label={`Learning journey: ${label} · ${pct}%`}
     >
       <div className="flex items-center justify-between gap-2">
         <span
@@ -56,7 +73,7 @@ export function LearningJourneyBar({
             className={cn("h-1.5 w-1.5 rounded-full", stage.color.dot)}
             aria-hidden
           />
-          {stage.label}
+          {label}
         </span>
         <span className="text-xs tabular-nums text-muted-foreground">
           {pct}%
