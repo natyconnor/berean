@@ -1,4 +1,8 @@
-import { MAX_LEARN_STAGE, SUPPORT_BANDS } from "./memory-scheduler";
+import {
+  MAX_LEARN_STAGE,
+  SUPPORT_BANDS,
+  type SupportBand,
+} from "./memory-scheduler";
 
 export type HintStage = "full" | "first-letters" | "cloze" | "hidden";
 
@@ -95,6 +99,32 @@ function getClozeFirstLetterIndices(
   );
 }
 
+/**
+ * Like {@link getClozeFirstLetterIndices} but with a minimum-1 guard for the
+ * Guided scaffold fade: if `density > 0` and rounding produces an empty set on
+ * a very short verse, force-select the top-ranked word so at least one word
+ * always gets a first-letter scaffold.
+ *
+ * This guard is intentionally applied to the `first-letters` stage only; cloze
+ * (Challenge) keeps its existing rounding behavior.
+ */
+function getFirstLetterScaffoldIndices(
+  text: string,
+  words: ReadonlyArray<string>,
+  density: number,
+  seed: number | undefined,
+): ReadonlySet<number> {
+  const indices = getClozeFirstLetterIndices(text, words, { density, seed });
+  if (indices.size === 0 && density > 0 && words.length > 0) {
+    // Math.round() rounded down to 0 — guarantee at least one scaffold.
+    return getClozeFirstLetterIndices(text, words, {
+      density: 1 / words.length,
+      seed,
+    });
+  }
+  return indices;
+}
+
 export function maskVerseText(
   text: string,
   stage: HintStage,
@@ -106,6 +136,29 @@ export function maskVerseText(
     stage === "cloze"
       ? getClozeFirstLetterIndices(text, wordTokens, options)
       : new Set<number>();
+
+  // For first-letters with an explicit density below 1.0: only the selected
+  // subset gets the first-letter scaffold; unselected words stay fully visible
+  // (masked: false). density undefined or >= 1 → all words scaffolded
+  // (original byte-for-byte behavior).
+  // Inline condition lets TypeScript narrow `options.density` to `number`.
+  const firstLetterScaffoldIndices: ReadonlySet<number> =
+    stage === "first-letters" &&
+    options?.density !== undefined &&
+    options.density < 1.0
+      ? getFirstLetterScaffoldIndices(
+          text,
+          wordTokens,
+          options.density,
+          options.seed,
+        )
+      : new Set<number>();
+
+  const partialFirstLetters =
+    stage === "first-letters" &&
+    options?.density !== undefined &&
+    options.density < 1.0;
+
   let wordIndex = 0;
 
   return matches.map((token) => {
@@ -121,6 +174,11 @@ export function maskVerseText(
       case "full":
         return { text: token, word: true, masked: false };
       case "first-letters":
+        if (partialFirstLetters) {
+          return firstLetterScaffoldIndices.has(currentWordIndex)
+            ? { text: maskFirstLetters(token), word: true, masked: true }
+            : { text: token, word: true, masked: false };
+        }
         return { text: maskFirstLetters(token), word: true, masked: true };
       case "cloze": {
         const firstLetterHint = clozeFirstLetterIndices.has(currentWordIndex);
@@ -143,12 +201,26 @@ export function maskVerseText(
 }
 
 /**
+ * Lerp density from `densityStart` to `densityEnd` across the band's required
+ * reps. A single-rep band (denominator = 0) holds at `densityStart`.
+ */
+function lerpBandDensity(band: SupportBand, stageReps: number): number {
+  const start = band.densityStart ?? 0;
+  const end = band.densityEnd ?? 0;
+  const denominator = band.requiredReps - 1;
+  const progress = denominator <= 0 ? 0 : stageReps / denominator;
+  return start + (end - start) * progress;
+}
+
+/**
  * Map a learner's position in the learning phase to the hint stage plus the
  * density/seed a rep should use. Bands are the single source of truth
  * ({@link SUPPORT_BANDS}); `learnStage` indexes into them.
  *
  * - `read` (stage 0) -> full text, no hints
- * - `guided` (stage 1) -> every word keeps its first letter
+ * - `guided` (stage 1) -> first-letter scaffold that fades from `densityStart`
+ *   (0.25, mostly visible) to `densityEnd` (1.0, fully scaffolded) across reps;
+ *   reshuffled per rep via `seed = stageReps`
  * - `challenge` (stage 2) -> cloze that fades from `densityStart` to
  *   `densityEnd` across the band, reshuffled per rep via `seed = stageReps`
  * - `memory` (stage 3) -> fully hidden
@@ -163,19 +235,12 @@ export function hintForProgress(
   switch (band.key) {
     case "read":
       return { stage: "full", density: band.densityStart ?? 0, seed: 0 };
-    case "guided":
-      return {
-        stage: "first-letters",
-        density: band.densityStart ?? 0,
-        seed: 0,
-      };
+    case "guided": {
+      const density = lerpBandDensity(band, stageReps);
+      return { stage: "first-letters", density, seed: stageReps };
+    }
     case "challenge": {
-      const start = band.densityStart ?? 0;
-      const end = band.densityEnd ?? 0;
-      const denominator = band.requiredReps - 1;
-      // lerp guard: a single-rep band has no span, so hold at densityStart.
-      const progress = denominator <= 0 ? 0 : stageReps / denominator;
-      const density = start + (end - start) * progress;
+      const density = lerpBandDensity(band, stageReps);
       return { stage: "cloze", density, seed: stageReps };
     }
     case "memory":

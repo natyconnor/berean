@@ -149,6 +149,72 @@ describe("maskVerseText", () => {
       );
     });
   });
+
+  describe("first-letters with density", () => {
+    it("partial density: some words scaffolded (masked), some fully visible", () => {
+      const tokens = maskVerseText(CLOZE_TEXT, "first-letters", {
+        density: 0.4,
+        seed: 1,
+      });
+      const wordTokens = tokens.filter((t) => t.word);
+      const scaffolded = wordTokens.filter((t) => t.masked);
+      const visible = wordTokens.filter((t) => !t.masked);
+
+      expect(scaffolded.length).toBeGreaterThan(0);
+      expect(visible.length).toBeGreaterThan(0);
+
+      // Scaffolded words contain an underscore (first-letter form).
+      for (const t of scaffolded) {
+        expect(t.text).toMatch(/_/);
+      }
+      // Visible words are full text — no underscores.
+      for (const t of visible) {
+        expect(t.text).not.toMatch(/_/);
+      }
+    });
+
+    it("density 1.0 is byte-for-byte identical to no options (all words scaffolded)", () => {
+      expect(
+        maskVerseText(CLOZE_TEXT, "first-letters", { density: 1.0 }),
+      ).toEqual(maskVerseText(CLOZE_TEXT, "first-letters"));
+    });
+
+    it("density undefined is byte-for-byte identical to no options", () => {
+      expect(
+        maskVerseText(CLOZE_TEXT, "first-letters", { density: undefined }),
+      ).toEqual(maskVerseText(CLOZE_TEXT, "first-letters"));
+    });
+
+    it("short verse (1 word) with density > 0 still scaffolds at least one word", () => {
+      // Math.round(0.25 * 1) = 0 without the min-1 guard — every word would
+      // stay fully visible, defeating the purpose of the Guided scaffold fade.
+      const tokens = maskVerseText("Rejoice", "first-letters", {
+        density: 0.25,
+        seed: 0,
+      });
+      const scaffolded = tokens.filter((t) => t.word && t.masked);
+      expect(scaffolded.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("different seeds produce different scaffolded subsets at the same density", () => {
+      const density = 0.5;
+      const a = maskVerseText(CLOZE_TEXT, "first-letters", {
+        density,
+        seed: 1,
+      });
+      const b = maskVerseText(CLOZE_TEXT, "first-letters", {
+        density,
+        seed: 2,
+      });
+
+      const maskedA = a.filter((t) => t.word && t.masked).length;
+      const maskedB = b.filter((t) => t.word && t.masked).length;
+      // Same count of scaffolded words.
+      expect(maskedA).toBe(maskedB);
+      // But different tokens are masked.
+      expect(a).not.toEqual(b);
+    });
+  });
 });
 
 describe("hintForProgress", () => {
@@ -160,17 +226,27 @@ describe("hintForProgress", () => {
     });
   });
 
-  it("maps the guided band (stage 1) to full-density first letters", () => {
+  it("fades the guided band (stage 1) from densityStart to densityEnd across reps", () => {
+    const guided = SUPPORT_BANDS[1];
+    const lastRep = guided.requiredReps - 1;
+
+    // Rep 0: density at densityStart (0.25), seed 0.
     expect(hintForProgress(1, 0)).toEqual({
       stage: "first-letters",
-      density: 1,
+      density: guided.densityStart,
       seed: 0,
     });
-    expect(hintForProgress(1, 3)).toEqual({
-      stage: "first-letters",
-      density: 1,
-      seed: 0,
-    });
+
+    // Final rep: density at densityEnd (1.0), seed = lastRep.
+    const atEnd = hintForProgress(1, lastRep);
+    expect(atEnd.stage).toBe("first-letters");
+    expect(atEnd.seed).toBe(lastRep);
+    expect(atEnd.density).toBeCloseTo(guided.densityEnd ?? 0);
+
+    // Mid-rep: strictly between start and end (increasing ramp).
+    const mid = hintForProgress(1, Math.floor(lastRep / 2));
+    expect(mid.density).toBeGreaterThan(hintForProgress(1, 0).density);
+    expect(mid.density).toBeLessThan(atEnd.density);
   });
 
   it("fades the challenge band (stage 2) from densityStart to densityEnd", () => {

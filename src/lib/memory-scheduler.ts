@@ -52,14 +52,14 @@ export const SUPPORT_BANDS: readonly SupportBand[] = [
     key: "guided",
     label: "Guided",
     requiredReps: 5,
-    densityStart: 1.0,
+    densityStart: 0.25,
     densityEnd: 1.0,
   },
   {
     key: "challenge",
     label: "Challenge",
     requiredReps: 8,
-    densityStart: 0.5,
+    densityStart: 0.65,
     densityEnd: 0.15,
   },
   {
