@@ -192,11 +192,38 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     };
   }
 
-  // off: bump up support (lower band index, floored at 0), reset that band's
-  // rep counter and the streak.
+  // off (soft step-back): lose one banked rep before dropping a band.
+  // mid-band: stageReps -= 1, stay on band.
+  // at 0 reps with a band above Read: drop one band, land at requiredRepsFor(prev) - 1.
+  // already at Read 0/0: stay (floor).
+  if (s.stageReps > 0) {
+    return {
+      status: "learning",
+      learnStage: s.learnStage,
+      stageReps: s.stageReps - 1,
+      ease: s.ease,
+      intervalDays: 0,
+      dueAt: r.now,
+      consecutiveCorrect: 0,
+      lapses: s.lapses,
+    };
+  }
+  if (s.learnStage > 0) {
+    const prevStage = s.learnStage - 1;
+    return {
+      status: "learning",
+      learnStage: prevStage,
+      stageReps: Math.max(0, requiredRepsFor(prevStage) - 1),
+      ease: s.ease,
+      intervalDays: 0,
+      dueAt: r.now,
+      consecutiveCorrect: 0,
+      lapses: s.lapses,
+    };
+  }
   return {
     status: "learning",
-    learnStage: Math.max(0, s.learnStage - 1),
+    learnStage: 0,
     stageReps: 0,
     ease: s.ease,
     intervalDays: 0,

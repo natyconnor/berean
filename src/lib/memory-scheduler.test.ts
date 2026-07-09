@@ -152,14 +152,29 @@ describe("learning phase grades", () => {
     expect(next.dueAt).toBe(NOW);
   });
 
-  it("off drops one band, resets stageReps, but never below band 0", () => {
-    const dropped = scheduleNext(learningAt(2, 4), review({ quality: "off" }));
-    expect(dropped.learnStage).toBe(1);
-    expect(dropped.stageReps).toBe(0);
-    expect(dropped.consecutiveCorrect).toBe(0);
-    const floored = scheduleNext(learningAt(0, 0), review({ quality: "off" }));
-    expect(floored.learnStage).toBe(0);
-    expect(floored.stageReps).toBe(0);
+  it("off mid-band: loses one banked rep and stays on the band", () => {
+    // Guided (stage 1) with 3 reps → Guided with 2
+    const next = scheduleNext(learningAt(1, 3), review({ quality: "off" }));
+    expect(next.learnStage).toBe(1);
+    expect(next.stageReps).toBe(2);
+    expect(next.consecutiveCorrect).toBe(0);
+    expect(next.status).toBe("learning");
+    expect(next.dueAt).toBe(NOW);
+  });
+
+  it("off at 0 reps drops one band, landing at requiredRepsFor(prev) - 1", () => {
+    // Guided (stage 1) at 0 reps → Read (stage 0) at max(0, 1-1) = 0
+    const next = scheduleNext(learningAt(1, 0), review({ quality: "off" }));
+    expect(next.learnStage).toBe(0);
+    expect(next.stageReps).toBe(0);
+    expect(next.consecutiveCorrect).toBe(0);
+  });
+
+  it("off at Read 0/0 stays at 0/0 (floor)", () => {
+    const next = scheduleNext(learningAt(0, 0), review({ quality: "off" }));
+    expect(next.learnStage).toBe(0);
+    expect(next.stageReps).toBe(0);
+    expect(next.consecutiveCorrect).toBe(0);
   });
 
   it("an exact at From Memory graduates to reviewing with a 1-day interval", () => {

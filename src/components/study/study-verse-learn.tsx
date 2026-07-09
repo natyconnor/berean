@@ -87,7 +87,17 @@ function predictLearning(
     return { learnStage: stage, stageReps: nextReps };
   }
   if (quality === "off") {
-    return { learnStage: Math.max(0, stage - 1), stageReps: 0 };
+    if (reps > 0) {
+      return { learnStage: stage, stageReps: reps - 1 };
+    }
+    if (stage > 0) {
+      const prevStage = stage - 1;
+      return {
+        learnStage: prevStage,
+        stageReps: Math.max(0, requiredRepsFor(prevStage) - 1),
+      };
+    }
+    return { learnStage: 0, stageReps: 0 };
   }
   // close: hold the band and its banked reps.
   return { learnStage: stage, stageReps: reps };
