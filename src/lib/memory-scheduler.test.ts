@@ -6,9 +6,12 @@ import {
   EASE_START,
   MASTERED_INTERVAL_DAYS,
   MAX_LEARN_STAGE,
+  requiredRepsFor,
   SUPPORT_BANDS,
   initialSchedule,
   scheduleNext,
+  SHORT_VERSE_WORDS,
+  LONG_VERSE_WORDS,
   type MemorySchedule,
   type ReviewInput,
 } from "./memory-scheduler";
@@ -116,30 +119,66 @@ describe("new -> learning graduation path", () => {
 });
 
 describe("learning phase grades", () => {
-  it("Guided needs 5 exacts: reps 1-4 hold the band, the 5th advances", () => {
+  it("Guided needs 3 exacts (short verse): reps 1–2 hold the band, the 3rd advances", () => {
     let s = learningAt(1);
-    for (let rep = 1; rep <= 4; rep += 1) {
+    for (let rep = 1; rep <= 2; rep += 1) {
       s = scheduleNext(s, review({ quality: "exact" }));
       expect(s.status).toBe("learning");
       expect(s.learnStage).toBe(1);
       expect(s.stageReps).toBe(rep);
     }
-    // Fifth exact clears Guided and advances to Challenge with a reset counter.
+    // Third exact clears Guided and advances to Challenge with a reset counter.
     s = scheduleNext(s, review({ quality: "exact" }));
     expect(s.status).toBe("learning");
     expect(s.learnStage).toBe(2);
     expect(s.stageReps).toBe(0);
-    expect(s.consecutiveCorrect).toBe(5);
+    expect(s.consecutiveCorrect).toBe(3);
   });
 
-  it("Challenge needs 8 exacts before advancing to From Memory", () => {
+  it("Challenge needs 5 exacts (short verse) before advancing to From Memory", () => {
     let s = learningAt(2);
-    for (let rep = 1; rep <= 7; rep += 1) {
+    for (let rep = 1; rep <= 4; rep += 1) {
       s = scheduleNext(s, review({ quality: "exact" }));
       expect(s.learnStage).toBe(2);
       expect(s.stageReps).toBe(rep);
     }
     s = scheduleNext(s, review({ quality: "exact" }));
+    expect(s.learnStage).toBe(3);
+    expect(s.stageReps).toBe(0);
+  });
+
+  it("Guided needs 7 exacts for a long verse (>=24 words)", () => {
+    let s = learningAt(1);
+    for (let rep = 1; rep <= 6; rep += 1) {
+      s = scheduleNext(
+        s,
+        review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
+      );
+      expect(s.learnStage).toBe(1);
+      expect(s.stageReps).toBe(rep);
+    }
+    s = scheduleNext(
+      s,
+      review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
+    );
+    expect(s.learnStage).toBe(2);
+    expect(s.stageReps).toBe(0);
+  });
+
+  it("Challenge needs 12 exacts for a long verse (>=24 words)", () => {
+    let s = learningAt(2);
+    for (let rep = 1; rep <= 11; rep += 1) {
+      s = scheduleNext(
+        s,
+        review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
+      );
+      expect(s.learnStage).toBe(2);
+      expect(s.stageReps).toBe(rep);
+    }
+    s = scheduleNext(
+      s,
+      review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
+    );
     expect(s.learnStage).toBe(3);
     expect(s.stageReps).toBe(0);
   });
@@ -167,6 +206,18 @@ describe("learning phase grades", () => {
     const next = scheduleNext(learningAt(1, 0), review({ quality: "off" }));
     expect(next.learnStage).toBe(0);
     expect(next.stageReps).toBe(0);
+    expect(next.consecutiveCorrect).toBe(0);
+  });
+
+  it("off at 0 reps uses wordCount when computing the landing stageReps", () => {
+    // Challenge (stage 2) at 0 reps, long verse: drop to Guided (stage 1).
+    // requiredRepsFor(1, 24) = 7, so landing reps = max(0, 7-1) = 6.
+    const next = scheduleNext(
+      learningAt(2, 0),
+      review({ quality: "off", wordCount: LONG_VERSE_WORDS }),
+    );
+    expect(next.learnStage).toBe(1);
+    expect(next.stageReps).toBe(6);
     expect(next.consecutiveCorrect).toBe(0);
   });
 
@@ -281,5 +332,38 @@ describe("interval fuzz", () => {
   it("leaves within-session retries due immediately (no fuzz on 0 interval)", () => {
     const next = scheduleNext(learningAt(1), review({ quality: "close" }));
     expect(next.dueAt).toBe(NOW);
+  });
+});
+
+describe("requiredRepsFor length curve", () => {
+  it("returns 1 for Read (stage 0) and From Memory (stage 3) regardless of wordCount", () => {
+    expect(requiredRepsFor(0)).toBe(1);
+    expect(requiredRepsFor(3)).toBe(1);
+    expect(requiredRepsFor(0, LONG_VERSE_WORDS)).toBe(1);
+    expect(requiredRepsFor(3, LONG_VERSE_WORDS)).toBe(1);
+  });
+
+  it("returns short-verse minima (3 / 5) when wordCount is omitted", () => {
+    expect(requiredRepsFor(1)).toBe(3);
+    expect(requiredRepsFor(2)).toBe(5);
+  });
+
+  it("returns short-verse minima for wordCount equal to SHORT_VERSE_WORDS", () => {
+    expect(requiredRepsFor(1, SHORT_VERSE_WORDS)).toBe(3);
+    expect(requiredRepsFor(2, SHORT_VERSE_WORDS)).toBe(5);
+  });
+
+  it("returns long-verse maxima (7 / 12) for wordCount >= LONG_VERSE_WORDS", () => {
+    expect(requiredRepsFor(1, LONG_VERSE_WORDS)).toBe(7);
+    expect(requiredRepsFor(2, LONG_VERSE_WORDS)).toBe(12);
+    // Clamped above LONG_VERSE_WORDS
+    expect(requiredRepsFor(1, 50)).toBe(7);
+    expect(requiredRepsFor(2, 50)).toBe(12);
+  });
+
+  it("interpolates at a midpoint (17 words, t=0.5)", () => {
+    // Guided: 3 + (7-3)*0.5 = 5; Challenge: 5 + (12-5)*0.5 = 8.5 → 9
+    expect(requiredRepsFor(1, 17)).toBe(5);
+    expect(requiredRepsFor(2, 17)).toBe(9);
   });
 });

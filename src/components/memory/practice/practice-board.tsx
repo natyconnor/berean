@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
-import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
+import { MAX_LEARN_STAGE, requiredRepsFor } from "@/lib/memory-scheduler";
 import {
   buildPracticeOrder,
   nextIndex,
@@ -33,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   type HintToken,
+  countVerseWords,
   hintForProgress,
   maskVerseText,
 } from "@/lib/verse-hint";
@@ -191,6 +192,19 @@ export function PracticeBoard({
       })
     : { learnStage: 0, stageReps: 0 };
 
+  // Fetch the active verse's text (cache-shared with PracticeCard) so the rail
+  // can show a length-accurate rep total via requiredRepsFor.
+  const { data: activeVerseData } = useEsvReference(
+    currentVerse?.reference ?? null,
+  );
+  const currentWordCount = useMemo(
+    () =>
+      activeVerseData
+        ? countVerseWords(activeVerseData.verses.map((v) => v.text).join(" "))
+        : undefined,
+    [activeVerseData],
+  );
+
   useEffect(() => {
     if (!isShuffling) return;
     const timer = window.setTimeout(
@@ -246,7 +260,7 @@ export function PracticeBoard({
               stageReps={currentProgress.stageReps}
               position={boundedIndex}
               total={orderedVerses.length}
-              onRecord={(tokens) => {
+              onRecord={(tokens, wordCount) => {
                 const verseId = currentVerse.id;
                 const seq = (attemptSeqByVerseId.current.get(verseId) ?? 0) + 1;
                 attemptSeqByVerseId.current.set(verseId, seq);
@@ -255,6 +269,7 @@ export function PracticeBoard({
                   tokens,
                   stage: currentProgress.learnStage,
                   mode: "practice",
+                  wordCount,
                 }).then((schedule) => {
                   if (!schedule) return;
                   // Adopt only the newest *successful* result. A failed/no-op
@@ -307,6 +322,7 @@ export function PracticeBoard({
             shuffleNonce={shuffleNonce}
             currentLearnStage={currentProgress.learnStage}
             currentStageReps={currentProgress.stageReps}
+            currentWordCount={currentWordCount}
           />
         </div>
       </div>
@@ -322,7 +338,10 @@ interface PracticeCardProps {
   stageReps: number;
   position: number;
   total: number;
-  onRecord: (tokens: ReturnType<typeof diffWords>) => Promise<void>;
+  onRecord: (
+    tokens: ReturnType<typeof diffWords>,
+    wordCount: number,
+  ) => Promise<void>;
   onPrev: () => void;
   onNext: () => void;
 }
@@ -357,18 +376,21 @@ function PracticeCard({
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = stageInfo.color;
-  const {
-    stage: hintStage,
-    density,
-    seed,
-  } = hintForProgress(learnStage, stageReps);
-  const tokens = useMemo(
-    () => maskVerseText(versePlainText, hintStage, { density, seed }),
-    [versePlainText, hintStage, density, seed],
-  );
+  const { hintStage, tokens, wordCount } = useMemo(() => {
+    const wc = countVerseWords(versePlainText);
+    const hint = hintForProgress(learnStage, stageReps, wc);
+    return {
+      hintStage: hint.stage,
+      tokens: maskVerseText(versePlainText, hint.stage, {
+        density: hint.density,
+        seed: hint.seed,
+      }),
+      wordCount: wc,
+    };
+  }, [versePlainText, learnStage, stageReps]);
 
   const isReadPrime = hintStage === "full";
-  const requiredReps = stageInfo.requiredReps;
+  const requiredReps = requiredRepsFor(learnStage, wordCount);
   // Only the multi-rep fading bands (Guided, Challenge) show a rep counter; the
   // single-rep Read prime and From Memory recall don't.
   const repLabel =
@@ -400,7 +422,7 @@ function PracticeCard({
     // (driven by `checked`) mounts and replaces this button.
     submit(() => {
       setChecked(true);
-      return onRecord(diffWords(typedAnswer, versePlainText));
+      return onRecord(diffWords(typedAnswer, versePlainText), wordCount ?? 0);
     });
   }
 
@@ -412,7 +434,9 @@ function PracticeCard({
     // (mutation error, verse not hearted) re-enables Continue rather than
     // stranding it. On the normal success path the band advances and this
     // button is unmounted.
-    submit(() => onRecord(diffWords(versePlainText, versePlainText)));
+    submit(() =>
+      onRecord(diffWords(versePlainText, versePlainText), wordCount ?? 0),
+    );
   }
 
   function continueAttempt() {

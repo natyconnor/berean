@@ -27,6 +27,7 @@ import { MAX_LEARN_STAGE, requiredRepsFor } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import {
   type HintToken,
+  countVerseWords,
   hintForProgress,
   maskVerseText,
 } from "@/lib/verse-hint";
@@ -75,10 +76,11 @@ function predictLearning(
   stage: number,
   reps: number,
   quality: VerseAttemptQuality,
+  wordCount?: number,
 ): VerseProgress {
   if (quality === "exact") {
     const nextReps = reps + 1;
-    if (nextReps >= requiredRepsFor(stage)) {
+    if (nextReps >= requiredRepsFor(stage, wordCount)) {
       if (stage >= MAX_LEARN_STAGE) {
         return { learnStage: MAX_LEARN_STAGE, stageReps: 0 };
       }
@@ -94,7 +96,7 @@ function predictLearning(
       const prevStage = stage - 1;
       return {
         learnStage: prevStage,
-        stageReps: Math.max(0, requiredRepsFor(prevStage) - 1),
+        stageReps: Math.max(0, requiredRepsFor(prevStage, wordCount) - 1),
       };
     }
     return { learnStage: 0, stageReps: 0 };
@@ -188,18 +190,21 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const repsIndex = progress?.stageReps ?? 0;
   const stageInfo = PRACTICE_STAGES[stageIndex] ?? PRACTICE_STAGES[0];
   const stageColor = stageInfo.color;
-  const {
-    stage: hintStage,
-    density,
-    seed,
-  } = hintForProgress(stageIndex, repsIndex);
-  const tokens = useMemo(
-    () => maskVerseText(versePlainText, hintStage, { density, seed }),
-    [versePlainText, hintStage, density, seed],
-  );
+  const { hintStage, tokens, wordCount } = useMemo(() => {
+    const wc = countVerseWords(versePlainText);
+    const hint = hintForProgress(stageIndex, repsIndex, wc);
+    return {
+      hintStage: hint.stage,
+      tokens: maskVerseText(versePlainText, hint.stage, {
+        density: hint.density,
+        seed: hint.seed,
+      }),
+      wordCount: wc,
+    };
+  }, [versePlainText, stageIndex, repsIndex]);
 
   const isReadPrime = hintStage === "full";
-  const requiredReps = stageInfo.requiredReps;
+  const requiredReps = requiredRepsFor(stageIndex, wordCount);
   // Only the multi-rep fading bands (Guided, Challenge) show a rep counter; the
   // single-rep Read prime and From Memory recall don't.
   const repLabel =
@@ -251,11 +256,12 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
         tokens: diffWords(versePlainText, versePlainText),
         stage: stageIndex,
         mode: "learn",
+        wordCount,
       }).then((schedule) => {
         applyProgress(
           schedule
             ? { learnStage: schedule.learnStage, stageReps: schedule.stageReps }
-            : predictLearning(stageIndex, repsIndex, "exact"),
+            : predictLearning(stageIndex, repsIndex, "exact", wordCount),
         );
         setTypedAnswer("");
         setChecked(false);
@@ -278,6 +284,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
         tokens: diffWords(typedAnswer, versePlainText),
         stage: stageIndex,
         mode: "learn",
+        wordCount,
       }).then((schedule) => {
         pendingProgressRef.current = schedule
           ? { learnStage: schedule.learnStage, stageReps: schedule.stageReps }
@@ -289,7 +296,12 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   function continueAfterReview() {
     applyProgress(
       pendingProgressRef.current ??
-        predictLearning(stageIndex, repsIndex, checkedQuality ?? "close"),
+        predictLearning(
+          stageIndex,
+          repsIndex,
+          checkedQuality ?? "close",
+          wordCount,
+        ),
     );
     pendingProgressRef.current = null;
     setTypedAnswer("");

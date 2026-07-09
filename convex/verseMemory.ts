@@ -249,6 +249,7 @@ export const recordAttempt = mutation({
     mode: modeValidator,
     durationMs: v.optional(v.number()),
     now: v.number(),
+    wordCount: v.optional(v.number()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -294,6 +295,7 @@ export const recordAttempt = mutation({
         accuracy: args.accuracy,
         mode: args.mode,
         now: args.now,
+        wordCount: args.wordCount,
       },
     );
 

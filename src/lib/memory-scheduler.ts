@@ -39,7 +39,27 @@ export interface SupportBand {
   densityEnd: number | null; // hint fraction at the last rep (fades within a band)
 }
 
-/** Single source of truth for the learning-phase bands; index === learnStage. */
+/**
+ * Word-count thresholds for the length-based rep curve.
+ *
+ * ≤SHORT_VERSE_WORDS → band minima; ≥LONG_VERSE_WORDS → band maxima; in
+ * between the counts are linearly interpolated.
+ */
+export const SHORT_VERSE_WORDS = 10;
+export const LONG_VERSE_WORDS = 24;
+
+// Per-band reps at the short and long endpoints.
+const GUIDED_MIN_REPS = 3;
+const GUIDED_MAX_REPS = 7;
+const CHALLENGE_MIN_REPS = 5;
+const CHALLENGE_MAX_REPS = 12;
+
+/**
+ * Single source of truth for the learning-phase bands; index === learnStage.
+ *
+ * `requiredReps` on Guided and Challenge are the **short-verse minima** (3 and
+ * 5). Use {@link requiredRepsFor} to get the length-adjusted count at runtime.
+ */
 export const SUPPORT_BANDS: readonly SupportBand[] = [
   {
     key: "read",
@@ -51,14 +71,14 @@ export const SUPPORT_BANDS: readonly SupportBand[] = [
   {
     key: "guided",
     label: "Guided",
-    requiredReps: 5,
+    requiredReps: 3,
     densityStart: 0.25,
     densityEnd: 1.0,
   },
   {
     key: "challenge",
     label: "Challenge",
-    requiredReps: 8,
+    requiredReps: 5,
     densityStart: 0.65,
     densityEnd: 0.15,
   },
@@ -71,9 +91,36 @@ export const SUPPORT_BANDS: readonly SupportBand[] = [
   },
 ];
 
-/** Exact reps needed to clear the band at `stage`. */
-export function requiredRepsFor(stage: number): number {
-  return SUPPORT_BANDS[stage].requiredReps;
+/**
+ * Exact reps needed to clear the band at `stage`, adjusted for verse length.
+ *
+ * Read (0) and From Memory (3) always return 1.  Guided (1) scales from 3 to 7
+ * and Challenge (2) from 5 to 12, linearly between {@link SHORT_VERSE_WORDS}
+ * and {@link LONG_VERSE_WORDS}.  Omitting `wordCount` (or passing a value ≤
+ * SHORT_VERSE_WORDS) preserves the short-verse minima for backward compat.
+ */
+export function requiredRepsFor(stage: number, wordCount?: number): number {
+  const band = SUPPORT_BANDS[stage];
+  if (!band) return 1;
+  if (band.key !== "guided" && band.key !== "challenge")
+    return band.requiredReps;
+
+  const words = wordCount ?? SHORT_VERSE_WORDS;
+  const clamped = Math.min(
+    LONG_VERSE_WORDS,
+    Math.max(SHORT_VERSE_WORDS, words),
+  );
+  const t =
+    (clamped - SHORT_VERSE_WORDS) / (LONG_VERSE_WORDS - SHORT_VERSE_WORDS);
+
+  if (band.key === "guided") {
+    return Math.round(
+      GUIDED_MIN_REPS + (GUIDED_MAX_REPS - GUIDED_MIN_REPS) * t,
+    );
+  }
+  return Math.round(
+    CHALLENGE_MIN_REPS + (CHALLENGE_MAX_REPS - CHALLENGE_MIN_REPS) * t,
+  );
 }
 
 export interface ReviewInput {
@@ -81,6 +128,8 @@ export interface ReviewInput {
   accuracy: number;
   mode: "learn" | "review" | "deck" | "practice";
   now: number; // pass `now` IN (Convex forbids Date.now() in queries)
+  /** Word count of the verse text; drives the length-based rep curve. */
+  wordCount?: number;
 }
 
 /** Ease bounds. Ease starts at {@link EASE_START} for freshly-seeded verses. */
@@ -137,7 +186,7 @@ function isLearningPhase(status: MemoryStatus): boolean {
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   if (r.quality === "exact") {
     const reps = s.stageReps + 1;
-    if (reps >= requiredRepsFor(s.learnStage)) {
+    if (reps >= requiredRepsFor(s.learnStage, r.wordCount)) {
       // Cleared this band on its required reps.
       if (s.learnStage >= MAX_LEARN_STAGE) {
         // Graduate into the reviewing phase with a fresh 1-day interval.
@@ -213,7 +262,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     return {
       status: "learning",
       learnStage: prevStage,
-      stageReps: Math.max(0, requiredRepsFor(prevStage) - 1),
+      stageReps: Math.max(0, requiredRepsFor(prevStage, r.wordCount) - 1),
       ease: s.ease,
       intervalDays: 0,
       dueAt: r.now,

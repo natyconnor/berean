@@ -23,6 +23,8 @@ interface RecordVerseAttemptInput {
   stage: number;
   mode: VerseAttemptMode;
   durationMs?: number;
+  /** Word count of the verse text; forwarded to the scheduler's length curve. */
+  wordCount?: number;
 }
 
 interface PendingAttempt {
@@ -92,6 +94,7 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
         mode: input.mode,
         durationMs: input.durationMs,
         now,
+        wordCount: input.wordCount,
       })
         .then((schedule): MemorySchedule | null => schedule)
         .catch((error: unknown) => {

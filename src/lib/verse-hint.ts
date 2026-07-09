@@ -1,5 +1,6 @@
 import {
   MAX_LEARN_STAGE,
+  requiredRepsFor,
   SUPPORT_BANDS,
   type SupportBand,
 } from "./memory-scheduler";
@@ -33,6 +34,16 @@ const MAX_CLOZE_FIRST_LETTER_PERCENT = 50;
 function isWordToken(token: string): boolean {
   WORD_PATTERN.lastIndex = 0;
   return WORD_PATTERN.test(token);
+}
+
+/**
+ * Count the maskable word tokens in a verse text, using the same Unicode
+ * letter/number definition as {@link maskVerseText}. Used to drive the
+ * length-based required-rep curve in {@link hintForProgress} and the scheduler.
+ */
+export function countVerseWords(text: string): number {
+  const matches = text.match(TOKEN_PATTERN) ?? [];
+  return matches.filter(isWordToken).length;
 }
 
 function maskFirstLetters(word: string): string {
@@ -204,10 +215,14 @@ export function maskVerseText(
  * Lerp density from `densityStart` to `densityEnd` across the band's required
  * reps. A single-rep band (denominator = 0) holds at `densityStart`.
  */
-function lerpBandDensity(band: SupportBand, stageReps: number): number {
+function lerpBandDensity(
+  band: SupportBand,
+  stageReps: number,
+  requiredReps: number,
+): number {
   const start = band.densityStart ?? 0;
   const end = band.densityEnd ?? 0;
-  const denominator = band.requiredReps - 1;
+  const denominator = requiredReps - 1;
   const progress = denominator <= 0 ? 0 : stageReps / denominator;
   return start + (end - start) * progress;
 }
@@ -216,6 +231,10 @@ function lerpBandDensity(band: SupportBand, stageReps: number): number {
  * Map a learner's position in the learning phase to the hint stage plus the
  * density/seed a rep should use. Bands are the single source of truth
  * ({@link SUPPORT_BANDS}); `learnStage` indexes into them.
+ *
+ * `wordCount` drives the length-based required-rep curve so the density lerp
+ * spans the correct number of reps for the verse length. Omitting it defaults
+ * to short-verse minima (backward compatible).
  *
  * - `read` (stage 0) -> full text, no hints
  * - `guided` (stage 1) -> first-letter scaffold that fades from `densityStart`
@@ -228,19 +247,21 @@ function lerpBandDensity(band: SupportBand, stageReps: number): number {
 export function hintForProgress(
   learnStage: number,
   stageReps: number,
+  wordCount?: number,
 ): { stage: HintStage; density: number; seed: number } {
   const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
   const band = SUPPORT_BANDS[clampedStage];
+  const required = requiredRepsFor(clampedStage, wordCount);
 
   switch (band.key) {
     case "read":
       return { stage: "full", density: band.densityStart ?? 0, seed: 0 };
     case "guided": {
-      const density = lerpBandDensity(band, stageReps);
+      const density = lerpBandDensity(band, stageReps, required);
       return { stage: "first-letters", density, seed: stageReps };
     }
     case "challenge": {
-      const density = lerpBandDensity(band, stageReps);
+      const density = lerpBandDensity(band, stageReps, required);
       return { stage: "cloze", density, seed: stageReps };
     }
     case "memory":

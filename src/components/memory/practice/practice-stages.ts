@@ -5,7 +5,13 @@ export interface PracticeStageInfo {
   stage: HintStage;
   /** Human label for this band, sourced from {@link SUPPORT_BANDS}. */
   label: string;
-  /** Exact reps needed to clear this band, sourced from {@link SUPPORT_BANDS}. */
+  /**
+   * Short-verse minimum reps for this band, sourced from {@link SUPPORT_BANDS}.
+   *
+   * This is the **minimum / fallback** for short verses (≤10 words). For
+   * length-adjusted rep counts use {@link requiredRepsFor} at call sites,
+   * passing the verse's word count.
+   */
   requiredReps: number;
   color: {
     dot: string;

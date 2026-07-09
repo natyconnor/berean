@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SUPPORT_BANDS } from "./memory-scheduler";
-import { hintForProgress, maskVerseText } from "./verse-hint";
+import { countVerseWords, hintForProgress, maskVerseText } from "./verse-hint";
 
 const CLOZE_TEXT =
   "In the beginning God created the heavens and the earth with wisdom";
@@ -278,5 +278,42 @@ describe("hintForProgress", () => {
       density: 0,
       seed: 0,
     });
+  });
+
+  it("uses wordCount to stretch the lerp denominator for a long verse", () => {
+    // Short verse (no wordCount): requiredReps(1)=3, at stageReps=2 → progress=1 → density=1.0
+    expect(hintForProgress(1, 2).density).toBeCloseTo(1.0);
+    // Long verse (24 words): requiredReps(1,24)=7, at stageReps=2 → progress=2/6≈0.333
+    const longDensity = 0.25 + (1.0 - 0.25) * (2 / 6);
+    expect(hintForProgress(1, 2, 24).density).toBeCloseTo(longDensity);
+    // Long density is less than short (hasn't reached densityEnd yet)
+    expect(hintForProgress(1, 2, 24).density).toBeLessThan(
+      hintForProgress(1, 2).density,
+    );
+  });
+});
+
+describe("countVerseWords", () => {
+  it("returns 0 for an empty string", () => {
+    expect(countVerseWords("")).toBe(0);
+  });
+
+  it("counts space-separated letter tokens", () => {
+    expect(countVerseWords("For God so loved the world")).toBe(6);
+  });
+
+  it("does not count punctuation or whitespace", () => {
+    expect(countVerseWords("Hello, world! One two.")).toBe(4);
+  });
+
+  it("treats apostrophe-contractions as a single word token", () => {
+    expect(countVerseWords("God's word endures")).toBe(3);
+  });
+
+  it("matches the token definition used by maskVerseText", () => {
+    const text = "In the beginning God created the heavens and the earth.";
+    const tokens = maskVerseText(text, "full");
+    const wordTokenCount = tokens.filter((t) => t.word).length;
+    expect(countVerseWords(text)).toBe(wordTokenCount);
   });
 });

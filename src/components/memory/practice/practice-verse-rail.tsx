@@ -1,6 +1,7 @@
 import { ListOrdered, Shuffle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { requiredRepsFor } from "@/lib/memory-scheduler";
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
@@ -26,6 +27,12 @@ interface PracticeVerseRailProps {
   currentLearnStage: number;
   /** The active verse's live reps banked on the current band. */
   currentStageReps: number;
+  /**
+   * Word count of the active verse's text. When provided, the rep label uses
+   * the length-adjusted required-rep count via {@link requiredRepsFor} so it
+   * matches the card and server. Falls back to short-verse minima when absent.
+   */
+  currentWordCount?: number;
   className?: string;
 }
 
@@ -44,11 +51,15 @@ export function PracticeVerseRail({
   shuffleNonce,
   currentLearnStage,
   currentStageReps,
+  currentWordCount,
   className,
 }: PracticeVerseRailProps) {
   const canReorder = verses.length >= 2;
   const currentStage = PRACTICE_STAGES[currentLearnStage] ?? PRACTICE_STAGES[0];
-  const currentRequiredReps = currentStage.requiredReps;
+  const currentRequiredReps = requiredRepsFor(
+    currentLearnStage,
+    currentWordCount,
+  );
   const currentRepLabel =
     currentRequiredReps > 1
       ? `rep ${Math.min(currentStageReps + 1, currentRequiredReps)} of ${currentRequiredReps}`
