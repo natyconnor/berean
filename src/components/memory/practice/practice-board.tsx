@@ -24,12 +24,7 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
 import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
-import {
-  buildPracticeOrder,
-  nextIndex,
-  type PracticeOrder,
-  prevIndex,
-} from "@/lib/practice-order";
+import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import {
   type HintToken,
@@ -40,7 +35,10 @@ import {
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { verseRefKey } from "../../../../shared/verse-ref-key";
-import { verseAttemptAccuracy } from "../../study/study-attempt-quality";
+import {
+  classifyVerseAttempt,
+  verseAttemptAccuracy,
+} from "../../study/study-attempt-quality";
 import type { CardReference } from "../../study/study-card-model";
 import { useRecordVerseAttempt } from "../../study/use-record-verse-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
@@ -232,10 +230,6 @@ export function PracticeBoard({
     if (index >= 0) setCurrentIndex(index);
   }
 
-  function goToIndex(index: number) {
-    setCurrentIndex(index);
-  }
-
   if (orderedVerses.length === 0 || !currentVerse) {
     return (
       <PracticeShell onExit={onExit}>
@@ -292,12 +286,6 @@ export function PracticeBoard({
                   }));
                 });
               }}
-              onPrev={() =>
-                goToIndex(prevIndex(boundedIndex, orderedVerses.length))
-              }
-              onNext={() =>
-                goToIndex(nextIndex(boundedIndex, orderedVerses.length))
-              }
             />
             <AnimatePresence>
               {isShuffling && (
@@ -343,8 +331,6 @@ interface PracticeCardProps {
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
   ) => Promise<void>;
-  onPrev: () => void;
-  onNext: () => void;
 }
 
 function PracticeCard({
@@ -354,8 +340,6 @@ function PracticeCard({
   position,
   total,
   onRecord,
-  onPrev,
-  onNext,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -364,6 +348,7 @@ function PracticeCard({
   // the learner continues.
   const [checked, setChecked] = useState(false);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
+  const reviewActionRef = useRef<HTMLButtonElement>(null);
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
   // click) into a single recorded attempt, and `submitPending` disables the
@@ -408,6 +393,7 @@ function PracticeCard({
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
+  const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
@@ -438,6 +424,50 @@ function PracticeCard({
     setTypedAnswer("");
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
+
+  useEffect(() => {
+    if (!checked) return;
+    reviewActionRef.current?.focus();
+  }, [checked]);
+
+  useEffect(() => {
+    if (!checked) return;
+    function handleResultEnter(event: globalThis.KeyboardEvent) {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      )
+        return;
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName.toUpperCase();
+        // Let editable fields handle their own Enter.
+        if (
+          tag === "TEXTAREA" ||
+          tag === "INPUT" ||
+          (active as HTMLElement).isContentEditable
+        )
+          return;
+        // Let other interactive controls (buttons, links, role=button/link)
+        // activate naturally — only intercept when focus is on reviewActionRef
+        // itself (or nowhere interactive).
+        const role = active.getAttribute("role") ?? "";
+        const isInteractive =
+          tag === "BUTTON" ||
+          tag === "A" ||
+          role === "button" ||
+          role === "link";
+        if (isInteractive && active !== reviewActionRef.current) return;
+      }
+      event.preventDefault();
+      reviewActionRef.current?.click();
+    }
+    window.addEventListener("keydown", handleResultEnter);
+    return () => window.removeEventListener("keydown", handleResultEnter);
+  }, [checked]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -538,49 +568,30 @@ function PracticeCard({
               <p className="text-center text-sm text-muted-foreground">
                 {`${checkedAccuracy}% recalled.`}
               </p>
-              <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Full text
-                </p>
-                {data?.verses.map((verse) => (
-                  <p key={verse.number}>
-                    <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
-                      {verse.number}
-                    </span>
-                    {verse.text}
+              {checkedQuality !== "exact" && (
+                <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Full text
                   </p>
-                ))}
-              </div>
+                  {data?.verses.map((verse) => (
+                    <p key={verse.number}>
+                      <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
+                        {verse.number}
+                      </span>
+                      {verse.text}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-3 border-t sm:flex-row sm:justify-between">
-          <div className="flex w-full gap-2 sm:w-auto">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onPrev}
-              className="gap-1.5"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              Prev
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onNext}
-              className="gap-1.5"
-            >
-              Next
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </Button>
-          </div>
+        <CardFooter className="flex justify-end border-t">
           <div className="flex w-full gap-2 sm:w-auto">
             {checked ? (
               <Button
+                ref={reviewActionRef}
                 type="button"
                 variant="default"
                 className="flex-1 sm:flex-none"
@@ -591,8 +602,12 @@ function PracticeCard({
                 // land before the next rep renders, so it can't re-record stale.
                 disabled={submitPending}
               >
-                <RotateCcw className="h-4 w-4" aria-hidden />
-                Continue
+                {checkedQuality === "exact" ? (
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                ) : (
+                  <RotateCcw className="h-4 w-4" aria-hidden />
+                )}
+                {checkedQuality === "exact" ? "Continue" : "Try again"}
               </Button>
             ) : isReadPrime ? (
               <Button

@@ -72,14 +72,21 @@ Spaced repetition is backed by two per-user Convex tables plus a framework-free 
 
 The learning phase is a **fade dial**: instead of four hard "mechanism" rungs (full text, first-letters, cloze, hidden), a verse fades from fully visible to fully hidden as the learner banks correct reps. The dial is the single source of truth in `src/lib/memory-scheduler.ts` (`SUPPORT_BANDS`, `requiredRepsFor`, `MAX_LEARN_STAGE = 3`) and is surfaced through the pure hint helper `src/lib/verse-hint.ts` (`maskVerseText`, `hintForProgress`).
 
-**Bands.** `learnStage` (0..3) indexes one of four **support bands** (`SUPPORT_BANDS`, `index === learnStage`), ordered from most to least support. Each band has a display name, the exact reps needed to clear it, and the hint density it fades across:
+**Bands.** `learnStage` (0..3) indexes one of four **support bands** (`SUPPORT_BANDS`, `index === learnStage`), ordered from most to least support. Each band has a display name, the reps needed to clear it (length-adjusted — see below), and the hint density it fades across:
 
-| `learnStage` | Band            | Required reps | Hint density (start → end)         |
-| ------------ | --------------- | ------------- | ---------------------------------- |
-| 0            | **Read**        | 1             | full text (no masking)             |
-| 1            | **Guided**      | 5             | 1.0 → 1.0 (first-letter scaffold)  |
-| 2            | **Challenge**   | 8             | 0.5 → 0.15 (fades within the band) |
-| 3            | **From Memory** | 1             | 0.0 → 0.0 (fully hidden)           |
+| `learnStage` | Band            | Required reps (base) | Hint density (start → end)                                   |
+| ------------ | --------------- | -------------------- | ------------------------------------------------------------ |
+| 0            | **Read**        | 1                    | full text (no masking)                                       |
+| 1            | **Guided**      | 3 (min) – 7 (max)    | 0.25 → 1.0 (partial first-letters, growing to full scaffold) |
+| 2            | **Challenge**   | 5 (min) – 12 (max)   | 0.65 → 0.15 (fades from mostly-shown to mostly-hidden)       |
+| 3            | **From Memory** | 1                    | 0.0 → 0.0 (fully hidden)                                     |
+
+**Length-based reps.** Guided and Challenge required-rep counts scale with verse length so longer verses get more rehearsals before advancing. The breakpoints are SHORT ≤ 10 words and LONG ≥ 24 words, with linear interpolation between them:
+
+| Band          | Short (≤ 10 w) | Long (≥ 24 w) |
+| ------------- | -------------- | ------------- |
+| **Guided**    | 3              | 7             |
+| **Challenge** | 5              | 12            |
 
 These names — **Read · Guided · Challenge · From Memory** — are the only learn-stage labels anywhere in the UI (there are no mechanism names like "Letters/Blanks/Hidden" and no rung called "Mastery"). `PRACTICE_STAGES` (`src/components/memory/practice/practice-stages.ts`) derives its labels and required-rep counts straight from `SUPPORT_BANDS` so the Practice board, the Review learn card, and the Library drill-down never drift.
 
@@ -87,7 +94,11 @@ These names — **Read · Guided · Challenge · From Memory** — are the only 
 
 - **exact** — banks a rep (and advances / graduates when the band is full).
 - **close** — holds the band _and_ its banked reps; retry this session (no progress lost, no penalty).
-- **off** — bumps support back up one band (`learnStage - 1`, floored at 0) and resets that band's rep counter.
+- **off (soft)** — subtracts one banked rep if any are banked (`stageReps > 0 → stageReps -= 1`). Only when all reps in the current band are already spent (`stageReps === 0`) does the verse drop to the previous band, landing at `requiredReps(prevBand) - 1` (i.e. one rep short of clearing the lower band immediately).
+
+**Journey progress bar.** The card header shows a **Learning Journey** progress bar that reflects progress across all four bands, computed as `learningJourneyFraction` over the complete Read → Guided → Challenge → From Memory arc. This replaces the older "rep N of M" counter, giving a sense of overall arc rather than just within-band progress.
+
+**Full text after check.** The full verse text is shown in the result view only when the attempt quality is **not** `exact`. On an exact recall the diff already confirms the verse was reproduced correctly, so the full-text panel is hidden to keep the success moment clean. For `close` and `off` results the full text is shown for comparison.
 
 **Persistence.** The whole dial state is durable: `stageReps` lives on the `verseMemory` row (schema-optional for backfilled rows, always written going forward) and is threaded through the reads that need it — `verseDetail`, `savedVerses.listForChapter` (for the heart ring), and pack/library joins — so a learner resumes at the exact rep they left off. The client never computes `learnStage`/`stageReps` itself; the server (`scheduleNext`) owns them.
 
@@ -99,7 +110,7 @@ All functions validate `args` + `returns`, check auth via `getCurrentUser*`, ver
 
 - `dueQueue({ now, limit? })` — verses with `dueAt <= now` (soonest first), **heart-aware**: only verses that currently have a `savedVerses` row are returned (un-hearted verses keep their memory row but drop out of the queue), joined to their `verseRefs`. `limit` defaults to 50. Returns `[]` when unauthenticated.
 - `dueCount({ now })` — cheap **heart-aware** count of due-now verses (only currently-hearted verses); backs the dock badge.
-- `recordAttempt({ verseRefId, quality, accuracy, stage, mode, durationMs?, now })` — appends a `verseMemoryReviews` row, loads/seeds the `verseMemory` row, applies `scheduleNext`, and patches the row (including `lastReviewedAt = now`, `createdAt` unchanged) in one atomic mutation. `mode` accepts `learn`/`review`/`deck`/`practice` (the scheduler ignores `mode`, so **practice reschedules identically** — it is a logging distinction only). Returns the new `MemorySchedule`.
+- `recordAttempt({ verseRefId, quality, accuracy, stage, mode, durationMs?, wordCount?, now })` — appends a `verseMemoryReviews` row, loads/seeds the `verseMemory` row, applies `scheduleNext`, and patches the row (including `lastReviewedAt = now`, `createdAt` unchanged) in one atomic mutation. Optional `wordCount` drives length-based Guided/Challenge required reps (omitted → short-verse minima). `mode` accepts `learn`/`review`/`deck`/`practice` (the scheduler ignores `mode`, so **practice reschedules identically** — it is a logging distinction only). Returns the new `MemorySchedule`.
 - `getOrCreateForVerse({ verseRefId, now })` — idempotent upsert via `by_userId_verseRefId`; returns the full row.
 - `memoryStats({ now })` — **heart-aware** per-status counts (`new`/`learning`/`reviewing`/`mastered`), plus `total` and a due-now `due` tally, computed by iterating the user's hearted verses (`savedVerses`) and joining each to its `verseMemory` row. Used by the hub for the "due today" number.
 - `listLibrary({ paginationOpts, sort })` — **paginated** (`paginationOptsValidator` + `.paginate()`) list of the user's hearted verses, each joined to its live memory schedule + `verseRefs` (reference, `status`, `dueAt`, `intervalDays`, `learnStage`, `ease`, `lapses`, `lastReviewedAt?`, `heartedAt`). `sort` picks the index the page is read through so ordering is stable across pages: `"dueAt"` (soonest-due first, `by_userId_dueAt`), `"status"` (grouped by status via `by_userId_status` — **index order, which is alphabetical, not lifecycle order**), or `"recent"` (most-recently-hearted first, `savedVerses.by_userId_createdAt`). The canonical set is the user's _hearted_ verses: for the memory-indexed sorts, rows without a matching `savedVerses` heart are filtered out of the page (a verse un-hearted after review keeps its memory row, so it must be excluded here), and a hearted verse still awaiting its `verseMemory` seed is skipped rather than fabricated. Filtering can shrink a page but keeps cursors correct (per Convex pagination guidance).
@@ -167,9 +178,8 @@ Alongside Review, Memory home exposes a **Practice** surface — a focused, **se
 
 - **Entry point.** A **Practice** button in the Memory-home header launches `PracticeBoard` (`src/components/memory/practice/practice-board.tsx`) as an **in-page surface** (state, not a route), mirroring the Review toggle. It is disabled until the user has at least one hearted verse. The v1 practice set is **every hearted verse** (`savedVerses.listAll`, sharing the cached subscription with the attempt recorder); packs feed it their members via the pack view.
 - **The board.** One verse card at a time with:
-  - a **verse rail** (`practice-verse-rail.tsx`) to jump directly to any verse,
-  - a **Shuffle / In-order** toggle, and
-  - **prev / next** controls that wrap around the set.
+  - a **verse rail** (`practice-verse-rail.tsx`) to jump directly to any verse, and
+  - a **Shuffle / In-order** toggle.
 - **Fade dial, not a selector.** The card renders the verse's current band (`Practice · Read/Guided/Challenge/From Memory`) and fades the text via `hintForProgress(learnStage, stageReps)` → `maskVerseText` (`src/lib/verse-hint.ts`). There is no manual stage picker — the band and rep counter come straight from the verse's live schedule (`stageReps` seeded per verse), so Practice and Review always agree on where a verse sits.
 - **Ordering is pure + tested.** Sequence math lives in `src/lib/practice-order.ts` (`buildPracticeOrder`, `nextIndex`, `prevIndex`) with a small seeded PRNG (`createSeededRandom`, mulberry32) so a shuffle is **deterministic for a given seed** — stable across re-renders and unit-testable (`practice-order.test.ts`) without `Math.random()`. Re-selecting Shuffle bumps the seed to reshuffle.
 - **Grading + persistence.** Typed recall is graded with `diffWords` + `classifyVerseAttempt` / `verseAttemptAccuracy` (reusing the same check → diff → grade flow as the learn ladder and the shared `VerseAttemptResult` panel). **Practice counts fully:** every checked attempt (and the Read prime's Continue, which banks the single Read rep) records **fire-and-forget** via `useRecordVerseAttempt().record(…, mode: "practice")` and runs the same `scheduleNext`, so it advances the fade dial, appears in the dashboard heatmap, and can move the verse's due date exactly like Review (the scheduler ignores `mode`). A single typed answer records **at most once**: after a check a fresh attempt is required (Try again / re-type), and changing the current verse resets the checked state so a stale answer can't be re-submitted.
@@ -192,7 +202,7 @@ Below the dashboard, Memory home renders a **Library** section (`MemoryLibrary`,
 - **Sort** — three modes (`Due` / `Status` / `Recent`) map to `listLibrary`'s `sort` arg. Changing the sort re-keys the paginated query, resetting to the first page.
 - **Search** — a client-side filter over the **loaded** pages' reference labels only (it does not fetch unloaded pages). This is a documented v1 limitation (see below).
 - **Empty state** — "No hearted verses yet…" when the user has none; a separate "no matches" message when a search filters everything out.
-- **Drill-down** — clicking a row opens a dialog with `VerseDetail` (`src/components/memory/verse-detail.tsx`), driven by `verseMemory.verseDetail`: the schedule (interval / ease / lapses), a **stage journey** across the [fade-dial bands](#the-fade-dial-learning-bands) (Read → Guided → Challenge → From Memory, current band highlighted with a live `stageReps / requiredReps` rep-progress caption), a **recent-accuracy sparkline** (reusing `linePath`/`scaleLinear` from `dashboard/svg-chart-helpers.ts`, attempts reversed to a left-to-right time axis), the derived **difficulty** signal (its "hardest stage" also labeled by band name), and a **next-due** line. Band labels come from `PRACTICE_STAGES`. Every chart/SVG carries a descriptive `aria-label`.
+- **Drill-down** — clicking a row opens a dialog with `VerseDetail` (`src/components/memory/verse-detail.tsx`), driven by `verseMemory.verseDetail`: the schedule (interval / ease / lapses), a **stage journey** across the [fade-dial bands](#the-fade-dial-learning-bands) (Read → Guided → Challenge → From Memory, current band highlighted with the shared [Journey progress bar](#the-fade-dial-learning-bands)), a **recent-accuracy sparkline** (reusing `linePath`/`scaleLinear` from `dashboard/svg-chart-helpers.ts`, attempts reversed to a left-to-right time axis), the derived **difficulty** signal (its "hardest stage" also labeled by band name), and a **next-due** line. Band labels come from `PRACTICE_STAGES`. Every chart/SVG carries a descriptive `aria-label`.
 
 #### Heart mastery ring (reader)
 

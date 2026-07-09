@@ -229,6 +229,45 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     reviewActionRef.current?.focus();
   }, [checked]);
 
+  useEffect(() => {
+    if (!checked) return;
+    function handleResultEnter(event: globalThis.KeyboardEvent) {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      )
+        return;
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName.toUpperCase();
+        // Let editable fields handle their own Enter.
+        if (
+          tag === "TEXTAREA" ||
+          tag === "INPUT" ||
+          (active as HTMLElement).isContentEditable
+        )
+          return;
+        // Let other interactive controls (buttons, links, role=button/link)
+        // activate naturally — only intercept when focus is on reviewActionRef
+        // itself (or nowhere interactive).
+        const role = active.getAttribute("role") ?? "";
+        const isInteractive =
+          tag === "BUTTON" ||
+          tag === "A" ||
+          role === "button" ||
+          role === "link";
+        if (isInteractive && active !== reviewActionRef.current) return;
+      }
+      event.preventDefault();
+      reviewActionRef.current?.click();
+    }
+    window.addEventListener("keydown", handleResultEnter);
+    return () => window.removeEventListener("keydown", handleResultEnter);
+  }, [checked]);
+
   function focusAnswerInput() {
     window.requestAnimationFrame(() => {
       answerInputRef.current?.focus();
@@ -412,19 +451,21 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
             <p className="text-center text-sm text-muted-foreground">
               {`${checkedAccuracy}% recalled.`}
             </p>
-            <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Full text
-              </p>
-              {data?.verses.map((verse) => (
-                <p key={verse.number}>
-                  <span className="mr-1 text-xs font-semibold text-muted-foreground align-top">
-                    {verse.number}
-                  </span>
-                  {verse.text}
+            {checkedQuality !== "exact" && (
+              <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Full text
                 </p>
-              ))}
-            </div>
+                {data?.verses.map((verse) => (
+                  <p key={verse.number}>
+                    <span className="mr-1 text-xs font-semibold text-muted-foreground align-top">
+                      {verse.number}
+                    </span>
+                    {verse.text}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </CardContent>
