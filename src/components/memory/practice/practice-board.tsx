@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
-import { MAX_LEARN_STAGE, requiredRepsFor } from "@/lib/memory-scheduler";
+import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
 import {
   buildPracticeOrder,
   nextIndex,
@@ -44,6 +44,7 @@ import { verseAttemptAccuracy } from "../../study/study-attempt-quality";
 import type { CardReference } from "../../study/study-card-model";
 import { useRecordVerseAttempt } from "../../study/use-record-verse-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
+import { LearningJourneyBar } from "./learning-journey-bar";
 import { PRACTICE_STAGES } from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
 
@@ -193,7 +194,7 @@ export function PracticeBoard({
     : { learnStage: 0, stageReps: 0 };
 
   // Fetch the active verse's text (cache-shared with PracticeCard) so the rail
-  // can show a length-accurate rep total via requiredRepsFor.
+  // and card can show a length-accurate journey bar via learningJourneyFraction.
   const { data: activeVerseData } = useEsvReference(
     currentVerse?.reference ?? null,
   );
@@ -390,18 +391,11 @@ function PracticeCard({
   }, [versePlainText, learnStage, stageReps]);
 
   const isReadPrime = hintStage === "full";
-  const requiredReps = requiredRepsFor(learnStage, wordCount);
-  // Only the multi-rep fading bands (Guided, Challenge) show a rep counter; the
-  // single-rep Read prime and From Memory recall don't.
-  const repLabel =
-    requiredReps > 1
-      ? `rep ${Math.min(stageReps + 1, requiredReps)} of ${requiredReps}`
-      : null;
   const promptLine = isReadPrime
     ? "Read it through, then continue"
     : hintStage === "hidden"
       ? "Recall the verse from memory"
-      : (repLabel ?? "Type what you remember");
+      : "Type what you remember";
 
   const canCheckAnswer =
     !loading &&
@@ -482,6 +476,11 @@ function PracticeCard({
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
           </p>
+          <LearningJourneyBar
+            learnStage={learnStage}
+            stageReps={stageReps}
+            wordCount={wordCount}
+          />
         </CardHeader>
 
         <CardContent className="space-y-5">

@@ -13,6 +13,30 @@ import {
 const LEARNING_RING_CEILING = 0.5;
 
 /**
+ * How far along the four-band learning journey a verse is, as a fraction in
+ * `[0, 1]`. Each of the `(MAX_LEARN_STAGE + 1)` bands occupies an equal slice;
+ * reps banked on the current band fill that slice proportionally.
+ *
+ * When `wordCount` is provided, the required-rep count for Guided and Challenge
+ * is length-adjusted via {@link requiredRepsFor}, so the bar matches the card
+ * and the server exactly.
+ *
+ * Pure: no React, no `Date.now()`.
+ */
+export function learningJourneyFraction(
+  learnStage: number,
+  stageReps: number,
+  wordCount?: number,
+): number {
+  const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
+  const required = Math.max(1, requiredRepsFor(clampedStage, wordCount));
+  const withinBand = Math.max(0, Math.min(1, stageReps / required));
+  const bandCount = MAX_LEARN_STAGE + 1;
+  const progress = (clampedStage + withinBand) / bandCount;
+  return Math.max(0, Math.min(1, progress));
+}
+
+/**
  * Map a verse's memory state to a mastery-ring fill fraction in `[0, 1]`, used
  * to draw a subtle progress ring around the heart in the reader.
  *
@@ -42,16 +66,12 @@ export function masteryRingFraction(
       const t = Math.max(0, Math.min(1, intervalDays / MASTERED_INTERVAL_DAYS));
       return 0.5 + t * 0.4;
     }
-    case "learning": {
-      // Each of the (MAX_LEARN_STAGE + 1) bands owns an equal slice of the
-      // learning arc; reps banked fill the current band's slice.
-      const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
-      const required = Math.max(1, requiredRepsFor(clampedStage));
-      const withinBand = Math.max(0, Math.min(1, stageReps / required));
-      const bandCount = MAX_LEARN_STAGE + 1;
-      const progress = (clampedStage + withinBand) / bandCount;
-      return Math.max(0, Math.min(1, progress)) * LEARNING_RING_CEILING;
-    }
+    case "learning":
+      // Reuse the shared fraction; multiply by the ceiling so the heart ring
+      // and the progress bar never drift apart.
+      return (
+        learningJourneyFraction(learnStage, stageReps) * LEARNING_RING_CEILING
+      );
     case "new":
       return 0;
     default:

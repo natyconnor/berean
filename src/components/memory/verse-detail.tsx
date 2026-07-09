@@ -6,6 +6,7 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
 import { AddToPack } from "./packs/add-to-pack";
+import { LearningJourneyBar } from "./practice/learning-journey-bar";
 import { PRACTICE_STAGES } from "./practice/practice-stages";
 
 /**
@@ -158,7 +159,7 @@ export function VerseDetail({
             Graduated to review — recalled from memory.
           </p>
         ) : (
-          <RepProgress
+          <LearningJourneyBar
             learnStage={detail.learnStage}
             stageReps={detail.stageReps}
           />
@@ -256,32 +257,6 @@ export function VerseDetail({
         )}
       </section>
     </div>
-  );
-}
-
-/**
- * Reps banked toward clearing the current learn band, e.g. "Challenge · 3 / 8
- * reps banked". Reads the band's label + required reps from the shared bands.
- */
-function RepProgress({
-  learnStage,
-  stageReps,
-}: {
-  learnStage: number;
-  stageReps?: number;
-}) {
-  const band =
-    PRACTICE_STAGES[Math.min(Math.max(learnStage, 0), MAX_LEARN_STAGE)] ??
-    PRACTICE_STAGES[0];
-  const banked = stageReps ?? 0;
-  return (
-    <p className="text-xs text-muted-foreground">
-      {band.label} ·{" "}
-      <span className="tabular-nums text-foreground">
-        {Math.min(banked, band.requiredReps)} / {band.requiredReps}
-      </span>{" "}
-      reps banked
-    </p>
   );
 }
 

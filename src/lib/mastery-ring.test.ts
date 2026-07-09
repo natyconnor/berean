@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { masteryRingFraction } from "./mastery-ring";
-import { MASTERED_INTERVAL_DAYS } from "./memory-scheduler";
+import { learningJourneyFraction, masteryRingFraction } from "./mastery-ring";
+import { MASTERED_INTERVAL_DAYS, requiredRepsFor } from "./memory-scheduler";
 
 describe("masteryRingFraction", () => {
   it("shows no ring for new verses", () => {
@@ -51,5 +51,60 @@ describe("masteryRingFraction", () => {
     expect(
       masteryRingFraction("reviewing", MASTERED_INTERVAL_DAYS * 4),
     ).toBeCloseTo(0.9);
+  });
+});
+
+describe("learningJourneyFraction", () => {
+  it("returns 0 at the very start (stage 0, no reps)", () => {
+    expect(learningJourneyFraction(0, 0)).toBe(0);
+  });
+
+  it("clearing Read (stage 0 → 1) moves the fraction by exactly 1/4", () => {
+    // Stage 0 at 0 reps → 0; stage 1 at 0 reps → 1/4.
+    const before = learningJourneyFraction(0, 0);
+    const after = learningJourneyFraction(1, 0);
+    expect(after - before).toBeCloseTo(0.25);
+  });
+
+  it("banking half of Guided's required reps fills halfway through that slice", () => {
+    // Guided (stage 1) slice spans 0.25 → 0.50; halfway is 0.375.
+    const guidedRequired = requiredRepsFor(1); // 3 for short verse
+    const halfReps = Math.round(guidedRequired / 2);
+    const fraction = learningJourneyFraction(1, halfReps);
+    expect(fraction).toBeGreaterThan(0.25);
+    expect(fraction).toBeLessThan(0.5);
+    expect(fraction).toBeCloseTo(0.25 + (halfReps / guidedRequired) * 0.25, 5);
+  });
+
+  it("banking all required reps on Challenge exactly reaches From Memory's start", () => {
+    // Stage 2 fully banked → stage 3 at 0 reps = 3/4 = 0.75.
+    const challengeRequired = requiredRepsFor(2);
+    expect(learningJourneyFraction(2, challengeRequired)).toBeCloseTo(0.75);
+    expect(learningJourneyFraction(3, 0)).toBeCloseTo(0.75);
+  });
+
+  it("the full journey reaches 1 exactly when all bands are cleared", () => {
+    const fromMemoryRequired = requiredRepsFor(3);
+    expect(learningJourneyFraction(3, fromMemoryRequired)).toBeCloseTo(1);
+  });
+
+  it("length-adjusted Guided reps shift the fraction correctly", () => {
+    // 24-word verse: Guided needs 7 reps (max). One rep = 1/7 of the Guided slice.
+    const longWordCount = 24;
+    const guidedRequired = requiredRepsFor(1, longWordCount); // 7
+    const oneRep = learningJourneyFraction(1, 1, longWordCount);
+    expect(oneRep).toBeCloseTo(0.25 + (1 / guidedRequired) * 0.25, 5);
+  });
+
+  it("masteryRingFraction learning case equals learningJourneyFraction × 0.5", () => {
+    // The two helpers must stay in lockstep.
+    const ring = masteryRingFraction("learning", 0, 2, 3);
+    const journey = learningJourneyFraction(2, 3);
+    expect(ring).toBeCloseTo(journey * 0.5, 10);
+  });
+
+  it("clamps out-of-range inputs", () => {
+    expect(learningJourneyFraction(99, 999)).toBeCloseTo(1);
+    expect(learningJourneyFraction(-1, -5)).toBe(0);
   });
 });

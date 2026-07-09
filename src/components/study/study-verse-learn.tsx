@@ -33,6 +33,7 @@ import {
 } from "@/lib/verse-hint";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
+import { LearningJourneyBar } from "../memory/practice/learning-journey-bar";
 import { PRACTICE_STAGES } from "../memory/practice/practice-stages";
 import {
   classifyVerseAttempt,
@@ -204,18 +205,11 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   }, [versePlainText, stageIndex, repsIndex]);
 
   const isReadPrime = hintStage === "full";
-  const requiredReps = requiredRepsFor(stageIndex, wordCount);
-  // Only the multi-rep fading bands (Guided, Challenge) show a rep counter; the
-  // single-rep Read prime and From Memory recall don't.
-  const repLabel =
-    requiredReps > 1
-      ? `rep ${Math.min(repsIndex + 1, requiredReps)} of ${requiredReps}`
-      : null;
   const promptLine = isReadPrime
     ? "Read it through, then continue"
     : hintStage === "hidden"
       ? "Recall the verse from memory"
-      : (repLabel ?? "Type what you remember");
+      : "Type what you remember";
 
   const canCheckAnswer =
     !loading &&
@@ -350,6 +344,13 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
         >
           {stageReady ? promptLine : "\u00a0"}
         </p>
+        {stageReady && (
+          <LearningJourneyBar
+            learnStage={stageIndex}
+            stageReps={repsIndex}
+            wordCount={wordCount}
+          />
+        )}
       </CardHeader>
 
       <CardContent className="space-y-5">

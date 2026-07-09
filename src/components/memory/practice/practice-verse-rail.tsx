@@ -1,12 +1,12 @@
 import { ListOrdered, Shuffle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import { requiredRepsFor } from "@/lib/memory-scheduler";
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import type { CardReference } from "../../study/study-card-model";
+import { LearningJourneyBar } from "./learning-journey-bar";
 import { PRACTICE_STAGES } from "./practice-stages";
 
 interface RailVerse {
@@ -56,14 +56,6 @@ export function PracticeVerseRail({
 }: PracticeVerseRailProps) {
   const canReorder = verses.length >= 2;
   const currentStage = PRACTICE_STAGES[currentLearnStage] ?? PRACTICE_STAGES[0];
-  const currentRequiredReps = requiredRepsFor(
-    currentLearnStage,
-    currentWordCount,
-  );
-  const currentRepLabel =
-    currentRequiredReps > 1
-      ? `rep ${Math.min(currentStageReps + 1, currentRequiredReps)} of ${currentRequiredReps}`
-      : null;
 
   return (
     <div className={cn("rounded-xl border bg-card p-4 shadow-sm", className)}>
@@ -124,25 +116,15 @@ export function PracticeVerseRail({
           </p>
           <div
             className={cn(
-              "flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5",
+              "rounded-lg border px-3 py-2.5",
               currentStage.color.railActive,
             )}
           >
-            <span className="inline-flex items-center gap-2 text-sm font-medium">
-              <span
-                className={cn(
-                  "h-2 w-2 shrink-0 rounded-full",
-                  currentStage.color.dot,
-                )}
-                aria-hidden
-              />
-              {currentStage.label}
-            </span>
-            {currentRepLabel && (
-              <span className="text-xs font-medium tabular-nums">
-                {currentRepLabel}
-              </span>
-            )}
+            <LearningJourneyBar
+              learnStage={currentLearnStage}
+              stageReps={currentStageReps}
+              wordCount={currentWordCount}
+            />
           </div>
         </div>
 
