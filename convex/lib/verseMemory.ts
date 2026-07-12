@@ -50,6 +50,7 @@ export async function seedVerseMemory(
     dueAt: schedule.dueAt,
     consecutiveCorrect: schedule.consecutiveCorrect,
     lapses: schedule.lapses,
+    earlyReviewApplied: schedule.earlyReviewApplied,
     createdAt: now,
   });
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
-import type { MemoryStatus } from "@/lib/memory-scheduler";
+import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
+import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import type { PracticeVerse } from "./practice/practice-board";
 import { VerseDetail } from "./verse-detail";
 
 type LibrarySort = "dueAt" | "status" | "recent";
@@ -24,24 +26,8 @@ const SORTS: Array<{ key: LibrarySort; label: string }> = [
   { key: "recent", label: "Recent" },
 ];
 
-const STATUS_STYLES: Record<MemoryStatus, { label: string; dot: string }> = {
-  new: { label: "New", dot: "bg-[var(--chart-3)]" },
-  learning: { label: "Learning", dot: "bg-[var(--chart-4)]" },
-  reviewing: { label: "Reviewing", dot: "bg-[var(--chart-1)]" },
-  mastered: { label: "Mastered", dot: "bg-[var(--chart-2)]" },
-};
-
 const INITIAL_PAGE_SIZE = 20;
 const LOAD_MORE_PAGE_SIZE = 20;
-
-function formatDueLabel(dueAt: number, now: number): string {
-  const diff = dueAt - now;
-  if (diff <= 0) return "Due now";
-  const days = Math.round(diff / (24 * 60 * 60 * 1000));
-  if (days <= 0) return "Due today";
-  if (days === 1) return "Tomorrow";
-  return `In ${days} days`;
-}
 
 /**
  * The Library: every hearted verse with its memory state and next-due date,
@@ -51,7 +37,17 @@ function formatDueLabel(dueAt: number, now: number): string {
  * Search is client-side over the loaded pages' reference labels (it does not
  * fetch unloaded pages) — a documented v1 limitation.
  */
-export function MemoryLibrary({ now }: { now: number }) {
+export function MemoryLibrary({
+  now,
+  onPracticeVerse,
+  onReviewVerse,
+}: {
+  now: number;
+  /** Start a practice session scoped to one library verse. */
+  onPracticeVerse: (verse: PracticeVerse) => void;
+  /** Start a review session scoped to one library verse. */
+  onReviewVerse: (verse: PracticeVerse) => void;
+}) {
   const [sort, setSort] = useState<LibrarySort>("dueAt");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Id<"verseRefs"> | null>(null);
@@ -62,19 +58,33 @@ export function MemoryLibrary({ now }: { now: number }) {
     { initialNumItems: INITIAL_PAGE_SIZE },
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return results;
-    return results.filter((row) =>
-      formatVerseRef(row).toLowerCase().includes(q),
-    );
-  }, [results, search]);
-
   const isLoadingFirstPage = status === "LoadingFirstPage";
   const isLoadingMore = status === "LoadingMore";
   const canLoadMore = status === "CanLoadMore";
   const isExhausted = status === "Exhausted";
   const hasResults = results.length > 0;
+
+  // Keep the last non-empty page for the active sort so a sort switch (or brief
+  // re-fetch) fades over the existing list instead of collapsing to a spinner.
+  // Cached pages return instantly; only a never-seen sort truly reloads.
+  const [heldPage, setHeldPage] = useState<{
+    sort: LibrarySort;
+    results: typeof results;
+  } | null>(null);
+  if (hasResults && (heldPage?.results !== results || heldPage.sort !== sort)) {
+    setHeldPage({ sort, results });
+  }
+  const isSwitchingSort =
+    isLoadingFirstPage && heldPage !== null && heldPage.sort !== sort;
+  const displayResults = isSwitchingSort ? heldPage.results : results;
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return displayResults;
+    return displayResults.filter((row) =>
+      formatVerseRef(row).toLowerCase().includes(q),
+    );
+  }, [displayResults, search]);
 
   // `listLibrary` can legitimately return an empty page while more pages exist
   // (e.g. a paginated slice whose rows all filtered out to un-hearted memory
@@ -142,11 +152,11 @@ export function MemoryLibrary({ now }: { now: number }) {
         />
       </div>
 
-      {isLoadingFirstPage ? (
-        <div className="flex justify-center py-16">
+      {isLoadingFirstPage && !isSwitchingSort ? (
+        <div className="flex min-h-[16rem] items-center justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : !hasResults && isExhausted ? (
+      ) : !hasResults && !isSwitchingSort && isExhausted ? (
         // Genuinely empty: the query is exhausted and no rows loaded anywhere.
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
           <p className="text-sm text-muted-foreground">
@@ -154,7 +164,7 @@ export function MemoryLibrary({ now }: { now: number }) {
             your library.
           </p>
         </div>
-      ) : !hasResults ? (
+      ) : !hasResults && !isSwitchingSort ? (
         // Empty page(s) so far but more remain — auto-loading; keep Load more
         // reachable as a fallback so the user is never stuck.
         <div className="flex flex-col items-center gap-2 py-12">
@@ -170,9 +180,15 @@ export function MemoryLibrary({ now }: { now: number }) {
         </>
       ) : (
         <>
-          <ul className="space-y-1.5">
+          <ul
+            className={cn(
+              "space-y-1.5 transition-opacity",
+              isSwitchingSort && "pointer-events-none opacity-50",
+            )}
+            aria-busy={isSwitchingSort}
+          >
             {filtered.map((row) => {
-              const style = STATUS_STYLES[row.status];
+              const style = MEMORY_STATUS_STYLE[row.status];
               return (
                 <li key={row.verseMemoryId}>
                   <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
@@ -193,7 +209,12 @@ export function MemoryLibrary({ now }: { now: number }) {
                           {formatVerseRef(row)}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          {style.label} · {formatDueLabel(row.dueAt, now)}
+                          {formatMemoryStatusSubtitle({
+                            status: row.status,
+                            statusLabel: style.label,
+                            dueAt: row.dueAt,
+                            now,
+                          })}
                         </span>
                       </span>
                     </button>
@@ -217,7 +238,18 @@ export function MemoryLibrary({ now }: { now: number }) {
             <DialogTitle>Verse detail</DialogTitle>
           </DialogHeader>
           {selected !== null ? (
-            <VerseDetail verseRefId={selected} now={now} />
+            <VerseDetail
+              verseRefId={selected}
+              now={now}
+              onPractice={(verse) => {
+                setSelected(null);
+                onPracticeVerse(verse);
+              }}
+              onReview={(verse) => {
+                setSelected(null);
+                onReviewVerse(verse);
+              }}
+            />
           ) : null}
         </DialogContent>
       </Dialog>

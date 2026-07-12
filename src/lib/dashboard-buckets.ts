@@ -7,49 +7,144 @@
  * trivially unit-testable and shared between the Convex aggregate queries and
  * any client-side derivation.
  *
- * **Timezone simplification.** Convex queries cannot call `Date.now()`, so the
- * client passes `now` in and all bucketing is done in **UTC days**. This keeps
- * the queries deterministic and cacheable at the cost of not honoring the
- * viewer's local timezone — a day boundary is midnight UTC, not local midnight.
- * That's an acceptable v1 tradeoff for a coarse growth dashboard; if per-user
- * local-day bucketing is needed later, the client can pass a UTC offset.
+ * **Timezone.** Convex queries cannot call `Date.now()` or read the viewer's
+ * zone, so the client passes `now` plus an IANA `timeZone` (e.g.
+ * `America/Los_Angeles`). Day boundaries are local midnights in that zone,
+ * including DST transitions — never UTC midnight.
  */
 
 export const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 
-/** Midnight-UTC timestamp of the day containing `ts`. */
-export function startOfUtcDay(ts: number): number {
-  return Math.floor(ts / DAY_MS) * DAY_MS;
+const dateKeyFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function dateKeyFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = dateKeyFormatters.get(timeZone);
+  if (!formatter) {
+    // en-CA yields stable YYYY-MM-DD keys that sort lexicographically by date.
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    dateKeyFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+/** Fall back to UTC when the zone string is missing or rejected by Intl. */
+export function normalizeTimeZone(timeZone: string | undefined): string {
+  if (!timeZone) return "UTC";
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone });
+    return timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
+/** Calendar `YYYY-MM-DD` for `ts` in `timeZone`. */
+export function zonedDateKey(ts: number, timeZone: string): string {
+  return dateKeyFormatter(timeZone).format(new Date(ts));
 }
 
 /**
- * The `days` UTC-day-start timestamps ending on the day of `now`, oldest first.
- * The last entry is always "today" (the UTC day of `now`).
+ * UTC instant of local midnight for the calendar day containing `ts` in
+ * `timeZone`. Binary-searches across the ±14h window around the UTC date so
+ * DST gaps/overlaps still resolve to the true local midnight.
  */
-export function utcDayStarts(now: number, days: number): number[] {
-  const todayStart = startOfUtcDay(now);
-  const starts: number[] = [];
-  for (let i = days - 1; i >= 0; i -= 1) {
-    starts.push(todayStart - i * DAY_MS);
+export function startOfZonedDay(ts: number, timeZone: string): number {
+  const key = zonedDateKey(ts, timeZone);
+  const [year, month, day] = key.split("-").map(Number);
+  const utcGuess = Date.UTC(year, month - 1, day);
+  let lo = utcGuess - 14 * HOUR_MS;
+  let hi = utcGuess + 14 * HOUR_MS;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (zonedDateKey(mid, timeZone) < key) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/** @deprecated Prefer {@link startOfZonedDay} with an explicit zone. */
+export function startOfUtcDay(ts: number): number {
+  return startOfZonedDay(ts, "UTC");
+}
+
+/**
+ * `days` local-midnight timestamps ending on the local day of `now`, oldest
+ * first. The last entry is always "today" in `timeZone`.
+ */
+export function zonedDayStarts(
+  now: number,
+  days: number,
+  timeZone: string,
+): number[] {
+  const starts: number[] = [startOfZonedDay(now, timeZone)];
+  for (let i = 1; i < days; i += 1) {
+    // Step 1ms before this midnight so we land on the previous calendar day
+    // (including 23h/25h DST days). Do not subtract ~36h from midnight — that
+    // skips a day.
+    const previous = starts[0];
+    starts.unshift(startOfZonedDay(previous - 1, timeZone));
   }
   return starts;
 }
 
+/** @deprecated Prefer {@link zonedDayStarts}. */
+export function utcDayStarts(now: number, days: number): number[] {
+  return zonedDayStarts(now, days, "UTC");
+}
+
 /**
- * Count timestamps into a `days`-long window ending today (UTC), oldest first.
- * Timestamps outside the window are ignored.
+ * `days` local-midnight timestamps starting on the local day of `now`, oldest
+ * first (today, tomorrow, …). Used by the review forecast.
+ */
+export function zonedUpcomingDayStarts(
+  now: number,
+  days: number,
+  timeZone: string,
+): number[] {
+  const starts: number[] = [startOfZonedDay(now, timeZone)];
+  for (let i = 1; i < days; i += 1) {
+    const previous = starts[i - 1];
+    starts.push(startOfZonedDay(previous + 36 * HOUR_MS, timeZone));
+  }
+  return starts;
+}
+
+function dayKeyIndex(
+  starts: readonly number[],
+  timeZone: string,
+): Map<string, number> {
+  const map = new Map<string, number>();
+  starts.forEach((dayStart, i) => {
+    map.set(zonedDateKey(dayStart, timeZone), i);
+  });
+  return map;
+}
+
+/**
+ * Count timestamps into a `days`-long window ending today (local), oldest
+ * first. Timestamps outside the window are ignored.
  */
 export function bucketReviewCounts(
   createdAts: readonly number[],
   now: number,
   days: number,
+  timeZone: string = "UTC",
 ): number[] {
-  const starts = utcDayStarts(now, days);
-  const windowStart = starts[0];
-  const counts = new Array<number>(days).fill(0);
+  const starts = zonedDayStarts(now, days, timeZone);
+  const indexByKey = dayKeyIndex(starts, timeZone);
+  const counts = Array.from({ length: days }, () => 0);
   for (const ts of createdAts) {
-    const index = Math.floor((startOfUtcDay(ts) - windowStart) / DAY_MS);
-    if (index >= 0 && index < days) {
+    const index = indexByKey.get(zonedDateKey(ts, timeZone));
+    if (index !== undefined) {
       counts[index] += 1;
     }
   }
@@ -57,24 +152,23 @@ export function bucketReviewCounts(
 }
 
 /**
- * Average `accuracy` per UTC day over a `days`-long window ending today, oldest
- * first. Days with no reviews get `null` (rather than 0) so charts can skip
- * them instead of drawing a misleading zero.
+ * Average `accuracy` per local day over a `days`-long window ending today,
+ * oldest first. Days with no reviews get `null` (rather than 0) so charts can
+ * skip them instead of drawing a misleading zero.
  */
 export function bucketAccuracyAverages(
   reviews: readonly { createdAt: number; accuracy: number }[],
   now: number,
   days: number,
+  timeZone: string = "UTC",
 ): Array<{ average: number | null; count: number }> {
-  const starts = utcDayStarts(now, days);
-  const windowStart = starts[0];
-  const sums = new Array<number>(days).fill(0);
-  const counts = new Array<number>(days).fill(0);
+  const starts = zonedDayStarts(now, days, timeZone);
+  const indexByKey = dayKeyIndex(starts, timeZone);
+  const sums = Array.from({ length: days }, () => 0);
+  const counts = Array.from({ length: days }, () => 0);
   for (const review of reviews) {
-    const index = Math.floor(
-      (startOfUtcDay(review.createdAt) - windowStart) / DAY_MS,
-    );
-    if (index >= 0 && index < days) {
+    const index = indexByKey.get(zonedDateKey(review.createdAt, timeZone));
+    if (index !== undefined) {
       sums[index] += review.accuracy;
       counts[index] += 1;
     }
@@ -86,12 +180,14 @@ export function bucketAccuracyAverages(
 }
 
 /**
- * Count verse `dueAt`s into the next `days` UTC days starting today, oldest
+ * Count verse `dueAt`s into the next `days` local days starting today, oldest
  * first. Day 0 ("Today") counts only verses that are **actually due now**
  * (`dueAt <= now`), matching the rest of the app's "due today" definition
  * (`memoryStats.due`, `dueQueue`, the Start review disabled state) — so
  * overdue verses fold into Today but a verse scheduled for later today does
- * not. Upcoming days (1..) are bucketed by UTC calendar day; verses due later
+ * not. Callers must pass only review-phase (`reviewing` / `mastered`) dueAts;
+ * learning-phase verses are filtered out before this helper runs.
+ * Upcoming days (1..) are bucketed by local calendar day; verses due later
  * today therefore fall outside the window's day-0 count and are not shown.
  * Verses due beyond the window are ignored.
  */
@@ -99,20 +195,22 @@ export function bucketForecastCounts(
   dueAts: readonly number[],
   now: number,
   days: number,
+  timeZone: string = "UTC",
 ): number[] {
-  const todayStart = startOfUtcDay(now);
-  const counts = new Array<number>(days).fill(0);
+  const starts = zonedUpcomingDayStarts(now, days, timeZone);
+  const indexByKey = dayKeyIndex(starts, timeZone);
+  const counts = Array.from({ length: days }, () => 0);
   for (const dueAt of dueAts) {
     if (dueAt <= now) {
       // Due or overdue -> Today, consistent with `dueAt <= now` everywhere.
       counts[0] += 1;
       continue;
     }
-    // Not yet due: bucket into its upcoming UTC calendar day. An index of 0
+    // Not yet due: bucket into its upcoming local calendar day. An index of 0
     // here means "later today" — kept out of the Today count (no calendar
     // bucket fits it) rather than inflating the "due now" number.
-    const index = Math.floor((startOfUtcDay(dueAt) - todayStart) / DAY_MS);
-    if (index >= 1 && index < days) {
+    const index = indexByKey.get(zonedDateKey(dueAt, timeZone));
+    if (index !== undefined && index >= 1) {
       counts[index] += 1;
     }
   }
@@ -120,20 +218,47 @@ export function bucketForecastCounts(
 }
 
 /**
- * The current review streak: consecutive days with at least one review, ending
- * today. Expects the oldest-first daily counts from {@link bucketReviewCounts}.
- * Returns 0 when today has no reviews yet.
+ * Streak derived from oldest-first daily activity counts
+ * ({@link bucketReviewCounts}).
+ *
+ * - If today has activity, `days` is the run ending today and `atRisk` is false.
+ * - If today is empty but yesterday starts a run, that run is still alive
+ *   (`atRisk: true`) — the user must practice today to extend it.
+ * - Otherwise the streak is broken (`days: 0`).
  */
-export function computeStreak(dailyCounts: readonly number[]): number {
-  let streak = 0;
-  for (let i = dailyCounts.length - 1; i >= 0; i -= 1) {
-    if (dailyCounts[i] > 0) {
-      streak += 1;
+export interface StreakInfo {
+  days: number;
+  /** True when a streak ending yesterday is waiting on today's practice. */
+  atRisk: boolean;
+}
+
+export function computeStreak(dailyCounts: readonly number[]): StreakInfo {
+  if (dailyCounts.length === 0) {
+    return { days: 0, atRisk: false };
+  }
+
+  const todayIndex = dailyCounts.length - 1;
+  const practicedToday = (dailyCounts[todayIndex] ?? 0) > 0;
+
+  // Grace for "new day, not yet practiced": count from yesterday if it has activity.
+  let startIndex = todayIndex;
+  if (!practicedToday) {
+    if (todayIndex === 0 || (dailyCounts[todayIndex - 1] ?? 0) === 0) {
+      return { days: 0, atRisk: false };
+    }
+    startIndex = todayIndex - 1;
+  }
+
+  let days = 0;
+  for (let i = startIndex; i >= 0; i -= 1) {
+    if ((dailyCounts[i] ?? 0) > 0) {
+      days += 1;
     } else {
       break;
     }
   }
-  return streak;
+
+  return { days, atRisk: !practicedToday && days > 0 };
 }
 
 /**

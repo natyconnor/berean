@@ -20,6 +20,11 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
@@ -43,7 +48,7 @@ import type { CardReference } from "../../study/study-card-model";
 import { useRecordVerseAttempt } from "../../study/use-record-verse-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
 import { LearningJourneyBar } from "./learning-journey-bar";
-import { PRACTICE_STAGES } from "./practice-stages";
+import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
 
 export interface PracticeVerse {
@@ -58,7 +63,8 @@ export interface PracticeVerse {
   stageReps?: number;
   /**
    * Lifecycle status. Needed so a verse that has already graduated to
-   * reviewing/mastered shows a full journey bar instead of From Memory at 75%.
+   * reviewing/mastered shows a full journey bar instead of the From Memory
+   * floor.
    */
   status?: MemoryStatus;
 }
@@ -66,8 +72,12 @@ export interface PracticeVerse {
 interface PracticeBoardProps {
   /** The verse set to practice (e.g. the user's hearted verses or a pack). */
   verses: ReadonlyArray<PracticeVerse>;
-  /** Return to the memory home. */
+  /** Human-readable name for the set being practiced. */
+  scopeLabel: string;
+  /** Return to the memory home or pack. */
   onExit: () => void;
+  /** Describes the back-button destination. */
+  exitTooltip?: string;
 }
 
 /** Live learning progress the board tracks per verse this session. */
@@ -129,7 +139,9 @@ function normalizeStatus(status: MemoryStatus | undefined): MemoryStatus {
  */
 export function PracticeBoard({
   verses,
+  scopeLabel,
   onExit,
+  exitTooltip,
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [order, setOrder] = useState<PracticeOrder>("in-order");
@@ -260,7 +272,11 @@ export function PracticeBoard({
 
   if (orderedVerses.length === 0 || !currentVerse) {
     return (
-      <PracticeShell onExit={onExit}>
+      <PracticeShell
+        scopeLabel={scopeLabel}
+        onExit={onExit}
+        exitTooltip={exitTooltip}
+      >
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
           <p className="text-sm text-muted-foreground">
             No verses to practice yet. Heart a verse in the reader to build your
@@ -272,7 +288,11 @@ export function PracticeBoard({
   }
 
   return (
-    <PracticeShell onExit={onExit}>
+    <PracticeShell
+      scopeLabel={scopeLabel}
+      onExit={onExit}
+      exitTooltip={exitTooltip}
+    >
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="order-2 md:order-1">
           <div className="relative">
@@ -395,7 +415,7 @@ function PracticeCard({
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
-  const stageColor = stageInfo.color;
+  const stageColor = practiceChromeFor(learnStage, status);
   const { hintStage, tokens, wordCount } = useMemo(() => {
     const wc = countVerseWords(versePlainText);
     const hint = hintForProgress(learnStage, stageReps, wc);
@@ -428,6 +448,12 @@ function PracticeCard({
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
+  // Once graduated, another exact recall is just another practice pass — offer
+  // "Try again" instead of implying the learning journey still advances.
+  const offerPracticeAgain =
+    status === "reviewing" ||
+    status === "mastered" ||
+    checkedQuality !== "exact";
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
@@ -637,12 +663,12 @@ function PracticeCard({
                 // land before the next rep renders, so it can't re-record stale.
                 disabled={submitPending}
               >
-                {checkedQuality === "exact" ? (
-                  <ArrowRight className="h-4 w-4" aria-hidden />
-                ) : (
+                {offerPracticeAgain ? (
                   <RotateCcw className="h-4 w-4" aria-hidden />
+                ) : (
+                  <ArrowRight className="h-4 w-4" aria-hidden />
                 )}
-                {checkedQuality === "exact" ? "Continue" : "Try again"}
+                {offerPracticeAgain ? "Try again" : "Continue"}
               </Button>
             ) : isReadPrime ? (
               <Button
@@ -764,7 +790,7 @@ function PracticeShuffleCardFace({
 }): JSX.Element {
   const refLabel = formatVerseRef(verse.reference);
   const stage = PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
-  const stageColor = stage.color;
+  const stageColor = practiceChromeFor(verse.learnStage, verse.status);
 
   return (
     <div
@@ -818,26 +844,43 @@ function HintTokenText({ tokens }: { tokens: ReadonlyArray<HintToken> }) {
 }
 
 function PracticeShell({
+  scopeLabel,
   onExit,
+  exitTooltip = "Go back to the Memory dashboard",
   children,
 }: {
+  scopeLabel: string;
   onExit: () => void;
+  exitTooltip?: string;
   children: ReactNode;
 }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onExit}
-            className="-ml-2 gap-1.5"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Memory
-          </Button>
-          <h1 className="text-lg font-semibold tracking-tight">Practice</h1>
+        <div className="flex min-w-0 items-center gap-3">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onExit}
+                className="-ml-2 shrink-0 gap-1.5"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden />
+                Back
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{exitTooltip}</TooltipContent>
+          </Tooltip>
+          <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
+            <span className="shrink-0 font-semibold">Practice</span>
+            <span aria-hidden className="text-muted-foreground">
+              ·
+            </span>
+            <span className="truncate font-medium text-muted-foreground">
+              {scopeLabel}
+            </span>
+          </h1>
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">

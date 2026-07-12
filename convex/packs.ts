@@ -13,6 +13,7 @@ import {
   type PackMember,
 } from "./lib/packs";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
+import { isDueForReview } from "../src/lib/memory-scheduler";
 
 /**
  * A pack is a per-user named verse set. `scope` packs resolve their members
@@ -153,7 +154,7 @@ export const listMine = query({
 
       let dueCount = 0;
       for (const m of members) {
-        if (m.dueAt <= args.now) dueCount += 1;
+        if (isDueForReview(m, args.now)) dueCount += 1;
       }
 
       page.push({
@@ -424,7 +425,10 @@ export const resolveMembers = query({
       members = await loadCustomMembers(ctx, userId, args.id);
     }
 
-    return members.map((m) => ({ ...m, isDue: m.dueAt <= args.now }));
+    return members.map((m) => ({
+      ...m,
+      isDue: isDueForReview(m, args.now),
+    }));
   },
 });
 
@@ -440,7 +444,7 @@ export const previewScopeCount = query({
 
     let dueCount = 0;
     for (const m of members) {
-      if (m.dueAt <= args.now) dueCount += 1;
+      if (isDueForReview(m, args.now)) dueCount += 1;
     }
     return { verseCount: members.length, dueCount };
   },

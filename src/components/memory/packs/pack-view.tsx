@@ -13,7 +13,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 import type { FunctionReturnType } from "convex/server";
 
 import { api } from "../../../../convex/_generated/api";
@@ -29,36 +30,28 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLiveNow } from "@/hooks/use-live-now";
-import type { MemoryStatus } from "@/lib/memory-scheduler";
+import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
+import { memoryPracticeSearch } from "@/lib/memory-practice-search";
+import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
+import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { VerseDetail } from "@/components/memory/verse-detail";
 
-import { PracticeBoard, type PracticeVerse } from "../practice/practice-board";
-import { ReviewPlayer, type ReviewItem } from "../review-player";
 import { HeartedVersePicker, type HeartedVerse } from "./hearted-verse-picker";
 
-const STATUS_STYLES: Record<MemoryStatus, { label: string; dot: string }> = {
-  new: { label: "New", dot: "bg-[var(--chart-3)]" },
-  learning: { label: "Learning", dot: "bg-[var(--chart-4)]" },
-  reviewing: { label: "Reviewing", dot: "bg-[var(--chart-1)]" },
-  mastered: { label: "Mastered", dot: "bg-[var(--chart-2)]" },
-};
-
-function formatDueLabel(dueAt: number, now: number): string {
-  const diff = dueAt - now;
-  if (diff <= 0) return "Due now";
-  const days = Math.round(diff / (24 * 60 * 60 * 1000));
-  if (days <= 0) return "Due today";
-  if (days === 1) return "Tomorrow";
-  return `In ${days} days`;
-}
-
 /**
- * A single pack: header + counts, its resolved members, and Review (the due
- * subset, via {@link ReviewPlayer}) + Practice (all members, via
- * {@link PracticeBoard}) actions. Custom packs additionally support
- * add / remove / reorder of their hand-picked membership.
+ * A single pack: header + counts, its resolved members, and Review / Practice
+ * actions that navigate to `/memory/$packId/review` and
+ * `/memory/$packId/practice`. Custom packs additionally support add / remove /
+ * reorder of their hand-picked membership.
  */
 export function PackView({ packId }: { packId: Id<"packs"> }) {
   const now = useLiveNow();
@@ -76,41 +69,8 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
     }
   }, [pack, packId, touch]);
 
-  const [isReviewing, setIsReviewing] = useState(false);
-  const [isPracticing, setIsPracticing] = useState(false);
-
   const dueMembers = useMemo(
     () => (members ?? []).filter((m) => m.isDue),
-    [members],
-  );
-  const reviewDueItems = useMemo<ReviewItem[]>(
-    () =>
-      members === undefined
-        ? []
-        : dueMembers.map((m) => ({
-            verseRefId: m.verseRefId,
-            book: m.book,
-            chapter: m.chapter,
-            startVerse: m.startVerse,
-            endVerse: m.endVerse,
-            status: m.status,
-            learnStage: m.learnStage,
-          })),
-    [members, dueMembers],
-  );
-  const practiceVerses = useMemo<PracticeVerse[]>(
-    () =>
-      (members ?? []).map((m) => ({
-        reference: {
-          book: m.book,
-          chapter: m.chapter,
-          startVerse: m.startVerse,
-          endVerse: m.endVerse,
-        },
-        learnStage: m.learnStage,
-        stageReps: m.stageReps ?? 0,
-        status: m.status,
-      })),
     [members],
   );
 
@@ -149,29 +109,6 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
     );
   }
 
-  if (isReviewing) {
-    return (
-      <ReviewPlayer
-        title={pack.name}
-        backLabel="Pack"
-        source={{
-          dueItems: members === undefined ? undefined : reviewDueItems,
-          remainingDue: members === undefined ? undefined : dueMembers.length,
-        }}
-        onExit={() => setIsReviewing(false)}
-      />
-    );
-  }
-
-  if (isPracticing) {
-    return (
-      <PracticeBoard
-        verses={practiceVerses}
-        onExit={() => setIsPracticing(false)}
-      />
-    );
-  }
-
   return (
     <PackViewMain
       packId={packId}
@@ -179,8 +116,31 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
       members={members}
       now={now}
       dueCount={dueMembers.length}
-      onReview={() => setIsReviewing(true)}
-      onPractice={() => setIsPracticing(true)}
+      onBack={() => void navigate({ to: "/memory" })}
+      onReview={() =>
+        void navigate({
+          to: "/memory/$packId/review",
+          params: { packId },
+        })
+      }
+      onPractice={() =>
+        void navigate({
+          to: "/memory/$packId/practice",
+          params: { packId },
+        })
+      }
+      onPracticeVerse={(verse) =>
+        void navigate({
+          to: "/memory/practice",
+          search: memoryPracticeSearch(verse.reference),
+        })
+      }
+      onReviewVerse={(verse) =>
+        void navigate({
+          to: "/memory/review",
+          search: memoryReviewSearch(verse.reference),
+        })
+      }
       onDeleted={() => void navigate({ to: "/memory" })}
     />
   );
@@ -195,8 +155,11 @@ function PackViewMain({
   members,
   now,
   dueCount,
+  onBack,
   onReview,
   onPractice,
+  onPracticeVerse,
+  onReviewVerse,
   onDeleted,
 }: {
   packId: Id<"packs">;
@@ -204,8 +167,11 @@ function PackViewMain({
   members: Member[] | undefined;
   now: number;
   dueCount: number;
+  onBack: () => void;
   onReview: () => void;
   onPractice: () => void;
+  onPracticeVerse: (verse: PracticeVerse) => void;
+  onReviewVerse: (verse: PracticeVerse) => void;
   onDeleted: () => void;
 }) {
   const isCustom = pack.kind === "custom";
@@ -222,6 +188,8 @@ function PackViewMain({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [selectedVerseRefId, setSelectedVerseRefId] =
+    useState<Id<"verseRefs"> | null>(null);
   const [pendingVerseId, setPendingVerseId] = useState<Id<"verseRefs"> | null>(
     null,
   );
@@ -295,13 +263,20 @@ function PackViewMain({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-3">
-        <Link
-          to="/memory"
-          className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Memory
-        </Link>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onBack}
+              className="-ml-2 mb-1 shrink-0 gap-1.5"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Back
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Go back to Memory</TooltipContent>
+        </Tooltip>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold tracking-tight">
@@ -345,7 +320,12 @@ function PackViewMain({
             disabled={!canReview}
           >
             <Play className="h-4 w-4" aria-hidden />
-            Review{dueCount > 0 ? ` (${dueCount})` : ""}
+            Review
+            {dueCount > 0 ? (
+              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
+                {dueCount}
+              </span>
+            ) : null}
           </Button>
           <Button
             size="sm"
@@ -355,7 +335,7 @@ function PackViewMain({
             disabled={!canPractice}
           >
             <Dumbbell className="h-4 w-4" aria-hidden />
-            Practice
+            Practice Pack
           </Button>
         </div>
       </header>
@@ -395,27 +375,38 @@ function PackViewMain({
             ) : (
               <ul className="space-y-1.5">
                 {members.map((member, index) => {
-                  const style = STATUS_STYLES[member.status];
+                  const style = MEMORY_STATUS_STYLE[member.status];
                   return (
                     <li
                       key={member.verseRefId}
                       className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5"
                     >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "h-2 w-2 shrink-0 rounded-full",
-                          style.dot,
-                        )}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
-                          {formatVerseRef(member)}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedVerseRefId(member.verseRefId)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "h-2 w-2 shrink-0 rounded-full",
+                            style.dot,
+                          )}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {formatVerseRef(member)}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {formatMemoryStatusSubtitle({
+                              status: member.status,
+                              statusLabel: style.label,
+                              dueAt: member.dueAt,
+                              now,
+                            })}
+                          </span>
                         </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {style.label} · {formatDueLabel(member.dueAt, now)}
-                        </span>
-                      </span>
+                      </button>
                       {isCustom && (
                         <span className="flex shrink-0 items-center gap-0.5">
                           <Button
@@ -457,6 +448,33 @@ function PackViewMain({
           </section>
         </div>
       </ScrollArea>
+
+      <Dialog
+        open={selectedVerseRefId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedVerseRefId(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verse detail</DialogTitle>
+          </DialogHeader>
+          {selectedVerseRefId !== null ? (
+            <VerseDetail
+              verseRefId={selectedVerseRefId}
+              now={now}
+              onPractice={(verse) => {
+                setSelectedVerseRefId(null);
+                onPracticeVerse(verse);
+              }}
+              onReview={(verse) => {
+                setSelectedVerseRefId(null);
+                onReviewVerse(verse);
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>

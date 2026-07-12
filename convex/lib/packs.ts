@@ -9,8 +9,9 @@ import { sortByVerseRef } from "../../shared/compare-verse-refs";
 
 /**
  * A pack member: a verse reference joined to its live `verseMemory` schedule.
- * `isDue` is intentionally *not* part of this shape — it depends on `now`, so
- * callers add it at the query boundary (never `Date.now()` in a query).
+ * `isDue` is intentionally *not* part of this shape — it depends on `now` and
+ * review-phase status (`reviewing` / `mastered`), so callers add it at the
+ * query boundary via `isDueForReview` (never `Date.now()` in a query).
  */
 export type PackMember = {
   verseRefId: Id<"verseRefs">;

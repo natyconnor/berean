@@ -4,7 +4,7 @@ import { learningJourneyFraction } from "@/lib/mastery-ring";
 import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
-import { PRACTICE_STAGES } from "./practice-stages";
+import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 
 interface LearningJourneyBarProps {
   /** Current learning band (0..3). */
@@ -19,7 +19,7 @@ interface LearningJourneyBarProps {
   /**
    * Lifecycle status. Graduated verses (`reviewing` / `mastered`) fill the bar
    * to 100% — the scheduler resets `stageReps` on graduation, so stage alone
-   * would incorrectly leave the track at From Memory's 75% floor.
+   * would incorrectly leave the track at the From Memory floor.
    */
   status?: MemoryStatus;
   className?: string;
@@ -27,12 +27,12 @@ interface LearningJourneyBarProps {
 
 /**
  * Compact learning-journey progress bar: a band label and a thin filled track
- * that advances monotonically across all four bands (Read → Guided → Challenge
- * → From Memory). Fill fraction is {@link learningJourneyFraction}, keeping it
- * in sync with the mastery heart ring.
+ * that advances one equal step per successful Continue across all four bands
+ * (Read → Guided → Challenge → From Memory). Fill fraction is
+ * {@link learningJourneyFraction}, keeping it in sync with the mastery heart
+ * ring.
  *
- * Graduated verses keep the From Memory palette so the bar stays visually
- * continuous with the card chrome; only the label and fill change.
+ * Colors mirror the lifecycle palette: New → Learning → Reviewing → Mastered.
  */
 export function LearningJourneyBar({
   learnStage,
@@ -44,6 +44,7 @@ export function LearningJourneyBar({
   const graduated = status === "reviewing" || status === "mastered";
   const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
   const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
+  const chrome = practiceChromeFor(clampedStage, status);
   const label = graduated
     ? status === "mastered"
       ? "Mastered"
@@ -66,11 +67,11 @@ export function LearningJourneyBar({
         <span
           className={cn(
             "inline-flex items-center gap-1.5 text-xs font-medium",
-            stage.color.text,
+            chrome.text,
           )}
         >
           <span
-            className={cn("h-1.5 w-1.5 rounded-full", stage.color.dot)}
+            className={cn("h-1.5 w-1.5 rounded-full", chrome.dot)}
             aria-hidden
           />
           {label}
@@ -83,7 +84,7 @@ export function LearningJourneyBar({
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-300",
-            stage.color.dot,
+            chrome.dot,
           )}
           style={{ width: `${pct}%` }}
           aria-hidden

@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Layers, Loader2, Plus } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery } from "convex-helpers/react/cache";
 
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,12 @@ export function PackList({ now }: { now: number }) {
   const isLoadingFirstPage = status === "LoadingFirstPage";
   const isLoadingMore = status === "LoadingMore";
   const canLoadMore = status === "CanLoadMore";
+  const [heldResults, setHeldResults] = useState<typeof results | null>(null);
+  if (!isLoadingFirstPage && heldResults !== results) {
+    setHeldResults(results);
+  }
+  const isRefreshingFirstPage = isLoadingFirstPage && heldResults !== null;
+  const displayResults = isRefreshingFirstPage ? heldResults : results;
 
   return (
     <section className="space-y-3">
@@ -39,11 +46,11 @@ export function PackList({ now }: { now: number }) {
         </Button>
       </div>
 
-      {isLoadingFirstPage ? (
+      {isLoadingFirstPage && !isRefreshingFirstPage ? (
         <div className="flex justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : results.length === 0 ? (
+      ) : displayResults.length === 0 ? (
         <div className="rounded-xl border bg-card px-4 py-10 text-center">
           <Layers
             className="mx-auto mb-3 h-6 w-6 text-muted-foreground/70"
@@ -63,7 +70,7 @@ export function PackList({ now }: { now: number }) {
       ) : (
         <>
           <ul className="space-y-1.5">
-            {results.map((pack) => (
+            {displayResults.map((pack) => (
               <li key={pack._id}>
                 <Link
                   to="/memory/$packId"

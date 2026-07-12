@@ -1,5 +1,5 @@
 import { type JSX, type ReactNode, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { VerseMemoryCard } from "../study/study-card-model";
 import { StudyActivityDeck } from "../study/study-activity-deck";
 import { ReviewSummary } from "./review-summary";
-import { StudyVerseLearn } from "../study/study-verse-learn";
 
 /**
  * The minimal per-verse shape the player needs to sequence a run. Satisfied by
@@ -38,7 +37,7 @@ export interface ReviewSource {
   remainingDue: number | undefined;
 }
 
-type Phase = "learn" | "review" | "summary";
+type Phase = "review" | "summary";
 
 interface ReviewPlayerProps {
   /** Return to the memory home (or pack view). */
@@ -47,6 +46,8 @@ interface ReviewPlayerProps {
   title?: string;
   /** Back-button label. Defaults to "Memory". */
   backLabel?: string;
+  /** Done button label. Defaults by source. */
+  doneLabel?: string;
   /**
    * When provided, drives the run from this reactive due set instead of the
    * global `verseMemory.dueQueue`. Used to play a single pack's due subset.
@@ -54,11 +55,7 @@ interface ReviewPlayerProps {
   source?: ReviewSource;
 }
 
-function isLearnStatus(status: MemoryStatus): boolean {
-  return status === "new" || status === "learning";
-}
-
-/** Map a due row into the verse-memory card shape the deck/learn expect. */
+/** Map a due row into the verse-memory card shape the deck expects. */
 function toCard(item: ReviewItem): VerseMemoryCard {
   return {
     type: "verse-memory",
@@ -73,19 +70,20 @@ function toCard(item: ReviewItem): VerseMemoryCard {
 }
 
 /**
- * Orchestrates the global Review: the due queue across every hearted
- * verse, played through the existing learn ladder (new/learning verses) and
- * the deck (reviewing/mastered verses), ending in a summary.
+ * Orchestrates Review: the due queue of `reviewing` / `mastered` hearted
+ * verses, played through the deck, ending in a summary. Learning-phase verses
+ * are not part of this queue — they are practiced from verse detail / learn.
  *
  * The due list is snapshotted on entry so cards don't vanish mid-session as
  * `recordAttempt` reschedules verses out of the live due set. The live query is
- * still observed to detect when the review phase is finished and to compute the
- * end-of-run summary (verses cleared, stage-ups, verses still due).
+ * still observed to detect when the review is finished and to compute the
+ * end-of-run summary (verses cleared, verses still due).
  */
 export function ReviewPlayer({
   onExit,
   title = "Review",
   backLabel = "Memory",
+  doneLabel,
   source,
 }: ReviewPlayerProps): JSX.Element {
   // Live `now` (coarse, ~60s) so late-due verses are reflected while the run is
@@ -97,14 +95,14 @@ export function ReviewPlayer({
     api.verseMemory.dueQueue,
     source ? "skip" : { now },
   );
-  // `dueQueue` is capped (<=50 rows); `memoryStats.due` counts *all* due verses,
-  // so it — not the capped queue length — is the true remaining total.
+  // `dueQueue` is capped (<=50 rows); `memoryStats.due` counts *all* due review
+  // verses, so it — not the capped queue length — is the true remaining total.
   const globalStats = useQuery(
     api.verseMemory.memoryStats,
     source ? "skip" : { now },
   );
-  // Driven by a pack (`source`) → returning lands on the pack, not memory home.
-  const doneLabel = source ? "Back to pack" : "Back to memory";
+  const resolvedDoneLabel =
+    doneLabel ?? (source ? "Back to pack" : "Back to memory");
   const dueItems: ReviewItem[] | undefined = source
     ? source.dueItems
     : globalDue;
@@ -117,29 +115,15 @@ export function ReviewPlayer({
     setSnapshot(dueItems);
   }
 
-  const learnItems = useMemo(
-    () => snapshot?.filter((it) => isLearnStatus(it.status)) ?? [],
-    [snapshot],
-  );
-  const reviewItems = useMemo(
-    () => snapshot?.filter((it) => !isLearnStatus(it.status)) ?? [],
-    [snapshot],
-  );
+  const reviewItems = snapshot ?? [];
 
   const [phase, setPhase] = useState<Phase | null>(null);
-  const [learnIndex, setLearnIndex] = useState(0);
 
   // Pick the starting phase once the snapshot resolves, computed during render
   // (not in an effect) so it commits before paint. Empty snapshots fall through
   // to the caught-up state below.
   if (snapshot !== null && snapshot.length > 0 && phase === null) {
-    setPhase(
-      learnItems.length > 0
-        ? "learn"
-        : reviewItems.length > 0
-          ? "review"
-          : "summary",
-    );
+    setPhase("review");
   }
 
   const liveDue = useMemo(() => dueItems ?? [], [dueItems]);
@@ -163,40 +147,25 @@ export function ReviewPlayer({
 
   const summary = useMemo(() => {
     let cleared = 0;
-    let stageUps = 0;
     for (const it of snapshot ?? []) {
-      const live = liveByRef.get(it.verseRefId);
-      if (!live) {
+      if (!liveByRef.has(it.verseRefId)) {
         // No longer due: rescheduled into the future by a graded attempt.
         cleared += 1;
-      } else if (live.learnStage > it.learnStage) {
-        stageUps += 1;
       }
     }
     return {
       cleared,
-      stageUps,
-      reviewed: cleared + stageUps,
-      // True outstanding count across *all* due verses (uncapped), falling back
-      // to the queue length only until the remaining total resolves.
+      stageUps: 0,
+      reviewed: cleared,
+      // True outstanding count across *all* due review verses (uncapped),
+      // falling back to the queue length only until the remaining total resolves.
       remaining: remainingDue ?? liveDue.length,
     };
   }, [snapshot, liveByRef, liveDue.length, remainingDue]);
 
-  function advanceLearn() {
-    if (learnIndex + 1 < learnItems.length) {
-      setLearnIndex(learnIndex + 1);
-    } else if (reviewItems.length > 0) {
-      setPhase("review");
-    } else {
-      setPhase("summary");
-    }
-  }
-
   function handleContinue() {
     // Re-run against whatever is still due right now.
     setSnapshot(liveDue);
-    setLearnIndex(0);
     setPhase(null);
   }
 
@@ -206,7 +175,7 @@ export function ReviewPlayer({
     return (
       <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
         {caughtUp ? (
-          <CaughtUp onExit={onExit} doneLabel={doneLabel} />
+          <CaughtUp onExit={onExit} doneLabel={resolvedDoneLabel} />
         ) : (
           <LoadingState />
         )}
@@ -224,57 +193,24 @@ export function ReviewPlayer({
           remaining={summary.remaining}
           onDone={onExit}
           onContinue={summary.remaining > 0 ? handleContinue : undefined}
-          doneLabel={doneLabel}
+          doneLabel={resolvedDoneLabel}
         />
       </TodayQueueShell>
     );
   }
 
-  if (effectivePhase === "review") {
-    const reviewCards = reviewItems.map(toCard);
-    return (
-      <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
-        <div className="space-y-4">
-          <StudyActivityDeck
-            key="today-review"
-            cards={reviewCards}
-            scopeLabel="review"
-          />
-          <div className="mx-auto flex w-full max-w-2xl justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPhase("summary")}
-            >
-              End review
-            </Button>
-          </div>
-        </div>
-      </TodayQueueShell>
-    );
-  }
-
-  // Learn phase.
-  const learnItem = learnItems[Math.min(learnIndex, learnItems.length - 1)];
-  const learnCard = toCard(learnItem);
-  const isLastLearn = learnIndex + 1 >= learnItems.length;
-  const nextLabel = !isLastLearn
-    ? "Next verse"
-    : reviewItems.length > 0
-      ? "Continue to review"
-      : "Finish";
-
+  const reviewCards = reviewItems.map(toCard);
   return (
     <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
       <div className="space-y-4">
-        <StudyVerseLearn key={learnCard.id} card={learnCard} />
-        <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">
-            Verse {learnIndex + 1} of {learnItems.length} to learn
-          </span>
-          <Button onClick={advanceLearn} className="gap-1.5">
-            {nextLabel}
-            <ArrowRight className="h-4 w-4" aria-hidden />
+        <StudyActivityDeck
+          key="today-review"
+          cards={reviewCards}
+          scopeLabel="review"
+        />
+        <div className="mx-auto flex w-full max-w-2xl justify-end">
+          <Button variant="ghost" size="sm" onClick={() => setPhase("summary")}>
+            End review
           </Button>
         </div>
       </div>

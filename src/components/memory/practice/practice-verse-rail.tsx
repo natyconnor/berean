@@ -8,7 +8,7 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import type { CardReference } from "../../study/study-card-model";
 import { LearningJourneyBar } from "./learning-journey-bar";
-import { PRACTICE_STAGES } from "./practice-stages";
+import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 
 interface RailVerse {
   id: string;
@@ -60,60 +60,61 @@ export function PracticeVerseRail({
   className,
 }: PracticeVerseRailProps) {
   const canReorder = verses.length >= 2;
-  const currentStage = PRACTICE_STAGES[currentLearnStage] ?? PRACTICE_STAGES[0];
+  const currentChrome = practiceChromeFor(currentLearnStage, currentStatus);
 
   return (
     <div className={cn("rounded-xl border bg-card p-4 shadow-sm", className)}>
       <div className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Order
-          </p>
-          <div
-            className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
-            role="group"
-            aria-label="Practice order"
-          >
-            <button
-              type="button"
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors",
-                order === "shuffle"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => onOrderChange("shuffle")}
-              disabled={!canReorder}
-              aria-pressed={order === "shuffle"}
+        {canReorder && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Order
+            </p>
+            <div
+              className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+              role="group"
+              aria-label="Practice order"
             >
-              <motion.span
-                key={shuffleNonce}
-                aria-hidden
-                initial={{ rotate: 0 }}
-                animate={{ rotate: order === "shuffle" ? 360 : 0 }}
-                transition={{ duration: 0.45, ease: "easeOut" }}
-                className="inline-flex"
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors",
+                  order === "shuffle"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                onClick={() => onOrderChange("shuffle")}
+                aria-pressed={order === "shuffle"}
               >
-                <Shuffle className="h-3.5 w-3.5 shrink-0" />
-              </motion.span>
-              Shuffle
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors",
-                order === "in-order"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => onOrderChange("in-order")}
-              aria-pressed={order === "in-order"}
-            >
-              <ListOrdered className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              In order
-            </button>
+                <motion.span
+                  key={shuffleNonce}
+                  aria-hidden
+                  initial={{ rotate: 0 }}
+                  animate={{ rotate: order === "shuffle" ? 360 : 0 }}
+                  transition={{ duration: 0.45, ease: "easeOut" }}
+                  className="inline-flex"
+                >
+                  <Shuffle className="h-3.5 w-3.5 shrink-0" />
+                </motion.span>
+                Shuffle
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors",
+                  order === "in-order"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                onClick={() => onOrderChange("in-order")}
+                aria-pressed={order === "in-order"}
+              >
+                <ListOrdered className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                In order
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -122,7 +123,7 @@ export function PracticeVerseRail({
           <div
             className={cn(
               "rounded-lg border px-3 py-2.5",
-              currentStage.color.railActive,
+              currentChrome.railActive,
             )}
           >
             <LearningJourneyBar
@@ -136,7 +137,7 @@ export function PracticeVerseRail({
 
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Verses
+            {verses.length === 1 ? "Verse" : "Verses"}
           </p>
           <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1">
             <AnimatePresence initial={false}>
@@ -144,6 +145,10 @@ export function PracticeVerseRail({
                 const active = verse.id === activeId;
                 const stage =
                   PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
+                const chrome = practiceChromeFor(
+                  verse.learnStage,
+                  verse.status,
+                );
                 return (
                   <motion.button
                     layout
@@ -152,7 +157,7 @@ export function PracticeVerseRail({
                     className={cn(
                       "inline-flex w-full items-center gap-2 rounded-full border px-2.5 py-1 text-left text-[11px] font-medium transition-colors",
                       active
-                        ? stage.color.railActive
+                        ? chrome.railActive
                         : "border-border/60 bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                     )}
                     onClick={() => onSelectVerse(verse.id)}
@@ -164,7 +169,7 @@ export function PracticeVerseRail({
                     <span
                       className={cn(
                         "h-2 w-2 shrink-0 rounded-full ring-1 ring-background/80",
-                        stage.color.dot,
+                        chrome.dot,
                       )}
                       aria-hidden
                     />

@@ -14,16 +14,19 @@ const LEARNING_RING_CEILING = 0.5;
 
 /**
  * How far along the four-band learning journey a verse is, as a fraction in
- * `[0, 1]`. Each of the `(MAX_LEARN_STAGE + 1)` bands occupies an equal slice;
- * reps banked on the current band fill that slice proportionally.
+ * `[0, 1]`. Progress is counted in exact reps across every band, so each
+ * successful Continue fills the same amount of the bar (1 / total required
+ * reps for this verse length). Cleared earlier bands count as fully banked;
+ * the current band contributes its banked `stageReps`.
  *
- * When `wordCount` is provided, the required-rep count for Guided and Challenge
- * is length-adjusted via {@link requiredRepsFor}, so the bar matches the card
- * and the server exactly.
+ * When `wordCount` is provided, Guided and Challenge required-rep counts are
+ * length-adjusted via {@link requiredRepsFor}, so the bar matches the card and
+ * the server exactly.
  *
  * Graduating out of learning (`reviewing` / `mastered`) is a full journey: the
  * scheduler resets `stageReps` to 0 on graduation while leaving `learnStage` at
- * From Memory, so without `status` the bar would incorrectly stick at 75%.
+ * From Memory, so without `status` the bar would incorrectly drop back to the
+ * From Memory floor.
  *
  * Pure: no React, no `Date.now()`.
  */
@@ -34,12 +37,24 @@ export function learningJourneyFraction(
   status?: MemoryStatus,
 ): number {
   if (status === "reviewing" || status === "mastered") return 1;
+
   const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
-  const required = Math.max(1, requiredRepsFor(clampedStage, wordCount));
-  const withinBand = Math.max(0, Math.min(1, stageReps / required));
-  const bandCount = MAX_LEARN_STAGE + 1;
-  const progress = (clampedStage + withinBand) / bandCount;
-  return Math.max(0, Math.min(1, progress));
+  const bankedOnCurrent = Math.max(0, stageReps);
+
+  let totalRequired = 0;
+  let completed = 0;
+  for (let stage = 0; stage <= MAX_LEARN_STAGE; stage += 1) {
+    const required = Math.max(1, requiredRepsFor(stage, wordCount));
+    totalRequired += required;
+    if (stage < clampedStage) {
+      completed += required;
+    } else if (stage === clampedStage) {
+      completed += Math.min(required, bankedOnCurrent);
+    }
+  }
+
+  if (totalRequired === 0) return 0;
+  return Math.max(0, Math.min(1, completed / totalRequired));
 }
 
 /**

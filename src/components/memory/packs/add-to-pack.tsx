@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Check, Loader2, Plus } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { usePaginatedQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
+import { usePaginatedQuery } from "convex-helpers/react/cache";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";

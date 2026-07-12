@@ -254,9 +254,11 @@ export default defineSchema({
     stageReps: v.optional(v.number()), // exact reps banked at the current band; a band clears only after its required reps (schema-optional for backfill, always written going forward)
     ease: v.number(), // 1.3 .. 2.8, starts 2.3
     intervalDays: v.number(),
-    dueAt: v.number(), // drives "due today" + dock badge
+    dueAt: v.number(), // drives review queue + dock badge (reviewing/mastered only)
     consecutiveCorrect: v.number(),
     lapses: v.number(),
+    // True after one successful early (pre-due) reschedule this interval; optional for backfill
+    earlyReviewApplied: v.optional(v.boolean()),
     lastReviewedAt: v.optional(v.number()),
     createdAt: v.number(),
   })

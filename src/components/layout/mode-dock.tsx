@@ -303,7 +303,14 @@ export function ModeDock() {
               {showBadge ? (
                 <span
                   aria-label={badgeLabel}
-                  className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-destructive-foreground"
+                  className={cn(
+                    "ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
+                    // Theme primary on the card; invert against the selected
+                    // primary pill so the count stays readable in every theme.
+                    isMemoryRoute
+                      ? "bg-primary-foreground text-primary"
+                      : "bg-primary text-primary-foreground",
+                  )}
                 >
                   {dueCount}
                 </span>

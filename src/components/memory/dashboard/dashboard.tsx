@@ -1,8 +1,9 @@
 import { Loader2, Play } from "lucide-react";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { computeStreak, overallAccuracy } from "@/lib/dashboard-buckets";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { KpiRow } from "./kpi-row";
 import { PracticeHeatmap } from "./practice-heatmap";
 import { MasteryBar } from "./mastery-bar";
@@ -16,7 +17,8 @@ const FORECAST_DAYS = 14;
 /**
  * The Memory progress dashboard: a "Today" hero (keeping Review reachable),
  * a KPI row, and inline SVG/CSS charts. All data is real and reactive; `now` is
- * supplied by the caller (never `Date.now()` inside Convex).
+ * supplied by the caller (never `Date.now()` inside Convex). Day buckets use
+ * the viewer's IANA timezone so streaks and heatmaps follow local midnights.
  *
  * Each section loads independently — the Today hero + Review render as
  * soon as `memoryStats` (the due count) resolves, so the primary review action
@@ -29,18 +31,22 @@ export function MemoryDashboard({
   now: number;
   onStartReview: () => void;
 }) {
+  const timeZone = getViewerTimeZone();
   const stats = useQuery(api.verseMemory.memoryStats, { now });
   const mastery = useQuery(api.verseMemory.masteryDistribution, { now });
   const heatmap = useQuery(api.verseMemory.reviewHeatmap, {
     now,
+    timeZone,
     days: HEATMAP_DAYS,
   });
   const trend = useQuery(api.verseMemory.accuracyTrend, {
     now,
+    timeZone,
     days: TREND_DAYS,
   });
   const forecast = useQuery(api.verseMemory.reviewForecast, {
     now,
+    timeZone,
     days: FORECAST_DAYS,
   });
 
@@ -61,18 +67,23 @@ export function MemoryDashboard({
 
   return (
     <div className="space-y-4">
-      <TodayHero due={stats?.due} onStartReview={onStartReview} />
+      {/* Header band: the Today hero and the KPI cluster share a row on large
+          screens so the top of the page stops being a near-empty wide card. */}
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-center">
+        <TodayHero due={stats?.due} onStartReview={onStartReview} />
+        <div className="lg:col-span-2">
+          <KpiRow
+            kpis={{
+              dueToday: stats?.due,
+              streak,
+              inMemory,
+              accuracy30d,
+            }}
+          />
+        </div>
+      </div>
 
-      <KpiRow
-        kpis={{
-          dueToday: stats?.due,
-          streakDays: streak,
-          inMemory,
-          accuracy30d,
-        }}
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {heatmap === undefined ? (
           <ChartSkeleton title="Practice" />
         ) : (

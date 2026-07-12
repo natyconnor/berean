@@ -10,6 +10,11 @@
  *    stages 0..3 (full | first-letters | cloze | hidden) within a session.
  *  - Reviewing phase (`reviewing` / `mastered`): the verse is recalled from
  *    hidden and the inter-review interval grows or shrinks with performance.
+ *
+ * Early practice (before `dueAt`) may reschedule once from "now" so a successful
+ * early review still counts — but further early successes leave the interval
+ * alone until the verse is due again. Long-term memory needs real time gaps;
+ * extra reps can still boost accuracy without accelerating the schedule.
  */
 
 /** Verse-memory lifecycle status. */
@@ -24,6 +29,12 @@ export interface MemorySchedule {
   dueAt: number;
   consecutiveCorrect: number;
   lapses: number;
+  /**
+   * True after a successful early (pre-due) review already advanced this
+   * interval. Cleared on the next due/overdue review or on a lapse. Extra early
+   * successes while this is set leave the schedule unchanged.
+   */
+  earlyReviewApplied: boolean;
 }
 
 /**
@@ -179,8 +190,28 @@ function computeDueAt(
   return Math.round(input.now + intervalDays * factor * DAY_MS);
 }
 
-function isLearningPhase(status: MemoryStatus): boolean {
+/** True while the verse is still on the learn ladder (not yet graduated). */
+export function isLearningPhase(status: MemoryStatus): boolean {
   return status === "new" || status === "learning";
+}
+
+/** True once the verse has graduated into spaced review. */
+export function isReviewPhase(status: MemoryStatus): boolean {
+  return status === "reviewing" || status === "mastered";
+}
+
+/**
+ * Whether a verse belongs in the review queue right now.
+ *
+ * Only `reviewing` / `mastered` verses with `dueAt <= now` qualify. Learning-
+ * phase verses keep `dueAt = now` so they stay available for practice, but they
+ * must not inflate the review queue, dock badge, or "due today" counts.
+ */
+export function isDueForReview(
+  schedule: Pick<MemorySchedule, "status" | "dueAt">,
+  now: number,
+): boolean {
+  return isReviewPhase(schedule.status) && schedule.dueAt <= now;
 }
 
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
@@ -200,6 +231,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
           dueAt: computeDueAt(r, s.intervalDays, intervalDays),
           consecutiveCorrect: s.consecutiveCorrect + 1,
           lapses: s.lapses,
+          earlyReviewApplied: false,
         };
       }
       // Advance to the next (lower-support) band; retry again this session.
@@ -212,6 +244,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
         dueAt: r.now,
         consecutiveCorrect: s.consecutiveCorrect + 1,
         lapses: s.lapses,
+        earlyReviewApplied: false,
       };
     }
     // Bank a rep on this band and try it again this session.
@@ -224,6 +257,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       dueAt: r.now,
       consecutiveCorrect: s.consecutiveCorrect + 1,
       lapses: s.lapses,
+      earlyReviewApplied: false,
     };
   }
 
@@ -238,6 +272,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       dueAt: r.now,
       consecutiveCorrect: s.consecutiveCorrect,
       lapses: s.lapses,
+      earlyReviewApplied: false,
     };
   }
 
@@ -255,6 +290,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       dueAt: r.now,
       consecutiveCorrect: 0,
       lapses: s.lapses,
+      earlyReviewApplied: false,
     };
   }
   if (s.learnStage > 0) {
@@ -268,6 +304,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       dueAt: r.now,
       consecutiveCorrect: 0,
       lapses: s.lapses,
+      earlyReviewApplied: false,
     };
   }
   return {
@@ -279,12 +316,16 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     dueAt: r.now,
     consecutiveCorrect: 0,
     lapses: s.lapses,
+    earlyReviewApplied: false,
   };
 }
 
 function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
+  const isEarly = r.now < s.dueAt;
+
   if (r.quality === "off") {
     // Lapse: reset the interval, ding the ease, and relearn from stage 0.
+    // Always applies even when early — a miss should not be ignored.
     const intervalDays = 1;
     return {
       status: "learning",
@@ -295,7 +336,14 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       dueAt: computeDueAt(r, s.intervalDays, intervalDays),
       consecutiveCorrect: 0,
       lapses: s.lapses + 1,
+      earlyReviewApplied: false,
     };
+  }
+
+  // One early success may push dueAt out from now; further early successes
+  // leave the schedule alone until the verse is due again.
+  if (isEarly && s.earlyReviewApplied) {
+    return s;
   }
 
   if (r.quality === "close") {
@@ -310,6 +358,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       dueAt: computeDueAt(r, s.intervalDays, intervalDays),
       consecutiveCorrect: s.consecutiveCorrect,
       lapses: s.lapses,
+      earlyReviewApplied: isEarly,
     };
   }
 
@@ -324,6 +373,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     dueAt: computeDueAt(r, s.intervalDays, intervalDays),
     consecutiveCorrect: s.consecutiveCorrect + 1,
     lapses: s.lapses,
+    earlyReviewApplied: isEarly,
   };
 }
 
@@ -356,5 +406,6 @@ export function initialSchedule(now: number): MemorySchedule {
     dueAt: now,
     consecutiveCorrect: 0,
     lapses: 0,
+    earlyReviewApplied: false,
   };
 }

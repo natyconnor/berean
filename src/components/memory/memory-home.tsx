@@ -1,66 +1,36 @@
-import { useMemo, useState } from "react";
 import { Dumbbell } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { memoryPracticeSearch } from "@/lib/memory-practice-search";
+import { memoryReviewSearch } from "@/lib/memory-review-search";
 
 import { api } from "../../../convex/_generated/api";
 import { MemoryDashboard } from "./dashboard/dashboard";
 import { MemoryLibrary } from "./memory-library";
 import { PackList } from "./packs/pack-list";
-import { PracticeBoard, type PracticeVerse } from "./practice/practice-board";
-import { ReviewPlayer } from "./review-player";
 
 /**
  * Memory home: the verse-memory experience surfaced at `/memory`. Leads with the
  * progress dashboard (whose "Today" hero exposes the Review action) and the
- * library of every hearted verse. Review and Practice are in-page surfaces
- * toggled via `isReviewing` / `isPracticing` — no routes — mirroring the old
- * study-hub Today-queue pattern.
+ * library of every hearted verse. Review and Practice live on their own routes
+ * (`/memory/review`, `/memory/practice`) so reloads and back/forward keep you
+ * in-session.
  */
 export function MemoryHome() {
   // Refreshes on an interval so the due count stays live while the tab is open
   // (verses whose dueAt lands after mount get counted). Passed as a query arg;
   // never Date.now() inside Convex.
   const now = useLiveNow();
-  const [isReviewing, setIsReviewing] = useState(false);
-  const [isPracticing, setIsPracticing] = useState(false);
+  const navigate = useNavigate();
 
-  // v1 practice set: every hearted verse. Pack-specific entry points come in a
-  // later PR. Shares the cached `savedVerses.listAll` subscription with the
-  // attempt-recorder so there's no duplicate round trip.
+  // Shares the cached `savedVerses.listAll` subscription so Practice can tell
+  // whether the header action is available without a duplicate round trip.
   const savedVerses = useQuery(api.savedVerses.listAll, {});
-  const practiceVerses = useMemo<PracticeVerse[]>(
-    () =>
-      (savedVerses ?? []).map((verse) => ({
-        reference: {
-          book: verse.book,
-          chapter: verse.chapter,
-          startVerse: verse.startVerse,
-          endVerse: verse.endVerse,
-        },
-        learnStage: verse.memory?.learnStage ?? 0,
-        stageReps: verse.memory?.stageReps ?? 0,
-        status: verse.memory?.status,
-      })),
-    [savedVerses],
-  );
-  const canPractice = practiceVerses.length > 0;
-
-  if (isReviewing) {
-    return <ReviewPlayer onExit={() => setIsReviewing(false)} />;
-  }
-
-  if (isPracticing) {
-    return (
-      <PracticeBoard
-        verses={practiceVerses}
-        onExit={() => setIsPracticing(false)}
-      />
-    );
-  }
+  const canPractice = (savedVerses?.length ?? 0) > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -76,7 +46,9 @@ export function MemoryHome() {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={() => setIsPracticing(true)}
+            onClick={() =>
+              void navigate({ to: "/memory/practice", search: {} })
+            }
             disabled={!canPractice}
           >
             <Dumbbell className="h-4 w-4" aria-hidden />
@@ -85,13 +57,36 @@ export function MemoryHome() {
         </div>
       </header>
       <ScrollArea className="flex-1 min-h-0">
-        <div className="max-w-2xl mx-auto px-5 py-6 space-y-8">
+        <div className="mx-auto max-w-6xl space-y-8 px-5 py-6">
           <MemoryDashboard
             now={now}
-            onStartReview={() => setIsReviewing(true)}
+            onStartReview={() => void navigate({ to: "/memory/review" })}
           />
-          <PackList now={now} />
-          <MemoryLibrary now={now} />
+          {/* Library is the main column; Packs sits as a sidebar on large
+              screens. Explicit col/row placement keeps Packs first in DOM order
+              (so it stacks on top on mobile) while rendering on the right at lg. */}
+          <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+            <div className="lg:col-start-3 lg:row-start-1">
+              <PackList now={now} />
+            </div>
+            <div className="lg:col-span-2 lg:col-start-1 lg:row-start-1">
+              <MemoryLibrary
+                now={now}
+                onPracticeVerse={(verse) => {
+                  void navigate({
+                    to: "/memory/practice",
+                    search: memoryPracticeSearch(verse.reference),
+                  });
+                }}
+                onReviewVerse={(verse) => {
+                  void navigate({
+                    to: "/memory/review",
+                    search: memoryReviewSearch(verse.reference),
+                  });
+                }}
+              />
+            </div>
+          </div>
         </div>
       </ScrollArea>
     </div>

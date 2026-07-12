@@ -4,14 +4,19 @@ import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findVerseMemory, getOrCreateVerseMemory } from "./lib/verseMemory";
-import { scheduleNext } from "../src/lib/memory-scheduler";
+import {
+  isDueForReview,
+  isReviewPhase,
+  scheduleNext,
+} from "../src/lib/memory-scheduler";
 import {
   bucketAccuracyAverages,
   bucketForecastCounts,
   bucketReviewCounts,
-  DAY_MS,
-  startOfUtcDay,
-  utcDayStarts,
+  normalizeTimeZone,
+  startOfZonedDay,
+  zonedDayStarts,
+  zonedUpcomingDayStarts,
 } from "../src/lib/dashboard-buckets";
 
 /** Clamp a caller-supplied day count to a sane bounded window. */
@@ -48,7 +53,7 @@ const modeValidator = v.union(
   v.literal("practice"),
 );
 
-/** The 7-field schedule returned by the pure scheduler. */
+/** The schedule returned by the pure scheduler. */
 const memoryScheduleValidator = v.object({
   status: statusValidator,
   learnStage: v.number(),
@@ -58,6 +63,7 @@ const memoryScheduleValidator = v.object({
   dueAt: v.number(),
   consecutiveCorrect: v.number(),
   lapses: v.number(),
+  earlyReviewApplied: v.boolean(),
 });
 
 /** A full `verseMemory` row (system `_creationTime` omitted). */
@@ -73,6 +79,7 @@ const verseMemoryValidator = v.object({
   dueAt: v.number(),
   consecutiveCorrect: v.number(),
   lapses: v.number(),
+  earlyReviewApplied: v.optional(v.boolean()),
   lastReviewedAt: v.optional(v.number()),
   createdAt: v.number(),
 });
@@ -89,6 +96,7 @@ const dueQueueItem = v.object({
   dueAt: v.number(),
   consecutiveCorrect: v.number(),
   lapses: v.number(),
+  earlyReviewApplied: v.optional(v.boolean()),
   lastReviewedAt: v.optional(v.number()),
   createdAt: v.number(),
   book: v.string(),
@@ -110,17 +118,20 @@ function toRowView(row: Doc<"verseMemory">) {
     dueAt: row.dueAt,
     consecutiveCorrect: row.consecutiveCorrect,
     lapses: row.lapses,
+    earlyReviewApplied: row.earlyReviewApplied,
     lastReviewedAt: row.lastReviewedAt,
     createdAt: row.createdAt,
   };
 }
 
 /**
- * Verses due for study at `now` (soonest first), joined to their verse ref.
+ * Verses due for review at `now` (soonest first), joined to their verse ref.
  *
- * Heart-aware: only verses that are currently hearted (have a `savedVerses`
- * row) are returned. A verse un-hearted after review keeps its `verseMemory`
- * row as durable history, but drops out of the live due queue until re-hearted.
+ * Only `reviewing` / `mastered` verses with `dueAt <= now` qualify — learning-
+ * phase verses are practiced from the verse detail / learn flow, not the review
+ * queue. Heart-aware: only currently hearted verses (have a `savedVerses` row)
+ * are returned. A verse un-hearted after review keeps its `verseMemory` row as
+ * durable history, but drops out of the live due queue until re-hearted.
  * `now` is passed in by the caller so the query stays deterministic/cacheable.
  */
 export const dueQueue = query({
@@ -153,6 +164,7 @@ export const dueQueue = query({
       dueAt: number;
       consecutiveCorrect: number;
       lapses: number;
+      earlyReviewApplied?: boolean;
       lastReviewedAt?: number;
       createdAt: number;
       book: string;
@@ -163,6 +175,7 @@ export const dueQueue = query({
 
     for (const row of dueRows) {
       if (items.length >= limit) break;
+      if (!isDueForReview(row, args.now)) continue;
 
       const saved = await ctx.db
         .query("savedVerses")
@@ -186,6 +199,7 @@ export const dueQueue = query({
         dueAt: row.dueAt,
         consecutiveCorrect: row.consecutiveCorrect,
         lapses: row.lapses,
+        earlyReviewApplied: row.earlyReviewApplied,
         lastReviewedAt: row.lastReviewedAt,
         createdAt: row.createdAt,
         book: ref.book,
@@ -200,8 +214,9 @@ export const dueQueue = query({
 });
 
 /**
- * Cheap count of verses due at `now`. Heart-aware: only currently-hearted
- * verses (with a `savedVerses` row) are counted. Drives the dock badge.
+ * Cheap count of verses due for review at `now` (`reviewing` / `mastered`
+ * only). Heart-aware: only currently-hearted verses (with a `savedVerses` row)
+ * are counted. Drives the dock badge.
  */
 export const dueCount = query({
   args: { now: v.number() },
@@ -221,6 +236,7 @@ export const dueCount = query({
 
     let count = 0;
     for (const row of dueRows) {
+      if (!isDueForReview(row, args.now)) continue;
       const saved = await ctx.db
         .query("savedVerses")
         .withIndex("by_userId_verseRefId", (q) =>
@@ -289,6 +305,7 @@ export const recordAttempt = mutation({
         dueAt: memory.dueAt,
         consecutiveCorrect: memory.consecutiveCorrect,
         lapses: memory.lapses,
+        earlyReviewApplied: memory.earlyReviewApplied ?? false,
       },
       {
         quality: args.quality,
@@ -308,6 +325,7 @@ export const recordAttempt = mutation({
       dueAt: next.dueAt,
       consecutiveCorrect: next.consecutiveCorrect,
       lapses: next.lapses,
+      earlyReviewApplied: next.earlyReviewApplied,
       lastReviewedAt: args.now,
     });
 
@@ -347,7 +365,8 @@ const memoryStatsValidator = v.object({
 });
 
 /**
- * Per-status counts for the current user, plus a due-now tally.
+ * Per-status counts for the current user, plus a due-now tally of review-phase
+ * verses (`reviewing` / `mastered` with `dueAt <= now`).
  *
  * Heart-aware: the canonical in-Memory set is the user's hearted verses
  * (`savedVerses`), so we iterate those and join each to its `verseMemory` row.
@@ -382,7 +401,7 @@ export const memoryStats = query({
       if (!memory) continue;
       stats[memory.status] += 1;
       stats.total += 1;
-      if (memory.dueAt <= args.now) {
+      if (isDueForReview(memory, args.now)) {
         stats.due += 1;
       }
     }
@@ -396,18 +415,23 @@ const dayCountValidator = v.object({
 });
 
 /**
- * Per-day review counts over the last `days` (default 30, UTC day buckets).
+ * Per-day review counts over the last `days` (default 30, local day buckets).
  *
  * Bounded by the time window via the `by_userId_createdAt` index range on
- * `createdAt`, so it never scans the whole log. `now` is passed in to keep the
- * query deterministic; see `dashboard-buckets.ts` for the UTC-day simplification.
+ * `createdAt`, so it never scans the whole log. `now` and `timeZone` are
+ * passed in to keep the query deterministic; see `dashboard-buckets.ts`.
  */
 export const reviewHeatmap = query({
-  args: { now: v.number(), days: v.optional(v.number()) },
+  args: {
+    now: v.number(),
+    timeZone: v.string(),
+    days: v.optional(v.number()),
+  },
   returns: v.array(dayCountValidator),
   handler: async (ctx, args) => {
     const days = normalizeDays(args.days);
-    const dayStarts = utcDayStarts(args.now, days);
+    const timeZone = normalizeTimeZone(args.timeZone);
+    const dayStarts = zonedDayStarts(args.now, days, timeZone);
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
       return dayStarts.map((dayStart) => ({ dayStart, count: 0 }));
@@ -425,6 +449,7 @@ export const reviewHeatmap = query({
       rows.map((row) => row.createdAt),
       args.now,
       days,
+      timeZone,
     );
     return dayStarts.map((dayStart, i) => ({ dayStart, count: counts[i] }));
   },
@@ -437,17 +462,22 @@ const dayAccuracyValidator = v.object({
 });
 
 /**
- * Per-day average accuracy over the last `days` (default 30, UTC day buckets).
+ * Per-day average accuracy over the last `days` (default 30, local day buckets).
  *
  * Days with no reviews report `average: null` (not 0). Bounded by the window
  * via the `by_userId_createdAt` index range on `createdAt`.
  */
 export const accuracyTrend = query({
-  args: { now: v.number(), days: v.optional(v.number()) },
+  args: {
+    now: v.number(),
+    timeZone: v.string(),
+    days: v.optional(v.number()),
+  },
   returns: v.array(dayAccuracyValidator),
   handler: async (ctx, args) => {
     const days = normalizeDays(args.days);
-    const dayStarts = utcDayStarts(args.now, days);
+    const timeZone = normalizeTimeZone(args.timeZone);
+    const dayStarts = zonedDayStarts(args.now, days, timeZone);
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
       return dayStarts.map((dayStart) => ({
@@ -469,6 +499,7 @@ export const accuracyTrend = query({
       rows.map((row) => ({ createdAt: row.createdAt, accuracy: row.accuracy })),
       args.now,
       days,
+      timeZone,
     );
     return dayStarts.map((dayStart, i) => ({
       dayStart,
@@ -479,31 +510,38 @@ export const accuracyTrend = query({
 });
 
 /**
- * Count of verses due per upcoming day over the next `days` (default 30).
+ * Count of review-phase verses due per upcoming day over the next `days`
+ * (default 30). Learning-phase verses are excluded.
  *
  * Overdue verses are folded into today (day 0). Heart-aware: un-hearted verses
  * (no `savedVerses` row) are skipped even though their memory row survives.
  * Reads through `by_userId_dueAt`, bounded above by the end of the window; the
  * result set is at most the user's verse-memory corpus (same bound as
- * `memoryStats`).
+ * `memoryStats`). Day buckets use the viewer's IANA `timeZone`.
  */
 export const reviewForecast = query({
-  args: { now: v.number(), days: v.optional(v.number()) },
+  args: {
+    now: v.number(),
+    timeZone: v.string(),
+    days: v.optional(v.number()),
+  },
   returns: v.array(dayCountValidator),
   handler: async (ctx, args) => {
     const days = normalizeDays(args.days);
-    const todayStart = startOfUtcDay(args.now);
-    const dayStarts: number[] = [];
-    for (let i = 0; i < days; i += 1) {
-      dayStarts.push(todayStart + i * DAY_MS);
-    }
+    const timeZone = normalizeTimeZone(args.timeZone);
+    const dayStarts = zonedUpcomingDayStarts(args.now, days, timeZone);
 
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
       return dayStarts.map((dayStart) => ({ dayStart, count: 0 }));
     }
 
-    const windowEnd = todayStart + days * DAY_MS;
+    // Exclusive end: local midnight of the day after the last forecast bucket.
+    const lastDayStart = dayStarts[days - 1] ?? dayStarts[0];
+    const windowEnd = startOfZonedDay(
+      lastDayStart + 36 * 60 * 60 * 1000,
+      timeZone,
+    );
     const rows = await ctx.db
       .query("verseMemory")
       .withIndex("by_userId_dueAt", (q) =>
@@ -513,6 +551,9 @@ export const reviewForecast = query({
 
     const dueAts: number[] = [];
     for (const row of rows) {
+      // Learning-phase verses keep dueAt = now for practice availability, but
+      // they are not part of the review forecast.
+      if (!isReviewPhase(row.status)) continue;
       const saved = await ctx.db
         .query("savedVerses")
         .withIndex("by_userId_verseRefId", (q) =>
@@ -523,7 +564,7 @@ export const reviewForecast = query({
       dueAts.push(row.dueAt);
     }
 
-    const counts = bucketForecastCounts(dueAts, args.now, days);
+    const counts = bucketForecastCounts(dueAts, args.now, days, timeZone);
     return dayStarts.map((dayStart, i) => ({ dayStart, count: counts[i] }));
   },
 });
@@ -899,7 +940,7 @@ export const verseDetail = query({
       endVerse: ref.endVerse,
       isHearted: saved !== null,
       heartedAt: saved?.createdAt ?? null,
-      isDue: memory.dueAt <= args.now,
+      isDue: isDueForReview(memory, args.now),
       status: memory.status,
       learnStage: memory.learnStage,
       stageReps: memory.stageReps,

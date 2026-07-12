@@ -9,6 +9,7 @@ import {
   requiredRepsFor,
   SUPPORT_BANDS,
   initialSchedule,
+  isDueForReview,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -39,6 +40,7 @@ function learningAt(stage: number, stageReps = 0): MemorySchedule {
     dueAt: NOW,
     consecutiveCorrect: 0,
     lapses: 0,
+    earlyReviewApplied: false,
   };
 }
 
@@ -52,6 +54,7 @@ function reviewing(overrides: Partial<MemorySchedule> = {}): MemorySchedule {
     dueAt: NOW,
     consecutiveCorrect: 3,
     lapses: 0,
+    earlyReviewApplied: false,
     ...overrides,
   };
 }
@@ -72,6 +75,7 @@ describe("initialSchedule", () => {
       dueAt: NOW,
       consecutiveCorrect: 0,
       lapses: 0,
+      earlyReviewApplied: false,
     });
   });
 });
@@ -265,6 +269,98 @@ describe("reviewing phase grades", () => {
     expect(next.status).toBe("learning");
     expect(next.learnStage).toBe(0);
     expect(next.consecutiveCorrect).toBe(0);
+    expect(next.earlyReviewApplied).toBe(false);
+  });
+});
+
+describe("early review boost (once per interval)", () => {
+  it("first successful early review grows the interval from now", () => {
+    const s = reviewing({
+      intervalDays: 5,
+      ease: 2.3,
+      dueAt: NOW + 2 * DAY_MS,
+      earlyReviewApplied: false,
+    });
+    const next = scheduleNext(s, review({ quality: "exact" }));
+    expect(next.intervalDays).toBeCloseTo(5 * 2.3, 5);
+    expect(next.dueAt).toBeGreaterThan(NOW);
+    expect(next.earlyReviewApplied).toBe(true);
+  });
+
+  it("second early success leaves interval and dueAt unchanged", () => {
+    const first = scheduleNext(
+      reviewing({
+        intervalDays: 5,
+        ease: 2.3,
+        dueAt: NOW + 2 * DAY_MS,
+        earlyReviewApplied: false,
+      }),
+      review({ quality: "exact" }),
+    );
+    const second = scheduleNext(
+      first,
+      review({ quality: "exact", now: NOW + DAY_MS, accuracy: 99 }),
+    );
+    expect(second.intervalDays).toBe(first.intervalDays);
+    expect(second.dueAt).toBe(first.dueAt);
+    expect(second.ease).toBe(first.ease);
+    expect(second.consecutiveCorrect).toBe(first.consecutiveCorrect);
+    expect(second.earlyReviewApplied).toBe(true);
+  });
+
+  it("due review after an early boost grows again and clears the flag", () => {
+    const afterEarly = scheduleNext(
+      reviewing({
+        intervalDays: 5,
+        ease: 2.3,
+        dueAt: NOW + 2 * DAY_MS,
+        earlyReviewApplied: false,
+      }),
+      review({ quality: "exact" }),
+    );
+    const whenDue = scheduleNext(
+      afterEarly,
+      review({ quality: "exact", now: afterEarly.dueAt }),
+    );
+    expect(whenDue.intervalDays).toBeCloseTo(
+      afterEarly.intervalDays * afterEarly.ease,
+      5,
+    );
+    expect(whenDue.earlyReviewApplied).toBe(false);
+    expect(whenDue.dueAt).toBeGreaterThan(afterEarly.dueAt);
+  });
+
+  it("early close also consumes the one-time boost", () => {
+    const s = reviewing({
+      intervalDays: 5,
+      ease: 2.3,
+      dueAt: NOW + DAY_MS,
+      earlyReviewApplied: false,
+      consecutiveCorrect: 3,
+    });
+    const first = scheduleNext(s, review({ quality: "close" }));
+    expect(first.earlyReviewApplied).toBe(true);
+    expect(first.intervalDays).toBeCloseTo(5 * 2.3 * 0.8, 5);
+
+    const second = scheduleNext(
+      first,
+      review({ quality: "close", now: NOW + 1 }),
+    );
+    expect(second).toEqual(first);
+  });
+
+  it("early off still lapses and clears the early-boost flag", () => {
+    const s = reviewing({
+      intervalDays: 10,
+      ease: 2.3,
+      dueAt: NOW + DAY_MS,
+      earlyReviewApplied: true,
+      lapses: 0,
+    });
+    const next = scheduleNext(s, review({ quality: "off" }));
+    expect(next.status).toBe("learning");
+    expect(next.earlyReviewApplied).toBe(false);
+    expect(next.lapses).toBe(1);
   });
 });
 
@@ -362,8 +458,30 @@ describe("requiredRepsFor length curve", () => {
   });
 
   it("interpolates at a midpoint (17 words, t=0.5)", () => {
-    // Guided: 3 + (7-3)*0.5 = 5; Challenge: 5 + (12-5)*0.5 = 8.5 → 9
+    // Guided: 3 + (7-3)*0.5 = 5; Challenge: 5 + (12-5)*0.5 = 9
     expect(requiredRepsFor(1, 17)).toBe(5);
     expect(requiredRepsFor(2, 17)).toBe(9);
+  });
+});
+
+describe("isDueForReview", () => {
+  it("excludes new and learning verses even when dueAt is now", () => {
+    expect(isDueForReview(initialSchedule(NOW), NOW)).toBe(false);
+    expect(isDueForReview(learningAt(2), NOW)).toBe(false);
+  });
+
+  it("includes reviewing and mastered verses when dueAt <= now", () => {
+    expect(isDueForReview(reviewing({ dueAt: NOW }), NOW)).toBe(true);
+    expect(isDueForReview(reviewing({ dueAt: NOW - 1 }), NOW)).toBe(true);
+    expect(
+      isDueForReview(
+        reviewing({ status: "mastered", dueAt: NOW, intervalDays: 40 }),
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("excludes reviewing verses scheduled in the future", () => {
+    expect(isDueForReview(reviewing({ dueAt: NOW + DAY_MS }), NOW)).toBe(false);
   });
 });

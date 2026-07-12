@@ -21,8 +21,12 @@ import { Route as StudyNewRouteImport } from './routes/study/new'
 import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
 import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
 import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
+import { Route as MemoryReviewRouteImport } from './routes/memory/review'
+import { Route as MemoryPracticeRouteImport } from './routes/memory/practice'
 import { Route as MemoryNewRouteImport } from './routes/memory/new'
 import { Route as MemoryPackIdRouteImport } from './routes/memory/$packId'
+import { Route as MemoryPackIdReviewRouteImport } from './routes/memory_.$packId.review'
+import { Route as MemoryPackIdPracticeRouteImport } from './routes/memory_.$packId.practice'
 
 const ThemeTestRoute = ThemeTestRouteImport.update({
   id: '/theme-test',
@@ -84,6 +88,16 @@ const PassagePassageIdRoute = PassagePassageIdRouteImport.update({
   path: '/passage/$passageId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryReviewRoute = MemoryReviewRouteImport.update({
+  id: '/memory/review',
+  path: '/memory/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryPracticeRoute = MemoryPracticeRouteImport.update({
+  id: '/memory/practice',
+  path: '/memory/practice',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MemoryNewRoute = MemoryNewRouteImport.update({
   id: '/memory/new',
   path: '/memory/new',
@@ -92,6 +106,16 @@ const MemoryNewRoute = MemoryNewRouteImport.update({
 const MemoryPackIdRoute = MemoryPackIdRouteImport.update({
   id: '/memory/$packId',
   path: '/memory/$packId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryPackIdReviewRoute = MemoryPackIdReviewRouteImport.update({
+  id: '/memory_/$packId/review',
+  path: '/memory/$packId/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryPackIdPracticeRoute = MemoryPackIdPracticeRouteImport.update({
+  id: '/memory_/$packId/practice',
+  path: '/memory/$packId/practice',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -103,6 +127,8 @@ export interface FileRoutesByFullPath {
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
   '/memory/new': typeof MemoryNewRoute
+  '/memory/practice': typeof MemoryPracticeRoute
+  '/memory/review': typeof MemoryReviewRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -110,6 +136,8 @@ export interface FileRoutesByFullPath {
   '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
+  '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
+  '/memory/$packId/review': typeof MemoryPackIdReviewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -119,6 +147,8 @@ export interface FileRoutesByTo {
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
   '/memory/new': typeof MemoryNewRoute
+  '/memory/practice': typeof MemoryPracticeRoute
+  '/memory/review': typeof MemoryReviewRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -126,6 +156,8 @@ export interface FileRoutesByTo {
   '/memory': typeof MemoryIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/study': typeof StudyIndexRoute
+  '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
+  '/memory/$packId/review': typeof MemoryPackIdReviewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -136,6 +168,8 @@ export interface FileRoutesById {
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
   '/memory/new': typeof MemoryNewRoute
+  '/memory/practice': typeof MemoryPracticeRoute
+  '/memory/review': typeof MemoryReviewRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -143,6 +177,8 @@ export interface FileRoutesById {
   '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
+  '/memory_/$packId/practice': typeof MemoryPackIdPracticeRoute
+  '/memory_/$packId/review': typeof MemoryPackIdReviewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -154,6 +190,8 @@ export interface FileRouteTypes {
     | '/theme-test'
     | '/memory/$packId'
     | '/memory/new'
+    | '/memory/practice'
+    | '/memory/review'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -161,6 +199,8 @@ export interface FileRouteTypes {
     | '/memory/'
     | '/settings/'
     | '/study/'
+    | '/memory/$packId/practice'
+    | '/memory/$packId/review'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -170,6 +210,8 @@ export interface FileRouteTypes {
     | '/theme-test'
     | '/memory/$packId'
     | '/memory/new'
+    | '/memory/practice'
+    | '/memory/review'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -177,6 +219,8 @@ export interface FileRouteTypes {
     | '/memory'
     | '/settings'
     | '/study'
+    | '/memory/$packId/practice'
+    | '/memory/$packId/review'
   id:
     | '__root__'
     | '/'
@@ -186,6 +230,8 @@ export interface FileRouteTypes {
     | '/theme-test'
     | '/memory/$packId'
     | '/memory/new'
+    | '/memory/practice'
+    | '/memory/review'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -193,6 +239,8 @@ export interface FileRouteTypes {
     | '/memory/'
     | '/settings/'
     | '/study/'
+    | '/memory_/$packId/practice'
+    | '/memory_/$packId/review'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -203,6 +251,8 @@ export interface RootRouteChildren {
   ThemeTestRoute: typeof ThemeTestRoute
   MemoryPackIdRoute: typeof MemoryPackIdRoute
   MemoryNewRoute: typeof MemoryNewRoute
+  MemoryPracticeRoute: typeof MemoryPracticeRoute
+  MemoryReviewRoute: typeof MemoryReviewRoute
   PassagePassageIdRoute: typeof PassagePassageIdRoute
   SettingsTagsRoute: typeof SettingsTagsRoute
   StudySessionIdRoute: typeof StudySessionIdRoute
@@ -210,6 +260,8 @@ export interface RootRouteChildren {
   MemoryIndexRoute: typeof MemoryIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
   StudyIndexRoute: typeof StudyIndexRoute
+  MemoryPackIdPracticeRoute: typeof MemoryPackIdPracticeRoute
+  MemoryPackIdReviewRoute: typeof MemoryPackIdReviewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -298,6 +350,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PassagePassageIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/review': {
+      id: '/memory/review'
+      path: '/memory/review'
+      fullPath: '/memory/review'
+      preLoaderRoute: typeof MemoryReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory/practice': {
+      id: '/memory/practice'
+      path: '/memory/practice'
+      fullPath: '/memory/practice'
+      preLoaderRoute: typeof MemoryPracticeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/memory/new': {
       id: '/memory/new'
       path: '/memory/new'
@@ -312,6 +378,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryPackIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory_/$packId/review': {
+      id: '/memory_/$packId/review'
+      path: '/memory/$packId/review'
+      fullPath: '/memory/$packId/review'
+      preLoaderRoute: typeof MemoryPackIdReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory_/$packId/practice': {
+      id: '/memory_/$packId/practice'
+      path: '/memory/$packId/practice'
+      fullPath: '/memory/$packId/practice'
+      preLoaderRoute: typeof MemoryPackIdPracticeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -323,6 +403,8 @@ const rootRouteChildren: RootRouteChildren = {
   ThemeTestRoute: ThemeTestRoute,
   MemoryPackIdRoute: MemoryPackIdRoute,
   MemoryNewRoute: MemoryNewRoute,
+  MemoryPracticeRoute: MemoryPracticeRoute,
+  MemoryReviewRoute: MemoryReviewRoute,
   PassagePassageIdRoute: PassagePassageIdRoute,
   SettingsTagsRoute: SettingsTagsRoute,
   StudySessionIdRoute: StudySessionIdRoute,
@@ -330,6 +412,8 @@ const rootRouteChildren: RootRouteChildren = {
   MemoryIndexRoute: MemoryIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   StudyIndexRoute: StudyIndexRoute,
+  MemoryPackIdPracticeRoute: MemoryPackIdPracticeRoute,
+  MemoryPackIdReviewRoute: MemoryPackIdReviewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

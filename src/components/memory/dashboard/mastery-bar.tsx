@@ -1,4 +1,9 @@
-import { chartColor } from "./svg-chart-helpers";
+import type { MemoryStatus } from "@/lib/memory-scheduler";
+import {
+  MEMORY_STATUS_ORDER,
+  MEMORY_STATUS_STYLE,
+} from "@/lib/memory-status-style";
+import { cn } from "@/lib/utils";
 
 export interface MasteryDistribution {
   new: number;
@@ -8,30 +13,19 @@ export interface MasteryDistribution {
   total: number;
 }
 
-interface Segment {
-  key: keyof Omit<MasteryDistribution, "total">;
-  label: string;
-  color: string;
-}
-
-// Order matters: left-to-right reflects the memorization lifecycle.
-const SEGMENTS: Segment[] = [
-  { key: "new", label: "New", color: chartColor(3) },
-  { key: "learning", label: "Learning", color: chartColor(4) },
-  { key: "reviewing", label: "Reviewing", color: chartColor(1) },
-  { key: "mastered", label: "Mastered", color: chartColor(2) },
-];
-
 /** Horizontal stacked bar of verses by lifecycle status. */
 export function MasteryBar({ data }: { data: MasteryDistribution }) {
   const total = data.total;
-  const visible = SEGMENTS.filter((s) => data[s.key] > 0);
+  const visible = MEMORY_STATUS_ORDER.filter((key) => data[key] > 0);
 
   const summary =
     total === 0
       ? "No verses yet."
       : visible
-          .map((s) => `${data[s.key]} ${s.label.toLowerCase()}`)
+          .map(
+            (key) =>
+              `${data[key]} ${MEMORY_STATUS_STYLE[key].label.toLowerCase()}`,
+          )
           .join(", ");
 
   return (
@@ -52,39 +46,63 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
           <div
             role="img"
             aria-label={`Mastery distribution: ${summary}.`}
-            className="mt-3 flex h-4 w-full overflow-hidden rounded-full"
+            className="mt-3 flex h-4 w-full gap-0.5 overflow-hidden rounded-full"
           >
-            {visible.map((s) => (
+            {visible.map((key) => (
               <div
-                key={s.key}
-                className="h-full"
-                style={{
-                  width: `${(data[s.key] / total) * 100}%`,
-                  backgroundColor: s.color,
-                }}
+                key={key}
+                className={cn(
+                  "h-full first:rounded-l-full last:rounded-r-full",
+                  MEMORY_STATUS_STYLE[key].bar,
+                )}
+                style={{ width: `${(data[key] / total) * 100}%` }}
               />
             ))}
           </div>
-          <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-            {SEGMENTS.map((s) => (
-              <li
-                key={s.key}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground"
-              >
-                <span
-                  aria-hidden
-                  className="inline-block h-2.5 w-2.5 rounded-sm"
-                  style={{ backgroundColor: s.color }}
-                />
-                <span className="font-medium tabular-nums text-foreground">
-                  {data[s.key]}
-                </span>
-                {s.label}
-              </li>
+          <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {MEMORY_STATUS_ORDER.map((key) => (
+              <StatusLegendItem key={key} status={key} count={data[key]} />
             ))}
           </ul>
         </>
       )}
     </section>
+  );
+}
+
+function StatusLegendItem({
+  status,
+  count,
+}: {
+  status: MemoryStatus;
+  count: number;
+}) {
+  const style = MEMORY_STATUS_STYLE[status];
+  const muted = count === 0;
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-1.5 text-xs",
+        muted ? "text-muted-foreground/60" : "text-muted-foreground",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "inline-block h-2.5 w-2.5 shrink-0 rounded-sm",
+          style.dot,
+          muted && "opacity-40",
+        )}
+      />
+      <span
+        className={cn(
+          "font-semibold tabular-nums",
+          muted ? "text-muted-foreground/70" : "text-foreground",
+        )}
+      >
+        {count}
+      </span>
+      {style.label}
+    </li>
   );
 }
