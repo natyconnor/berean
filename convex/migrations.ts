@@ -85,3 +85,82 @@ export const backfillVerseMemory = internalMutation({
     };
   },
 });
+
+/**
+ * Backfill the denormalized `verseMemory.isHearted` flag from the canonical
+ * `savedVerses` table in bounded batches.
+ */
+export const backfillVerseMemoryIsHearted = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+    scannedSoFar: v.optional(v.number()),
+    patchedSoFar: v.optional(v.number()),
+    unchangedSoFar: v.optional(v.number()),
+  },
+  returns: v.object({
+    batchScanned: v.number(),
+    batchPatched: v.number(),
+    batchUnchanged: v.number(),
+    totalScanned: v.number(),
+    totalPatched: v.number(),
+    totalUnchanged: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? DEFAULT_BACKFILL_BATCH_SIZE;
+
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("verseMemory")
+      .paginate({ cursor: args.cursor ?? null, numItems: batchSize });
+
+    let patched = 0;
+    let unchanged = 0;
+
+    for (const row of page) {
+      const saved = await ctx.db
+        .query("savedVerses")
+        .withIndex("by_userId_verseRefId", (q) =>
+          q.eq("userId", row.userId).eq("verseRefId", row.verseRefId),
+        )
+        .unique();
+      const isHearted = saved !== null;
+      if (row.isHearted === isHearted) {
+        unchanged += 1;
+        continue;
+      }
+      await ctx.db.patch(row._id, { isHearted });
+      patched += 1;
+    }
+
+    const totalScanned = (args.scannedSoFar ?? 0) + page.length;
+    const totalPatched = (args.patchedSoFar ?? 0) + patched;
+    const totalUnchanged = (args.unchangedSoFar ?? 0) + unchanged;
+
+    if (!isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.migrations.backfillVerseMemoryIsHearted,
+        {
+          cursor: continueCursor,
+          batchSize: args.batchSize,
+          scannedSoFar: totalScanned,
+          patchedSoFar: totalPatched,
+          unchangedSoFar: totalUnchanged,
+        },
+      );
+    }
+
+    return {
+      batchScanned: page.length,
+      batchPatched: patched,
+      batchUnchanged: unchanged,
+      totalScanned,
+      totalPatched,
+      totalUnchanged,
+      isDone,
+      continueCursor: isDone ? null : continueCursor,
+    };
+  },
+});

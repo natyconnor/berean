@@ -3,7 +3,11 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
-import { findVerseMemory, getOrCreateVerseMemory } from "./lib/verseMemory";
+import {
+  findVerseMemory,
+  getOrCreateVerseMemory,
+  isLiveHeartedMemory,
+} from "./lib/verseMemory";
 import {
   isDueForReview,
   isReviewPhase,
@@ -80,6 +84,7 @@ const verseMemoryValidator = v.object({
   consecutiveCorrect: v.number(),
   lapses: v.number(),
   earlyReviewApplied: v.optional(v.boolean()),
+  isHearted: v.optional(v.boolean()),
   lastReviewedAt: v.optional(v.number()),
   createdAt: v.number(),
 });
@@ -119,6 +124,7 @@ function toRowView(row: Doc<"verseMemory">) {
     consecutiveCorrect: row.consecutiveCorrect,
     lapses: row.lapses,
     earlyReviewApplied: row.earlyReviewApplied,
+    isHearted: row.isHearted,
     lastReviewedAt: row.lastReviewedAt,
     createdAt: row.createdAt,
   };
@@ -129,9 +135,9 @@ function toRowView(row: Doc<"verseMemory">) {
  *
  * Only `reviewing` / `mastered` verses with `dueAt <= now` qualify — learning-
  * phase verses are practiced from the verse detail / learn flow, not the review
- * queue. Heart-aware: only currently hearted verses (have a `savedVerses` row)
- * are returned. A verse un-hearted after review keeps its `verseMemory` row as
- * durable history, but drops out of the live due queue until re-hearted.
+ * queue. Heart-aware: only rows denormalized as currently hearted are returned.
+ * A verse un-hearted after review keeps its `verseMemory` row as durable
+ * history, but drops out of the live due queue until re-hearted.
  * `now` is passed in by the caller so the query stays deterministic/cacheable.
  */
 export const dueQueue = query({
@@ -147,8 +153,8 @@ export const dueQueue = query({
 
     const dueRows = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_dueAt", (q) =>
-        q.eq("userId", userId).lte("dueAt", args.now),
+      .withIndex("by_userId_isHearted_dueAt", (q) =>
+        q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
       )
       .order("asc")
       .collect();
@@ -176,14 +182,6 @@ export const dueQueue = query({
     for (const row of dueRows) {
       if (items.length >= limit) break;
       if (!isDueForReview(row, args.now)) continue;
-
-      const saved = await ctx.db
-        .query("savedVerses")
-        .withIndex("by_userId_verseRefId", (q) =>
-          q.eq("userId", userId).eq("verseRefId", row.verseRefId),
-        )
-        .unique();
-      if (!saved) continue;
 
       const ref = await ctx.db.get(row.verseRefId);
       if (!ref || ref.userId !== userId) continue;
@@ -215,8 +213,8 @@ export const dueQueue = query({
 
 /**
  * Cheap count of verses due for review at `now` (`reviewing` / `mastered`
- * only). Heart-aware: only currently-hearted verses (with a `savedVerses` row)
- * are counted. Drives the dock badge.
+ * only). Heart-aware: only rows denormalized as currently hearted are counted.
+ * Drives the dock badge.
  */
 export const dueCount = query({
   args: { now: v.number() },
@@ -229,21 +227,15 @@ export const dueCount = query({
 
     const dueRows = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_dueAt", (q) =>
-        q.eq("userId", userId).lte("dueAt", args.now),
+      .withIndex("by_userId_isHearted_dueAt", (q) =>
+        q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
       )
       .collect();
 
     let count = 0;
     for (const row of dueRows) {
       if (!isDueForReview(row, args.now)) continue;
-      const saved = await ctx.db
-        .query("savedVerses")
-        .withIndex("by_userId_verseRefId", (q) =>
-          q.eq("userId", userId).eq("verseRefId", row.verseRefId),
-        )
-        .unique();
-      if (saved) count += 1;
+      count += 1;
     }
     return count;
   },
@@ -368,9 +360,8 @@ const memoryStatsValidator = v.object({
  * Per-status counts for the current user, plus a due-now tally of review-phase
  * verses (`reviewing` / `mastered` with `dueAt <= now`).
  *
- * Heart-aware: the canonical in-Memory set is the user's hearted verses
- * (`savedVerses`), so we iterate those and join each to its `verseMemory` row.
- * A verse un-hearted after review keeps its memory row but is not counted here.
+ * Heart-aware: uses the denormalized `verseMemory.isHearted` flag, so this is a
+ * single pass over live memory rows rather than a saved-verse join.
  */
 export const memoryStats = query({
   args: { now: v.number() },
@@ -390,15 +381,15 @@ export const memoryStats = query({
       return empty;
     }
 
-    const saved = await ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
+    const rows = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_isHearted", (q) =>
+        q.eq("userId", userId).eq("isHearted", true),
+      )
       .collect();
 
     const stats = { ...empty };
-    for (const row of saved) {
-      const memory = await findVerseMemory(ctx, userId, row.verseRefId);
-      if (!memory) continue;
+    for (const memory of rows) {
       stats[memory.status] += 1;
       stats.total += 1;
       if (isDueForReview(memory, args.now)) {
@@ -414,30 +405,48 @@ const dayCountValidator = v.object({
   count: v.number(),
 });
 
+const dayAccuracyValidator = v.object({
+  dayStart: v.number(),
+  average: v.union(v.number(), v.null()),
+  count: v.number(),
+});
+
 /**
- * Per-day review counts over the last `days` (default 30, local day buckets).
- *
- * Bounded by the time window via the `by_userId_createdAt` index range on
- * `createdAt`, so it never scans the whole log. `now` and `timeZone` are
- * passed in to keep the query deterministic; see `dashboard-buckets.ts`.
+ * Per-day practice count and accuracy aggregates for the dashboard. A single
+ * review-log window feeds both the 12-week heatmap and 30-day trend.
  */
-export const reviewHeatmap = query({
+export const reviewActivity = query({
   args: {
     now: v.number(),
     timeZone: v.string(),
-    days: v.optional(v.number()),
+    heatmapDays: v.optional(v.number()),
+    trendDays: v.optional(v.number()),
   },
-  returns: v.array(dayCountValidator),
+  returns: v.object({
+    heatmap: v.array(dayCountValidator),
+    trend: v.array(dayAccuracyValidator),
+  }),
   handler: async (ctx, args) => {
-    const days = normalizeDays(args.days);
+    const heatmapDays = normalizeDays(args.heatmapDays ?? 84);
+    const trendDays = normalizeDays(args.trendDays ?? 30);
+    const windowDays = Math.max(heatmapDays, trendDays);
     const timeZone = normalizeTimeZone(args.timeZone);
-    const dayStarts = zonedDayStarts(args.now, days, timeZone);
+    const heatmapDayStarts = zonedDayStarts(args.now, heatmapDays, timeZone);
+    const trendDayStarts = zonedDayStarts(args.now, trendDays, timeZone);
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
-      return dayStarts.map((dayStart) => ({ dayStart, count: 0 }));
+      return {
+        heatmap: heatmapDayStarts.map((dayStart) => ({ dayStart, count: 0 })),
+        trend: trendDayStarts.map((dayStart) => ({
+          dayStart,
+          average: null,
+          count: 0,
+        })),
+      };
     }
 
-    const windowStart = dayStarts[0];
+    const windowStarts = zonedDayStarts(args.now, windowDays, timeZone);
+    const windowStart = windowStarts[0];
     const rows = await ctx.db
       .query("verseMemoryReviews")
       .withIndex("by_userId_createdAt", (q) =>
@@ -448,64 +457,26 @@ export const reviewHeatmap = query({
     const counts = bucketReviewCounts(
       rows.map((row) => row.createdAt),
       args.now,
-      days,
+      heatmapDays,
       timeZone,
     );
-    return dayStarts.map((dayStart, i) => ({ dayStart, count: counts[i] }));
-  },
-});
-
-const dayAccuracyValidator = v.object({
-  dayStart: v.number(),
-  average: v.union(v.number(), v.null()),
-  count: v.number(),
-});
-
-/**
- * Per-day average accuracy over the last `days` (default 30, local day buckets).
- *
- * Days with no reviews report `average: null` (not 0). Bounded by the window
- * via the `by_userId_createdAt` index range on `createdAt`.
- */
-export const accuracyTrend = query({
-  args: {
-    now: v.number(),
-    timeZone: v.string(),
-    days: v.optional(v.number()),
-  },
-  returns: v.array(dayAccuracyValidator),
-  handler: async (ctx, args) => {
-    const days = normalizeDays(args.days);
-    const timeZone = normalizeTimeZone(args.timeZone);
-    const dayStarts = zonedDayStarts(args.now, days, timeZone);
-    const userId = await getCurrentUserIdOrNull(ctx);
-    if (!userId) {
-      return dayStarts.map((dayStart) => ({
-        dayStart,
-        average: null,
-        count: 0,
-      }));
-    }
-
-    const windowStart = dayStarts[0];
-    const rows = await ctx.db
-      .query("verseMemoryReviews")
-      .withIndex("by_userId_createdAt", (q) =>
-        q.eq("userId", userId).gte("createdAt", windowStart),
-      )
-      .collect();
-
     const buckets = bucketAccuracyAverages(
       rows.map((row) => ({ createdAt: row.createdAt, accuracy: row.accuracy })),
       args.now,
-      days,
+      trendDays,
       timeZone,
     );
-    return dayStarts.map((dayStart, i) => ({
-      dayStart,
-      average: buckets[i].average,
-      count: buckets[i].count,
-    }));
+    return {
+      heatmap: heatmapDayStarts.map((dayStart, i) => ({
+        dayStart,
+        count: counts[i],
+      })),
+      trend: trendDayStarts.map((dayStart, i) => ({
+        dayStart,
+        average: buckets[i].average,
+        count: buckets[i].count,
+      })),
+    };
   },
 });
 
@@ -513,11 +484,9 @@ export const accuracyTrend = query({
  * Count of review-phase verses due per upcoming day over the next `days`
  * (default 30). Learning-phase verses are excluded.
  *
- * Overdue verses are folded into today (day 0). Heart-aware: un-hearted verses
- * (no `savedVerses` row) are skipped even though their memory row survives.
- * Reads through `by_userId_dueAt`, bounded above by the end of the window; the
- * result set is at most the user's verse-memory corpus (same bound as
- * `memoryStats`). Day buckets use the viewer's IANA `timeZone`.
+ * Overdue verses are folded into today (day 0). Heart-aware: reads only rows
+ * denormalized as currently hearted. Day buckets use the viewer's IANA
+ * `timeZone`.
  */
 export const reviewForecast = query({
   args: {
@@ -544,8 +513,8 @@ export const reviewForecast = query({
     );
     const rows = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_dueAt", (q) =>
-        q.eq("userId", userId).lt("dueAt", windowEnd),
+      .withIndex("by_userId_isHearted_dueAt", (q) =>
+        q.eq("userId", userId).eq("isHearted", true).lt("dueAt", windowEnd),
       )
       .collect();
 
@@ -554,66 +523,11 @@ export const reviewForecast = query({
       // Learning-phase verses keep dueAt = now for practice availability, but
       // they are not part of the review forecast.
       if (!isReviewPhase(row.status)) continue;
-      const saved = await ctx.db
-        .query("savedVerses")
-        .withIndex("by_userId_verseRefId", (q) =>
-          q.eq("userId", userId).eq("verseRefId", row.verseRefId),
-        )
-        .unique();
-      if (!saved) continue;
       dueAts.push(row.dueAt);
     }
 
     const counts = bucketForecastCounts(dueAts, args.now, days, timeZone);
     return dayStarts.map((dayStart, i) => ({ dayStart, count: counts[i] }));
-  },
-});
-
-const masteryDistributionValidator = v.object({
-  new: v.number(),
-  learning: v.number(),
-  reviewing: v.number(),
-  mastered: v.number(),
-  total: v.number(),
-});
-
-/**
- * Counts of verses by lifecycle status for the current user.
- *
- * Heart-aware: iterates the user's hearted verses (`savedVerses`) and joins
- * each to its `verseMemory` row, so un-hearted verses (whose memory row
- * survives as history) don't inflate the distribution.
- */
-export const masteryDistribution = query({
-  args: { now: v.number() },
-  returns: masteryDistributionValidator,
-  handler: async (ctx) => {
-    const empty = {
-      new: 0,
-      learning: 0,
-      reviewing: 0,
-      mastered: 0,
-      total: 0,
-    };
-
-    const userId = await getCurrentUserIdOrNull(ctx);
-    if (!userId) {
-      return empty;
-    }
-
-    const saved = await ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
-
-    const stats = { ...empty };
-    for (const row of saved) {
-      const memory = await findVerseMemory(ctx, userId, row.verseRefId);
-      if (!memory) continue;
-      stats[memory.status] += 1;
-      stats.total += 1;
-    }
-    return stats;
   },
 });
 
@@ -697,12 +611,9 @@ function toLibraryItem(
  *   order — alphabetical, not lifecycle order; documented in study-mode.md).
  * - `"recent"` — most recently hearted first (`savedVerses.by_userId_createdAt`).
  *
- * The canonical set is the user's *hearted* verses (`savedVerses`). For the
- * memory-indexed sorts, rows without a matching heart are filtered out (a verse
- * un-hearted after review keeps its memory row, so we must exclude it here). A
- * hearted verse still awaiting its `verseMemory` seed (legacy, pre-backfill) is
- * skipped rather than fabricated. Filtering shrinks a page but keeps cursors
- * correct, per the Convex pagination guidance.
+ * The canonical set is the user's *hearted* verses. Memory-indexed sorts use
+ * `verseMemory.isHearted` to avoid probing `savedVerses` just to exclude
+ * un-hearted history rows; `savedVerses` is still loaded for `heartedAt`.
  */
 export const listLibrary = query({
   args: {
@@ -750,7 +661,9 @@ export const listLibrary = query({
       args.sort === "dueAt"
         ? ctx.db
             .query("verseMemory")
-            .withIndex("by_userId_dueAt", (q) => q.eq("userId", userId))
+            .withIndex("by_userId_isHearted_dueAt", (q) =>
+              q.eq("userId", userId).eq("isHearted", true),
+            )
             .order("asc")
         : ctx.db
             .query("verseMemory")
@@ -761,6 +674,7 @@ export const listLibrary = query({
 
     const page: LibraryItem[] = [];
     for (const memory of paginated.page) {
+      if (!isLiveHeartedMemory(memory)) continue;
       const saved = await ctx.db
         .query("savedVerses")
         .withIndex("by_userId_verseRefId", (q) =>

@@ -1,5 +1,6 @@
 import { Loader2, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { computeStreak, overallAccuracy } from "@/lib/dashboard-buckets";
@@ -14,6 +15,8 @@ const HEATMAP_DAYS = 84; // 12 weeks
 const TREND_DAYS = 30;
 const FORECAST_DAYS = 14;
 
+type MemoryStats = FunctionReturnType<typeof api.verseMemory.memoryStats>;
+
 /**
  * The Memory progress dashboard: a "Today" hero (keeping Review reachable),
  * a KPI row, and inline SVG/CSS charts. All data is real and reactive; `now` is
@@ -26,23 +29,19 @@ const FORECAST_DAYS = 14;
  */
 export function MemoryDashboard({
   now,
+  stats,
   onStartReview,
 }: {
   now: number;
+  stats: MemoryStats | undefined;
   onStartReview: () => void;
 }) {
   const timeZone = getViewerTimeZone();
-  const stats = useQuery(api.verseMemory.memoryStats, { now });
-  const mastery = useQuery(api.verseMemory.masteryDistribution, { now });
-  const heatmap = useQuery(api.verseMemory.reviewHeatmap, {
+  const activity = useQuery(api.verseMemory.reviewActivity, {
     now,
     timeZone,
-    days: HEATMAP_DAYS,
-  });
-  const trend = useQuery(api.verseMemory.accuracyTrend, {
-    now,
-    timeZone,
-    days: TREND_DAYS,
+    heatmapDays: HEATMAP_DAYS,
+    trendDays: TREND_DAYS,
   });
   const forecast = useQuery(api.verseMemory.reviewForecast, {
     now,
@@ -51,18 +50,18 @@ export function MemoryDashboard({
   });
 
   const streak =
-    heatmap === undefined
+    activity === undefined
       ? undefined
-      : computeStreak(heatmap.map((d) => d.count));
+      : computeStreak(activity.heatmap.map((d) => d.count));
   const inMemory =
-    mastery === undefined
+    stats === undefined
       ? undefined
-      : mastery.learning + mastery.reviewing + mastery.mastered;
+      : stats.learning + stats.reviewing + stats.mastered;
   const accuracy30d =
-    trend === undefined
+    activity === undefined
       ? undefined
       : overallAccuracy(
-          trend.map((d) => ({ average: d.average, count: d.count })),
+          activity.trend.map((d) => ({ average: d.average, count: d.count })),
         );
 
   return (
@@ -84,20 +83,20 @@ export function MemoryDashboard({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {heatmap === undefined ? (
+        {activity === undefined ? (
           <ChartSkeleton title="Practice" />
         ) : (
-          <PracticeHeatmap data={heatmap} />
+          <PracticeHeatmap data={activity.heatmap} />
         )}
-        {mastery === undefined ? (
+        {stats === undefined ? (
           <ChartSkeleton title="Mastery" />
         ) : (
-          <MasteryBar data={mastery} />
+          <MasteryBar data={stats} />
         )}
-        {trend === undefined ? (
+        {activity === undefined ? (
           <ChartSkeleton title="Accuracy trend" />
         ) : (
-          <AccuracyTrend data={trend} />
+          <AccuracyTrend data={activity.trend} />
         )}
         {forecast === undefined ? (
           <ChartSkeleton title="Upcoming" />

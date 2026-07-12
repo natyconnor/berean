@@ -1,3 +1,8 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { chartColor } from "./svg-chart-helpers";
 
 export interface DayCount {
@@ -21,11 +26,15 @@ function tickLabel(dayStart: number, index: number): string {
   });
 }
 
+function duePhrase(count: number): string {
+  return count === 1 ? "1 due" : `${count} due`;
+}
+
 /**
  * Upcoming review load: verses due per day over the next `data.length` days,
  * as a labeled bar chart. Day 0 (Today) folds in any overdue verses and is
- * emphasized; future days fade back. Every bar carries its count inline and a
- * full date in its tooltip, with sparse date ticks along the axis.
+ * emphasized; future days fade back. Hover (or focus) any day for the full
+ * date and count; sparse axis ticks stay readable at compact widths.
  */
 export function ReviewForecast({ data }: { data: DayCount[] }) {
   const total = data.reduce((sum, d) => sum + d.count, 0);
@@ -33,12 +42,14 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
   const count = data.length;
 
   // Sparse axis ticks: first (Today), roughly-thirds, and last.
-  const tickIndices = new Set<number>([
-    0,
-    Math.round((count - 1) / 3),
-    Math.round((2 * (count - 1)) / 3),
-    count - 1,
-  ]);
+  const tickIndices = [
+    ...new Set([
+      0,
+      Math.round((count - 1) / 3),
+      Math.round((2 * (count - 1)) / 3),
+      count - 1,
+    ]),
+  ].sort((a, b) => a - b);
 
   const label =
     total === 0
@@ -72,49 +83,78 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
           <div
             role="img"
             aria-label={label}
-            className="mt-2 flex h-24 items-end gap-1"
+            className="mt-2 flex h-24 items-end gap-0.5"
           >
             {data.map((d, i) => {
               const isToday = i === 0;
               const heightPct =
                 d.count <= 0 ? 0 : Math.max(6, (d.count / max) * 100);
               return (
-                <div
-                  key={d.dayStart}
-                  className="flex h-full flex-1 flex-col items-center justify-end gap-1"
-                  title={`${formatDay(d.dayStart)}: ${d.count} due`}
-                >
-                  <span className="text-[9px] leading-none text-muted-foreground tabular-nums">
-                    {d.count > 0 ? d.count : ""}
-                  </span>
-                  {d.count > 0 ? (
-                    <div
-                      className="w-full rounded-t-[3px]"
-                      style={{
-                        height: `${heightPct}%`,
-                        backgroundColor: isToday
-                          ? chartColor(1)
-                          : `color-mix(in oklab, ${chartColor(1)} 45%, transparent)`,
-                      }}
-                    />
-                  ) : (
-                    // Keep empty days visible with a faint baseline tick.
-                    <div className="h-px w-full rounded bg-border" />
-                  )}
-                </div>
+                <Tooltip key={d.dayStart}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 rounded-sm px-px outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`${formatDay(d.dayStart)}: ${duePhrase(d.count)}`}
+                    >
+                      <span className="text-[9px] leading-none text-muted-foreground tabular-nums">
+                        {d.count > 0 ? d.count : "\u00a0"}
+                      </span>
+                      {d.count > 0 ? (
+                        <div
+                          className="w-full rounded-t-[3px] transition-opacity group-hover:opacity-90"
+                          style={{
+                            height: `${heightPct}%`,
+                            backgroundColor: isToday
+                              ? chartColor(1)
+                              : `color-mix(in oklab, ${chartColor(1)} 45%, transparent)`,
+                          }}
+                        />
+                      ) : (
+                        // Keep empty days visible with a faint baseline tick.
+                        <div className="h-px w-full rounded bg-border" />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="tabular-nums">
+                    {formatDay(d.dayStart)}
+                    <span className="mx-1.5 text-background/50">·</span>
+                    {duePhrase(d.count)}
+                  </TooltipContent>
+                </Tooltip>
               );
             })}
           </div>
 
-          <div className="mt-1.5 flex gap-1 text-[10px] text-muted-foreground">
-            {data.map((d, i) => (
-              <span
-                key={d.dayStart}
-                className="flex-1 truncate text-center first:text-left last:text-right"
-              >
-                {tickIndices.has(i) ? tickLabel(d.dayStart, i) : ""}
-              </span>
-            ))}
+          {/* Positioned ticks (not one truncated slot per day) so labels stay readable. */}
+          <div
+            className="relative mt-1.5 h-3.5 text-[10px] text-muted-foreground"
+            aria-hidden
+          >
+            {tickIndices.map((i) => {
+              const day = data[i];
+              if (!day) return null;
+              const leftPct = count <= 1 ? 0 : (i / (count - 1)) * 100;
+              const align =
+                i === 0 ? "start" : i === count - 1 ? "end" : "center";
+              return (
+                <span
+                  key={day.dayStart}
+                  className="absolute top-0 whitespace-nowrap"
+                  style={{
+                    left: `${leftPct}%`,
+                    transform:
+                      align === "start"
+                        ? "none"
+                        : align === "end"
+                          ? "translateX(-100%)"
+                          : "translateX(-50%)",
+                  }}
+                >
+                  {tickLabel(day.dayStart, i)}
+                </span>
+              );
+            })}
           </div>
         </>
       )}

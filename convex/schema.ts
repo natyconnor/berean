@@ -259,10 +259,14 @@ export default defineSchema({
     lapses: v.number(),
     // True after one successful early (pre-due) reschedule this interval; optional for backfill
     earlyReviewApplied: v.optional(v.boolean()),
+    // Optional while backfilled; true means the verse is currently in savedVerses.
+    isHearted: v.optional(v.boolean()),
     lastReviewedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_userId_dueAt", ["userId", "dueAt"]) // Today queue + badge
+    .index("by_userId_isHearted", ["userId", "isHearted"])
+    .index("by_userId_isHearted_dueAt", ["userId", "isHearted", "dueAt"])
     .index("by_userId_status", ["userId", "status"])
     .index("by_userId_verseRefId", ["userId", "verseRefId"]), // upsert on heart
 

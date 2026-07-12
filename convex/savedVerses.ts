@@ -184,6 +184,10 @@ export const toggle = mutation({
       // `verseMemory` row untouched, so spaced-repetition progress and review
       // history survive a heart toggle. See docs/study-mode.md.
       await ctx.db.delete(existing._id);
+      const memory = await findVerseMemory(ctx, userId, verseRefId);
+      if (memory) {
+        await ctx.db.patch(memory._id, { isHearted: false });
+      }
       return "removed" as const;
     }
 

@@ -27,10 +27,8 @@ export function MemoryHome() {
   const now = useLiveNow();
   const navigate = useNavigate();
 
-  // Shares the cached `savedVerses.listAll` subscription so Practice can tell
-  // whether the header action is available without a duplicate round trip.
-  const savedVerses = useQuery(api.savedVerses.listAll, {});
-  const canPractice = (savedVerses?.length ?? 0) > 0;
+  const stats = useQuery(api.verseMemory.memoryStats, { now });
+  const canPractice = (stats?.total ?? 0) > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -52,7 +50,7 @@ export function MemoryHome() {
             disabled={!canPractice}
           >
             <Dumbbell className="h-4 w-4" aria-hidden />
-            Practice
+            Practice All
           </Button>
         </div>
       </header>
@@ -60,6 +58,7 @@ export function MemoryHome() {
         <div className="mx-auto max-w-6xl space-y-8 px-5 py-6">
           <MemoryDashboard
             now={now}
+            stats={stats}
             onStartReview={() => void navigate({ to: "/memory/review" })}
           />
           {/* Library is the main column; Packs sits as a sidebar on large

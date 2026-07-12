@@ -21,6 +21,10 @@ export async function findVerseMemory(
     .unique();
 }
 
+export function isLiveHeartedMemory(row: Doc<"verseMemory">): boolean {
+  return row.isHearted === true;
+}
+
 /**
  * Idempotently create the `verseMemory` row for a (user, verse) pair.
  *
@@ -35,6 +39,9 @@ export async function seedVerseMemory(
 ): Promise<Id<"verseMemory">> {
   const existing = await findVerseMemory(ctx, userId, verseRefId);
   if (existing) {
+    if (!isLiveHeartedMemory(existing)) {
+      await ctx.db.patch(existing._id, { isHearted: true });
+    }
     return existing._id;
   }
 
@@ -51,6 +58,7 @@ export async function seedVerseMemory(
     consecutiveCorrect: schedule.consecutiveCorrect,
     lapses: schedule.lapses,
     earlyReviewApplied: schedule.earlyReviewApplied,
+    isHearted: true,
     createdAt: now,
   });
 }
