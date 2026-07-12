@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
+import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
@@ -377,9 +378,9 @@ function PackViewMain({
                 {members.map((member, index) => {
                   const style = MEMORY_STATUS_STYLE[member.status];
                   return (
-                    <li
+                    <MemoryListItem
                       key={member.verseRefId}
-                      className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5"
+                      className="flex items-center gap-2 px-3 py-2.5"
                     >
                       <button
                         type="button"
@@ -440,7 +441,7 @@ function PackViewMain({
                           </Button>
                         </span>
                       )}
-                    </li>
+                    </MemoryListItem>
                   );
                 })}
               </ul>

@@ -4,6 +4,7 @@ import {
   linePath,
   scaleLinear,
 } from "./svg-chart-helpers";
+import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 
 export interface DayAccuracy {
   dayStart: number;
@@ -54,7 +55,7 @@ export function AccuracyTrend({ data }: { data: DayAccuracy[] }) {
         )} percent.`;
 
   return (
-    <section className="rounded-xl border bg-card p-4 shadow-sm">
+    <MemoryDashboardCard className="p-4">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Accuracy trend</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -164,6 +165,6 @@ export function AccuracyTrend({ data }: { data: DayAccuracy[] }) {
           )}
         </>
       )}
-    </section>
+    </MemoryDashboardCard>
   );
 }

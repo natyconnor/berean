@@ -1,4 +1,10 @@
 import type { CSSProperties } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { chartColor } from "./svg-chart-helpers";
 
 export interface DayCount {
@@ -20,6 +26,10 @@ function monthLabel(dayStart: number): string {
   return new Date(dayStart).toLocaleDateString(undefined, {
     month: "short",
   });
+}
+
+function reviewPhrase(count: number): string {
+  return count === 1 ? "1 review" : `${count} reviews`;
 }
 
 /** Map a count to a background: muted at 0, ramping chart-1 opacity otherwise. */
@@ -84,7 +94,7 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
       : `Practice heatmap: ${total} reviews over the last ${data.length} days.`;
 
   return (
-    <section className="rounded-xl border bg-card p-4 shadow-sm">
+    <MemoryDashboardCard className="p-4">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Practice</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -146,14 +156,21 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
                         aria-hidden
                       />
                     ) : (
-                      <span
-                        key={cell.dayStart}
-                        className="aspect-square rounded-[3px]"
-                        title={`${formatDay(cell.dayStart)}: ${cell.count} ${
-                          cell.count === 1 ? "review" : "reviews"
-                        }`}
-                        style={cellStyle(cell.count, max)}
-                      />
+                      <Tooltip key={cell.dayStart}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="aspect-square rounded-[3px] outline-none transition-[filter] duration-150 hover:brightness-[1.08] focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label={`${formatDay(cell.dayStart)}: ${reviewPhrase(cell.count)}`}
+                            style={cellStyle(cell.count, max)}
+                          />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="tabular-nums">
+                          {formatDay(cell.dayStart)}
+                          <span className="mx-1.5 text-background/50">·</span>
+                          {reviewPhrase(cell.count)}
+                        </TooltipContent>
+                      </Tooltip>
                     ),
                   ),
                 )}
@@ -175,6 +192,6 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
           </div>
         </div>
       )}
-    </section>
+    </MemoryDashboardCard>
   );
 }

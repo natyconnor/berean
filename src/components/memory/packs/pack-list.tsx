@@ -5,6 +5,7 @@ import { usePaginatedQuery } from "convex-helpers/react/cache";
 
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
+import { MemoryListRow } from "@/components/memory/memory-surface";
 
 const INITIAL_PAGE_SIZE = 10;
 const LOAD_MORE_PAGE_SIZE = 10;
@@ -72,26 +73,28 @@ export function PackList({ now }: { now: number }) {
           <ul className="space-y-1.5">
             {displayResults.map((pack) => (
               <li key={pack._id}>
-                <Link
-                  to="/memory/$packId"
-                  params={{ packId: pack._id }}
-                  className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                    <Layers className="h-4 w-4" aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {pack.name}
+                <MemoryListRow>
+                  <Link
+                    to="/memory/$packId"
+                    params={{ packId: pack._id }}
+                    className="flex items-center gap-3 px-3 py-2.5"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Layers className="h-4 w-4" aria-hidden />
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {pack.kind === "scope" ? "Scope" : "Custom"} ·{" "}
-                      {pack.verseCount} verse
-                      {pack.verseCount !== 1 ? "s" : ""}
-                      {pack.dueCount > 0 ? ` · ${pack.dueCount} due` : ""}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {pack.name}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {pack.kind === "scope" ? "Scope" : "Custom"} ·{" "}
+                        {pack.verseCount} verse
+                        {pack.verseCount !== 1 ? "s" : ""}
+                        {pack.dueCount > 0 ? ` · ${pack.dueCount} due` : ""}
+                      </span>
                     </span>
-                  </span>
-                </Link>
+                  </Link>
+                </MemoryListRow>
               </li>
             ))}
           </ul>

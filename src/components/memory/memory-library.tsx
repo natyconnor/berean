@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
+import { MemoryListRow } from "@/components/memory/memory-surface";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import type { PracticeVerse } from "./practice/practice-board";
 import { VerseDetail } from "./verse-detail";
@@ -191,7 +192,7 @@ export function MemoryLibrary({
               const style = MEMORY_STATUS_STYLE[row.status];
               return (
                 <li key={row.verseMemoryId}>
-                  <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
+                  <MemoryListRow className="flex items-center gap-3 px-3 py-2.5">
                     <button
                       type="button"
                       onClick={() => setSelected(row.verseRefId)}
@@ -218,7 +219,7 @@ export function MemoryLibrary({
                         </span>
                       </span>
                     </button>
-                  </div>
+                  </MemoryListRow>
                 </li>
               );
             })}

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { CalendarClock, Flame, Layers, Target } from "lucide-react";
+import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import type { StreakInfo } from "@/lib/dashboard-buckets";
 import { cn } from "@/lib/utils";
 
@@ -57,9 +58,9 @@ function StreakKpi({ streak }: { streak: StreakInfo | undefined }) {
   const atRisk = streak?.atRisk === true;
 
   return (
-    <div
+    <MemoryDashboardCard
       className={cn(
-        "rounded-xl border bg-card p-3 shadow-sm transition-colors",
+        "p-3",
         atRisk &&
           "border-[color:var(--chart-1)]/45 bg-[color:var(--chart-1)]/[0.07] shadow-[0_0_0_1px_color-mix(in_oklch,var(--chart-1)_18%,transparent)]",
       )}
@@ -103,7 +104,7 @@ function StreakKpi({ streak }: { streak: StreakInfo | undefined }) {
           ) : null}
         </>
       )}
-    </div>
+    </MemoryDashboardCard>
   );
 }
 
@@ -120,7 +121,7 @@ function Kpi({
   accent?: boolean;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-3 shadow-sm">
+    <MemoryDashboardCard className="p-3">
       <div className="flex items-center gap-1.5 text-muted-foreground">
         <span className={cn(accent && "text-[color:var(--chart-1)]")}>
           {icon}
@@ -139,6 +140,6 @@ function Kpi({
           {value}
         </div>
       )}
-    </div>
+    </MemoryDashboardCard>
   );
 }

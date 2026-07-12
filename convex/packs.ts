@@ -14,6 +14,7 @@ import {
 } from "./lib/packs";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import { isDueForReview } from "../src/lib/memory-scheduler";
+import { scopesEqual } from "../src/lib/scope-equality";
 
 /**
  * A pack is a per-user named verse set. `scope` packs resolve their members
@@ -96,6 +97,27 @@ export const create = mutation({
     }
 
     const now = Date.now();
+
+    // Scope packs are identified by their filter. Reuse the most recently
+    // opened pack with the same scope so "Memorize this scope" is idempotent.
+    if (args.kind === "scope" && args.scope) {
+      const existingPacks = await ctx.db
+        .query("packs")
+        .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+        .order("desc")
+        .collect();
+      const match = existingPacks.find(
+        (pack) =>
+          pack.kind === "scope" &&
+          pack.scope !== undefined &&
+          scopesEqual(pack.scope, args.scope!),
+      );
+      if (match) {
+        await ctx.db.patch(match._id, { lastOpenedAt: now });
+        return match._id;
+      }
+    }
+
     return await ctx.db.insert("packs", {
       userId,
       name: args.name,

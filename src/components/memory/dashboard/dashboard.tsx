@@ -3,6 +3,7 @@ import { useQuery } from "convex-helpers/react/cache";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
+import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { computeStreak, overallAccuracy } from "@/lib/dashboard-buckets";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { KpiRow } from "./kpi-row";
@@ -122,16 +123,16 @@ function TodayHero({
 }) {
   if (due === undefined) {
     return (
-      <section className="rounded-xl border bg-card p-5 shadow-sm">
+      <MemoryDashboardCard className="p-5">
         <div className="flex justify-center py-4">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      </section>
+      </MemoryDashboardCard>
     );
   }
 
   return (
-    <section className="rounded-xl border bg-card p-5 shadow-sm">
+    <MemoryDashboardCard className="p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -156,18 +157,18 @@ function TodayHero({
           Review
         </Button>
       </div>
-    </section>
+    </MemoryDashboardCard>
   );
 }
 
 /** Placeholder card shown in a chart slot while its aggregate query loads. */
 function ChartSkeleton({ title }: { title: string }) {
   return (
-    <section className="rounded-xl border bg-card p-4 shadow-sm">
+    <MemoryDashboardCard className="p-4">
       <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
       <div className="mt-3 flex h-24 items-center justify-center">
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
-    </section>
+    </MemoryDashboardCard>
   );
 }

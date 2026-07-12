@@ -3,6 +3,7 @@ import {
   MEMORY_STATUS_ORDER,
   MEMORY_STATUS_STYLE,
 } from "@/lib/memory-status-style";
+import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { cn } from "@/lib/utils";
 
 export interface MasteryDistribution {
@@ -29,7 +30,7 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
           .join(", ");
 
   return (
-    <section className="rounded-xl border bg-card p-4 shadow-sm">
+    <MemoryDashboardCard className="p-4">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Mastery</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -66,7 +67,7 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
           </ul>
         </>
       )}
-    </section>
+    </MemoryDashboardCard>
   );
 }
 

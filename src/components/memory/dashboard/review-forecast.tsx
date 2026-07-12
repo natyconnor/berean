@@ -3,6 +3,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { chartColor } from "./svg-chart-helpers";
 
 export interface DayCount {
@@ -57,7 +58,7 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
       : `Review forecast: ${total} reviews due over the next ${count} days.`;
 
   return (
-    <section className="rounded-xl border bg-card p-4 shadow-sm">
+    <MemoryDashboardCard className="p-4">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Upcoming</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -158,6 +159,6 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
           </div>
         </>
       )}
-    </section>
+    </MemoryDashboardCard>
   );
 }
