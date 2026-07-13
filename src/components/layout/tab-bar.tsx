@@ -2,15 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
-import {
-  BookOpen,
-  Brain,
-  LogOut,
-  Plus,
-  Search,
-  Settings,
-  X,
-} from "lucide-react";
+import { LogOut, Plus, Search, Settings, X } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SearchDialog } from "@/components/notes/search-dialog";
 import { ThemeDropdown } from "./theme-dropdown";
@@ -23,11 +15,7 @@ import { logInteraction } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
-import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
-import {
-  shouldRevealMemory,
-  shouldRevealSearch,
-} from "@/lib/staged-onboarding-thresholds";
+import { shouldRevealSearch } from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
@@ -46,7 +34,6 @@ export function TabBar() {
   const navigate = useNavigate();
   const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false);
   const isSearchRoute = location.pathname === "/search";
-  const isMemoryRoute = location.pathname.startsWith("/memory");
   const isStudyRoute = location.pathname.startsWith("/study");
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const savedSearchState = readSearchWorkspaceState();
@@ -59,35 +46,11 @@ export function TabBar() {
     FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY,
     searchRevealReached,
   );
-  const memoryRevealReached = milestones
-    ? shouldRevealMemory(milestones)
-    : false;
-  const studyRevealReached = isStudyFeatureAccessible(milestones);
-  // The Mode Dock owns the Memory/Study reveal *callouts* (and the display
-  // queue). The toolbar Memory/Study links are the documented fallbacks, so they
-  // opt out of the display queue (`useDisplayQueue: false`) to avoid pinning the
-  // queue with no UI, but still complete their reveal when the user opens the
-  // mode this way.
-  const memoryHint = useFeatureHint(
-    FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
-    memoryRevealReached,
-    { useDisplayQueue: false },
-  );
-  const studyHint = useFeatureHint(
-    FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES,
-    studyRevealReached,
-    { useDisplayQueue: false },
-  );
-  // Soft-hide rule: only show a toolbar button once the user has reached the
-  // milestone, OR once they've already acknowledged the hint. The global hint
-  // queue prevents multiple reveal callouts from stacking. Memory (hearts) and
-  // Study (notes) are toolbar fallbacks — the Mode Dock owns their reveals.
+  // Soft-hide rule: only show the search toolbar button once the user has
+  // reached the milestone, OR once they've already acknowledged the hint.
+  // Memory and Study live in the Mode Dock, not the toolbar.
   const showSearchButton =
     searchRevealReached || searchHint.completed || searchHint.dismissed;
-  const showMemoryButton =
-    memoryRevealReached || memoryHint.completed || memoryHint.dismissed;
-  const showStudyButton =
-    studyRevealReached || studyHint.completed || studyHint.dismissed;
   const searchShortcutLabel = formatCommandOrControlShortcut("K");
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
   const settingsShortcutLabel = formatCommandOrControlShortcut(",");
@@ -252,66 +215,6 @@ export function TabBar() {
               </Link>
             </TooltipButton>
           </FeatureCallout>
-        ) : null}
-        {showMemoryButton ? (
-          <TooltipButton
-            asChild
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-8 w-8",
-              isMemoryRoute &&
-                "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
-            )}
-            tooltip="Open memory"
-            aria-label="Open memory"
-          >
-            <Link
-              to="/memory"
-              onClick={() => {
-                logInteraction("toolbar", "memory-opened");
-                // Fallback completion: opening Memory from the toolbar resolves
-                // the reveal so the hint queue always progresses, even if the
-                // user never saw the dock callout. `complete()` is idempotent,
-                // so the dock callout and this path complete it exactly once.
-                if (memoryHint.pending) {
-                  memoryHint.complete();
-                }
-              }}
-            >
-              <Brain className="h-4 w-4" />
-            </Link>
-          </TooltipButton>
-        ) : null}
-        {showStudyButton ? (
-          <TooltipButton
-            asChild
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-8 w-8",
-              isStudyRoute &&
-                "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
-            )}
-            tooltip="Open study"
-            aria-label="Open study"
-          >
-            <Link
-              to="/study"
-              onClick={() => {
-                logInteraction("toolbar", "study-opened");
-                // Fallback completion: opening Study from the toolbar resolves
-                // the reveal so the hint queue always progresses, even if the
-                // user never saw the dock callout. `complete()` is idempotent,
-                // so the dock callout and this path complete it exactly once.
-                if (studyHint.pending) {
-                  studyHint.complete();
-                }
-              }}
-            >
-              <BookOpen className="h-4 w-4" />
-            </Link>
-          </TooltipButton>
         ) : null}
         <div className="relative">
           {isSettingsRoute ? (

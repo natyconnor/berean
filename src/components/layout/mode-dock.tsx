@@ -83,9 +83,7 @@ export function ModeDock() {
 
   // One-time reveal callouts, reusing the shared hint system. Only claim a hint
   // while the dock can actually render its callout — when the dock is off, the
-  // toolbar links are the fallbacks that complete the reveals (see tab-bar.tsx),
-  // so the global hint queue is never pinned by an eligible-but-unrendered
-  // callout.
+  // global hint queue is never pinned by an eligible-but-unrendered callout.
   const memoryHint = useFeatureHint(
     FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
     memoryUnlocked && dockEnabled,

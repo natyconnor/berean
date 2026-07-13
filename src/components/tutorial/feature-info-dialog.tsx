@@ -21,6 +21,13 @@ interface FeatureInfoDialogProps {
    * exist purely to inform; there is no required follow-up action.
    */
   dismissLabel?: string;
+  /** Optional primary CTA label (shown after dismiss, matching FeatureCallout). */
+  primaryActionLabel?: string;
+  /**
+   * Invoked when the primary CTA is clicked. The dialog then calls
+   * `state.complete()` (same as FeatureCallout).
+   */
+  onPrimaryAction?: () => void;
 }
 
 /**
@@ -33,6 +40,8 @@ export function FeatureInfoDialog({
   description,
   body,
   dismissLabel = "Got it",
+  primaryActionLabel,
+  onPrimaryAction,
 }: FeatureInfoDialogProps) {
   const open = state.pending;
 
@@ -56,7 +65,23 @@ export function FeatureInfoDialog({
         </DialogHeader>
         {body ? <div className="text-sm text-foreground">{body}</div> : null}
         <DialogFooter>
-          <Button onClick={() => state.complete()}>{dismissLabel}</Button>
+          {primaryActionLabel ? (
+            <Button variant="outline" onClick={() => state.complete()}>
+              {dismissLabel}
+            </Button>
+          ) : (
+            <Button onClick={() => state.complete()}>{dismissLabel}</Button>
+          )}
+          {primaryActionLabel ? (
+            <Button
+              onClick={() => {
+                onPrimaryAction?.();
+                state.complete();
+              }}
+            >
+              {primaryActionLabel}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

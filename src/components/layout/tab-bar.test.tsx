@@ -5,10 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StagedOnboardingContext } from "@/components/tutorial/staged-onboarding-context";
-import {
-  MEMORY_MIN_HEARTS,
-  SEARCH_MIN_NOTES_TOTAL,
-} from "@/lib/staged-onboarding-thresholds";
+import { SEARCH_MIN_NOTES_TOTAL } from "@/lib/staged-onboarding-thresholds";
 import { TabBar } from "./tab-bar";
 
 function StagedOnboardingTestProvider({ children }: { children: ReactNode }) {
@@ -16,12 +13,11 @@ function StagedOnboardingTestProvider({ children }: { children: ReactNode }) {
     <StagedOnboardingContext.Provider
       value={{
         milestones: {
-          // Above the Search + Study (notes) thresholds and at the Memory
-          // (hearts) threshold, so all three toolbar fallbacks are revealed.
+          // Above the Search threshold so the toolbar search button is revealed.
           notesCount: SEARCH_MIN_NOTES_TOTAL,
           taggedNotesCount: 0,
           distinctTagCount: 0,
-          heartsCount: MEMORY_MIN_HEARTS,
+          heartsCount: 0,
           hasInlineVerseLink: false,
           hasExplicitVerseLink: false,
           starterTagCount: 0,
@@ -51,11 +47,6 @@ const mocks = vi.hoisted(() => ({
   setActiveTab: vi.fn(),
   signOut: vi.fn(),
   useLocation: vi.fn(() => ({ pathname: "/passage/John-1" })),
-}));
-
-vi.mock("@/lib/feature-flags", () => ({
-  isFeatureEnabled: (flag: string) => flag === "study",
-  FEATURE_FLAGS: { study: true },
 }));
 
 vi.mock("@/lib/use-tabs", () => ({
@@ -143,8 +134,8 @@ describe("TabBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("gates the Memory (hearts) and Study (notes) toolbar fallbacks behind their reveals", () => {
-    // No staged-onboarding provider → no milestones → nothing revealed yet.
+  it("gates the search toolbar button behind its reveal", () => {
+    // No staged-onboarding provider → no milestones → search stays hidden.
     const { unmount } = render(
       <TooltipProvider delayDuration={0}>
         <TabBar />
@@ -158,8 +149,6 @@ describe("TabBar", () => {
     expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
     unmount();
 
-    // Once the hearts (Memory) and notes (Study) milestones are reached, both
-    // toolbar fallbacks appear. The Mode Dock still owns their reveal callouts.
     render(
       <StagedOnboardingTestProvider>
         <TooltipProvider delayDuration={0}>
@@ -169,11 +158,11 @@ describe("TabBar", () => {
     );
 
     expect(
-      screen.getByRole("link", { name: "Open memory" }),
+      screen.getByRole("link", { name: "Open search workspace" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Open study" }),
-    ).toBeInTheDocument();
+    // Memory and Study live in the Mode Dock, not the toolbar.
+    expect(screen.queryByRole("link", { name: "Open memory" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
   });
 
   it("shows the passage shortcut in the new-tab tooltip", async () => {

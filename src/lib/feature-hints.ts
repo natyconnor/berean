@@ -28,11 +28,22 @@ export const FEATURE_HINTS = {
   SEARCH_REVEAL_AFTER_LIBRARY: "search-reveal-after-library",
   /** Wave 5 callout that appears beside the newly-revealed Compose/Read toggle. */
   READING_MODE_REVEAL: "reading-mode-reveal",
+  /**
+   * One-time launch announcement for the Memory overhaul + Mode Dock.
+   * Shown only to accounts created before `MEMORY_LAUNCH_ANNOUNCEMENT_AFTER`.
+   */
+  MEMORY_LAUNCH_ANNOUNCEMENT: "memory-launch-announcement",
 } as const;
 
 export type FeatureHintId = (typeof FEATURE_HINTS)[keyof typeof FEATURE_HINTS];
 
 export const HINT_QUEUE_COOLDOWN_MS = 1 * 60 * 1000;
+
+/**
+ * Accounts created before this timestamp are eligible for the Memory launch
+ * announcement. July 14, 2026 6:00 AM Eastern (EDT, UTC-4).
+ */
+export const MEMORY_LAUNCH_ANNOUNCEMENT_AFTER = Date.UTC(2026, 6, 14, 10, 0, 0);
 
 export interface FeatureHintMetadata {
   /**
@@ -53,4 +64,5 @@ export const FEATURE_HINT_METADATA: Record<FeatureHintId, FeatureHintMetadata> =
     [FEATURE_HINTS.STUDY_FIRST_OPEN_EXPLAINER]: { priority: 0 },
     [FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY]: { priority: 70 },
     [FEATURE_HINTS.READING_MODE_REVEAL]: { priority: 60 },
+    [FEATURE_HINTS.MEMORY_LAUNCH_ANNOUNCEMENT]: { priority: 0 },
   };
