@@ -28,8 +28,9 @@ function monthLabel(dayStart: number): string {
   });
 }
 
-function reviewPhrase(count: number): string {
-  return count === 1 ? "1 review" : `${count} reviews`;
+/** Learn, review, deck, and free practice all count as practice activity. */
+function practicePhrase(count: number): string {
+  return count === 1 ? "1 practice" : `${count} practices`;
 }
 
 /** Map a count to a background: muted at 0, ramping chart-1 opacity otherwise. */
@@ -90,21 +91,21 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
 
   const label =
     total === 0
-      ? "Practice heatmap: no reviews in this window."
-      : `Practice heatmap: ${total} reviews over the last ${data.length} days.`;
+      ? "Practice heatmap: no practice in this window."
+      : `Practice heatmap: ${total} practices over the last ${data.length} days.`;
 
   return (
     <MemoryDashboardCard className="p-4">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Practice</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {total} {total === 1 ? "review" : "reviews"}
+          {practicePhrase(total)}
         </span>
       </div>
 
       {total === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
-          No reviews yet. Your daily practice will show up here.
+          No practice yet. Learning and reviewing verses will show up here.
         </p>
       ) : (
         <div role="img" aria-label={label} className="mt-3">
@@ -161,14 +162,14 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
                           <button
                             type="button"
                             className="aspect-square rounded-[3px] outline-none transition-[filter] duration-150 hover:brightness-[1.08] focus-visible:ring-2 focus-visible:ring-ring"
-                            aria-label={`${formatDay(cell.dayStart)}: ${reviewPhrase(cell.count)}`}
+                            aria-label={`${formatDay(cell.dayStart)}: ${practicePhrase(cell.count)}`}
                             style={cellStyle(cell.count, max)}
                           />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="tabular-nums">
                           {formatDay(cell.dayStart)}
                           <span className="mx-1.5 text-background/50">·</span>
-                          {reviewPhrase(cell.count)}
+                          {practicePhrase(cell.count)}
                         </TooltipContent>
                       </Tooltip>
                     ),
