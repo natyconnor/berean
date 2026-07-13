@@ -379,68 +379,6 @@ export const removeVerse = mutation({
   },
 });
 
-export const reorder = mutation({
-  args: {
-    id: v.id("packs"),
-    orderedVerseRefIds: v.array(v.id("verseRefs")),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-    const pack = await loadOwnedPack(ctx, args.id, userId);
-    if (!pack) throw new Error("Pack not found");
-    if (pack.kind !== "custom") {
-      throw new Error("Can only reorder custom packs");
-    }
-
-    // Load the pack's current membership in its existing order so any row the
-    // caller omits keeps its prior relative order.
-    const rows = await ctx.db
-      .query("packVerses")
-      .withIndex("by_userId_packId_order", (q) =>
-        q.eq("userId", userId).eq("packId", args.id),
-      )
-      .order("asc")
-      .collect();
-
-    const rowByRef = new Map(rows.map((row) => [String(row.verseRefId), row]));
-
-    // Every provided id must belong to the pack.
-    for (const verseRefId of args.orderedVerseRefIds) {
-      if (!rowByRef.has(String(verseRefId))) {
-        throw new Error("Verse is not a member of this pack");
-      }
-    }
-
-    // Sequence the provided ids first (in caller order, de-duplicated), then
-    // any remaining members in their prior relative order. Re-numbering every
-    // row keeps the final `order` values contiguous (0..n-1) with no
-    // duplicates, which is what `loadCustomMembers` sorts on.
-    const sequenced: typeof rows = [];
-    const seen = new Set<string>();
-    for (const verseRefId of args.orderedVerseRefIds) {
-      const key = String(verseRefId);
-      if (seen.has(key)) continue;
-      const row = rowByRef.get(key);
-      if (!row) continue;
-      seen.add(key);
-      sequenced.push(row);
-    }
-    for (const row of rows) {
-      if (seen.has(String(row.verseRefId))) continue;
-      sequenced.push(row);
-    }
-
-    for (let i = 0; i < sequenced.length; i += 1) {
-      const row = sequenced[i];
-      if (row.order !== i) {
-        await ctx.db.patch(row._id, { order: i });
-      }
-    }
-    return null;
-  },
-});
-
 export const resolveMembers = query({
   args: { id: v.id("packs"), now: v.number() },
   returns: v.array(packMemberValidator),

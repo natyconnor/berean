@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  ChevronDown,
-  ChevronUp,
   Dumbbell,
   Loader2,
   Pencil,
@@ -56,8 +54,8 @@ import {
 /**
  * A single pack: header + counts, its resolved members, and Review / Practice
  * actions that navigate to `/memory/$packId/review` and
- * `/memory/$packId/practice`. Custom packs additionally support add / remove /
- * reorder of their hand-picked membership.
+ * `/memory/$packId/practice`. Custom packs additionally support add / remove
+ * of their hand-picked membership.
  */
 export function PackView({ packId }: { packId: Id<"packs"> }) {
   const now = useLiveNow();
@@ -187,7 +185,6 @@ function PackViewMain({
   const remove = useMutation(api.packs.remove);
   const addVerse = useMutation(api.packs.addVerse);
   const removeVerse = useMutation(api.packs.removeVerse);
-  const reorder = useMutation(api.packs.reorder);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(pack.name);
@@ -252,18 +249,6 @@ function PackViewMain({
       await removeVerse({ id: packId, verseRefId });
     },
     [removeVerse, packId],
-  );
-
-  const handleMove = useCallback(
-    async (index: number, direction: "up" | "down") => {
-      if (!members) return;
-      const ids = members.map((m) => m.verseRefId);
-      const j = direction === "up" ? index - 1 : index + 1;
-      if (j < 0 || j >= ids.length) return;
-      [ids[index], ids[j]] = [ids[j], ids[index]];
-      await reorder({ id: packId, orderedVerseRefIds: ids });
-    },
-    [members, reorder, packId],
   );
 
   const canReview = dueCount > 0;
@@ -381,7 +366,7 @@ function PackViewMain({
               </div>
             ) : (
               <ul className="space-y-1.5">
-                {members.map((member, index) => {
+                {members.map((member) => {
                   const style = MEMORY_STATUS_STYLE[member.status];
                   return (
                     <MemoryListItem
@@ -415,37 +400,15 @@ function PackViewMain({
                         </span>
                       </button>
                       {isCustom && (
-                        <span className="flex shrink-0 items-center gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            disabled={index === 0}
-                            onClick={() => void handleMove(index, "up")}
-                            aria-label={`Move ${formatVerseRef(member)} up`}
-                          >
-                            <ChevronUp className="h-4 w-4" aria-hidden />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            disabled={index === members.length - 1}
-                            onClick={() => void handleMove(index, "down")}
-                            aria-label={`Move ${formatVerseRef(member)} down`}
-                          >
-                            <ChevronDown className="h-4 w-4" aria-hidden />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => void handleRemove(member.verseRefId)}
-                            aria-label={`Remove ${formatVerseRef(member)}`}
-                          >
-                            <X className="h-4 w-4" aria-hidden />
-                          </Button>
-                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => void handleRemove(member.verseRefId)}
+                          aria-label={`Remove ${formatVerseRef(member)}`}
+                        >
+                          <X className="h-4 w-4" aria-hidden />
+                        </Button>
                       )}
                     </MemoryListItem>
                   );
