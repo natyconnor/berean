@@ -23,10 +23,10 @@ import { logInteraction } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
+import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
 import {
   shouldRevealMemory,
   shouldRevealSearch,
-  shouldRevealStudy,
 } from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
@@ -62,7 +62,7 @@ export function TabBar() {
   const memoryRevealReached = milestones
     ? shouldRevealMemory(milestones)
     : false;
-  const studyRevealReached = milestones ? shouldRevealStudy(milestones) : false;
+  const studyRevealReached = isStudyFeatureAccessible(milestones);
   // The Mode Dock owns the Memory/Study reveal *callouts* (and the display
   // queue). The toolbar Memory/Study links are the documented fallbacks, so they
   // opt out of the display queue (`useDisplayQueue: false`) to avoid pinning the

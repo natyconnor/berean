@@ -12,15 +12,20 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { ScopeForm } from "@/components/study/scope-form";
 import { useScopeForm } from "@/components/study/use-scope-form";
 
-import { HeartedVersePicker, type HeartedVerse } from "./hearted-verse-picker";
+import { PackVersePicker } from "./pack-verse-picker";
+import {
+  packVerseKey,
+  type HeartedVerse,
+  type PackableVerse,
+} from "./pack-verse-types";
 
 type PackKind = "scope" | "custom";
 
 /**
  * Creates a pack: a name, a kind toggle (Scope vs Custom), and the matching
  * body. Scope packs embed the shared {@link ScopeForm} with a live member
- * preview; custom packs hand-pick from hearted verses. On create we navigate
- * straight to the new pack's view.
+ * preview; custom packs can stage hearted, typed, or browsed verses. On create
+ * we navigate straight to the new pack's view.
  */
 export function PackBuilder() {
   const navigate = useNavigate();
@@ -39,7 +44,7 @@ export function PackBuilder() {
     kind === "scope" ? { scope: scopeForPreview, now } : "skip",
   );
 
-  // Custom packs are curated from hearted verses (adding one hearts it anyway).
+  // Custom pack membership always hearts the verse when the pack is saved.
   const savedVerses = useQuery(
     api.savedVerses.listAll,
     kind === "custom" ? {} : "skip",
@@ -56,12 +61,12 @@ export function PackBuilder() {
     [savedVerses],
   );
 
-  const [staged, setStaged] = useState<Map<string, HeartedVerse>>(new Map());
+  const [staged, setStaged] = useState<Map<string, PackableVerse>>(new Map());
 
-  const toggleStaged = useCallback((verse: HeartedVerse) => {
+  const toggleStaged = useCallback((verse: PackableVerse) => {
     setStaged((prev) => {
       const next = new Map(prev);
-      const key = String(verse.verseRefId);
+      const key = packVerseKey(verse);
       if (next.has(key)) {
         next.delete(key);
       } else {
@@ -230,13 +235,14 @@ export function PackBuilder() {
                   Verses
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Pick verses to include. You can add more later from the pack.
+                  Add by reference, choose from hearted verses, or browse the
+                  Bible. Added verses are hearted for Memory.
                 </p>
               </div>
-              <HeartedVersePicker
-                verses={heartedVerses}
-                isLoading={savedVerses === undefined}
-                isSelected={(id) => staged.has(String(id))}
+              <PackVersePicker
+                heartedVerses={heartedVerses}
+                isLoadingHearted={savedVerses === undefined}
+                isSelected={(verse) => staged.has(packVerseKey(verse))}
                 onSelect={toggleStaged}
               />
             </section>

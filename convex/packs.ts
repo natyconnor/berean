@@ -15,6 +15,7 @@ import {
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import { isDueForReview } from "../src/lib/memory-scheduler";
 import { scopesEqual } from "../src/lib/scope-equality";
+import { verseMatchesScope } from "../src/lib/verse-scope-match";
 
 /**
  * A pack is a per-user named verse set. `scope` packs resolve their members
@@ -282,6 +283,17 @@ export const addVerse = mutation({
     });
     if (boundsError) {
       throw new Error(boundsError);
+    }
+
+    if (
+      pack.kind === "scope" &&
+      (!pack.scope ||
+        !verseMatchesScope(
+          { book: args.book, chapter: args.chapter },
+          pack.scope,
+        ))
+    ) {
+      throw new Error("That verse is outside this pack's scope.");
     }
 
     const verseRefId = await findOrCreateVerseRefId(ctx, userId, {

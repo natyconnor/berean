@@ -11,10 +11,8 @@ import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useTabs } from "@/lib/use-tabs";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
-import {
-  shouldRevealMemory,
-  shouldRevealStudy,
-} from "@/lib/staged-onboarding-thresholds";
+import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
+import { shouldRevealMemory } from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
@@ -75,7 +73,7 @@ export function ModeDock() {
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
   const memoryUnlocked = milestones ? shouldRevealMemory(milestones) : false;
-  const studyUnlocked = milestones ? shouldRevealStudy(milestones) : false;
+  const studyUnlocked = isStudyFeatureAccessible(milestones);
   const unlockedModes = useMemo<Mode[]>(() => {
     const modes: Mode[] = ["notes"];
     if (memoryUnlocked) modes.push("memory");

@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { StudySessionPage } from "@/components/routes/study-session-page";
+import { StudyFeatureGate } from "@/components/routes/study-feature-gate";
 
 export const Route = createFileRoute("/study/$sessionId")({
-  component: StudySessionPage,
+  component: () => (
+    <StudyFeatureGate>
+      <StudySessionPage />
+    </StudyFeatureGate>
+  ),
 });

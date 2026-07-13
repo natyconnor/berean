@@ -25,7 +25,7 @@ const MODE_DOCK_OPTIONS: Array<{
   {
     value: "off",
     label: "Off",
-    description: "Hide the dock entirely. The Study icon stays in the toolbar.",
+    description: "Hide the dock entirely. Mode shortcuts stay in the toolbar.",
   },
 ];
 

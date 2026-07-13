@@ -46,7 +46,12 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { VerseDetail } from "@/components/memory/verse-detail";
 
-import { HeartedVersePicker, type HeartedVerse } from "./hearted-verse-picker";
+import { PackVersePicker } from "./pack-verse-picker";
+import {
+  packVerseKey,
+  type HeartedVerse,
+  type PackableVerse,
+} from "./pack-verse-types";
 
 /**
  * A single pack: header + counts, its resolved members, and Review / Practice
@@ -191,12 +196,14 @@ function PackViewMain({
   const [addOpen, setAddOpen] = useState(false);
   const [selectedVerseRefId, setSelectedVerseRefId] =
     useState<Id<"verseRefs"> | null>(null);
-  const [pendingVerseId, setPendingVerseId] = useState<Id<"verseRefs"> | null>(
-    null,
-  );
+  const [pendingVerseKey, setPendingVerseKey] = useState<string | null>(null);
 
   const memberRefIds = useMemo(
     () => new Set((members ?? []).map((m) => String(m.verseRefId))),
+    [members],
+  );
+  const memberRefKeys = useMemo(
+    () => new Set((members ?? []).map((m) => packVerseKey(m))),
     [members],
   );
 
@@ -221,9 +228,10 @@ function PackViewMain({
   }, [remove, packId, onDeleted]);
 
   const handleAdd = useCallback(
-    async (verse: HeartedVerse) => {
-      if (pendingVerseId) return;
-      setPendingVerseId(verse.verseRefId);
+    async (verse: PackableVerse) => {
+      if (pendingVerseKey) return;
+      const key = packVerseKey(verse);
+      setPendingVerseKey(key);
       try {
         await addVerse({
           id: packId,
@@ -233,10 +241,10 @@ function PackViewMain({
           endVerse: verse.endVerse,
         });
       } finally {
-        setPendingVerseId(null);
+        setPendingVerseKey(null);
       }
     },
-    [addVerse, packId, pendingVerseId],
+    [addVerse, packId, pendingVerseKey],
   );
 
   const handleRemove = useCallback(
@@ -348,17 +356,15 @@ function PackViewMain({
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 Verses
               </h2>
-              {isCustom && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1.5"
-                  onClick={() => setAddOpen(true)}
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden />
-                  Add verses
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5"
+                onClick={() => setAddOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Add verses
+              </Button>
             </div>
 
             {members === undefined ? (
@@ -369,8 +375,8 @@ function PackViewMain({
               <div className="rounded-xl border bg-card px-4 py-10 text-center">
                 <p className="text-sm text-muted-foreground">
                   {isCustom
-                    ? "No verses yet. Add hearted verses to build this pack."
-                    : "No hearted verses match this scope yet. Heart matching verses and they'll appear here."}
+                    ? "No verses yet. Add a verse by reference, from your hearted list, or by browsing."
+                    : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
                 </p>
               </div>
             ) : (
@@ -532,15 +538,15 @@ function PackViewMain({
         </DialogContent>
       </Dialog>
 
-      {isCustom && (
-        <AddVersesDialog
-          open={addOpen}
-          onOpenChange={setAddOpen}
-          memberRefIds={memberRefIds}
-          pendingVerseId={pendingVerseId}
-          onAdd={handleAdd}
-        />
-      )}
+      <AddVersesDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        memberRefIds={memberRefIds}
+        memberRefKeys={memberRefKeys}
+        pendingVerseKey={pendingVerseKey}
+        scope={pack.kind === "scope" ? pack.scope : undefined}
+        onAdd={handleAdd}
+      />
     </div>
   );
 }
@@ -549,17 +555,26 @@ function AddVersesDialog({
   open,
   onOpenChange,
   memberRefIds,
-  pendingVerseId,
+  memberRefKeys,
+  pendingVerseKey,
+  scope,
   onAdd,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   memberRefIds: Set<string>;
-  pendingVerseId: Id<"verseRefs"> | null;
-  onAdd: (verse: HeartedVerse) => void;
+  memberRefKeys: Set<string>;
+  pendingVerseKey: string | null;
+  scope?: Pack["scope"];
+  onAdd: (verse: PackableVerse) => void;
 }) {
-  // Only load hearted verses while the dialog is open.
-  const savedVerses = useQuery(api.savedVerses.listAll, open ? {} : "skip");
+  // Only load hearted verses while the dialog is open — and never for scope
+  // packs, whose "add" flow is purely about hearting *new* verses in the scope
+  // (a hearted list would just re-list verses already in the pack).
+  const savedVerses = useQuery(
+    api.savedVerses.listAll,
+    open && !scope ? {} : "skip",
+  );
   const heartedVerses = useMemo<HeartedVerse[]>(
     () =>
       (savedVerses ?? []).map((v) => ({
@@ -576,18 +591,30 @@ function AddVersesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add verses</DialogTitle>
+          <DialogTitle>
+            {scope ? "Heart verses in scope" : "Add verses"}
+          </DialogTitle>
           <DialogDescription>
-            Pick from your hearted verses. Adding a verse hearts it if it
-            isn&apos;t already.
+            {scope
+              ? "Type a reference or browse within this pack's scope. Verses you heart here join the pack automatically."
+              : "Type a reference, pick from hearted verses, or browse. Added verses are hearted for Memory."}
           </DialogDescription>
         </DialogHeader>
-        <HeartedVersePicker
-          verses={heartedVerses}
-          isLoading={open && savedVerses === undefined}
-          isSelected={(id) => memberRefIds.has(String(id))}
-          isDisabled={(id) => memberRefIds.has(String(id))}
-          isPending={(id) => pendingVerseId === id}
+        <PackVersePicker
+          heartedVerses={heartedVerses}
+          isLoadingHearted={open && !scope && savedVerses === undefined}
+          scope={scope}
+          isSelected={(verse) =>
+            (verse.verseRefId !== undefined &&
+              memberRefIds.has(String(verse.verseRefId))) ||
+            memberRefKeys.has(packVerseKey(verse))
+          }
+          isDisabled={(verse) =>
+            (verse.verseRefId !== undefined &&
+              memberRefIds.has(String(verse.verseRefId))) ||
+            memberRefKeys.has(packVerseKey(verse))
+          }
+          isPending={(verse) => pendingVerseKey === packVerseKey(verse)}
           onSelect={onAdd}
         />
       </DialogContent>

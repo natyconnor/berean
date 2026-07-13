@@ -53,6 +53,11 @@ const mocks = vi.hoisted(() => ({
   useLocation: vi.fn(() => ({ pathname: "/passage/John-1" })),
 }));
 
+vi.mock("@/lib/feature-flags", () => ({
+  isFeatureEnabled: (flag: string) => flag === "study",
+  FEATURE_FLAGS: { study: true },
+}));
+
 vi.mock("@/lib/use-tabs", () => ({
   useTabs: () => ({
     tabs: [{ id: "john-1", passageId: "John-1", label: "John 1" }],
