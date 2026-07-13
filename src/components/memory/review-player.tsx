@@ -115,7 +115,11 @@ export function ReviewPlayer({
     setSnapshot(dueItems);
   }
 
-  const reviewItems = snapshot ?? [];
+  const reviewItems = useMemo(() => snapshot ?? [], [snapshot]);
+
+  // Stable across Convex re-renders while the snapshot is frozen — avoids
+  // handing StudyActivityDeck a new `cards` array after every recordAttempt.
+  const reviewCards = useMemo(() => reviewItems.map(toCard), [reviewItems]);
 
   const [phase, setPhase] = useState<Phase | null>(null);
 
@@ -199,21 +203,16 @@ export function ReviewPlayer({
     );
   }
 
-  const reviewCards = reviewItems.map(toCard);
   return (
     <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
-      <div className="space-y-4">
-        <StudyActivityDeck
-          key="today-review"
-          cards={reviewCards}
-          scopeLabel="review"
-        />
-        <div className="mx-auto flex w-full max-w-2xl justify-end">
-          <Button variant="ghost" size="sm" onClick={() => setPhase("summary")}>
-            End review
-          </Button>
-        </div>
-      </div>
+      <StudyActivityDeck
+        key="today-review"
+        cards={reviewCards}
+        scopeLabel="review"
+        interaction="test"
+        onEndSession={() => setPhase("summary")}
+        endSessionLabel="End review"
+      />
     </TodayQueueShell>
   );
 }

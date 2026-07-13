@@ -115,10 +115,5 @@ export function useStudyActivityDeckDebug({
     devLog.info("studyTeach", "deck-restart", ctx);
   }
 
-  function logShuffle(ctx: { cardsLength: number }): void {
-    if (!studyTeachDebugEnabled()) return;
-    devLog.info("studyTeach", "deck-shuffle", ctx);
-  }
-
-  return { logAdvance, logRestart, logShuffle };
+  return { logAdvance, logRestart };
 }

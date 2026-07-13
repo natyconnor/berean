@@ -20,10 +20,16 @@ import {
   verseAttemptAccuracy,
 } from "./study-attempt-quality";
 import type { VerseMemoryCard as VerseMemoryCardData } from "./study-card-model";
-import { useRecordVerseAttempt } from "./use-record-verse-attempt";
+import {
+  useRecordVerseAttempt,
+  type VerseAttemptMode,
+} from "./use-record-verse-attempt";
 import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
 const ESV_FADE_S = 0.3;
+
+/** Modes the deck card can persist; learn/practice use other surfaces. */
+type DeckAttemptMode = Extract<VerseAttemptMode, "deck" | "review">;
 
 interface StudyVerseMemoryCardProps {
   card: VerseMemoryCardData;
@@ -32,10 +38,12 @@ interface StudyVerseMemoryCardProps {
   onTypedAnswerChange: (value: string) => void;
   /**
    * When provided, the card publishes a "record this attempt" callback here so
-   * the deck can persist the attempt (mode `"deck"`) on completion without
-   * owning any scheduling logic itself.
+   * the deck can persist the attempt on check/completion without owning any
+   * scheduling logic itself.
    */
   recordRef?: MutableRefObject<(() => void) | null>;
+  /** Persistence mode for graded recalls. Defaults to `"deck"`. */
+  attemptMode?: DeckAttemptMode;
 }
 
 interface VerseAttemptResultProps {
@@ -187,6 +195,7 @@ export function StudyVerseMemoryCard({
   typedAnswer,
   onTypedAnswerChange,
   recordRef,
+  attemptMode = "deck",
 }: StudyVerseMemoryCardProps): JSX.Element {
   const refLabel = formatVerseRef(card.reference);
 
@@ -198,11 +207,11 @@ export function StudyVerseMemoryCard({
   const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
 
   const { record } = useRecordVerseAttempt();
-  // Holds a completed-but-ungradable typed answer (Done tapped before the ESV
+  // Holds a completed-but-ungradable typed answer (check/Done before the ESV
   // text arrived) so the flush effect can persist it once text is available.
   const pendingDeckTypedRef = useRef<string | null>(null);
 
-  // Persist a deck recall. Deck recall is always the fully-hidden rung, so it
+  // Persist a recall. Deck/review recall is always the fully-hidden rung, so it
   // is logged as such. Returns whether it actually fired (needs verse text).
   const recordDeckAttempt = useCallback(
     (typed: string): boolean => {
@@ -213,11 +222,11 @@ export function StudyVerseMemoryCard({
         reference: card.reference,
         tokens: diffWords(typed, versePlainText),
         stage: MAX_LEARN_STAGE,
-        mode: "deck",
+        mode: attemptMode,
       });
       return true;
     },
-    [record, card.reference, versePlainText],
+    [record, card.reference, versePlainText, attemptMode],
   );
 
   useEffect(() => {
@@ -245,8 +254,8 @@ export function StudyVerseMemoryCard({
   }, [versePlainText, recordDeckAttempt]);
 
   const front = (
-    <div className="flex flex-col items-center gap-5 py-8 h-full w-full px-6 text-center">
-      <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+    <div className="flex h-full w-full flex-col items-center gap-4 px-6 py-7 text-center">
+      <h2 className="text-2xl font-semibold tracking-tight text-foreground">
         {refLabel}
       </h2>
       <p className="text-sm text-muted-foreground">
@@ -256,15 +265,15 @@ export function StudyVerseMemoryCard({
         value={typedAnswer}
         onChange={(e) => onTypedAnswerChange(e.target.value)}
         placeholder="Type what you remember"
-        className="w-full max-w-xl min-h-[200px] resize-none"
+        className="min-h-[160px] w-full max-w-xl resize-none"
         aria-label="Your recalled verse"
       />
     </div>
   );
 
   const back = (
-    <div className="flex flex-col gap-4 py-8 h-full w-full px-6 overflow-auto">
-      <h2 className="text-center text-3xl font-semibold tracking-tight text-foreground">
+    <div className="flex h-full w-full flex-col gap-4 overflow-auto px-6 py-7">
+      <h2 className="text-center text-2xl font-semibold tracking-tight text-foreground">
         {refLabel}
       </h2>
 
