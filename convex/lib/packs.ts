@@ -1,6 +1,6 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { findVerseMemory } from "./verseMemory";
+import { findVerseMemory, isLiveHeartedMemory } from "./verseMemory";
 import {
   verseMatchesScope,
   type VerseScope,
@@ -99,10 +99,10 @@ export function filterScopeMembers(
 /**
  * Members of a custom pack, in explicit membership order.
  *
- * Joins each `packVerses` row (read through `by_userId_packId_order`) to its
- * verse reference and `verseMemory` row. Membership is explicit and survives
- * un-hearting (the memory row is durable), so this joins to `verseMemory`
- * directly rather than requiring a live heart. Bounded by pack size.
+ * Joins each `packVerses` row to its verse reference and `verseMemory` row.
+ * Membership is hearted-only: unhearting deletes `packVerses` rows, and this
+ * loader also skips any stale membership whose verse is no longer hearted.
+ * Bounded by pack size.
  */
 export async function loadCustomMembers(
   ctx: QueryCtx,
@@ -119,10 +119,17 @@ export async function loadCustomMembers(
 
   const members: PackMember[] = [];
   for (const row of rows) {
+    const saved = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId_verseRefId", (q) =>
+        q.eq("userId", userId).eq("verseRefId", row.verseRefId),
+      )
+      .unique();
+    if (!saved) continue;
     const ref = await ctx.db.get(row.verseRefId);
     if (!ref || ref.userId !== userId) continue;
     const memory = await findVerseMemory(ctx, userId, row.verseRefId);
-    if (!memory) continue;
+    if (!memory || !isLiveHeartedMemory(memory)) continue;
     members.push(toMember(ref, memory));
   }
   return members;

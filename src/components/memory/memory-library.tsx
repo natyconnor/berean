@@ -68,6 +68,8 @@ export function MemoryLibrary({
   // Keep the last non-empty page for the active sort so a sort switch (or brief
   // re-fetch) fades over the existing list instead of collapsing to a spinner.
   // Cached pages return instantly; only a never-seen sort truly reloads.
+  // Adjusting state during render when the source list changes is the React-
+  // documented pattern for this (not an effect).
   const [heldPage, setHeldPage] = useState<{
     sort: LibrarySort;
     results: typeof results;

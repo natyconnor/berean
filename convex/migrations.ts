@@ -164,3 +164,150 @@ export const backfillVerseMemoryIsHearted = internalMutation({
     };
   },
 });
+
+/**
+ * Delete custom-pack membership rows whose verse is no longer hearted.
+ * Safe to re-run; processes packVerses in bounded batches.
+ */
+export const cleanupUnheartedPackVerses = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+    scannedSoFar: v.optional(v.number()),
+    deletedSoFar: v.optional(v.number()),
+  },
+  returns: v.object({
+    batchScanned: v.number(),
+    batchDeleted: v.number(),
+    totalScanned: v.number(),
+    totalDeleted: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? DEFAULT_BACKFILL_BATCH_SIZE;
+
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("packVerses")
+      .paginate({ cursor: args.cursor ?? null, numItems: batchSize });
+
+    let deleted = 0;
+    for (const row of page) {
+      const saved = await ctx.db
+        .query("savedVerses")
+        .withIndex("by_userId_verseRefId", (q) =>
+          q.eq("userId", row.userId).eq("verseRefId", row.verseRefId),
+        )
+        .unique();
+      if (saved) continue;
+      await ctx.db.delete(row._id);
+      deleted += 1;
+    }
+
+    const totalScanned = (args.scannedSoFar ?? 0) + page.length;
+    const totalDeleted = (args.deletedSoFar ?? 0) + deleted;
+
+    if (!isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.migrations.cleanupUnheartedPackVerses,
+        {
+          cursor: continueCursor,
+          batchSize: args.batchSize,
+          scannedSoFar: totalScanned,
+          deletedSoFar: totalDeleted,
+        },
+      );
+    }
+
+    return {
+      batchScanned: page.length,
+      batchDeleted: deleted,
+      totalScanned,
+      totalDeleted,
+      isDone,
+      continueCursor: isDone ? null : continueCursor,
+    };
+  },
+});
+
+/**
+ * Rebuild denormalized `userMemoryStats` from hearted `verseMemory` rows.
+ */
+export const backfillUserMemoryStats = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+    scannedSoFar: v.optional(v.number()),
+  },
+  returns: v.object({
+    batchScanned: v.number(),
+    totalScanned: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const batchSize = args.batchSize ?? DEFAULT_BACKFILL_BATCH_SIZE;
+
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("users")
+      .paginate({ cursor: args.cursor ?? null, numItems: batchSize });
+
+    for (const user of page) {
+      const existing = await ctx.db
+        .query("userMemoryStats")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .unique();
+      if (existing) {
+        await ctx.db.delete(existing._id);
+      }
+
+      const hearted = await ctx.db
+        .query("verseMemory")
+        .withIndex("by_userId_isHearted", (q) =>
+          q.eq("userId", user._id).eq("isHearted", true),
+        )
+        .collect();
+
+      const counts = {
+        new: 0,
+        learning: 0,
+        reviewing: 0,
+        mastered: 0,
+        total: 0,
+      };
+      for (const row of hearted) {
+        counts[row.status] += 1;
+        counts.total += 1;
+      }
+
+      await ctx.db.insert("userMemoryStats", {
+        userId: user._id,
+        ...counts,
+        updatedAt: now,
+      });
+    }
+
+    const totalScanned = (args.scannedSoFar ?? 0) + page.length;
+
+    if (!isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.migrations.backfillUserMemoryStats,
+        {
+          cursor: continueCursor,
+          batchSize: args.batchSize,
+          scannedSoFar: totalScanned,
+        },
+      );
+    }
+
+    return {
+      batchScanned: page.length,
+      totalScanned,
+      isDone,
+      continueCursor: isDone ? null : continueCursor,
+    };
+  },
+});

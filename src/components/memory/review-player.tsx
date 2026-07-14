@@ -95,8 +95,8 @@ export function ReviewPlayer({
     api.verseMemory.dueQueue,
     source ? "skip" : { now },
   );
-  // `dueQueue` is capped (<=50 rows); `memoryStats.due` counts *all* due review
-  // verses, so it — not the capped queue length — is the true remaining total.
+  // `dueQueue` is capped; `memoryStats.due` counts *all* due review verses, so
+  // it — not the capped queue length — is the true remaining total.
   const globalStats = useQuery(
     api.verseMemory.memoryStats,
     source ? "skip" : { now },
@@ -111,8 +111,17 @@ export function ReviewPlayer({
     : globalStats?.due;
 
   const [snapshot, setSnapshot] = useState<ReviewItem[] | null>(null);
-  if (dueItems !== undefined && snapshot === null) {
+  const [phase, setPhase] = useState<Phase | null>(null);
+  const [sessionEpoch, setSessionEpoch] = useState(0);
+  const [capturedEpoch, setCapturedEpoch] = useState<number | null>(null);
+
+  // Freeze the due list once it resolves for this session epoch. Adjusting
+  // state during render when syncing to a changed epoch is the React-
+  // documented pattern (avoids setState-in-effect lint).
+  if (dueItems !== undefined && capturedEpoch !== sessionEpoch) {
+    setCapturedEpoch(sessionEpoch);
     setSnapshot(dueItems);
+    setPhase(dueItems.length > 0 ? "review" : null);
   }
 
   const reviewItems = useMemo(() => snapshot ?? [], [snapshot]);
@@ -120,15 +129,6 @@ export function ReviewPlayer({
   // Stable across Convex re-renders while the snapshot is frozen — avoids
   // handing StudyActivityDeck a new `cards` array after every recordAttempt.
   const reviewCards = useMemo(() => reviewItems.map(toCard), [reviewItems]);
-
-  const [phase, setPhase] = useState<Phase | null>(null);
-
-  // Pick the starting phase once the snapshot resolves, computed during render
-  // (not in an effect) so it commits before paint. Empty snapshots fall through
-  // to the caught-up state below.
-  if (snapshot !== null && snapshot.length > 0 && phase === null) {
-    setPhase("review");
-  }
 
   const liveDue = useMemo(() => dueItems ?? [], [dueItems]);
   const liveDueRefIds = useMemo(
@@ -141,8 +141,7 @@ export function ReviewPlayer({
     return map;
   }, [liveDue]);
 
-  // The review deck is done once none of its verses remain due. Derived rather
-  // than committed so we never call setState from an effect.
+  // The review deck is done once none of its verses remain due.
   const reviewDone =
     phase === "review" &&
     reviewItems.length > 0 &&
@@ -159,7 +158,6 @@ export function ReviewPlayer({
     }
     return {
       cleared,
-      stageUps: 0,
       reviewed: cleared,
       // True outstanding count across *all* due review verses (uncapped),
       // falling back to the queue length only until the remaining total resolves.
@@ -169,8 +167,7 @@ export function ReviewPlayer({
 
   function handleContinue() {
     // Re-run against whatever is still due right now.
-    setSnapshot(liveDue);
-    setPhase(null);
+    setSessionEpoch((n) => n + 1);
   }
 
   // Loading / empty states.
@@ -193,7 +190,6 @@ export function ReviewPlayer({
         <ReviewSummary
           reviewed={summary.reviewed}
           cleared={summary.cleared}
-          stageUps={summary.stageUps}
           remaining={summary.remaining}
           onDone={onExit}
           onContinue={summary.remaining > 0 ? handleContinue : undefined}

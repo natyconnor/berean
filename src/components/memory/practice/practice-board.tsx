@@ -28,7 +28,7 @@ import {
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
-import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
+import { type MemoryStatus } from "@/lib/memory-scheduler";
 import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +37,11 @@ import {
   hintForProgress,
   maskVerseText,
 } from "@/lib/verse-hint";
+import {
+  normalizeReps,
+  normalizeStageIndex,
+  normalizeStatus,
+} from "@/lib/verse-practice-progress";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -45,7 +50,7 @@ import {
   verseAttemptAccuracy,
 } from "../../study/study-attempt-quality";
 import type { CardReference } from "../../study/study-card-model";
-import { useRecordVerseAttempt } from "../../study/use-record-verse-attempt";
+import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
@@ -101,29 +106,6 @@ const DEAL_STAGGER_S = 0.08;
 const DEAL_FLY_IN_S = 0.16;
 const DEAL_FADE_OUT_S = 0.12;
 
-function normalizeStageIndex(stage: number): number {
-  if (!Number.isFinite(stage)) return 0;
-  return Math.min(MAX_LEARN_STAGE, Math.max(0, Math.trunc(stage)));
-}
-
-function normalizeReps(reps: number): number {
-  if (!Number.isFinite(reps)) return 0;
-  return Math.max(0, Math.trunc(reps));
-}
-
-function normalizeStatus(status: MemoryStatus | undefined): MemoryStatus {
-  if (
-    status === "new" ||
-    status === "learning" ||
-    status === "reviewing" ||
-    status === "mastered"
-  ) {
-    return status;
-  }
-  // Absent status (legacy callers / no memory row yet) → still learning.
-  return "learning";
-}
-
 /**
  * The Practice board: a focused, self-directed surface. One verse card at a
  * time, a verse rail to jump around, a Shuffle / In-order toggle, and prev/next
@@ -152,7 +134,7 @@ export function PracticeBoard({
   const [isShuffling, setIsShuffling] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const { record } = useRecordVerseAttempt();
+  const { recordWithSeqAdopt } = useVersePracticeAttempt("practice");
 
   // Snapshot the practice set once when the board mounts. Like ReviewPlayer
   // freezing its due queue, this keeps mid-session heart changes (which mutate
@@ -186,15 +168,6 @@ export function PracticeBoard({
       ]),
     ),
   );
-
-  // Per-verse attempt bookkeeping for out-of-order resolution. `attemptSeq`
-  // assigns a monotonic id at send time; `appliedSeq` records the newest attempt
-  // whose result we actually adopted. A settled response updates progress only
-  // when it carries a schedule (non-null) and is newer than the last adopted
-  // one — so neither a slower earlier attempt nor a newer *failed* (null)
-  // attempt can strand the dial behind the server.
-  const attemptSeqByVerseId = useRef<Map<string, number>>(new Map());
-  const appliedSeqByVerseId = useRef<Map<string, number>>(new Map());
 
   const orderedVerses = useMemo(
     () => buildPracticeOrder(baseVerses, order, seed),
@@ -306,35 +279,21 @@ export function PracticeBoard({
               total={orderedVerses.length}
               onRecord={(tokens, wordCount) => {
                 const verseId = currentVerse.id;
-                const seq = (attemptSeqByVerseId.current.get(verseId) ?? 0) + 1;
-                attemptSeqByVerseId.current.set(verseId, seq);
-                return record({
-                  reference: currentVerse.reference,
-                  tokens,
-                  stage: currentProgress.learnStage,
-                  mode: "practice",
-                  wordCount,
-                }).then((schedule) => {
-                  if (!schedule) return;
-                  // Adopt only the newest *successful* result. A failed/no-op
-                  // attempt resolves to null and never advances `appliedSeq`, so
-                  // a slower earlier success can't be discarded by it; and once
-                  // a newer success has landed, this older one is dropped.
-                  const applied = appliedSeqByVerseId.current.get(verseId) ?? 0;
-                  if (seq <= applied) return;
-                  appliedSeqByVerseId.current.set(verseId, seq);
-                  // Adopt the server-authoritative band + reps + status so the
-                  // dial advances (exact), holds (close), steps support back up
-                  // (off), or fills to 100% on graduation live in-session.
-                  setProgressByVerseId((prev) => ({
-                    ...prev,
-                    [verseId]: {
-                      learnStage: normalizeStageIndex(schedule.learnStage),
-                      stageReps: normalizeReps(schedule.stageReps),
-                      status: normalizeStatus(schedule.status),
-                    },
-                  }));
-                });
+                return recordWithSeqAdopt(
+                  verseId,
+                  {
+                    reference: currentVerse.reference,
+                    tokens,
+                    stage: currentProgress.learnStage,
+                    wordCount,
+                  },
+                  (next) => {
+                    setProgressByVerseId((prev) => ({
+                      ...prev,
+                      [verseId]: next,
+                    }));
+                  },
+                );
               }}
             />
             <AnimatePresence>

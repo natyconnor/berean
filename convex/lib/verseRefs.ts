@@ -1,12 +1,13 @@
-import type { MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import type { VerseRefInput } from "./noteContent";
 
-export async function findOrCreateVerseRefId(
-  ctx: MutationCtx,
+/** Look up an existing verse ref for the user; does not create. */
+export async function findVerseRefId(
+  ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   ref: VerseRefInput,
-): Promise<Id<"verseRefs">> {
+): Promise<Id<"verseRefs"> | null> {
   const existing = await ctx.db
     .query("verseRefs")
     .withIndex("by_userId_book_chapter_verses", (q) =>
@@ -18,9 +19,17 @@ export async function findOrCreateVerseRefId(
         .eq("endVerse", ref.endVerse),
     )
     .unique();
+  return existing?._id ?? null;
+}
 
-  if (existing) {
-    return existing._id;
+export async function findOrCreateVerseRefId(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  ref: VerseRefInput,
+): Promise<Id<"verseRefs">> {
+  const existingId = await findVerseRefId(ctx, userId, ref);
+  if (existingId) {
+    return existingId;
   }
 
   return await ctx.db.insert("verseRefs", {

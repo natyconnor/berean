@@ -217,7 +217,7 @@ export default defineSchema({
   }).index("by_userId_lastOpenedAt", ["userId", "lastOpenedAt"]),
 
   packVerses: defineTable({
-    // Custom-pack membership (ordered).
+    // Custom-pack membership (ordered). Hearted-only: unheart deletes these rows.
     userId: v.id("users"),
     packId: v.id("packs"),
     verseRefId: v.id("verseRefs"),
@@ -226,7 +226,22 @@ export default defineSchema({
   })
     .index("by_userId_packId_order", ["userId", "packId", "order"])
     .index("by_packId", ["packId"])
-    .index("by_userId_packId_verseRefId", ["userId", "packId", "verseRefId"]),
+    .index("by_userId_packId_verseRefId", ["userId", "packId", "verseRefId"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"]),
+
+  /**
+   * Denormalized hearted-verse status counts for O(1) memoryStats.
+   * `due` is time-dependent and is still computed live from the due index.
+   */
+  userMemoryStats: defineTable({
+    userId: v.id("users"),
+    new: v.number(),
+    learning: v.number(),
+    reviewing: v.number(),
+    mastered: v.number(),
+    total: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
 
   feedbackReports: defineTable({
     userId: v.id("users"),
@@ -267,6 +282,7 @@ export default defineSchema({
     .index("by_userId_dueAt", ["userId", "dueAt"]) // Today queue + badge
     .index("by_userId_isHearted", ["userId", "isHearted"])
     .index("by_userId_isHearted_dueAt", ["userId", "isHearted", "dueAt"])
+    .index("by_userId_isHearted_status", ["userId", "isHearted", "status"])
     .index("by_userId_status", ["userId", "status"])
     .index("by_userId_verseRefId", ["userId", "verseRefId"]), // upsert on heart
 
@@ -286,5 +302,11 @@ export default defineSchema({
     ),
     durationMs: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_userId_createdAt", ["userId", "createdAt"]),
+  })
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_userId_verseRefId_createdAt", [
+      "userId",
+      "verseRefId",
+      "createdAt",
+    ]),
 });

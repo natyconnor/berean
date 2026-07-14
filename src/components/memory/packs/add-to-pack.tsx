@@ -42,9 +42,11 @@ export function AddToPack({
 
   const [pendingId, setPendingId] = useState<Id<"packs"> | null>(null);
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
 
   async function handleAdd(packId: Id<"packs">) {
     if (pendingId) return;
+    setError(null);
     setPendingId(packId);
     try {
       await addVerse({
@@ -55,6 +57,8 @@ export function AddToPack({
         endVerse: reference.endVerse,
       });
       setAddedIds((prev) => new Set(prev).add(String(packId)));
+    } catch {
+      setError("Couldn't add to that pack. Please try again.");
     } finally {
       setPendingId(null);
     }
@@ -90,6 +94,11 @@ export function AddToPack({
             <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
               Custom packs
             </p>
+            {error ? (
+              <p role="alert" className="px-2 py-1 text-xs text-destructive">
+                {error}
+              </p>
+            ) : null}
             <ScrollArea className="max-h-56">
               <ul className="space-y-0.5 pr-1">
                 {customPacks.map((pack) => {

@@ -20,7 +20,8 @@ import { verseMatchesScope } from "../src/lib/verse-scope-match";
 /**
  * A pack is a per-user named verse set. `scope` packs resolve their members
  * LIVE from `savedVerses` ∩ scope; `custom` packs store explicit ordered
- * membership rows in `packVerses`. See docs/study-mode.md.
+ * membership rows in `packVerses`. Pack membership is hearted-only: unhearting
+ * a verse removes it from all custom packs.
  */
 
 const kindValidator = v.union(v.literal("scope"), v.literal("custom"));
@@ -161,30 +162,56 @@ export const listMine = query({
       return { ...paginated, page: [] };
     }
 
-    // Scope packs all resolve against the same hearted set, so load it once
-    // and reuse it across every scope pack in this page (bounded by the
-    // user's hearted set); custom packs read their own membership rows.
-    const hearted = await loadHeartedMembers(ctx, userId);
+    // Lightweight list counts: one savedVerses pass + hearted memory map for
+    // scope packs; custom packs count membership rows (hearted-filtered).
+    const saved = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    const memories = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_isHearted", (q) =>
+        q.eq("userId", userId).eq("isHearted", true),
+      )
+      .collect();
+    const memoryByRef = new Map(
+      memories.map((m) => [m.verseRefId, m] as const),
+    );
 
     const page = [];
     for (const pack of paginated.page) {
-      let members: PackMember[];
-      if (pack.kind === "scope" && pack.scope) {
-        members = filterScopeMembers(hearted, pack.scope);
-      } else {
-        members = await loadCustomMembers(ctx, userId, pack._id);
-      }
-
+      let verseCount = 0;
       let dueCount = 0;
-      for (const m of members) {
-        if (isDueForReview(m, args.now)) dueCount += 1;
+
+      if (pack.kind === "scope" && pack.scope) {
+        for (const row of saved) {
+          if (
+            !verseMatchesScope(
+              { book: row.book, chapter: row.chapter },
+              pack.scope,
+            )
+          ) {
+            continue;
+          }
+          verseCount += 1;
+          const memory = memoryByRef.get(row.verseRefId);
+          if (memory && isDueForReview(memory, args.now)) {
+            dueCount += 1;
+          }
+        }
+      } else {
+        const members = await loadCustomMembers(ctx, userId, pack._id);
+        verseCount = members.length;
+        for (const m of members) {
+          if (isDueForReview(m, args.now)) dueCount += 1;
+        }
       }
 
       page.push({
         _id: pack._id,
         name: pack.name,
         kind: pack.kind,
-        verseCount: members.length,
+        verseCount,
         dueCount,
         lastOpenedAt: pack.lastOpenedAt,
       });

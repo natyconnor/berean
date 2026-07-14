@@ -194,6 +194,11 @@ function PackViewMain({
   const [selectedVerseRefId, setSelectedVerseRefId] =
     useState<Id<"verseRefs"> | null>(null);
   const [pendingVerseKey, setPendingVerseKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [removingRefId, setRemovingRefId] = useState<Id<"verseRefs"> | null>(
+    null,
+  );
 
   const memberRefIds = useMemo(
     () => new Set((members ?? []).map((m) => String(m.verseRefId))),
@@ -210,16 +215,26 @@ function PackViewMain({
       setRenameOpen(false);
       return;
     }
-    await rename({ id: packId, name: next });
-    setRenameOpen(false);
+    setActionError(null);
+    setIsRenaming(true);
+    try {
+      await rename({ id: packId, name: next });
+      setRenameOpen(false);
+    } catch {
+      setActionError("Couldn't rename the pack. Please try again.");
+    } finally {
+      setIsRenaming(false);
+    }
   }, [renameValue, pack.name, rename, packId]);
 
   const handleDelete = useCallback(async () => {
+    setActionError(null);
     setIsDeleting(true);
     try {
       await remove({ id: packId });
       onDeleted();
-    } finally {
+    } catch {
+      setActionError("Couldn't delete the pack. Please try again.");
       setIsDeleting(false);
     }
   }, [remove, packId, onDeleted]);
@@ -228,6 +243,7 @@ function PackViewMain({
     async (verse: PackableVerse) => {
       if (pendingVerseKey) return;
       const key = packVerseKey(verse);
+      setActionError(null);
       setPendingVerseKey(key);
       try {
         await addVerse({
@@ -237,6 +253,8 @@ function PackViewMain({
           startVerse: verse.startVerse,
           endVerse: verse.endVerse,
         });
+      } catch {
+        setActionError("Couldn't add that verse. Please try again.");
       } finally {
         setPendingVerseKey(null);
       }
@@ -246,7 +264,15 @@ function PackViewMain({
 
   const handleRemove = useCallback(
     async (verseRefId: Id<"verseRefs">) => {
-      await removeVerse({ id: packId, verseRefId });
+      setActionError(null);
+      setRemovingRefId(verseRefId);
+      try {
+        await removeVerse({ id: packId, verseRefId });
+      } catch {
+        setActionError("Couldn't remove that verse. Please try again.");
+      } finally {
+        setRemovingRefId(null);
+      }
     },
     [removeVerse, packId],
   );
@@ -334,6 +360,15 @@ function PackViewMain({
         </div>
       </header>
 
+      {actionError ? (
+        <div
+          role="alert"
+          className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-sm text-destructive"
+        >
+          {actionError}
+        </div>
+      ) : null}
+
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-2xl px-5 py-6">
           <section className="space-y-3">
@@ -405,6 +440,7 @@ function PackViewMain({
                           size="icon"
                           className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
                           onClick={() => void handleRemove(member.verseRefId)}
+                          disabled={removingRefId === member.verseRefId}
                           aria-label={`Remove ${formatVerseRef(member)}`}
                         >
                           <X className="h-4 w-4" aria-hidden />
@@ -464,10 +500,16 @@ function PackViewMain({
             autoFocus
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setRenameOpen(false)}
+              disabled={isRenaming}
+            >
               Cancel
             </Button>
-            <Button onClick={() => void handleRename()}>Save</Button>
+            <Button onClick={() => void handleRename()} disabled={isRenaming}>
+              {isRenaming ? "Saving…" : "Save"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -107,6 +107,13 @@ export async function deleteAllDataForUser(
     await ctx.db.delete(row._id);
   }
 
+  for (const row of await ctx.db
+    .query("userMemoryStats")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
   const sessions = await ctx.db
     .query("authSessions")
     .withIndex("userId", (q) => q.eq("userId", userId))

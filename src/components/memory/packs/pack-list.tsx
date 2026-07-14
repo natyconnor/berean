@@ -26,6 +26,9 @@ export function PackList({ now }: { now: number }) {
   const isLoadingFirstPage = status === "LoadingFirstPage";
   const isLoadingMore = status === "LoadingMore";
   const canLoadMore = status === "CanLoadMore";
+  // Hold the last settled page so a refresh doesn't flash a spinner.
+  // Adjusting state during render when results settle is the React-documented
+  // pattern for deriving held UI state from props.
   const [heldResults, setHeldResults] = useState<typeof results | null>(null);
   if (!isLoadingFirstPage && heldResults !== results) {
     setHeldResults(results);

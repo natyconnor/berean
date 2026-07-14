@@ -3,7 +3,12 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
-import { findVerseMemory, seedVerseMemory } from "./lib/verseMemory";
+import {
+  adjustUserMemoryStats,
+  deletePackMembershipsForVerse,
+  findVerseMemory,
+  seedVerseMemory,
+} from "./lib/verseMemory";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 
 /**
@@ -180,14 +185,24 @@ export const toggle = mutation({
       .unique();
 
     if (existing) {
-      // Un-hearting removes the bookmark but intentionally leaves any
-      // `verseMemory` row untouched, so spaced-repetition progress and review
-      // history survive a heart toggle. See docs/study-mode.md.
+      // Un-hearting removes the bookmark and drops the verse from Memory:
+      // pack membership is deleted, isHearted is cleared, but spaced-repetition
+      // progress and review history on verseMemory survive for a later re-heart.
       await ctx.db.delete(existing._id);
       const memory = await findVerseMemory(ctx, userId, verseRefId);
       if (memory) {
+        if (memory.isHearted === true) {
+          await adjustUserMemoryStats(
+            ctx,
+            userId,
+            Date.now(),
+            memory.status,
+            null,
+          );
+        }
         await ctx.db.patch(memory._id, { isHearted: false });
       }
+      await deletePackMembershipsForVerse(ctx, userId, verseRefId);
       return "removed" as const;
     }
 

@@ -23,11 +23,7 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { diffWords } from "@/lib/diff-words";
-import {
-  MAX_LEARN_STAGE,
-  requiredRepsFor,
-  type MemoryStatus,
-} from "@/lib/memory-scheduler";
+import { type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import {
   type HintToken,
@@ -35,17 +31,18 @@ import {
   hintForProgress,
   maskVerseText,
 } from "@/lib/verse-hint";
+import { predictLearning } from "@/lib/verse-practice-progress";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { LearningJourneyBar } from "../memory/practice/learning-journey-bar";
 import { PRACTICE_STAGES } from "../memory/practice/practice-stages";
 import {
   classifyVerseAttempt,
-  type VerseAttemptQuality,
   verseAttemptAccuracy,
 } from "./study-attempt-quality";
 import type { VerseMemoryCard } from "./study-card-model";
 import { useRecordVerseAttempt } from "./use-record-verse-attempt";
+import { useVersePracticeAttempt } from "./use-verse-practice-attempt";
 import { VerseAttemptResult } from "./study-verse-memory-card";
 
 interface StudyVerseLearnProps {
@@ -62,61 +59,6 @@ interface VerseProgress {
 // Bounded retries for the one-shot rung restore on transient read failures.
 const RESTORE_MAX_ATTEMPTS = 3;
 
-function clampStage(stage: number): number {
-  if (!Number.isFinite(stage)) return 0;
-  return Math.min(MAX_LEARN_STAGE, Math.max(0, Math.trunc(stage)));
-}
-
-function clampReps(reps: number): number {
-  if (!Number.isFinite(reps)) return 0;
-  return Math.max(0, Math.trunc(reps));
-}
-
-/**
- * Local mirror of the scheduler's learning-phase transition, used only as a
- * fallback when a recorded attempt resolves to `null` (verse not hearted or the
- * mutation failed) so the UI still advances instead of stalling. On the normal
- * path we adopt the server-authoritative `learnStage`/`stageReps` instead.
- */
-function predictLearning(
-  stage: number,
-  reps: number,
-  quality: VerseAttemptQuality,
-  wordCount?: number,
-  status: MemoryStatus = "learning",
-): VerseProgress {
-  if (quality === "exact") {
-    const nextReps = reps + 1;
-    if (nextReps >= requiredRepsFor(stage, wordCount)) {
-      if (stage >= MAX_LEARN_STAGE) {
-        return {
-          learnStage: MAX_LEARN_STAGE,
-          stageReps: 0,
-          status: "reviewing",
-        };
-      }
-      return { learnStage: stage + 1, stageReps: 0, status: "learning" };
-    }
-    return { learnStage: stage, stageReps: nextReps, status: "learning" };
-  }
-  if (quality === "off") {
-    if (reps > 0) {
-      return { learnStage: stage, stageReps: reps - 1, status: "learning" };
-    }
-    if (stage > 0) {
-      const prevStage = stage - 1;
-      return {
-        learnStage: prevStage,
-        stageReps: Math.max(0, requiredRepsFor(prevStage, wordCount) - 1),
-        status: "learning",
-      };
-    }
-    return { learnStage: 0, stageReps: 0, status: "learning" };
-  }
-  // close: hold the band and its banked reps.
-  return { learnStage: stage, stageReps: reps, status };
-}
-
 export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   // Server-authoritative rung (band + reps banked on it). Held null until the
   // one-shot restore resolves so we never flash the default Read prime.
@@ -126,8 +68,13 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const refLabel = formatVerseRef(card.reference);
   const { data, loading, error } = useEsvReference(card.reference);
 
-  const { record, resolveVerseRefId, heartedVersesReady } =
-    useRecordVerseAttempt();
+  const { resolveVerseRefId, heartedVersesReady } = useRecordVerseAttempt();
+  const {
+    normalizeProgress,
+    recordWithImmediateAdopt,
+    recordDeferred,
+    commitDeferred,
+  } = useVersePracticeAttempt("learn");
   const getOrCreateForVerse = useMutation(api.verseMemory.getOrCreateForVerse);
   const verseRefId = resolveVerseRefId(card.reference);
   // `learnStage`/`stageReps` on the server are the single source of truth for
@@ -136,9 +83,6 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   // learner continues, so the review never changes underneath them.
   const restoredRef = useRef(false);
   const interactedRef = useRef(false);
-  // The server-authoritative rung a recorded attempt returned. Held here and
-  // adopted only when the learner continues, keeping the checked result stable.
-  const pendingProgressRef = useRef<VerseProgress | null>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
@@ -149,13 +93,12 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   // check-answer, or the result-view Continue) is mounted at a time.
   const { submit, pending: submitPending } = useSubmitLock();
 
-  const applyProgress = useCallback((next: VerseProgress) => {
-    setProgress({
-      learnStage: clampStage(next.learnStage),
-      stageReps: clampReps(next.stageReps),
-      status: next.status,
-    });
-  }, []);
+  const applyProgress = useCallback(
+    (next: VerseProgress) => {
+      setProgress(normalizeProgress(next));
+    },
+    [normalizeProgress],
+  );
 
   const stageReady =
     heartedVersesReady &&
@@ -298,32 +241,26 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     // stranding it. There is no result view for the Read prime, so the adopted
     // rung lands directly once the recorded rep settles.
     submit(() =>
-      record({
-        reference: card.reference,
-        tokens: diffWords(versePlainText, versePlainText),
-        stage: stageIndex,
-        mode: "learn",
-        wordCount,
-      }).then((schedule) => {
-        applyProgress(
-          schedule
-            ? {
-                learnStage: schedule.learnStage,
-                stageReps: schedule.stageReps,
-                status: schedule.status,
-              }
-            : predictLearning(
-                stageIndex,
-                repsIndex,
-                "exact",
-                wordCount,
-                status,
-              ),
-        );
-        setTypedAnswer("");
-        setChecked(false);
-        focusAnswerInput();
-      }),
+      recordWithImmediateAdopt(
+        {
+          reference: card.reference,
+          tokens: diffWords(versePlainText, versePlainText),
+          stage: stageIndex,
+          wordCount,
+          current: {
+            learnStage: stageIndex,
+            stageReps: repsIndex,
+            status,
+          },
+          quality: "exact",
+        },
+        (next) => {
+          applyProgress(next);
+          setTypedAnswer("");
+          setChecked(false);
+          focusAnswerInput();
+        },
+      ),
     );
   }
 
@@ -336,27 +273,18 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     // `checked`) mounts and replaces this button.
     submit(() => {
       setChecked(true);
-      return record({
+      return recordDeferred({
         reference: card.reference,
         tokens: diffWords(typedAnswer, versePlainText),
         stage: stageIndex,
-        mode: "learn",
         wordCount,
-      }).then((schedule) => {
-        pendingProgressRef.current = schedule
-          ? {
-              learnStage: schedule.learnStage,
-              stageReps: schedule.stageReps,
-              status: schedule.status,
-            }
-          : null;
       });
     });
   }
 
   function continueAfterReview() {
     applyProgress(
-      pendingProgressRef.current ??
+      commitDeferred(
         predictLearning(
           stageIndex,
           repsIndex,
@@ -364,8 +292,8 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
           wordCount,
           status,
         ),
+      ),
     );
-    pendingProgressRef.current = null;
     setTypedAnswer("");
     setChecked(false);
     focusAnswerInput();

@@ -5,12 +5,10 @@ import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { Button } from "@/components/ui/button";
 
 interface ReviewSummaryProps {
-  /** Verses that made progress this session (cleared or stepped up a stage). */
+  /** Verses that made progress this session (cleared from the due queue). */
   reviewed: number;
   /** Verses that left today's due queue (rescheduled into the future). */
   cleared: number;
-  /** Verses that advanced at least one learn stage but are still due. */
-  stageUps: number;
   /** Verses still due right now (0 == fully caught up). */
   remaining: number;
   onDone: () => void;
@@ -22,12 +20,11 @@ interface ReviewSummaryProps {
 
 /**
  * End-of-queue card shown after a Review run: what got reviewed, what
- * cleared, stage-ups earned, and whether the learner is fully caught up.
+ * cleared, and whether the learner is fully caught up.
  */
 export function ReviewSummary({
   reviewed,
   cleared,
-  stageUps,
   remaining,
   onDone,
   onContinue,
@@ -56,10 +53,9 @@ export function ReviewSummary({
       </div>
 
       <div className="mt-6 space-y-6">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <Stat label="Reviewed" value={reviewed} />
           <Stat label="Cleared" value={cleared} />
-          <Stat label="Stage-ups" value={stageUps} />
         </div>
 
         <div className="flex flex-col gap-2">

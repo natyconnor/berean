@@ -7,7 +7,10 @@ import {
   findVerseMemory,
   getOrCreateVerseMemory,
   isLiveHeartedMemory,
+  adjustUserMemoryStats,
+  findSavedVerse,
 } from "./lib/verseMemory";
+import { findVerseRefId } from "./lib/verseRefs";
 import {
   isDueForReview,
   isReviewPhase,
@@ -36,6 +39,10 @@ function normalizeDays(days: number | undefined): number {
 }
 
 const DEFAULT_DUE_LIMIT = 50;
+/** Cap how many due-index rows we scan when filling a limited queue / count. */
+const MAX_DUE_SCAN = 500;
+/** Safety cap on review-log rows read for dashboard windows. */
+const MAX_REVIEW_ACTIVITY_ROWS = 5000;
 
 const statusValidator = v.union(
   v.literal("new"),
@@ -139,6 +146,9 @@ function toRowView(row: Doc<"verseMemory">) {
  * A verse un-hearted after review keeps its `verseMemory` row as durable
  * history, but drops out of the live due queue until re-hearted.
  * `now` is passed in by the caller so the query stays deterministic/cacheable.
+ *
+ * Reads are bounded: we `.take()` from the due index (with overscan) instead of
+ * collecting every hearted due row for the user.
  */
 export const dueQueue = query({
   args: { now: v.number(), limit: v.optional(v.number()) },
@@ -150,6 +160,7 @@ export const dueQueue = query({
     }
 
     const limit = args.limit ?? DEFAULT_DUE_LIMIT;
+    const scanCap = Math.min(MAX_DUE_SCAN, Math.max(limit * 4, limit));
 
     const dueRows = await ctx.db
       .query("verseMemory")
@@ -157,7 +168,7 @@ export const dueQueue = query({
         q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
       )
       .order("asc")
-      .collect();
+      .take(scanCap);
 
     const items: Array<{
       _id: Id<"verseMemory">;
@@ -212,9 +223,67 @@ export const dueQueue = query({
 });
 
 /**
+ * Single-verse due lookup for scoped review (verse detail / pack → review).
+ * Returns the due queue item when the hearted verse is due for review, else null.
+ * Does not rely on a capped global dueQueue scan.
+ */
+export const dueForVerse = query({
+  args: {
+    now: v.number(),
+    book: v.string(),
+    chapter: v.number(),
+    startVerse: v.number(),
+    endVerse: v.number(),
+  },
+  returns: v.union(dueQueueItem, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return null;
+
+    const verseRefId = await findVerseRefId(ctx, userId, {
+      book: args.book,
+      chapter: args.chapter,
+      startVerse: args.startVerse,
+      endVerse: args.endVerse,
+    });
+    if (!verseRefId) return null;
+
+    const saved = await findSavedVerse(ctx, userId, verseRefId);
+    if (!saved) return null;
+
+    const memory = await findVerseMemory(ctx, userId, verseRefId);
+    if (!memory || !isLiveHeartedMemory(memory)) return null;
+    if (!isDueForReview(memory, args.now)) return null;
+
+    const ref = await ctx.db.get(verseRefId);
+    if (!ref || ref.userId !== userId) return null;
+
+    return {
+      _id: memory._id,
+      verseRefId: memory.verseRefId,
+      status: memory.status,
+      learnStage: memory.learnStage,
+      stageReps: memory.stageReps,
+      ease: memory.ease,
+      intervalDays: memory.intervalDays,
+      dueAt: memory.dueAt,
+      consecutiveCorrect: memory.consecutiveCorrect,
+      lapses: memory.lapses,
+      earlyReviewApplied: memory.earlyReviewApplied,
+      lastReviewedAt: memory.lastReviewedAt,
+      createdAt: memory.createdAt,
+      book: ref.book,
+      chapter: ref.chapter,
+      startVerse: ref.startVerse,
+      endVerse: ref.endVerse,
+    };
+  },
+});
+
+/**
  * Cheap count of verses due for review at `now` (`reviewing` / `mastered`
  * only). Heart-aware: only rows denormalized as currently hearted are counted.
- * Drives the dock badge.
+ * Drives the dock badge. Bounded scan — not a full collect.
  */
 export const dueCount = query({
   args: { now: v.number() },
@@ -230,7 +299,8 @@ export const dueCount = query({
       .withIndex("by_userId_isHearted_dueAt", (q) =>
         q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
       )
-      .collect();
+      .order("asc")
+      .take(MAX_DUE_SCAN);
 
     let count = 0;
     for (const row of dueRows) {
@@ -308,6 +378,16 @@ export const recordAttempt = mutation({
       },
     );
 
+    if (memory.status !== next.status && isLiveHeartedMemory(memory)) {
+      await adjustUserMemoryStats(
+        ctx,
+        userId,
+        args.now,
+        memory.status,
+        next.status,
+      );
+    }
+
     await ctx.db.patch(memory._id, {
       status: next.status,
       learnStage: next.learnStage,
@@ -360,8 +440,8 @@ const memoryStatsValidator = v.object({
  * Per-status counts for the current user, plus a due-now tally of review-phase
  * verses (`reviewing` / `mastered` with `dueAt <= now`).
  *
- * Heart-aware: uses the denormalized `verseMemory.isHearted` flag, so this is a
- * single pass over live memory rows rather than a saved-verse join.
+ * Status totals come from denormalized `userMemoryStats` (O(1)). Due is still
+ * computed live from a bounded due-index scan (time-dependent).
  */
 export const memoryStats = query({
   args: { now: v.number() },
@@ -381,22 +461,48 @@ export const memoryStats = query({
       return empty;
     }
 
-    const rows = await ctx.db
-      .query("verseMemory")
-      .withIndex("by_userId_isHearted", (q) =>
-        q.eq("userId", userId).eq("isHearted", true),
-      )
-      .collect();
+    const rollup = await ctx.db
+      .query("userMemoryStats")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
 
-    const stats = { ...empty };
-    for (const memory of rows) {
-      stats[memory.status] += 1;
-      stats.total += 1;
-      if (isDueForReview(memory, args.now)) {
-        stats.due += 1;
-      }
+    const dueRows = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_isHearted_dueAt", (q) =>
+        q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
+      )
+      .order("asc")
+      .take(MAX_DUE_SCAN);
+
+    let due = 0;
+    for (const row of dueRows) {
+      if (isDueForReview(row, args.now)) due += 1;
     }
-    return stats;
+
+    if (!rollup) {
+      // Pre-backfill fallback: count from hearted rows once.
+      const rows = await ctx.db
+        .query("verseMemory")
+        .withIndex("by_userId_isHearted", (q) =>
+          q.eq("userId", userId).eq("isHearted", true),
+        )
+        .take(MAX_DUE_SCAN);
+      const stats = { ...empty, due };
+      for (const memory of rows) {
+        stats[memory.status] += 1;
+        stats.total += 1;
+      }
+      return stats;
+    }
+
+    return {
+      new: rollup.new,
+      learning: rollup.learning,
+      reviewing: rollup.reviewing,
+      mastered: rollup.mastered,
+      total: rollup.total,
+      due,
+    };
   },
 });
 
@@ -452,7 +558,7 @@ export const reviewActivity = query({
       .withIndex("by_userId_createdAt", (q) =>
         q.eq("userId", userId).gte("createdAt", windowStart),
       )
-      .collect();
+      .take(MAX_REVIEW_ACTIVITY_ROWS);
 
     const counts = bucketReviewCounts(
       rows.map((row) => row.createdAt),
@@ -516,7 +622,7 @@ export const reviewForecast = query({
       .withIndex("by_userId_isHearted_dueAt", (q) =>
         q.eq("userId", userId).eq("isHearted", true).lt("dueAt", windowEnd),
       )
-      .collect();
+      .take(MAX_DUE_SCAN);
 
     const dueAts: number[] = [];
     for (const row of rows) {
@@ -667,7 +773,9 @@ export const listLibrary = query({
             .order("asc")
         : ctx.db
             .query("verseMemory")
-            .withIndex("by_userId_status", (q) => q.eq("userId", userId))
+            .withIndex("by_userId_isHearted_status", (q) =>
+              q.eq("userId", userId).eq("isHearted", true),
+            )
             .order("asc");
 
     const paginated = await memoryQuery.paginate(args.paginationOpts);
@@ -692,13 +800,6 @@ export const listLibrary = query({
 
 /** How many recent attempts the drill-down shows. */
 const VERSE_DETAIL_ATTEMPT_LIMIT = 20;
-/**
- * Upper bound on log rows scanned while gathering one verse's recent attempts.
- * `verseMemoryReviews` is only indexed `by_userId_createdAt` (no per-verse
- * index), so we walk the user's log newest-first and stop once we have enough
- * matches or hit this cap — keeping the read bounded on very active users.
- */
-const VERSE_DETAIL_SCAN_LIMIT = 500;
 
 const attemptValidator = v.object({
   quality: qualityValidator,
@@ -825,26 +926,22 @@ export const verseDetail = query({
       )
       .unique();
 
-    const attempts: Attempt[] = [];
-    let scanned = 0;
-    for await (const row of ctx.db
+    const attemptRows = await ctx.db
       .query("verseMemoryReviews")
-      .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
-      .order("desc")) {
-      scanned += 1;
-      if (row.verseRefId === args.verseRefId) {
-        attempts.push({
-          quality: row.quality,
-          accuracy: row.accuracy,
-          stage: row.stage,
-          mode: row.mode,
-          durationMs: row.durationMs,
-          createdAt: row.createdAt,
-        });
-        if (attempts.length >= VERSE_DETAIL_ATTEMPT_LIMIT) break;
-      }
-      if (scanned >= VERSE_DETAIL_SCAN_LIMIT) break;
-    }
+      .withIndex("by_userId_verseRefId_createdAt", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .order("desc")
+      .take(VERSE_DETAIL_ATTEMPT_LIMIT);
+
+    const attempts: Attempt[] = attemptRows.map((row) => ({
+      quality: row.quality,
+      accuracy: row.accuracy,
+      stage: row.stage,
+      mode: row.mode,
+      durationMs: row.durationMs,
+      createdAt: row.createdAt,
+    }));
 
     return {
       verseRefId: args.verseRefId,
