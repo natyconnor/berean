@@ -132,7 +132,10 @@ export function StagedOnboardingProvider({
       if (isLoading) return false;
       const record = hintsById.get(hintId);
       if (!record) return true;
-      if (record.shownAt !== undefined) return false;
+      // `shownAt` is exposure analytics only — do not clear pending on it.
+      // Display-queue hints call markShown as soon as the callout opens; if that
+      // flipped eligibility, releaseHintDisplay would tear the callout down
+      // immediately (the Memory first-heart reveal bug).
       if (record.completedAt !== undefined) return false;
       if (record.dismissedAt !== undefined) return false;
       return true;
