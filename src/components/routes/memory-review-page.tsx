@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { Clock3, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 import { api } from "../../../convex/_generated/api";
 import {
@@ -31,11 +32,20 @@ export function MemoryReviewPage() {
       : "skip",
   );
 
+  // Freeze the scoped due row once it first resolves so Check → reschedule
+  // doesn't bounce this page to "Not due yet" mid-session.
+  const [scopedSnapshot, setScopedSnapshot] = useState<
+    ReviewItem | null | undefined
+  >(undefined);
+  if (hasScope && scopedDue !== undefined && scopedSnapshot === undefined) {
+    setScopedSnapshot(scopedDue);
+  }
+
   if (!hasScope) {
     return <ReviewPlayer onExit={() => void navigate({ to: "/memory" })} />;
   }
 
-  if (scopedDue === undefined) {
+  if (scopedSnapshot === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -43,7 +53,7 @@ export function MemoryReviewPage() {
     );
   }
 
-  if (scopedDue === null) {
+  if (scopedSnapshot === null) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-background px-6 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -65,7 +75,7 @@ export function MemoryReviewPage() {
     );
   }
 
-  const dueItems: ReviewItem[] = [scopedDue];
+  const dueItems: ReviewItem[] = [scopedSnapshot];
 
   return (
     <ReviewPlayer
@@ -73,7 +83,8 @@ export function MemoryReviewPage() {
       doneLabel="Back to memory"
       source={{
         dueItems,
-        remainingDue: 1,
+        // Live remaining: once the verse leaves the due set, remaining is 0.
+        remainingDue: scopedDue === null ? 0 : 1,
       }}
       onExit={() => void navigate({ to: "/memory" })}
     />

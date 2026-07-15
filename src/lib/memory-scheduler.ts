@@ -154,6 +154,18 @@ export const MAX_LEARN_STAGE = 3;
 /** Interval (days) at or beyond which a reviewing verse becomes `mastered`. */
 export const MASTERED_INTERVAL_DAYS = 30;
 
+/**
+ * Review accuracy below this lapses back into learning. At or above, imperfect
+ * recalls stay in the review queue with conservative interval growth.
+ */
+export const REVIEW_LAPSE_ACCURACY = 60;
+
+/**
+ * After a review lapse, re-enter learning at Guided (first-letters) rather than
+ * Read — the learner still remembers some of the verse.
+ */
+export const REVIEW_LAPSE_LEARN_STAGE = 1;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Interval spread applied to due dates so reviews don't bunch up (+/-10%). */
@@ -323,17 +335,17 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
 function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   const isEarly = r.now < s.dueAt;
 
-  if (r.quality === "off") {
-    // Lapse: reset the interval, ding the ease, and relearn from stage 0.
-    // Always applies even when early — a miss should not be ignored.
-    const intervalDays = 1;
+  if (r.accuracy < REVIEW_LAPSE_ACCURACY) {
+    // Soft lapse: ding ease, count the lapse, and resume at Guided
+    // (first-letters) instead of wiping back to Read. Always applies even when
+    // early — a hard miss should not be ignored.
     return {
       status: "learning",
-      learnStage: 0,
+      learnStage: REVIEW_LAPSE_LEARN_STAGE,
       stageReps: 0,
       ease: clampEase(s.ease - 0.2),
-      intervalDays,
-      dueAt: computeDueAt(r, s.intervalDays, intervalDays),
+      intervalDays: 0,
+      dueAt: r.now,
       consecutiveCorrect: 0,
       lapses: s.lapses + 1,
       earlyReviewApplied: false,
@@ -346,32 +358,33 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     return s;
   }
 
-  if (r.quality === "close") {
-    // Grow the interval, but conservatively; leave ease untouched.
-    const intervalDays = s.intervalDays * s.ease * 0.8;
+  if (r.quality === "exact") {
+    // exact: full interval growth and a small ease bump.
+    const intervalDays = s.intervalDays * s.ease;
     return {
       status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
       learnStage: s.learnStage,
       stageReps: s.stageReps,
-      ease: s.ease,
+      ease: clampEase(s.ease + 0.05),
       intervalDays,
       dueAt: computeDueAt(r, s.intervalDays, intervalDays),
-      consecutiveCorrect: s.consecutiveCorrect,
+      consecutiveCorrect: s.consecutiveCorrect + 1,
       lapses: s.lapses,
       earlyReviewApplied: isEarly,
     };
   }
 
-  // exact: full interval growth and a small ease bump.
-  const intervalDays = s.intervalDays * s.ease;
+  // close (and former "off but ≥60%"): grow the interval conservatively;
+  // leave ease untouched.
+  const intervalDays = s.intervalDays * s.ease * 0.8;
   return {
     status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
     learnStage: s.learnStage,
     stageReps: s.stageReps,
-    ease: clampEase(s.ease + 0.05),
+    ease: s.ease,
     intervalDays,
     dueAt: computeDueAt(r, s.intervalDays, intervalDays),
-    consecutiveCorrect: s.consecutiveCorrect + 1,
+    consecutiveCorrect: s.consecutiveCorrect,
     lapses: s.lapses,
     earlyReviewApplied: isEarly,
   };

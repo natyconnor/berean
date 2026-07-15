@@ -260,16 +260,34 @@ describe("reviewing phase grades", () => {
     expect(next.status).toBe("reviewing");
   });
 
-  it("off lapses: interval -> 1d, ease -0.2, lapses++, back to learning", () => {
+  it("accuracy under 60% lapses: ease -0.2, lapses++, back to Guided learning", () => {
     const s = reviewing({ intervalDays: 20, ease: 2.3, lapses: 1 });
-    const next = scheduleNext(s, review({ quality: "off" }));
-    expect(next.intervalDays).toBe(1);
+    const next = scheduleNext(
+      s,
+      review({ quality: "off", accuracy: 16, mode: "review" }),
+    );
+    expect(next.intervalDays).toBe(0);
+    expect(next.dueAt).toBe(NOW);
     expect(next.ease).toBeCloseTo(2.1, 5);
     expect(next.lapses).toBe(2);
     expect(next.status).toBe("learning");
-    expect(next.learnStage).toBe(0);
+    expect(next.learnStage).toBe(1);
+    expect(next.stageReps).toBe(0);
     expect(next.consecutiveCorrect).toBe(0);
     expect(next.earlyReviewApplied).toBe(false);
+  });
+
+  it("accuracy at 60%+ stays reviewing with close-style growth even if quality is off", () => {
+    const s = reviewing({ intervalDays: 5, ease: 2.3, consecutiveCorrect: 3 });
+    const next = scheduleNext(
+      s,
+      review({ quality: "off", accuracy: 70, mode: "review" }),
+    );
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBeCloseTo(5 * 2.3 * 0.8, 5);
+    expect(next.ease).toBeCloseTo(2.3, 5);
+    expect(next.consecutiveCorrect).toBe(3);
+    expect(next.lapses).toBe(0);
   });
 });
 
@@ -349,7 +367,7 @@ describe("early review boost (once per interval)", () => {
     expect(second).toEqual(first);
   });
 
-  it("early off still lapses and clears the early-boost flag", () => {
+  it("early low-accuracy miss still lapses and clears the early-boost flag", () => {
     const s = reviewing({
       intervalDays: 10,
       ease: 2.3,
@@ -357,8 +375,12 @@ describe("early review boost (once per interval)", () => {
       earlyReviewApplied: true,
       lapses: 0,
     });
-    const next = scheduleNext(s, review({ quality: "off" }));
+    const next = scheduleNext(
+      s,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
     expect(next.status).toBe("learning");
+    expect(next.learnStage).toBe(1);
     expect(next.earlyReviewApplied).toBe(false);
     expect(next.lapses).toBe(1);
   });
@@ -367,7 +389,10 @@ describe("early review boost (once per interval)", () => {
 describe("ease clamping", () => {
   it("floors ease at EASE_MIN on repeated lapses", () => {
     const s = reviewing({ ease: EASE_MIN + 0.1 });
-    const next = scheduleNext(s, review({ quality: "off" }));
+    const next = scheduleNext(
+      s,
+      review({ quality: "off", accuracy: 10, mode: "review" }),
+    );
     expect(next.ease).toBe(EASE_MIN);
   });
 

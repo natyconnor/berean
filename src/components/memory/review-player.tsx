@@ -9,9 +9,12 @@ import type { MemoryStatus } from "@/lib/memory-scheduler";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import type { VerseMemoryCard } from "../study/study-card-model";
-import { StudyActivityDeck } from "../study/study-activity-deck";
-import { ReviewSummary } from "./review-summary";
+import { referenceKey, type VerseMemoryCard } from "../study/study-card-model";
+import {
+  StudyActivityDeck,
+  type GradedDeckAttempt,
+} from "../study/study-activity-deck";
+import { ReviewSummary, type ReviewSessionAttempt } from "./review-summary";
 
 /**
  * The minimal per-verse shape the player needs to sequence a run. Satisfied by
@@ -75,9 +78,10 @@ function toCard(item: ReviewItem): VerseMemoryCard {
  * are not part of this queue — they are practiced from verse detail / learn.
  *
  * The due list is snapshotted on entry so cards don't vanish mid-session as
- * `recordAttempt` reschedules verses out of the live due set. The live query is
- * still observed to detect when the review is finished and to compute the
- * end-of-run summary (verses cleared, verses still due).
+ * `recordAttempt` reschedules verses out of the live due set. Session end is
+ * driven by the deck (last Next or End review), not by the live due set
+ * emptying — so the last verse's result screen stays visible until the user
+ * advances.
  */
 export function ReviewPlayer({
   onExit,
@@ -114,6 +118,9 @@ export function ReviewPlayer({
   const [phase, setPhase] = useState<Phase | null>(null);
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const [capturedEpoch, setCapturedEpoch] = useState<number | null>(null);
+  const [sessionAttempts, setSessionAttempts] = useState<
+    ReviewSessionAttempt[]
+  >([]);
 
   // Freeze the due list once it resolves for this session epoch. Adjusting
   // state during render when syncing to a changed epoch is the React-
@@ -122,6 +129,7 @@ export function ReviewPlayer({
     setCapturedEpoch(sessionEpoch);
     setSnapshot(dueItems);
     setPhase(dueItems.length > 0 ? "review" : null);
+    setSessionAttempts([]);
   }
 
   const reviewItems = useMemo(() => snapshot ?? [], [snapshot]);
@@ -131,47 +139,43 @@ export function ReviewPlayer({
   const reviewCards = useMemo(() => reviewItems.map(toCard), [reviewItems]);
 
   const liveDue = useMemo(() => dueItems ?? [], [dueItems]);
-  const liveDueRefIds = useMemo(
-    () => new Set(liveDue.map((it) => it.verseRefId)),
-    [liveDue],
-  );
-  const liveByRef = useMemo(() => {
-    const map = new Map<Id<"verseRefs">, ReviewItem>();
-    for (const it of liveDue) map.set(it.verseRefId, it);
-    return map;
-  }, [liveDue]);
 
-  // The review deck is done once none of its verses remain due.
-  const reviewDone =
-    phase === "review" &&
-    reviewItems.length > 0 &&
-    !reviewItems.some((it) => liveDueRefIds.has(it.verseRefId));
-  const effectivePhase: Phase | null = reviewDone ? "summary" : phase;
+  const remaining = remainingDue ?? liveDue.length;
 
-  const summary = useMemo(() => {
-    let cleared = 0;
-    for (const it of snapshot ?? []) {
-      if (!liveByRef.has(it.verseRefId)) {
-        // No longer due: rescheduled into the future by a graded attempt.
-        cleared += 1;
-      }
-    }
-    return {
-      cleared,
-      reviewed: cleared,
-      // True outstanding count across *all* due review verses (uncapped),
-      // falling back to the queue length only until the remaining total resolves.
-      remaining: remainingDue ?? liveDue.length,
-    };
-  }, [snapshot, liveByRef, liveDue.length, remainingDue]);
+  const averageAccuracy = useMemo(() => {
+    if (sessionAttempts.length === 0) return null;
+    const sum = sessionAttempts.reduce((acc, a) => acc + a.accuracy, 0);
+    return Math.round(sum / sessionAttempts.length);
+  }, [sessionAttempts]);
 
   function handleContinue() {
     // Re-run against whatever is still due right now.
     setSessionEpoch((n) => n + 1);
   }
 
+  function handleAttemptGraded(attempt: GradedDeckAttempt) {
+    const key = referenceKey(attempt.reference);
+    setSessionAttempts((prev) => {
+      const idx = prev.findIndex((a) => referenceKey(a.reference) === key);
+      const nextAttempt = {
+        reference: attempt.reference,
+        accuracy: attempt.accuracy,
+      };
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = nextAttempt;
+        return next;
+      }
+      return [...prev, nextAttempt];
+    });
+  }
+
+  function goToSummary() {
+    setPhase("summary");
+  }
+
   // Loading / empty states.
-  if (dueItems === undefined || snapshot === null || effectivePhase === null) {
+  if (dueItems === undefined || snapshot === null || phase === null) {
     const caughtUp = snapshot !== null && snapshot.length === 0;
     return (
       <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
@@ -184,15 +188,15 @@ export function ReviewPlayer({
     );
   }
 
-  if (effectivePhase === "summary") {
+  if (phase === "summary") {
     return (
       <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
         <ReviewSummary
-          reviewed={summary.reviewed}
-          cleared={summary.cleared}
-          remaining={summary.remaining}
+          attempts={sessionAttempts}
+          averageAccuracy={averageAccuracy}
+          remaining={remaining}
           onDone={onExit}
-          onContinue={summary.remaining > 0 ? handleContinue : undefined}
+          onContinue={remaining > 0 ? handleContinue : undefined}
           doneLabel={resolvedDoneLabel}
         />
       </TodayQueueShell>
@@ -202,11 +206,13 @@ export function ReviewPlayer({
   return (
     <TodayQueueShell onExit={onExit} title={title} backLabel={backLabel}>
       <StudyActivityDeck
-        key="today-review"
+        key={`today-review-${sessionEpoch}`}
         cards={reviewCards}
         scopeLabel="review"
         interaction="test"
-        onEndSession={() => setPhase("summary")}
+        onEndSession={goToSummary}
+        onDeckComplete={goToSummary}
+        onAttemptGraded={handleAttemptGraded}
         endSessionLabel="End review"
       />
     </TodayQueueShell>

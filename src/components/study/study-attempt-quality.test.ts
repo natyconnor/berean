@@ -38,8 +38,9 @@ describe("classifyVerseAttempt", () => {
     expect(classifyVerseAttempt(diffWords(typed, actual))).toBe("close");
   });
 
-  it("does not count a two-word verse with one wrong word as close", () => {
+  it("marks a two-word verse with one wrong word as off (50%)", () => {
     const tokens = diffWords("Jesus cried", "Jesus wept");
+    expect(verseAttemptAccuracy(tokens)).toBe(50);
     expect(classifyVerseAttempt(tokens)).toBe("off");
   });
 
@@ -47,6 +48,15 @@ describe("classifyVerseAttempt", () => {
     const actual = "In the beginning was the Word and the Word was with God";
     const typed = "Once upon a time there lived a king";
     expect(classifyVerseAttempt(diffWords(typed, actual))).toBe("off");
+  });
+
+  it("treats accuracy at the 60% threshold as close", () => {
+    // 3 matches / 5 tokens = 60%
+    const actual = "one two three four five";
+    const typed = "one two three wrong wrong";
+    const tokens = diffWords(typed, actual);
+    expect(verseAttemptAccuracy(tokens)).toBe(60);
+    expect(classifyVerseAttempt(tokens)).toBe("close");
   });
 });
 

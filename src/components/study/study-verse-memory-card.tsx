@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type JSX,
   type MutableRefObject,
 } from "react";
@@ -10,7 +11,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
-import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
+import { MAX_LEARN_STAGE, type MemorySchedule } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
@@ -19,7 +20,10 @@ import {
   classifyVerseAttempt,
   verseAttemptAccuracy,
 } from "./study-attempt-quality";
-import type { VerseMemoryCard as VerseMemoryCardData } from "./study-card-model";
+import type {
+  CardReference,
+  VerseMemoryCard as VerseMemoryCardData,
+} from "./study-card-model";
 import {
   useRecordVerseAttempt,
   type VerseAttemptMode,
@@ -30,6 +34,12 @@ const ESV_FADE_S = 0.3;
 
 /** Modes the deck card can persist; learn/practice use other surfaces. */
 type DeckAttemptMode = Extract<VerseAttemptMode, "deck" | "review">;
+
+/** Fired when a deck card successfully grades a typed recall. */
+export interface GradedDeckAttempt {
+  reference: CardReference;
+  accuracy: number;
+}
 
 interface StudyVerseMemoryCardProps {
   card: VerseMemoryCardData;
@@ -44,12 +54,18 @@ interface StudyVerseMemoryCardProps {
   recordRef?: MutableRefObject<(() => void) | null>;
   /** Persistence mode for graded recalls. Defaults to `"deck"`. */
   attemptMode?: DeckAttemptMode;
+  /** Optional session listener for graded accuracy (e.g. review summary). */
+  onAttemptGraded?: (attempt: GradedDeckAttempt) => void;
 }
 
 interface VerseAttemptResultProps {
   typedAnswer: string;
   versePlainText: string;
   diffTokens?: ReadonlyArray<DiffToken>;
+  /** Review mode: show schedule-consequence copy above the diff. */
+  showScheduleOutcome?: boolean;
+  nextSchedule?: MemorySchedule | null;
+  now?: number;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -151,6 +167,9 @@ export function VerseAttemptResult({
   typedAnswer,
   versePlainText,
   diffTokens: providedDiffTokens,
+  showScheduleOutcome = false,
+  nextSchedule = null,
+  now,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -164,8 +183,14 @@ export function VerseAttemptResult({
 
   return (
     <div className="w-full max-w-xl mx-auto space-y-2">
-      {attemptQuality && attemptQuality !== "off" && (
-        <VerseMemoryFeedback quality={attemptQuality} attemptKey={attemptKey} />
+      {attemptQuality && (showScheduleOutcome || attemptQuality !== "off") && (
+        <VerseMemoryFeedback
+          quality={attemptQuality}
+          attemptKey={attemptKey}
+          showScheduleOutcome={showScheduleOutcome}
+          nextSchedule={nextSchedule}
+          now={now}
+        />
       )}
       <motion.div
         initial={{ opacity: 0, y: -4 }}
@@ -196,8 +221,20 @@ export function StudyVerseMemoryCard({
   onTypedAnswerChange,
   recordRef,
   attemptMode = "deck",
+  onAttemptGraded,
 }: StudyVerseMemoryCardProps): JSX.Element {
   const refLabel = formatVerseRef(card.reference);
+  const showScheduleOutcome = attemptMode === "review";
+  const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
+  const [scheduleCardId, setScheduleCardId] = useState(card.id);
+  const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
+
+  // Reset outcome state when the deck advances to a new verse (render-time
+  // sync — avoids setState-in-effect).
+  if (scheduleCardId !== card.id) {
+    setScheduleCardId(card.id);
+    setNextSchedule(null);
+  }
 
   // Fetch eagerly (not gated on `flipped`) so the verse text is cached and
   // ready the moment the user reveals the back of the card. The result is
@@ -218,15 +255,25 @@ export function StudyVerseMemoryCard({
       if (typed.trim().length === 0 || versePlainText.length === 0) {
         return false;
       }
+      const tokens = diffWords(typed, versePlainText);
+      const accuracy = verseAttemptAccuracy(tokens);
+      setOutcomeNow(Date.now());
+      setNextSchedule(null);
       void record({
         reference: card.reference,
-        tokens: diffWords(typed, versePlainText),
+        tokens,
         stage: MAX_LEARN_STAGE,
         mode: attemptMode,
+      }).then((schedule) => {
+        if (schedule) setNextSchedule(schedule);
+      });
+      onAttemptGraded?.({
+        reference: card.reference,
+        accuracy,
       });
       return true;
     },
-    [record, card.reference, versePlainText, attemptMode],
+    [record, card.reference, versePlainText, attemptMode, onAttemptGraded],
   );
 
   useEffect(() => {
@@ -281,6 +328,9 @@ export function StudyVerseMemoryCard({
         <VerseAttemptResult
           typedAnswer={typedAnswer}
           versePlainText={versePlainText}
+          showScheduleOutcome={showScheduleOutcome}
+          nextSchedule={nextSchedule}
+          now={outcomeNow}
         />
       )}
 

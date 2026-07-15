@@ -15,7 +15,10 @@ import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { StudyTeachCard } from "./study-teach-card";
-import { StudyVerseMemoryCard } from "./study-verse-memory-card";
+import {
+  StudyVerseMemoryCard,
+  type GradedDeckAttempt,
+} from "./study-verse-memory-card";
 import {
   getCardKind,
   referenceKey,
@@ -31,6 +34,8 @@ import {
 /** Flashcard = free reveal/retry. Test = one-shot typed check (Memory Review). */
 export type DeckInteraction = "flashcard" | "test";
 
+export type { GradedDeckAttempt };
+
 interface StudyActivityDeckProps {
   cards: StudyCard[];
   scopeLabel: string;
@@ -43,6 +48,13 @@ interface StudyActivityDeckProps {
    * Check, then only advances (Memory Review).
    */
   interaction?: DeckInteraction;
+  /**
+   * When the last card advances off the queue, call this instead of showing
+   * the built-in "Session complete" state (Memory Review → summary).
+   */
+  onDeckComplete?: () => void;
+  /** Fired each time a verse-memory card grades a typed recall. */
+  onAttemptGraded?: (attempt: GradedDeckAttempt) => void;
 }
 
 const TEACH_TIMER_SECONDS = 300;
@@ -90,6 +102,8 @@ export function StudyActivityDeck({
   onEndSession,
   endSessionLabel = "End session",
   interaction = "flashcard",
+  onDeckComplete,
+  onAttemptGraded,
 }: StudyActivityDeckProps): JSX.Element {
   const isTestMode = interaction === "test";
   // Compare by card-id *set*, not array reference. Parents (e.g. ReviewPlayer)
@@ -226,6 +240,9 @@ export function StudyActivityDeck({
     setQueue(nextQueue);
     setPosition(nextPos);
     setFlipped(false);
+    if (nextQueue.length === 0) {
+      onDeckComplete?.();
+    }
   }
 
   function handleCorrect() {
@@ -390,6 +407,11 @@ export function StudyActivityDeck({
   }
 
   if (isComplete || !currentCard) {
+    // Parent-owned completion (e.g. Review → summary) replaces the built-in
+    // session-complete screen; show nothing while that handoff lands.
+    if (onDeckComplete) {
+      return <div className="py-8" aria-hidden />;
+    }
     return (
       <StudyDeckCompleteState
         cards={cards}
@@ -465,6 +487,7 @@ export function StudyActivityDeck({
                         onTypedAnswerChange={handleTypedAnswerChange}
                         recordRef={recordAttemptRef}
                         attemptMode={isTestMode ? "review" : "deck"}
+                        onAttemptGraded={onAttemptGraded}
                       />
                     ) : (
                       <StudyTeachCard
