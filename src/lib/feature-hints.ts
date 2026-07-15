@@ -41,9 +41,9 @@ export const HINT_QUEUE_COOLDOWN_MS = 1 * 60 * 1000;
 
 /**
  * Accounts created before this timestamp are eligible for the Memory launch
- * announcement. July 14, 2026 6:00 AM Eastern (EDT, UTC-4).
+ * announcement. July 16, 2026 6:00 AM Eastern (EDT, UTC-4).
  */
-export const MEMORY_LAUNCH_ANNOUNCEMENT_AFTER = Date.UTC(2026, 6, 14, 10, 0, 0);
+export const MEMORY_LAUNCH_ANNOUNCEMENT_AFTER = Date.UTC(2026, 6, 16, 10, 0, 0);
 
 export interface FeatureHintMetadata {
   /**
