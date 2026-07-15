@@ -7,12 +7,16 @@ import {
   FEATURE_HINTS,
   MEMORY_LAUNCH_ANNOUNCEMENT_AFTER,
 } from "@/lib/feature-hints";
+import { shouldRevealMemory } from "@/lib/staged-onboarding-thresholds";
 import { api } from "../../../convex/_generated/api";
 
 /**
  * One-time launch modal for the Memory overhaul + Mode Dock. Shown only to
  * accounts created before the launch cutoff (existing users), after the main
  * tour is done, so new signups get the normal first-heart / first-open flow.
+ *
+ * Most existing users have never hearted a verse, so the copy leads with
+ * hearting to unlock Memory. Users who already have hearts get an Explore CTA.
  */
 export function MemoryLaunchAnnouncementDialog() {
   const navigate = useNavigate();
@@ -23,6 +27,9 @@ export function MemoryLaunchAnnouncementDialog() {
     status.accountCreatedAt > 0 &&
     status.accountCreatedAt < MEMORY_LAUNCH_ANNOUNCEMENT_AFTER &&
     status.mainTutorialCompletedAt !== undefined;
+
+  const memoryUnlocked =
+    status !== undefined && shouldRevealMemory(status.milestones);
 
   const hint = useFeatureHint(
     FEATURE_HINTS.MEMORY_LAUNCH_ANNOUNCEMENT,
@@ -36,22 +43,28 @@ export function MemoryLaunchAnnouncementDialog() {
     <FeatureInfoDialog
       state={hint}
       title="Memory is here"
-      description="Store up your hearted verses and carry them with you — with practice, review, and packs to help you master them over time."
+      description="Heart a verse in the reader to unlock the Memory page — then practice, review, and build packs to store up verses over time."
       body={
         <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Heart a verse to save it for Memory.</li>
-          <li>Practice and review to lock verses in over time.</li>
+          <li>
+            Tap the heart beside any verse to unlock Memory in the floating bar
+            at the bottom of the screen.
+          </li>
+          <li>Practice and review to master verses over time.</li>
           <li>Build packs by theme or passage to focus your work.</li>
           <li>
-            Find Notes, Memory, and Study in the floating bar at the bottom of
-            the screen — switch there, or with Cmd/Ctrl+J.
+            Once unlocked, switch modes from the bar — or with Cmd/Ctrl+J.
           </li>
         </ul>
       }
-      primaryActionLabel="Explore Memory"
-      onPrimaryAction={() => {
-        void navigate({ to: "/memory" });
-      }}
+      primaryActionLabel={memoryUnlocked ? "Explore Memory" : undefined}
+      onPrimaryAction={
+        memoryUnlocked
+          ? () => {
+              void navigate({ to: "/memory" });
+            }
+          : undefined
+      }
     />
   );
 }

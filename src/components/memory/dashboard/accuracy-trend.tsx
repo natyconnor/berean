@@ -5,6 +5,7 @@ import {
   scaleLinear,
 } from "./svg-chart-helpers";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import { chartCardClassName } from "./chart-card";
 
 export interface DayAccuracy {
   dayStart: number;
@@ -55,7 +56,7 @@ export function AccuracyTrend({ data }: { data: DayAccuracy[] }) {
         )} percent.`;
 
   return (
-    <MemoryDashboardCard className="p-4">
+    <MemoryDashboardCard className={chartCardClassName}>
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Accuracy trend</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -64,13 +65,13 @@ export function AccuracyTrend({ data }: { data: DayAccuracy[] }) {
       </div>
 
       {overallCount === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="mt-3 flex-1 text-sm text-muted-foreground">
           No reviews yet. Accuracy will trend here as you practice.
         </p>
       ) : (
-        <>
+        <div className="mt-1 flex min-h-0 flex-1 flex-col">
           {latest !== null && (
-            <div className="mt-1 flex items-baseline gap-1.5">
+            <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-semibold tabular-nums tracking-tight">
                 {Math.round(latest)}%
               </span>
@@ -79,7 +80,7 @@ export function AccuracyTrend({ data }: { data: DayAccuracy[] }) {
           )}
 
           {/* Left gutter holds the y-axis labels; the chart fills the rest. */}
-          <div className="mt-2 flex gap-1.5">
+          <div className="mt-2 flex h-24 gap-1.5">
             <div className="relative w-7 shrink-0" aria-hidden>
               {[100, 50, 0].map((pct) => (
                 <span
@@ -163,7 +164,7 @@ export function AccuracyTrend({ data }: { data: DayAccuracy[] }) {
               <span>{formatDay(data[data.length - 1].dayStart)}</span>
             </div>
           )}
-        </>
+        </div>
       )}
     </MemoryDashboardCard>
   );

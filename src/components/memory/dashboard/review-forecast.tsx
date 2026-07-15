@@ -4,6 +4,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import { chartCardClassName } from "./chart-card";
 import { chartColor } from "./svg-chart-helpers";
 
 export interface DayCount {
@@ -58,7 +59,7 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
       : `Review forecast: ${total} reviews due over the next ${count} days.`;
 
   return (
-    <MemoryDashboardCard className="p-4">
+    <MemoryDashboardCard className={chartCardClassName}>
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Upcoming</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -67,12 +68,12 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
       </div>
 
       {total === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="mt-3 flex-1 text-sm text-muted-foreground">
           Nothing scheduled. New reviews appear here as verses come due.
         </p>
       ) : (
-        <>
-          <div className="mt-1 flex items-baseline gap-1.5">
+        <div className="mt-1 flex min-h-0 flex-1 flex-col">
+          <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-semibold tabular-nums tracking-tight">
               {total}
             </span>
@@ -84,7 +85,7 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
           <div
             role="img"
             aria-label={label}
-            className="mt-2 flex h-24 items-end gap-0.5"
+            className="mt-2 flex min-h-24 flex-1 items-end gap-0.5"
           >
             {data.map((d, i) => {
               const isToday = i === 0;
@@ -157,7 +158,7 @@ export function ReviewForecast({ data }: { data: DayCount[] }) {
               );
             })}
           </div>
-        </>
+        </div>
       )}
     </MemoryDashboardCard>
   );

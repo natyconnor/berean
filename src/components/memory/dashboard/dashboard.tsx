@@ -1,11 +1,13 @@
-import { Loader2, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
 import type { FunctionReturnType } from "convex/server";
+import { motion, useReducedMotion } from "framer-motion";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { computeStreak, overallAccuracy } from "@/lib/dashboard-buckets";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
+import { ChartSkeleton, ChartSlot } from "./chart-card";
 import { KpiRow } from "./kpi-row";
 import { PracticeHeatmap } from "./practice-heatmap";
 import { MasteryBar } from "./mastery-bar";
@@ -84,26 +86,30 @@ export function MemoryDashboard({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {activity === undefined ? (
-          <ChartSkeleton title="Practice" />
-        ) : (
-          <PracticeHeatmap data={activity.heatmap} />
-        )}
-        {stats === undefined ? (
-          <ChartSkeleton title="Mastery" />
-        ) : (
-          <MasteryBar data={stats} />
-        )}
-        {activity === undefined ? (
-          <ChartSkeleton title="Accuracy trend" />
-        ) : (
-          <AccuracyTrend data={activity.trend} />
-        )}
-        {forecast === undefined ? (
-          <ChartSkeleton title="Upcoming" />
-        ) : (
-          <ReviewForecast data={forecast} />
-        )}
+        <ChartSlot
+          loading={activity === undefined}
+          skeleton={<ChartSkeleton title="Practice" />}
+        >
+          {activity ? <PracticeHeatmap data={activity.heatmap} /> : null}
+        </ChartSlot>
+        <ChartSlot
+          loading={stats === undefined}
+          skeleton={<ChartSkeleton title="Mastery" />}
+        >
+          {stats ? <MasteryBar data={stats} /> : null}
+        </ChartSlot>
+        <ChartSlot
+          loading={activity === undefined}
+          skeleton={<ChartSkeleton title="Accuracy trend" />}
+        >
+          {activity ? <AccuracyTrend data={activity.trend} /> : null}
+        </ChartSlot>
+        <ChartSlot
+          loading={forecast === undefined}
+          skeleton={<ChartSkeleton title="Upcoming" />}
+        >
+          {forecast ? <ReviewForecast data={forecast} /> : null}
+        </ChartSlot>
       </div>
     </div>
   );
@@ -111,8 +117,8 @@ export function MemoryDashboard({
 
 /**
  * The "Today" hero. `due === undefined` means `memoryStats` is still loading;
- * we show a spinner but keep the section mounted so it doesn't jump. Once the
- * count resolves, Start review is enabled iff something is due.
+ * we keep a size-matched skeleton mounted so the header band doesn't jump,
+ * then fade the real copy in once the due count resolves.
  */
 function TodayHero({
   due,
@@ -121,19 +127,38 @@ function TodayHero({
   due: number | undefined;
   onStartReview: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
+
   if (due === undefined) {
     return (
-      <MemoryDashboardCard className="p-5">
-        <div className="flex justify-center py-4">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <MemoryDashboardCard
+        className="min-h-[8.75rem] p-5"
+        aria-busy
+        aria-label="Loading today's review"
+      >
+        <div
+          className="flex flex-wrap items-center justify-between gap-4"
+          aria-hidden
+        >
+          <div className="min-w-0 space-y-2">
+            <div className="h-3 w-12 animate-pulse rounded bg-muted" />
+            <div className="h-7 w-40 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-56 max-w-full animate-pulse rounded bg-muted" />
+          </div>
+          <div className="h-10 w-[5.75rem] animate-pulse rounded-md bg-muted" />
         </div>
       </MemoryDashboardCard>
     );
   }
 
   return (
-    <MemoryDashboardCard className="p-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <MemoryDashboardCard className="min-h-[8.75rem] p-5">
+      <motion.div
+        className="flex flex-wrap items-center justify-between gap-4"
+        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      >
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Today
@@ -156,19 +181,7 @@ function TodayHero({
           <Play className="h-4 w-4" />
           Review
         </Button>
-      </div>
-    </MemoryDashboardCard>
-  );
-}
-
-/** Placeholder card shown in a chart slot while its aggregate query loads. */
-function ChartSkeleton({ title }: { title: string }) {
-  return (
-    <MemoryDashboardCard className="p-4">
-      <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-      <div className="mt-3 flex h-24 items-center justify-center">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-      </div>
+      </motion.div>
     </MemoryDashboardCard>
   );
 }

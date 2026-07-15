@@ -5,6 +5,7 @@ import {
 } from "@/lib/memory-status-style";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { cn } from "@/lib/utils";
+import { chartCardClassName } from "./chart-card";
 
 export interface MasteryDistribution {
   new: number;
@@ -30,7 +31,7 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
           .join(", ");
 
   return (
-    <MemoryDashboardCard className="p-4">
+    <MemoryDashboardCard className={chartCardClassName}>
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Mastery</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -39,15 +40,15 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
       </div>
 
       {total === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="mt-3 flex-1 text-sm text-muted-foreground">
           No verses yet. Heart a verse to start memorizing.
         </p>
       ) : (
-        <>
+        <div className="mt-3 flex flex-1 flex-col justify-center gap-3">
           <div
             role="img"
             aria-label={`Mastery distribution: ${summary}.`}
-            className="mt-3 flex h-4 w-full gap-0.5 overflow-hidden rounded-full"
+            className="flex h-4 w-full gap-0.5 overflow-hidden rounded-full"
           >
             {visible.map((key) => (
               <div
@@ -60,12 +61,12 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
               />
             ))}
           </div>
-          <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
+          <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
             {MEMORY_STATUS_ORDER.map((key) => (
               <StatusLegendItem key={key} status={key} count={data[key]} />
             ))}
           </ul>
-        </>
+        </div>
       )}
     </MemoryDashboardCard>
   );

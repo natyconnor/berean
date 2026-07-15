@@ -5,6 +5,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import { chartCardClassName } from "./chart-card";
 import { chartColor } from "./svg-chart-helpers";
 
 export interface DayCount {
@@ -95,7 +96,7 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
       : `Practice heatmap: ${total} practices over the last ${data.length} days.`;
 
   return (
-    <MemoryDashboardCard className="p-4">
+    <MemoryDashboardCard className={chartCardClassName}>
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Practice</h3>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -104,12 +105,16 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
       </div>
 
       {total === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="mt-3 flex-1 text-sm text-muted-foreground">
           No practice yet. Learning and reviewing verses will show up here.
         </p>
       ) : (
-        <div role="img" aria-label={label} className="mt-3">
-          <div className="flex gap-1">
+        <div
+          role="img"
+          aria-label={label}
+          className="mt-3 flex min-h-0 flex-1 flex-col"
+        >
+          <div className="flex min-h-0 flex-1 gap-1">
             {/* Weekday guides down the left, aligned to the 7 cell rows. */}
             <div className="grid shrink-0 grid-rows-7 gap-1 pr-0.5 pt-[15px]">
               {WEEKDAY_LABELS.map((wd, i) => (
@@ -122,10 +127,10 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
               ))}
             </div>
 
-            <div className="min-w-0 flex-1">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               {/* Month labels, one grid cell per week column. */}
               <div
-                className="mb-1 grid gap-1"
+                className="mb-1 grid shrink-0 gap-1"
                 style={{
                   gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`,
                 }}
@@ -141,9 +146,11 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
                 ))}
               </div>
 
-              {/* The cell grid: one column per week, seven weekday rows. */}
+              {/* The cell grid: one column per week, seven weekday rows.
+                  Rows fill the reserved card height (not aspect-square) so a
+                  loaded heatmap can't push the dashboard row taller. */}
               <div
-                className="grid grid-flow-col grid-rows-7 gap-1"
+                className="grid min-h-0 flex-1 grid-flow-col grid-rows-7 gap-1"
                 style={{
                   gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`,
                 }}
@@ -151,17 +158,13 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
                 {weeks.flatMap((week, w) =>
                   week.map((cell, r) =>
                     cell === null ? (
-                      <span
-                        key={`blank-${w}-${r}`}
-                        className="aspect-square"
-                        aria-hidden
-                      />
+                      <span key={`blank-${w}-${r}`} aria-hidden />
                     ) : (
                       <Tooltip key={cell.dayStart}>
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            className="aspect-square rounded-[3px] outline-none transition-[filter] duration-150 hover:brightness-[1.08] focus-visible:ring-2 focus-visible:ring-ring"
+                            className="min-h-0 w-full rounded-[3px] outline-none transition-[filter] duration-150 hover:brightness-[1.08] focus-visible:ring-2 focus-visible:ring-ring"
                             aria-label={`${formatDay(cell.dayStart)}: ${practicePhrase(cell.count)}`}
                             style={cellStyle(cell.count, max)}
                           />
@@ -179,7 +182,7 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
             </div>
           </div>
 
-          <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+          <div className="mt-2 flex shrink-0 items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
             <span>Less</span>
             {[0, 0.4, 0.7, 1].map((t) => (
               <span
