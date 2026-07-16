@@ -1,16 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import { ListOrdered, Shuffle, SkipForward, Timer } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Eye,
+  RotateCcw,
+  SkipForward,
+  Timer,
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
+
 import { StudyTeachCard } from "./study-teach-card";
-import { StudyVerseMemoryCard } from "./study-verse-memory-card";
 import {
-  activityLabel,
+  StudyVerseMemoryCard,
+  type GradedDeckAttempt,
+} from "./study-verse-memory-card";
+import {
   getCardKind,
   referenceKey,
-  type ActivityType,
   type PassageNote,
   type StudyCard,
 } from "./study-card-model";
@@ -20,23 +31,33 @@ import {
   StudyDeckEmptyState,
 } from "./study-activity-deck-views";
 
+/** Flashcard = free reveal/retry. Test = one-shot typed check (Memory Review). */
+export type DeckInteraction = "flashcard" | "test";
+
+export type { GradedDeckAttempt };
+
 interface StudyActivityDeckProps {
   cards: StudyCard[];
   scopeLabel: string;
-  controlledOrder?: { order: "shuffle" | "in-order"; nonce: number };
+  /** Optional tertiary footer action (e.g. "End review"). */
+  onEndSession?: () => void;
+  endSessionLabel?: string;
+  /**
+   * Interaction style for verse-memory cards. `"flashcard"` (default) allows
+   * free Reveal / Try Again. `"test"` requires a typed answer, grades once on
+   * Check, then only advances (Memory Review).
+   */
+  interaction?: DeckInteraction;
+  /**
+   * When the last card advances off the queue, call this instead of showing
+   * the built-in "Session complete" state (Memory Review → summary).
+   */
+  onDeckComplete?: () => void;
+  /** Fired each time a verse-memory card grades a typed recall. */
+  onAttemptGraded?: (attempt: GradedDeckAttempt) => void;
 }
 
 const TEACH_TIMER_SECONDS = 300;
-
-/** Random order (Fisher–Yates); distinct from build-time deterministic shuffle. */
-function randomizeCardIds(cards: StudyCard[]): string[] {
-  const ids = cards.map((c) => c.id);
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-  }
-  return ids;
-}
 
 type ExitDirection = "right" | "left";
 
@@ -45,11 +66,10 @@ const SWIPE_DURATION_S = 0.32;
 const MAX_STACK_VISIBLE = 3;
 
 // Number of "dealer" cards that fly in on top of the settled stack during the
-// initial shuffle. Each one flies in from alternating sides, briefly lands on
-// the stack, then fades away to reveal the next one — giving a card-dealing
-// feel without cluttering the view with a large visible pile. The final
-// dealer card is the user's actual first card, which is what they'll see
-// when the overlay clears.
+// initial entry animation. Each one flies in from alternating sides, briefly
+// lands on the stack, then fades away to reveal the next one — giving a
+// card-dealing feel without cluttering the view with a large visible pile.
+// The final dealer card is the user's actual first card.
 const DEAL_COUNT = 6;
 const DEAL_STAGGER_S = 0.08;
 const DEAL_FLY_IN_S = 0.16;
@@ -79,14 +99,21 @@ const stackCardVariants: Variants = {
 export function StudyActivityDeck({
   cards,
   scopeLabel,
-  controlledOrder,
-}: StudyActivityDeckProps) {
-  const initialQueue = useMemo(() => {
-    if (controlledOrder?.order === "shuffle") {
-      return randomizeCardIds(cards);
-    }
-    return cards.map((c) => c.id);
-  }, [cards, controlledOrder]);
+  onEndSession,
+  endSessionLabel = "End session",
+  interaction = "flashcard",
+  onDeckComplete,
+  onAttemptGraded,
+}: StudyActivityDeckProps): JSX.Element {
+  const isTestMode = interaction === "test";
+  // Compare by card-id *set*, not array reference. Parents (e.g. ReviewPlayer)
+  // often pass a fresh `cards` array on Convex re-renders with the same ids;
+  // resetting on reference inequality wiped completedIds mid-session.
+  const cardsKey = useMemo(
+    () => [...new Set(cards.map((c) => c.id))].sort().join("\u0000"),
+    [cards],
+  );
+  const initialQueue = useMemo(() => cards.map((c) => c.id), [cards]);
   const cardsById = useMemo(() => {
     const map = new Map<string, StudyCard>();
     for (const c of cards) map.set(c.id, c);
@@ -94,7 +121,7 @@ export function StudyActivityDeck({
   }, [cards]);
 
   const [queue, setQueue] = useState<string[]>(() => initialQueue);
-  const [queueSource, setQueueSource] = useState(initialQueue);
+  const [queueSourceKey, setQueueSourceKey] = useState(cardsKey);
   const [position, setPosition] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
@@ -104,14 +131,19 @@ export function StudyActivityDeck({
   >({});
   const [isInitialShuffle, setIsInitialShuffle] = useState(true);
   // Bumped on restart to force the top-of-stack motion.divs to remount so
-  // the shuffle entry animation replays.
+  // the entry animation replays.
   const [shuffleNonce, setShuffleNonce] = useState(0);
   const [exitDirection, setExitDirection] = useState<ExitDirection | null>(
     null,
   );
 
-  if (queueSource !== initialQueue) {
-    setQueueSource(initialQueue);
+  // The active verse-memory card publishes its "persist this attempt" callback
+  // here. Fired on Done (flashcard) or Check answer (test). The deck owns no
+  // scheduling logic.
+  const recordAttemptRef = useRef<(() => void) | null>(null);
+
+  if (queueSourceKey !== cardsKey) {
+    setQueueSourceKey(cardsKey);
     setQueue(initialQueue);
     setPosition(0);
     setFlipped(false);
@@ -122,7 +154,7 @@ export function StudyActivityDeck({
     setShuffleNonce((n) => n + 1);
   }
 
-  // Play the shuffle animation once per mount (and once per restart, via
+  // Play the entry deal animation once per mount (and once per restart, via
   // `shuffleNonce`). The parent re-mounts this component on activity switch
   // via `key={view}` so this also fires per activity.
   useEffect(() => {
@@ -169,7 +201,7 @@ export function StudyActivityDeck({
     [queue, position],
   );
 
-  const { logAdvance, logRestart, logShuffle } = useStudyActivityDeckDebug({
+  const { logAdvance, logRestart } = useStudyActivityDeckDebug({
     cards,
     initialQueue,
     queue,
@@ -179,7 +211,7 @@ export function StudyActivityDeck({
     cardsById,
   });
 
-  function handleCorrect() {
+  function advanceCurrentCard() {
     if (!currentCardId) return;
     logAdvance("done", {
       position,
@@ -208,9 +240,35 @@ export function StudyActivityDeck({
     setQueue(nextQueue);
     setPosition(nextPos);
     setFlipped(false);
+    if (nextQueue.length === 0) {
+      onDeckComplete?.();
+    }
+  }
+
+  function handleCorrect() {
+    if (!currentCardId || isInitialShuffle) return;
+    // Flashcard: persist on Done. Test mode already persisted on Check.
+    if (!isTestMode) {
+      recordAttemptRef.current?.();
+    }
+    advanceCurrentCard();
+  }
+
+  function handleReveal() {
+    if (isInitialShuffle || flipped) return;
+    setFlipped(true);
+  }
+
+  function handleCheckAnswer() {
+    if (isInitialShuffle || flipped) return;
+    if (currentTyped.trim().length === 0) return;
+    // Grade once: record on check so Skip/retry can't replace the attempt.
+    recordAttemptRef.current?.();
+    setFlipped(true);
   }
 
   function handleTryAgain() {
+    if (isTestMode) return;
     setFlipped(false);
     if (currentCardId) {
       setTypedById((prev) => {
@@ -223,7 +281,7 @@ export function StudyActivityDeck({
   }
 
   function handleSkip() {
-    if (!currentCardId) return;
+    if (!currentCardId || isInitialShuffle) return;
     logAdvance("skip", {
       position,
       queueLength: queue.length,
@@ -258,35 +316,10 @@ export function StudyActivityDeck({
     setTypedById({});
     setExitDirection(null);
     setSecondsRemaining(TEACH_TIMER_SECONDS);
-    // Flip synchronously so the remounted motion.divs pick up the shuffle
+    // Flip synchronously so the remounted motion.divs pick up the deal
     // entry `initial` values on their first render.
     setIsInitialShuffle(true);
     setShuffleNonce((n) => n + 1);
-  }
-
-  function handleShuffle() {
-    if (totalCards < 2) return;
-    logShuffle({ cardsLength: cards.length });
-    setQueue(randomizeCardIds(cards));
-    setPosition(0);
-    setFlipped(false);
-    setCompletedIds(new Set());
-    setTypedById({});
-    setExitDirection(null);
-    setSecondsRemaining(TEACH_TIMER_SECONDS);
-    setIsInitialShuffle(true);
-    setShuffleNonce((n) => n + 1);
-  }
-
-  function handleRestoreOrder() {
-    if (totalCards < 2) return;
-    setQueue(initialQueue);
-    setPosition(0);
-    setFlipped(false);
-    setCompletedIds(new Set());
-    setTypedById({});
-    setExitDirection(null);
-    setSecondsRemaining(TEACH_TIMER_SECONDS);
   }
 
   function handleTypedAnswerChange(value: string) {
@@ -304,76 +337,101 @@ export function StudyActivityDeck({
     });
   }
 
+  // Enter: Reveal/Check on the front, Done/Next on the back. Shift+Enter still
+  // inserts newlines in the recall textarea. Leave buttons alone so native
+  // activation handles focused Skip / Reveal / Check / Try Again / Done / Next.
+  const shortcutRef = useRef({
+    flipped: false,
+    isInitialShuffle: true,
+    isComplete: false,
+    canCheck: false,
+    isTestMode: false,
+    onFrontAction: () => {},
+    onDone: () => {},
+  });
+  useEffect(() => {
+    shortcutRef.current = {
+      flipped,
+      isInitialShuffle,
+      isComplete,
+      canCheck: currentTyped.trim().length > 0,
+      isTestMode,
+      onFrontAction: isTestMode ? handleCheckAnswer : handleReveal,
+      onDone: handleCorrect,
+    };
+  });
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const s = shortcutRef.current;
+      if (s.isComplete || s.isInitialShuffle) return;
+
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName.toUpperCase();
+        const role = active.getAttribute("role") ?? "";
+        if (
+          tag === "BUTTON" ||
+          tag === "A" ||
+          role === "button" ||
+          role === "link"
+        ) {
+          return;
+        }
+      }
+
+      if (s.flipped) {
+        event.preventDefault();
+        s.onDone();
+        return;
+      }
+      // Test mode: require a typed answer before Check (no empty peek).
+      if (s.isTestMode && !s.canCheck) return;
+      event.preventDefault();
+      s.onFrontAction();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   if (totalCards === 0) {
     return <StudyDeckEmptyState />;
   }
 
   if (isComplete || !currentCard) {
-    const deckOwnsOrder = controlledOrder === undefined;
+    // Parent-owned completion (e.g. Review → summary) replaces the built-in
+    // session-complete screen; show nothing while that handoff lands.
+    if (onDeckComplete) {
+      return <div className="py-8" aria-hidden />;
+    }
     return (
       <StudyDeckCompleteState
         cards={cards}
         scopeLabel={scopeLabel}
         onRestart={handleRestart}
-        onShuffle={deckOwnsOrder ? handleShuffle : undefined}
-        onRestoreOrder={
-          deckOwnsOrder && cards[0]?.type === "verse-memory"
-            ? handleRestoreOrder
-            : undefined
-        }
       />
     );
   }
 
-  const currentCardActivity: ActivityType = currentCard.type;
-  const isVerseMemoryDeck = cards[0]?.type === "verse-memory";
-  const deckOwnsOrder = controlledOrder === undefined;
-
   const isTeachRevealed = isTeachCard && flipped;
-  const deckContentMaxWidth =
-    controlledOrder !== undefined ? "max-w-full" : "max-w-2xl";
+  const deckContentMaxWidth = "max-w-2xl";
 
   return (
     <div className="flex flex-col gap-4">
       <div className={cn("mx-auto w-full space-y-2", deckContentMaxWidth)}>
-        <div className="relative flex min-h-7 items-center justify-center">
-          {totalCards >= 2 && deckOwnsOrder && (
-            <div className="absolute left-0 flex items-center">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
-                onClick={handleShuffle}
-                disabled={isInitialShuffle}
-                aria-label="Shuffle deck and start over"
-              >
-                <Shuffle className="h-3.5 w-3.5 shrink-0" />
-                <span className="text-xs">Shuffle</span>
-              </Button>
-              {isVerseMemoryDeck && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
-                  onClick={handleRestoreOrder}
-                  disabled={isInitialShuffle}
-                  aria-label="Restore original verse order and start over"
-                >
-                  <ListOrdered className="h-3.5 w-3.5 shrink-0" />
-                  <span className="text-xs">In order</span>
-                </Button>
-              )}
-            </div>
-          )}
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            {activityLabel(currentCardActivity)}
-          </p>
-          {isTeachCard && !isInitialShuffle && (
+        {isTeachCard && !isInitialShuffle && (
+          <div className="flex min-h-7 items-center justify-end">
             <TeachTimer secondsRemaining={secondsRemaining} />
-          )}
-        </div>
+          </div>
+        )}
         <StudyDeckProgress
           cards={cards}
           completedIds={completedIds}
@@ -387,13 +445,13 @@ export function StudyActivityDeck({
           "relative mx-auto w-full",
           isTeachRevealed
             ? "max-w-5xl min-h-[680px]"
-            : cn(deckContentMaxWidth, "min-h-[520px]"),
+            : cn(deckContentMaxWidth, "min-h-[480px]"),
         )}
         transition={{ duration: 0.45, ease: "easeInOut" }}
       >
         {/*
           Base stack sits statically in its settled 3-card layout. During the
-          initial shuffle, top-card real content is hidden behind a stub so
+          initial deal, top-card real content is hidden behind a stub so
           the dealer overlay can animate on top of a clean pile without
           fighting with rendered text. When a teach card is flipped to its
           reveal panel we hide the peek cards entirely so the "stack" motif
@@ -427,6 +485,9 @@ export function StudyActivityDeck({
                         flipped={flipped}
                         typedAnswer={currentTyped}
                         onTypedAnswerChange={handleTypedAnswerChange}
+                        recordRef={recordAttemptRef}
+                        attemptMode={isTestMode ? "review" : "deck"}
+                        onAttemptGraded={onAttemptGraded}
                       />
                     ) : (
                       <StudyTeachCard
@@ -442,7 +503,7 @@ export function StudyActivityDeck({
                     )}
                   </div>
                 ) : (
-                  <div className="pointer-events-none h-full w-full rounded-xl border bg-card shadow-sm overflow-hidden">
+                  <div className="pointer-events-none h-full w-full overflow-hidden rounded-xl border bg-card shadow-sm">
                     <StackedCardStub card={card} />
                   </div>
                 )}
@@ -462,14 +523,14 @@ export function StudyActivityDeck({
         </AnimatePresence>
       </motion.div>
 
-      <div className={cn("mx-auto w-full pt-1", deckContentMaxWidth)}>
+      <div className={cn("mx-auto w-full space-y-2 pt-1", deckContentMaxWidth)}>
         {!flipped ? (
-          <div className="grid grid-cols-[auto_1fr] gap-2">
+          <div className="flex items-stretch gap-2">
             <Button
               type="button"
               size="lg"
               variant="outline"
-              className="gap-1"
+              className="shrink-0 gap-1.5"
               onClick={handleSkip}
               disabled={isInitialShuffle}
               aria-label="Skip card"
@@ -477,34 +538,77 @@ export function StudyActivityDeck({
               <SkipForward className="h-4 w-4" />
               Skip
             </Button>
-            <Button
-              type="button"
-              size="lg"
-              className="w-full"
-              onClick={() => setFlipped(true)}
-              disabled={isInitialShuffle}
-            >
-              Reveal
-            </Button>
+            {isTestMode ? (
+              <Button
+                type="button"
+                size="lg"
+                className="min-w-0 flex-1 gap-1.5"
+                onClick={handleCheckAnswer}
+                disabled={isInitialShuffle || currentTyped.trim().length === 0}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Check answer
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="lg"
+                className="min-w-0 flex-1 gap-1.5"
+                onClick={handleReveal}
+                disabled={isInitialShuffle}
+              >
+                <Eye className="h-4 w-4" />
+                Reveal
+              </Button>
+            )}
           </div>
+        ) : isTestMode ? (
+          <Button
+            type="button"
+            size="lg"
+            className="w-full gap-1.5"
+            onClick={handleCorrect}
+            disabled={isInitialShuffle}
+          >
+            Next
+            <ArrowRight className="h-4 w-4" />
+          </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"
               variant="outline"
               size="lg"
+              className="gap-1.5"
               onClick={handleTryAgain}
               disabled={isInitialShuffle}
             >
+              <RotateCcw className="h-4 w-4" />
               Try Again
             </Button>
             <Button
               type="button"
               size="lg"
+              className="gap-1.5"
               onClick={handleCorrect}
               disabled={isInitialShuffle}
             >
+              <Check className="h-4 w-4" />
               Done
+            </Button>
+          </div>
+        )}
+        {onEndSession && (
+          <div className="flex justify-start">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-muted-foreground hover:text-foreground"
+              onClick={onEndSession}
+              disabled={isInitialShuffle}
+            >
+              {endSessionLabel}
             </Button>
           </div>
         )}
@@ -513,11 +617,12 @@ export function StudyActivityDeck({
   );
 }
 
-function StackedCardStub({ card }: { card: StudyCard }) {
-  const label = card.type === "verse-memory" ? "Verse Memory" : "Teach";
+function StackedCardStub({ card }: { card: StudyCard }): JSX.Element {
+  const label =
+    card.type === "verse-memory" ? formatVerseRef(card.reference) : "Teach";
   return (
-    <div className="flex h-full w-full items-start justify-center py-6">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+    <div className="flex h-full w-full items-start justify-center px-6 py-6">
+      <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </p>
     </div>
@@ -530,13 +635,15 @@ function ShuffleDealerOverlay({
 }: {
   cards: StudyCard[];
   firstCard: StudyCard;
-}) {
+}): JSX.Element {
   const samples = useMemo<StudyCard[]>(() => {
     const others = cards.filter((c) => c.id !== firstCard.id);
     const leadIns: StudyCard[] = [];
     for (let i = 0; i < DEAL_COUNT - 1; i++) {
       const pick =
-        others.length > 0 ? others[(i * 3 + 1) % others.length] : firstCard;
+        others.length > 0
+          ? (others[(i * 3 + 1) % others.length] ?? firstCard)
+          : firstCard;
       leadIns.push(pick);
     }
     return [...leadIns, firstCard];
@@ -570,7 +677,7 @@ function ShuffleDealerCard({
   index: number;
   card: StudyCard;
   isLast: boolean;
-}) {
+}): JSX.Element {
   const fromLeft = index % 2 === 0;
   const startX = fromLeft ? -360 : 360;
   const startRotate = fromLeft ? -10 : 10;
@@ -581,7 +688,7 @@ function ShuffleDealerCard({
   const flyInFrac = DEAL_FLY_IN_S / totalDuration;
   return (
     <motion.div
-      className="absolute inset-0 rounded-xl border bg-card shadow-md overflow-hidden"
+      className="absolute inset-0 overflow-hidden rounded-xl border bg-card shadow-md"
       style={{ zIndex: 50 + index }}
       initial={{ x: startX, y: 0, rotate: startRotate, opacity: 0 }}
       animate={
@@ -606,18 +713,18 @@ function ShuffleDealerCard({
   );
 }
 
-function ShuffleDealerCardFace({ card }: { card: StudyCard }) {
+function ShuffleDealerCardFace({ card }: { card: StudyCard }): JSX.Element {
   const refLabel = formatVerseRef(card.reference);
   if (card.type === "verse-memory") {
     return (
-      <div className="flex h-full w-full flex-col items-center gap-5 px-6 py-8 text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+      <div className="flex h-full w-full flex-col items-center gap-4 px-6 py-7 text-center">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
           {refLabel}
         </h2>
         <p className="text-sm text-muted-foreground">
           Can you recall this verse?
         </p>
-        <div className="w-full max-w-xl min-h-[200px] rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-muted-foreground/50">
+        <div className="min-h-[160px] w-full max-w-xl rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-muted-foreground/50">
           Type what you remember
         </div>
       </div>
@@ -628,11 +735,11 @@ function ShuffleDealerCardFace({ card }: { card: StudyCard }) {
       <h2 className="shrink-0 text-center text-2xl font-semibold tracking-tight text-foreground">
         {refLabel}
       </h2>
-      <div className="w-full max-w-xl mx-auto space-y-2 px-2">
+      <div className="mx-auto w-full max-w-xl space-y-2 px-2">
         <div className="h-4 w-full animate-pulse rounded bg-muted" />
         <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
       </div>
-      <div className="w-full max-w-xl mx-auto min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-muted-foreground/50">
+      <div className="mx-auto min-h-[120px] w-full max-w-xl rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-muted-foreground/50">
         Practice teaching a point on this passage. Then reveal to compare with
         your notes.
       </div>
@@ -648,7 +755,7 @@ function StudyDeckProgress({
   cards: StudyCard[];
   completedIds: Set<string>;
   currentIndex: number;
-}) {
+}): JSX.Element {
   const counts = useMemo(() => {
     let totalVerses = 0;
     let totalNotes = 0;
@@ -674,8 +781,8 @@ function StudyDeckProgress({
   const hasNotes = counts.totalNotes > 0;
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+    <div className="space-y-2">
+      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
         {hasVerses && (
           <div
             className="h-full bg-primary transition-[width]"
@@ -689,8 +796,8 @@ function StudyDeckProgress({
           />
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 font-medium normal-case tracking-normal">
           {hasVerses && (
             <LegendItem
               colorClass="bg-primary"
@@ -704,7 +811,7 @@ function StudyDeckProgress({
             />
           )}
         </div>
-        <p>
+        <p className="tabular-nums">
           {Math.min(currentIndex + 1, total)} of {total}
         </p>
       </div>
@@ -718,7 +825,7 @@ function LegendItem({
 }: {
   colorClass: string;
   label: string;
-}) {
+}): JSX.Element {
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
@@ -730,7 +837,11 @@ function LegendItem({
   );
 }
 
-function TeachTimer({ secondsRemaining }: { secondsRemaining: number }) {
+function TeachTimer({
+  secondsRemaining,
+}: {
+  secondsRemaining: number;
+}): JSX.Element {
   const minutes = Math.floor(secondsRemaining / 60);
   const seconds = secondsRemaining % 60;
   const label = `${minutes}:${seconds.toString().padStart(2, "0")}`;
@@ -739,7 +850,7 @@ function TeachTimer({ secondsRemaining }: { secondsRemaining: number }) {
   return (
     <div
       className={cn(
-        "absolute right-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-mono tabular-nums",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] tabular-nums",
         isExpired
           ? "border-destructive/40 bg-destructive/10 text-destructive"
           : isLow

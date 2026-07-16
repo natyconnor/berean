@@ -13,7 +13,6 @@ function byView(
 describe("buildActivityOptions", () => {
   it("always includes Overview first and enabled", () => {
     const options = buildActivityOptions({
-      savedVersesCount: 0,
       notesCount: 0,
       teachPassagesCount: 0,
     });
@@ -21,20 +20,17 @@ describe("buildActivityOptions", () => {
     expect(options[0].available).toBe(true);
   });
 
-  it("disables Verse Memory when there are no hearted verses", () => {
+  it("is note-only: exposes Overview + Teach and no Verse Memory", () => {
     const options = buildActivityOptions({
-      savedVersesCount: 0,
       notesCount: 3,
       teachPassagesCount: 3,
     });
-    const verseMemory = byView(options, "verse-memory");
-    expect(verseMemory.available).toBe(false);
-    expect(verseMemory.disabledReason).toMatch(/Heart/i);
+    expect(options.map((o) => o.view)).toEqual(["overview", "teach"]);
+    expect(options.map((o) => o.view as string)).not.toContain("verse-memory");
   });
 
   it("disables Teach when there are no teach passages even if notes exist", () => {
     const options = buildActivityOptions({
-      savedVersesCount: 2,
       notesCount: 3,
       teachPassagesCount: 0,
     });
@@ -45,7 +41,6 @@ describe("buildActivityOptions", () => {
 
   it("disables Teach with the add-notes reason when no notes exist", () => {
     const options = buildActivityOptions({
-      savedVersesCount: 2,
       notesCount: 0,
       teachPassagesCount: 0,
     });
@@ -54,13 +49,11 @@ describe("buildActivityOptions", () => {
     expect(teach.disabledReason).toMatch(/Add notes/i);
   });
 
-  it("enables both activities when their prerequisites are met", () => {
+  it("enables Teach when its prerequisites are met", () => {
     const options = buildActivityOptions({
-      savedVersesCount: 1,
       notesCount: 1,
       teachPassagesCount: 1,
     });
-    expect(byView(options, "verse-memory").available).toBe(true);
     expect(byView(options, "teach").available).toBe(true);
   });
 });

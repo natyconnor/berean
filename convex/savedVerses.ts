@@ -1,9 +1,34 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
+import {
+  adjustUserMemoryStats,
+  deletePackMembershipsForVerse,
+  findVerseMemory,
+  seedVerseMemory,
+} from "./lib/verseMemory";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
+
+/**
+ * The verse's live memory schedule, when a `verseMemory` row exists. Included
+ * so the reader can decorate the heart with a mastery ring (see
+ * `masteryRingFraction`) without a per-verse follow-up query — the join happens
+ * inside this single per-chapter query.
+ */
+const savedMemoryValidator = v.object({
+  status: v.union(
+    v.literal("new"),
+    v.literal("learning"),
+    v.literal("reviewing"),
+    v.literal("mastered"),
+  ),
+  learnStage: v.number(),
+  stageReps: v.optional(v.number()),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+});
 
 const savedVerseListItem = v.object({
   _id: v.id("savedVerses"),
@@ -13,15 +38,10 @@ const savedVerseListItem = v.object({
   startVerse: v.number(),
   endVerse: v.number(),
   createdAt: v.number(),
+  memory: v.optional(savedMemoryValidator),
 });
 
-async function toListItem(
-  ctx: {
-    db: { get: (id: Id<"verseRefs">) => Promise<Doc<"verseRefs"> | null> };
-  },
-  row: Doc<"savedVerses">,
-  userId: Id<"users">,
-): Promise<{
+type SavedVerseListItem = {
   _id: Id<"savedVerses">;
   verseRefId: Id<"verseRefs">;
   book: string;
@@ -29,11 +49,25 @@ async function toListItem(
   startVerse: number;
   endVerse: number;
   createdAt: number;
-} | null> {
+  memory?: {
+    status: Doc<"verseMemory">["status"];
+    learnStage: number;
+    stageReps?: number;
+    intervalDays: number;
+    dueAt: number;
+  };
+};
+
+async function toListItem(
+  ctx: QueryCtx,
+  row: Doc<"savedVerses">,
+  userId: Id<"users">,
+): Promise<SavedVerseListItem | null> {
   const ref = await ctx.db.get(row.verseRefId);
   if (!ref || ref.userId !== userId) {
     return null;
   }
+  const memory = await findVerseMemory(ctx, userId, row.verseRefId);
   return {
     _id: row._id,
     verseRefId: row.verseRefId,
@@ -42,6 +76,15 @@ async function toListItem(
     startVerse: ref.startVerse,
     endVerse: ref.endVerse,
     createdAt: row.createdAt,
+    memory: memory
+      ? {
+          status: memory.status,
+          learnStage: memory.learnStage,
+          stageReps: memory.stageReps,
+          intervalDays: memory.intervalDays,
+          dueAt: memory.dueAt,
+        }
+      : undefined,
   };
 }
 
@@ -64,15 +107,7 @@ export const listForChapter = query({
       )
       .collect();
 
-    const items: Array<{
-      _id: Id<"savedVerses">;
-      verseRefId: Id<"verseRefs">;
-      book: string;
-      chapter: number;
-      startVerse: number;
-      endVerse: number;
-      createdAt: number;
-    }> = [];
+    const items: SavedVerseListItem[] = [];
 
     for (const row of rows) {
       const item = await toListItem(ctx, row, userId);
@@ -101,15 +136,7 @@ export const listAll = query({
 
     rows.sort((a, b) => b.createdAt - a.createdAt);
 
-    const items: Array<{
-      _id: Id<"savedVerses">;
-      verseRefId: Id<"verseRefs">;
-      book: string;
-      chapter: number;
-      startVerse: number;
-      endVerse: number;
-      createdAt: number;
-    }> = [];
+    const items: SavedVerseListItem[] = [];
 
     for (const row of rows) {
       const item = await toListItem(ctx, row, userId);
@@ -158,17 +185,39 @@ export const toggle = mutation({
       .unique();
 
     if (existing) {
+      // Un-hearting removes the bookmark and drops the verse from Memory:
+      // pack membership is deleted, isHearted is cleared, but spaced-repetition
+      // progress and review history on verseMemory survive for a later re-heart.
       await ctx.db.delete(existing._id);
+      const memory = await findVerseMemory(ctx, userId, verseRefId);
+      if (memory) {
+        if (memory.isHearted === true) {
+          await adjustUserMemoryStats(
+            ctx,
+            userId,
+            Date.now(),
+            memory.status,
+            null,
+          );
+        }
+        await ctx.db.patch(memory._id, { isHearted: false });
+      }
+      await deletePackMembershipsForVerse(ctx, userId, verseRefId);
       return "removed" as const;
     }
 
+    const now = Date.now();
     await ctx.db.insert("savedVerses", {
       userId,
       verseRefId,
       book: args.book,
       chapter: args.chapter,
-      createdAt: Date.now(),
+      createdAt: now,
     });
+
+    // Hearting a verse seeds its memory record (idempotent: a re-heart after
+    // un-hearting reuses the existing row rather than creating a duplicate).
+    await seedVerseMemory(ctx, userId, verseRefId, now);
 
     return "added" as const;
   },

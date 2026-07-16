@@ -1,10 +1,16 @@
 import { devLog } from "@/lib/dev-log";
 import { studyTeachDebugEnabled } from "@/lib/debug-study-teach";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
-import { sortByVerseRef } from "../../../shared/compare-verse-refs";
 import { verseRefKey } from "../../../shared/verse-ref-key";
 
-export type ActivityType = "verse-memory" | "teach";
+/**
+ * Study session activities. Verse memory is no longer a Study activity — it
+ * lives entirely in Memory now — so Study sessions only build Teach cards.
+ */
+export type ActivityType = "teach";
+
+/** The kinds of cards a deck can render (shared with the Memory deck). */
+export type CardType = StudyCard["type"];
 
 export interface CardReference {
   book: string;
@@ -34,34 +40,11 @@ export interface TeachCard {
 
 export type StudyCard = VerseMemoryCard | TeachCard;
 
-export interface ResolvedSavedVerse {
-  _id: string;
-  book: string;
-  chapter: number;
-  startVerse: number;
-  endVerse: number;
-}
-
 export interface ResolvedNote {
   noteId: string;
   content: string;
   tags: string[];
   refs: CardReference[];
-}
-
-function buildVerseMemoryCards(
-  savedVerses: ResolvedSavedVerse[],
-): VerseMemoryCard[] {
-  return sortByVerseRef(savedVerses).map((sv) => ({
-    type: "verse-memory" as const,
-    id: `vm:${sv._id}`,
-    reference: {
-      book: sv.book,
-      chapter: sv.chapter,
-      startVerse: sv.startVerse,
-      endVerse: sv.endVerse,
-    },
-  }));
 }
 
 export function refEquals(a: CardReference, b: CardReference): boolean {
@@ -182,23 +165,14 @@ function shuffleCards(cards: StudyCard[]): StudyCard[] {
   return result;
 }
 
-export function buildStudyCards(
-  savedVerses: ResolvedSavedVerse[],
-  notes: ResolvedNote[],
-  activity: ActivityType,
-): StudyCard[] {
-  switch (activity) {
-    case "verse-memory":
-      return buildVerseMemoryCards(savedVerses);
-    case "teach":
-      // Shuffle so order is not dominated by Convex link iteration (e.g. all
-      // of one chapter before another).
-      return shuffleCards(buildTeachCards(notes));
-  }
+export function buildStudyCards(notes: ResolvedNote[]): StudyCard[] {
+  // Shuffle so order is not dominated by Convex link iteration (e.g. all of one
+  // chapter before another).
+  return shuffleCards(buildTeachCards(notes));
 }
 
-export function activityLabel(activity: ActivityType): string {
-  switch (activity) {
+export function activityLabel(cardType: CardType): string {
+  switch (cardType) {
     case "verse-memory":
       return "Verse Memory";
     case "teach":
@@ -212,8 +186,8 @@ export function getCardKind(card: StudyCard): CardKind {
   return card.type === "verse-memory" ? "verse" : "note";
 }
 
-export function activityDescription(activity: ActivityType): string {
-  switch (activity) {
+export function activityDescription(cardType: CardType): string {
+  switch (cardType) {
     case "verse-memory":
       return "Recall hearted verses from memory";
     case "teach":

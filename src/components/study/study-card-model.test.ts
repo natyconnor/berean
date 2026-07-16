@@ -50,28 +50,29 @@ describe("countDistinctTeachPassageRefs", () => {
   });
 });
 
-describe("buildStudyCards verse-memory", () => {
-  it("orders cards by canonical verse reference, not input order", () => {
-    const cards = buildStudyCards(
-      [
-        {
-          _id: "late",
-          book: "John",
-          chapter: 3,
-          startVerse: 16,
-          endVerse: 16,
-        },
-        {
-          _id: "early",
-          book: "Genesis",
-          chapter: 1,
-          startVerse: 1,
-          endVerse: 1,
-        },
-      ],
-      [],
-      "verse-memory",
-    );
-    expect(cards.map((c) => c.id)).toEqual(["vm:early", "vm:late"]);
+describe("buildStudyCards", () => {
+  it("builds one teach card per distinct linked passage", () => {
+    const cards = buildStudyCards([
+      {
+        noteId: "n1",
+        content: "note one",
+        tags: [],
+        refs: [{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }],
+      },
+      {
+        noteId: "n2",
+        content: "note two",
+        tags: [],
+        refs: [{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }],
+      },
+      {
+        noteId: "n3",
+        content: "note three",
+        tags: [],
+        refs: [{ book: "Genesis", chapter: 1, startVerse: 1, endVerse: 1 }],
+      },
+    ]);
+    expect(cards).toHaveLength(2);
+    expect(cards.every((c) => c.type === "teach")).toBe(true);
   });
 });

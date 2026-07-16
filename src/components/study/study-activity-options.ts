@@ -16,24 +16,21 @@ export interface ActivityOption {
 }
 
 export function buildActivityOptions(input: {
-  savedVersesCount: number;
   notesCount: number;
   teachPassagesCount: number;
 }): ActivityOption[] {
-  const hasVerses = input.savedVersesCount > 0;
   const hasNotes = input.notesCount > 0;
   const hasTeachPassages = input.teachPassagesCount > 0;
 
-  const activities: ActivityType[] = ["verse-memory", "teach"];
+  // Study is note-only: Teach is its single activity (Verse memory now lives
+  // entirely in Memory).
+  const activities: ActivityType[] = ["teach"];
 
   const activityOptions: ActivityOption[] = activities.map((activity) => {
     let available = true;
     let disabledReason: string | undefined;
 
-    if (activity === "verse-memory" && !hasVerses) {
-      available = false;
-      disabledReason = "Heart some verses in this scope to use Verse Memory.";
-    } else if (activity === "teach" && !hasTeachPassages) {
+    if (!hasTeachPassages) {
       available = false;
       disabledReason = hasNotes
         ? "Link notes to verses in this scope to use Teach."

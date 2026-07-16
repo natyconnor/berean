@@ -21,18 +21,18 @@ import {
 
 import { formatScopeSummary, type StudyScope } from "./study-scope-summary";
 
-const KNOWN_ACTIVITIES = new Set<ActivityType>(["verse-memory", "teach"]);
+const KNOWN_ACTIVITIES = new Set<ActivityType>(["teach"]);
 
 /**
  * `lastView` can be any `SessionView` (overview + activity types) plus a
  * couple of legacy names. The card only surfaces a "Last: X" chip when the
  * last view was an activity — there's nothing interesting to say about
- * "last viewed the overview".
+ * "last viewed the overview". Legacy verse-memory views no longer map to a
+ * Study activity, so they surface no chip.
  */
 function lastViewAsActivity(value: string | undefined): ActivityType | null {
   if (!value) return null;
   if (value === "explain") return "teach";
-  if (value === "mixed-review") return "verse-memory";
   if (KNOWN_ACTIVITIES.has(value as ActivityType)) {
     return value as ActivityType;
   }

@@ -18,15 +18,19 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_deleteAccount from "../lib/deleteAccount.js";
 import type * as lib_noteContent from "../lib/noteContent.js";
 import type * as lib_onboarding from "../lib/onboarding.js";
+import type * as lib_packs from "../lib/packs.js";
 import type * as lib_publicValues from "../lib/publicValues.js";
 import type * as lib_seed_devSeedSupport from "../lib/seed/devSeedSupport.js";
 import type * as lib_tags from "../lib/tags.js";
 import type * as lib_tutorial from "../lib/tutorial.js";
+import type * as lib_verseMemory from "../lib/verseMemory.js";
 import type * as lib_verseRefs from "../lib/verseRefs.js";
+import type * as migrations from "../migrations.js";
 import type * as noteTransfer from "../noteTransfer.js";
 import type * as noteVerseLinks from "../noteVerseLinks.js";
 import type * as notes from "../notes.js";
 import type * as onboarding from "../onboarding.js";
+import type * as packs from "../packs.js";
 import type * as savedVerses from "../savedVerses.js";
 import type * as seed from "../seed.js";
 import type * as studySessions from "../studySessions.js";
@@ -34,6 +38,7 @@ import type * as tags from "../tags.js";
 import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 import type * as verseLinks from "../verseLinks.js";
+import type * as verseMemory from "../verseMemory.js";
 import type * as verseRefs from "../verseRefs.js";
 
 import type {
@@ -53,15 +58,19 @@ declare const fullApi: ApiFromModules<{
   "lib/deleteAccount": typeof lib_deleteAccount;
   "lib/noteContent": typeof lib_noteContent;
   "lib/onboarding": typeof lib_onboarding;
+  "lib/packs": typeof lib_packs;
   "lib/publicValues": typeof lib_publicValues;
   "lib/seed/devSeedSupport": typeof lib_seed_devSeedSupport;
   "lib/tags": typeof lib_tags;
   "lib/tutorial": typeof lib_tutorial;
+  "lib/verseMemory": typeof lib_verseMemory;
   "lib/verseRefs": typeof lib_verseRefs;
+  migrations: typeof migrations;
   noteTransfer: typeof noteTransfer;
   noteVerseLinks: typeof noteVerseLinks;
   notes: typeof notes;
   onboarding: typeof onboarding;
+  packs: typeof packs;
   savedVerses: typeof savedVerses;
   seed: typeof seed;
   studySessions: typeof studySessions;
@@ -69,6 +78,7 @@ declare const fullApi: ApiFromModules<{
   userSettings: typeof userSettings;
   users: typeof users;
   verseLinks: typeof verseLinks;
+  verseMemory: typeof verseMemory;
   verseRefs: typeof verseRefs;
 }>;
 

@@ -1,11 +1,12 @@
 import type { DiffToken } from "@/lib/diff-words";
+import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 
 /**
  * How close the user's typed verse came to the actual text.
  *
  * - `exact`: every diff token matched (ignoring case and trailing punctuation).
- * - `close`: one or two small slips on a verse the user otherwise nailed.
- * - `off`: more than a few slips, or a short verse with a significant miss.
+ * - `close`: imperfect, but accuracy at or above {@link REVIEW_LAPSE_ACCURACY}.
+ * - `off`: accuracy below {@link REVIEW_LAPSE_ACCURACY}.
  */
 export type VerseAttemptQuality = "exact" | "close" | "off";
 
@@ -15,11 +16,6 @@ const ERROR_STATUSES: ReadonlySet<DiffToken["status"]> = new Set([
   "missing",
   "extra",
 ]);
-
-// Thresholds chosen to feel generous on longer verses without letting a
-// two-word verse where the user got one word wrong count as "really close".
-const MAX_CLOSE_ERRORS = 3;
-const MIN_CLOSE_MATCH_RATIO = 0.8;
 
 export function verseAttemptAccuracy(tokens: ReadonlyArray<DiffToken>): number {
   if (tokens.length === 0) return 0;
@@ -41,40 +37,9 @@ export function classifyVerseAttempt(
 ): VerseAttemptQuality | null {
   if (tokens.length === 0) return null;
 
-  let matches = 0;
-  let mismatches = 0;
-  let missing = 0;
-  let extras = 0;
-  for (const token of tokens) {
-    switch (token.status) {
-      case "match":
-        matches += 1;
-        break;
-      case "mismatch":
-        mismatches += 1;
-        break;
-      case "missing":
-        missing += 1;
-        break;
-      case "extra":
-        extras += 1;
-        break;
-    }
-  }
-
-  const errors = mismatches + missing + extras;
-  if (errors === 0) return "exact";
-
-  // Match ratio against the larger of the two word counts so that a typed
-  // attempt with lots of extras doesn't silently pass as "close".
-  const actualLen = matches + mismatches + missing;
-  const typedLen = matches + mismatches + extras;
-  const denom = Math.max(actualLen, typedLen, 1);
-  const matchRatio = matches / denom;
-
-  if (errors <= MAX_CLOSE_ERRORS && matchRatio >= MIN_CLOSE_MATCH_RATIO) {
-    return "close";
-  }
+  const accuracy = verseAttemptAccuracy(tokens);
+  if (accuracy === 100) return "exact";
+  if (accuracy >= REVIEW_LAPSE_ACCURACY) return "close";
   return "off";
 }
 

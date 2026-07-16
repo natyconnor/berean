@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
-import { BookOpen, LogOut, Plus, Search, Settings, X } from "lucide-react";
+import { LogOut, Plus, Search, Settings, X } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SearchDialog } from "@/components/notes/search-dialog";
 import { ThemeDropdown } from "./theme-dropdown";
@@ -15,10 +15,7 @@ import { logInteraction } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
-import {
-  shouldRevealSearch,
-  shouldRevealStudy,
-} from "@/lib/staged-onboarding-thresholds";
+import { shouldRevealSearch } from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
@@ -42,23 +39,16 @@ export function TabBar() {
   const savedSearchState = readSearchWorkspaceState();
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
-  const studyRevealReached = milestones ? shouldRevealStudy(milestones) : false;
   const searchRevealReached = milestones
     ? shouldRevealSearch(milestones)
     : false;
-  const studyHint = useFeatureHint(
-    FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART,
-    studyRevealReached,
-  );
   const searchHint = useFeatureHint(
     FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY,
     searchRevealReached,
   );
-  // Soft-hide rule: only show Study/Search toolbar buttons once the user has
+  // Soft-hide rule: only show the search toolbar button once the user has
   // reached the milestone, OR once they've already acknowledged the hint.
-  // The global hint queue prevents multiple reveal callouts from stacking.
-  const showStudyButton =
-    studyRevealReached || studyHint.completed || studyHint.dismissed;
+  // Memory and Study live in the Mode Dock, not the toolbar.
   const showSearchButton =
     searchRevealReached || searchHint.completed || searchHint.dismissed;
   const searchShortcutLabel = formatCommandOrControlShortcut("K");
@@ -222,47 +212,6 @@ export function TabBar() {
                 }}
               >
                 <Search className="h-4 w-4" />
-              </Link>
-            </TooltipButton>
-          </FeatureCallout>
-        ) : null}
-        {showStudyButton ? (
-          <FeatureCallout
-            state={studyHint}
-            title="Study is now available"
-            description="You've hearted a verse, so Study can help you review hearted verses, summarize notes, and run practice activities."
-            primaryActionLabel="Open Study"
-            onPrimaryAction={() => {
-              logInteraction("toolbar", "study-opened", {
-                trigger: "reveal-callout",
-              });
-              void navigate({ to: "/study" });
-            }}
-            side="bottom"
-            align="end"
-          >
-            <TooltipButton
-              asChild
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-8 w-8",
-                isStudyRoute &&
-                  "h-10 w-10 rounded-none border-b-2 border-b-primary bg-background text-foreground",
-              )}
-              tooltip="Open study"
-              aria-label="Open study"
-            >
-              <Link
-                to="/study"
-                onClick={() => {
-                  logInteraction("toolbar", "study-opened");
-                  if (!studyHint.completed && !studyHint.dismissed) {
-                    studyHint.complete();
-                  }
-                }}
-              >
-                <BookOpen className="h-4 w-4" />
               </Link>
             </TooltipButton>
           </FeatureCallout>

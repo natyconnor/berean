@@ -45,6 +45,20 @@ export async function deleteAllDataForUser(
   }
 
   for (const row of await ctx.db
+    .query("verseMemory")
+    .withIndex("by_userId_dueAt", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
+    .query("verseMemoryReviews")
+    .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
     .query("verseRefs")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .collect()) {
@@ -75,6 +89,27 @@ export async function deleteAllDataForUser(
   for (const row of await ctx.db
     .query("highlights")
     .withIndex("by_userId_book_chapter", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
+    .query("packVerses")
+    .withIndex("by_userId_packId_order", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
+    .query("packs")
+    .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
+    .query("userMemoryStats")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
     .collect()) {
     await ctx.db.delete(row._id);
   }

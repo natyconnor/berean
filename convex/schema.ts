@@ -42,6 +42,10 @@ export default defineSchema({
     advancedSearchOnboardingCompletedAt: v.optional(v.number()),
     focusModeOnboardingCompletedAt: v.optional(v.number()),
     starterTagCategoryColors: v.optional(v.record(v.string(), v.string())),
+    // How the bottom-center Mode Dock behaves. Absent = "auto-hide" default.
+    modeDock: v.optional(
+      v.union(v.literal("auto-hide"), v.literal("always"), v.literal("off")),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -187,6 +191,58 @@ export default defineSchema({
     lastOpenedAt: v.number(),
   }).index("by_userId_lastOpenedAt", ["userId", "lastOpenedAt"]),
 
+  packs: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    kind: v.union(v.literal("scope"), v.literal("custom")),
+    // Present iff kind === "scope"; identical shape to studySessions.scope.
+    scope: v.optional(
+      v.object({
+        books: v.array(v.string()),
+        chapterRanges: v.optional(
+          v.array(
+            v.object({
+              book: v.string(),
+              startChapter: v.number(),
+              endChapter: v.number(),
+            }),
+          ),
+        ),
+        tags: v.array(v.string()),
+        tagMatchMode: v.union(v.literal("any"), v.literal("all")),
+      }),
+    ),
+    createdAt: v.number(),
+    lastOpenedAt: v.number(),
+  }).index("by_userId_lastOpenedAt", ["userId", "lastOpenedAt"]),
+
+  packVerses: defineTable({
+    // Custom-pack membership (ordered). Hearted-only: unheart deletes these rows.
+    userId: v.id("users"),
+    packId: v.id("packs"),
+    verseRefId: v.id("verseRefs"),
+    order: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_userId_packId_order", ["userId", "packId", "order"])
+    .index("by_packId", ["packId"])
+    .index("by_userId_packId_verseRefId", ["userId", "packId", "verseRefId"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"]),
+
+  /**
+   * Denormalized hearted-verse status counts for O(1) memoryStats.
+   * `due` is time-dependent and is still computed live from the due index.
+   */
+  userMemoryStats: defineTable({
+    userId: v.id("users"),
+    new: v.number(),
+    learning: v.number(),
+    reviewing: v.number(),
+    mastered: v.number(),
+    total: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   feedbackReports: defineTable({
     userId: v.id("users"),
     kind: v.union(v.literal("bug"), v.literal("feature")),
@@ -199,4 +255,58 @@ export default defineSchema({
   })
     .index("by_createdAt", ["createdAt"])
     .index("by_userId", ["userId"]),
+
+  verseMemory: defineTable({
+    userId: v.id("users"),
+    verseRefId: v.id("verseRefs"),
+    status: v.union(
+      v.literal("new"),
+      v.literal("learning"),
+      v.literal("reviewing"),
+      v.literal("mastered"),
+    ),
+    learnStage: v.number(), // 0..3 support band index -> Read|Guided|Challenge|From Memory
+    stageReps: v.optional(v.number()), // exact reps banked at the current band; a band clears only after its required reps (schema-optional for backfill, always written going forward)
+    ease: v.number(), // 1.3 .. 2.8, starts 2.3
+    intervalDays: v.number(),
+    dueAt: v.number(), // drives review queue + dock badge (reviewing/mastered only)
+    consecutiveCorrect: v.number(),
+    lapses: v.number(),
+    // True after one successful early (pre-due) reschedule this interval; optional for backfill
+    earlyReviewApplied: v.optional(v.boolean()),
+    // Optional while backfilled; true means the verse is currently in savedVerses.
+    isHearted: v.optional(v.boolean()),
+    lastReviewedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_userId_dueAt", ["userId", "dueAt"]) // Today queue + badge
+    .index("by_userId_isHearted", ["userId", "isHearted"])
+    .index("by_userId_isHearted_dueAt", ["userId", "isHearted", "dueAt"])
+    .index("by_userId_isHearted_status", ["userId", "isHearted", "status"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"]), // upsert on heart
+
+  verseMemoryReviews: defineTable({
+    // append-only log
+    userId: v.id("users"),
+    verseRefId: v.id("verseRefs"),
+    verseMemoryId: v.id("verseMemory"),
+    quality: v.union(v.literal("exact"), v.literal("close"), v.literal("off")), // from classifyVerseAttempt
+    accuracy: v.number(), // 0..100 from verseAttemptAccuracy
+    stage: v.number(), // learnStage at time of attempt
+    mode: v.union(
+      v.literal("learn"),
+      v.literal("review"),
+      v.literal("deck"),
+      v.literal("practice"),
+    ),
+    durationMs: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_userId_verseRefId_createdAt", [
+      "userId",
+      "verseRefId",
+      "createdAt",
+    ]),
 });

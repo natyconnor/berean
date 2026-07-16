@@ -69,7 +69,7 @@ export function StudyHub() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Study</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Your study sessions
+              Note collections to review and teach
             </p>
           </div>
           <Button asChild size="sm">
@@ -81,69 +81,76 @@ export function StudyHub() {
         </div>
       </header>
       <ScrollArea className="flex-1 min-h-0">
-        <div className="max-w-2xl mx-auto px-5 py-6">
-          {isLoadingFirstPage ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : results.length === 0 ? (
-            <div className="text-center py-16 px-4">
-              <p className="text-sm text-muted-foreground mb-4">
-                No study sessions yet. Create one to get started.
-              </p>
-              <Button asChild>
-                <Link to="/study/new">
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  New session
-                </Link>
-              </Button>
-            </div>
-          ) : (
-            <>
-              <ul className="space-y-2">
-                {results.map((session, index) => {
-                  const title =
-                    session.name && session.name.length > 0
-                      ? session.name
-                      : formatScopeSummary(session.scope);
-                  return (
-                    <StudySessionCard
-                      key={session._id}
-                      sessionId={session._id}
-                      index={index}
-                      name={session.name}
-                      scope={session.scope}
-                      lastOpenedAt={session.lastOpenedAt}
-                      savedVersesCount={session.savedVersesCount}
-                      notesCount={session.notesCount}
-                      teachPassagesCount={session.teachPassagesCount}
-                      lastView={session.lastView}
-                      onDelete={() => requestDelete({ id: session._id, title })}
-                    />
-                  );
-                })}
-              </ul>
-              {(canLoadMore || isLoadingMore) && (
-                <div className="mt-4 flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => loadMore(LOAD_MORE_PAGE_SIZE)}
-                    disabled={!canLoadMore}
-                  >
-                    {isLoadingMore ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      "Load more"
-                    )}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
+        <div className="max-w-2xl mx-auto px-5 py-6 space-y-8">
+          <section className="space-y-3">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Sessions
+            </h2>
+            {isLoadingFirstPage ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : results.length === 0 ? (
+              <div className="text-center py-16 px-4">
+                <p className="text-sm text-muted-foreground mb-4">
+                  No study sessions yet. Create one to get started.
+                </p>
+                <Button asChild>
+                  <Link to="/study/new">
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    New session
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <>
+                <ul className="space-y-2">
+                  {results.map((session, index) => {
+                    const title =
+                      session.name && session.name.length > 0
+                        ? session.name
+                        : formatScopeSummary(session.scope);
+                    return (
+                      <StudySessionCard
+                        key={session._id}
+                        sessionId={session._id}
+                        index={index}
+                        name={session.name}
+                        scope={session.scope}
+                        lastOpenedAt={session.lastOpenedAt}
+                        savedVersesCount={session.savedVersesCount}
+                        notesCount={session.notesCount}
+                        teachPassagesCount={session.teachPassagesCount}
+                        lastView={session.lastView}
+                        onDelete={() =>
+                          requestDelete({ id: session._id, title })
+                        }
+                      />
+                    );
+                  })}
+                </ul>
+                {(canLoadMore || isLoadingMore) && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadMore(LOAD_MORE_PAGE_SIZE)}
+                      disabled={!canLoadMore}
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Load more"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
         </div>
       </ScrollArea>
       <DeleteStudySessionDialog

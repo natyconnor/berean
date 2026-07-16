@@ -5,10 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StagedOnboardingContext } from "@/components/tutorial/staged-onboarding-context";
-import {
-  SEARCH_MIN_NOTES_TOTAL,
-  STUDY_MIN_HEARTS,
-} from "@/lib/staged-onboarding-thresholds";
+import { SEARCH_MIN_NOTES_TOTAL } from "@/lib/staged-onboarding-thresholds";
 import { TabBar } from "./tab-bar";
 
 function StagedOnboardingTestProvider({ children }: { children: ReactNode }) {
@@ -16,10 +13,11 @@ function StagedOnboardingTestProvider({ children }: { children: ReactNode }) {
     <StagedOnboardingContext.Provider
       value={{
         milestones: {
+          // Above the Search threshold so the toolbar search button is revealed.
           notesCount: SEARCH_MIN_NOTES_TOTAL,
           taggedNotesCount: 0,
           distinctTagCount: 0,
-          heartsCount: STUDY_MIN_HEARTS,
+          heartsCount: 0,
           hasInlineVerseLink: false,
           hasExplicitVerseLink: false,
           starterTagCount: 0,
@@ -136,8 +134,9 @@ describe("TabBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides the search and study buttons until the staged onboarding milestones fire", () => {
-    render(
+  it("gates the search toolbar button behind its reveal", () => {
+    // No staged-onboarding provider → no milestones → search stays hidden.
+    const { unmount } = render(
       <TooltipProvider delayDuration={0}>
         <TabBar />
       </TooltipProvider>,
@@ -146,6 +145,23 @@ describe("TabBar", () => {
     expect(
       screen.queryByRole("link", { name: "Open search workspace" }),
     ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open memory" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
+    unmount();
+
+    render(
+      <StagedOnboardingTestProvider>
+        <TooltipProvider delayDuration={0}>
+          <TabBar />
+        </TooltipProvider>
+      </StagedOnboardingTestProvider>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Open search workspace" }),
+    ).toBeInTheDocument();
+    // Memory and Study live in the Mode Dock, not the toolbar.
+    expect(screen.queryByRole("link", { name: "Open memory" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
   });
 

@@ -164,4 +164,48 @@ describe("StagedOnboardingProvider hint queue", () => {
       "true",
     );
   });
+
+  it("keeps a display-queue hint pending after markShown", async () => {
+    function ShownProbe() {
+      const state = useFeatureHint(
+        FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
+        true,
+      );
+
+      return (
+        <section aria-label="memory-reveal">
+          <div data-testid="memory-reveal-pending">{String(state.pending)}</div>
+          <button type="button" onClick={state.markShown}>
+            Mark shown
+          </button>
+          <button type="button" onClick={state.complete}>
+            Complete
+          </button>
+        </section>
+      );
+    }
+
+    render(
+      <TestProvider>
+        <ShownProbe />
+      </TestProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("memory-reveal-pending")).toHaveTextContent(
+        "true",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark shown" }));
+
+    expect(screen.getByTestId("memory-reveal-pending")).toHaveTextContent(
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    expect(screen.getByTestId("memory-reveal-pending")).toHaveTextContent(
+      "false",
+    );
+  });
 });

@@ -1,6 +1,15 @@
-import { CheckCircle2, RotateCcw } from "lucide-react";
-import { type KeyboardEvent, useMemo, useState } from "react";
+import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useMutation } from "convex/react";
 
+import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,94 +20,283 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
+import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { devLog } from "@/lib/dev-log";
 import { diffWords } from "@/lib/diff-words";
+import { type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import {
-  type HintStage,
   type HintToken,
+  countVerseWords,
+  hintForProgress,
   maskVerseText,
 } from "@/lib/verse-hint";
+import { predictLearning } from "@/lib/verse-practice-progress";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
-import { verseAttemptAccuracy } from "./study-attempt-quality";
+import { LearningJourneyBar } from "../memory/practice/learning-journey-bar";
+import { PRACTICE_STAGES } from "../memory/practice/practice-stages";
+import {
+  classifyVerseAttempt,
+  verseAttemptAccuracy,
+} from "./study-attempt-quality";
 import type { VerseMemoryCard } from "./study-card-model";
+import { useRecordVerseAttempt } from "./use-record-verse-attempt";
+import { useVersePracticeAttempt } from "./use-verse-practice-attempt";
 import { VerseAttemptResult } from "./study-verse-memory-card";
 
 interface StudyVerseLearnProps {
   card: VerseMemoryCard;
 }
 
-interface StageInfo {
-  stage: HintStage;
-  label: string;
-  description: string;
+/** Live learning progress for the verse this card is teaching. */
+interface VerseProgress {
+  learnStage: number;
+  stageReps: number;
+  status: MemoryStatus;
 }
 
-const STAGES: readonly StageInfo[] = [
-  {
-    stage: "full",
-    label: "Full",
-    description: "Read and absorb the verse.",
-  },
-  {
-    stage: "first-letters",
-    label: "Letters",
-    description: "Use first-letter scaffolding.",
-  },
-  {
-    stage: "cloze",
-    label: "Blanks",
-    description: "Recall the missing words.",
-  },
-  {
-    stage: "hidden",
-    label: "Hidden",
-    description: "Type it from memory.",
-  },
-] as const;
-const PASS_THRESHOLD = 85;
+// Bounded retries for the one-shot rung restore on transient read failures.
+const RESTORE_MAX_ATTEMPTS = 3;
 
 export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
-  const [stage, setStage] = useState<HintStage>("full");
+  // Server-authoritative rung (band + reps banked on it). Held null until the
+  // one-shot restore resolves so we never flash the default Read prime.
+  const [progress, setProgress] = useState<VerseProgress | null>(null);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
   const refLabel = formatVerseRef(card.reference);
   const { data, loading, error } = useEsvReference(card.reference);
-  const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
-  const tokens = useMemo(
-    () => maskVerseText(versePlainText, stage),
-    [stage, versePlainText],
+
+  const { resolveVerseRefId, heartedVersesReady } = useRecordVerseAttempt();
+  const {
+    normalizeProgress,
+    recordWithImmediateAdopt,
+    recordDeferred,
+    commitDeferred,
+  } = useVersePracticeAttempt("learn");
+  const getOrCreateForVerse = useMutation(api.verseMemory.getOrCreateForVerse);
+  const verseRefId = resolveVerseRefId(card.reference);
+  // `learnStage`/`stageReps` on the server are the single source of truth for
+  // the rung: the scheduler advances/drops the band and banks reps based on
+  // attempt quality. The UI adopts them on open (restore) and only after the
+  // learner continues, so the review never changes underneath them.
+  const restoredRef = useRef(false);
+  const interactedRef = useRef(false);
+  const answerInputRef = useRef<HTMLTextAreaElement>(null);
+  const reviewActionRef = useRef<HTMLButtonElement>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  // Serializes attempt submission: the synchronous in-flight lock collapses
+  // same-tick double activations (double-tap, touch+mouse, Enter + click) into
+  // a single recorded attempt, and `submitPending` disables the control while
+  // it's in flight. One lock suffices because only one submit path (Read prime,
+  // check-answer, or the result-view Continue) is mounted at a time.
+  const { submit, pending: submitPending } = useSubmitLock();
+
+  const applyProgress = useCallback(
+    (next: VerseProgress) => {
+      setProgress(normalizeProgress(next));
+    },
+    [normalizeProgress],
   );
-  const stageIndex = STAGES.findIndex((item) => item.stage === stage);
-  const currentStage = STAGES[stageIndex] ?? STAGES[0];
-  const canAdvance = stageIndex >= 0 && stageIndex < STAGES.length - 1;
-  const canCheckAnswer = !loading && !error;
+
+  const stageReady =
+    heartedVersesReady &&
+    (verseRefId === null ||
+      progress !== null ||
+      restoreAttempt >= RESTORE_MAX_ATTEMPTS);
+
+  // Resume the learner at their persisted rung on (re)open. Hold the stage UI
+  // until restore finishes so we never flash the default Read prime.
+  useEffect(() => {
+    if (!heartedVersesReady || !verseRefId) return;
+    if (progress !== null || restoredRef.current) return;
+    if (restoreAttempt >= RESTORE_MAX_ATTEMPTS) return;
+
+    let cancelled = false;
+    void getOrCreateForVerse({ verseRefId, now: Date.now() })
+      .then((row) => {
+        if (cancelled) return;
+        restoredRef.current = true;
+        if (!interactedRef.current) {
+          applyProgress({
+            learnStage: row.learnStage,
+            stageReps: row.stageReps ?? 0,
+            status: row.status,
+          });
+        }
+      })
+      .catch((restoreError: unknown) => {
+        devLog.warn("verseMemory", "learnStage restore failed", restoreError);
+        if (!cancelled) setRestoreAttempt((n) => n + 1);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    verseRefId,
+    heartedVersesReady,
+    progress,
+    getOrCreateForVerse,
+    restoreAttempt,
+    applyProgress,
+  ]);
+
+  const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
+  const stageIndex = progress?.learnStage ?? 0;
+  const repsIndex = progress?.stageReps ?? 0;
+  const status = progress?.status ?? "learning";
+  const stageInfo = PRACTICE_STAGES[stageIndex] ?? PRACTICE_STAGES[0];
+  const stageColor = stageInfo.color;
+  const { hintStage, tokens, wordCount } = useMemo(() => {
+    const wc = countVerseWords(versePlainText);
+    const hint = hintForProgress(stageIndex, repsIndex, wc);
+    return {
+      hintStage: hint.stage,
+      tokens: maskVerseText(versePlainText, hint.stage, {
+        density: hint.density,
+        seed: hint.seed,
+      }),
+      wordCount: wc,
+    };
+  }, [versePlainText, stageIndex, repsIndex]);
+
+  const isReadPrime = hintStage === "full";
+  const promptLine = isReadPrime
+    ? "Read it through, then continue"
+    : hintStage === "hidden"
+      ? "Recall the verse from memory"
+      : "Type what you remember";
+
+  const canCheckAnswer =
+    !loading &&
+    !error &&
+    typedAnswer.trim().length > 0 &&
+    versePlainText !== "";
+  const canContinueRead = !loading && !error && versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
-  const passed = checked && checkedAccuracy >= PASS_THRESHOLD;
+  const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
 
-  function selectStage(nextStage: HintStage) {
-    setStage(nextStage);
-    setTypedAnswer("");
-    setChecked(false);
+  useEffect(() => {
+    if (!checked) return;
+    reviewActionRef.current?.focus();
+  }, [checked]);
+
+  useEffect(() => {
+    if (!checked) return;
+    function handleResultEnter(event: globalThis.KeyboardEvent) {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      )
+        return;
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName.toUpperCase();
+        // Let editable fields handle their own Enter.
+        if (
+          tag === "TEXTAREA" ||
+          tag === "INPUT" ||
+          (active as HTMLElement).isContentEditable
+        )
+          return;
+        // Let other interactive controls (buttons, links, role=button/link)
+        // activate naturally — only intercept when focus is on reviewActionRef
+        // itself (or nowhere interactive).
+        const role = active.getAttribute("role") ?? "";
+        const isInteractive =
+          tag === "BUTTON" ||
+          tag === "A" ||
+          role === "button" ||
+          role === "link";
+        if (isInteractive && active !== reviewActionRef.current) return;
+      }
+      event.preventDefault();
+      reviewActionRef.current?.click();
+    }
+    window.addEventListener("keydown", handleResultEnter);
+    return () => window.removeEventListener("keydown", handleResultEnter);
+  }, [checked]);
+
+  function focusAnswerInput() {
+    window.requestAnimationFrame(() => {
+      answerInputRef.current?.focus();
+    });
   }
 
-  function advanceStage() {
-    if (!canAdvance) return;
-    selectStage(STAGES[stageIndex + 1].stage);
-  }
-
-  function resetAttempt() {
-    setTypedAnswer("");
-    setChecked(false);
+  function continueRead() {
+    if (!canContinueRead || !stageReady) return;
+    interactedRef.current = true;
+    // Submitting the shown (full) text banks the single Read rep, advancing the
+    // scheduler to the first fading band. The lock collapses same-tick double
+    // activations; it releases whatever the outcome, so a null/unchanged result
+    // (mutation error, verse not hearted) re-enables Continue rather than
+    // stranding it. There is no result view for the Read prime, so the adopted
+    // rung lands directly once the recorded rep settles.
+    submit(() =>
+      recordWithImmediateAdopt(
+        {
+          reference: card.reference,
+          tokens: diffWords(versePlainText, versePlainText),
+          stage: stageIndex,
+          wordCount,
+          current: {
+            learnStage: stageIndex,
+            stageReps: repsIndex,
+            status,
+          },
+          quality: "exact",
+        },
+        (next) => {
+          applyProgress(next);
+          setTypedAnswer("");
+          setChecked(false);
+          focusAnswerInput();
+        },
+      ),
+    );
   }
 
   function checkAnswer() {
-    if (!canCheckAnswer) return;
-    setChecked(true);
+    if (!canCheckAnswer || checked) return;
+    interactedRef.current = true;
+    // Record the graded attempt but keep the review stable: hold the returned
+    // rung and adopt it only after the learner continues. The lock keeps a
+    // double-tap from recording twice before the result view (driven by
+    // `checked`) mounts and replaces this button.
+    submit(() => {
+      setChecked(true);
+      return recordDeferred({
+        reference: card.reference,
+        tokens: diffWords(typedAnswer, versePlainText),
+        stage: stageIndex,
+        wordCount,
+      });
+    });
+  }
+
+  function continueAfterReview() {
+    applyProgress(
+      commitDeferred(
+        predictLearning(
+          stageIndex,
+          repsIndex,
+          checkedQuality ?? "close",
+          wordCount,
+          status,
+        ),
+      ),
+    );
+    setTypedAnswer("");
+    setChecked(false);
+    focusAnswerInput();
   }
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -108,75 +306,98 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   }
 
   return (
-    <Card className="mx-auto w-full overflow-hidden">
+    <Card
+      className={cn(
+        "mx-auto w-full overflow-hidden",
+        stageReady && stageColor.panel,
+      )}
+    >
       <CardHeader className="gap-3 text-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Learn
+          <p
+            className={cn(
+              "inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]",
+              stageReady ? stageColor.text : "text-muted-foreground",
+            )}
+          >
+            {stageReady && (
+              <span
+                className={cn("h-2 w-2 rounded-full", stageColor.dot)}
+                aria-hidden
+              />
+            )}
+            Learn{stageReady ? ` · ${stageInfo.label}` : ""}
           </p>
           <CardTitle className="mt-2 text-3xl tracking-tight">
             {refLabel}
           </CardTitle>
         </div>
-        <div className="mx-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-lg bg-muted p-1">
-          {STAGES.map((item, index) => (
-            <button
-              key={item.stage}
-              type="button"
-              className={cn(
-                "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                item.stage === stage
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => selectStage(item.stage)}
-              aria-current={item.stage === stage ? "step" : undefined}
-            >
-              <span className="sr-only">Stage {index + 1}: </span>
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {currentStage.description}
+        <p
+          className={cn(
+            "text-sm font-medium",
+            stageReady ? stageColor.text : "text-muted-foreground",
+          )}
+        >
+          {stageReady ? promptLine : "\u00a0"}
         </p>
+        {stageReady && (
+          <LearningJourneyBar
+            learnStage={stageIndex}
+            stageReps={repsIndex}
+            wordCount={wordCount}
+            status={status}
+          />
+        )}
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <div className="min-h-[180px] rounded-xl border bg-background px-4 py-4 text-left text-lg leading-8">
-          {loading ? (
-            <div className="space-y-3 py-2">
-              <div className="h-4 w-full animate-pulse rounded bg-muted" />
-              <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
-              <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
+        {!checked && (
+          <>
+            <div
+              className={cn(
+                "min-h-[180px] rounded-xl border bg-background px-4 py-4 text-left text-lg leading-8",
+                stageReady && stageColor.panel,
+              )}
+            >
+              {!stageReady || loading ? (
+                <div className="space-y-3 py-2">
+                  <div className="h-4 w-full animate-pulse rounded bg-muted" />
+                  <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
+                  <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
+                </div>
+              ) : error ? (
+                <p className="text-sm text-destructive">
+                  Could not load verse text.
+                </p>
+              ) : hintStage === "hidden" ? (
+                <div className="flex h-full min-h-[140px] items-center justify-center text-center">
+                  <p className="max-w-sm text-sm text-muted-foreground">
+                    No hint text. Type the verse from memory, then check your
+                    answer.
+                  </p>
+                </div>
+              ) : (
+                <HintTokenText tokens={tokens} />
+              )}
             </div>
-          ) : error ? (
-            <p className="text-sm text-destructive">
-              Could not load verse text.
-            </p>
-          ) : stage === "hidden" ? (
-            <div className="flex h-full min-h-[140px] items-center justify-center text-center">
-              <p className="max-w-sm text-sm text-muted-foreground">
-                No hint text. Type the verse from memory, then check your
-                answer.
-              </p>
-            </div>
-          ) : (
-            <HintTokenText tokens={tokens} />
-          )}
-        </div>
 
-        <Textarea
-          value={typedAnswer}
-          onChange={(event) => {
-            setTypedAnswer(event.target.value);
-            setChecked(false);
-          }}
-          onKeyDown={handleAnswerKeyDown}
-          placeholder="Type what you remember"
-          className="min-h-[150px] resize-none"
-          aria-label="Your recalled verse"
-        />
+            {stageReady && !isReadPrime && (
+              <Textarea
+                ref={answerInputRef}
+                value={typedAnswer}
+                onChange={(event) => {
+                  interactedRef.current = true;
+                  setTypedAnswer(event.target.value);
+                  setChecked(false);
+                }}
+                onKeyDown={handleAnswerKeyDown}
+                placeholder="Type what you remember"
+                className="min-h-[150px] resize-none"
+                aria-label="Your recalled verse"
+              />
+            )}
+          </>
+        )}
 
         {checked && (
           <div className="space-y-4">
@@ -186,25 +407,23 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               diffTokens={checkedDiffTokens}
             />
             <p className="text-center text-sm text-muted-foreground">
-              {passed
-                ? canAdvance
-                  ? `${checkedAccuracy}% recalled. Ready for a harder level.`
-                  : `${checkedAccuracy}% recalled. Memorized!`
-                : `${checkedAccuracy}% recalled. Reach ${PASS_THRESHOLD}% to level up.`}
+              {`${checkedAccuracy}% recalled.`}
             </p>
-            <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Full text
-              </p>
-              {data?.verses.map((verse) => (
-                <p key={verse.number}>
-                  <span className="mr-1 text-xs font-semibold text-muted-foreground align-top">
-                    {verse.number}
-                  </span>
-                  {verse.text}
+            {checkedQuality !== "exact" && (
+              <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Full text
                 </p>
-              ))}
-            </div>
+                {data?.verses.map((verse) => (
+                  <p key={verse.number}>
+                    <span className="mr-1 text-xs font-semibold text-muted-foreground align-top">
+                      {verse.number}
+                    </span>
+                    {verse.text}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </CardContent>
@@ -216,10 +435,31 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               type="button"
               variant="outline"
               className="flex-1 sm:flex-none"
-              onClick={resetAttempt}
+              onClick={continueAfterReview}
+              ref={reviewActionRef}
+              // Hold until the attempt settles: this both keeps the submit lock
+              // from swallowing the next check (resetting the question mid-flight
+              // would strand it) and ensures the adopted band/reps land before
+              // the next rep renders, so it can't re-record stale.
+              disabled={submitPending}
             >
-              <RotateCcw className="h-4 w-4" aria-hidden />
-              Try again
+              {checkedQuality === "exact" ? (
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              ) : (
+                <RotateCcw className="h-4 w-4" aria-hidden />
+              )}
+              {checkedQuality === "exact" ? "Continue" : "Try again"}
+            </Button>
+          ) : isReadPrime ? (
+            <Button
+              type="button"
+              variant="default"
+              className="flex-1 sm:flex-none"
+              onClick={continueRead}
+              disabled={!stageReady || !canContinueRead || submitPending}
+            >
+              Continue
+              <ArrowRight className="h-4 w-4" aria-hidden />
             </Button>
           ) : (
             <Button
@@ -227,20 +467,10 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               variant="default"
               className="flex-1 sm:flex-none"
               onClick={checkAnswer}
-              disabled={!canCheckAnswer}
+              disabled={!stageReady || !canCheckAnswer}
             >
               <CheckCircle2 className="h-4 w-4" aria-hidden />
               Check answer
-            </Button>
-          )}
-          {passed && canAdvance && (
-            <Button
-              type="button"
-              className="flex-1 sm:flex-none"
-              onClick={advanceStage}
-              disabled={loading || !!error}
-            >
-              Next Level
             </Button>
           )}
         </div>
