@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/natyconnor/berean/compare/v1.9.0...v1.10.0) (2026-07-16)
+
+
+### Features
+
+* Overhaul Memory experience to be a dedicated parallel scripture memory experience ([#116](https://github.com/natyconnor/berean/issues/116)) ([afb43c0](https://github.com/natyconnor/berean/commit/afb43c031332499d3992b68c4499f5b36049d71a))
+
 ## [1.9.0](https://github.com/natyconnor/berean/compare/v1.8.0...v1.9.0) (2026-06-26)
 
 
