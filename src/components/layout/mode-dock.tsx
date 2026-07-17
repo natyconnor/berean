@@ -42,8 +42,8 @@ function isEditorElement(element: Element | null): boolean {
  * The Mode Dock: a floating bottom-center pill with up to three segments (Notes
  * / Memory / Study) and a live due-count badge on Memory. It's `position: fixed`
  * so it never affects layout flow, and it's engineered to slide out of the way
- * while you work. Each mode beyond Notes is revealed progressively, and the dock
- * stays hidden until at least two modes are unlocked.
+ * while you work. Notes and Memory are always available; Study unlocks once
+ * enough notes exist.
  */
 export function ModeDock() {
   const location = useLocation();
@@ -67,26 +67,24 @@ export function ModeDock() {
   const dockEnabled = preference !== "off";
   const autoHide = preference === "auto-hide";
 
-  // Progressive reveal. Notes is always unlocked; Memory unlocks on the first
-  // heart, Study once enough notes exist. The dock only renders once a *second*
-  // mode is unlocked (a single Notes segment isn't worth the chrome).
+  // Notes + Memory are always unlocked so the dock is discoverable without
+  // waiting on a first heart. Study still unlocks once enough notes exist.
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
-  const memoryUnlocked = milestones ? shouldRevealMemory(milestones) : false;
   const studyUnlocked = isStudyFeatureAccessible(milestones);
   const unlockedModes = useMemo<Mode[]>(() => {
-    const modes: Mode[] = ["notes"];
-    if (memoryUnlocked) modes.push("memory");
+    const modes: Mode[] = ["notes", "memory"];
     if (studyUnlocked) modes.push("study");
     return modes;
-  }, [memoryUnlocked, studyUnlocked]);
+  }, [studyUnlocked]);
 
   // One-time reveal callouts, reusing the shared hint system. Only claim a hint
   // while the dock can actually render its callout — when the dock is off, the
   // global hint queue is never pinned by an eligible-but-unrendered callout.
+  // Hint id kept for persisted dismissals; Memory is always available now.
   const memoryHint = useFeatureHint(
     FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
-    memoryUnlocked && dockEnabled,
+    shouldRevealMemory(milestones) && dockEnabled,
   );
   const studyHint = useFeatureHint(
     FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES,
@@ -223,8 +221,7 @@ export function ModeDock() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [dockEnabled, unlockedModes, activeMode, goToMode]);
 
-  // A lone Notes segment isn't worth the chrome — wait for a second mode.
-  if (!dockEnabled || unlockedModes.length < 2) {
+  if (!dockEnabled) {
     return null;
   }
 
@@ -264,56 +261,54 @@ export function ModeDock() {
           <NotebookPen className="h-4 w-4" />
           <span>Notes</span>
         </Link>
-        {memoryUnlocked ? (
-          <FeatureCallout
-            state={memoryHint}
-            title="Memory lives here now"
-            description="You've hearted a verse — it's now in Memory. Use this dock to review and grow your verses. A badge appears when reviews are due."
-            primaryActionLabel="Open Memory"
-            onPrimaryAction={() => {
+        <FeatureCallout
+          state={memoryHint}
+          title="Memory lives here"
+          description="Heart verses in the reader, then use Memory to practice, review, and build packs. A badge appears when reviews are due."
+          primaryActionLabel="Open Memory"
+          onPrimaryAction={() => {
+            logInteraction("mode-dock", "memory-opened", {
+              trigger: "reveal-callout",
+            });
+            void navigate({ to: "/memory" });
+          }}
+          side="top"
+          align="center"
+        >
+          <Link
+            to="/memory"
+            title={`Memory (${toggleShortcutLabel} cycles)`}
+            aria-label="Memory"
+            aria-current={isMemoryRoute ? "page" : undefined}
+            onClick={() => {
               logInteraction("mode-dock", "memory-opened", {
-                trigger: "reveal-callout",
+                trigger: "click",
               });
-              void navigate({ to: "/memory" });
+              if (!memoryHint.completed && !memoryHint.dismissed) {
+                memoryHint.complete();
+              }
             }}
-            side="top"
-            align="center"
+            className={segmentClassName(isMemoryRoute)}
           >
-            <Link
-              to="/memory"
-              title={`Memory (${toggleShortcutLabel} cycles)`}
-              aria-label="Memory"
-              aria-current={isMemoryRoute ? "page" : undefined}
-              onClick={() => {
-                logInteraction("mode-dock", "memory-opened", {
-                  trigger: "click",
-                });
-                if (!memoryHint.completed && !memoryHint.dismissed) {
-                  memoryHint.complete();
-                }
-              }}
-              className={segmentClassName(isMemoryRoute)}
-            >
-              <Brain className="h-4 w-4" />
-              <span>Memory</span>
-              {showBadge ? (
-                <span
-                  aria-label={badgeLabel}
-                  className={cn(
-                    "ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
-                    // Theme primary on the card; invert against the selected
-                    // primary pill so the count stays readable in every theme.
-                    isMemoryRoute
-                      ? "bg-primary-foreground text-primary"
-                      : "bg-primary text-primary-foreground",
-                  )}
-                >
-                  {dueCount}
-                </span>
-              ) : null}
-            </Link>
-          </FeatureCallout>
-        ) : null}
+            <Brain className="h-4 w-4" />
+            <span>Memory</span>
+            {showBadge ? (
+              <span
+                aria-label={badgeLabel}
+                className={cn(
+                  "ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
+                  // Theme primary on the card; invert against the selected
+                  // primary pill so the count stays readable in every theme.
+                  isMemoryRoute
+                    ? "bg-primary-foreground text-primary"
+                    : "bg-primary text-primary-foreground",
+                )}
+              >
+                {dueCount}
+              </span>
+            ) : null}
+          </Link>
+        </FeatureCallout>
         {studyUnlocked ? (
           <FeatureCallout
             state={studyHint}

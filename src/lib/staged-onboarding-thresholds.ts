@@ -20,11 +20,11 @@ export const VERSE_LINKS_MIN_NOTES = 2;
 export const STARTER_TAGS_MIN_TAGGED_NOTES = 1;
 
 /**
- * Minimum hearted verses before revealing Memory. Verse memory is powered by
- * hearts, so the first heart unlocks the entire Memory workspace (and, with
- * Notes, makes the Mode Dock worth showing).
+ * Legacy heart threshold for Memory reveal. Memory is always available in the
+ * Mode Dock now (discovery shouldn't wait on a first heart), but the constant
+ * is retained so older tests and comments stay readable.
  */
-export const MEMORY_MIN_HEARTS = 1;
+export const MEMORY_MIN_HEARTS = 0;
 
 /**
  * Minimum total notes before revealing Study. Study drills the notes you've
@@ -86,9 +86,16 @@ export function shouldRevealStarterTags(
   );
 }
 
-/** Was the Memory reveal reached (first hearted verse)? */
-export function shouldRevealMemory(milestones: OnboardingMilestones): boolean {
-  return milestones.heartsCount >= MEMORY_MIN_HEARTS;
+/**
+ * Memory is always unlocked so the Mode Dock (and Memory itself) are
+ * discoverable without waiting for a first heart.
+ */
+export function shouldRevealMemory(
+  // Kept for call-site compatibility with other reveal helpers.
+  _milestones?: OnboardingMilestones,
+): boolean {
+  void _milestones;
+  return true;
 }
 
 /** Was the Study reveal reached (enough notes to drill)? */
