@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/natyconnor/berean/compare/v1.10.0...v1.10.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* Always show the Mode Dock so Memory is discoverable without hearting first. ([#118](https://github.com/natyconnor/berean/issues/118)) ([9b505b2](https://github.com/natyconnor/berean/commit/9b505b219e715f74d33912d741e4770c54cd404b))
+
 ## [1.10.0](https://github.com/natyconnor/berean/compare/v1.9.0...v1.10.0) (2026-07-16)
 
 
