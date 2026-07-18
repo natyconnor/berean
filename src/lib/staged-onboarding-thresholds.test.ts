@@ -75,11 +75,11 @@ describe("staged onboarding thresholds", () => {
     ).toBe(false);
   });
 
-  it("reveals Memory after the first hearted verse", () => {
+  it("always reveals Memory (dock discovery is not gated on hearts)", () => {
+    expect(shouldRevealMemory(milestones({ heartsCount: 0 }))).toBe(true);
     expect(
       shouldRevealMemory(milestones({ heartsCount: MEMORY_MIN_HEARTS })),
     ).toBe(true);
-    expect(shouldRevealMemory(milestones({ heartsCount: 0 }))).toBe(false);
   });
 
   it("reveals Study once enough notes exist (not hearts-based)", () => {

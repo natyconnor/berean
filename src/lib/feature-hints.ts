@@ -16,7 +16,7 @@ export const FEATURE_HINTS = {
    * dismissals stay valid, but it is no longer surfaced.
    */
   STUDY_REVEAL_AFTER_FIRST_HEART: "study-reveal-after-first-heart",
-  /** Memory reveal callout pointing at the Memory segment after the first heart. */
+  /** Memory dock callout (id retained; Memory is always available now). */
   MEMORY_REVEAL_AFTER_FIRST_HEART: "memory-reveal-after-first-heart",
   /** Study reveal callout pointing at the Study segment once enough notes exist. */
   STUDY_REVEAL_AFTER_NOTES: "study-reveal-after-notes",
