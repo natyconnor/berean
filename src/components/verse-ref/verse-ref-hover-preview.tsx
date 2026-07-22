@@ -6,7 +6,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatVerseRef, type VerseRef } from "@/lib/verse-ref-utils";
+import {
+  formatVerseRef,
+  isChapterScopeRef,
+  type VerseRef,
+} from "@/lib/verse-ref-utils";
 
 interface VerseRefHoverPreviewProps {
   refValue: VerseRef;
@@ -20,6 +24,7 @@ interface VerseRefPreviewContentProps {
   error: string | null;
   verses: Array<{ number: number; text: string }>;
   showClickHint?: boolean;
+  showChapterEllipsis?: boolean;
 }
 
 export function VerseRefPreviewContent({
@@ -28,6 +33,7 @@ export function VerseRefPreviewContent({
   error,
   verses,
   showClickHint,
+  showChapterEllipsis = false,
 }: VerseRefPreviewContentProps) {
   return (
     <>
@@ -55,17 +61,23 @@ export function VerseRefPreviewContent({
               {verse.text}
             </p>
           ))}
+          {showChapterEllipsis ? (
+            <p className="text-xs leading-relaxed opacity-70">…</p>
+          ) : null}
         </div>
       )}
       {showClickHint ? (
         <p className="pt-2 mt-2 border-t border-border/50 text-[11px] text-muted-foreground">
-          Click to go to verse
+          {isChapterScopeRef(refValue)
+            ? "Click to go to chapter"
+            : "Click to go to verse"}
         </p>
       ) : null}
     </>
   );
 }
 
+/** Shared chrome for editor hover and read-mode tooltip previews. */
 export function VerseRefPreviewCard({
   refValue,
   showClickHint,
@@ -73,15 +85,19 @@ export function VerseRefPreviewCard({
   refValue: VerseRef;
   showClickHint?: boolean;
 }) {
-  const { data, loading, error } = useEsvReference(refValue);
+  const { data, loading, error, hasMoreChapterVerses } =
+    useEsvReference(refValue);
   return (
-    <VerseRefPreviewContent
-      refValue={refValue}
-      loading={loading}
-      error={error}
-      verses={data?.verses ?? []}
-      showClickHint={showClickHint}
-    />
+    <div className="space-y-2 rounded-md border bg-popover px-3 py-2 text-left text-popover-foreground shadow-lg">
+      <VerseRefPreviewContent
+        refValue={refValue}
+        loading={loading}
+        error={error}
+        verses={data?.verses ?? []}
+        showClickHint={showClickHint}
+        showChapterEllipsis={hasMoreChapterVerses}
+      />
+    </div>
   );
 }
 
@@ -95,7 +111,10 @@ export function VerseRefHoverPreview({
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent className="max-w-sm space-y-2 px-3 py-2 text-left">
+      <TooltipContent
+        showArrow={false}
+        className="w-80 max-w-[min(20rem,calc(100vw-2rem))] border-none bg-transparent p-0 text-popover-foreground shadow-none"
+      >
         {open ? (
           <VerseRefPreviewCard
             refValue={refValue}

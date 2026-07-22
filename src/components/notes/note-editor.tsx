@@ -202,7 +202,7 @@ export function NoteEditor({
       <InlineFeatureCallout
         state={verseLinkHint}
         title="Link to other verses with @"
-        description="Type @ followed by a reference like Genesis 1:1 to drop in a clickable verse link inside your note."
+        description="Type @ followed by a chapter like Genesis 1, or a verse like Genesis 1:1, to drop in a clickable link inside your note."
       />
 
       <InlineVerseEditor

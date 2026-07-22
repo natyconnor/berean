@@ -26,4 +26,19 @@ describe("verseRefKey", () => {
     expect(verseRefKey(base)).not.toBe(verseRefKey({ ...base, startVerse: 1 }));
     expect(verseRefKey(base)).not.toBe(verseRefKey({ ...base, endVerse: 18 }));
   });
+
+  it("distinguishes chapter-scoped refs from verse 1", () => {
+    const verseOne = {
+      book: "John",
+      chapter: 3,
+      startVerse: 1,
+      endVerse: 1,
+    };
+    expect(verseRefKey({ ...verseOne, scope: "chapter" })).toBe(
+      "John|3|1|1|chapter",
+    );
+    expect(verseRefKey({ ...verseOne, scope: "chapter" })).not.toBe(
+      verseRefKey(verseOne),
+    );
+  });
 });

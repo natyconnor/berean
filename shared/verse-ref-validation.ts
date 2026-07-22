@@ -6,6 +6,7 @@ export interface VerseRefLike {
   chapter: number;
   startVerse: number;
   endVerse: number;
+  scope?: "chapter";
 }
 
 export type VerseRefBoundsErrorCode =
@@ -32,13 +33,17 @@ export function validateVerseRefBounds(
     return { valid: false, code: "invalid_chapter" };
   }
 
-  if (ref.startVerse < 1 || ref.endVerse < ref.startVerse) {
-    return { valid: false, code: "invalid_range" };
-  }
-
   const maxVerse = getChapterVerseCount(ref.book, ref.chapter);
   if (!maxVerse) {
     return { valid: false, code: "invalid_chapter" };
+  }
+
+  if (ref.scope === "chapter") {
+    return { valid: true, maxVerse };
+  }
+
+  if (ref.startVerse < 1 || ref.endVerse < ref.startVerse) {
+    return { valid: false, code: "invalid_range" };
   }
 
   if (ref.startVerse > maxVerse || ref.endVerse > maxVerse) {

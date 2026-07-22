@@ -3,6 +3,7 @@ export interface VerseRefKeyInput {
   chapter: number;
   startVerse: number;
   endVerse: number;
+  scope?: "chapter";
 }
 
 /**
@@ -11,5 +12,6 @@ export interface VerseRefKeyInput {
  * formats never drift.
  */
 export function verseRefKey(ref: VerseRefKeyInput): string {
-  return `${ref.book}|${ref.chapter}|${ref.startVerse}|${ref.endVerse}`;
+  const base = `${ref.book}|${ref.chapter}|${ref.startVerse}|${ref.endVerse}`;
+  return ref.scope === "chapter" ? `${base}|chapter` : base;
 }

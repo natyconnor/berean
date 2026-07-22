@@ -1,13 +1,26 @@
 import { BIBLE_BOOKS, getBookInfo } from "@/lib/bible-books";
 
+export type VerseRefScope = "chapter";
+
 export interface VerseRef {
   book: string;
   chapter: number;
   startVerse: number;
   endVerse: number;
+  /** Present when the link targets an entire chapter (anchor verses are 1–1). */
+  scope?: VerseRefScope;
+}
+
+export function isChapterScopeRef(
+  ref: Pick<VerseRef, "scope"> | VerseRef,
+): boolean {
+  return ref.scope === "chapter";
 }
 
 export function formatVerseRef(ref: VerseRef): string {
+  if (isChapterScopeRef(ref)) {
+    return `${ref.book} ${ref.chapter}`;
+  }
   if (ref.startVerse === ref.endVerse) {
     return `${ref.book} ${ref.chapter}:${ref.startVerse}`;
   }
@@ -17,6 +30,8 @@ export function formatVerseRef(ref: VerseRef): string {
 interface ParseVerseRefOptions {
   defaultBook?: string;
   defaultChapter?: number;
+  /** When true, accepts `Book Chapter` (e.g. `John 3`) as a chapter-scoped ref. */
+  allowChapterOnly?: boolean;
 }
 
 interface BookMatch {
@@ -144,29 +159,55 @@ export function parseVerseRef(
     };
   }
 
-  const match = value.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
-  if (!match) return null;
+  const verseMatch = value.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
+  if (verseMatch) {
+    const canonicalBook = resolveCanonicalBookName(verseMatch[1]);
+    if (!canonicalBook) return null;
 
-  const canonicalBook = resolveCanonicalBookName(match[1]);
-  if (!canonicalBook) return null;
+    const chapter = Number.parseInt(verseMatch[2], 10);
+    const startVerse = Number.parseInt(verseMatch[3], 10);
+    const endVerse = verseMatch[4]
+      ? Number.parseInt(verseMatch[4], 10)
+      : startVerse;
+    const bookInfo = getBookInfo(canonicalBook);
 
-  const chapter = Number.parseInt(match[2], 10);
-  const startVerse = Number.parseInt(match[3], 10);
-  const endVerse = match[4] ? Number.parseInt(match[4], 10) : startVerse;
-  const bookInfo = getBookInfo(canonicalBook);
+    if (!bookInfo || chapter < 1 || chapter > bookInfo.chapters) {
+      return null;
+    }
+    if (startVerse < 1 || endVerse < startVerse) {
+      return null;
+    }
 
-  if (!bookInfo || chapter < 1 || chapter > bookInfo.chapters) {
+    return {
+      book: canonicalBook,
+      chapter,
+      startVerse,
+      endVerse,
+    };
+  }
+
+  if (!options.allowChapterOnly) {
     return null;
   }
-  if (startVerse < 1 || endVerse < startVerse) {
+
+  const chapterMatch = value.match(/^(.+?)\s+(\d+)$/);
+  if (!chapterMatch) return null;
+
+  const canonicalBook = resolveCanonicalBookName(chapterMatch[1]);
+  if (!canonicalBook) return null;
+
+  const chapter = Number.parseInt(chapterMatch[2], 10);
+  const bookInfo = getBookInfo(canonicalBook);
+  if (!bookInfo || chapter < 1 || chapter > bookInfo.chapters) {
     return null;
   }
 
   return {
     book: canonicalBook,
     chapter,
-    startVerse,
-    endVerse,
+    startVerse: 1,
+    endVerse: 1,
+    scope: "chapter",
   };
 }
 
@@ -184,7 +225,9 @@ export function buildVerseSuggestions(
       kind: "reference",
       key: `ref:${formatVerseRef(parsedRef)}`,
       label: formatVerseRef(parsedRef),
-      description: "Insert verse link",
+      description: isChapterScopeRef(parsedRef)
+        ? "Insert chapter link"
+        : "Insert verse link",
       ref: parsedRef,
     });
   }

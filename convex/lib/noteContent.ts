@@ -5,6 +5,7 @@ export const verseRefValue = v.object({
   chapter: v.number(),
   startVerse: v.number(),
   endVerse: v.number(),
+  scope: v.optional(v.literal("chapter")),
 });
 
 export const noteBodySegmentValue = v.union(
@@ -86,6 +87,7 @@ export function extractVerseRefsFromNoteBody(
       segment.ref.chapter,
       segment.ref.startVerse,
       segment.ref.endVerse,
+      segment.ref.scope ?? "",
     ].join("|");
     if (!refs.has(key)) {
       refs.set(key, segment.ref);
