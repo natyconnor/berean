@@ -45,7 +45,7 @@ describe("useCachedEsvQuery", () => {
     const { result, rerender } = renderHook(
       ({ query }) => useCachedEsvQuery(query),
       {
-        initialProps: { query: "John 1" as string | null },
+        initialProps: { query: "John 1" },
       },
     );
 

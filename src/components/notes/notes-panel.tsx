@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery } from "convex-helpers/react/cache";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -44,17 +44,17 @@ export function NotesPanel({
   const [internalCreating, setInternalCreating] = useState<VerseRef | null>(
     null,
   );
+  const [prevCreatingForRef, setPrevCreatingForRef] = useState(creatingForRef);
 
-  const activeCreatingRef = creatingForRef ?? internalCreating;
-
-  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on prop change */
-  useEffect(() => {
+  if (creatingForRef !== prevCreatingForRef) {
+    setPrevCreatingForRef(creatingForRef);
     if (creatingForRef) {
       setInternalCreating(null);
       setEditingNoteId(null);
     }
-  }, [creatingForRef]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }
+
+  const activeCreatingRef = creatingForRef ?? internalCreating;
 
   const notesByVerse = useMemo(
     () => buildNotesByVerseRange(chapterNotes),

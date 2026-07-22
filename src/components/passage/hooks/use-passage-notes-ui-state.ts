@@ -457,26 +457,8 @@ export function usePassageNotesUiState({
     return s;
   }, [draftCoveredVerses, viewSelectedVerses]);
 
-  // --- Reset on chapter change ---
-
-  useEffect(() => {
-    readPassageAutoOpenSuppressedRef.current.clear();
-    activeEditorKeyRef.current = null;
-    lastActiveTargetRef.current = null;
-    setCurrentFocusTarget(null);
-    setViewSelectedVerses(new Set());
-    setHoveredVerse(null);
-    setHoveredSingleBubble(null);
-    setHoveredPassageBubble(null);
-    setOpenVerseKeys(new Set());
-    setOpenPassageKeys(new Set());
-    setOpenEditors(new Map());
-    setEditorHasChanges(new Set());
-    setIsPassageSelection(false);
-  }, [book, chapter]);
-
-  // After chapter reset, open passage groups in read mode when the passage span
-  // has no per-verse notes. Re-run when note data loads.
+  // Open passage groups in read mode when the passage span has no per-verse
+  // notes. Re-run when note data loads.
   useEffect(() => {
     if (viewMode !== "read") return;
     setOpenPassageKeys((prev) => {

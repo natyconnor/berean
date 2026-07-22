@@ -11,8 +11,7 @@ interface UseHighlightPopoverOptions {
   highlights: HighlightRange[] | undefined;
   onDeleteHighlight: ((highlightId: string) => void) | undefined;
   onRecolorHighlight:
-    | ((highlightId: string, color: string) => void)
-    | undefined;
+    ((highlightId: string, color: string) => void) | undefined;
 }
 
 export interface UseHighlightPopoverReturn {

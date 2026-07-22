@@ -87,6 +87,9 @@ export function useAppVersionMonitor() {
   }, [latestVersion?.buildId]);
 
   useEffect(() => {
+    // Initial check may setState after the network response; this effect is a
+    // legitimate external sync (timers + visibility + online + fetch).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- external version polling
     void checkForUpdate();
 
     if (hasDetectedNewBuild(__APP_BUILD_ID__, latestVersion?.buildId)) return;

@@ -280,17 +280,7 @@ export function TutorialProvider({
   }, [activeTour, pendingTour]);
 
   useEffect(() => {
-    if (!activeStep) {
-      setTargetRect(null);
-      setCardAnchorRect(null);
-      setMeasuredStepId(null);
-      return;
-    }
-
-    if (!stepRequiresTarget(activeStep)) {
-      setTargetRect(null);
-      setCardAnchorRect(null);
-      setMeasuredStepId(activeStep.id);
+    if (!activeStep || !stepRequiresTarget(activeStep)) {
       return;
     }
 
@@ -340,6 +330,8 @@ export function TutorialProvider({
 
     if (!isMainComplete) {
       writeActiveTutorialTour("main");
+      // Auto-start is a one-shot orchestration from async completion status + route.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- external onboarding sync
       setPendingTour("main");
       setStepIndex(0);
       if (!isPassageRoute) {
