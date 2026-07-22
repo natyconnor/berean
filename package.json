@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.11.0",
   "type": "module",
-  "packageManager": "pnpm@11.2.2",
+  "packageManager": "pnpm@11.16.0+sha512.b767e9a98fc87aec0f42daefcd0e84941c2cdb45d73c4e1e68860fb2bdfdbe032ab592105479e5e05c237f740c8a5ffdbbb52385797ddc2296745a1bbb883e8d",
   "scripts": {
     "dev": "vite",
     "agent:check": "pnpm run format && pnpm run lint && pnpm run typecheck",
@@ -38,7 +38,7 @@
     "react-markdown": "10.1.0",
     "react-resizable-panels": "4.12.2",
     "tailwind-merge": "3.6.0",
-    "xlsx": "0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
