@@ -116,18 +116,17 @@ describe("TutorialProvider", () => {
     window.localStorage.clear();
 
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      () =>
-        ({
-          x: 0,
-          y: 0,
-          left: 0,
-          top: 0,
-          right: 120,
-          bottom: 24,
-          width: 120,
-          height: 24,
-          toJSON: () => ({}),
-        }) as DOMRect,
+      () => ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 120,
+        bottom: 24,
+        width: 120,
+        height: 24,
+        toJSON: () => ({}),
+      }),
     );
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {

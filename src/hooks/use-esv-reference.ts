@@ -76,12 +76,7 @@ export function useEsvReference(
 
 export interface VerseRefValidationState {
   status:
-    | "idle"
-    | "debouncing"
-    | "checking"
-    | "valid"
-    | "invalid"
-    | "unavailable";
+    "idle" | "debouncing" | "checking" | "valid" | "invalid" | "unavailable";
   data: EsvChapterData | null;
   error: string | null;
 }

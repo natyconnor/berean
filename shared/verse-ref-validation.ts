@@ -10,10 +10,7 @@ export interface VerseRefLike {
 }
 
 export type VerseRefBoundsErrorCode =
-  | "unknown_book"
-  | "invalid_chapter"
-  | "invalid_range"
-  | "verse_out_of_range";
+  "unknown_book" | "invalid_chapter" | "invalid_range" | "verse_out_of_range";
 
 export interface VerseRefBoundsValidation {
   valid: boolean;

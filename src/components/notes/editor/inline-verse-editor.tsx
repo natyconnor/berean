@@ -983,10 +983,7 @@ export function InlineVerseEditor({
   );
 
   const handleSelectSuggestion = useCallback(
-    (item: VerseSuggestionItem) => {
-      const match = activeQueryMatchRef.current;
-      if (!match) return;
-
+    (item: VerseSuggestionItem, match: ActiveQueryMatch) => {
       if (item.kind === "book" && item.book) {
         replaceTextInRange(match, `@${item.book} `);
       }
@@ -996,7 +993,6 @@ export function InlineVerseEditor({
       }
 
       emitChange("verseSuggest");
-      editorRef.current?.focus();
     },
     [emitChange],
   );
@@ -1265,7 +1261,11 @@ export function InlineVerseEditor({
             referenceSuggestion
           ) {
             event.preventDefault();
-            handleSelectSuggestion(referenceSuggestion);
+            const match = activeQueryMatchRef.current;
+            if (match) {
+              handleSelectSuggestion(referenceSuggestion, match);
+              editorRef.current?.focus();
+            }
             return;
           }
 
@@ -1275,10 +1275,14 @@ export function InlineVerseEditor({
             actionableSuggestions.length > 0
           ) {
             event.preventDefault();
-            handleSelectSuggestion(
+            const match = activeQueryMatchRef.current;
+            const suggestion =
               actionableSuggestions[activeHighlightedIndex] ??
-                actionableSuggestions[0],
-            );
+              actionableSuggestions[0];
+            if (match && suggestion) {
+              handleSelectSuggestion(suggestion, match);
+              editorRef.current?.focus();
+            }
             return;
           }
 
@@ -1329,8 +1333,10 @@ export function InlineVerseEditor({
                 event.preventDefault();
               }}
               onClick={() => {
-                if (referenceSuggestion) {
-                  handleSelectSuggestion(referenceSuggestion);
+                const match = activeQueryMatchRef.current;
+                if (referenceSuggestion && match) {
+                  handleSelectSuggestion(referenceSuggestion, match);
+                  editorRef.current?.focus();
                 }
               }}
             >
@@ -1379,7 +1385,11 @@ export function InlineVerseEditor({
                     onMouseDown={(event) => {
                       event.preventDefault();
                       setHighlightedIndex(index);
-                      handleSelectSuggestion(suggestion);
+                      const match = activeQueryMatchRef.current;
+                      if (match) {
+                        handleSelectSuggestion(suggestion, match);
+                        editorRef.current?.focus();
+                      }
                     }}
                   >
                     <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />

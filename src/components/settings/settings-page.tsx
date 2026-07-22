@@ -67,9 +67,6 @@ export function SettingsPage() {
   }, [navigate, backPassageId]);
 
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [draftCategoryColors, setDraftCategoryColors] = useState<
-    Record<string, string>
-  >({});
   const [customTagInput, setCustomTagInput] = useState("");
   const [deleteTagCandidate, setDeleteTagCandidate] = useState<string | null>(
     null,
@@ -129,9 +126,13 @@ export function SettingsPage() {
     [setupStatus?.categoryColors],
   );
 
-  useEffect(() => {
+  const [draftCategoryColors, setDraftCategoryColors] =
+    useState(categoryColors);
+  const [prevCategoryColors, setPrevCategoryColors] = useState(categoryColors);
+  if (categoryColors !== prevCategoryColors) {
+    setPrevCategoryColors(categoryColors);
     setDraftCategoryColors(categoryColors);
-  }, [categoryColors]);
+  }
 
   const selectedStarterCount = useMemo(() => {
     let count = 0;

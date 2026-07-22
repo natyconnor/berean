@@ -95,7 +95,7 @@ export function countDistinctTeachPassageRefs(
   const keys = new Set<string>();
   for (const note of notes) {
     for (const r of note.refs) {
-      keys.add(referenceKey(r as CardReference));
+      keys.add(referenceKey(r));
     }
   }
   return keys.size;

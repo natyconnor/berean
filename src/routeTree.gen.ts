@@ -9,38 +9,28 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ThemeTestRouteImport } from './routes/theme-test'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as SearchRouteImport } from './routes/search'
-import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as StudyIndexRouteImport } from './routes/study/index'
-import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as ThemeTestRouteImport } from './routes/theme-test'
 import { Route as MemoryIndexRouteImport } from './routes/memory/index'
-import { Route as StudyNewRouteImport } from './routes/study/new'
-import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
-import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
-import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
-import { Route as MemoryReviewRouteImport } from './routes/memory/review'
-import { Route as MemoryPracticeRouteImport } from './routes/memory/practice'
-import { Route as MemoryNewRouteImport } from './routes/memory/new'
 import { Route as MemoryPackIdRouteImport } from './routes/memory/$packId'
-import { Route as MemoryPackIdReviewRouteImport } from './routes/memory_.$packId.review'
+import { Route as MemoryNewRouteImport } from './routes/memory/new'
+import { Route as MemoryPracticeRouteImport } from './routes/memory/practice'
+import { Route as MemoryReviewRouteImport } from './routes/memory/review'
+import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
+import { Route as StudyIndexRouteImport } from './routes/study/index'
+import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
+import { Route as StudyNewRouteImport } from './routes/study/new'
 import { Route as MemoryPackIdPracticeRouteImport } from './routes/memory_.$packId.practice'
+import { Route as MemoryPackIdReviewRouteImport } from './routes/memory_.$packId.review'
 
-const ThemeTestRoute = ThemeTestRouteImport.update({
-  id: '/theme-test',
-  path: '/theme-test',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SearchRoute = SearchRouteImport.update({
-  id: '/search',
-  path: '/search',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -48,19 +38,19 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
-const StudyIndexRoute = StudyIndexRouteImport.update({
-  id: '/study/',
-  path: '/study/',
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsIndexRoute = SettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
+const ThemeTestRoute = ThemeTestRouteImport.update({
+  id: '/theme-test',
+  path: '/theme-test',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryIndexRoute = MemoryIndexRouteImport.update({
@@ -68,34 +58,9 @@ const MemoryIndexRoute = MemoryIndexRouteImport.update({
   path: '/memory/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const StudyNewRoute = StudyNewRouteImport.update({
-  id: '/study/new',
-  path: '/study/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StudySessionIdRoute = StudySessionIdRouteImport.update({
-  id: '/study/$sessionId',
-  path: '/study/$sessionId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsTagsRoute = SettingsTagsRouteImport.update({
-  id: '/settings/tags',
-  path: '/settings/tags',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PassagePassageIdRoute = PassagePassageIdRouteImport.update({
-  id: '/passage/$passageId',
-  path: '/passage/$passageId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MemoryReviewRoute = MemoryReviewRouteImport.update({
-  id: '/memory/review',
-  path: '/memory/review',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MemoryPracticeRoute = MemoryPracticeRouteImport.update({
-  id: '/memory/practice',
-  path: '/memory/practice',
+const MemoryPackIdRoute = MemoryPackIdRouteImport.update({
+  id: '/memory/$packId',
+  path: '/memory/$packId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryNewRoute = MemoryNewRouteImport.update({
@@ -103,19 +68,54 @@ const MemoryNewRoute = MemoryNewRouteImport.update({
   path: '/memory/new',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MemoryPackIdRoute = MemoryPackIdRouteImport.update({
-  id: '/memory/$packId',
-  path: '/memory/$packId',
+const MemoryPracticeRoute = MemoryPracticeRouteImport.update({
+  id: '/memory/practice',
+  path: '/memory/practice',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MemoryPackIdReviewRoute = MemoryPackIdReviewRouteImport.update({
-  id: '/memory_/$packId/review',
-  path: '/memory/$packId/review',
+const MemoryReviewRoute = MemoryReviewRouteImport.update({
+  id: '/memory/review',
+  path: '/memory/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PassagePassageIdRoute = PassagePassageIdRouteImport.update({
+  id: '/passage/$passageId',
+  path: '/passage/$passageId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsTagsRoute = SettingsTagsRouteImport.update({
+  id: '/settings/tags',
+  path: '/settings/tags',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudyIndexRoute = StudyIndexRouteImport.update({
+  id: '/study/',
+  path: '/study/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudySessionIdRoute = StudySessionIdRouteImport.update({
+  id: '/study/$sessionId',
+  path: '/study/$sessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudyNewRoute = StudyNewRouteImport.update({
+  id: '/study/new',
+  path: '/study/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryPackIdPracticeRoute = MemoryPackIdPracticeRouteImport.update({
   id: '/memory_/$packId/practice',
   path: '/memory/$packId/practice',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryPackIdReviewRoute = MemoryPackIdReviewRouteImport.update({
+  id: '/memory_/$packId/review',
+  path: '/memory/$packId/review',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -266,25 +266,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/theme-test': {
-      id: '/theme-test'
-      path: '/theme-test'
-      fullPath: '/theme-test'
-      preLoaderRoute: typeof ThemeTestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/search': {
-      id: '/search'
-      path: '/search'
-      fullPath: '/search'
-      preLoaderRoute: typeof SearchRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -294,25 +280,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/study/': {
-      id: '/study/'
-      path: '/study'
-      fullPath: '/study/'
-      preLoaderRoute: typeof StudyIndexRouteImport
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/': {
-      id: '/settings/'
-      path: '/settings'
-      fullPath: '/settings/'
-      preLoaderRoute: typeof SettingsIndexRouteImport
+    '/theme-test': {
+      id: '/theme-test'
+      path: '/theme-test'
+      fullPath: '/theme-test'
+      preLoaderRoute: typeof ThemeTestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory/': {
@@ -322,46 +308,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/study/new': {
-      id: '/study/new'
-      path: '/study/new'
-      fullPath: '/study/new'
-      preLoaderRoute: typeof StudyNewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/study/$sessionId': {
-      id: '/study/$sessionId'
-      path: '/study/$sessionId'
-      fullPath: '/study/$sessionId'
-      preLoaderRoute: typeof StudySessionIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings/tags': {
-      id: '/settings/tags'
-      path: '/settings/tags'
-      fullPath: '/settings/tags'
-      preLoaderRoute: typeof SettingsTagsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/passage/$passageId': {
-      id: '/passage/$passageId'
-      path: '/passage/$passageId'
-      fullPath: '/passage/$passageId'
-      preLoaderRoute: typeof PassagePassageIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/memory/review': {
-      id: '/memory/review'
-      path: '/memory/review'
-      fullPath: '/memory/review'
-      preLoaderRoute: typeof MemoryReviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/memory/practice': {
-      id: '/memory/practice'
-      path: '/memory/practice'
-      fullPath: '/memory/practice'
-      preLoaderRoute: typeof MemoryPracticeRouteImport
+    '/memory/$packId': {
+      id: '/memory/$packId'
+      path: '/memory/$packId'
+      fullPath: '/memory/$packId'
+      preLoaderRoute: typeof MemoryPackIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory/new': {
@@ -371,18 +322,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryNewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/memory/$packId': {
-      id: '/memory/$packId'
-      path: '/memory/$packId'
-      fullPath: '/memory/$packId'
-      preLoaderRoute: typeof MemoryPackIdRouteImport
+    '/memory/practice': {
+      id: '/memory/practice'
+      path: '/memory/practice'
+      fullPath: '/memory/practice'
+      preLoaderRoute: typeof MemoryPracticeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/memory_/$packId/review': {
-      id: '/memory_/$packId/review'
-      path: '/memory/$packId/review'
-      fullPath: '/memory/$packId/review'
-      preLoaderRoute: typeof MemoryPackIdReviewRouteImport
+    '/memory/review': {
+      id: '/memory/review'
+      path: '/memory/review'
+      fullPath: '/memory/review'
+      preLoaderRoute: typeof MemoryReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/passage/$passageId': {
+      id: '/passage/$passageId'
+      path: '/passage/$passageId'
+      fullPath: '/passage/$passageId'
+      preLoaderRoute: typeof PassagePassageIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/tags': {
+      id: '/settings/tags'
+      path: '/settings/tags'
+      fullPath: '/settings/tags'
+      preLoaderRoute: typeof SettingsTagsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study/': {
+      id: '/study/'
+      path: '/study'
+      fullPath: '/study/'
+      preLoaderRoute: typeof StudyIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study/$sessionId': {
+      id: '/study/$sessionId'
+      path: '/study/$sessionId'
+      fullPath: '/study/$sessionId'
+      preLoaderRoute: typeof StudySessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study/new': {
+      id: '/study/new'
+      path: '/study/new'
+      fullPath: '/study/new'
+      preLoaderRoute: typeof StudyNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory_/$packId/practice': {
@@ -390,6 +383,13 @@ declare module '@tanstack/react-router' {
       path: '/memory/$packId/practice'
       fullPath: '/memory/$packId/practice'
       preLoaderRoute: typeof MemoryPackIdPracticeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory_/$packId/review': {
+      id: '/memory_/$packId/review'
+      path: '/memory/$packId/review'
+      fullPath: '/memory/$packId/review'
+      preLoaderRoute: typeof MemoryPackIdReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
