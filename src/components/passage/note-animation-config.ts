@@ -62,6 +62,15 @@ export const CROSSFADE_TRANSITION: Transition = {
   ease: [0.22, 1, 0.36, 1],
 };
 
+/**
+ * Section heading enter/exit: fade + slight vertical slide while height
+ * collapses so neighbouring verses can layout-animate into place.
+ */
+export const SECTION_HEADING_TRANSITION: Transition = {
+  duration: 0.28,
+  ease: [0.22, 1, 0.36, 1],
+};
+
 export const NOTE_CONTENT_VARIANTS: Variants = {
   hidden: { opacity: 0, y: -4 },
   visible: { opacity: 1, y: 0 },

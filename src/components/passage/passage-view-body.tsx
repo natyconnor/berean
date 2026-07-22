@@ -7,6 +7,7 @@ import { ChapterPager } from "@/components/bible/chapter-pager";
 import { CopyrightNotice } from "@/components/bible/copyright-notice";
 import { VerseRowWithNotes } from "./view/verse-row-with-notes";
 import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
+import { SectionHeading } from "./section-heading";
 import {
   NOTE_ENTER_TRANSITION,
   CROSSFADE_TRANSITION,
@@ -44,12 +45,14 @@ type VerseItem =
       kind: "single";
       verseNumber: number;
       text: string;
+      heading?: string;
       singleNotes: NoteWithRef[];
       passageNotes: NoteWithRef[];
     }
   | {
       kind: "passageGroup";
       anchorVerse: number;
+      heading?: string;
       verses: Array<{ verseNumber: number; text: string }>;
       passageNotes: NoteWithRef[];
       singleNotesByVerse: Map<number, NoteWithRef[]>;
@@ -64,6 +67,7 @@ interface PassageViewBodyProps {
   topGridClass: string;
   viewportRef: RefObject<HTMLDivElement | null>;
   filteredVerses: VerseItem[];
+  showSectionHeaders: boolean;
   passageNotesInteraction: PassageNotesInteraction;
   effectiveViewMode: PassageViewMode;
   isFocusMode: boolean;
@@ -94,6 +98,7 @@ export function PassageViewBody({
   topGridClass,
   viewportRef,
   filteredVerses,
+  showSectionHeaders,
   passageNotesInteraction,
   effectiveViewMode,
   isFocusMode,
@@ -351,6 +356,16 @@ export function PassageViewBody({
                       exit={{ opacity: 0 }}
                       transition={CROSSFADE_TRANSITION}
                     >
+                      {item.heading ? (
+                        <AnimatePresence initial={false}>
+                          {showSectionHeaders ? (
+                            <SectionHeading
+                              key={`heading-group-${item.anchorVerse}`}
+                              title={item.heading}
+                            />
+                          ) : null}
+                        </AnimatePresence>
+                      ) : null}
                       <PassageGroupWithNotes
                         verses={item.verses}
                         passageNotes={item.passageNotes}
@@ -431,6 +446,16 @@ export function PassageViewBody({
                         : NOTE_ENTER_TRANSITION
                     }
                   >
+                    {item.heading ? (
+                      <AnimatePresence initial={false}>
+                        {showSectionHeaders ? (
+                          <SectionHeading
+                            key={`heading-${item.verseNumber}`}
+                            title={item.heading}
+                          />
+                        ) : null}
+                      </AnimatePresence>
+                    ) : null}
                     <VerseRowWithNotes
                       verseNumber={item.verseNumber}
                       text={item.text}

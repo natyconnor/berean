@@ -17,6 +17,7 @@ import { usePassageKeyboardShortcuts } from "./hooks/use-passage-keyboard-shortc
 import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
 import { usePassageViewTour } from "./hooks/use-passage-view-tour";
+import { useSectionHeaders } from "./hooks/use-section-headers";
 import { PassageViewBody } from "./passage-view-body";
 import { PassageViewDialogs } from "./passage-view-dialogs";
 import { PassageViewHeader } from "./passage-view-header";
@@ -42,12 +43,14 @@ type VerseItem =
       kind: "single";
       verseNumber: number;
       text: string;
+      heading?: string;
       singleNotes: NoteWithRef[];
       passageNotes: NoteWithRef[];
     }
   | {
       kind: "passageGroup";
       anchorVerse: number;
+      heading?: string;
       verses: Array<{ verseNumber: number; text: string }>;
       passageNotes: NoteWithRef[];
       singleNotesByVerse: Map<number, NoteWithRef[]>;
@@ -109,6 +112,7 @@ export function PassageChapterView({
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
+  const { showSectionHeaders, toggleSectionHeaders } = useSectionHeaders();
   const { activeTour, startTour, isFocusModeTutorialComplete } = useTutorial();
   const passageNotesInteraction = usePassageNotesInteraction(book, chapter, {
     viewMode: effectiveViewMode,
@@ -162,6 +166,16 @@ export function PassageChapterView({
     startTour,
     toggleFocusMode,
   ]);
+
+  const handleSectionHeadersToggle = useCallback(() => {
+    const enabling = !showSectionHeaders;
+    logInteraction("reader", "section-headers-changed", {
+      book,
+      chapter,
+      enabled: enabling,
+    });
+    toggleSectionHeaders();
+  }, [book, chapter, showSectionHeaders, toggleSectionHeaders]);
 
   const chapterHighlights = useQuery(api.highlights.getForChapter, {
     book,
@@ -398,9 +412,16 @@ export function PassageChapterView({
             if (notes && notes.length > 0)
               singleNotesByVerse.set(v.verseNumber, notes);
           }
+          const groupHeading = data.verses.find(
+            (v) =>
+              v.number >= range.startVerse &&
+              v.number <= range.endVerse &&
+              v.heading,
+          )?.heading;
           items.push({
             kind: "passageGroup",
             anchorVerse: range.anchorVerse,
+            heading: groupHeading,
             verses: blockVerses,
             passageNotes: passageNotesByAnchor.get(range.anchorVerse) ?? [],
             singleNotesByVerse,
@@ -426,6 +447,7 @@ export function PassageChapterView({
         kind: "single",
         verseNumber: verse.number,
         text: verse.text,
+        heading: verse.heading,
         singleNotes,
         passageNotes,
       });
@@ -517,6 +539,7 @@ export function PassageChapterView({
     navigateActiveTab,
     setViewMode: setViewModeWithNotesReset,
     onToggleFocusMode: handleFocusModeToggle,
+    onToggleSectionHeaders: handleSectionHeadersToggle,
   });
 
   const { isScrolled } = usePassageScrollRestoration({
@@ -593,6 +616,7 @@ export function PassageChapterView({
         effectiveViewMode={effectiveViewMode}
         isReadMode={isReadMode}
         isFocusMode={isFocusMode}
+        showSectionHeaders={showSectionHeaders}
         hasAnyNotes={hasAnyNotes}
         noteVisibility={noteVisibility}
         chapterNotesCount={chapterNoteStats.chapterNotesCount}
@@ -600,6 +624,7 @@ export function PassageChapterView({
         setViewModeWithNotesReset={setViewModeWithNotesReset}
         setNoteVisibility={setNoteVisibility}
         onToggleFocusMode={handleFocusModeToggle}
+        onToggleSectionHeaders={handleSectionHeadersToggle}
       />
 
       <PassageViewBody
@@ -611,6 +636,7 @@ export function PassageChapterView({
         topGridClass={topGridClass}
         viewportRef={viewportRef}
         filteredVerses={filteredVerses}
+        showSectionHeaders={showSectionHeaders}
         passageNotesInteraction={passageNotesInteraction}
         effectiveViewMode={effectiveViewMode}
         isFocusMode={!isReadMode && isFocusMode}

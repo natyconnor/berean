@@ -28,6 +28,7 @@ interface PassageViewHeaderProps {
   effectiveViewMode: PassageViewMode;
   isReadMode: boolean;
   isFocusMode: boolean;
+  showSectionHeaders: boolean;
   hasAnyNotes: boolean;
   noteVisibility: NoteVisibility;
   /** Number of single-verse notes in this chapter, used for reading-mode reveal trigger. */
@@ -37,6 +38,7 @@ interface PassageViewHeaderProps {
   setViewModeWithNotesReset: (next: PassageViewMode) => void;
   setNoteVisibility: (next: NoteVisibility) => void;
   onToggleFocusMode: () => void;
+  onToggleSectionHeaders: () => void;
 }
 
 export function PassageViewHeader({
@@ -48,6 +50,7 @@ export function PassageViewHeader({
   effectiveViewMode,
   isReadMode,
   isFocusMode,
+  showSectionHeaders,
   hasAnyNotes,
   noteVisibility,
   chapterNotesCount,
@@ -55,6 +58,7 @@ export function PassageViewHeader({
   setViewModeWithNotesReset,
   setNoteVisibility,
   onToggleFocusMode,
+  onToggleSectionHeaders,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
@@ -87,7 +91,12 @@ export function PassageViewHeader({
     >
       <div className={cn("grid", passageGridClass, headerInnerClass)}>
         <div className="flex items-center">
-          <ChapterHeader book={book} chapter={chapter} />
+          <ChapterHeader
+            book={book}
+            chapter={chapter}
+            showSectionHeaders={showSectionHeaders}
+            onToggleSectionHeaders={onToggleSectionHeaders}
+          />
         </div>
         <div className="pb-3 pt-1">
           <div className="flex items-center justify-between gap-2">

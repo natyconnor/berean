@@ -49,7 +49,7 @@ async function fetchPassageText(
     q: query,
     "include-verse-numbers": "true",
     "include-first-verse-numbers": "true",
-    "include-headings": "false",
+    "include-headings": "true",
     "include-footnotes": "false",
     "include-footnote-body": "false",
     "include-passage-references": "true",

@@ -53,6 +53,7 @@ export type ExportableLinkedNote = Infer<typeof exportableLinkedNoteValue>;
 export const esvVerseValue = v.object({
   number: v.number(),
   text: v.string(),
+  heading: v.optional(v.string()),
 });
 
 export type EsvVerse = Infer<typeof esvVerseValue>;
