@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/natyconnor/berean/compare/v1.10.2...v1.11.0) (2026-07-22)
+
+
+### Features
+
+* Add optional ESV section headers with animated toggle. ([#124](https://github.com/natyconnor/berean/issues/124)) ([9f7d378](https://github.com/natyconnor/berean/commit/9f7d3786cb829c78508e1cbb259aa99fb996a828))
+
 ## [1.10.2](https://github.com/natyconnor/berean/compare/v1.10.1...v1.10.2) (2026-07-22)
 
 
