@@ -1,4 +1,5 @@
 import type { VerseRef } from "@/lib/verse-ref-utils";
+import { verseRefKey } from "../../shared/verse-ref-key";
 
 export interface NoteTextSegment {
   type: "text";
@@ -117,6 +118,8 @@ export function normalizeNoteBody(
       typeof segment.ref.startVerse === "number" &&
       typeof segment.ref.endVerse === "number"
     ) {
+      const scope =
+        segment.ref.scope === "chapter" ? ("chapter" as const) : undefined;
       normalizedSegments.push({
         type: "verseRef",
         label: segment.label,
@@ -125,6 +128,7 @@ export function normalizeNoteBody(
           chapter: segment.ref.chapter,
           startVerse: segment.ref.startVerse,
           endVerse: segment.ref.endVerse,
+          ...(scope ? { scope } : {}),
         },
       });
     }
@@ -180,12 +184,7 @@ export function extractVerseRefsFromNoteBody(
   const deduped = new Map<string, VerseRef>();
   for (const segment of normalized.segments) {
     if (segment.type !== "verseRef") continue;
-    const key = [
-      segment.ref.book,
-      segment.ref.chapter,
-      segment.ref.startVerse,
-      segment.ref.endVerse,
-    ].join("|");
+    const key = verseRefKey(segment.ref);
     if (!deduped.has(key)) {
       deduped.set(key, segment.ref);
     }

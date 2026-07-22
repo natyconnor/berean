@@ -27,16 +27,20 @@ export async function findOrCreateVerseRefId(
   userId: Id<"users">,
   ref: VerseRefInput,
 ): Promise<Id<"verseRefs">> {
-  const existingId = await findVerseRefId(ctx, userId, ref);
+  // Chapter-scoped note links still index as verse 1 for chapter association.
+  const indexedRef = {
+    book: ref.book,
+    chapter: ref.chapter,
+    startVerse: ref.startVerse,
+    endVerse: ref.endVerse,
+  };
+  const existingId = await findVerseRefId(ctx, userId, indexedRef);
   if (existingId) {
     return existingId;
   }
 
   return await ctx.db.insert("verseRefs", {
     userId,
-    book: ref.book,
-    chapter: ref.chapter,
-    startVerse: ref.startVerse,
-    endVerse: ref.endVerse,
+    ...indexedRef,
   });
 }

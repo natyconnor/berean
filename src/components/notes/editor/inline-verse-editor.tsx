@@ -1,13 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertCircle,
-  BookOpen,
-  CheckCircle2,
-  Link2,
-  Loader2,
-} from "lucide-react";
+import { AlertCircle, BookOpen, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBookInfo } from "@/lib/bible-books";
+import { getChapterVerseCount } from "@/lib/bible-verse-counts";
 import {
   EMPTY_NOTE_BODY,
   createVerseRefSegment,
@@ -20,6 +15,7 @@ import { devLog } from "@/lib/dev-log";
 import {
   buildVerseSuggestions,
   formatVerseRef,
+  isChapterScopeRef,
   parseVerseRef,
   resolveCanonicalBookName,
   type VerseRef,
@@ -138,7 +134,11 @@ function readReferenceDraft(
 
 function isPotentialVerseQuery(
   query: string,
-  defaults: { defaultBook?: string; defaultChapter?: number },
+  defaults: {
+    defaultBook?: string;
+    defaultChapter?: number;
+    allowChapterOnly?: boolean;
+  },
 ): boolean {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
@@ -163,15 +163,16 @@ function buildDraftStatus(draft: ReferenceDraft): QueryStatusState {
     return {
       tone: "info",
       label: `Now type a chapter for ${draft.book}.`,
-      description: "For example: John 3:16",
+      description: "For example: John 3, or keep going with John 3:16",
     };
   }
 
   if (!draft.startVerseText) {
     return {
       tone: "info",
-      label: `Keep typing a verse in ${draft.book} ${draft.chapterText}.`,
-      description: "Add a verse number to finish the link.",
+      label: `Link ${draft.book} ${draft.chapterText}, or keep typing a verse.`,
+      description:
+        "Press Enter to link the chapter, or type :16 (or a range) for a specific verse.",
     };
   }
 
@@ -224,7 +225,11 @@ function buildPreviewSnippet(
     return null;
   }
 
-  const flattened = verses
+  const previewVerses = isChapterScopeRef(refValue)
+    ? verses.slice(0, 3)
+    : verses;
+
+  const flattened = previewVerses
     .map((verse) => `${verse.text.replace(/\s+/g, " ").trim()}`)
     .join(" ")
     .trim();
@@ -234,10 +239,13 @@ function buildPreviewSnippet(
   }
 
   const maxLength = 120;
-  const truncated =
-    flattened.length > maxLength
-      ? `${flattened.slice(0, maxLength).trimEnd()}...`
-      : flattened;
+  const chapterHasMore =
+    isChapterScopeRef(refValue) &&
+    (getChapterVerseCount(refValue.book, refValue.chapter) ?? 0) > 3;
+  const needsEllipsis = chapterHasMore || flattened.length > maxLength;
+  const truncated = needsEllipsis
+    ? `${flattened.slice(0, maxLength).trimEnd()}...`
+    : flattened;
 
   return `${formatVerseRef(refValue)} ${truncated}`;
 }
@@ -256,6 +264,9 @@ function createPillElement(
   pill.dataset.chapter = String(refValue.chapter);
   pill.dataset.startVerse = String(refValue.startVerse);
   pill.dataset.endVerse = String(refValue.endVerse);
+  if (isChapterScopeRef(refValue)) {
+    pill.dataset.scope = "chapter";
+  }
 
   const text = documentRef.createElement("span");
   text.textContent = label;
@@ -375,6 +386,9 @@ function parseSegmentsFromNodeList(
             chapter: Number.parseInt(node.dataset.chapter ?? "0", 10),
             startVerse: Number.parseInt(node.dataset.startVerse ?? "0", 10),
             endVerse: Number.parseInt(node.dataset.endVerse ?? "0", 10),
+            ...(node.dataset.scope === "chapter"
+              ? { scope: "chapter" as const }
+              : {}),
           },
           node.dataset.label ?? "",
         ),
@@ -719,6 +733,7 @@ export function InlineVerseEditor({
     () => ({
       defaultBook: verseRef.book,
       defaultChapter: verseRef.chapter,
+      allowChapterOnly: true,
     }),
     [verseRef.book, verseRef.chapter],
   );
@@ -776,19 +791,14 @@ export function InlineVerseEditor({
       kind: "reference" as const,
       key: `ref:${formatVerseRef(parsedRef)}`,
       label: formatVerseRef(parsedRef),
-      description: "Insert verse link",
+      description: isChapterScopeRef(parsedRef)
+        ? "Insert chapter link"
+        : "Insert verse link",
       ref: parsedRef,
     };
   }, [localValidationMessage, parsedRef]);
 
-  const actionableSuggestions = useMemo(() => {
-    const nextItems: VerseSuggestionItem[] = [];
-    if (referenceSuggestion) {
-      nextItems.push(referenceSuggestion);
-    }
-    nextItems.push(...bookSuggestions);
-    return nextItems;
-  }, [bookSuggestions, referenceSuggestion]);
+  const actionableSuggestions = bookSuggestions;
 
   const activeHighlightedIndex =
     actionableSuggestions.length === 0
@@ -799,9 +809,9 @@ export function InlineVerseEditor({
     if (!trimmedEffectiveQuery) {
       return {
         tone: "info",
-        label: "Type a verse like John 3:16.",
+        label: "Type a chapter like John 3, or a verse like John 3:16.",
         description:
-          "Pick a starter book below, or keep typing to create a verse link.",
+          "Pick a starter book below, or keep typing to create a link.",
       };
     }
 
@@ -823,18 +833,21 @@ export function InlineVerseEditor({
 
     if (parsedRef) {
       const label = formatVerseRef(parsedRef);
+      const readyLabel = isChapterScopeRef(parsedRef)
+        ? `${label} is ready to insert. Keep typing :verse for a specific verse.`
+        : `${label} is ready to insert.`;
       switch (validation.status) {
         case "debouncing":
         case "checking":
           return {
             tone: "success",
-            label: `${label} is ready to insert.`,
+            label: readyLabel,
             showSpinner: true,
           };
         case "valid":
           return {
             tone: "success",
-            label: `${label} is ready to insert.`,
+            label: readyLabel,
             previewText:
               buildPreviewSnippet(parsedRef, validation.data?.verses ?? []) ??
               undefined,
@@ -842,13 +855,13 @@ export function InlineVerseEditor({
         case "invalid":
           return {
             tone: "success",
-            label: `${label} is ready to insert.`,
+            label: readyLabel,
             description: "Preview unavailable in ESV.",
           };
         case "unavailable":
           return {
             tone: "success",
-            label: `${label} is ready to insert.`,
+            label: readyLabel,
             description: "Preview check unavailable right now.",
           };
         default:
@@ -863,8 +876,9 @@ export function InlineVerseEditor({
     if (bookOnlyMatch) {
       return {
         tone: "info",
-        label: `Now type a chapter and verse for ${bookOnlyMatch}.`,
-        description: "For example: John 3:16",
+        label: `Now type a chapter for ${bookOnlyMatch}.`,
+        description:
+          "For example: John 3 to link the chapter, or John 3:16 for a verse.",
       };
     }
 
@@ -882,9 +896,9 @@ export function InlineVerseEditor({
 
     return {
       tone: "info",
-      label: "Type a book like John to start a verse link.",
+      label: "Type a book like John to start a link.",
       description:
-        "Verse link suggestions will stay open while you type the reference.",
+        "Link suggestions will stay open while you type a chapter or verse.",
     };
   }, [
     bookSuggestions.length,
@@ -940,7 +954,15 @@ export function InlineVerseEditor({
     const maxLeft = Math.max(containerRect.width - previewWidth - 8, 8);
 
     setHoverPreview({
-      refValue: { book, chapter, startVerse, endVerse },
+      refValue: {
+        book,
+        chapter,
+        startVerse,
+        endVerse,
+        ...(pill.dataset.scope === "chapter"
+          ? { scope: "chapter" as const }
+          : {}),
+      },
       left: Math.min(Math.max(pillRect.left - containerRect.left, 8), maxLeft),
       top: pillRect.bottom - containerRect.top + 8,
     });
@@ -1156,6 +1178,9 @@ export function InlineVerseEditor({
                 chapter,
                 startVerse,
                 endVerse,
+                ...(pill.dataset.scope === "chapter"
+                  ? { scope: "chapter" as const }
+                  : {}),
               });
             }
           }
@@ -1237,6 +1262,16 @@ export function InlineVerseEditor({
           if (
             isQueryActive &&
             (event.key === "Enter" || event.key === "Tab") &&
+            referenceSuggestion
+          ) {
+            event.preventDefault();
+            handleSelectSuggestion(referenceSuggestion);
+            return;
+          }
+
+          if (
+            isQueryActive &&
+            (event.key === "Enter" || event.key === "Tab") &&
             actionableSuggestions.length > 0
           ) {
             event.preventDefault();
@@ -1272,9 +1307,15 @@ export function InlineVerseEditor({
                 Preview of the verse-link suggestion for what you typed above.
               </div>
             ) : null}
-            <div
+            <button
+              type="button"
+              disabled={!isQueryActive || !referenceSuggestion}
               className={cn(
-                "mb-1 rounded-sm px-2 py-2 text-left",
+                "w-full rounded-sm px-2 py-2 text-left",
+                actionableSuggestions.length > 0 && "mb-1",
+                isQueryActive &&
+                  referenceSuggestion &&
+                  "cursor-pointer transition-colors hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 queryStatus.tone === "error" &&
                   "bg-destructive/10 text-destructive",
                 queryStatus.tone === "success" &&
@@ -1283,6 +1324,15 @@ export function InlineVerseEditor({
                   "bg-sky-500/10 text-sky-700 dark:text-sky-300",
                 queryStatus.tone === "info" && "bg-muted/70 text-foreground",
               )}
+              onMouseDown={(event) => {
+                if (!referenceSuggestion) return;
+                event.preventDefault();
+              }}
+              onClick={() => {
+                if (referenceSuggestion) {
+                  handleSelectSuggestion(referenceSuggestion);
+                }
+              }}
             >
               <div className="flex items-start gap-2">
                 {queryStatus.tone === "loading" ? (
@@ -1314,46 +1364,38 @@ export function InlineVerseEditor({
                   ) : null}
                 </div>
               </div>
-            </div>
+            </button>
 
-            {actionableSuggestions.length > 0 ? (
-              actionableSuggestions.map((suggestion, index) => (
-                <button
-                  key={suggestion.key}
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60",
-                    index === activeHighlightedIndex &&
-                      "bg-accent text-accent-foreground",
-                  )}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    setHighlightedIndex(index);
-                    handleSelectSuggestion(suggestion);
-                  }}
-                >
-                  {suggestion.kind === "reference" ? (
-                    <Link2 className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
-                  ) : (
+            {actionableSuggestions.length > 0
+              ? actionableSuggestions.map((suggestion, index) => (
+                  <button
+                    key={suggestion.key}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60",
+                      index === activeHighlightedIndex &&
+                        "bg-accent text-accent-foreground",
+                    )}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setHighlightedIndex(index);
+                      handleSelectSuggestion(suggestion);
+                    }}
+                  >
                     <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">
-                      {suggestion.label}
-                    </div>
-                    {suggestion.description ? (
-                      <div className="text-xs text-muted-foreground">
-                        {suggestion.description}
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">
+                        {suggestion.label}
                       </div>
-                    ) : null}
-                  </div>
-                </button>
-              ))
-            ) : (
-              <div className="px-2 py-1 text-xs text-muted-foreground">
-                No selectable verse link yet.
-              </div>
-            )}
+                      {suggestion.description ? (
+                        <div className="text-xs text-muted-foreground">
+                          {suggestion.description}
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                ))
+              : null}
           </div>
         </div>
       )}
@@ -1363,9 +1405,7 @@ export function InlineVerseEditor({
           className="pointer-events-none absolute z-50 w-80"
           style={{ left: hoverPreview.left, top: hoverPreview.top }}
         >
-          <div className="rounded-md border bg-popover px-3 py-2 shadow-lg">
-            <VerseRefPreviewCard refValue={hoverPreview.refValue} />
-          </div>
+          <VerseRefPreviewCard refValue={hoverPreview.refValue} />
         </div>
       ) : null}
     </div>

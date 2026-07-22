@@ -69,7 +69,11 @@ function formatInlineVerseRef(ref: {
   chapter: number;
   startVerse: number;
   endVerse: number;
+  scope?: "chapter";
 }): string {
+  if (ref.scope === "chapter") {
+    return `${ref.book} ${ref.chapter}`;
+  }
   if (ref.startVerse === ref.endVerse) {
     return `${ref.book} ${ref.chapter}:${ref.startVerse}`;
   }

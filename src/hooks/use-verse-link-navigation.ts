@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 import { useTabs } from "@/lib/use-tabs";
-import { toPassageId, type VerseRef } from "@/lib/verse-ref-utils";
+import {
+  isChapterScopeRef,
+  toPassageId,
+  type VerseRef,
+} from "@/lib/verse-ref-utils";
 
 export interface CurrentChapter {
   book: string;
@@ -8,9 +12,10 @@ export interface CurrentChapter {
 }
 
 /**
- * Returns a handler for Ctrl/Cmd+click on verse link pills.
+ * Returns a handler for click on verse link pills.
  * - Same chapter: navigates active tab with focus params (scrolls to verse)
  * - Different chapter: opens new tab with passage and scrolls to verse
+ * - Chapter-scoped links open the chapter with no verse focus params
  */
 export function useVerseLinkNavigation(currentChapter?: CurrentChapter) {
   const { openTab, navigateActiveTab } = useTabs();
@@ -19,7 +24,9 @@ export function useVerseLinkNavigation(currentChapter?: CurrentChapter) {
     (ref: VerseRef) => {
       const passageId = toPassageId(ref.book, ref.chapter);
       const label = `${ref.book} ${ref.chapter}`;
-      const search = { startVerse: ref.startVerse, endVerse: ref.endVerse };
+      const search = isChapterScopeRef(ref)
+        ? {}
+        : { startVerse: ref.startVerse, endVerse: ref.endVerse };
 
       if (
         currentChapter &&

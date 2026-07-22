@@ -9,7 +9,7 @@ import { InlineVerseEditor } from "./inline-verse-editor";
 
 vi.mock("@/hooks/use-esv-reference", () => ({
   useDebouncedEsvReferenceValidation: () => ({
-    status: "idle" as const,
+    status: "valid" as const,
     data: null,
   }),
 }));
@@ -206,5 +206,132 @@ describe("InlineVerseEditor", () => {
     });
     expect(dispatchResult).toBe(false);
     expect(enterEvent.defaultPrevented).toBe(true);
+  });
+
+  it("inserts a chapter link when Enter is pressed on @John 3", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    editor.innerHTML = "@John 3";
+    const textNode = editor.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected text node");
+    }
+    placeCaretAtEnd(textNode);
+    act(() => {
+      fireEvent.input(editor);
+    });
+
+    expect(
+      screen.getByRole("button", { name: /John 3 is ready to insert/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Insert chapter link")).not.toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(editor, { key: "Enter" });
+    });
+
+    expect(latestBody.segments).toEqual([
+      {
+        type: "verseRef",
+        label: "John 3",
+        ref: {
+          book: "John",
+          chapter: 3,
+          startVerse: 1,
+          endVerse: 1,
+          scope: "chapter",
+        },
+      },
+      {
+        type: "text",
+        text: " ",
+      },
+    ]);
+    expect(noteBodyToPlainText(latestBody)).toBe("John 3 ");
+  });
+
+  it("inserts a verse link when the ready status is clicked", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    editor.innerHTML = "@John 3:16";
+    const textNode = editor.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected text node");
+    }
+    placeCaretAtEnd(textNode);
+    act(() => {
+      fireEvent.input(editor);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /John 3:16 is ready to insert/i }),
+    );
+
+    expect(noteBodyToPlainText(latestBody)).toBe("John 3:16 ");
+    expect(screen.queryByText("Insert verse link")).not.toBeInTheDocument();
+  });
+
+  it("round-trips chapter pill scope through editor DOM", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+    const initialBody: NoteBody = {
+      version: 1,
+      segments: [
+        {
+          type: "verseRef",
+          label: "John 3",
+          ref: {
+            book: "John",
+            chapter: 3,
+            startVerse: 1,
+            endVerse: 1,
+            scope: "chapter",
+          },
+        },
+      ],
+    };
+
+    render(
+      <InlineVerseEditor
+        initialBody={initialBody}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    const pill = editor.querySelector("[data-note-verse-pill='true']");
+    expect(pill).not.toBeNull();
+    expect(pill?.getAttribute("data-scope")).toBe("chapter");
+    expect(pill?.getAttribute("data-label")).toBe("John 3");
+
+    act(() => {
+      fireEvent.input(editor);
+    });
+
+    expect(latestBody.segments).toEqual(initialBody.segments);
   });
 });

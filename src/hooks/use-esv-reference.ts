@@ -5,18 +5,27 @@ import {
 } from "../../shared/esv-api";
 import { useCachedEsvQuery } from "@/hooks/use-cached-esv-query";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { formatVerseRef, toEsvQuery } from "@/lib/verse-ref-utils";
+import {
+  formatVerseRef,
+  isChapterScopeRef,
+  toEsvQuery,
+  type VerseRefScope,
+} from "@/lib/verse-ref-utils";
+import { getChapterVerseCount } from "@/lib/bible-verse-counts";
 
 export interface ReferenceQuery {
   book: string;
   chapter: number;
   startVerse: number;
   endVerse: number;
+  scope?: VerseRefScope;
 }
 
 export interface UseEsvReferenceOptions {
   enabled?: boolean;
 }
+
+const CHAPTER_PREVIEW_VERSE_COUNT = 3;
 
 export function useEsvReference(
   ref: ReferenceQuery | null,
@@ -32,6 +41,13 @@ export function useEsvReference(
 
   const data = useMemo((): EsvChapterData | null => {
     if (!chapterData || !ref) return null;
+    if (isChapterScopeRef(ref)) {
+      return sliceEsvChapterToVerseRange(
+        chapterData,
+        1,
+        CHAPTER_PREVIEW_VERSE_COUNT,
+      );
+    }
     return sliceEsvChapterToVerseRange(
       chapterData,
       ref.startVerse,
@@ -40,6 +56,12 @@ export function useEsvReference(
   }, [chapterData, ref]);
 
   const rangeLabel = ref ? formatVerseRef(ref) : null;
+  const hasMoreChapterVerses = Boolean(
+    ref &&
+    isChapterScopeRef(ref) &&
+    (getChapterVerseCount(ref.book, ref.chapter) ?? 0) >
+      CHAPTER_PREVIEW_VERSE_COUNT,
+  );
 
   return {
     data,
@@ -47,6 +69,8 @@ export function useEsvReference(
     error,
     /** Human-readable verse range (e.g. `John 3:16-18`). Passage fetch uses chapter key. */
     query: rangeLabel,
+    /** True when a chapter-scoped preview is truncated after the first three verses. */
+    hasMoreChapterVerses,
   };
 }
 
@@ -84,7 +108,8 @@ export function useDebouncedEsvReferenceValidation(
       debouncedRef.book !== ref.book ||
       debouncedRef.chapter !== ref.chapter ||
       debouncedRef.startVerse !== ref.startVerse ||
-      debouncedRef.endVerse !== ref.endVerse
+      debouncedRef.endVerse !== ref.endVerse ||
+      debouncedRef.scope !== ref.scope
     ) {
       return {
         status: "debouncing",
