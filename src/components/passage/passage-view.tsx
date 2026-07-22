@@ -13,6 +13,7 @@ import { useTabs } from "@/lib/use-tabs";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { cn } from "@/lib/utils";
 import { useFocusMode } from "./hooks/use-focus-mode";
+import { useSectionHeaders } from "./hooks/use-section-headers";
 import { usePassageViewMode } from "./hooks/use-passage-view-mode";
 import { usePassageKeyboardShortcuts } from "./hooks/use-passage-keyboard-shortcuts";
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
@@ -39,12 +40,14 @@ type VerseItem =
       kind: "single";
       verseNumber: number;
       text: string;
+      heading?: string;
       singleNotes: NoteWithRef[];
       passageNotes: NoteWithRef[];
     }
   | {
       kind: "passageGroup";
       anchorVerse: number;
+      heading?: string;
       verses: Array<{ verseNumber: number; text: string }>;
       passageNotes: NoteWithRef[];
       singleNotesByVerse: Map<number, NoteWithRef[]>;
@@ -120,6 +123,7 @@ export function PassageView({
     [book, chapter, effectiveViewMode, setViewMode],
   );
   const { isFocusMode, toggleFocusMode } = useFocusMode();
+  const { showSectionHeaders, toggleSectionHeaders } = useSectionHeaders();
   const { activeTour, startTour, isFocusModeTutorialComplete } = useTutorial();
   const passageNotesInteraction = usePassageNotesInteraction(book, chapter, {
     viewMode: effectiveViewMode,
@@ -173,6 +177,16 @@ export function PassageView({
     startTour,
     toggleFocusMode,
   ]);
+
+  const handleSectionHeadersToggle = useCallback(() => {
+    const enabling = !showSectionHeaders;
+    logInteraction("reader", "section-headers-changed", {
+      book,
+      chapter,
+      enabled: enabling,
+    });
+    toggleSectionHeaders();
+  }, [book, chapter, showSectionHeaders, toggleSectionHeaders]);
 
   const chapterHighlights = useQuery(api.highlights.getForChapter, {
     book,
@@ -409,9 +423,16 @@ export function PassageView({
             if (notes && notes.length > 0)
               singleNotesByVerse.set(v.verseNumber, notes);
           }
+          const groupHeading = data.verses.find(
+            (v) =>
+              v.number >= range.startVerse &&
+              v.number <= range.endVerse &&
+              v.heading,
+          )?.heading;
           items.push({
             kind: "passageGroup",
             anchorVerse: range.anchorVerse,
+            heading: groupHeading,
             verses: blockVerses,
             passageNotes: passageNotesByAnchor.get(range.anchorVerse) ?? [],
             singleNotesByVerse,
@@ -437,6 +458,7 @@ export function PassageView({
         kind: "single",
         verseNumber: verse.number,
         text: verse.text,
+        heading: verse.heading,
         singleNotes,
         passageNotes,
       });
@@ -541,6 +563,7 @@ export function PassageView({
     navigateActiveTab,
     setViewMode: setViewModeWithNotesReset,
     onToggleFocusMode: handleFocusModeToggle,
+    onToggleSectionHeaders: handleSectionHeadersToggle,
   });
 
   const { isScrolled } = usePassageScrollRestoration({
@@ -617,6 +640,7 @@ export function PassageView({
         effectiveViewMode={effectiveViewMode}
         isReadMode={isReadMode}
         isFocusMode={isFocusMode}
+        showSectionHeaders={showSectionHeaders}
         hasAnyNotes={hasAnyNotes}
         noteVisibility={noteVisibility}
         chapterNotesCount={chapterNoteStats.chapterNotesCount}
@@ -624,6 +648,7 @@ export function PassageView({
         setViewModeWithNotesReset={setViewModeWithNotesReset}
         setNoteVisibility={handleSetNoteVisibility}
         onToggleFocusMode={handleFocusModeToggle}
+        onToggleSectionHeaders={handleSectionHeadersToggle}
       />
 
       <PassageViewBody
@@ -635,6 +660,7 @@ export function PassageView({
         topGridClass={topGridClass}
         viewportRef={viewportRef}
         filteredVerses={filteredVerses}
+        showSectionHeaders={showSectionHeaders}
         passageNotesInteraction={passageNotesInteraction}
         effectiveViewMode={effectiveViewMode}
         isFocusMode={!isReadMode && isFocusMode}
