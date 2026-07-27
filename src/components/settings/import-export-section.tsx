@@ -407,12 +407,10 @@ export function ImportExportSection() {
     if (!EXPORT_ENABLED) return;
     if (!exportableNotes) return;
 
-    let exportedBookCount = 0;
     try {
       setExportError(null);
       const notes = exportableNotes;
       const books = getExportBooks(notes, exportScope);
-      exportedBookCount = books.length;
       logInteraction("import-export", "export-started", {
         noteCount: notes.length,
         scope: exportScope,
@@ -483,7 +481,7 @@ export function ImportExportSection() {
       link.remove();
       URL.revokeObjectURL(url);
       logInteraction("import-export", "export-completed", {
-        bookCount: exportedBookCount,
+        bookCount: books.length,
         scope: exportScope,
       });
     } catch (error) {

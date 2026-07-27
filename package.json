@@ -19,7 +19,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@auth/core": "0.41.2",
+    "@auth/core": "0.41.3",
     "@convex-dev/auth": "0.0.94",
     "@tanstack/react-router": "1.170.18",
     "@tanstack/router-plugin": "1.168.22",
@@ -41,7 +41,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.5",
+    "@eslint/js": "10.0.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
@@ -51,11 +51,11 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.2.0",
     "babel-plugin-react-compiler": "1.0.0",
-    "eslint": "9.39.5",
+    "eslint": "10.8.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.3",
     "globals": "16.5.0",
-    "jsdom": "28.1.0",
+    "jsdom": "29.1.1",
     "prettier": "3.9.5",
     "shadcn": "3.8.5",
     "tailwindcss": "4.3.3",
