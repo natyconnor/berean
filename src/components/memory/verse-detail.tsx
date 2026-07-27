@@ -187,8 +187,10 @@ export function VerseDetail({
     stageReps: detail.stageReps,
     status: detail.status,
   };
+  // Review-phase verses can start a one-off (including early) review from here;
+  // learning-phase verses use Learn / practice instead.
   const showReviewAction =
-    onReview !== undefined && isReviewPhase(detail.status) && detail.isDue;
+    onReview !== undefined && isReviewPhase(detail.status);
 
   // Attempts arrive newest-first; reverse for a left-to-right time axis.
   const chronological = [...detail.attempts].reverse();
@@ -240,7 +242,7 @@ export function VerseDetail({
               onClick={() => onPractice(actionVerse)}
             >
               <Dumbbell className="h-4 w-4" aria-hidden />
-              Practice
+              Learn
             </Button>
           )}
           <AddToPack reference={cardReference} now={now} />
