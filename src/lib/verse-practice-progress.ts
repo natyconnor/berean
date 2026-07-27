@@ -1,4 +1,5 @@
 import {
+  isLearningProgressAttempt,
   MAX_LEARN_STAGE,
   requiredRepsFor,
   type MemoryStatus,
@@ -55,10 +56,11 @@ export function predictLearning(
   stage: number,
   reps: number,
   quality: VerseAttemptQuality,
+  accuracy: number,
   wordCount?: number,
   status: MemoryStatus = "learning",
 ): VersePracticeProgress {
-  if (quality === "exact") {
+  if (isLearningProgressAttempt(quality, accuracy)) {
     const nextReps = reps + 1;
     if (nextReps >= requiredRepsFor(stage, wordCount)) {
       if (stage >= MAX_LEARN_STAGE) {

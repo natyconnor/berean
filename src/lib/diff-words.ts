@@ -1,4 +1,4 @@
-export type DiffStatus = "match" | "mismatch" | "missing" | "extra";
+export type DiffStatus = "match" | "typo" | "mismatch" | "missing" | "extra";
 
 export interface DiffToken {
   /** The original visible text from whichever side this token represents. */
@@ -25,6 +25,7 @@ const SMART_PUNCT_REPLACEMENTS: Readonly<Record<string, string>> = {
   "\u201C": '"',
   "\u201D": '"',
 };
+const WORD_SEPARATOR_PATTERN = /(?:\s+|[\p{Pd}\u00ad]+)/u;
 
 function normalize(word: string): string {
   return word
@@ -40,7 +41,50 @@ function normalize(word: string): string {
 function tokenize(input: string): string[] {
   const trimmed = input.trim();
   if (trimmed.length === 0) return [];
-  return trimmed.split(/\s+/);
+  // Bible text commonly uses em dashes while people naturally type a space or
+  // hyphen. Treat every dash form as a word boundary so those choices grade
+  // identically.
+  return trimmed.split(WORD_SEPARATOR_PATTERN).filter(Boolean);
+}
+
+/** True for a single insertion, deletion, substitution, or adjacent swap. */
+function isMinorTypo(typed: string, actual: string): boolean {
+  if (typed === actual || Math.min(typed.length, actual.length) < 4)
+    return false;
+  if (Math.abs(typed.length - actual.length) > 1) return false;
+
+  if (typed.length === actual.length) {
+    const differences: number[] = [];
+    for (let index = 0; index < typed.length; index++) {
+      if (typed[index] !== actual[index]) differences.push(index);
+      if (differences.length > 2) return false;
+    }
+    if (differences.length === 1) return true;
+    if (differences.length !== 2) return false;
+    const [first, second] = differences;
+    return (
+      second === first + 1 &&
+      typed[first] === actual[second] &&
+      typed[second] === actual[first]
+    );
+  }
+
+  const shorter = typed.length < actual.length ? typed : actual;
+  const longer = typed.length < actual.length ? actual : typed;
+  let shortIndex = 0;
+  let longIndex = 0;
+  let skipped = false;
+  while (shortIndex < shorter.length && longIndex < longer.length) {
+    if (shorter[shortIndex] === longer[longIndex]) {
+      shortIndex++;
+      longIndex++;
+      continue;
+    }
+    if (skipped) return false;
+    skipped = true;
+    longIndex++;
+  }
+  return true;
 }
 
 function preferCandidate(
@@ -90,11 +134,13 @@ export function diffWords(typed: string, actual: string): DiffToken[] {
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       const isMatch = typedNorm[i - 1] === actualNorm[j - 1];
+      const isTypo =
+        !isMatch && isMinorTypo(typedNorm[i - 1], actualNorm[j - 1]);
       const diagonal = dp[i - 1][j - 1];
       let best: AlignmentCell = {
-        cost: diagonal.cost + (isMatch ? 0 : 2),
+        cost: diagonal.cost + (isMatch ? 0 : isTypo ? 0.25 : 2),
         matches: diagonal.matches + (isMatch ? 1 : 0),
-        operation: isMatch ? "match" : "mismatch",
+        operation: isMatch ? "match" : isTypo ? "typo" : "mismatch",
       };
 
       const extra = dp[i - 1][j];
@@ -129,6 +175,14 @@ export function diffWords(typed: string, actual: string): DiffToken[] {
         text: typedWords[i - 1],
         expectedText: actualWords[j - 1],
         status: "mismatch",
+      });
+      i--;
+      j--;
+    } else if (operation === "typo") {
+      tokens.push({
+        text: typedWords[i - 1],
+        expectedText: actualWords[j - 1],
+        status: "typo",
       });
       i--;
       j--;

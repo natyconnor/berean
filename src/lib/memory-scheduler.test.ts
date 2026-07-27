@@ -187,12 +187,25 @@ describe("learning phase grades", () => {
     expect(s.stageReps).toBe(0);
   });
 
-  it("close holds the band and its banked reps", () => {
-    const next = scheduleNext(learningAt(2, 3), review({ quality: "close" }));
+  it("a passing but imperfect recall holds the band and its banked reps", () => {
+    const next = scheduleNext(
+      learningAt(2, 3),
+      review({ quality: "close", accuracy: 70 }),
+    );
     expect(next.learnStage).toBe(2);
     expect(next.stageReps).toBe(3);
     expect(next.status).toBe("learning");
     expect(next.dueAt).toBe(NOW);
+  });
+
+  it("a near-perfect recall banks learning progress", () => {
+    const next = scheduleNext(
+      learningAt(2, 3),
+      review({ quality: "close", accuracy: 92 }),
+    );
+    expect(next.learnStage).toBe(2);
+    expect(next.stageReps).toBe(4);
+    expect(next.status).toBe("learning");
   });
 
   it("off mid-band: loses one banked rep and stays on the band", () => {
@@ -451,7 +464,10 @@ describe("interval fuzz", () => {
   });
 
   it("leaves within-session retries due immediately (no fuzz on 0 interval)", () => {
-    const next = scheduleNext(learningAt(1), review({ quality: "close" }));
+    const next = scheduleNext(
+      learningAt(1),
+      review({ quality: "close", accuracy: 70 }),
+    );
     expect(next.dueAt).toBe(NOW);
   });
 });

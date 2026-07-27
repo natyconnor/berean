@@ -16,7 +16,9 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
+import { toPracticeVerse } from "./to-practice-verse";
 import { VerseDetail } from "./verse-detail";
 
 type LibrarySort = "dueAt" | "status" | "recent";
@@ -192,6 +194,7 @@ export function MemoryLibrary({
           >
             {filtered.map((row) => {
               const style = MEMORY_STATUS_STYLE[row.status];
+              const practiceVerse = toPracticeVerse(row);
               return (
                 <li key={row.verseMemoryId}>
                   <MemoryListRow className="flex items-center gap-3 px-3 py-2.5">
@@ -221,6 +224,12 @@ export function MemoryLibrary({
                         </span>
                       </span>
                     </button>
+                    <MemoryVerseListAction
+                      status={row.status}
+                      verse={practiceVerse}
+                      onPractice={onPracticeVerse}
+                      onReview={onReviewVerse}
+                    />
                   </MemoryListRow>
                 </li>
               );

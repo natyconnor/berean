@@ -28,7 +28,10 @@ import {
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
-import { type MemoryStatus } from "@/lib/memory-scheduler";
+import {
+  isLearningProgressAttempt,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import {
@@ -61,7 +64,7 @@ export interface PracticeVerse {
   /** Server-authoritative memory rung for this verse (0..3). */
   learnStage: number;
   /**
-   * Server-authoritative exact reps banked on the current band. Optional so
+   * Server-authoritative strong reps banked on the current band. Optional so
    * callers that don't (yet) surface it fall back to a fresh band; read
    * defensively via `stageReps ?? 0`.
    */
@@ -407,12 +410,13 @@ function PracticeCard({
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
-  // Once graduated, another exact recall is just another practice pass — offer
+  const madeLearningProgress =
+    checkedQuality !== null &&
+    isLearningProgressAttempt(checkedQuality, checkedAccuracy);
+  // Once graduated, another strong recall is just another practice pass — offer
   // "Try again" instead of implying the learning journey still advances.
   const offerPracticeAgain =
-    status === "reviewing" ||
-    status === "mastered" ||
-    checkedQuality !== "exact";
+    status === "reviewing" || status === "mastered" || !madeLearningProgress;
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;

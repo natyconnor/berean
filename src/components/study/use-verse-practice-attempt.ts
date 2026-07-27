@@ -46,6 +46,7 @@ interface UseVersePracticeAttemptReturn {
     args: RecordAttemptArgs & {
       current: VersePracticeProgress;
       quality: VerseAttemptQuality;
+      accuracy: number;
     },
     onAdopt: (next: VersePracticeProgress) => void,
   ) => Promise<void>;
@@ -104,6 +105,7 @@ export function useVersePracticeAttempt(
       args: RecordAttemptArgs & {
         current: VersePracticeProgress;
         quality: VerseAttemptQuality;
+        accuracy: number;
       },
       onAdopt: (next: VersePracticeProgress) => void,
     ): Promise<void> => {
@@ -121,6 +123,7 @@ export function useVersePracticeAttempt(
               args.current.learnStage,
               args.current.stageReps,
               args.quality,
+              args.accuracy,
               args.wordCount,
               args.current.status,
             ),

@@ -60,9 +60,12 @@ export function MemoryReviewPage() {
           <Clock3 className="h-6 w-6 text-muted-foreground" aria-hidden />
         </div>
         <div className="max-w-sm space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">Not due yet</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Not ready to review
+          </h1>
           <p className="text-sm text-muted-foreground">
-            {formatVerseRef(search)} isn&apos;t due for review right now.
+            {formatVerseRef(search)} isn&apos;t in review yet. Learn it first,
+            then come back for a one-off review anytime.
           </p>
         </div>
         <Button
@@ -83,8 +86,9 @@ export function MemoryReviewPage() {
       doneLabel="Back to memory"
       source={{
         dueItems,
-        // Live remaining: once the verse leaves the due set, remaining is 0.
-        remainingDue: scopedDue === null ? 0 : 1,
+        // Single-verse sessions are one-offs: after this card there is nothing
+        // else in scope to continue into (even if the verse stays reviewable).
+        remainingDue: 0,
       }}
       onExit={() => void navigate({ to: "/memory" })}
     />

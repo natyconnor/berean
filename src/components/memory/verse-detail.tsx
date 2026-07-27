@@ -1,4 +1,4 @@
-import { Dumbbell, Play } from "lucide-react";
+import { GraduationCap, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -187,8 +187,10 @@ export function VerseDetail({
     stageReps: detail.stageReps,
     status: detail.status,
   };
+  // Review-phase verses can start a one-off (including early) review from here;
+  // learning-phase verses use Learn / practice instead.
   const showReviewAction =
-    onReview !== undefined && isReviewPhase(detail.status) && detail.isDue;
+    onReview !== undefined && isReviewPhase(detail.status);
 
   // Attempts arrive newest-first; reverse for a left-to-right time axis.
   const chronological = [...detail.attempts].reverse();
@@ -239,8 +241,8 @@ export function VerseDetail({
               className="gap-1.5"
               onClick={() => onPractice(actionVerse)}
             >
-              <Dumbbell className="h-4 w-4" aria-hidden />
-              Practice
+              <GraduationCap className="h-4 w-4" aria-hidden />
+              {detail.status === "learning" ? "Continue Learning" : "Learn"}
             </Button>
           )}
           <AddToPack reference={cardReference} now={now} />

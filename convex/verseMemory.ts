@@ -223,9 +223,13 @@ export const dueQueue = query({
 });
 
 /**
- * Single-verse due lookup for scoped review (verse detail / pack → review).
- * Returns the due queue item when the hearted verse is due for review, else null.
- * Does not rely on a capped global dueQueue scan.
+ * Resolve a single hearted verse for a scoped review session.
+ *
+ * Unlike the global due queue, a verse-scoped deep link may start a one-off
+ * early review: any live `reviewing` / `mastered` row qualifies, even when
+ * `dueAt > now`. The scheduler still applies its once-per-interval early-boost
+ * rules when the attempt is recorded. `now` is accepted so callers can share
+ * the same live clock as other memory queries (cache key parity).
  */
 export const dueForVerse = query({
   args: {
@@ -237,6 +241,10 @@ export const dueForVerse = query({
   },
   returns: v.union(dueQueueItem, v.null()),
   handler: async (ctx, args) => {
+    // Kept for caller cache-key parity with dueQueue / pack resolve; eligibility
+    // below is review-phase, not dueAt (scoped one-off / early reviews).
+    void args.now;
+
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) return null;
 
@@ -253,7 +261,7 @@ export const dueForVerse = query({
 
     const memory = await findVerseMemory(ctx, userId, verseRefId);
     if (!memory || !isLiveHeartedMemory(memory)) return null;
-    if (!isDueForReview(memory, args.now)) return null;
+    if (!isReviewPhase(memory.status)) return null;
 
     const ref = await ctx.db.get(verseRefId);
     if (!ref || ref.userId !== userId) return null;

@@ -42,6 +42,8 @@ import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { MemoryVerseListAction } from "@/components/memory/memory-verse-list-action";
+import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { VerseDetail } from "@/components/memory/verse-detail";
 
 import { PackVersePicker } from "./pack-verse-picker";
@@ -403,6 +405,7 @@ function PackViewMain({
               <ul className="space-y-1.5">
                 {members.map((member) => {
                   const style = MEMORY_STATUS_STYLE[member.status];
+                  const practiceVerse = toPracticeVerse(member);
                   return (
                     <MemoryListItem
                       key={member.verseRefId}
@@ -434,6 +437,12 @@ function PackViewMain({
                           </span>
                         </span>
                       </button>
+                      <MemoryVerseListAction
+                        status={member.status}
+                        verse={practiceVerse}
+                        onPractice={onPracticeVerse}
+                        onReview={onReviewVerse}
+                      />
                       {isCustom && (
                         <Button
                           variant="ghost"
