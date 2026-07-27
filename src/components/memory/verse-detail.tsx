@@ -1,4 +1,4 @@
-import { Dumbbell, Play } from "lucide-react";
+import { GraduationCap, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -241,8 +241,8 @@ export function VerseDetail({
               className="gap-1.5"
               onClick={() => onPractice(actionVerse)}
             >
-              <Dumbbell className="h-4 w-4" aria-hidden />
-              Learn
+              <GraduationCap className="h-4 w-4" aria-hidden />
+              {detail.status === "learning" ? "Continue Learning" : "Learn"}
             </Button>
           )}
           <AddToPack reference={cardReference} now={now} />
