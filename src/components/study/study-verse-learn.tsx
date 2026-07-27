@@ -23,7 +23,10 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { diffWords } from "@/lib/diff-words";
-import { type MemoryStatus } from "@/lib/memory-scheduler";
+import {
+  isLearningProgressAttempt,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import {
   type HintToken,
@@ -180,6 +183,9 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
+  const madeLearningProgress =
+    checkedQuality !== null &&
+    isLearningProgressAttempt(checkedQuality, checkedAccuracy);
 
   useEffect(() => {
     if (!checked) return;
@@ -253,6 +259,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
             status,
           },
           quality: "exact",
+          accuracy: 100,
         },
         (next) => {
           applyProgress(next);
@@ -289,6 +296,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
           stageIndex,
           repsIndex,
           checkedQuality ?? "close",
+          checkedAccuracy,
           wordCount,
           status,
         ),
@@ -443,12 +451,12 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               // the next rep renders, so it can't re-record stale.
               disabled={submitPending}
             >
-              {checkedQuality === "exact" ? (
+              {madeLearningProgress ? (
                 <ArrowRight className="h-4 w-4" aria-hidden />
               ) : (
                 <RotateCcw className="h-4 w-4" aria-hidden />
               )}
-              {checkedQuality === "exact" ? "Continue" : "Try again"}
+              {madeLearningProgress ? "Continue" : "Try again"}
             </Button>
           ) : isReadPrime ? (
             <Button

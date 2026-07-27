@@ -38,6 +38,22 @@ describe("classifyVerseAttempt", () => {
     expect(classifyVerseAttempt(diffWords(typed, actual))).toBe("close");
   });
 
+  it("gives most of a word's credit for a small typo", () => {
+    const tokens = diffWords("Jesus asnwered him", "Jesus answered him");
+    expect(verseAttemptAccuracy(tokens)).toBe(93);
+    expect(classifyVerseAttempt(tokens)).toBe("close");
+    expect(hasAttemptErrors(tokens)).toBe(true);
+  });
+
+  it("does not penalize the choice of a dash or a space", () => {
+    const tokens = diffWords(
+      "a righteous person though",
+      "a righteous person—though",
+    );
+    expect(verseAttemptAccuracy(tokens)).toBe(100);
+    expect(classifyVerseAttempt(tokens)).toBe("exact");
+  });
+
   it("marks a two-word verse with one wrong word as off (50%)", () => {
     const tokens = diffWords("Jesus cried", "Jesus wept");
     expect(verseAttemptAccuracy(tokens)).toBe(50);
@@ -82,7 +98,7 @@ describe("verseAttemptAccuracy", () => {
     expect(verseAttemptAccuracy(tokens)).toBe(100);
   });
 
-  it("rounds the matched token percentage", () => {
+  it("rounds the credited token percentage", () => {
     const tokens = diffWords("Jesus cried loudly", "Jesus wept");
     expect(verseAttemptAccuracy(tokens)).toBe(33);
   });

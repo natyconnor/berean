@@ -40,7 +40,7 @@ export interface MemorySchedule {
 /**
  * A learning-phase support band. `index === learnStage` (0..3): index 0 is the
  * most support (Read), index 3 is the least (From Memory). A band only clears
- * after {@link SupportBand.requiredReps} exact reps are banked.
+ * after {@link SupportBand.requiredReps} strong reps are banked.
  */
 export interface SupportBand {
   key: "read" | "guided" | "challenge" | "memory";
@@ -161,6 +161,13 @@ export const MASTERED_INTERVAL_DAYS = 30;
 export const REVIEW_LAPSE_ACCURACY = 60;
 
 /**
+ * Near-perfect learning attempts still bank a rep. This lets one missed word
+ * or a small typo count on a longer passage without allowing a merely passing
+ * recall to clear a support band.
+ */
+export const LEARN_PROGRESS_ACCURACY = 85;
+
+/**
  * After a review lapse, re-enter learning at Guided (first-letters) rather than
  * Read — the learner still remembers some of the verse.
  */
@@ -212,6 +219,17 @@ export function isReviewPhase(status: MemoryStatus): boolean {
   return status === "reviewing" || status === "mastered";
 }
 
+/** Whether a learning attempt is strong enough to bank progress. */
+export function isLearningProgressAttempt(
+  quality: ReviewInput["quality"],
+  accuracy: number,
+): boolean {
+  return (
+    quality === "exact" ||
+    (quality === "close" && accuracy >= LEARN_PROGRESS_ACCURACY)
+  );
+}
+
 /**
  * Whether a verse belongs in the review queue right now.
  *
@@ -227,7 +245,7 @@ export function isDueForReview(
 }
 
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
-  if (r.quality === "exact") {
+  if (isLearningProgressAttempt(r.quality, r.accuracy)) {
     const reps = s.stageReps + 1;
     if (reps >= requiredRepsFor(s.learnStage, r.wordCount)) {
       // Cleared this band on its required reps.

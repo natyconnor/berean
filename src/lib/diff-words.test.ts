@@ -88,11 +88,38 @@ describe("diffWords", () => {
     ]);
   });
 
-  it("renders the user's typo instead of striking through the correct word", () => {
+  it("recognizes a one-edit typo while retaining both spellings", () => {
     expect(diffWords("Jesus answerd him", "Jesus answered him")).toEqual([
       { text: "Jesus", status: "match" },
-      { text: "answerd", expectedText: "answered", status: "mismatch" },
+      { text: "answerd", expectedText: "answered", status: "typo" },
       { text: "him", status: "match" },
+    ]);
+  });
+
+  it("recognizes adjacent swapped letters as a typo", () => {
+    expect(diffWords("Jesus asnwered him", "Jesus answered him")).toEqual([
+      { text: "Jesus", status: "match" },
+      { text: "asnwered", expectedText: "answered", status: "typo" },
+      { text: "him", status: "match" },
+    ]);
+  });
+
+  it("treats hyphens and typographic dashes like spaces", () => {
+    expect(
+      diffWords(
+        "a righteous person though perhaps",
+        "a righteous person—though perhaps",
+      ),
+    ).toEqual([
+      { text: "a", status: "match" },
+      { text: "righteous", status: "match" },
+      { text: "person", status: "match" },
+      { text: "though", status: "match" },
+      { text: "perhaps", status: "match" },
+    ]);
+    expect(diffWords("stead-fast", "stead\u2013fast")).toEqual([
+      { text: "stead", status: "match" },
+      { text: "fast", status: "match" },
     ]);
   });
 

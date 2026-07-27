@@ -4,7 +4,7 @@ import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 /**
  * How close the user's typed verse came to the actual text.
  *
- * - `exact`: every diff token matched (ignoring case and trailing punctuation).
+ * - `exact`: every diff token matched (ignoring case, punctuation, and dashes).
  * - `close`: imperfect, but accuracy at or above {@link REVIEW_LAPSE_ACCURACY}.
  * - `off`: accuracy below {@link REVIEW_LAPSE_ACCURACY}.
  */
@@ -12,19 +12,24 @@ export type VerseAttemptQuality = "exact" | "close" | "off";
 
 /** Errors we count when scoring a typed attempt. */
 const ERROR_STATUSES: ReadonlySet<DiffToken["status"]> = new Set([
+  "typo",
   "mismatch",
   "missing",
   "extra",
 ]);
 
+/** A minor spelling typo keeps most of the word's credit. */
+const TYPO_CREDIT = 0.8;
+
 export function verseAttemptAccuracy(tokens: ReadonlyArray<DiffToken>): number {
   if (tokens.length === 0) return 0;
 
-  let matches = 0;
+  let credit = 0;
   for (const token of tokens) {
-    if (token.status === "match") matches += 1;
+    if (token.status === "match") credit += 1;
+    if (token.status === "typo") credit += TYPO_CREDIT;
   }
-  return Math.round((matches / tokens.length) * 100);
+  return Math.round((credit / tokens.length) * 100);
 }
 
 /**

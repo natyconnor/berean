@@ -86,7 +86,7 @@ function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
   const expectedText =
     token.status === "extra"
       ? PLACEHOLDER
-      : token.status === "mismatch"
+      : token.status === "mismatch" || token.status === "typo"
         ? (token.expectedText ?? PLACEHOLDER)
         : token.text;
 
@@ -94,7 +94,9 @@ function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
 
   const typedClassName = cn(
     baseRow,
-    (token.status === "mismatch" || token.status === "extra") &&
+    (token.status === "mismatch" ||
+      token.status === "typo" ||
+      token.status === "extra") &&
       "bg-rose-500/10 text-rose-600 line-through decoration-rose-500/60 ring-1 ring-inset ring-rose-500/20 dark:text-rose-300",
     token.status === "missing" &&
       "border border-dashed border-amber-500/60 text-transparent",
@@ -102,7 +104,9 @@ function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
 
   const expectedClassName = cn(
     baseRow,
-    (token.status === "mismatch" || token.status === "missing") &&
+    (token.status === "mismatch" ||
+      token.status === "typo" ||
+      token.status === "missing") &&
       "bg-amber-500/15 text-amber-700 ring-1 ring-inset ring-amber-500/20 dark:text-amber-200",
     token.status === "extra" &&
       "border border-dashed border-rose-500/40 text-transparent",
@@ -113,9 +117,13 @@ function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
       ? `Missing word: ${token.text}`
       : token.status === "extra"
         ? `Extra word: ${token.text}`
-        : `Different word: ${token.text}${
-            token.expectedText ? `, expected ${token.expectedText}` : ""
-          }`;
+        : token.status === "typo"
+          ? `Small typo: ${token.text}${
+              token.expectedText ? `, expected ${token.expectedText}` : ""
+            }`
+          : `Different word: ${token.text}${
+              token.expectedText ? `, expected ${token.expectedText}` : ""
+            }`;
 
   return (
     <span
