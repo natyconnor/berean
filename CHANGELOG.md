@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.1](https://github.com/natyconnor/berean/compare/v1.11.0...v1.11.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* add Learn/Review actions on hearted verse list rows ([#132](https://github.com/natyconnor/berean/issues/132)) ([16a376e](https://github.com/natyconnor/berean/commit/16a376e79300aff5fb620f5756b5995792896079))
+
 ## [1.11.0](https://github.com/natyconnor/berean/compare/v1.10.2...v1.11.0) (2026-07-22)
 
 
