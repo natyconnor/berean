@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.2](https://github.com/natyconnor/berean/compare/v1.11.1...v1.11.2) (2026-07-28)
+
+
+### Bug Fixes
+
+* split chapter reference into book and chapter pickers ([#134](https://github.com/natyconnor/berean/issues/134)) ([1c6674c](https://github.com/natyconnor/berean/commit/1c6674c3467417db281c0a626a34312be23543d8))
+
 ## [1.11.1](https://github.com/natyconnor/berean/compare/v1.11.0...v1.11.1) (2026-07-27)
 
 
