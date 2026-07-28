@@ -14,14 +14,32 @@ import { PassageNavigator } from "./passage-navigator";
 import { cn } from "@/lib/utils";
 
 /**
- * Book and chapter are separate pickers, so each is its own hoverable target.
- * They stay unstyled at rest to read as one serif reference, and the paired
- * chevrons plus per-segment hover fill reveal the two hit areas.
+ * Book and chapter open different pickers, so each needs its own target. At
+ * rest the pair reads as one reference carved into the page; hovering or
+ * focusing the well slides a caret into each segment so both hit areas become
+ * obvious, and only the segment under the pointer takes a fill.
+ *
+ * The well sits between the edge-pinned pager arrows, so the caret space grows
+ * outward from the center: the book text slides left while the chapter number
+ * holds position, keeping whichever segment the pointer is over under it.
  */
+const REFERENCE_WELL_CLASS =
+  "group/ref flex min-w-0 items-center rounded-lg bg-muted/30 px-1 py-0.5 cl-well dark:bg-muted/40";
 const REFERENCE_SEGMENT_CLASS =
-  "group h-auto gap-1.5 rounded-md px-2 py-0.5 text-2xl font-serif font-semibold tracking-tight";
-const REFERENCE_CHEVRON_CLASS =
-  "size-3.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground";
+  "h-auto gap-0 rounded-md px-2 py-0.5 text-2xl font-serif font-semibold tracking-tight hover:bg-primary/10 dark:hover:bg-primary/15";
+/** Matches the Candlelight easing used by `cl-transition`. */
+const REFERENCE_CARET_SLOT_CLASS =
+  "flex w-0 shrink-0 justify-end overflow-hidden opacity-0 transition-[width,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/ref:w-5 group-hover/ref:opacity-100 group-focus-within/ref:w-5 group-focus-within/ref:opacity-100 motion-reduce:transition-none";
+const REFERENCE_CARET_CLASS =
+  "size-3.5 -translate-x-1 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/ref:translate-x-0 group-focus-within/ref:translate-x-0 motion-reduce:transition-none";
+
+function ReferenceCaret() {
+  return (
+    <span aria-hidden className={REFERENCE_CARET_SLOT_CLASS}>
+      <ChevronDown className={REFERENCE_CARET_CLASS} />
+    </span>
+  );
+}
 
 interface ChapterHeaderProps {
   book: string;
@@ -84,7 +102,7 @@ export function ChapterHeader({
         >
           <ChevronLeft className="h-4 w-4" />
         </TooltipButton>
-        <h1 className="flex min-w-0 items-center gap-1">
+        <h1 className={REFERENCE_WELL_CLASS}>
           <TooltipButton
             variant="ghost"
             onClick={openBookNavigator}
@@ -93,7 +111,7 @@ export function ChapterHeader({
             aria-label={`Change book, currently ${book}`}
           >
             <span className="truncate">{book}</span>
-            <ChevronDown className={REFERENCE_CHEVRON_CLASS} />
+            <ReferenceCaret />
           </TooltipButton>
           <TooltipButton
             variant="ghost"
@@ -103,7 +121,7 @@ export function ChapterHeader({
             aria-label={`Change chapter in ${book}, currently chapter ${chapter}`}
           >
             {chapter}
-            <ChevronDown className={REFERENCE_CHEVRON_CLASS} />
+            <ReferenceCaret />
           </TooltipButton>
           <PassageNavigator
             open={navigatorOpen}
