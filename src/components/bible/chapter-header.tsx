@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -8,8 +9,19 @@ import {
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTabs } from "@/lib/use-tabs";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
+import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { PassageNavigator } from "./passage-navigator";
 import { cn } from "@/lib/utils";
+
+/**
+ * Book and chapter are separate pickers, so each is its own hoverable target.
+ * They stay unstyled at rest to read as one serif reference, and the paired
+ * chevrons plus per-segment hover fill reveal the two hit areas.
+ */
+const REFERENCE_SEGMENT_CLASS =
+  "group h-auto gap-1.5 rounded-md px-2 py-0.5 text-2xl font-serif font-semibold tracking-tight";
+const REFERENCE_CHEVRON_CLASS =
+  "size-3.5 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground";
 
 interface ChapterHeaderProps {
   book: string;
@@ -28,6 +40,9 @@ export function ChapterHeader({
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
   const hasPrev = previous !== null;
   const hasNext = next !== null;
+  const passageShortcutLabel = formatCommandOrControlShortcut("G");
+  const [navigatorOpen, setNavigatorOpen] = useState(false);
+  const [navigatorBook, setNavigatorBook] = useState<string | null>(null);
 
   function goPrev() {
     if (!previous) return;
@@ -37,6 +52,23 @@ export function ChapterHeader({
   function goNext() {
     if (!next) return;
     navigateActiveTab(next.passageId, next.label);
+  }
+
+  function openBookNavigator() {
+    setNavigatorBook(null);
+    setNavigatorOpen(true);
+  }
+
+  function openChapterNavigator() {
+    setNavigatorBook(book);
+    setNavigatorOpen(true);
+  }
+
+  function handleNavigatorOpenChange(nextOpen: boolean) {
+    setNavigatorOpen(nextOpen);
+    if (!nextOpen) {
+      setNavigatorBook(null);
+    }
   }
 
   return (
@@ -52,23 +84,34 @@ export function ChapterHeader({
         >
           <ChevronLeft className="h-4 w-4" />
         </TooltipButton>
-        <h1 className="text-2xl font-serif font-semibold tracking-tight">
+        <h1 className="flex min-w-0 items-center gap-1">
+          <TooltipButton
+            variant="ghost"
+            onClick={openBookNavigator}
+            className={cn(REFERENCE_SEGMENT_CLASS, "min-w-0")}
+            tooltip={`Change book (${passageShortcutLabel})`}
+            aria-label={`Change book, currently ${book}`}
+          >
+            <span className="truncate">{book}</span>
+            <ChevronDown className={REFERENCE_CHEVRON_CLASS} />
+          </TooltipButton>
+          <TooltipButton
+            variant="ghost"
+            onClick={openChapterNavigator}
+            className={cn(REFERENCE_SEGMENT_CLASS, "shrink-0 tabular-nums")}
+            tooltip={`Change chapter in ${book}`}
+            aria-label={`Change chapter in ${book}, currently chapter ${chapter}`}
+          >
+            {chapter}
+            <ChevronDown className={REFERENCE_CHEVRON_CLASS} />
+          </TooltipButton>
           <PassageNavigator
+            open={navigatorOpen}
+            onOpenChange={handleNavigatorOpenChange}
+            initialBookName={navigatorBook}
+            trigger={null}
             onSelectPassage={(passageId, label) =>
               navigateActiveTab(passageId, label)
-            }
-            trigger={
-              <TooltipButton
-                variant="ghost"
-                className="h-auto gap-1 rounded-md px-2 py-1 text-2xl font-serif font-semibold tracking-tight"
-                tooltip="Click to navigate to a specific Bible chapter"
-                aria-label="Navigate to a specific Bible chapter"
-              >
-                <span>
-                  {book} {chapter}
-                </span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              </TooltipButton>
             }
           />
         </h1>

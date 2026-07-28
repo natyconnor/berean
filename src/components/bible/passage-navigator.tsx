@@ -26,10 +26,20 @@ const slideVariants = {
 };
 
 interface PassageNavigatorProps {
-  trigger?: ReactNode;
+  /** Pass `null` to omit the trigger (fully controlled via `open`). */
+  trigger?: ReactNode | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onSelectPassage?: (passageId: string, label: string) => void;
+  /**
+   * When the dialog opens with this set, skip book selection and show
+   * chapter selection for the named book.
+   */
+  initialBookName?: string | null;
+}
+
+function findBookByName(name: string): BookInfo | null {
+  return BIBLE_BOOKS.find((b) => b.name === name) ?? null;
 }
 
 export function PassageNavigator({
@@ -37,15 +47,30 @@ export function PassageNavigator({
   open: openProp,
   onOpenChange,
   onSelectPassage,
+  initialBookName = null,
 }: PassageNavigatorProps = {}) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
+  /**
+   * `undefined` means “derive from `initialBookName` while open”;
+   * `null` means the user stepped back to the book list;
+   * otherwise a concrete book for chapter selection.
+   */
+  const [selectedBookOverride, setSelectedBookOverride] = useState<
+    BookInfo | null | undefined
+  >(undefined);
   const [search, setSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [chapterDigits, setChapterDigits] = useState("");
   const open = openProp ?? uncontrolledOpen;
   const { openTab } = useTabs();
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
+
+  const selectedBook =
+    selectedBookOverride !== undefined
+      ? selectedBookOverride
+      : open && initialBookName
+        ? findBookByName(initialBookName)
+        : null;
 
   const filteredBooks = useMemo(
     () =>
@@ -75,7 +100,7 @@ export function PassageNavigator({
     if (book.chapters === 1) {
       selectChapter(book, 1);
     } else {
-      setSelectedBook(book);
+      setSelectedBookOverride(book);
       setSearch("");
       setChapterDigits("");
     }
@@ -93,7 +118,7 @@ export function PassageNavigator({
   }
 
   function resetState() {
-    setSelectedBook(null);
+    setSelectedBookOverride(undefined);
     setSearch("");
     setHighlightedIndex(0);
     setChapterDigits("");
@@ -109,20 +134,25 @@ export function PassageNavigator({
     }
   }
 
+  const resolvedTrigger =
+    trigger === undefined ? (
+      <TooltipButton
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        tooltip={`Go to passage (${passageShortcutLabel})`}
+      >
+        <TableOfContents className="h-4 w-4" />
+      </TooltipButton>
+    ) : (
+      trigger
+    );
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <TooltipButton
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            tooltip={`Go to passage (${passageShortcutLabel})`}
-          >
-            <TableOfContents className="h-4 w-4" />
-          </TooltipButton>
-        )}
-      </DialogTrigger>
+      {resolvedTrigger != null ? (
+        <DialogTrigger asChild>{resolvedTrigger}</DialogTrigger>
+      ) : null}
       <DialogContent
         className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-md"
         data-passage-dismiss-exempt
@@ -221,7 +251,7 @@ export function PassageNavigator({
                   type="button"
                   onClick={() => {
                     setChapterDigits("");
-                    setSelectedBook(null);
+                    setSelectedBookOverride(null);
                   }}
                 >
                   &larr; {selectedBook.name}
