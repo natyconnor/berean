@@ -100,11 +100,29 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  /* Hue-matched to the light chart ramp so a series keeps its identity across
+     modes, lifted in lightness and pulled back in chroma to suit a dark canvas.
+     chart-1 is the activity/streak color and must stay warm — the stock dark
+     ramp swapped it to blue, which put a blue flame on the streak card. */
+  --chart-1: oklch(0.7 0.17 42);
+  --chart-2: oklch(0.7 0.1 185);
+  --chart-3: oklch(0.62 0.09 228);
+  --chart-4: oklch(0.82 0.15 85);
+  --chart-5: oklch(0.76 0.15 70);
+  /* Passage notes read as gold in light mode, plum in dark. Gold is not
+     portable: at the lightness a dark surface lives at (~0.29) sRGB allows
+     hue 80 a maximum chroma of 0.063, the lowest of any hue, so every amber
+     fill collapses to brown no matter how it is mixed. Hue 318 allows 0.148
+     at the same lightness, which is enough headroom to stay unmistakably
+     colored while sitting quietly behind body text. Tyrian purple was gold's
+     peer in illuminated manuscripts, so it carries the same "set apart"
+     reading that gold carries on parchment. */
+  --cl-passage-surface: oklch(0.288 0.052 318);
+  --cl-passage-surface-hover: oklch(0.32 0.062 318);
+  --cl-passage-surface-soft: oklch(0.255 0.032 318);
+  --cl-passage-line: oklch(0.72 0.13 318 / 0.42);
+  --cl-passage-ink: oklch(0.815 0.115 318);
+  --cl-passage-ink-dim: oklch(0.7 0.088 318);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -245,21 +263,20 @@
   animation-delay: var(--slide-delay, 0ms);
 }
 
-/* Candlelight — theme tokens (see docs/note-candlelight-v2-spec.md) */
+/* Candlelight — theme tokens (see docs/note-candlelight-v2-spec.md).
+   --background and --card must not be declared here. This class sits on the app
+   shell, and a custom property set on a descendant shadows the inherited value
+   for that whole subtree — declaring them here overrode every theme's palette. */
 .cl-theme {
-  --background: oklch(0.98 0.007 75);
-  --card: oklch(1 0 0);
   --cl-text-pool: rgba(50, 35, 15, 0.13);
   --cl-glint: rgba(255, 244, 210, 0.22);
   --cl-glint-warm: rgba(255, 236, 180, 0.32);
 }
 
 .dark .cl-theme {
-  --background: oklch(0.138 0.005 65);
-  --card: oklch(0.22 0.006 68);
   --cl-text-pool: rgba(0, 0, 0, 0.22);
-  --cl-glint: rgba(180, 130, 50, 0.16);
-  --cl-glint-warm: rgba(200, 150, 60, 0.22);
+  --cl-glint: rgba(214, 180, 130, 0.07);
+  --cl-glint-warm: rgba(220, 180, 120, 0.1);
 }
 
 /* Candlelight — depth levels (v2 spec) */
@@ -288,7 +305,7 @@
     0 30px 60px rgba(50, 35, 15, 0.04);
 }
 
-.cl-depth-3-amber {
+.cl-depth-3-passage {
   box-shadow:
     inset 0 1px 0 rgba(255, 248, 210, 0.88),
     0 1px 3px rgba(0, 0, 0, 0.08),
@@ -306,7 +323,7 @@
     0 44px 80px rgba(50, 35, 15, 0.06);
 }
 
-.cl-depth-4-amber {
+.cl-depth-4-passage {
   box-shadow:
     inset 0 1px 0 rgba(255, 248, 210, 0.92),
     0 2px 5px rgba(0, 0, 0, 0.09),
@@ -324,7 +341,7 @@
     0 44px 80px rgba(50, 35, 15, 0.06);
 }
 
-.cl-editor-lift-amber:focus-within {
+.cl-editor-lift-passage:focus-within {
   box-shadow:
     inset 0 1px 0 rgba(255, 248, 210, 0.92),
     0 2px 5px rgba(0, 0, 0, 0.09),
@@ -357,13 +374,17 @@
     0 30px 60px rgba(0, 0, 0, 0.12);
 }
 
-.dark .cl-depth-3-amber {
+/* Passage depth in dark mode carries its identity in a hairline, not in the cast
+   shadow: a tinted shadow composites brighter than a dark canvas, so it reads as a
+   lamp rather than as depth. Cast layers stay black; only the inset ring is tinted. */
+.dark .cl-depth-3-passage {
   box-shadow:
-    inset 0 1px 0 rgba(255, 248, 210, 0.1),
-    0 1px 3px rgba(0, 0, 0, 0.28),
-    0 5px 16px rgba(180, 120, 20, 0.22),
-    0 18px 42px rgba(180, 120, 20, 0.16),
-    0 30px 60px rgba(180, 120, 20, 0.08);
+    inset 0 0 0 1px oklch(0.72 0.13 318 / 0.34),
+    inset 0 1px 0 rgba(245, 228, 250, 0.09),
+    0 1px 3px rgba(0, 0, 0, 0.34),
+    0 5px 16px rgba(0, 0, 0, 0.3),
+    0 18px 42px rgba(0, 0, 0, 0.24),
+    0 30px 60px rgba(0, 0, 0, 0.14);
 }
 
 .dark .cl-depth-4 {
@@ -375,13 +396,14 @@
     0 44px 80px rgba(0, 0, 0, 0.14);
 }
 
-.dark .cl-depth-4-amber {
+.dark .cl-depth-4-passage {
   box-shadow:
-    inset 0 1px 0 rgba(255, 248, 210, 0.1),
-    0 2px 5px rgba(0, 0, 0, 0.3),
-    0 8px 24px rgba(180, 120, 20, 0.28),
-    0 24px 56px rgba(180, 120, 20, 0.22),
-    0 44px 80px rgba(180, 120, 20, 0.12);
+    inset 0 0 0 1px oklch(0.72 0.13 318 / 0.44),
+    inset 0 1px 0 rgba(245, 228, 250, 0.11),
+    0 2px 5px rgba(0, 0, 0, 0.38),
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 24px 56px rgba(0, 0, 0, 0.26),
+    0 44px 80px rgba(0, 0, 0, 0.16);
 }
 
 .dark .cl-editor-lift:focus-within {
@@ -393,13 +415,14 @@
     0 44px 80px rgba(0, 0, 0, 0.14);
 }
 
-.dark .cl-editor-lift-amber:focus-within {
+.dark .cl-editor-lift-passage:focus-within {
   box-shadow:
-    inset 0 1px 0 rgba(255, 248, 210, 0.1),
-    0 2px 5px rgba(0, 0, 0, 0.3),
-    0 8px 24px rgba(180, 120, 20, 0.28),
-    0 24px 56px rgba(180, 120, 20, 0.22),
-    0 44px 80px rgba(180, 120, 20, 0.12);
+    inset 0 0 0 1px oklch(0.72 0.13 318 / 0.52),
+    inset 0 1px 0 rgba(245, 228, 250, 0.12),
+    0 2px 5px rgba(0, 0, 0, 0.38),
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    0 24px 56px rgba(0, 0, 0, 0.26),
+    0 44px 80px rgba(0, 0, 0, 0.16);
 }
 
 /* Passage viewport — pool of light (v2 spec) */
@@ -440,7 +463,7 @@
 .dark .cl-focus-bloom:focus-within {
   background-image: radial-gradient(
     ellipse at 40% -5%,
-    rgba(180, 130, 50, 0.18) 0%,
+    rgba(190, 150, 90, 0.09) 0%,
     transparent 58%
   );
 }
@@ -448,10 +471,10 @@
 @keyframes cl-glow-ring {
   0%,
   100% {
-    box-shadow: 0 0 0 1.5px oklch(0.85 0.15 85 / 0.2);
+    box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--ring) 14%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 3.5px oklch(0.85 0.15 85 / 0.32);
+    box-shadow: 0 0 0 2.5px color-mix(in oklab, var(--ring) 22%, transparent);
   }
 }
 
@@ -520,11 +543,12 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(220, 180, 100, 0.22) 30%,
-    rgba(220, 180, 100, 0.28) 50%,
-    rgba(220, 180, 100, 0.22) 70%,
+    rgba(220, 190, 140, 0.14) 30%,
+    rgba(220, 190, 140, 0.18) 50%,
+    rgba(220, 190, 140, 0.14) 70%,
     transparent
   );
+  box-shadow: 0 0 3px 1px rgba(255, 235, 190, 0.1);
 }
 
 /* Candlelight — note indicator ember glow on verse hover */
@@ -541,9 +565,9 @@
 }
 .dark .group:hover .cl-ember-single {
   box-shadow:
-    0 0 3px 1px rgba(255, 200, 100, 0.5),
-    0 0 8px 2px rgba(255, 180, 60, 0.25);
-  filter: brightness(1.3);
+    0 0 3px 1px rgba(255, 200, 100, 0.34),
+    0 0 8px 2px rgba(255, 180, 60, 0.16);
+  filter: brightness(1.18);
 }
 
 .cl-ember-passage {
@@ -559,9 +583,9 @@
 }
 .dark .group:hover .cl-ember-passage {
   box-shadow:
-    0 0 3px 1px rgba(255, 210, 80, 0.55),
-    0 0 8px 2px rgba(255, 190, 50, 0.3);
-  filter: brightness(1.3);
+    0 0 3px 1px oklch(0.815 0.115 318 / 0.42),
+    0 0 8px 2px oklch(0.72 0.13 318 / 0.2);
+  filter: brightness(1.18);
 }
 
 .cl-ember-range {
@@ -577,9 +601,9 @@
 }
 .dark .group:hover .cl-ember-range {
   box-shadow:
-    0 0 3px 1px rgba(255, 210, 80, 0.45),
-    0 0 6px 2px rgba(255, 190, 60, 0.2);
-  filter: brightness(1.3);
+    0 0 3px 1px oklch(0.815 0.115 318 / 0.34),
+    0 0 6px 2px oklch(0.72 0.13 318 / 0.15);
+  filter: brightness(1.18);
 }
 
 /* Candlelight — shadow flicker on expanded verse hover */
@@ -678,8 +702,11 @@
   background-blend-mode: multiply;
   background-size: 200px 200px;
 }
+/* Grain reads on a lifted canvas at roughly half the light-mode strength; at full
+   strength over a dark surface the tint stops being texture and becomes a veil. */
 .dark .cl-grain-full::before {
-  background-color: rgb(140, 110, 50);
+  background-color: rgb(150, 132, 104);
+  opacity: calc(var(--cl-grain-intensity, 0.5) * 0.55);
 }
 
 .cl-grain-vignette {
@@ -704,7 +731,8 @@
   );
 }
 .dark .cl-grain-vignette {
-  background-color: rgb(140, 110, 50);
+  background-color: rgb(150, 132, 104);
+  opacity: calc(var(--cl-grain-intensity, 0.5) * 0.55);
 }
 
 @keyframes cl-grain-shift {

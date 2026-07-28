@@ -18,6 +18,7 @@ import {
   FOCUS_MODE_SPOTLIGHT_VERSE_START,
 } from "@/components/tutorial/focus-mode-tour";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/lib/use-theme";
 import { hasExactSavedSpan } from "@/lib/saved-verse-utils";
 import { masteryRingFraction } from "@/lib/mastery-ring";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
@@ -299,18 +300,23 @@ export function PassageViewBody({
     filteredVerses,
   ]);
 
+  const { darkMode } = useTheme();
+
   const focusGlowStyle = useMemo(() => {
     if (!isFocusMode || focusGlowAmount <= 0) return undefined;
 
-    const innerPercent = Math.round(10 + focusGlowAmount * 0.18);
-    const outerPercent = Math.round(5 + focusGlowAmount * 0.1);
+    // Against a dark canvas the rim needs far less primary mixed in before it
+    // registers; at light-mode strength it blooms across the whole viewport.
+    const intensity = darkMode ? 0.38 : 1;
+    const innerPercent = Math.round((10 + focusGlowAmount * 0.18) * intensity);
+    const outerPercent = Math.round((5 + focusGlowAmount * 0.1) * intensity);
     const innerBlur = Math.round(10 + focusGlowAmount * 0.12);
     const outerBlur = Math.round(20 + focusGlowAmount * 0.08);
 
     return {
       boxShadow: `inset 0 0 ${innerBlur}px color-mix(in oklab, var(--primary) ${innerPercent}%, transparent), inset 0 0 ${outerBlur}px color-mix(in oklab, var(--primary) ${outerPercent}%, transparent)`,
     };
-  }, [focusGlowAmount, isFocusMode]);
+  }, [darkMode, focusGlowAmount, isFocusMode]);
 
   return (
     <div className="relative flex-1 min-h-0 overflow-hidden">

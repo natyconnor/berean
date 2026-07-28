@@ -159,8 +159,8 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           data-note-surface
           className={
             isReadMode
-              ? "space-y-3 rounded-xl bg-amber-50/25 dark:bg-amber-900/14 p-3"
-              : "min-h-[96px] space-y-1.5 rounded-lg bg-amber-50/30 dark:bg-amber-900/12 p-2.5"
+              ? "space-y-3 rounded-xl bg-amber-50/25 dark:bg-[var(--cl-passage-surface-soft)] p-3"
+              : "min-h-[96px] space-y-1.5 rounded-lg bg-amber-50/30 dark:bg-[var(--cl-passage-surface-soft)] p-2.5"
           }
           onClick={(e) => e.stopPropagation()}
           onMouseEnter={onMouseEnter}
@@ -169,8 +169,8 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
           {visibleNotes.length > 0 && (
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-1.5">
-                <BookOpen className="h-3 w-3 text-amber-600 dark:text-amber-400/70 shrink-0" />
-                <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide">
+                <BookOpen className="h-3 w-3 text-amber-600 dark:text-[var(--cl-passage-ink)] shrink-0" />
+                <span className="text-[10px] font-semibold text-amber-700 dark:text-[var(--cl-passage-ink)] uppercase tracking-wide">
                   {formatVerseRef(notes[0].verseRef)}
                 </span>
               </div>
@@ -292,9 +292,9 @@ function CollapsedPassageBubble({
     <div
       className={cn(
         "group relative text-sm transition-colors rounded-lg",
-        "bg-amber-50/90 dark:bg-amber-900/22",
+        "bg-amber-50/90 dark:bg-[var(--cl-passage-surface)]",
         "cl-depth-1 cl-transition shadow-none",
-        "hover:bg-amber-50 dark:hover:bg-amber-800/25",
+        "hover:bg-amber-50 dark:hover:bg-[var(--cl-passage-surface-hover)]",
         isGlowing && "cl-glow-pulse",
       )}
       onMouseEnter={onMouseEnter}
@@ -316,13 +316,13 @@ function CollapsedPassageBubble({
           <div className="mb-1 flex min-w-0 items-center gap-1.5">
             <BookOpen
               className={cn(
-                "text-amber-600 dark:text-amber-400/70 shrink-0",
+                "text-amber-600 dark:text-[var(--cl-passage-ink)] shrink-0",
                 compact ? "h-2.5 w-2.5" : "h-3 w-3",
               )}
             />
             <span
               className={cn(
-                "min-w-0 flex-1 font-semibold text-amber-700 dark:text-amber-400/70 uppercase tracking-wide truncate",
+                "min-w-0 flex-1 font-semibold text-amber-700 dark:text-[var(--cl-passage-ink)] uppercase tracking-wide truncate",
                 compact ? "text-[8px]" : "text-[10px]",
               )}
             >
@@ -332,7 +332,7 @@ function CollapsedPassageBubble({
               <Badge
                 variant="outline"
                 className={cn(
-                  "border-amber-300 text-amber-700 dark:border-amber-600/50 dark:text-amber-400/70 ml-auto shrink-0",
+                  "border-amber-300 text-amber-700 dark:border-[var(--cl-passage-line)] dark:text-[var(--cl-passage-ink)] ml-auto shrink-0",
                   compact ? "text-[8px] px-1 py-0" : "text-[10px] px-1.5 py-0",
                 )}
               >
@@ -387,8 +387,9 @@ function PassageNotesPill({
         <button
           data-note-trigger
           className={cn(
-            "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-600/45 dark:bg-amber-900/20 dark:text-amber-300",
-            isGlowing && "ring-1 ring-amber-400/50",
+            "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 transition-colors hover:bg-amber-100 dark:border-[var(--cl-passage-line)] dark:bg-[var(--cl-passage-surface)] dark:text-[var(--cl-passage-ink)] dark:hover:bg-[var(--cl-passage-surface-hover)]",
+            isGlowing &&
+              "ring-1 ring-amber-400/50 dark:ring-[var(--cl-passage-ink-dim)]",
           )}
           onClick={onClick}
         >
@@ -421,9 +422,9 @@ function ExpandedPassageNote({
     <div
       className={cn(
         isReading
-          ? "rounded-lg bg-amber-50/90 dark:bg-amber-900/22 px-4 py-3"
-          : "rounded-md bg-amber-50/90 dark:bg-amber-900/22 px-3 py-2 text-sm",
-        "cl-depth-3-amber cl-transition shadow-none",
+          ? "rounded-lg bg-amber-50/90 dark:bg-[var(--cl-passage-surface)] px-4 py-3"
+          : "rounded-md bg-amber-50/90 dark:bg-[var(--cl-passage-surface)] px-3 py-2 text-sm",
+        "cl-depth-3-passage cl-transition shadow-none",
         isReading && "group",
       )}
     >
