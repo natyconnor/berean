@@ -141,8 +141,10 @@ export function HighlightToolbar({
         <button
           key={color.id}
           type="button"
-          className="h-6 w-6 rounded-full border border-border/50 transition-transform hover:scale-110 hover:ring-2 hover:ring-ring/30"
-          style={{ backgroundColor: color.swatch }}
+          className={cn(
+            "h-6 w-6 rounded-full border border-border/50 transition-transform hover:scale-110 hover:ring-2 hover:ring-ring/30",
+            color.swatchBg,
+          )}
           title={`Highlight ${color.label}`}
           onClick={() => handleColorClick(color.id)}
         />

@@ -441,8 +441,8 @@ export const VerseRowLeft = memo(function VerseRowLeft({
           <mark
             key={i}
             className={cn(
-              "rounded-sm",
-              bgClass ?? "bg-yellow-200/70",
+              "rounded-sm text-foreground",
+              bgClass ?? "bg-yellow-200/70 dark:bg-yellow-400/30",
               expanded && onMarkClick
                 ? cn(
                     "cursor-pointer px-1 py-0.5 rounded transition-all duration-150 hover:brightness-[1.08] hover:saturate-[1.4] hover:shadow-sm",

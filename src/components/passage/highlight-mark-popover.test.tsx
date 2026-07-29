@@ -31,6 +31,11 @@ describe("HighlightMarkPopover", () => {
       />,
     );
 
+    expect(screen.getByTitle("Change to Green")).toHaveClass(
+      "bg-green-200/70",
+      "dark:bg-green-400/40",
+    );
+
     await user.click(screen.getByTitle("Change to Green"));
 
     expect(onRecolor).toHaveBeenCalledWith("green");

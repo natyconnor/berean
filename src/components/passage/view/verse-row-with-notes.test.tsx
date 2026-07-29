@@ -83,6 +83,17 @@ function renderVerseRow(props: ReturnType<typeof defaultProps>) {
 }
 
 describe("VerseRowWithNotes – highlight interaction", () => {
+  it("keeps highlighted verse text readable in dark mode", () => {
+    const props = defaultProps();
+    props.openVerseKeys = new Set([1]);
+    const { container } = renderVerseRow(props);
+
+    expect(getExpandedMark(container)).toHaveClass(
+      "text-foreground",
+      "dark:bg-yellow-400/30",
+    );
+  });
+
   it("opens the popover when clicking a highlight in an expanded verse", () => {
     const props = defaultProps();
     props.openVerseKeys = new Set([1]);
