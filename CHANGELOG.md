@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.3](https://github.com/natyconnor/berean/compare/v1.11.2...v1.11.3) (2026-07-29)
+
+
+### Bug Fixes
+
+* lift dark mode surfaces and replace passage gold with plum ([#136](https://github.com/natyconnor/berean/issues/136)) ([25ae84b](https://github.com/natyconnor/berean/commit/25ae84b430badbe790825567ee205535b40e18fa))
+
 ## [1.11.2](https://github.com/natyconnor/berean/compare/v1.11.1...v1.11.2) (2026-07-28)
 
 
