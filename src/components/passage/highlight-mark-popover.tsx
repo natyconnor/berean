@@ -88,11 +88,11 @@ export function HighlightMarkPopover({
             type="button"
             className={cn(
               "h-6 w-6 rounded-full border transition-[border-color,box-shadow]",
+              color.swatchBg,
               currentColor === color.id
                 ? "border-foreground/50 ring-2 ring-ring/30 scale-110"
                 : "border-border/50",
             )}
-            style={{ backgroundColor: color.swatch }}
             title={`Change to ${color.label}`}
             whileHover={{ scale: 1.18 }}
             whileTap={{ scale: 0.92 }}
