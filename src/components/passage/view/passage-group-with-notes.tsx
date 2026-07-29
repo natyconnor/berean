@@ -198,7 +198,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={CROSSFADE_TRANSITION}
-            className="flex h-full min-h-0 flex-col justify-center rounded-lg bg-amber-100/60 dark:bg-amber-900/20 cl-depth-2 cl-transition"
+            className="flex h-full min-h-0 flex-col justify-center rounded-lg bg-amber-100/60 dark:bg-[var(--cl-passage-surface-soft)] cl-depth-2 cl-transition"
           >
             <div className="flex">
               {groupPassageHeart && (

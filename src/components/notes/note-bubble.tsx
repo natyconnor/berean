@@ -41,10 +41,12 @@ export const NoteBubble = memo(function NoteBubble({
     <div
       className={cn(
         "group relative p-3 cursor-pointer overflow-visible rounded-lg transition-all",
-        isPassage ? "bg-amber-50/90 dark:bg-amber-900/22" : "bg-card",
+        isPassage
+          ? "bg-amber-50/90 dark:bg-[var(--cl-passage-surface)]"
+          : "bg-card",
         isExpanded
           ? isPassage
-            ? "cl-depth-3-amber cl-transition shadow-none"
+            ? "cl-depth-3-passage cl-transition shadow-none"
             : "cl-depth-3 cl-transition shadow-none"
           : "cl-depth-1 cl-transition shadow-none",
       )}
@@ -58,7 +60,7 @@ export const NoteBubble = memo(function NoteBubble({
           {isPassage && (
             <Badge
               variant="outline"
-              className="text-xs font-normal text-amber-700 dark:text-amber-400/70 border-amber-300 dark:border-amber-600/50"
+              className="text-xs font-normal text-amber-700 dark:text-[var(--cl-passage-ink)] border-amber-300 dark:border-[var(--cl-passage-line)]"
             >
               passage
             </Badge>

@@ -177,7 +177,7 @@ export function NoteEditor({
         "space-y-3",
         "rounded-lg p-2.5 shadow-none",
         isPassage
-          ? "bg-amber-50/90 dark:bg-amber-900/22 cl-depth-3-amber cl-transition cl-editor-lift-amber cl-focus-bloom"
+          ? "bg-amber-50/90 dark:bg-[var(--cl-passage-surface)] cl-depth-3-passage cl-transition cl-editor-lift-passage cl-focus-bloom"
           : "bg-card cl-depth-3 cl-transition cl-editor-lift cl-focus-bloom",
       )}
       onKeyDown={handleKeyDown}
@@ -236,14 +236,16 @@ export function NoteEditor({
           popoverDropdown
           selectedTagBadgeClassName={cn(
             "text-xs",
-            isPassage && "border-amber-300 dark:border-amber-600/50",
+            isPassage &&
+              "border-amber-300 dark:border-[var(--cl-passage-line)]",
           )}
           inputClassName={cn(
             "border-0 border-b rounded-none bg-transparent px-0 h-7",
             "border-border/50 focus:border-border/80",
             "focus-visible:ring-0 focus-visible:ring-offset-0",
             "placeholder:text-muted-foreground/50",
-            isPassage && "border-amber-300/60 focus:border-amber-400/70",
+            isPassage &&
+              "border-amber-300/60 focus:border-amber-400/70 dark:border-[var(--cl-passage-line)] dark:focus:border-[var(--cl-passage-ink-dim)]",
           )}
           tourId={tour.tagsTourId}
           tutorialPreviewTags={tour.tutorialPreviewTags}

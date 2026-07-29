@@ -39,7 +39,7 @@ export function NoteCardActions({
 }: NoteCardActionsProps) {
   const hoverBg =
     variant === "passage"
-      ? "hover:bg-amber-100 dark:hover:bg-amber-800/30"
+      ? "hover:bg-amber-100 dark:hover:bg-[var(--cl-passage-surface-hover)]"
       : "hover:bg-muted";
 
   return (
@@ -90,7 +90,9 @@ export function NoteTagList({
   if (tags.length === 0) return null;
 
   const borderClass =
-    variant === "passage" ? "border-amber-300 dark:border-amber-600/45" : "";
+    variant === "passage"
+      ? "border-amber-300 dark:border-[var(--cl-passage-line)]"
+      : "";
   const sizeClass = size === "xs" ? "text-[10px] px-1.5 py-0" : "text-xs";
 
   return (
@@ -226,7 +228,7 @@ export function HoverEditButton({
 }: HoverEditButtonProps) {
   const hoverBg =
     variant === "passage"
-      ? "hover:bg-amber-100 dark:hover:bg-amber-800/30"
+      ? "hover:bg-amber-100 dark:hover:bg-[var(--cl-passage-surface-hover)]"
       : "hover:bg-muted";
 
   return (

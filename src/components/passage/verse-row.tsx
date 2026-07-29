@@ -525,7 +525,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         isSelected &&
           isPassageSelection &&
           !isExpanded &&
-          "bg-amber-100/80 dark:bg-amber-800/30 ring-1 ring-amber-400/40 dark:ring-amber-500/30",
+          "bg-amber-100/80 dark:bg-[var(--cl-passage-surface)] ring-1 ring-amber-400/40 dark:ring-[var(--cl-passage-line)]",
         isSelected &&
           !isPassageSelection &&
           !isExpanded &&
@@ -533,7 +533,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         isInSelectionRange &&
           !isSelected &&
           isPassageSelection &&
-          "bg-amber-50/60 dark:bg-amber-800/20",
+          "bg-amber-50/60 dark:bg-[var(--cl-passage-surface-soft)]",
         isInSelectionRange &&
           !isSelected &&
           !isPassageSelection &&
@@ -548,7 +548,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
           !isSelected &&
           !isInSelectionRange &&
           !isNoteBubbleHovered &&
-          "bg-amber-50/60 dark:bg-amber-800/20",
+          "bg-amber-50/60 dark:bg-[var(--cl-passage-surface-soft)]",
         !isSelected && !isInSelectionRange && !isExpanded && "hover:bg-muted",
         isExpanded &&
           variant !== "groupedPassage" &&
@@ -674,10 +674,10 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60 cl-ember-single" />
                   )}
                   {isPassageAnchor && (
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-amber-400/80 dark:bg-amber-400/50 cl-ember-passage" />
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-sm bg-amber-400/80 dark:bg-[var(--cl-passage-ink)] cl-ember-passage" />
                   )}
                   {isInPassageRange && !isPassageAnchor && (
-                    <span className="mt-0.5 h-0.5 w-2 shrink-0 rounded bg-amber-300/70 dark:bg-amber-500/40 cl-ember-range" />
+                    <span className="mt-0.5 h-0.5 w-2 shrink-0 rounded bg-amber-300/70 dark:bg-[var(--cl-passage-ink-dim)] cl-ember-range" />
                   )}
                 </span>
               </span>
