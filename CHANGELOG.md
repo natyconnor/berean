@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.4](https://github.com/natyconnor/berean/compare/v1.11.3...v1.11.4) (2026-07-29)
+
+
+### Bug Fixes
+
+* keep dark mode highlight text readable and match swatches ([#138](https://github.com/natyconnor/berean/issues/138)) ([2985caa](https://github.com/natyconnor/berean/commit/2985caab3dc15f1bc02f82430ac9ad09261a6b61))
+
 ## [1.11.3](https://github.com/natyconnor/berean/compare/v1.11.2...v1.11.3) (2026-07-29)
 
 
