@@ -50,9 +50,14 @@ async function fetchPassageText(
     "include-verse-numbers": "true",
     "include-first-verse-numbers": "true",
     "include-headings": "true",
+    // Prefixes every section heading with a rule of underscores, which is how
+    // `parsePassageIntoVerses` tells headings apart from verse text.
+    "include-heading-horizontal-lines": "true",
     "include-footnotes": "false",
     "include-footnote-body": "false",
-    "include-passage-references": "true",
+    // The reference is available as the response's `canonical` field, so keeping
+    // it out of the text means there is nothing to strip back off.
+    "include-passage-references": "false",
     "include-short-copyright": "false",
     "include-copyright": "true",
     "indent-poetry": "true",

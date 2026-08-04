@@ -15,8 +15,11 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
+  splitSegmentsByHeadings,
   splitTextByHighlights,
+  VERSE_ASIDE_ATTRIBUTE,
   type HighlightRange,
+  type VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
 import { getHighlightColor } from "@/lib/highlight-colors";
 import { VERSE_EXPAND_TRANSITION } from "./note-animation-config";
@@ -63,6 +66,12 @@ export interface PassageHeartControl {
 interface VerseRowLeftProps {
   verseNumber: number;
   text: string;
+  /** Editorial section heading for this verse (Headers toggle). */
+  heading?: string;
+  /** Always-visible ESV subheading (acrostic letter, Song speaker, psalm title). */
+  subheading?: string;
+  /** Section headings / speakers the ESV prints partway through this verse. */
+  midHeadings?: VerseHeadingAtOffset[];
   selection: VerseSelectionState;
   noteIndicator: VerseNoteIndicatorState;
   hover: VerseHoverState;
@@ -344,6 +353,9 @@ export const PassageHeartAnimatedButton = memo(
 export const VerseRowLeft = memo(function VerseRowLeft({
   verseNumber,
   text,
+  heading,
+  subheading,
+  midHeadings,
   selection,
   noteIndicator,
   hover,
@@ -424,10 +436,40 @@ export const VerseRowLeft = memo(function VerseRowLeft({
 
   const DRAG_THRESHOLD = 4;
 
+  const contentParts =
+    segments || (midHeadings && midHeadings.length > 0)
+      ? splitSegmentsByHeadings(segments ?? [{ text }], midHeadings ?? [])
+      : null;
+
   const renderHighlightedText = useCallback(
     (expanded: boolean) => {
-      if (!segments) return text;
-      return segments.map((seg, i) => {
+      if (!contentParts) return text;
+      return contentParts.map((part, i) => {
+        if (part.kind === "heading") {
+          const isSub = part.variant === "sub";
+          return (
+            <span
+              key={i}
+              {...{ [VERSE_ASIDE_ATTRIBUTE]: "" }}
+              className={
+                isSub
+                  ? // Speaker labels / acrostics mid-verse — sit clear of poetry
+                    "mt-[0.85em] mb-[0.35em] block pl-1 font-sans text-[0.95em] font-semibold tracking-tight text-foreground/90 not-italic"
+                  : "mt-[1em] mb-[0.35em] block font-serif text-[1.125em] font-semibold tracking-tight text-foreground/90"
+              }
+            >
+              {part.text}
+            </span>
+          );
+        }
+        const seg = part.segment;
+        if (part.hidden) {
+          return (
+            <span key={i} className="hidden">
+              {seg.text}
+            </span>
+          );
+        }
         if (!seg.color) {
           return <span key={i}>{seg.text}</span>;
         }
@@ -485,7 +527,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         );
       });
     },
-    [activeHighlightId, segments, text, onMarkClick],
+    [activeHighlightId, contentParts, text, onMarkClick],
   );
 
   return (
@@ -619,7 +661,21 @@ export const VerseRowLeft = memo(function VerseRowLeft({
         )}
         aria-hidden
       />
-      <div className="relative z-10 flex h-full items-center">
+      <div className="relative z-10 flex h-full flex-col justify-center">
+        {(heading || subheading) && (
+          <div className="mb-1 w-full shrink-0">
+            {heading ? (
+              <h2 className="pb-0.5 font-serif text-lg font-semibold tracking-tight text-foreground/90 whitespace-pre-line">
+                {heading}
+              </h2>
+            ) : null}
+            {subheading ? (
+              <h2 className="pb-0.5 font-sans text-base font-semibold tracking-tight text-foreground/90 whitespace-pre-line">
+                {subheading}
+              </h2>
+            ) : null}
+          </div>
+        )}
         <div className="flex w-full gap-2">
           <motion.span
             animate={{ paddingTop: sizes.verseNumberPaddingTop }}

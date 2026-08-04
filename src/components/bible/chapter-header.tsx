@@ -181,8 +181,8 @@ export function ChapterHeader({
         </TooltipTrigger>
         <TooltipContent>
           {showSectionHeaders
-            ? "Hide ESV section headings"
-            : "Show ESV section headings"}
+            ? "Hide editorial section headings"
+            : "Show editorial section headings"}
         </TooltipContent>
       </Tooltip>
     </div>
