@@ -39,8 +39,15 @@ export interface EsvChapterData {
   copyright: string;
 }
 
-/** Bumped when cached chapter shape or parsing changes (e.g. headings). */
-const CACHE_PREFIX = "esv_cache_v8_";
+/** Which ESV API path produced (or should look up) a cached chapter. */
+export type EsvSource = "text" | "html";
+
+/** Bumped when cached chapter shape, parsing, or cache keying changes. */
+const CACHE_PREFIX = "esv_cache_v9_";
+
+function passageCacheKey(query: string, source?: EsvSource): string {
+  return `${CACHE_PREFIX}${source ?? "text"}_${query}`;
+}
 
 /**
  * Closed set of ESV subheadings that the text API does not mark with an
@@ -136,9 +143,12 @@ export function isEsvChapterData(value: unknown): value is EsvChapterData {
   );
 }
 
-export function getCachedPassage(query: string): EsvChapterData | null {
+export function getCachedPassage(
+  query: string,
+  source?: EsvSource,
+): EsvChapterData | null {
   try {
-    const cached = sessionStorage.getItem(`${CACHE_PREFIX}${query}`);
+    const cached = sessionStorage.getItem(passageCacheKey(query, source));
     if (!cached) return null;
     const parsed = parseStoredJson(cached);
     return isEsvChapterData(parsed) ? parsed : null;
@@ -148,9 +158,16 @@ export function getCachedPassage(query: string): EsvChapterData | null {
   return null;
 }
 
-export function setCachedPassage(query: string, data: EsvChapterData): void {
+export function setCachedPassage(
+  query: string,
+  data: EsvChapterData,
+  source?: EsvSource,
+): void {
   try {
-    sessionStorage.setItem(`${CACHE_PREFIX}${query}`, JSON.stringify(data));
+    sessionStorage.setItem(
+      passageCacheKey(query, source),
+      JSON.stringify(data),
+    );
   } catch {
     // ignore — sessionStorage might be full
   }
