@@ -39,6 +39,10 @@ interface PassageViewHeaderProps {
   setNoteVisibility: (next: NoteVisibility) => void;
   onToggleFocusMode: () => void;
   onToggleSectionHeaders: () => void;
+  /** DEV-only ESV HTML source switch (gated by caller with import.meta.env.DEV). */
+  showEsvHtmlToggle?: boolean;
+  esvHtmlEnabled?: boolean;
+  onToggleEsvHtml?: () => void;
 }
 
 export function PassageViewHeader({
@@ -59,6 +63,9 @@ export function PassageViewHeader({
   setNoteVisibility,
   onToggleFocusMode,
   onToggleSectionHeaders,
+  showEsvHtmlToggle = false,
+  esvHtmlEnabled = false,
+  onToggleEsvHtml,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
@@ -96,6 +103,9 @@ export function PassageViewHeader({
             chapter={chapter}
             showSectionHeaders={showSectionHeaders}
             onToggleSectionHeaders={onToggleSectionHeaders}
+            showEsvHtmlToggle={showEsvHtmlToggle}
+            esvHtmlEnabled={esvHtmlEnabled}
+            onToggleEsvHtml={onToggleEsvHtml}
           />
         </div>
         <div className="pb-3 pt-1">

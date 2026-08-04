@@ -2,10 +2,10 @@
  * ESV fetch path preference: text API (default) vs HTML API.
  *
  * Set (pick one):
- *   localStorage.setItem("berean:esvSource", "html")
- *   then reload.
- *
- * Or open the app with ?esvSource=html|text (persists the value in localStorage).
+ *   - DEV UI: “ESV HTML” switch next to Headers (calls `setEsvSource` + retry)
+ *   - `setEsvSource("html" | "text")` from code, then retry / remount the chapter
+ *   - `localStorage.setItem("berean:esvSource", "html")` then reload
+ *   - `?esvSource=html|text` (persists the value in localStorage)
  *
  * Reset to default:
  *   localStorage.removeItem("berean:esvSource")

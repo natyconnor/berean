@@ -46,6 +46,11 @@ interface ChapterHeaderProps {
   chapter: number;
   showSectionHeaders: boolean;
   onToggleSectionHeaders: () => void;
+  /** DEV-only: when true, the ESV HTML source switch is shown. */
+  showEsvHtmlToggle?: boolean;
+  /** Whether the HTML fetch path is active. */
+  esvHtmlEnabled?: boolean;
+  onToggleEsvHtml?: () => void;
 }
 
 export function ChapterHeader({
@@ -53,6 +58,9 @@ export function ChapterHeader({
   chapter,
   showSectionHeaders,
   onToggleSectionHeaders,
+  showEsvHtmlToggle = false,
+  esvHtmlEnabled = false,
+  onToggleEsvHtml,
 }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
@@ -144,47 +152,89 @@ export function ChapterHeader({
           <ChevronRight className="h-4 w-4" />
         </TooltipButton>
       </div>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,color] duration-200",
-              showSectionHeaders
-                ? "border-border bg-muted/40 text-foreground"
-                : "border-border bg-background",
-            )}
-          >
-            <label
-              htmlFor="passage-section-headers"
+      <div className="flex shrink-0 items-center gap-2">
+        {import.meta.env.DEV && showEsvHtmlToggle && onToggleEsvHtml ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,color] duration-200",
+                  esvHtmlEnabled
+                    ? "border-border bg-muted/40 text-foreground"
+                    : "border-border bg-background",
+                )}
+              >
+                <label
+                  htmlFor="passage-esv-html-source"
+                  className={cn(
+                    "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
+                    esvHtmlEnabled
+                      ? "text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  ESV HTML
+                </label>
+                <Switch
+                  id="passage-esv-html-source"
+                  checked={esvHtmlEnabled}
+                  onCheckedChange={(checked) => {
+                    if (checked !== esvHtmlEnabled) {
+                      onToggleEsvHtml();
+                    }
+                  }}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              {esvHtmlEnabled
+                ? "Use ESV text API (default)"
+                : "Use ESV HTML API (DEV A/B)"}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
               className={cn(
-                "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
+                "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,color] duration-200",
                 showSectionHeaders
-                  ? "text-foreground"
-                  : "text-muted-foreground",
+                  ? "border-border bg-muted/40 text-foreground"
+                  : "border-border bg-background",
               )}
             >
-              Headers
-              <kbd className="rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
-                H
-              </kbd>
-            </label>
-            <Switch
-              id="passage-section-headers"
-              checked={showSectionHeaders}
-              onCheckedChange={(checked) => {
-                if (checked !== showSectionHeaders) {
-                  onToggleSectionHeaders();
-                }
-              }}
-            />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          {showSectionHeaders
-            ? "Hide editorial section headings"
-            : "Show editorial section headings"}
-        </TooltipContent>
-      </Tooltip>
+              <label
+                htmlFor="passage-section-headers"
+                className={cn(
+                  "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
+                  showSectionHeaders
+                    ? "text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                Headers
+                <kbd className="rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                  H
+                </kbd>
+              </label>
+              <Switch
+                id="passage-section-headers"
+                checked={showSectionHeaders}
+                onCheckedChange={(checked) => {
+                  if (checked !== showSectionHeaders) {
+                    onToggleSectionHeaders();
+                  }
+                }}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {showSectionHeaders
+              ? "Hide editorial section headings"
+              : "Show editorial section headings"}
+          </TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   );
 }
