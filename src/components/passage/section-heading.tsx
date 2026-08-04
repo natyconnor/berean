@@ -29,8 +29,10 @@ export const SectionHeading = forwardRef<HTMLDivElement, SectionHeadingProps>(
       >
         <h2
           className={cn(
-            "pl-8 font-serif font-semibold tracking-tight text-foreground/90 whitespace-pre-line",
-            isSub ? "pt-4 pb-1 text-base" : "pt-6 pb-1 text-lg",
+            "pl-8 font-semibold tracking-tight text-foreground/90 whitespace-pre-line",
+            isSub
+              ? "pt-4 pb-1 font-sans text-base"
+              : "pt-6 pb-1 font-serif text-lg",
           )}
         >
           {title}

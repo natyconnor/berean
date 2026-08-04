@@ -126,7 +126,10 @@ function classifyElement(el: HTMLElement): WalkEvent | "skip" | "descend" {
 
 function walkNodes(node: Node, emit: (event: WalkEvent) => void): void {
   if (isTextNode(node)) {
-    const value = (node.rawText ?? node.text ?? "").replace(/\u00a0/g, " ");
+    // Prefer `text` (entity-decoded) over `rawText`, which leaves literals
+    // like `&nbsp;` in verse bodies. Map real NBSPs to spaces so poetry
+    // indent from Crossway still works after soft breaks.
+    const value = (node.text ?? "").replace(/\u00a0/g, " ");
     // Inter-tag whitespace from pretty-printed HTML is noise; intentional
     // poetry indent is non-empty after trim only when it has content nearby —
     // pure whitespace/newline text nodes are skipped.
@@ -192,6 +195,17 @@ function flushPendingsIntoMid(verse: OpenVerse): void {
   verse.pendingSubs = [];
 }
 
+/**
+ * Crossway HTML poetry uses 2-space `&nbsp;` steps (plus CSS on esv.org).
+ * The text API uses 4-space monospace steps. Scale leading spaces so
+ * `whitespace-pre-wrap` matches the text path.
+ */
+function expandHtmlPoetryIndent(part: string): string {
+  const match = /^( +)/.exec(part);
+  if (!match?.[1]) return part;
+  return " ".repeat(match[1].length * 2) + part.slice(match[1].length);
+}
+
 function appendText(verse: OpenVerse, raw: string): void {
   const hasContent = raw.trim().length > 0;
   if (!hasContent) return;
@@ -219,10 +233,12 @@ function appendText(verse: OpenVerse, raw: string): void {
   const isFirstPart = verse.text.length === 0;
   let part = raw.replace(/\s+$/, "");
   if (isFirstPart) {
+    // Verse-start lines flush left (same as the text parser).
     part = part.replace(/^\s+/, "");
   } else if (verse.text.endsWith("\n")) {
     // Keep poetry indentation after soft breaks; drop only blank lead-ins.
     part = part.replace(/^(?:[ \t]*\n)+/, "");
+    part = expandHtmlPoetryIndent(part);
   } else if (!verse.needsParagraphBreak) {
     // Soft-join when text continues after a heading flush already added \n\n.
   }

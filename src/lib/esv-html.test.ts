@@ -57,6 +57,21 @@ describe("parseEsvHtmlResponse / Song of Solomon 1", () => {
     expect(mid?.offset).toBeGreaterThan(0);
     expect(v4.subheading).toBeUndefined();
   });
+
+  it("decodes HTML entities and scales poetry indent to text-API steps", () => {
+    for (const verse of data.verses) {
+      expect(verse.text).not.toMatch(/&nbsp;|&amp;|&lt;|&gt;|&#\d+;/);
+    }
+    const v2 = data.verses.find((v) => v.number === 2);
+    expect(v2?.text).toMatch(/^Let him kiss me/);
+    // HTML `&nbsp;` steps (2/4) are doubled to match the text API (4/8).
+    expect(v2?.text).toMatch(/\n {4}For your love is better than wine/);
+
+    const v3 = data.verses.find((v) => v.number === 3);
+    expect(v3?.text).toMatch(/^your anointing oils are fragrant/);
+    expect(v3?.text).toMatch(/\n {4}your name is oil poured out/);
+    expect(v3?.text).toMatch(/\n {8}therefore virgins love you/);
+  });
 });
 
 describe("parseEsvHtmlResponse / Psalm 119 acrostics", () => {

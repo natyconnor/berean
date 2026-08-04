@@ -35,8 +35,6 @@ interface PassageGroupWithNotesProps {
   verses: Array<{
     verseNumber: number;
     text: string;
-    heading?: string;
-    subheading?: string;
     midHeadings?: VerseHeadingAtOffset[];
   }>;
   passageNotes: NoteWithRef[];
@@ -226,8 +224,6 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                     key={verse.verseNumber}
                     verseNumber={verse.verseNumber}
                     text={verse.text}
-                    heading={verse.heading}
-                    subheading={verse.subheading}
                     midHeadings={verse.midHeadings}
                     selection={EMPTY_SELECTION}
                     noteIndicator={EMPTY_NOTE_INDICATOR}

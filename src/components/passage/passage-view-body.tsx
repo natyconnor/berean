@@ -8,6 +8,7 @@ import { ChapterPager } from "@/components/bible/chapter-pager";
 import { CopyrightNotice } from "@/components/bible/copyright-notice";
 import { VerseRowWithNotes } from "./view/verse-row-with-notes";
 import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
+import { SectionHeading } from "./section-heading";
 import {
   NOTE_ENTER_TRANSITION,
   CROSSFADE_TRANSITION,
@@ -369,16 +370,25 @@ export function PassageViewBody({
                       exit={{ opacity: 0 }}
                       transition={CROSSFADE_TRANSITION}
                     >
+                      {item.heading ? (
+                        <AnimatePresence initial={false}>
+                          {showSectionHeaders ? (
+                            <SectionHeading
+                              key={`heading-group-${item.anchorVerse}`}
+                              title={item.heading}
+                            />
+                          ) : null}
+                        </AnimatePresence>
+                      ) : null}
+                      {item.subheading ? (
+                        <SectionHeading
+                          key={`subheading-group-${item.anchorVerse}`}
+                          title={item.subheading}
+                          variant="sub"
+                        />
+                      ) : null}
                       <PassageGroupWithNotes
-                        verses={item.verses.map((verse, index) =>
-                          index === 0
-                            ? {
-                                ...verse,
-                                heading: item.heading,
-                                subheading: item.subheading,
-                              }
-                            : verse,
-                        )}
+                        verses={item.verses}
                         passageNotes={item.passageNotes}
                         singleNotesByVerse={item.singleNotesByVerse}
                         viewMode={effectiveViewMode}
@@ -457,11 +467,26 @@ export function PassageViewBody({
                         : NOTE_ENTER_TRANSITION
                     }
                   >
+                    {item.heading ? (
+                      <AnimatePresence initial={false}>
+                        {showSectionHeaders ? (
+                          <SectionHeading
+                            key={`heading-${item.verseNumber}`}
+                            title={item.heading}
+                          />
+                        ) : null}
+                      </AnimatePresence>
+                    ) : null}
+                    {item.subheading ? (
+                      <SectionHeading
+                        key={`subheading-${item.verseNumber}`}
+                        title={item.subheading}
+                        variant="sub"
+                      />
+                    ) : null}
                     <VerseRowWithNotes
                       verseNumber={item.verseNumber}
                       text={item.text}
-                      heading={showSectionHeaders ? item.heading : undefined}
-                      subheading={item.subheading}
                       midHeadings={item.midHeadings}
                       viewMode={effectiveViewMode}
                       currentChapter={{ book, chapter }}

@@ -216,18 +216,3 @@ describe("VerseRowWithNotes – mid-verse headings", () => {
     expect(label.className).toContain("font-sans");
   });
 });
-
-describe("VerseRowWithNotes – leading headings", () => {
-  it("keeps editorial headings and subheadings inside the verse card", () => {
-    renderVerseRow({
-      ...defaultProps(),
-      heading: "The Bride Confesses Her Love",
-      subheading: "She",
-    });
-
-    expect(
-      screen.getByRole("heading", { name: "The Bride Confesses Her Love" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "She" })).toBeInTheDocument();
-  });
-});

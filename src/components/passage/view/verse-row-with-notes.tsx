@@ -114,10 +114,6 @@ export interface CurrentChapter {
 export interface VerseRowWithNotesProps {
   verseNumber: number;
   text: string;
-  /** Editorial section heading for this verse (Headers toggle). */
-  heading?: string;
-  /** Always-visible ESV subheading (acrostic letter, Song speaker, psalm title). */
-  subheading?: string;
   midHeadings?: VerseHeadingAtOffset[];
   viewMode?: "compose" | "read";
   currentChapter?: CurrentChapter;
@@ -204,8 +200,6 @@ export interface VerseRowWithNotesProps {
 export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   verseNumber,
   text,
-  heading,
-  subheading,
   midHeadings,
   viewMode = "compose",
   currentChapter,
@@ -428,8 +422,6 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           <VerseTextPane
             verseNumber={verseNumber}
             text={text}
-            heading={heading}
-            subheading={subheading}
             midHeadings={midHeadings}
             selection={{
               isSelected: selectedVerses.has(verseNumber),

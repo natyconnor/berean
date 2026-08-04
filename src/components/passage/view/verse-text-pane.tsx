@@ -20,8 +20,6 @@ import type {
 export interface VerseTextPaneProps {
   verseNumber: number;
   text: string;
-  heading?: string;
-  subheading?: string;
   midHeadings?: VerseHeadingAtOffset[];
   selection: VerseSelectionState;
   noteIndicator: VerseNoteIndicatorState;
@@ -52,8 +50,6 @@ export interface VerseTextPaneProps {
 export const VerseTextPane = memo(function VerseTextPane({
   verseNumber,
   text,
-  heading,
-  subheading,
   midHeadings,
   selection,
   noteIndicator,
@@ -102,8 +98,6 @@ export const VerseTextPane = memo(function VerseTextPane({
       <VerseRowLeft
         verseNumber={verseNumber}
         text={text}
-        heading={heading}
-        subheading={subheading}
         midHeadings={midHeadings}
         selection={selection}
         noteIndicator={noteIndicator}
