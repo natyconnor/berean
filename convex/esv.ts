@@ -10,6 +10,7 @@ import {
 } from "./lib/publicValues";
 import { requireActionIdentity } from "./lib/auth";
 import { parseEsvResponse } from "../shared/esv-api";
+import { parseEsvHtmlResponse } from "../shared/esv-html";
 
 function parseJsonBody(value: string): unknown {
   return JSON.parse(value) as unknown;
@@ -41,6 +42,36 @@ function parseRetryAfterMs(response: Response): number | null {
   return Math.min(delta, MAX_BACKOFF_MS);
 }
 
+/** Fetch an ESV API URL with shared 429 backoff / Retry-After handling. */
+async function fetchEsv(apiKey: string, url: string): Promise<string> {
+  for (let attempt = 0; attempt < MAX_RATE_LIMIT_ATTEMPTS; attempt++) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Token ${apiKey}` },
+    });
+
+    if (response.status === 429 && attempt < MAX_RATE_LIMIT_ATTEMPTS - 1) {
+      void response.text().catch(() => {
+        /* drain body for connection hygiene */
+      });
+      const fromHeader = parseRetryAfterMs(response);
+      const exponential = Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
+      const waitMs = fromHeader ?? exponential;
+      await sleep(waitMs);
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `ESV API error: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    return await response.text();
+  }
+
+  throw new Error("ESV API error: 429 Too Many Requests (retries exhausted)");
+}
+
 async function fetchPassageText(
   apiKey: string,
   query: string,
@@ -66,34 +97,33 @@ async function fetchPassageText(
   });
 
   const url = `https://api.esv.org/v3/passage/text/?${params}`;
+  const body = await fetchEsv(apiKey, url);
+  return parseEsvResponse(parseJsonBody(body));
+}
 
-  for (let attempt = 0; attempt < MAX_RATE_LIMIT_ATTEMPTS; attempt++) {
-    const response = await fetch(url, {
-      headers: { Authorization: `Token ${apiKey}` },
-    });
+async function fetchPassageHtml(
+  apiKey: string,
+  query: string,
+): Promise<EsvChapterData> {
+  const params = new URLSearchParams({
+    q: query,
+    "include-headings": "true",
+    "include-subheadings": "true",
+    "include-verse-numbers": "true",
+    "include-first-verse-numbers": "true",
+    "include-footnotes": "false",
+    "include-footnote-body": "false",
+    "include-passage-references": "false",
+    "include-audio-link": "false",
+    "include-copyright": "true",
+    "include-short-copyright": "false",
+    "wrapping-div": "false",
+    "inline-styles": "false",
+  });
 
-    if (response.status === 429 && attempt < MAX_RATE_LIMIT_ATTEMPTS - 1) {
-      void response.text().catch(() => {
-        /* drain body for connection hygiene */
-      });
-      const fromHeader = parseRetryAfterMs(response);
-      const exponential = Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
-      const waitMs = fromHeader ?? exponential;
-      await sleep(waitMs);
-      continue;
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        `ESV API error: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const body = await response.text();
-    return parseEsvResponse(parseJsonBody(body));
-  }
-
-  throw new Error("ESV API error: 429 Too Many Requests (retries exhausted)");
+  const url = `https://api.esv.org/v3/passage/html/?${params}`;
+  const body = await fetchEsv(apiKey, url);
+  return parseEsvHtmlResponse(parseJsonBody(body));
 }
 
 export const getPassageText = action({
@@ -109,6 +139,22 @@ export const getPassageText = action({
         "ESV_API_KEY not configured in Convex environment variables",
       );
     return await fetchPassageText(apiKey, args.query);
+  },
+});
+
+export const getPassageHtml = action({
+  args: {
+    query: v.string(),
+  },
+  returns: esvChapterDataValue,
+  handler: async (ctx, args) => {
+    await requireActionIdentity(ctx);
+    const apiKey = process.env.ESV_API_KEY;
+    if (!apiKey)
+      throw new Error(
+        "ESV_API_KEY not configured in Convex environment variables",
+      );
+    return await fetchPassageHtml(apiKey, args.query);
   },
 });
 
