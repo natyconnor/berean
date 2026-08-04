@@ -197,8 +197,7 @@ function flushPendingsIntoMid(verse: OpenVerse): void {
 
 /**
  * Crossway HTML poetry uses 2-space `&nbsp;` steps (plus CSS on esv.org).
- * The text API uses 4-space monospace steps. Scale leading spaces so
- * `whitespace-pre-wrap` matches the text path.
+ * Scale them to 4-space application steps for `whitespace-pre-wrap`.
  */
 function expandHtmlPoetryIndent(part: string): string {
   const match = /^( +)/.exec(part);

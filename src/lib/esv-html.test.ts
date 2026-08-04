@@ -58,13 +58,13 @@ describe("parseEsvHtmlResponse / Song of Solomon 1", () => {
     expect(v4.subheading).toBeUndefined();
   });
 
-  it("decodes HTML entities and scales poetry indent to text-API steps", () => {
+  it("decodes HTML entities and scales poetry to application indent steps", () => {
     for (const verse of data.verses) {
       expect(verse.text).not.toMatch(/&nbsp;|&amp;|&lt;|&gt;|&#\d+;/);
     }
     const v2 = data.verses.find((v) => v.number === 2);
     expect(v2?.text).toMatch(/^Let him kiss me/);
-    // HTML `&nbsp;` steps (2/4) are doubled to match the text API (4/8).
+    // Crossway's HTML `&nbsp;` steps (2/4) become application steps (4/8).
     expect(v2?.text).toMatch(/\n {4}For your love is better than wine/);
 
     const v3 = data.verses.find((v) => v.number === 3);

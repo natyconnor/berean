@@ -7,7 +7,6 @@ import {
   setCachedPassage,
 } from "../../shared/esv-api";
 import { logInteraction } from "@/lib/dev-log";
-import { resolveEsvSource } from "@/lib/esv-source";
 
 interface AsyncQueryState {
   query: string | null;
@@ -47,8 +46,7 @@ export function useCachedEsvQuery(
   options?: UseCachedEsvQueryOptions,
 ) {
   const enabled = options?.enabled ?? true;
-  const fetchPassageText = useAction(api.esv.getPassageText);
-  const fetchPassageHtml = useAction(api.esv.getPassageHtml);
+  const fetchPassage = useAction(api.esv.getPassage);
   const requestVersionRef = useRef(0);
   const lastLoadLogRef = useRef<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -58,8 +56,7 @@ export function useCachedEsvQuery(
     error: null,
   });
 
-  const source = resolveEsvSource();
-  const cached = query ? getCachedPassage(query, source) : null;
+  const cached = query ? getCachedPassage(query) : null;
 
   const retry = useCallback(() => {
     requestVersionRef.current += 1;
@@ -75,14 +72,14 @@ export function useCachedEsvQuery(
       return;
     }
 
-    const cachedData = getCachedPassage(query, source);
+    const cachedData = getCachedPassage(query);
     if (cachedData) {
-      const logKey = `${source}:${query}`;
+      const logKey = query;
       if (lastLoadLogRef.current !== logKey) {
         lastLoadLogRef.current = logKey;
         logInteraction("reader", "esv-load", {
           query,
-          source,
+          source: "html",
           cache: "hit",
           fetchMs: 0,
           ...chapterLoadMetrics(cachedData),
@@ -97,18 +94,16 @@ export function useCachedEsvQuery(
       return;
     }
 
-    const fetchPassage =
-      source === "html" ? fetchPassageHtml : fetchPassageText;
     const startedAt = performance.now();
 
     void fetchPassage({ query })
       .then((data) => {
         if (requestVersion !== requestVersionRef.current) return;
-        setCachedPassage(query, data, source);
-        lastLoadLogRef.current = `${source}:${query}`;
+        setCachedPassage(query, data);
+        lastLoadLogRef.current = query;
         logInteraction("reader", "esv-load", {
           query,
-          source,
+          source: "html",
           cache: "miss",
           fetchMs: Math.round(performance.now() - startedAt),
           ...chapterLoadMetrics(data),
@@ -128,7 +123,7 @@ export function useCachedEsvQuery(
             error instanceof Error ? error.message : "Failed to load passage",
         });
       });
-  }, [enabled, fetchPassageHtml, fetchPassageText, query, retryNonce, source]);
+  }, [enabled, fetchPassage, query, retryNonce]);
 
   const hasFreshAsyncState = asyncState.query === query;
 

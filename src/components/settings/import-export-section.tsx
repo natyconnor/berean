@@ -101,7 +101,7 @@ function InlineCode({ children }: { children: string }) {
 export function ImportExportSection() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const importNotesBatch = useMutation(api.noteTransfer.importNotesBatch);
-  const fetchChaptersTextBatch = useAction(api.esv.getChaptersTextBatch);
+  const fetchChaptersBatch = useAction(api.esv.getChaptersBatch);
   const exportableNotes = useQuery(
     api.noteTransfer.listExportableNotes,
     EXPORT_ENABLED ? {} : "skip",
@@ -432,7 +432,7 @@ export function ImportExportSection() {
           totalBooks: books.length,
         });
 
-        const rawChapters = await fetchChaptersTextBatch({
+        const rawChapters = await fetchChaptersBatch({
           book,
           chapters: Array.from(
             { length: bookInfo.chapters },

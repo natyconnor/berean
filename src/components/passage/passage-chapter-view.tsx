@@ -19,7 +19,6 @@ import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interactio
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
 import { usePassageViewTour } from "./hooks/use-passage-view-tour";
 import { useSectionHeaders } from "./hooks/use-section-headers";
-import { useEsvSource } from "./hooks/use-esv-source";
 import { PassageViewBody } from "./passage-view-body";
 import { PassageViewDialogs } from "./passage-view-dialogs";
 import { PassageViewHeader } from "./passage-view-header";
@@ -122,7 +121,6 @@ export function PassageChapterView({
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
   const { showSectionHeaders, toggleSectionHeaders } = useSectionHeaders();
-  const { esvSource, toggleEsvHtml } = useEsvSource();
   const { activeTour, startTour, isFocusModeTutorialComplete } = useTutorial();
   const passageNotesInteraction = usePassageNotesInteraction(book, chapter, {
     viewMode: effectiveViewMode,
@@ -186,12 +184,6 @@ export function PassageChapterView({
     });
     toggleSectionHeaders();
   }, [book, chapter, showSectionHeaders, toggleSectionHeaders]);
-
-  const handleEsvHtmlToggle = useCallback(() => {
-    const next = toggleEsvHtml();
-    logInteraction("reader", "esv-source-changed", { source: next });
-    retryPassage();
-  }, [retryPassage, toggleEsvHtml]);
 
   const chapterHighlights = useQuery(api.highlights.getForChapter, {
     book,
@@ -664,9 +656,6 @@ export function PassageChapterView({
         setNoteVisibility={setNoteVisibility}
         onToggleFocusMode={handleFocusModeToggle}
         onToggleSectionHeaders={handleSectionHeadersToggle}
-        showEsvHtmlToggle={import.meta.env.DEV}
-        esvHtmlEnabled={esvSource === "html"}
-        onToggleEsvHtml={handleEsvHtmlToggle}
       />
 
       <PassageViewBody

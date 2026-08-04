@@ -9,7 +9,6 @@ import {
   type EsvChapterResult,
 } from "./lib/publicValues";
 import { requireActionIdentity } from "./lib/auth";
-import { parseEsvResponse } from "../shared/esv-api";
 import { parseEsvHtmlResponse } from "../shared/esv-html";
 
 function parseJsonBody(value: string): unknown {
@@ -72,36 +71,7 @@ async function fetchEsv(apiKey: string, url: string): Promise<string> {
   throw new Error("ESV API error: 429 Too Many Requests (retries exhausted)");
 }
 
-async function fetchPassageText(
-  apiKey: string,
-  query: string,
-): Promise<EsvChapterData> {
-  const params = new URLSearchParams({
-    q: query,
-    "include-verse-numbers": "true",
-    "include-first-verse-numbers": "true",
-    "include-headings": "true",
-    // Prefixes every section heading with a rule of underscores, which is how
-    // `parsePassageIntoVerses` tells headings apart from verse text.
-    "include-heading-horizontal-lines": "true",
-    "include-footnotes": "false",
-    "include-footnote-body": "false",
-    // The reference is available as the response's `canonical` field, so keeping
-    // it out of the text means there is nothing to strip back off.
-    "include-passage-references": "false",
-    "include-short-copyright": "false",
-    "include-copyright": "true",
-    "indent-poetry": "true",
-    "indent-using": "space",
-    "line-length": "0",
-  });
-
-  const url = `https://api.esv.org/v3/passage/text/?${params}`;
-  const body = await fetchEsv(apiKey, url);
-  return parseEsvResponse(parseJsonBody(body));
-}
-
-async function fetchPassageHtml(
+async function fetchPassage(
   apiKey: string,
   query: string,
 ): Promise<EsvChapterData> {
@@ -126,7 +96,7 @@ async function fetchPassageHtml(
   return parseEsvHtmlResponse(parseJsonBody(body));
 }
 
-export const getPassageText = action({
+export const getPassage = action({
   args: {
     query: v.string(),
   },
@@ -138,27 +108,11 @@ export const getPassageText = action({
       throw new Error(
         "ESV_API_KEY not configured in Convex environment variables",
       );
-    return await fetchPassageText(apiKey, args.query);
+    return await fetchPassage(apiKey, args.query);
   },
 });
 
-export const getPassageHtml = action({
-  args: {
-    query: v.string(),
-  },
-  returns: esvChapterDataValue,
-  handler: async (ctx, args) => {
-    await requireActionIdentity(ctx);
-    const apiKey = process.env.ESV_API_KEY;
-    if (!apiKey)
-      throw new Error(
-        "ESV_API_KEY not configured in Convex environment variables",
-      );
-    return await fetchPassageHtml(apiKey, args.query);
-  },
-});
-
-export const getChaptersTextBatch = action({
+export const getChaptersBatch = action({
   args: {
     book: v.string(),
     chapters: v.array(v.number()),
@@ -179,7 +133,7 @@ export const getChaptersTextBatch = action({
 
     const results: EsvChapterResult[] = [];
     for (const chapter of uniqueChapters) {
-      const data = await fetchPassageText(apiKey, `${args.book} ${chapter}`);
+      const data = await fetchPassage(apiKey, `${args.book} ${chapter}`);
       results.push({
         chapter,
         data,
