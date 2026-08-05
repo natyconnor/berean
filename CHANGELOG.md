@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/natyconnor/berean/compare/v1.12.0...v1.12.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* keep passage tabs scrollable and actions reachable ([#144](https://github.com/natyconnor/berean/issues/144)) ([908d3bb](https://github.com/natyconnor/berean/commit/908d3bb20407231073397a56b6051288863bfd6a))
+
 ## [1.12.0](https://github.com/natyconnor/berean/compare/v1.11.4...v1.12.0) (2026-08-05)
 
 
