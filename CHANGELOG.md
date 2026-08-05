@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/natyconnor/berean/compare/v1.11.4...v1.12.0) (2026-08-05)
+
+
+### Features
+
+* Switch ESV passages to HTML API for headings and structure ([#142](https://github.com/natyconnor/berean/issues/142)) ([1ff42c1](https://github.com/natyconnor/berean/commit/1ff42c11d2364fe2f501ecc4f220b1370a37dc28))
+
 ## [1.11.4](https://github.com/natyconnor/berean/compare/v1.11.3...v1.11.4) (2026-07-29)
 
 
