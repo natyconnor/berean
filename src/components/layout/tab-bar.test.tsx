@@ -186,11 +186,11 @@ describe("TabBar", () => {
     expect(tabRegion.querySelector(".w-max")).toHaveClass("min-w-full");
     expect(appActions).toHaveClass("shrink-0");
     expect(tabRegion.parentElement).toBe(appActions.parentElement);
-    expect(tabRegion).toContainElement(
-      screen.getByRole("button", {
-        name: "Open a new tab to a Bible chapter",
-      }),
-    );
+    const newTabButton = screen.getByRole("button", {
+      name: "Open a new tab to a Bible chapter",
+    });
+    expect(tabRegion).toContainElement(newTabButton);
+    expect(newTabButton.parentElement).toHaveClass("px-1");
   });
 
   it("pins the new-tab action beside app actions when the tabs overflow", () => {

@@ -172,22 +172,24 @@ export function TabBar() {
             ))}
           </AnimatePresence>
           {!tabsOverflow ? (
-            <PassageNavigator
-              open={passageNavigatorOpen}
-              onOpenChange={handlePassageNavigatorOpenChange}
-              trigger={
-                <TooltipButton
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  tooltip={`Open a new tab to a Bible chapter (${passageShortcutLabel})`}
-                  aria-label="Open a new tab to a Bible chapter"
-                  data-tour-id="app-book-selector"
-                >
-                  <Plus className="h-4 w-4" />
-                </TooltipButton>
-              }
-            />
+            <div className="flex h-10 items-center px-1">
+              <PassageNavigator
+                open={passageNavigatorOpen}
+                onOpenChange={handlePassageNavigatorOpenChange}
+                trigger={
+                  <TooltipButton
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    tooltip={`Open a new tab to a Bible chapter (${passageShortcutLabel})`}
+                    aria-label="Open a new tab to a Bible chapter"
+                    data-tour-id="app-book-selector"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </TooltipButton>
+                }
+              />
+            </div>
           ) : null}
         </Reorder.Group>
         <ScrollBar orientation="horizontal" />
