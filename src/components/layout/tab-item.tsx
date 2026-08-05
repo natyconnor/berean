@@ -21,9 +21,9 @@ export function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
       exit={{ opacity: 0, width: 0 }}
       transition={{ duration: 0.15, ease: "easeOut" }}
       className={cn(
-        "group flex h-10 items-stretch border-r text-sm transition-colors",
+        "group flex h-10 shrink-0 items-stretch border-r text-sm transition-colors",
         isActive
-          ? "bg-background text-foreground border-b-2 border-b-primary"
+          ? "border-t-[3px] border-t-primary bg-primary/10 font-semibold text-foreground"
           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
       )}
     >

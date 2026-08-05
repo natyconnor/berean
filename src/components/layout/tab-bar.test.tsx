@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -48,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   signOut: vi.fn(),
   useLocation: vi.fn(() => ({ pathname: "/passage/John-1" })),
 }));
+let triggerResize: (() => void) | undefined;
 
 vi.mock("@/lib/use-tabs", () => ({
   useTabs: () => ({
@@ -99,6 +100,7 @@ describe("TabBar", () => {
     mocks.setActiveTab.mockReset();
     mocks.signOut.mockReset();
     mocks.useLocation.mockReturnValue({ pathname: "/passage/John-1" });
+    triggerResize = undefined;
     Object.defineProperty(window.navigator, "platform", {
       configurable: true,
       value: "MacIntel",
@@ -106,6 +108,9 @@ describe("TabBar", () => {
     vi.stubGlobal(
       "ResizeObserver",
       class ResizeObserver {
+        constructor(callback: ResizeObserverCallback) {
+          triggerResize = () => callback([], this);
+        }
         disconnect() {}
         observe() {}
         unobserve() {}
@@ -163,6 +168,58 @@ describe("TabBar", () => {
     // Memory and Study live in the Mode Dock, not the toolbar.
     expect(screen.queryByRole("link", { name: "Open memory" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open study" })).toBeNull();
+  });
+
+  it("keeps passage tabs scrollable without allowing them to displace app actions", () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TabBar />
+      </TooltipProvider>,
+    );
+
+    const tabRegion = screen.getByRole("region", {
+      name: "Open passage tabs",
+    });
+    const appActions = screen.getByRole("toolbar", { name: "App actions" });
+
+    expect(tabRegion).toHaveClass("min-w-0", "flex-1", "overflow-hidden");
+    expect(tabRegion.querySelector(".w-max")).toHaveClass("min-w-full");
+    expect(appActions).toHaveClass("shrink-0");
+    expect(tabRegion.parentElement).toBe(appActions.parentElement);
+    expect(tabRegion).toContainElement(
+      screen.getByRole("button", {
+        name: "Open a new tab to a Bible chapter",
+      }),
+    );
+  });
+
+  it("pins the new-tab action beside app actions when the tabs overflow", () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TabBar />
+      </TooltipProvider>,
+    );
+
+    const tabRegion = screen.getByRole("region", {
+      name: "Open passage tabs",
+    });
+    const viewport = tabRegion.querySelector(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (!viewport) throw new Error("Expected the tab scroll viewport");
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 400 },
+      scrollWidth: { configurable: true, value: 800 },
+    });
+
+    act(() => triggerResize?.());
+
+    const appActions = screen.getByRole("toolbar", { name: "App actions" });
+    expect(
+      screen.getByRole("button", {
+        name: "Open a new tab to a Bible chapter",
+      }),
+    ).toBe(appActions.firstElementChild);
   });
 
   it("shows the passage shortcut in the new-tab tooltip", async () => {
