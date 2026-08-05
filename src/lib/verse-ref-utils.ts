@@ -274,10 +274,6 @@ export function toPassageId(book: string, chapter: number): string {
   return `${urlBook}-${chapter}`;
 }
 
-export function toEsvQuery(book: string, chapter: number): string {
-  return `${book} ${chapter}`;
-}
-
 export function isPassageNote(ref: VerseRef): boolean {
   return ref.startVerse !== ref.endVerse;
 }

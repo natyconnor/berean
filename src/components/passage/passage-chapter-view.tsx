@@ -4,6 +4,7 @@ import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
+import type { EsvVerse, EsvVerseHeading } from "../../../shared/esv-api";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import { useTutorial } from "@/components/tutorial/tutorial-context";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,8 @@ type VerseItem =
       verseNumber: number;
       text: string;
       heading?: string;
+      subheading?: string;
+      midHeadings?: EsvVerseHeading[];
       singleNotes: NoteWithRef[];
       passageNotes: NoteWithRef[];
     }
@@ -51,7 +54,12 @@ type VerseItem =
       kind: "passageGroup";
       anchorVerse: number;
       heading?: string;
-      verses: Array<{ verseNumber: number; text: string }>;
+      subheading?: string;
+      verses: Array<{
+        verseNumber: number;
+        text: string;
+        midHeadings?: EsvVerseHeading[];
+      }>;
       passageNotes: NoteWithRef[];
       singleNotesByVerse: Map<number, NoteWithRef[]>;
     };
@@ -394,6 +402,22 @@ export function PassageChapterView({
     }
 
     const items: VerseItem[] = [];
+    // Editorial section headings (____) follow the Headers toggle. Crossway
+    // subheadings — Psalm 119 letters, Song speakers, psalm titles — stay on;
+    // they are part of the printed ESV text the reader expects to always see.
+    const midHeadingsOf = (verse: EsvVerse) => {
+      if (!verse.midHeadings || verse.midHeadings.length === 0) {
+        return undefined;
+      }
+      if (showSectionHeaders) return verse.midHeadings;
+      const subs = verse.midHeadings.filter(
+        (heading) => heading.variant === "sub",
+      );
+      return subs.length > 0 ? subs : undefined;
+    };
+    const headingOf = (verse: EsvVerse) =>
+      showSectionHeaders ? verse.heading : undefined;
+    const subheadingOf = (verse: EsvVerse) => verse.subheading;
 
     for (const verse of data.verses) {
       if (mergedVerses.has(verse.number)) {
@@ -405,23 +429,27 @@ export function PassageChapterView({
             .filter(
               (v) => v.number >= range.startVerse && v.number <= range.endVerse,
             )
-            .map((v) => ({ verseNumber: v.number, text: v.text }));
+            .map((v) => ({
+              verseNumber: v.number,
+              text: v.text,
+              midHeadings: midHeadingsOf(v),
+            }));
           const singleNotesByVerse = new Map<number, NoteWithRef[]>();
           for (const v of blockVerses) {
             const notes = displaySingleVerseNotes.get(v.verseNumber);
             if (notes && notes.length > 0)
               singleNotesByVerse.set(v.verseNumber, notes);
           }
-          const groupHeading = data.verses.find(
-            (v) =>
-              v.number >= range.startVerse &&
-              v.number <= range.endVerse &&
-              v.heading,
-          )?.heading;
+          const inRange = (v: EsvVerse) =>
+            v.number >= range.startVerse && v.number <= range.endVerse;
           items.push({
             kind: "passageGroup",
             anchorVerse: range.anchorVerse,
-            heading: groupHeading,
+            heading: showSectionHeaders
+              ? data.verses.find((v) => inRange(v) && v.heading)?.heading
+              : undefined,
+            subheading: data.verses.find((v) => inRange(v) && v.subheading)
+              ?.subheading,
             verses: blockVerses,
             passageNotes: passageNotesByAnchor.get(range.anchorVerse) ?? [],
             singleNotesByVerse,
@@ -447,7 +475,9 @@ export function PassageChapterView({
         kind: "single",
         verseNumber: verse.number,
         text: verse.text,
-        heading: verse.heading,
+        heading: headingOf(verse),
+        subheading: subheadingOf(verse),
+        midHeadings: midHeadingsOf(verse),
         singleNotes,
         passageNotes,
       });
@@ -463,6 +493,7 @@ export function PassageChapterView({
     passageNotesByAnchor,
     noteVisibility,
     displaySingleVerseNotes,
+    showSectionHeaders,
   ]);
 
   const currentGroupedVerses = useMemo(() => {

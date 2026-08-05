@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -74,7 +75,7 @@ function clickMark(mark: HTMLElement) {
   fireEvent.pointerUp(mark, { clientX: 10, clientY: 10 });
 }
 
-function renderVerseRow(props: ReturnType<typeof defaultProps>) {
+function renderVerseRow(props: ComponentProps<typeof VerseRowWithNotes>) {
   return render(
     <TooltipProvider>
       <VerseRowWithNotes {...props} />
@@ -152,5 +153,66 @@ describe("VerseRowWithNotes – highlight interaction", () => {
 
     expect(props.onMouseDown).toHaveBeenCalledWith(1);
     expect(screen.queryByTitle("Change to Green")).not.toBeInTheDocument();
+  });
+});
+
+describe("VerseRowWithNotes – mid-verse headings", () => {
+  const FIRST = "Then Nathan went to his house.";
+  const SECOND = "  And the LORD afflicted the child, and he became sick.";
+  const VERSE = `${FIRST}\n\n${SECOND}`;
+
+  function midVerseProps() {
+    const props = defaultProps();
+    props.text = VERSE;
+    props.highlights = [];
+    return {
+      ...props,
+      midHeadings: [
+        { text: "David’s Child Dies", offset: VERSE.indexOf(SECOND) },
+      ],
+    };
+  }
+
+  it("renders the heading between the sentences it interrupts", () => {
+    const { container } = renderVerseRow(midVerseProps());
+
+    const verseText = container.querySelector('span[aria-hidden="false"]')!;
+    const heading = verseText.querySelector("[data-verse-aside]")!;
+
+    expect(heading).toHaveTextContent("David’s Child Dies");
+    expect(heading.nextSibling).toHaveTextContent(SECOND.trim());
+    // The paragraph break stays in the DOM, hidden, so highlight offsets still
+    // line up with the verse text.
+    const brk = heading.previousSibling as HTMLElement;
+    expect(brk).toHaveClass("hidden");
+    expect(brk.textContent).toBe("\n\n");
+    expect(verseText.textContent).toBe(
+      `${FIRST}\n\nDavid’s Child Dies${SECOND}`,
+    );
+  });
+
+  it("keeps the paragraph break when section headers are hidden", () => {
+    const { container } = renderVerseRow({
+      ...midVerseProps(),
+      midHeadings: undefined,
+    });
+
+    expect(container.querySelector("[data-verse-aside]")).toBeNull();
+    expect(
+      container.querySelector('span[aria-hidden="false"]')!.textContent,
+    ).toBe(VERSE);
+  });
+
+  it("renders mid-verse speaker labels distinctly from section titles", () => {
+    const { container } = renderVerseRow({
+      ...midVerseProps(),
+      midHeadings: [
+        { text: "Others", offset: VERSE.indexOf(SECOND), variant: "sub" },
+      ],
+    });
+
+    const label = container.querySelector("[data-verse-aside]")!;
+    expect(label).toHaveTextContent("Others");
+    expect(label.className).toContain("font-sans");
   });
 });

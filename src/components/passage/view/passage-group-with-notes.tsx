@@ -25,11 +25,18 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
-import type { HighlightRange } from "@/lib/highlight-utils";
+import type {
+  HighlightRange,
+  VerseHeadingAtOffset,
+} from "@/lib/highlight-utils";
 import type { CurrentChapter } from "./verse-row-with-notes";
 
 interface PassageGroupWithNotesProps {
-  verses: Array<{ verseNumber: number; text: string }>;
+  verses: Array<{
+    verseNumber: number;
+    text: string;
+    midHeadings?: VerseHeadingAtOffset[];
+  }>;
   passageNotes: NoteWithRef[];
   singleNotesByVerse: Map<number, NoteWithRef[]>;
   viewMode: "compose" | "read";
@@ -217,6 +224,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                     key={verse.verseNumber}
                     verseNumber={verse.verseNumber}
                     text={verse.text}
+                    midHeadings={verse.midHeadings}
                     selection={EMPTY_SELECTION}
                     noteIndicator={EMPTY_NOTE_INDICATOR}
                     hover={EMPTY_HOVER}

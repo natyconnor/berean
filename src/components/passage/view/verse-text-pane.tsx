@@ -12,11 +12,15 @@ import {
 import { HighlightToolbar } from "../highlight-toolbar";
 import { HighlightMarkPopover } from "../highlight-mark-popover";
 import { useHighlightPopover } from "../hooks/use-highlight-popover";
-import type { HighlightRange } from "@/lib/highlight-utils";
+import type {
+  HighlightRange,
+  VerseHeadingAtOffset,
+} from "@/lib/highlight-utils";
 
 export interface VerseTextPaneProps {
   verseNumber: number;
   text: string;
+  midHeadings?: VerseHeadingAtOffset[];
   selection: VerseSelectionState;
   noteIndicator: VerseNoteIndicatorState;
   hover: VerseHoverState;
@@ -46,6 +50,7 @@ export interface VerseTextPaneProps {
 export const VerseTextPane = memo(function VerseTextPane({
   verseNumber,
   text,
+  midHeadings,
   selection,
   noteIndicator,
   hover,
@@ -93,6 +98,7 @@ export const VerseTextPane = memo(function VerseTextPane({
       <VerseRowLeft
         verseNumber={verseNumber}
         text={text}
+        midHeadings={midHeadings}
         selection={selection}
         noteIndicator={noteIndicator}
         hover={hover}

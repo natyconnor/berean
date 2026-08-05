@@ -1,0 +1,19 @@
+{
+  "query": "2 Samuel 12:15–16",
+  "canonical": "2 Samuel 12:15–16",
+  "parsed": [[10012015, 10012016]],
+  "passage_meta": [
+    {
+      "canonical": "2 Samuel 12:15–16",
+      "chapter_start": [10012001, 10012031],
+      "chapter_end": [10012001, 10012031],
+      "prev_verse": 10012014,
+      "next_verse": 10012017,
+      "prev_chapter": [10011001, 10011027],
+      "next_chapter": [10013001, 10013039]
+    }
+  ],
+  "passages": [
+    "<div id=\"v10012015-10012016\" class=\"basic eng esv text\" reference=\"2 Samuel 12:15–16\" start=\"10012015\" end=\"10012016\"><p id=\"p10012015_01-1\" class=\"virtual\"><b class=\"verse-num\" id=\"v10012015-1\">15&nbsp;</b>Then Nathan went to his house.</p>\n<h3 id=\"p10012015_01-1\">David’s Child Dies</h3>\n<p id=\"p10012015_04-1\">And the LORD afflicted the child that Uriah’s wife bore to David, and he became sick. <b class=\"verse-num\" id=\"v10012016-1\">16&nbsp;</b>David therefore sought God on behalf of the child. And David fasted and went in and lay all night on the ground.</p>\n</div> <p class=\"copyright\">ESV<sup><small>®</small></sup> Bible (The Holy Bible, English Standard Version<sup><small>®</small></sup>), copyright © 2001 by <a href=\"https://www.crossway.org\">Crossway</a>, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.</p>\n<p class=\"copyright\">The Holy Bible, English Standard Version (ESV) is adapted from the Revised Standard Version of the Bible, copyright Division of Christian Education of the National Council of the Churches of Christ in the U.S.A. All rights reserved.\n</p>\n<p class=\"copyright\">For information on how the ESV can be quoted, please visit our <a href=\"https://www.crossway.org/permissions/\">permission site</a>.</p>"
+  ]
+}

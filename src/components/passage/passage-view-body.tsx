@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { HighlightRange } from "@/lib/highlight-utils";
+import type { EsvVerseHeading } from "../../../shared/esv-api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChapterPager } from "@/components/bible/chapter-pager";
 import { CopyrightNotice } from "@/components/bible/copyright-notice";
@@ -47,6 +48,8 @@ type VerseItem =
       verseNumber: number;
       text: string;
       heading?: string;
+      subheading?: string;
+      midHeadings?: EsvVerseHeading[];
       singleNotes: NoteWithRef[];
       passageNotes: NoteWithRef[];
     }
@@ -54,7 +57,12 @@ type VerseItem =
       kind: "passageGroup";
       anchorVerse: number;
       heading?: string;
-      verses: Array<{ verseNumber: number; text: string }>;
+      subheading?: string;
+      verses: Array<{
+        verseNumber: number;
+        text: string;
+        midHeadings?: EsvVerseHeading[];
+      }>;
       passageNotes: NoteWithRef[];
       singleNotesByVerse: Map<number, NoteWithRef[]>;
     };
@@ -372,6 +380,13 @@ export function PassageViewBody({
                           ) : null}
                         </AnimatePresence>
                       ) : null}
+                      {item.subheading ? (
+                        <SectionHeading
+                          key={`subheading-group-${item.anchorVerse}`}
+                          title={item.subheading}
+                          variant="sub"
+                        />
+                      ) : null}
                       <PassageGroupWithNotes
                         verses={item.verses}
                         passageNotes={item.passageNotes}
@@ -462,9 +477,17 @@ export function PassageViewBody({
                         ) : null}
                       </AnimatePresence>
                     ) : null}
+                    {item.subheading ? (
+                      <SectionHeading
+                        key={`subheading-${item.verseNumber}`}
+                        title={item.subheading}
+                        variant="sub"
+                      />
+                    ) : null}
                     <VerseRowWithNotes
                       verseNumber={item.verseNumber}
                       text={item.text}
+                      midHeadings={item.midHeadings}
                       viewMode={effectiveViewMode}
                       currentChapter={{ book, chapter }}
                       selectedVerses={selectedVerses}

@@ -50,10 +50,20 @@ export const exportableLinkedNoteValue = v.object({
 
 export type ExportableLinkedNote = Infer<typeof exportableLinkedNoteValue>;
 
+export const esvVerseHeadingValue = v.object({
+  text: v.string(),
+  offset: v.number(),
+  variant: v.optional(v.union(v.literal("section"), v.literal("sub"))),
+});
+
+export type EsvVerseHeading = Infer<typeof esvVerseHeadingValue>;
+
 export const esvVerseValue = v.object({
   number: v.number(),
   text: v.string(),
   heading: v.optional(v.string()),
+  subheading: v.optional(v.string()),
+  midHeadings: v.optional(v.array(esvVerseHeadingValue)),
 });
 
 export type EsvVerse = Infer<typeof esvVerseValue>;

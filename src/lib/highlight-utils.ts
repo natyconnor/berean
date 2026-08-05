@@ -70,6 +70,151 @@ export function splitTextByHighlights(
   return segments;
 }
 
+export interface VerseHeadingAtOffset {
+  text: string;
+  offset: number;
+  variant?: "section" | "sub";
+}
+
+export type VerseContentPart =
+  | {
+      kind: "text";
+      segment: TextSegmentWithHighlight;
+      /**
+       * The paragraph break a heading stands in: kept in the DOM so selection
+       * offsets still match the verse text, but not shown, since the heading
+       * supplies the break itself.
+       */
+      hidden?: boolean;
+    }
+  | { kind: "heading"; text: string; variant?: "section" | "sub" };
+
+/** The line break at the end of the text a heading interrupts. */
+const TRAILING_BREAK = /(?:[ \t]*\n)+[ \t]*$/;
+
+/**
+ * Splices section headings that start partway through a verse into its text
+ * segments, splitting a segment when a heading falls inside it. Offsets are
+ * character positions in the verse text, so headings land between the same words
+ * the ESV prints them between.
+ */
+export function splitSegmentsByHeadings(
+  segments: TextSegmentWithHighlight[],
+  headings: VerseHeadingAtOffset[],
+): VerseContentPart[] {
+  if (headings.length === 0) {
+    return segments.map((segment) => ({ kind: "text", segment }));
+  }
+
+  const ordered = [...headings].sort((a, b) => a.offset - b.offset);
+  const parts: VerseContentPart[] = [];
+  let next = 0;
+  let consumed = 0;
+
+  const pushTextBeforeHeading = (
+    segment: TextSegmentWithHighlight,
+    text: string,
+  ) => {
+    const brk = TRAILING_BREAK.exec(text);
+    const visible = brk ? text.slice(0, brk.index) : text;
+    if (visible.length > 0) {
+      parts.push({ kind: "text", segment: { ...segment, text: visible } });
+    }
+    if (brk) {
+      parts.push({
+        kind: "text",
+        segment: { ...segment, text: brk[0] },
+        hidden: true,
+      });
+    }
+  };
+
+  for (const segment of segments) {
+    let cut = 0;
+    while (
+      next < ordered.length &&
+      ordered[next].offset < consumed + segment.text.length
+    ) {
+      const at = Math.max(ordered[next].offset - consumed, cut);
+      if (at > cut) {
+        pushTextBeforeHeading(segment, segment.text.slice(cut, at));
+      }
+      parts.push({
+        kind: "heading",
+        text: ordered[next].text,
+        variant: ordered[next].variant,
+      });
+      cut = at;
+      next++;
+    }
+    if (cut < segment.text.length) {
+      parts.push({
+        kind: "text",
+        segment:
+          cut === 0 ? segment : { ...segment, text: segment.text.slice(cut) },
+      });
+    }
+    consumed += segment.text.length;
+  }
+
+  for (; next < ordered.length; next++) {
+    parts.push({
+      kind: "heading",
+      text: ordered[next].text,
+      variant: ordered[next].variant,
+    });
+  }
+
+  return parts;
+}
+
+/**
+ * Marks an element whose text is part of the rendered verse but not of the verse
+ * text itself, so it is discounted when measuring selection offsets.
+ */
+export const VERSE_ASIDE_ATTRIBUTE = "data-verse-aside";
+
+const VERSE_ASIDE_SELECTOR = `[${VERSE_ASIDE_ATTRIBUTE}]`;
+
+/**
+ * Length of the heading's text that lies before `range`'s end, so headings
+ * rendered inside the verse don't shift the offsets of the text after them.
+ */
+function asideLengthWithin(range: Range, aside: Element): number {
+  const asideRange = document.createRange();
+  asideRange.selectNodeContents(aside);
+
+  if (
+    range.comparePoint(asideRange.startContainer, asideRange.startOffset) > 0
+  ) {
+    return 0;
+  }
+  if (range.comparePoint(asideRange.endContainer, asideRange.endOffset) <= 0) {
+    return asideRange.toString().length;
+  }
+
+  const clipped = document.createRange();
+  clipped.setStart(asideRange.startContainer, asideRange.startOffset);
+  clipped.setEnd(range.endContainer, range.endOffset);
+  return clipped.toString().length;
+}
+
+function verseTextOffset(
+  containerEl: HTMLElement,
+  node: Node,
+  nodeOffset: number,
+): number {
+  const range = document.createRange();
+  range.selectNodeContents(containerEl);
+  range.setEnd(node, nodeOffset);
+
+  let length = range.toString().length;
+  for (const aside of containerEl.querySelectorAll(VERSE_ASIDE_SELECTOR)) {
+    length -= asideLengthWithin(range, aside);
+  }
+  return Math.max(0, length);
+}
+
 /**
  * Computes the character offset within a verse text element based on
  * the Selection API range. Returns null if the selection is outside the element.
@@ -90,15 +235,12 @@ export function getSelectionOffsets(
     return null;
   }
 
-  const preRange = document.createRange();
-  preRange.selectNodeContents(containerEl);
-  preRange.setEnd(range.startContainer, range.startOffset);
-  const start = preRange.toString().length;
-
-  const fullRange = document.createRange();
-  fullRange.selectNodeContents(containerEl);
-  fullRange.setEnd(range.endContainer, range.endOffset);
-  const end = fullRange.toString().length;
+  const start = verseTextOffset(
+    containerEl,
+    range.startContainer,
+    range.startOffset,
+  );
+  const end = verseTextOffset(containerEl, range.endContainer, range.endOffset);
 
   if (start === end) return null;
   return { start: Math.min(start, end), end: Math.max(start, end) };

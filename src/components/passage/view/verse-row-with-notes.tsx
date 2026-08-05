@@ -9,7 +9,10 @@ import { cn } from "@/lib/utils";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
-import type { HighlightRange } from "@/lib/highlight-utils";
+import type {
+  HighlightRange,
+  VerseHeadingAtOffset,
+} from "@/lib/highlight-utils";
 import {
   LAYOUT_CORRECTION_TRANSITION,
   NOTE_ENTER_TRANSITION,
@@ -111,6 +114,7 @@ export interface CurrentChapter {
 export interface VerseRowWithNotesProps {
   verseNumber: number;
   text: string;
+  midHeadings?: VerseHeadingAtOffset[];
   viewMode?: "compose" | "read";
   currentChapter?: CurrentChapter;
 
@@ -196,6 +200,7 @@ export interface VerseRowWithNotesProps {
 export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   verseNumber,
   text,
+  midHeadings,
   viewMode = "compose",
   currentChapter,
   selectedVerses,
@@ -417,6 +422,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           <VerseTextPane
             verseNumber={verseNumber}
             text={text}
+            midHeadings={midHeadings}
             selection={{
               isSelected: selectedVerses.has(verseNumber),
               isInSelectionRange,

@@ -1,14 +1,18 @@
 import { forwardRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { SECTION_HEADING_TRANSITION } from "@/components/passage/note-animation-config";
+import { cn } from "@/lib/utils";
 
 interface SectionHeadingProps {
   title: string;
+  /** Section titles are larger; ESV subheadings (Aleph, psalm titles) are lighter. */
+  variant?: "section" | "sub";
 }
 
 export const SectionHeading = forwardRef<HTMLDivElement, SectionHeadingProps>(
-  function SectionHeading({ title }, ref) {
+  function SectionHeading({ title, variant = "section" }, ref) {
     const reduceMotion = useReducedMotion();
+    const isSub = variant === "sub";
 
     return (
       <motion.div
@@ -23,7 +27,14 @@ export const SectionHeading = forwardRef<HTMLDivElement, SectionHeadingProps>(
         transition={SECTION_HEADING_TRANSITION}
         className="overflow-hidden"
       >
-        <h2 className="pt-6 pb-1 pl-8 font-serif text-lg font-semibold tracking-tight text-foreground/90">
+        <h2
+          className={cn(
+            "pl-8 font-semibold tracking-tight text-foreground/90 whitespace-pre-line",
+            isSub
+              ? "pt-4 pb-1 font-sans text-base"
+              : "pt-6 pb-1 font-serif text-lg",
+          )}
+        >
           {title}
         </h2>
       </motion.div>
