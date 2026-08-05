@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, Reorder } from "framer-motion";
 import { useTabs } from "@/lib/use-tabs";
 import { TabItem } from "./tab-item";
@@ -33,6 +33,9 @@ export function TabBar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [passageNavigatorOpen, setPassageNavigatorOpen] = useState(false);
+  const [tabsOverflow, setTabsOverflow] = useState(false);
+  const tabsViewportRef = useRef<HTMLDivElement>(null);
+  const tabsContentRef = useRef<HTMLDivElement>(null);
   const isSearchRoute = location.pathname === "/search";
   const isStudyRoute = location.pathname.startsWith("/study");
   const isSettingsRoute = location.pathname.startsWith("/settings");
@@ -69,6 +72,22 @@ export function TabBar() {
     mode: savedSearchState.params.mode,
     noteId: savedSearchState.params.noteId,
   };
+
+  useLayoutEffect(() => {
+    const viewport = tabsViewportRef.current;
+    const content = tabsContentRef.current;
+    if (!viewport || !content) return;
+
+    const updateOverflow = () => {
+      setTabsOverflow(viewport.scrollWidth > viewport.clientWidth + 1);
+    };
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(viewport);
+    observer.observe(content);
+    updateOverflow();
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -122,13 +141,19 @@ export function TabBar() {
       className="flex items-center border-b bg-muted/30 h-10 shrink-0"
       data-passage-dismiss-exempt
     >
-      <ScrollArea className="flex-1">
+      <ScrollArea
+        role="region"
+        aria-label="Open passage tabs"
+        className="min-w-0 flex-1 overflow-hidden"
+        viewportRef={tabsViewportRef}
+      >
         <Reorder.Group
+          ref={tabsContentRef}
           as="div"
           axis="x"
           values={tabs}
           onReorder={reorderTabs}
-          className="flex items-center h-10"
+          className="flex h-10 w-max min-w-full items-center"
         >
           <AnimatePresence initial={false}>
             {tabs.map((tab) => (
@@ -146,31 +171,53 @@ export function TabBar() {
               />
             ))}
           </AnimatePresence>
-          <div className="flex h-10 items-center px-1">
-            <PassageNavigator
-              open={passageNavigatorOpen}
-              onOpenChange={handlePassageNavigatorOpenChange}
-              trigger={
-                <TooltipButton
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  tooltip={`Open a new tab to a Bible chapter (${passageShortcutLabel})`}
-                  aria-label="Open a new tab to a Bible chapter"
-                  data-tour-id="app-book-selector"
-                >
-                  <Plus className="h-4 w-4" />
-                </TooltipButton>
-              }
-            />
-          </div>
+          {!tabsOverflow ? (
+            <div className="flex h-10 items-center px-1">
+              <PassageNavigator
+                open={passageNavigatorOpen}
+                onOpenChange={handlePassageNavigatorOpenChange}
+                trigger={
+                  <TooltipButton
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    tooltip={`Open a new tab to a Bible chapter (${passageShortcutLabel})`}
+                    aria-label="Open a new tab to a Bible chapter"
+                    data-tour-id="app-book-selector"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </TooltipButton>
+                }
+              />
+            </div>
+          ) : null}
         </Reorder.Group>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
       <div
-        className="flex items-center gap-1 mx-1 shrink-0"
+        role="toolbar"
+        aria-label="App actions"
+        className="mx-1 flex shrink-0 items-center gap-1"
         data-tour-id="app-toolbar"
       >
+        {tabsOverflow ? (
+          <PassageNavigator
+            open={passageNavigatorOpen}
+            onOpenChange={handlePassageNavigatorOpenChange}
+            trigger={
+              <TooltipButton
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                tooltip={`Open a new tab to a Bible chapter (${passageShortcutLabel})`}
+                aria-label="Open a new tab to a Bible chapter"
+                data-tour-id="app-book-selector"
+              >
+                <Plus className="h-4 w-4" />
+              </TooltipButton>
+            }
+          />
+        ) : null}
         {showSearchButton ? (
           <FeatureCallout
             state={searchHint}

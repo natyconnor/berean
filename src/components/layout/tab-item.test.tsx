@@ -34,4 +34,30 @@ describe("TabItem", () => {
       screen.getByRole("button", { name: "Close John 1" }),
     ).toBeInTheDocument();
   });
+
+  it("places the active indicator above the horizontal scrollbar", () => {
+    render(
+      <Reorder.Group
+        axis="x"
+        values={[{ id: "john-1", passageId: "John-1", label: "John 1" }]}
+        onReorder={() => {}}
+      >
+        <TabItem
+          tab={{ id: "john-1", passageId: "John-1", label: "John 1" }}
+          isActive
+          onActivate={() => {}}
+          onClose={() => {}}
+        />
+      </Reorder.Group>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "John 1" }).parentElement,
+    ).toHaveClass(
+      "border-t-[3px]",
+      "border-t-primary",
+      "bg-primary/10",
+      "font-semibold",
+    );
+  });
 });
