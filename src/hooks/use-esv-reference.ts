@@ -5,10 +5,10 @@ import {
 } from "../../shared/esv-api";
 import { useCachedEsvQuery } from "@/hooks/use-cached-esv-query";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { toEsvQuery } from "../../shared/esv-query";
 import {
   formatVerseRef,
   isChapterScopeRef,
-  toEsvQuery,
   type VerseRefScope,
 } from "@/lib/verse-ref-utils";
 import { getChapterVerseCount } from "@/lib/bible-verse-counts";

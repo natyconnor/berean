@@ -18,6 +18,9 @@ const PASSAGES = [
   { slug: "song-of-solomon-1", query: "Song of Solomon 1" },
   { slug: "psalm-119-1-16", query: "Psalm 119:1-16" },
   { slug: "2-samuel-12-15-16", query: "2 Samuel 12:15-16" },
+  // Single-chapter book: the ESV API reads "Jude 1" as Jude verse 1, so the
+  // whole-book query is the only way to get all 25 verses.
+  { slug: "jude", query: "Jude" },
 ];
 
 function buildHtmlUrl(query) {

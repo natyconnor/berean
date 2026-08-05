@@ -10,6 +10,7 @@ import {
 } from "./lib/publicValues";
 import { requireActionIdentity } from "./lib/auth";
 import { parseEsvHtmlResponse } from "../shared/esv-html";
+import { toEsvQuery } from "../shared/esv-query";
 
 function parseJsonBody(value: string): unknown {
   return JSON.parse(value) as unknown;
@@ -133,7 +134,7 @@ export const getChaptersBatch = action({
 
     const results: EsvChapterResult[] = [];
     for (const chapter of uniqueChapters) {
-      const data = await fetchPassage(apiKey, `${args.book} ${chapter}`);
+      const data = await fetchPassage(apiKey, toEsvQuery(args.book, chapter));
       results.push({
         chapter,
         data,

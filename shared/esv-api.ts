@@ -33,7 +33,7 @@ export interface EsvChapterData {
 }
 
 /** Bumped when cached chapter shape, parsing, or cache keying changes. */
-const CACHE_PREFIX = "esv_cache_v10_";
+const CACHE_PREFIX = "esv_cache_v3_";
 
 function passageCacheKey(query: string): string {
   return `${CACHE_PREFIX}${query}`;

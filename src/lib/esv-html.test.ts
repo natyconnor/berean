@@ -126,6 +126,34 @@ describe("parseEsvHtmlResponse / 2 Samuel 12:15 mid-verse heading", () => {
   });
 });
 
+describe("parseEsvHtmlResponse / Jude (single-chapter book)", () => {
+  const data = parseEsvHtmlResponse(loadFixture("jude"));
+
+  it("parses the whole book from a bare book-name query", () => {
+    expect(data.canonical).toBe("Jude");
+    expect(data.verses).toHaveLength(25);
+    expect(data.verses[0]?.number).toBe(1);
+    expect(data.verses.at(-1)?.number).toBe(25);
+  });
+
+  it("reads the chapter-num label `1:1` as verse 1", () => {
+    const v1 = data.verses.find((v) => v.number === 1);
+    expect(v1?.heading).toBe("Greeting");
+    expect(v1?.text).toMatch(/^Jude, a servant of Jesus Christ/);
+    expect(v1?.text).toContain("To those who are called");
+  });
+
+  it("attaches the remaining editorial headings", () => {
+    expect(data.verses.find((v) => v.number === 3)?.heading).toBe(
+      "Judgment on False Teachers",
+    );
+    expect(data.verses.find((v) => v.number === 17)?.heading).toBe(
+      "A Call to Persevere",
+    );
+    expect(data.verses.find((v) => v.number === 24)?.heading).toBe("Doxology");
+  });
+});
+
 describe("parsePassageHtmlIntoVerses", () => {
   it("returns an empty list for empty HTML", () => {
     expect(parsePassageHtmlIntoVerses("")).toEqual([]);

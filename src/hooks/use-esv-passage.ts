@@ -1,4 +1,4 @@
-import { toEsvQuery } from "@/lib/verse-ref-utils";
+import { toEsvQuery } from "../../shared/esv-query";
 import { useCachedEsvQuery } from "@/hooks/use-cached-esv-query";
 
 export function useEsvPassage(book: string, chapter: number) {
