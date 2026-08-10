@@ -7,7 +7,10 @@
  *
  * A verse moves through two phases:
  *  - Learning phase (`new` / `learning`): the learner steps through display
- *    stages 0..3 (full | first-letters | cloze | hidden) within a session.
+ *    stages 0..3 (full | first-letters | cloze | hidden) across ~3 calendar
+ *    sessions. Day 1 is Read + Guided; clearing Guided or Challenge soft-locks
+ *    the verse until tomorrow (`dueAt` in the future). Day 3 clears From Memory
+ *    and graduates.
  *  - Reviewing phase (`reviewing` / `mastered`): the verse is recalled from
  *    hidden and the inter-review interval grows or shrinks with performance.
  *
@@ -59,44 +62,55 @@ export interface SupportBand {
 export const SHORT_VERSE_WORDS = 10;
 export const LONG_VERSE_WORDS = 24;
 
-// Per-band reps at the short and long endpoints.
-const GUIDED_MIN_REPS = 3;
-const GUIDED_MAX_REPS = 7;
-const CHALLENGE_MIN_REPS = 5;
-const CHALLENGE_MAX_REPS = 12;
+/**
+ * Reps each band needs at the short and long endpoints (~5 reps/session feel).
+ *
+ * Read is a single priming pass. The other three are one session's work each,
+ * so From Memory carries a real rep count too rather than graduating a verse on
+ * one lucky recall.
+ */
+const BAND_REP_RANGE: Record<
+  SupportBand["key"],
+  readonly [min: number, max: number]
+> = {
+  read: [1, 1],
+  guided: [3, 5],
+  challenge: [4, 6],
+  memory: [3, 4],
+};
 
 /**
  * Single source of truth for the learning-phase bands; index === learnStage.
  *
- * `requiredReps` on Guided and Challenge are the **short-verse minima** (3 and
- * 5). Use {@link requiredRepsFor} to get the length-adjusted count at runtime.
+ * `requiredReps` is the **short-verse minimum** from {@link BAND_REP_RANGE}.
+ * Use {@link requiredRepsFor} to get the length-adjusted count at runtime.
  */
 export const SUPPORT_BANDS: readonly SupportBand[] = [
   {
     key: "read",
     label: "Read",
-    requiredReps: 1,
+    requiredReps: BAND_REP_RANGE.read[0],
     densityStart: null,
     densityEnd: null,
   },
   {
     key: "guided",
     label: "Guided",
-    requiredReps: 3,
+    requiredReps: BAND_REP_RANGE.guided[0],
     densityStart: 0.25,
     densityEnd: 1.0,
   },
   {
     key: "challenge",
     label: "Challenge",
-    requiredReps: 5,
+    requiredReps: BAND_REP_RANGE.challenge[0],
     densityStart: 0.65,
     densityEnd: 0.15,
   },
   {
     key: "memory",
     label: "From Memory",
-    requiredReps: 1,
+    requiredReps: BAND_REP_RANGE.memory[0],
     densityStart: 0.0,
     densityEnd: 0.0,
   },
@@ -105,16 +119,17 @@ export const SUPPORT_BANDS: readonly SupportBand[] = [
 /**
  * Exact reps needed to clear the band at `stage`, adjusted for verse length.
  *
- * Read (0) and From Memory (3) always return 1.  Guided (1) scales from 3 to 7
- * and Challenge (2) from 5 to 12, linearly between {@link SHORT_VERSE_WORDS}
- * and {@link LONG_VERSE_WORDS}.  Omitting `wordCount` (or passing a value ≤
- * SHORT_VERSE_WORDS) preserves the short-verse minima for backward compat.
+ * Read (0) is always 1. Guided (1) scales 3→5, Challenge (2) 4→6, and From
+ * Memory (3) 3→4, linearly between {@link SHORT_VERSE_WORDS} and
+ * {@link LONG_VERSE_WORDS}. Omitting `wordCount` (or passing a value ≤
+ * SHORT_VERSE_WORDS) yields the short-verse minima.
  */
 export function requiredRepsFor(stage: number, wordCount?: number): number {
   const band = SUPPORT_BANDS[stage];
   if (!band) return 1;
-  if (band.key !== "guided" && band.key !== "challenge")
-    return band.requiredReps;
+
+  const [min, max] = BAND_REP_RANGE[band.key];
+  if (min === max) return min;
 
   const words = wordCount ?? SHORT_VERSE_WORDS;
   const clamped = Math.min(
@@ -124,14 +139,7 @@ export function requiredRepsFor(stage: number, wordCount?: number): number {
   const t =
     (clamped - SHORT_VERSE_WORDS) / (LONG_VERSE_WORDS - SHORT_VERSE_WORDS);
 
-  if (band.key === "guided") {
-    return Math.round(
-      GUIDED_MIN_REPS + (GUIDED_MAX_REPS - GUIDED_MIN_REPS) * t,
-    );
-  }
-  return Math.round(
-    CHALLENGE_MIN_REPS + (CHALLENGE_MAX_REPS - CHALLENGE_MIN_REPS) * t,
-  );
+  return Math.round(min + (max - min) * t);
 }
 
 export interface ReviewInput {
@@ -141,6 +149,11 @@ export interface ReviewInput {
   now: number; // pass `now` IN (Convex forbids Date.now() in queries)
   /** Word count of the verse text; drives the length-based rep curve. */
   wordCount?: number;
+  /**
+   * Client's `getTimezoneOffset()`, so a learning soft lock lands on the start
+   * of their next local day. Omitted falls back to a rolling day.
+   */
+  tzOffsetMinutes?: number;
 }
 
 /** Ease bounds. Ease starts at {@link EASE_START} for freshly-seeded verses. */
@@ -173,10 +186,58 @@ export const LEARN_PROGRESS_ACCURACY = 85;
  */
 export const REVIEW_LAPSE_LEARN_STAGE = 1;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Interval spread applied to due dates so reviews don't bunch up (+/-10%). */
 const FUZZ_RATIO = 0.1;
+
+/**
+ * Clearing Guided (1) or Challenge (2) ends today's learning session: advance
+ * to the next band and soft-lock until tomorrow. Read (0) stays same-day;
+ * From Memory (3) graduates instead.
+ */
+export function isLearningSessionEndingStage(stage: number): boolean {
+  return stage === 1 || stage === 2;
+}
+
+/**
+ * Floor on a soft lock, so a session finished just before midnight can't reopen
+ * minutes later. Small enough that the verse still comes back the next morning.
+ */
+const MIN_LEARNING_LOCK_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * When the learner's next session opens: the start of their next local day, so
+ * finishing at 8pm reopens the next morning rather than 24 hours later.
+ *
+ * `tzOffsetMinutes` is the client's `Date.prototype.getTimezoneOffset()`
+ * (minutes to add to local time to reach UTC, e.g. 420 for UTC-7). Without it
+ * the local day is unknowable, so the lock falls back to a rolling day.
+ */
+export function nextLearningSessionDueAt(
+  now: number,
+  tzOffsetMinutes?: number,
+): number {
+  if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
+    return now + DAY_MS;
+  }
+  const offsetMs = tzOffsetMinutes * 60 * 1000;
+  const localNow = now - offsetMs;
+  const nextLocalMidnight = (Math.floor(localNow / DAY_MS) + 1) * DAY_MS;
+  return Math.max(nextLocalMidnight + offsetMs, now + MIN_LEARNING_LOCK_MS);
+}
+
+/**
+ * Slack allowed when comparing a learning `dueAt` against the caller's clock.
+ *
+ * A learning verse only ever holds one of two due dates: `now` when it is still
+ * available this session, or ~24h out when the session ended. Callers compare
+ * against a coarse clock (the UI refreshes it every few minutes) that can trail
+ * the timestamp an attempt was stamped with, so a bare `dueAt > now` reads a
+ * just-recorded rep as locked. The two real values are a day apart, so treating
+ * anything inside this window as "available now" cannot confuse them.
+ */
+export const LEARNING_LOCK_GRACE_MS = 30 * 60 * 1000;
 
 function clampEase(ease: number): number {
   return Math.min(EASE_MAX, Math.max(EASE_MIN, ease));
@@ -234,14 +295,46 @@ export function isLearningProgressAttempt(
  * Whether a verse belongs in the review queue right now.
  *
  * Only `reviewing` / `mastered` verses with `dueAt <= now` qualify. Learning-
- * phase verses keep `dueAt = now` so they stay available for practice, but they
- * must not inflate the review queue, dock badge, or "due today" counts.
+ * phase verses use {@link isDueForLearning} instead and must not inflate the
+ * review queue.
  */
 export function isDueForReview(
   schedule: Pick<MemorySchedule, "status" | "dueAt">,
   now: number,
 ): boolean {
   return isReviewPhase(schedule.status) && schedule.dueAt <= now;
+}
+
+/**
+ * Whether an in-progress learning verse can take a progress-banking attempt
+ * now. Only `learning` (already started) qualifies — hearted `new` verses are
+ * available for Practice but do not inflate “to learn today” / dock badge
+ * counts until the learner has begun. Soft-locked verses (`dueAt` a session
+ * ahead after a session-ending band clear) return false until the next
+ * calendar session.
+ */
+export function isDueForLearning(
+  schedule: Pick<MemorySchedule, "status" | "dueAt">,
+  now: number,
+): boolean {
+  return (
+    schedule.status === "learning" &&
+    schedule.dueAt - now <= LEARNING_LOCK_GRACE_MS
+  );
+}
+
+/**
+ * True when the verse is still learning but today's session is done — Practice
+ * and list CTAs should show a soft-lock "back tomorrow" state.
+ */
+export function isLearningLocked(
+  schedule: Pick<MemorySchedule, "status" | "dueAt">,
+  now: number,
+): boolean {
+  return (
+    isLearningPhase(schedule.status) &&
+    schedule.dueAt - now > LEARNING_LOCK_GRACE_MS
+  );
 }
 
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
@@ -264,14 +357,18 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
           earlyReviewApplied: false,
         };
       }
-      // Advance to the next (lower-support) band; retry again this session.
+      // Advance to the next band. Guided/Challenge clears end today's session
+      // (soft-lock until tomorrow); Read stays available the same day.
+      const sessionEnding = isLearningSessionEndingStage(s.learnStage);
       return {
         status: "learning",
         learnStage: s.learnStage + 1,
         stageReps: 0,
         ease: s.ease,
         intervalDays: 0,
-        dueAt: r.now,
+        dueAt: sessionEnding
+          ? nextLearningSessionDueAt(r.now, r.tzOffsetMinutes)
+          : r.now,
         consecutiveCorrect: s.consecutiveCorrect + 1,
         lapses: s.lapses,
         earlyReviewApplied: false,

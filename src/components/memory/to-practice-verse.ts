@@ -1,9 +1,9 @@
-import type { CardReference } from "@/components/study/study-card-model";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 
+import type { CardReference } from "../study/study-card-model";
 import type { PracticeVerse } from "./practice/practice-board";
 
-/** Build a practice/review payload from a library or pack member row. */
+/** Map a library / pack row into the Practice board's verse shape. */
 export function toPracticeVerse(row: {
   book: string;
   chapter: number;
@@ -12,6 +12,7 @@ export function toPracticeVerse(row: {
   learnStage: number;
   stageReps?: number;
   status: MemoryStatus;
+  dueAt?: number;
 }): PracticeVerse {
   const reference: CardReference = {
     book: row.book,
@@ -24,5 +25,6 @@ export function toPracticeVerse(row: {
     learnStage: row.learnStage,
     stageReps: row.stageReps,
     status: row.status,
+    dueAt: row.dueAt,
   };
 }

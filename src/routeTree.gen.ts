@@ -16,6 +16,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ThemeTestRouteImport } from './routes/theme-test'
 import { Route as MemoryIndexRouteImport } from './routes/memory/index'
 import { Route as MemoryPackIdRouteImport } from './routes/memory/$packId'
+import { Route as MemoryLearnRouteImport } from './routes/memory/learn'
 import { Route as MemoryNewRouteImport } from './routes/memory/new'
 import { Route as MemoryPracticeRouteImport } from './routes/memory/practice'
 import { Route as MemoryReviewRouteImport } from './routes/memory/review'
@@ -25,6 +26,7 @@ import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
 import { Route as StudyIndexRouteImport } from './routes/study/index'
 import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
 import { Route as StudyNewRouteImport } from './routes/study/new'
+import { Route as MemoryPackIdLearnRouteImport } from './routes/memory_.$packId.learn'
 import { Route as MemoryPackIdPracticeRouteImport } from './routes/memory_.$packId.practice'
 import { Route as MemoryPackIdReviewRouteImport } from './routes/memory_.$packId.review'
 
@@ -61,6 +63,11 @@ const MemoryIndexRoute = MemoryIndexRouteImport.update({
 const MemoryPackIdRoute = MemoryPackIdRouteImport.update({
   id: '/memory/$packId',
   path: '/memory/$packId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryLearnRoute = MemoryLearnRouteImport.update({
+  id: '/memory/learn',
+  path: '/memory/learn',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryNewRoute = MemoryNewRouteImport.update({
@@ -108,6 +115,11 @@ const StudyNewRoute = StudyNewRouteImport.update({
   path: '/study/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryPackIdLearnRoute = MemoryPackIdLearnRouteImport.update({
+  id: '/memory_/$packId/learn',
+  path: '/memory/$packId/learn',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MemoryPackIdPracticeRoute = MemoryPackIdPracticeRouteImport.update({
   id: '/memory_/$packId/practice',
   path: '/memory/$packId/practice',
@@ -126,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/learn': typeof MemoryLearnRoute
   '/memory/new': typeof MemoryNewRoute
   '/memory/practice': typeof MemoryPracticeRoute
   '/memory/review': typeof MemoryReviewRoute
@@ -136,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
+  '/memory/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory/$packId/review': typeof MemoryPackIdReviewRoute
 }
@@ -146,6 +160,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/learn': typeof MemoryLearnRoute
   '/memory/new': typeof MemoryNewRoute
   '/memory/practice': typeof MemoryPracticeRoute
   '/memory/review': typeof MemoryReviewRoute
@@ -156,6 +171,7 @@ export interface FileRoutesByTo {
   '/memory': typeof MemoryIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/study': typeof StudyIndexRoute
+  '/memory/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory/$packId/review': typeof MemoryPackIdReviewRoute
 }
@@ -167,6 +183,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
+  '/memory/learn': typeof MemoryLearnRoute
   '/memory/new': typeof MemoryNewRoute
   '/memory/practice': typeof MemoryPracticeRoute
   '/memory/review': typeof MemoryReviewRoute
@@ -177,6 +194,7 @@ export interface FileRoutesById {
   '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
+  '/memory_/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory_/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory_/$packId/review': typeof MemoryPackIdReviewRoute
 }
@@ -189,6 +207,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/theme-test'
     | '/memory/$packId'
+    | '/memory/learn'
     | '/memory/new'
     | '/memory/practice'
     | '/memory/review'
@@ -199,6 +218,7 @@ export interface FileRouteTypes {
     | '/memory/'
     | '/settings/'
     | '/study/'
+    | '/memory/$packId/learn'
     | '/memory/$packId/practice'
     | '/memory/$packId/review'
   fileRoutesByTo: FileRoutesByTo
@@ -209,6 +229,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/theme-test'
     | '/memory/$packId'
+    | '/memory/learn'
     | '/memory/new'
     | '/memory/practice'
     | '/memory/review'
@@ -219,6 +240,7 @@ export interface FileRouteTypes {
     | '/memory'
     | '/settings'
     | '/study'
+    | '/memory/$packId/learn'
     | '/memory/$packId/practice'
     | '/memory/$packId/review'
   id:
@@ -229,6 +251,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/theme-test'
     | '/memory/$packId'
+    | '/memory/learn'
     | '/memory/new'
     | '/memory/practice'
     | '/memory/review'
@@ -239,6 +262,7 @@ export interface FileRouteTypes {
     | '/memory/'
     | '/settings/'
     | '/study/'
+    | '/memory_/$packId/learn'
     | '/memory_/$packId/practice'
     | '/memory_/$packId/review'
   fileRoutesById: FileRoutesById
@@ -250,6 +274,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   ThemeTestRoute: typeof ThemeTestRoute
   MemoryPackIdRoute: typeof MemoryPackIdRoute
+  MemoryLearnRoute: typeof MemoryLearnRoute
   MemoryNewRoute: typeof MemoryNewRoute
   MemoryPracticeRoute: typeof MemoryPracticeRoute
   MemoryReviewRoute: typeof MemoryReviewRoute
@@ -260,6 +285,7 @@ export interface RootRouteChildren {
   MemoryIndexRoute: typeof MemoryIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
   StudyIndexRoute: typeof StudyIndexRoute
+  MemoryPackIdLearnRoute: typeof MemoryPackIdLearnRoute
   MemoryPackIdPracticeRoute: typeof MemoryPackIdPracticeRoute
   MemoryPackIdReviewRoute: typeof MemoryPackIdReviewRoute
 }
@@ -313,6 +339,13 @@ declare module '@tanstack/react-router' {
       path: '/memory/$packId'
       fullPath: '/memory/$packId'
       preLoaderRoute: typeof MemoryPackIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory/learn': {
+      id: '/memory/learn'
+      path: '/memory/learn'
+      fullPath: '/memory/learn'
+      preLoaderRoute: typeof MemoryLearnRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory/new': {
@@ -378,6 +411,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudyNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory_/$packId/learn': {
+      id: '/memory_/$packId/learn'
+      path: '/memory/$packId/learn'
+      fullPath: '/memory/$packId/learn'
+      preLoaderRoute: typeof MemoryPackIdLearnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/memory_/$packId/practice': {
       id: '/memory_/$packId/practice'
       path: '/memory/$packId/practice'
@@ -402,6 +442,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   ThemeTestRoute: ThemeTestRoute,
   MemoryPackIdRoute: MemoryPackIdRoute,
+  MemoryLearnRoute: MemoryLearnRoute,
   MemoryNewRoute: MemoryNewRoute,
   MemoryPracticeRoute: MemoryPracticeRoute,
   MemoryReviewRoute: MemoryReviewRoute,
@@ -412,6 +453,7 @@ const rootRouteChildren: RootRouteChildren = {
   MemoryIndexRoute: MemoryIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   StudyIndexRoute: StudyIndexRoute,
+  MemoryPackIdLearnRoute: MemoryPackIdLearnRoute,
   MemoryPackIdPracticeRoute: MemoryPackIdPracticeRoute,
   MemoryPackIdReviewRoute: MemoryPackIdReviewRoute,
 }

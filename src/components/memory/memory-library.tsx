@@ -42,12 +42,12 @@ const LOAD_MORE_PAGE_SIZE = 20;
  */
 export function MemoryLibrary({
   now,
-  onPracticeVerse,
+  onLearnVerse,
   onReviewVerse,
 }: {
   now: number;
-  /** Start a practice session scoped to one library verse. */
-  onPracticeVerse: (verse: PracticeVerse) => void;
+  /** Start a Learning session scoped to one library verse. */
+  onLearnVerse: (verse: PracticeVerse) => void;
   /** Start a review session scoped to one library verse. */
   onReviewVerse: (verse: PracticeVerse) => void;
 }) {
@@ -227,7 +227,8 @@ export function MemoryLibrary({
                     <MemoryVerseListAction
                       status={row.status}
                       verse={practiceVerse}
-                      onPractice={onPracticeVerse}
+                      now={now}
+                      onLearn={onLearnVerse}
                       onReview={onReviewVerse}
                     />
                   </MemoryListRow>
@@ -253,9 +254,9 @@ export function MemoryLibrary({
             <VerseDetail
               verseRefId={selected}
               now={now}
-              onPractice={(verse) => {
+              onLearn={(verse) => {
                 setSelected(null);
-                onPracticeVerse(verse);
+                onLearnVerse(verse);
               }}
               onReview={(verse) => {
                 setSelected(null);

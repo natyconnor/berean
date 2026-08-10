@@ -228,7 +228,7 @@ export function ModeDock() {
   const toggleShortcutLabel = formatCommandOrControlShortcut("J");
   const showBadge = typeof dueCount === "number" && dueCount > 0;
   const badgeLabel = showBadge
-    ? `${dueCount} ${dueCount === 1 ? "verse" : "verses"} due for review`
+    ? `${dueCount} ${dueCount === 1 ? "verse" : "verses"} due today`
     : undefined;
 
   const motionProps = reducedMotion

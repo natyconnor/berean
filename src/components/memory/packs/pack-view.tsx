@@ -3,6 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Dumbbell,
+  GraduationCap,
   Loader2,
   Pencil,
   Play,
@@ -35,10 +36,11 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
-import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
@@ -77,6 +79,14 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
 
   const dueMembers = useMemo(
     () => (members ?? []).filter((m) => m.isDue),
+    [members],
+  );
+  const learningDueCount = useMemo(
+    () => (members ?? []).filter((m) => isDueForLearning(m, now)).length,
+    [members, now],
+  );
+  const practiceCount = useMemo(
+    () => (members ?? []).filter((m) => isReviewPhase(m.status)).length,
     [members],
   );
 
@@ -122,10 +132,18 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
       members={members}
       now={now}
       dueCount={dueMembers.length}
+      learningDueCount={learningDueCount}
+      practiceCount={practiceCount}
       onBack={() => void navigate({ to: "/memory" })}
       onReview={() =>
         void navigate({
           to: "/memory/$packId/review",
+          params: { packId },
+        })
+      }
+      onLearn={() =>
+        void navigate({
+          to: "/memory/$packId/learn",
           params: { packId },
         })
       }
@@ -135,10 +153,10 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
           params: { packId },
         })
       }
-      onPracticeVerse={(verse) =>
+      onLearnVerse={(verse) =>
         void navigate({
-          to: "/memory/practice",
-          search: memoryPracticeSearch(verse.reference),
+          to: "/memory/learn",
+          search: memoryLearnSearch(verse.reference),
         })
       }
       onReviewVerse={(verse) =>
@@ -161,10 +179,13 @@ function PackViewMain({
   members,
   now,
   dueCount,
+  learningDueCount,
+  practiceCount,
   onBack,
   onReview,
+  onLearn,
   onPractice,
-  onPracticeVerse,
+  onLearnVerse,
   onReviewVerse,
   onDeleted,
 }: {
@@ -173,10 +194,13 @@ function PackViewMain({
   members: Member[] | undefined;
   now: number;
   dueCount: number;
+  learningDueCount: number;
+  practiceCount: number;
   onBack: () => void;
   onReview: () => void;
+  onLearn: () => void;
   onPractice: () => void;
-  onPracticeVerse: (verse: PracticeVerse) => void;
+  onLearnVerse: (verse: PracticeVerse) => void;
   onReviewVerse: (verse: PracticeVerse) => void;
   onDeleted: () => void;
 }) {
@@ -280,7 +304,8 @@ function PackViewMain({
   );
 
   const canReview = dueCount > 0;
-  const canPractice = verseCount > 0;
+  const canLearn = learningDueCount > 0;
+  const canPractice = practiceCount > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -335,6 +360,20 @@ function PackViewMain({
           </div>
         </div>
         <div className="mt-3 flex gap-2">
+          {canLearn ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={onLearn}
+            >
+              <GraduationCap className="h-4 w-4" aria-hidden />
+              Continue Learning
+              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted-foreground tabular-nums">
+                {learningDueCount}
+              </span>
+            </Button>
+          ) : null}
           <Button
             size="sm"
             className="gap-1.5"
@@ -440,7 +479,8 @@ function PackViewMain({
                       <MemoryVerseListAction
                         status={member.status}
                         verse={practiceVerse}
-                        onPractice={onPracticeVerse}
+                        now={now}
+                        onLearn={onLearnVerse}
                         onReview={onReviewVerse}
                       />
                       {isCustom && (
@@ -478,9 +518,9 @@ function PackViewMain({
             <VerseDetail
               verseRefId={selectedVerseRefId}
               now={now}
-              onPractice={(verse) => {
+              onLearn={(verse) => {
                 setSelectedVerseRefId(null);
-                onPracticeVerse(verse);
+                onLearnVerse(verse);
               }}
               onReview={(verse) => {
                 setSelectedVerseRefId(null);

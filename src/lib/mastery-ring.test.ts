@@ -15,7 +15,7 @@ describe("masteryRingFraction", () => {
 
   it("grows the learning ring across the ladder, staying below the reviewing band", () => {
     const early = masteryRingFraction("learning", 0, 1, 0);
-    const mid = masteryRingFraction("learning", 0, 2, 4);
+    const mid = masteryRingFraction("learning", 0, 2, 2);
     const late = masteryRingFraction("learning", 0, 3, 0);
     expect(early).toBeGreaterThan(0);
     expect(mid).toBeGreaterThan(early);
@@ -24,8 +24,10 @@ describe("masteryRingFraction", () => {
   });
 
   it("banks reps within a band to approach the reviewing floor", () => {
-    // Stage 3 (From Memory) needs 1 rep; a full band lands exactly at the floor.
-    expect(masteryRingFraction("learning", 0, 3, 1)).toBeCloseTo(0.5);
+    // Clearing the last band (From Memory) lands exactly at the floor.
+    expect(
+      masteryRingFraction("learning", 0, 3, requiredRepsFor(3)),
+    ).toBeCloseTo(0.5);
   });
 
   it("clamps out-of-range learn stages and rep counts", () => {
@@ -55,7 +57,7 @@ describe("masteryRingFraction", () => {
 });
 
 describe("learningJourneyFraction", () => {
-  /** Short-verse total: Read 1 + Guided 3 + Challenge 5 + From Memory 1. */
+  /** Short-verse total: Read 1 + Guided 3 + Challenge 4 + From Memory 3. */
   const shortTotal =
     requiredRepsFor(0) +
     requiredRepsFor(1) +
@@ -67,8 +69,8 @@ describe("learningJourneyFraction", () => {
   });
 
   it("each successful Continue fills the same fraction of the bar", () => {
-    // Short verse: 10 exact reps across the journey → each Continue = 10%.
-    expect(shortTotal).toBe(10);
+    // Short verse: 11 exact reps across the journey → each Continue = 1/11.
+    expect(shortTotal).toBe(11);
     const step = 1 / shortTotal;
 
     // Read continue: stage 0 → stage 1.
@@ -91,7 +93,7 @@ describe("learningJourneyFraction", () => {
     ).toBeCloseTo(step);
     // From Memory start is after all prior bands; one more Continue fills the last step.
     expect(
-      learningJourneyFraction(3, 0) - learningJourneyFraction(2, 4),
+      learningJourneyFraction(3, 0) - learningJourneyFraction(2, 3),
     ).toBeCloseTo(step);
     expect(
       learningJourneyFraction(3, 1) - learningJourneyFraction(3, 0),
@@ -142,14 +144,14 @@ describe("learningJourneyFraction", () => {
   });
 
   it("length-adjusted Guided reps shift the fraction correctly", () => {
-    // 24-word verse: Guided 7 + Challenge 12 → total 1+7+12+1 = 21.
+    // 24-word verse: Guided 5 + Challenge 6 + From Memory 4 → total 1+5+6+4 = 16.
     const longWordCount = 24;
     const longTotal =
       requiredRepsFor(0, longWordCount) +
       requiredRepsFor(1, longWordCount) +
       requiredRepsFor(2, longWordCount) +
       requiredRepsFor(3, longWordCount);
-    expect(longTotal).toBe(21);
+    expect(longTotal).toBe(16);
     // Read cleared (1) + one Guided rep.
     const oneRep = learningJourneyFraction(1, 1, longWordCount);
     expect(oneRep).toBeCloseTo(2 / longTotal, 5);

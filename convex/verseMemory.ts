@@ -12,9 +12,12 @@ import {
 } from "./lib/verseMemory";
 import { findVerseRefId } from "./lib/verseRefs";
 import {
+  isDueForLearning,
   isDueForReview,
+  isLearningLocked,
   isReviewPhase,
   scheduleNext,
+  type MemorySchedule,
 } from "../src/lib/memory-scheduler";
 import {
   bucketAccuracyAverages,
@@ -289,8 +292,9 @@ export const dueForVerse = query({
 });
 
 /**
- * Cheap count of verses due for review at `now` (`reviewing` / `mastered`
- * only). Heart-aware: only rows denormalized as currently hearted are counted.
+ * Cheap count of verses due *today* — review-phase dues plus in-progress
+ * learning verses whose session is available (`status === "learning"` and
+ * `dueAt <= now`). Hearted `new` verses and soft-locked learning are excluded.
  * Drives the dock badge. Bounded scan — not a full collect.
  */
 export const dueCount = query({
@@ -312,8 +316,9 @@ export const dueCount = query({
 
     let count = 0;
     for (const row of dueRows) {
-      if (!isDueForReview(row, args.now)) continue;
-      count += 1;
+      if (isDueForReview(row, args.now) || isDueForLearning(row, args.now)) {
+        count += 1;
+      }
     }
     return count;
   },
@@ -325,6 +330,9 @@ export const dueCount = query({
  * Appends a `verseMemoryReviews` row, loads (or seeds) the `verseMemory` row,
  * applies the pure `scheduleNext`, and patches the row. Returns the new
  * schedule so callers can reflect the updated `dueAt`/status immediately.
+ *
+ * Soft-locked learning verses (`dueAt` in the future) do not advance: the
+ * mutation returns the current schedule without writing a review or patch.
  */
 export const recordAttempt = mutation({
   args: {
@@ -336,6 +344,8 @@ export const recordAttempt = mutation({
     durationMs: v.optional(v.number()),
     now: v.number(),
     wordCount: v.optional(v.number()),
+    /** Client `getTimezoneOffset()`; lands learning soft locks on their day. */
+    tzOffsetMinutes: v.optional(v.number()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -353,6 +363,23 @@ export const recordAttempt = mutation({
       args.now,
     );
 
+    const current: MemorySchedule = {
+      status: memory.status,
+      learnStage: memory.learnStage,
+      stageReps: memory.stageReps ?? 0,
+      ease: memory.ease,
+      intervalDays: memory.intervalDays,
+      dueAt: memory.dueAt,
+      consecutiveCorrect: memory.consecutiveCorrect,
+      lapses: memory.lapses,
+      earlyReviewApplied: memory.earlyReviewApplied ?? false,
+    };
+
+    // Soft lock: today's learning session is done — refuse to bank more reps.
+    if (isLearningLocked(current, args.now)) {
+      return current;
+    }
+
     await ctx.db.insert("verseMemoryReviews", {
       userId,
       verseRefId: args.verseRefId,
@@ -365,26 +392,14 @@ export const recordAttempt = mutation({
       createdAt: args.now,
     });
 
-    const next = scheduleNext(
-      {
-        status: memory.status,
-        learnStage: memory.learnStage,
-        stageReps: memory.stageReps ?? 0,
-        ease: memory.ease,
-        intervalDays: memory.intervalDays,
-        dueAt: memory.dueAt,
-        consecutiveCorrect: memory.consecutiveCorrect,
-        lapses: memory.lapses,
-        earlyReviewApplied: memory.earlyReviewApplied ?? false,
-      },
-      {
-        quality: args.quality,
-        accuracy: args.accuracy,
-        mode: args.mode,
-        now: args.now,
-        wordCount: args.wordCount,
-      },
-    );
+    const next = scheduleNext(current, {
+      quality: args.quality,
+      accuracy: args.accuracy,
+      mode: args.mode,
+      now: args.now,
+      wordCount: args.wordCount,
+      tzOffsetMinutes: args.tzOffsetMinutes,
+    });
 
     if (memory.status !== next.status && isLiveHeartedMemory(memory)) {
       await adjustUserMemoryStats(
@@ -442,14 +457,17 @@ const memoryStatsValidator = v.object({
   mastered: v.number(),
   total: v.number(),
   due: v.number(),
+  learningDue: v.number(),
 });
 
 /**
- * Per-status counts for the current user, plus a due-now tally of review-phase
- * verses (`reviewing` / `mastered` with `dueAt <= now`).
+ * Per-status counts for the current user, plus due-now tallies:
+ * - `due` — review-phase verses (`reviewing` / `mastered` with `dueAt <= now`)
+ * - `learningDue` — in-progress `learning` verses available for today's
+ *   session (excludes hearted-but-not-started `new` verses)
  *
- * Status totals come from denormalized `userMemoryStats` (O(1)). Due is still
- * computed live from a bounded due-index scan (time-dependent).
+ * Status totals come from denormalized `userMemoryStats` (O(1)). Due counts are
+ * still computed live from a bounded due-index scan (time-dependent).
  */
 export const memoryStats = query({
   args: { now: v.number() },
@@ -462,6 +480,7 @@ export const memoryStats = query({
       mastered: 0,
       total: 0,
       due: 0,
+      learningDue: 0,
     };
 
     const userId = await getCurrentUserIdOrNull(ctx);
@@ -483,8 +502,10 @@ export const memoryStats = query({
       .take(MAX_DUE_SCAN);
 
     let due = 0;
+    let learningDue = 0;
     for (const row of dueRows) {
       if (isDueForReview(row, args.now)) due += 1;
+      if (isDueForLearning(row, args.now)) learningDue += 1;
     }
 
     if (!rollup) {
@@ -495,7 +516,7 @@ export const memoryStats = query({
           q.eq("userId", userId).eq("isHearted", true),
         )
         .take(MAX_DUE_SCAN);
-      const stats = { ...empty, due };
+      const stats = { ...empty, due, learningDue };
       for (const memory of rows) {
         stats[memory.status] += 1;
         stats.total += 1;
@@ -510,6 +531,7 @@ export const memoryStats = query({
       mastered: rollup.mastered,
       total: rollup.total,
       due,
+      learningDue,
     };
   },
 });
@@ -634,8 +656,8 @@ export const reviewForecast = query({
 
     const dueAts: number[] = [];
     for (const row of rows) {
-      // Learning-phase verses keep dueAt = now for practice availability, but
-      // they are not part of the review forecast.
+      // Soft-locked learning verses have dueAt in the future and would appear
+      // in the window; exclude them — forecast is review-phase only.
       if (!isReviewPhase(row.status)) continue;
       dueAts.push(row.dueAt);
     }

@@ -5,7 +5,7 @@ import { useQuery } from "convex-helpers/react/cache";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { memoryPracticeSearch } from "@/lib/memory-practice-search";
+import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 
 import { api } from "../../../convex/_generated/api";
@@ -16,9 +16,8 @@ import { PackList } from "./packs/pack-list";
 /**
  * Memory home: the verse-memory experience surfaced at `/memory`. Leads with the
  * progress dashboard (whose "Today" hero exposes the Review action) and the
- * library of every hearted verse. Review and Practice live on their own routes
- * (`/memory/review`, `/memory/practice`) so reloads and back/forward keep you
- * in-session.
+ * library of every hearted verse. Learning, Review, and Practice live on their
+ * own routes so reloads and back/forward keep the learner in-session.
  */
 export function MemoryHome() {
   // Refreshes on an interval so the due count stays live while the tab is open
@@ -28,7 +27,7 @@ export function MemoryHome() {
   const navigate = useNavigate();
 
   const stats = useQuery(api.verseMemory.memoryStats, { now });
-  const canPractice = (stats?.total ?? 0) > 0;
+  const canPractice = (stats?.reviewing ?? 0) + (stats?.mastered ?? 0) > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -60,6 +59,9 @@ export function MemoryHome() {
             now={now}
             stats={stats}
             onStartReview={() => void navigate({ to: "/memory/review" })}
+            onStartLearning={() =>
+              void navigate({ to: "/memory/learn", search: {} })
+            }
           />
           {/* Library is the main column; Packs sits as a sidebar on large
               screens. Explicit col/row placement keeps Packs first in DOM order
@@ -71,10 +73,10 @@ export function MemoryHome() {
             <div className="lg:col-span-2 lg:col-start-1 lg:row-start-1">
               <MemoryLibrary
                 now={now}
-                onPracticeVerse={(verse) => {
+                onLearnVerse={(verse) => {
                   void navigate({
-                    to: "/memory/practice",
-                    search: memoryPracticeSearch(verse.reference),
+                    to: "/memory/learn",
+                    search: memoryLearnSearch(verse.reference),
                   });
                 }}
                 onReviewVerse={(verse) => {

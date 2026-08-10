@@ -126,6 +126,8 @@ export function useVersePracticeAttempt(
               args.accuracy,
               args.wordCount,
               args.current.status,
+              // Approximate soft-lock dueAt when the mutation returns null.
+              Date.now(),
             ),
       );
     },
