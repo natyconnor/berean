@@ -1,4 +1,4 @@
-import { Play } from "lucide-react";
+import { GraduationCap, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
 import type { FunctionReturnType } from "convex/server";
 import { motion, useReducedMotion } from "framer-motion";
@@ -34,10 +34,12 @@ export function MemoryDashboard({
   now,
   stats,
   onStartReview,
+  onStartLearning,
 }: {
   now: number;
   stats: MemoryStats | undefined;
   onStartReview: () => void;
+  onStartLearning: () => void;
 }) {
   const timeZone = getViewerTimeZone();
   const activity = useQuery(api.verseMemory.reviewActivity, {
@@ -66,17 +68,24 @@ export function MemoryDashboard({
       : overallAccuracy(
           activity.trend.map((d) => ({ average: d.average, count: d.count })),
         );
+  const dueToday =
+    stats === undefined ? undefined : stats.due + stats.learningDue;
 
   return (
     <div className="space-y-4">
       {/* Header band: the Today hero and the KPI cluster share a row on large
           screens so the top of the page stops being a near-empty wide card. */}
       <div className="grid gap-4 lg:grid-cols-3 lg:items-center">
-        <TodayHero due={stats?.due} onStartReview={onStartReview} />
+        <TodayHero
+          reviewDue={stats?.due}
+          learningDue={stats?.learningDue}
+          onStartReview={onStartReview}
+          onStartLearning={onStartLearning}
+        />
         <div className="lg:col-span-2">
           <KpiRow
             kpis={{
-              dueToday: stats?.due,
+              dueToday,
               streak,
               inMemory,
               accuracy30d,
@@ -116,25 +125,29 @@ export function MemoryDashboard({
 }
 
 /**
- * The "Today" hero. `due === undefined` means `memoryStats` is still loading;
+ * The "Today" hero. Undefined dues mean `memoryStats` is still loading;
  * we keep a size-matched skeleton mounted so the header band doesn't jump,
- * then fade the real copy in once the due count resolves.
+ * then fade the real copy in once the due counts resolve.
  */
 function TodayHero({
-  due,
+  reviewDue,
+  learningDue,
   onStartReview,
+  onStartLearning,
 }: {
-  due: number | undefined;
+  reviewDue: number | undefined;
+  learningDue: number | undefined;
   onStartReview: () => void;
+  onStartLearning: () => void;
 }) {
   const reduceMotion = useReducedMotion();
 
-  if (due === undefined) {
+  if (reviewDue === undefined || learningDue === undefined) {
     return (
       <MemoryDashboardCard
         className="min-h-[8.75rem] p-5"
         aria-busy
-        aria-label="Loading today's review"
+        aria-label="Loading today's memory work"
       >
         <div
           className="flex flex-wrap items-center justify-between gap-4"
@@ -151,6 +164,24 @@ function TodayHero({
     );
   }
 
+  const totalDue = reviewDue + learningDue;
+  const headline =
+    totalDue === 0
+      ? "All caught up"
+      : learningDue > 0 && reviewDue > 0
+        ? `${learningDue} to learn · ${reviewDue} to review`
+        : learningDue > 0
+          ? `${learningDue} to learn today`
+          : `${reviewDue} due today`;
+  const subtitle =
+    totalDue === 0
+      ? "No verses need learning or review right now."
+      : learningDue > 0 && reviewDue > 0
+        ? "Continue learning sessions, then clear today's reviews."
+        : learningDue > 0
+          ? "Finish today's learning sessions on your hearted verses."
+          : "Review your hearted verses across every session.";
+
   return (
     <MemoryDashboardCard className="min-h-[8.75rem] p-5">
       <motion.div
@@ -164,23 +195,32 @@ function TodayHero({
             Today
           </p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-            {due > 0 ? `${due} due today` : "All caught up"}
+            {headline}
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {due > 0
-              ? "Review your hearted verses across every session."
-              : "No verses are due for review right now."}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
-        <Button
-          size="lg"
-          onClick={onStartReview}
-          disabled={due === 0}
-          className="gap-1.5"
-        >
-          <Play className="h-4 w-4" />
-          Review
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {learningDue > 0 ? (
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={onStartLearning}
+              className="gap-1.5"
+            >
+              <GraduationCap className="h-4 w-4" aria-hidden />
+              Continue Learning
+            </Button>
+          ) : null}
+          <Button
+            size="lg"
+            onClick={onStartReview}
+            disabled={reviewDue === 0}
+            className="gap-1.5"
+          >
+            <Play className="h-4 w-4" />
+            Review
+          </Button>
+        </div>
       </motion.div>
     </MemoryDashboardCard>
   );

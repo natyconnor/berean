@@ -95,6 +95,9 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
         durationMs: input.durationMs,
         now,
         wordCount: input.wordCount,
+        // Lets the scheduler land a learning soft lock on the start of the
+        // learner's next local day instead of a rolling 24 hours.
+        tzOffsetMinutes: new Date(now).getTimezoneOffset(),
       })
         .then((schedule): MemorySchedule | null => schedule)
         .catch((error: unknown) => {

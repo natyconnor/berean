@@ -16,9 +16,11 @@ interface RailVerse {
   learnStage: number;
   stageReps: number;
   status: MemoryStatus;
+  locked?: boolean;
 }
 
 interface PracticeVerseRailProps {
+  sessionLabel: "Learning" | "Practice";
   verses: ReadonlyArray<RailVerse>;
   activeId: string | null;
   onSelectVerse: (id: string) => void;
@@ -37,6 +39,8 @@ interface PracticeVerseRailProps {
    * matches the card and server. Falls back to short-verse minima when absent.
    */
   currentWordCount?: number;
+  /** Soft-locked: today's learning session is done for the active verse. */
+  currentLocked?: boolean;
   className?: string;
 }
 
@@ -47,6 +51,7 @@ interface PracticeVerseRailProps {
  * clickable verse list used to jump around the set.
  */
 export function PracticeVerseRail({
+  sessionLabel,
   verses,
   activeId,
   onSelectVerse,
@@ -57,6 +62,7 @@ export function PracticeVerseRail({
   currentStageReps,
   currentStatus,
   currentWordCount,
+  currentLocked = false,
   className,
 }: PracticeVerseRailProps) {
   const canReorder = verses.length >= 2;
@@ -73,7 +79,7 @@ export function PracticeVerseRail({
             <div
               className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
               role="group"
-              aria-label="Practice order"
+              aria-label={`${sessionLabel} order`}
             >
               <button
                 type="button"
@@ -132,6 +138,11 @@ export function PracticeVerseRail({
               wordCount={currentWordCount}
               status={currentStatus}
             />
+            {currentLocked ? (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Next session tomorrow
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -149,6 +160,7 @@ export function PracticeVerseRail({
                   verse.learnStage,
                   verse.status,
                 );
+                const locked = verse.locked === true;
                 return (
                   <motion.button
                     layout
@@ -156,14 +168,15 @@ export function PracticeVerseRail({
                     type="button"
                     className={cn(
                       "inline-flex w-full items-center gap-2 rounded-full border px-2.5 py-1 text-left text-[11px] font-medium transition-colors",
+                      locked && "opacity-60",
                       active
                         ? chrome.railActive
                         : "border-border/60 bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                     )}
                     onClick={() => onSelectVerse(verse.id)}
                     aria-current={active ? "true" : undefined}
-                    aria-label={`${formatVerseRef(verse.reference)} (${stage.label} band)`}
-                    title={`${formatVerseRef(verse.reference)} · ${stage.label}`}
+                    aria-label={`${formatVerseRef(verse.reference)} (${stage.label} band${locked ? ", done for today" : ""})`}
+                    title={`${formatVerseRef(verse.reference)} · ${stage.label}${locked ? " · Tomorrow" : ""}`}
                     transition={{ layout: { duration: 0.28, ease: "easeOut" } }}
                   >
                     <span
@@ -176,6 +189,11 @@ export function PracticeVerseRail({
                     <span className="truncate">
                       {formatVerseRef(verse.reference)}
                     </span>
+                    {locked ? (
+                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                        Done
+                      </span>
+                    ) : null}
                   </motion.button>
                 );
               })}

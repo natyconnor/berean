@@ -7,6 +7,7 @@ import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import {
+  isLearningLocked,
   isReviewPhase,
   MAX_LEARN_STAGE,
   type MemoryStatus,
@@ -147,13 +148,13 @@ function VerseDetailSkeleton() {
 export function VerseDetail({
   verseRefId,
   now,
-  onPractice,
+  onLearn,
   onReview,
 }: {
   verseRefId: Id<"verseRefs">;
   now: number;
-  /** Start practice for this verse (closes the detail dialog upstream). */
-  onPractice: (verse: PracticeVerse) => void;
+  /** Start Learning for this verse (closes the detail dialog upstream). */
+  onLearn: (verse: PracticeVerse) => void;
   /** Start review for this verse when it is due. */
   onReview?: (verse: PracticeVerse) => void;
 }) {
@@ -186,11 +187,16 @@ export function VerseDetail({
     learnStage: detail.learnStage,
     stageReps: detail.stageReps,
     status: detail.status,
+    dueAt: detail.dueAt,
   };
   // Review-phase verses can start a one-off (including early) review from here;
-  // learning-phase verses use Learn / practice instead.
+  // Learning-phase verses use Learn instead (unless soft-locked).
   const showReviewAction =
     onReview !== undefined && isReviewPhase(detail.status);
+  const learningLocked = isLearningLocked(
+    { status: detail.status, dueAt: detail.dueAt },
+    now,
+  );
 
   // Attempts arrive newest-first; reverse for a left-to-right time axis.
   const chronological = [...detail.attempts].reverse();
@@ -239,10 +245,17 @@ export function VerseDetail({
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => onPractice(actionVerse)}
+              disabled={learningLocked}
+              onClick={() => {
+                if (!learningLocked) onLearn(actionVerse);
+              }}
             >
               <GraduationCap className="h-4 w-4" aria-hidden />
-              {detail.status === "learning" ? "Continue Learning" : "Learn"}
+              {learningLocked
+                ? "Tomorrow"
+                : detail.status === "learning"
+                  ? "Continue Learning"
+                  : "Learn"}
             </Button>
           )}
           <AddToPack reference={cardReference} now={now} />
@@ -296,10 +309,17 @@ export function VerseDetail({
             Graduated to review — recalled from memory.
           </p>
         ) : (
-          <LearningJourneyBar
-            learnStage={detail.learnStage}
-            stageReps={detail.stageReps}
-          />
+          <>
+            <LearningJourneyBar
+              learnStage={detail.learnStage}
+              stageReps={detail.stageReps}
+            />
+            {learningLocked ? (
+              <p className="text-xs text-muted-foreground">
+                Session done for today — next session tomorrow.
+              </p>
+            ) : null}
+          </>
         )}
       </section>
 

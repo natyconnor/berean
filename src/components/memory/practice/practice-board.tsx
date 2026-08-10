@@ -26,12 +26,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useEsvReference } from "@/hooks/use-esv-reference";
+import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
 import {
+  isLearningLocked,
+  isLearningPhase,
   isLearningProgressAttempt,
+  requiredRepsFor,
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
+import type { MemorySessionKind } from "@/lib/memory-session";
 import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import {
@@ -58,6 +63,7 @@ import { VerseAttemptResult } from "../../study/study-verse-memory-card";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
+import { SessionComplete } from "./session-complete";
 
 export interface PracticeVerse {
   reference: CardReference;
@@ -75,9 +81,16 @@ export interface PracticeVerse {
    * floor.
    */
   status?: MemoryStatus;
+  /**
+   * Next availability timestamp. For learning verses, a future `dueAt` means
+   * today's session is done (soft lock until tomorrow).
+   */
+  dueAt?: number;
 }
 
 interface PracticeBoardProps {
+  /** Learning advances today's ladder; Practice is optional graduated recall. */
+  kind: MemorySessionKind;
   /** The verse set to practice (e.g. the user's hearted verses or a pack). */
   verses: ReadonlyArray<PracticeVerse>;
   /** Human-readable name for the set being practiced. */
@@ -86,6 +99,8 @@ interface PracticeBoardProps {
   onExit: () => void;
   /** Describes the back-button destination. */
   exitTooltip?: string;
+  /** Names the back-button destination on the end-of-session card. */
+  exitLabel?: string;
 }
 
 /** Live learning progress the board tracks per verse this session. */
@@ -93,6 +108,7 @@ interface VerseProgress {
   learnStage: number;
   stageReps: number;
   status: MemoryStatus;
+  dueAt: number;
 }
 
 interface OrderedVerse {
@@ -101,6 +117,23 @@ interface OrderedVerse {
   learnStage: number;
   stageReps: number;
   status: MemoryStatus;
+  dueAt: number;
+}
+
+/**
+ * Whether this verse still has work left in the current session.
+ *
+ * Learning is rationed one band per day, so a verse drops out of the session
+ * once it soft-locks or graduates into review. Practice is optional extra
+ * recall with no ration, so it never runs dry.
+ */
+function hasSessionWorkLeft(
+  kind: MemorySessionKind,
+  progress: Pick<VerseProgress, "status" | "dueAt">,
+  now: number,
+): boolean {
+  if (kind === "practice") return true;
+  return isLearningPhase(progress.status) && !isLearningLocked(progress, now);
 }
 
 const SHUFFLE_DURATION_MS = 750;
@@ -110,12 +143,11 @@ const DEAL_FLY_IN_S = 0.16;
 const DEAL_FADE_OUT_S = 0.12;
 
 /**
- * The Practice board: a focused, self-directed surface. One verse card at a
- * time, a verse rail to jump around, a Shuffle / In-order toggle, and prev/next
- * navigation.
+ * Shared Learning / Practice board: one verse card at a time, a verse rail to
+ * jump around, a Shuffle / In-order toggle, and prev/next navigation.
  *
- * Practice counts fully: every attempt records with `mode: "practice"` and
- * reschedules exactly like Review. The card is driven entirely by the server's
+ * Attempts use the session's explicit `learn` or `practice` mode and count
+ * fully. The card is driven entirely by the server's
  * `learnStage` + `stageReps`: a Read prime, then the fading support bands
  * (Guided → Challenge → From Memory) that re-randomize and thin their hints per
  * rep. Each recorded attempt adopts the returned `learnStage`/`stageReps`, so
@@ -123,12 +155,15 @@ const DEAL_FADE_OUT_S = 0.12;
  * live in-session.
  */
 export function PracticeBoard({
+  kind,
   verses,
   scopeLabel,
   onExit,
   exitTooltip,
+  exitLabel = "Back to Memory",
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
+  const now = useLiveNow();
   const [order, setOrder] = useState<PracticeOrder>("in-order");
   // Bumped each time the user (re-)selects Shuffle so repeated presses reshuffle
   // deterministically without depending on Math.random().
@@ -136,8 +171,14 @@ export function PracticeBoard({
   const [shuffleNonce, setShuffleNonce] = useState(0);
   const [isShuffling, setIsShuffling] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  // Set once every verse has spent its turn and the learner dismisses the last
+  // result, so the run ends on a summary instead of a dead card.
+  const [finished, setFinished] = useState(false);
 
-  const { recordWithSeqAdopt } = useVersePracticeAttempt("practice");
+  const { recordWithSeqAdopt } = useVersePracticeAttempt(
+    kind === "learning" ? "learn" : "practice",
+  );
+  const sessionLabel = kind === "learning" ? "Learning" : "Practice";
 
   // Snapshot the practice set once when the board mounts. Like ReviewPlayer
   // freezing its due queue, this keeps mid-session heart changes (which mutate
@@ -150,12 +191,13 @@ export function PracticeBoard({
       learnStage: normalizeStageIndex(verse.learnStage),
       stageReps: normalizeReps(verse.stageReps ?? 0),
       status: normalizeStatus(verse.status),
+      dueAt: verse.dueAt ?? now,
     })),
   );
 
   // Live per-verse learning progress. Seeded from the frozen snapshot, then
   // advanced by adopting the server-authoritative `learnStage`/`stageReps`/
-  // `status` returned by each recorded attempt, so the fade dial moves
+  // `status`/`dueAt` returned by each recorded attempt, so the fade dial moves
   // in-session (and graduation fills the journey bar to 100%).
   const [progressByVerseId, setProgressByVerseId] = useState<
     Record<string, VerseProgress>
@@ -167,6 +209,7 @@ export function PracticeBoard({
           learnStage: verse.learnStage,
           stageReps: verse.stageReps,
           status: verse.status,
+          dueAt: verse.dueAt,
         },
       ]),
     ),
@@ -189,9 +232,18 @@ export function PracticeBoard({
           learnStage: progress?.learnStage ?? verse.learnStage,
           stageReps: progress?.stageReps ?? verse.stageReps,
           status: progress?.status ?? verse.status,
+          dueAt: progress?.dueAt ?? verse.dueAt,
+          locked: !hasSessionWorkLeft(
+            kind,
+            {
+              status: progress?.status ?? verse.status,
+              dueAt: progress?.dueAt ?? verse.dueAt,
+            },
+            now,
+          ),
         };
       }),
-    [orderedVerses, progressByVerseId],
+    [orderedVerses, progressByVerseId, now, kind],
   );
 
   const boundedIndex =
@@ -204,8 +256,14 @@ export function PracticeBoard({
         learnStage: currentVerse.learnStage,
         stageReps: currentVerse.stageReps,
         status: currentVerse.status,
+        dueAt: currentVerse.dueAt,
       })
-    : { learnStage: 0, stageReps: 0, status: "learning" };
+    : { learnStage: 0, stageReps: 0, status: "learning", dueAt: now };
+
+  // Soft lock drives the card's "come back tomorrow" chrome; work-left drives
+  // navigation, so a verse that graduates mid-session also hands off cleanly.
+  const currentLocked = isLearningLocked(currentProgress, now);
+  const currentHasWorkLeft = hasSessionWorkLeft(kind, currentProgress, now);
 
   // Fetch the active verse's text (cache-shared with PracticeCard) so the rail
   // and card can show a length-accurate journey bar via learningJourneyFraction.
@@ -249,22 +307,40 @@ export function PracticeBoard({
   if (orderedVerses.length === 0 || !currentVerse) {
     return (
       <PracticeShell
+        sessionLabel={sessionLabel}
         scopeLabel={scopeLabel}
         onExit={onExit}
         exitTooltip={exitTooltip}
       >
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
           <p className="text-sm text-muted-foreground">
-            No verses to practice yet. Heart a verse in the reader to build your
-            practice set.
+            No verses are available for {sessionLabel.toLowerCase()}.
           </p>
         </div>
       </PracticeShell>
     );
   }
 
+  if (finished) {
+    return (
+      <PracticeShell
+        sessionLabel={sessionLabel}
+        scopeLabel={scopeLabel}
+        onExit={onExit}
+        exitTooltip={exitTooltip}
+      >
+        <SessionComplete
+          verses={railVerses}
+          exitLabel={exitLabel}
+          onExit={onExit}
+        />
+      </PracticeShell>
+    );
+  }
+
   return (
     <PracticeShell
+      sessionLabel={sessionLabel}
       scopeLabel={scopeLabel}
       onExit={onExit}
       exitTooltip={exitTooltip}
@@ -274,10 +350,12 @@ export function PracticeBoard({
           <div className="relative">
             <PracticeCard
               key={currentVerse.id}
+              sessionLabel={sessionLabel}
               reference={currentVerse.reference}
               learnStage={currentProgress.learnStage}
               stageReps={currentProgress.stageReps}
               status={currentProgress.status}
+              locked={currentLocked}
               position={boundedIndex}
               total={orderedVerses.length}
               onRecord={(tokens, wordCount) => {
@@ -293,16 +371,37 @@ export function PracticeBoard({
                   (next) => {
                     setProgressByVerseId((prev) => ({
                       ...prev,
-                      [verseId]: next,
+                      [verseId]: {
+                        learnStage: next.learnStage,
+                        stageReps: next.stageReps,
+                        status: next.status,
+                        dueAt: next.dueAt ?? now,
+                      },
                     }));
                   },
                 );
+              }}
+              advancesOnContinue={!currentHasWorkLeft}
+              onContinueAfterResult={() => {
+                // A session-ending clear leaves this card with nothing more to
+                // give today, so hand off to the next verse that still has a
+                // session left rather than parking the learner on a dead end.
+                if (currentHasWorkLeft) return;
+                const nextAvailable = railVerses.findIndex(
+                  (verse, index) => index !== boundedIndex && !verse.locked,
+                );
+                if (nextAvailable >= 0) {
+                  setCurrentIndex(nextAvailable);
+                  return;
+                }
+                setFinished(true);
               }}
             />
             <AnimatePresence>
               {isShuffling && (
                 <PracticeShuffleOverlay
                   key={`practice-shuffle-${shuffleNonce}`}
+                  sessionLabel={sessionLabel}
                   verses={railVerses}
                   firstVerse={
                     railVerses.find((v) => v.id === currentVerse.id) ??
@@ -315,6 +414,7 @@ export function PracticeBoard({
         </div>
         <div className="order-1 md:order-2">
           <PracticeVerseRail
+            sessionLabel={sessionLabel}
             verses={railVerses}
             activeId={currentVerse.id}
             onSelectVerse={handleSelectVerse}
@@ -325,6 +425,7 @@ export function PracticeBoard({
             currentStageReps={currentProgress.stageReps}
             currentStatus={currentProgress.status}
             currentWordCount={currentWordCount}
+            currentLocked={currentLocked}
           />
         </div>
       </div>
@@ -333,6 +434,7 @@ export function PracticeBoard({
 }
 
 interface PracticeCardProps {
+  sessionLabel: "Learning" | "Practice";
   reference: CardReference;
   /** Server-authoritative band for this verse (0..3). */
   learnStage: number;
@@ -340,22 +442,35 @@ interface PracticeCardProps {
   stageReps: number;
   /** Lifecycle status — fills the journey bar on graduation. */
   status: MemoryStatus;
+  /** Soft-locked: today's learning session is done. */
+  locked: boolean;
   position: number;
   total: number;
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
   ) => Promise<void>;
+  /**
+   * This verse is spent for the session, so dismissing the result leaves the
+   * card instead of setting up another rep.
+   */
+  advancesOnContinue?: boolean;
+  /** Fired when the learner dismisses a checked attempt's result. */
+  onContinueAfterResult?: () => void;
 }
 
 function PracticeCard({
+  sessionLabel,
   reference,
   learnStage,
   stageReps,
   status,
+  locked,
   position,
   total,
   onRecord,
+  advancesOnContinue = false,
+  onContinueAfterResult,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -391,19 +506,34 @@ function PracticeCard({
     };
   }, [versePlainText, learnStage, stageReps]);
 
+  const requiredToday = requiredRepsFor(learnStage, wordCount);
+  const sessionGoalLabel =
+    status === "reviewing" || status === "mastered"
+      ? null
+      : `${stageInfo.label} · ${Math.min(stageReps, requiredToday)} of ${requiredToday} today`;
+
+  // A session-ending clear locks the verse the instant its attempt is adopted.
+  // Hold the graded result until the learner continues so the feedback they
+  // just earned isn't swapped out from under them.
+  const showLocked = locked && !checked;
+
   const isReadPrime = hintStage === "full";
-  const promptLine = isReadPrime
-    ? "Read it through, then continue"
-    : hintStage === "hidden"
-      ? "Recall the verse from memory"
-      : "Type what you remember";
+  const promptLine = showLocked
+    ? "Done for today — come back tomorrow"
+    : isReadPrime
+      ? "Read it through, then continue"
+      : hintStage === "hidden"
+        ? "Recall the verse from memory"
+        : "Type what you remember";
 
   const canCheckAnswer =
+    !locked &&
     !loading &&
     !error &&
     typedAnswer.trim().length > 0 &&
     versePlainText !== "";
-  const canContinueRead = !loading && !error && versePlainText !== "";
+  const canContinueRead =
+    !locked && !loading && !error && versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
@@ -414,9 +544,11 @@ function PracticeCard({
     checkedQuality !== null &&
     isLearningProgressAttempt(checkedQuality, checkedAccuracy);
   // Once graduated, another strong recall is just another practice pass — offer
-  // "Try again" instead of implying the learning journey still advances.
+  // "Try again" instead of implying the learning journey still advances. When
+  // the verse is spent for the session, continuing leaves the card entirely.
   const offerPracticeAgain =
-    status === "reviewing" || status === "mastered" || !madeLearningProgress;
+    !advancesOnContinue &&
+    (status === "reviewing" || status === "mastered" || !madeLearningProgress);
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
@@ -445,6 +577,7 @@ function PracticeCard({
   function continueAttempt() {
     setChecked(false);
     setTypedAnswer("");
+    onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
 
@@ -517,7 +650,7 @@ function PracticeCard({
                 className={cn("h-2 w-2 rounded-full", stageColor.dot)}
                 aria-hidden
               />
-              Practice · {stageInfo.label}
+              {sessionLabel} · {stageInfo.label}
             </p>
             <CardTitle className="mt-2 text-3xl tracking-tight">
               {refLabel}
@@ -529,91 +662,119 @@ function PracticeCard({
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
           </p>
+          {sessionGoalLabel && !locked ? (
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {sessionGoalLabel}
+            </p>
+          ) : null}
           <LearningJourneyBar
             learnStage={learnStage}
             stageReps={stageReps}
             wordCount={wordCount}
             status={status}
           />
+          {locked ? (
+            <p className="text-xs text-muted-foreground">
+              Next session tomorrow · {stageInfo.label} waiting
+            </p>
+          ) : null}
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {!checked && (
-            <>
-              <div
-                className={cn(
-                  "min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
-                  stageColor.panel,
-                )}
-              >
-                {loading ? (
-                  <div className="space-y-3 py-2">
-                    <div className="h-4 w-full animate-pulse rounded bg-muted" />
-                    <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
-                    <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
-                  </div>
-                ) : error ? (
-                  <p className="text-sm text-destructive">
-                    Could not load verse text.
-                  </p>
-                ) : hintStage === "hidden" ? (
-                  <div className="flex h-full min-h-[140px] items-center justify-center text-center">
-                    <p className="max-w-sm text-sm text-muted-foreground">
-                      No hint text. Type the verse from memory, then check your
-                      answer.
-                    </p>
-                  </div>
-                ) : (
-                  <HintTokenText tokens={tokens} />
-                )}
-              </div>
-
-              {!isReadPrime && (
-                <Textarea
-                  ref={answerInputRef}
-                  value={typedAnswer}
-                  onChange={(event) => setTypedAnswer(event.target.value)}
-                  onKeyDown={handleAnswerKeyDown}
-                  placeholder="Type what you remember"
-                  className="min-h-[170px] resize-none bg-background/80"
-                  aria-label="Your recalled verse"
-                />
-              )}
-            </>
-          )}
-
-          {checked && (
-            <div className="space-y-4">
-              <VerseAttemptResult
-                typedAnswer={typedAnswer}
-                versePlainText={versePlainText}
-                diffTokens={checkedDiffTokens}
+          {showLocked ? (
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border bg-background/75 px-5 py-8 text-center">
+              <CheckCircle2
+                className={cn("h-8 w-8", stageColor.text)}
+                aria-hidden
               />
-              <p className="text-center text-sm text-muted-foreground">
-                {`${checkedAccuracy}% recalled.`}
+              <p className="text-sm font-medium text-foreground">
+                Done for today
               </p>
-              {checkedQuality !== "exact" && (
-                <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Full text
+              <p className="max-w-sm text-sm text-muted-foreground">
+                You finished this verse&apos;s learning session. Come back
+                tomorrow to continue with {stageInfo.label}.
+              </p>
+            </div>
+          ) : (
+            <>
+              {!checked && (
+                <>
+                  <div
+                    className={cn(
+                      "min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
+                      stageColor.panel,
+                    )}
+                  >
+                    {loading ? (
+                      <div className="space-y-3 py-2">
+                        <div className="h-4 w-full animate-pulse rounded bg-muted" />
+                        <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
+                        <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
+                      </div>
+                    ) : error ? (
+                      <p className="text-sm text-destructive">
+                        Could not load verse text.
+                      </p>
+                    ) : hintStage === "hidden" ? (
+                      <div className="flex h-full min-h-[140px] items-center justify-center text-center">
+                        <p className="max-w-sm text-sm text-muted-foreground">
+                          No hint text. Type the verse from memory, then check
+                          your answer.
+                        </p>
+                      </div>
+                    ) : (
+                      <HintTokenText tokens={tokens} />
+                    )}
+                  </div>
+
+                  {!isReadPrime && (
+                    <Textarea
+                      ref={answerInputRef}
+                      value={typedAnswer}
+                      onChange={(event) => setTypedAnswer(event.target.value)}
+                      onKeyDown={handleAnswerKeyDown}
+                      placeholder="Type what you remember"
+                      className="min-h-[170px] resize-none bg-background/80"
+                      aria-label="Your recalled verse"
+                    />
+                  )}
+                </>
+              )}
+
+              {checked && (
+                <div className="space-y-4">
+                  <VerseAttemptResult
+                    typedAnswer={typedAnswer}
+                    versePlainText={versePlainText}
+                    diffTokens={checkedDiffTokens}
+                  />
+                  <p className="text-center text-sm text-muted-foreground">
+                    {`${checkedAccuracy}% recalled.`}
                   </p>
-                  {data?.verses.map((verse) => (
-                    <p key={verse.number}>
-                      <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
-                        {verse.number}
-                      </span>
-                      {verse.text}
-                    </p>
-                  ))}
+                  {checkedQuality !== "exact" && (
+                    <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Full text
+                      </p>
+                      {data?.verses.map((verse) => (
+                        <p key={verse.number}>
+                          <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
+                            {verse.number}
+                          </span>
+                          {verse.text}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </CardContent>
 
         <CardFooter className="flex justify-end border-t">
           <div className="flex w-full gap-2 sm:w-auto">
-            {checked ? (
+            {showLocked ? null : checked ? (
               <Button
                 ref={reviewActionRef}
                 type="button"
@@ -664,9 +825,11 @@ function PracticeCard({
 }
 
 function PracticeShuffleOverlay({
+  sessionLabel,
   verses,
   firstVerse,
 }: {
+  sessionLabel: "Learning" | "Practice";
   verses: ReadonlyArray<OrderedVerse>;
   firstVerse: OrderedVerse;
 }): JSX.Element {
@@ -692,6 +855,7 @@ function PracticeShuffleOverlay({
       {samples.map((sample, index) => (
         <PracticeShuffleCard
           key={`${index}-${sample.id}`}
+          sessionLabel={sessionLabel}
           index={index}
           verse={sample}
           isLast={index === samples.length - 1}
@@ -702,10 +866,12 @@ function PracticeShuffleOverlay({
 }
 
 function PracticeShuffleCard({
+  sessionLabel,
   index,
   verse,
   isLast,
 }: {
+  sessionLabel: "Learning" | "Practice";
   index: number;
   verse: OrderedVerse;
   isLast: boolean;
@@ -741,14 +907,16 @@ function PracticeShuffleCard({
         ease: "easeOut",
       }}
     >
-      <PracticeShuffleCardFace verse={verse} />
+      <PracticeShuffleCardFace sessionLabel={sessionLabel} verse={verse} />
     </motion.div>
   );
 }
 
 function PracticeShuffleCardFace({
+  sessionLabel,
   verse,
 }: {
+  sessionLabel: "Learning" | "Practice";
   verse: OrderedVerse;
 }): JSX.Element {
   const refLabel = formatVerseRef(verse.reference);
@@ -773,14 +941,14 @@ function PracticeShuffleCardFace({
             className={cn("h-2 w-2 rounded-full", stageColor.dot)}
             aria-hidden
           />
-          Practice · {stage.label}
+          {sessionLabel} · {stage.label}
         </p>
         <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
           {refLabel}
         </h2>
       </div>
       <p className="text-sm text-muted-foreground">
-        Shuffling your practice order
+        Shuffling your {sessionLabel.toLowerCase()} order
       </p>
       <div className="min-h-[200px] w-full max-w-xl rounded-md border border-input bg-background/80 px-3 py-2 text-left text-sm text-muted-foreground/50">
         Type what you remember
@@ -807,11 +975,13 @@ function HintTokenText({ tokens }: { tokens: ReadonlyArray<HintToken> }) {
 }
 
 function PracticeShell({
+  sessionLabel,
   scopeLabel,
   onExit,
   exitTooltip = "Go back to the Memory dashboard",
   children,
 }: {
+  sessionLabel: "Learning" | "Practice";
   scopeLabel: string;
   onExit: () => void;
   exitTooltip?: string;
@@ -836,7 +1006,7 @@ function PracticeShell({
             <TooltipContent>{exitTooltip}</TooltipContent>
           </Tooltip>
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
-            <span className="shrink-0 font-semibold">Practice</span>
+            <span className="shrink-0 font-semibold">{sessionLabel}</span>
             <span aria-hidden className="text-muted-foreground">
               ·
             </span>

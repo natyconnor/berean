@@ -283,8 +283,8 @@ describe("hintForProgress", () => {
   it("uses wordCount to stretch the lerp denominator for a long verse", () => {
     // Short verse (no wordCount): requiredReps(1)=3, at stageReps=2 → progress=1 → density=1.0
     expect(hintForProgress(1, 2).density).toBeCloseTo(1.0);
-    // Long verse (24 words): requiredReps(1,24)=7, at stageReps=2 → progress=2/6≈0.333
-    const longDensity = 0.25 + (1.0 - 0.25) * (2 / 6);
+    // Long verse (24 words): requiredReps(1,24)=5, at stageReps=2 → progress=2/4=0.5
+    const longDensity = 0.25 + (1.0 - 0.25) * (2 / 4);
     expect(hintForProgress(1, 2, 24).density).toBeCloseTo(longDensity);
     // Long density is less than short (hasn't reached densityEnd yet)
     expect(hintForProgress(1, 2, 24).density).toBeLessThan(
