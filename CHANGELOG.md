@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.2](https://github.com/natyconnor/berean/compare/v1.12.1...v1.12.2) (2026-08-10)
+
+
+### Bug Fixes
+
+* pace verse learning across multi-day sessions ([#148](https://github.com/natyconnor/berean/issues/148)) ([b059e68](https://github.com/natyconnor/berean/commit/b059e68434af27866e4d059aee877a01c43ebfe1))
+
 ## [1.12.1](https://github.com/natyconnor/berean/compare/v1.12.0...v1.12.1) (2026-08-05)
 
 
