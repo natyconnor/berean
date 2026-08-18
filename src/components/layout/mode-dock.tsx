@@ -8,7 +8,6 @@ import { api } from "../../../convex/_generated/api";
 import { cn } from "@/lib/utils";
 import { logInteraction } from "@/lib/dev-log";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
-import { useLiveNow } from "@/hooks/use-live-now";
 import { useTabs } from "@/lib/use-tabs";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
@@ -40,7 +39,7 @@ function isEditorElement(element: Element | null): boolean {
 
 /**
  * The Mode Dock: a floating bottom-center pill with up to three segments (Notes
- * / Memory / Study) and a live due-count badge on Memory. It's `position: fixed`
+ * / Memory / Study) and a due-count badge on Memory. It's `position: fixed`
  * so it never affects layout flow, and it's engineered to slide out of the way
  * while you work. Notes and Memory are always available; Study unlocks once
  * enough notes exist.
@@ -51,8 +50,19 @@ export function ModeDock() {
   const reducedMotion = useReducedMotion();
   const { backPassageId } = useTabs();
 
-  const now = useLiveNow();
-  const dueCount = useQuery(api.verseMemory.dueCount, { now });
+  // Snapshot `now` once per dock mount. A ticking clock would change the Convex
+  // query args on an interval, which makes `useQuery` return `undefined` while
+  // the new subscription loads — the badge unmounts and the Memory button
+  // flashes. Completing a review still updates the count (same args, reactive
+  // data). Newly-due verses wait until the next full load.
+  const [now] = useState(() => Date.now());
+  const dueCountResult = useQuery(api.verseMemory.dueCount, { now });
+  // Keep the last loaded count so a reconnect or loading gap after a long-lived
+  // tab doesn't blank the badge (which looks like the number "disappeared").
+  const [dueCount, setDueCount] = useState<number | undefined>(undefined);
+  if (typeof dueCountResult === "number" && dueCountResult !== dueCount) {
+    setDueCount(dueCountResult);
+  }
   const preference =
     useQuery(api.userSettings.getModeDockPreference) ?? "auto-hide";
 
