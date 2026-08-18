@@ -11,6 +11,7 @@ import {
   SUPPORT_BANDS,
   initialSchedule,
   isDueForLearning,
+  isDueForLibrary,
   isDueForReview,
   isLearningLocked,
   nextLearningSessionDueAt,
@@ -741,5 +742,25 @@ describe("isDueForLearning / isLearningLocked", () => {
     };
     expect(isDueForLearning(locked, NOW)).toBe(false);
     expect(isDueForLearning(locked, NOW + DAY_MS)).toBe(true);
+  });
+});
+
+describe("isDueForLibrary", () => {
+  it("does not treat new verses as due", () => {
+    expect(isDueForLibrary(initialSchedule(NOW), NOW)).toBe(false);
+  });
+
+  it("includes due review verses", () => {
+    expect(isDueForLibrary(reviewing({ dueAt: NOW }), NOW)).toBe(true);
+  });
+
+  it("includes unlocked learning verses", () => {
+    expect(isDueForLibrary(learningAt(1), NOW)).toBe(true);
+  });
+
+  it("excludes locked learning verses", () => {
+    const locked = learningAt(2);
+    locked.dueAt = NOW + DAY_MS;
+    expect(isDueForLibrary(locked, NOW)).toBe(false);
   });
 });
