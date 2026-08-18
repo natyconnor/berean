@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.4](https://github.com/natyconnor/berean/compare/v1.12.3...v1.12.4) (2026-08-18)
+
+
+### Bug Fixes
+
+* make From Memory two strict recalls ([#155](https://github.com/natyconnor/berean/issues/155)) ([d567c33](https://github.com/natyconnor/berean/commit/d567c33e3a9aeff49093c7b65882652c1f39acd3))
+
 ## [1.12.3](https://github.com/natyconnor/berean/compare/v1.12.2...v1.12.3) (2026-08-18)
 
 
