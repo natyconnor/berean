@@ -13,6 +13,7 @@ export function toPracticeVerse(row: {
   stageReps?: number;
   status: MemoryStatus;
   dueAt?: number;
+  lastReviewedAt?: number;
 }): PracticeVerse {
   const reference: CardReference = {
     book: row.book,
@@ -26,5 +27,6 @@ export function toPracticeVerse(row: {
     stageReps: row.stageReps,
     status: row.status,
     dueAt: row.dueAt,
+    lastReviewedAt: row.lastReviewedAt,
   };
 }

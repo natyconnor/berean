@@ -20,6 +20,11 @@ describe("formatMemoryDueLabel", () => {
     );
   });
 
+  it("does not treat in-progress learning as locked against a stale clock", () => {
+    const staleNow = NOW - 3 * 60 * 60 * 1000;
+    expect(formatMemoryDueLabel("learning", NOW, staleNow, NOW)).toBeNull();
+  });
+
   it("keeps due labels for review-phase verses", () => {
     expect(formatMemoryDueLabel("reviewing", NOW, NOW)).toBe("Due now");
     expect(formatMemoryDueLabel("mastered", NOW + DAY_MS, NOW)).toBe(

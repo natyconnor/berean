@@ -28,6 +28,7 @@ const savedMemoryValidator = v.object({
   stageReps: v.optional(v.number()),
   intervalDays: v.number(),
   dueAt: v.number(),
+  lastReviewedAt: v.optional(v.number()),
 });
 
 const savedVerseListItem = v.object({
@@ -55,6 +56,7 @@ type SavedVerseListItem = {
     stageReps?: number;
     intervalDays: number;
     dueAt: number;
+    lastReviewedAt?: number;
   };
 };
 
@@ -83,6 +85,7 @@ async function toListItem(
           stageReps: memory.stageReps,
           intervalDays: memory.intervalDays,
           dueAt: memory.dueAt,
+          lastReviewedAt: memory.lastReviewedAt,
         }
       : undefined,
   };

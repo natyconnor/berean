@@ -30,7 +30,14 @@ export function MemoryVerseListAction({
   onReview: (verse: PracticeVerse) => void;
 }) {
   if (isLearningPhase(status)) {
-    const locked = isLearningLocked({ status, dueAt: verse.dueAt ?? now }, now);
+    const locked = isLearningLocked(
+      {
+        status,
+        dueAt: verse.dueAt ?? now,
+        lastReviewedAt: verse.lastReviewedAt,
+      },
+      now,
+    );
     if (locked) {
       return (
         <Button

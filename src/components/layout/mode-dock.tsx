@@ -5,6 +5,7 @@ import { Brain, BookOpen, NotebookPen } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { api } from "../../../convex/_generated/api";
+import { useLiveNow } from "@/hooks/use-live-now";
 import { cn } from "@/lib/utils";
 import { logInteraction } from "@/lib/dev-log";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
@@ -50,12 +51,9 @@ export function ModeDock() {
   const reducedMotion = useReducedMotion();
   const { backPassageId } = useTabs();
 
-  // Snapshot `now` once per dock mount. A ticking clock would change the Convex
-  // query args on an interval, which makes `useQuery` return `undefined` while
-  // the new subscription loads — the badge unmounts and the Memory button
-  // flashes. Completing a review still updates the count (same args, reactive
-  // data). Newly-due verses wait until the next full load.
-  const [now] = useState(() => Date.now());
+  // Shared session clock (same snapshot as the Memory dashboard). Completing a
+  // review or learn still updates the count (same args, reactive data).
+  const now = useLiveNow();
   const dueCountResult = useQuery(api.verseMemory.dueCount, { now });
   // Keep the last loaded count so a reconnect or loading gap after a long-lived
   // tab doesn't blank the badge (which looks like the number "disappeared").

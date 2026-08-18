@@ -24,6 +24,7 @@ export type PackMember = {
   stageReps: number;
   intervalDays: number;
   dueAt: number;
+  lastReviewedAt?: number;
 };
 
 /** Get a pack the current user owns, or `null` when missing / not theirs. */
@@ -53,6 +54,7 @@ function toMember(
     stageReps: memory.stageReps ?? 0,
     intervalDays: memory.intervalDays,
     dueAt: memory.dueAt,
+    lastReviewedAt: memory.lastReviewedAt,
   };
 }
 

@@ -293,9 +293,9 @@ export const dueForVerse = query({
 
 /**
  * Cheap count of verses due *today* — review-phase dues plus in-progress
- * learning verses whose session is available (`status === "learning"` and
- * `dueAt <= now`). Hearted `new` verses and soft-locked learning are excluded.
- * Drives the dock badge. Bounded scan — not a full collect.
+ * learning verses whose session is available. Hearted `new` verses and
+ * soft-locked learning are excluded. Drives the dock badge. Bounded scan —
+ * not a full collect. Shares the same `now` snapshot as the dashboard.
  */
 export const dueCount = query({
   args: { now: v.number() },
@@ -376,7 +376,12 @@ export const recordAttempt = mutation({
     };
 
     // Soft lock: today's learning session is done — refuse to bank more reps.
-    if (isLearningLocked(current, args.now)) {
+    if (
+      isLearningLocked(
+        { ...current, lastReviewedAt: memory.lastReviewedAt },
+        args.now,
+      )
+    ) {
       return current;
     }
 

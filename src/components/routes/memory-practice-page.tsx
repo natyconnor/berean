@@ -99,6 +99,7 @@ function scopeMemorySessionVerses(
           stageReps?: number;
           status?: PracticeVerse["status"];
           dueAt?: number;
+          lastReviewedAt?: number;
         } | null;
       }>
     | undefined,
@@ -127,6 +128,7 @@ function scopeMemorySessionVerses(
         {
           status: verse.memory?.status,
           dueAt: verse.memory?.dueAt,
+          lastReviewedAt: verse.memory?.lastReviewedAt,
         },
         kind,
         now,
@@ -148,6 +150,7 @@ function scopeMemorySessionVerses(
         stageReps: verse.memory?.stageReps ?? 0,
         status: verse.memory?.status,
         dueAt: verse.memory?.dueAt,
+        lastReviewedAt: verse.memory?.lastReviewedAt,
       },
     ];
   });

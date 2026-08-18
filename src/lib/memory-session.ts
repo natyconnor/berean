@@ -9,6 +9,7 @@ export type MemorySessionKind = "learning" | "practice";
 export interface MemorySessionCandidate {
   status?: MemoryStatus;
   dueAt?: number;
+  lastReviewedAt?: number;
 }
 
 /**
@@ -33,7 +34,11 @@ export function isLearningSessionCandidate(
   if (candidate.status === undefined) return includeNew;
   if (candidate.status === "new") return includeNew;
   return isDueForLearning(
-    { status: candidate.status, dueAt: candidate.dueAt ?? now },
+    {
+      status: candidate.status,
+      dueAt: candidate.dueAt ?? now,
+      lastReviewedAt: candidate.lastReviewedAt,
+    },
     now,
   );
 }

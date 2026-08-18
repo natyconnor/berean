@@ -1,24 +1,20 @@
-import { useEffect, useState } from "react";
-
-const DEFAULT_INTERVAL_MS = 300_000;
+import { useState } from "react";
 
 /**
- * A coarse "current time" that refreshes on an interval so time-dependent
- * reactive queries (e.g. due counts) stay live while a tab is left open.
+ * One frozen "now" for the JS session. Dock badge, dashboard, and memory
+ * queues share it so they cannot drift. Counts still update when a review or
+ * learn attempt patches `verseMemory` (same query args, reactive data).
  *
- * The value updates at most once per `intervalMs` (default 5 minutes) rather than
- * every second, so it won't thrash re-renders. Pass the returned value as a
- * Convex query arg — never call `Date.now()` inside a Convex query.
+ * Verses that become due later while the tab sits idle wait for a reload.
  */
-export function useLiveNow(intervalMs: number = DEFAULT_INTERVAL_MS): number {
-  const [now, setNow] = useState(() => Date.now());
+let sessionNow: number | undefined;
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, intervalMs);
-    return () => window.clearInterval(timer);
-  }, [intervalMs]);
+export function getSessionNow(): number {
+  sessionNow ??= Date.now();
+  return sessionNow;
+}
 
+export function useLiveNow(): number {
+  const [now] = useState(getSessionNow);
   return now;
 }

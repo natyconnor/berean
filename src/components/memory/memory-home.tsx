@@ -20,9 +20,8 @@ import { PackList } from "./packs/pack-list";
  * own routes so reloads and back/forward keep the learner in-session.
  */
 export function MemoryHome() {
-  // Refreshes on an interval so the due count stays live while the tab is open
-  // (verses whose dueAt lands after mount get counted). Passed as a query arg;
-  // never Date.now() inside Convex.
+  // Shared session clock with the dock badge. Passed as a query arg; never
+  // Date.now() inside Convex. Counts still move when an attempt patches a row.
   const now = useLiveNow();
   const navigate = useNavigate();
 

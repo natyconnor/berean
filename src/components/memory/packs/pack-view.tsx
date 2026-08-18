@@ -471,6 +471,7 @@ function PackViewMain({
                               status: member.status,
                               statusLabel: style.label,
                               dueAt: member.dueAt,
+                              lastReviewedAt: member.lastReviewedAt,
                               now,
                             })}
                           </span>
