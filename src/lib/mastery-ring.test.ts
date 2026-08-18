@@ -57,7 +57,7 @@ describe("masteryRingFraction", () => {
 });
 
 describe("learningJourneyFraction", () => {
-  /** Short-verse total: Read 1 + Guided 3 + Challenge 4 + From Memory 3. */
+  /** Short-verse total: Read 1 + Guided 3 + Challenge 4 + From Memory 2. */
   const shortTotal =
     requiredRepsFor(0) +
     requiredRepsFor(1) +
@@ -69,8 +69,8 @@ describe("learningJourneyFraction", () => {
   });
 
   it("each successful Continue fills the same fraction of the bar", () => {
-    // Short verse: 11 exact reps across the journey → each Continue = 1/11.
-    expect(shortTotal).toBe(11);
+    // Short verse: 10 exact reps across the journey → each Continue = 1/10.
+    expect(shortTotal).toBe(10);
     const step = 1 / shortTotal;
 
     // Read continue: stage 0 → stage 1.
@@ -144,14 +144,14 @@ describe("learningJourneyFraction", () => {
   });
 
   it("length-adjusted Guided reps shift the fraction correctly", () => {
-    // 24-word verse: Guided 5 + Challenge 6 + From Memory 4 → total 1+5+6+4 = 16.
+    // 24-word verse: Guided 5 + Challenge 6 + From Memory 2 → total 1+5+6+2 = 14.
     const longWordCount = 24;
     const longTotal =
       requiredRepsFor(0, longWordCount) +
       requiredRepsFor(1, longWordCount) +
       requiredRepsFor(2, longWordCount) +
       requiredRepsFor(3, longWordCount);
-    expect(longTotal).toBe(16);
+    expect(longTotal).toBe(14);
     // Read cleared (1) + one Guided rep.
     const oneRep = learningJourneyFraction(1, 1, longWordCount);
     expect(oneRep).toBeCloseTo(2 / longTotal, 5);

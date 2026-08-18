@@ -38,11 +38,23 @@ describe("classifyVerseAttempt", () => {
     expect(classifyVerseAttempt(diffWords(typed, actual))).toBe("close");
   });
 
-  it("gives most of a word's credit for a small typo", () => {
+  it("treats a couple of typos as exact", () => {
     const tokens = diffWords("Jesus asnwered him", "Jesus answered him");
     expect(verseAttemptAccuracy(tokens)).toBe(93);
-    expect(classifyVerseAttempt(tokens)).toBe("close");
+    expect(classifyVerseAttempt(tokens)).toBe("exact");
     expect(hasAttemptErrors(tokens)).toBe(true);
+  });
+
+  it("treats two typos as exact", () => {
+    const actual = "Jesus answered him in the beginning";
+    const typed = "Jesus asnwered him in the begining";
+    expect(classifyVerseAttempt(diffWords(typed, actual))).toBe("exact");
+  });
+
+  it("treats three typos as close, not exact", () => {
+    const actual = "Jesus answered him in the beginning as the shepherd";
+    const typed = "Jesus asnwered him in the begining as the sheperd";
+    expect(classifyVerseAttempt(diffWords(typed, actual))).toBe("close");
   });
 
   it("does not penalize the choice of a dash or a space", () => {

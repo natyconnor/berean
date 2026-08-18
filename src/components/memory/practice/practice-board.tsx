@@ -542,7 +542,7 @@ function PracticeCard({
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
   const madeLearningProgress =
     checkedQuality !== null &&
-    isLearningProgressAttempt(checkedQuality, checkedAccuracy);
+    isLearningProgressAttempt(checkedQuality, checkedAccuracy, learnStage);
   // Once graduated, another strong recall is just another practice pass — offer
   // "Try again" instead of implying the learning journey still advances. When
   // the verse is spent for the session, continuing leaves the card entirely.
