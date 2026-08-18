@@ -4,7 +4,7 @@ import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import { useTabs } from "@/lib/use-tabs";
 import { logInteraction } from "@/lib/dev-log";
-import { toPassageId } from "@/lib/verse-ref-utils";
+import { formatBookChapter, toPassageId } from "@/lib/verse-ref-utils";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
 import { useSearchWorkspaceRouting } from "./hooks/use-search-workspace-routing";
 import { useSearchWorkspacePersistence } from "./hooks/use-search-workspace-persistence";
@@ -136,7 +136,7 @@ export function SearchWorkspace({ search }: SearchWorkspaceProps) {
   const jumpToReference = useCallback(
     (ref: SearchVerseRef) => {
       const passageId = toPassageId(ref.book, ref.chapter);
-      const label = `${ref.book} ${ref.chapter}`;
+      const label = formatBookChapter(ref.book, ref.chapter);
       logInteraction("search", "result-opened", {
         book: ref.book,
         chapter: ref.chapter,

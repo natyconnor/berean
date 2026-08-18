@@ -1,6 +1,7 @@
 import type * as XLSX from "xlsx";
 
 import { getChapterVerseCount } from "@/lib/bible-verse-counts";
+import { formatBookChapter } from "@/lib/verse-ref-utils";
 import { getCanonicalBookNameFromFileName } from "@/lib/note-transfer/books";
 import { parseImportedNoteCell } from "@/lib/note-transfer/note-cells";
 import type {
@@ -287,7 +288,7 @@ export function parseImportWorkbook(
             {
               severity: "error",
               code: "verse-number-out-of-range",
-              message: `Sheet "${sheetName}" row ${rowNumber} starts with verse ${verseNumber}, but ${book} ${chapter} only has ${expectedVerseCount} canonical verses.`,
+              message: `Sheet "${sheetName}" row ${rowNumber} starts with verse ${verseNumber}, but ${formatBookChapter(book, chapter)} only has ${expectedVerseCount} canonical verses.`,
               sheetName,
             },
             fileName,

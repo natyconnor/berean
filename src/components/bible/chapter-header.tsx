@@ -7,11 +7,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { useTabs } from "@/lib/use-tabs";
+import { displayBookName } from "@/lib/bible-books";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
-import { PassageNavigator } from "./passage-navigator";
+import { useTabs } from "@/lib/use-tabs";
 import { cn } from "@/lib/utils";
+import { PassageNavigator } from "./passage-navigator";
 
 /**
  * Book and chapter open different pickers, so each needs its own target. At
@@ -108,9 +109,9 @@ export function ChapterHeader({
             onClick={openBookNavigator}
             className={cn(REFERENCE_SEGMENT_CLASS, "min-w-0")}
             tooltip={`Change book (${passageShortcutLabel})`}
-            aria-label={`Change book, currently ${book}`}
+            aria-label={`Change book, currently ${displayBookName(book)}`}
           >
-            <span className="truncate">{book}</span>
+            <span className="truncate">{displayBookName(book)}</span>
             <ReferenceCaret />
           </TooltipButton>
           <TooltipButton

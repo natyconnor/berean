@@ -1,4 +1,4 @@
-import { BIBLE_BOOKS, getBookInfo } from "@/lib/bible-books";
+import { BIBLE_BOOKS, displayBookName, getBookInfo } from "@/lib/bible-books";
 
 export type VerseRefScope = "chapter";
 
@@ -17,14 +17,19 @@ export function isChapterScopeRef(
   return ref.scope === "chapter";
 }
 
+export function formatBookChapter(book: string, chapter: number): string {
+  return `${displayBookName(book)} ${chapter}`;
+}
+
 export function formatVerseRef(ref: VerseRef): string {
   if (isChapterScopeRef(ref)) {
-    return `${ref.book} ${ref.chapter}`;
+    return formatBookChapter(ref.book, ref.chapter);
   }
+  const book = displayBookName(ref.book);
   if (ref.startVerse === ref.endVerse) {
-    return `${ref.book} ${ref.chapter}:${ref.startVerse}`;
+    return `${book} ${ref.chapter}:${ref.startVerse}`;
   }
-  return `${ref.book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
+  return `${book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
 }
 
 interface ParseVerseRefOptions {

@@ -71,13 +71,14 @@ function formatInlineVerseRef(ref: {
   endVerse: number;
   scope?: "chapter";
 }): string {
+  const book = ref.book === "Psalms" ? "Psalm" : ref.book;
   if (ref.scope === "chapter") {
-    return `${ref.book} ${ref.chapter}`;
+    return `${book} ${ref.chapter}`;
   }
   if (ref.startVerse === ref.endVerse) {
-    return `${ref.book} ${ref.chapter}:${ref.startVerse}`;
+    return `${book} ${ref.chapter}:${ref.startVerse}`;
   }
-  return `${ref.book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
+  return `${book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
 }
 
 function toNoteSummary(note: Doc<"notes">): NoteSummary {

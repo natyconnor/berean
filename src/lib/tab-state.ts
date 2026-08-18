@@ -1,5 +1,5 @@
 import type { Tab } from "./tab-types";
-import { parsePassageId } from "./verse-ref-utils";
+import { formatBookChapter, parsePassageId } from "./verse-ref-utils";
 
 export interface TabStore {
   tabs: Tab[];
@@ -25,7 +25,7 @@ function updateTabHistory(history: string[], tabId: string): string[] {
 
 function buildPassageLabel(passageId: string): string {
   const { book, chapter } = parsePassageId(passageId);
-  return `${book} ${chapter}`;
+  return formatBookChapter(book, chapter);
 }
 
 export function createTab(

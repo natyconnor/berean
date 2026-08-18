@@ -1,4 +1,5 @@
 import { BIBLE_BOOKS } from "@/lib/bible-books";
+import { formatBookChapter } from "@/lib/verse-ref-utils";
 
 export interface StudyScope {
   books: string[];
@@ -47,7 +48,7 @@ function formatBookWithRange(
   const range = ranges?.find((r) => r.book === book);
   if (!range) return book;
   if (range.startChapter === range.endChapter) {
-    return `${book} ${range.startChapter}`;
+    return formatBookChapter(book, range.startChapter);
   }
   return `${book} ${range.startChapter}\u2013${range.endChapter}`;
 }

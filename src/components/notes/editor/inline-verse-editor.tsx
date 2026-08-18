@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, BookOpen, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getBookInfo } from "@/lib/bible-books";
+import { displayBookName, getBookInfo } from "@/lib/bible-books";
 import { getChapterVerseCount } from "@/lib/bible-verse-counts";
 import {
   EMPTY_NOTE_BODY,
@@ -170,7 +170,7 @@ function buildDraftStatus(draft: ReferenceDraft): QueryStatusState {
   if (!draft.startVerseText) {
     return {
       tone: "info",
-      label: `Link ${draft.book} ${draft.chapterText}, or keep typing a verse.`,
+      label: `Link ${displayBookName(draft.book)} ${draft.chapterText}, or keep typing a verse.`,
       description:
         "Press Enter to link the chapter, or type :16 (or a range) for a specific verse.",
     };
@@ -179,14 +179,14 @@ function buildDraftStatus(draft: ReferenceDraft): QueryStatusState {
   if (draft.endVerseText !== null && draft.endVerseText.length === 0) {
     return {
       tone: "info",
-      label: `Keep typing the end of the range for ${draft.book} ${draft.chapterText}:${draft.startVerseText}.`,
+      label: `Keep typing the end of the range for ${displayBookName(draft.book)} ${draft.chapterText}:${draft.startVerseText}.`,
       description: "Finish the ending verse to insert a range.",
     };
   }
 
   return {
     tone: "info",
-    label: `Keep refining ${draft.book} ${draft.chapterText}:${draft.startVerseText}.`,
+    label: `Keep refining ${displayBookName(draft.book)} ${draft.chapterText}:${draft.startVerseText}.`,
     description: "Press Enter once the reference validates.",
   };
 }

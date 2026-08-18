@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { BIBLE_BOOKS, type BookInfo } from "@/lib/bible-books";
+import { formatBookChapter } from "@/lib/verse-ref-utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -63,7 +64,7 @@ export function StudyScopeBookPicker({
             const info = BIBLE_BOOKS.find((b) => b.name === bookName);
             const label = range
               ? range.start === range.end
-                ? `${bookName} ${range.start}`
+                ? formatBookChapter(bookName, range.start)
                 : `${bookName} ${range.start}\u2013${range.end}`
               : bookName;
 
