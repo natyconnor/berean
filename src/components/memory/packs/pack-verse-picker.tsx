@@ -271,6 +271,7 @@ export function PackVersePicker({
         // action is discovering and hearting *new* verses within the scope.
         <VerseBrowsePicker
           scope={scope}
+          heartedVerses={heartedVerses}
           isSelected={isSelected}
           isDisabled={isDisabled}
           isPending={isPending}
@@ -313,6 +314,7 @@ export function PackVersePicker({
           ) : (
             <VerseBrowsePicker
               scope={scope}
+              heartedVerses={heartedVerses}
               isSelected={isSelected}
               isDisabled={isDisabled}
               isPending={isPending}

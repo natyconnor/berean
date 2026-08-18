@@ -5,8 +5,13 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEsvReference } from "@/hooks/use-esv-reference";
 import { BIBLE_BOOKS, type BookInfo } from "@/lib/bible-books";
 import { getChapterVerseCount } from "@/lib/bible-verse-counts";
+import {
+  heartedRunsForChapter,
+  overlappingSpans,
+} from "@/lib/hearted-verse-coverage";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { VerseScope } from "@/lib/verse-scope-match";
 import { cn } from "@/lib/utils";
@@ -41,6 +46,8 @@ interface VerseRange {
 
 interface VerseBrowsePickerProps {
   scope?: VerseScope;
+  heartedVerses?: ReadonlyArray<BrowseVerse>;
+  confirmLabel?: string;
   isSelected: (verse: BrowseVerse) => boolean;
   isDisabled?: (verse: BrowseVerse) => boolean;
   isPending?: (verse: BrowseVerse) => boolean;
@@ -49,6 +56,8 @@ interface VerseBrowsePickerProps {
 
 export function VerseBrowsePicker({
   scope,
+  heartedVerses = [],
+  confirmLabel = "Add",
   isSelected,
   isDisabled,
   isPending,
@@ -313,6 +322,8 @@ export function VerseBrowsePicker({
           book={selectedBook.name}
           chapter={selectedChapter}
           verseCount={verseCount}
+          heartedVerses={heartedVerses}
+          confirmLabel={confirmLabel}
           isSelected={isSelected}
           isDisabled={isDisabled}
           isPending={isPending}
@@ -327,6 +338,8 @@ function VerseRangeGrid({
   book,
   chapter,
   verseCount,
+  heartedVerses,
+  confirmLabel,
   isSelected,
   isDisabled,
   isPending,
@@ -335,6 +348,8 @@ function VerseRangeGrid({
   book: string;
   chapter: number;
   verseCount: number;
+  heartedVerses: ReadonlyArray<BrowseVerse>;
+  confirmLabel: string;
   isSelected: (verse: BrowseVerse) => boolean;
   isDisabled?: (verse: BrowseVerse) => boolean;
   isPending?: (verse: BrowseVerse) => boolean;
@@ -354,12 +369,48 @@ function VerseRangeGrid({
         }
       : null;
 
-  const span: BrowseVerse | null = range
-    ? { book, chapter, startVerse: range.start, endVerse: range.end }
-    : null;
+  const span: BrowseVerse | null = useMemo(
+    () =>
+      range
+        ? { book, chapter, startVerse: range.start, endVerse: range.end }
+        : null,
+    [range, book, chapter],
+  );
   const spanSelected = span ? isSelected(span) : false;
   const spanDisabled = span ? (isDisabled?.(span) ?? false) : false;
   const spanPending = span ? (isPending?.(span) ?? false) : false;
+
+  const heartedRuns = useMemo(
+    () => heartedRunsForChapter(heartedVerses, book, chapter, verseCount),
+    [heartedVerses, book, chapter, verseCount],
+  );
+
+  const overlapOffers = useMemo(() => {
+    if (!span) return [];
+    return overlappingSpans(span, heartedVerses).filter(
+      (hearted) =>
+        hearted.startVerse !== span.startVerse ||
+        hearted.endVerse !== span.endVerse,
+    );
+  }, [span, heartedVerses]);
+
+  const { data: esvData, loading: esvLoading } = useEsvReference(span);
+  const esvText = esvData?.verses
+    .map((verse) => verse.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  function isInSelectionOrPreview(verse: number): boolean {
+    if (
+      previewRange &&
+      verse >= previewRange.start &&
+      verse <= previewRange.end
+    ) {
+      return true;
+    }
+    return range !== null && verse >= range.start && verse <= range.end;
+  }
 
   function handleVerseClick(verse: number) {
     if (range === null) {
@@ -430,6 +481,11 @@ function VerseRangeGrid({
         >
           {Array.from({ length: verseCount }, (_, index) => {
             const verse = index + 1;
+            const coverageRun = isInSelectionOrPreview(verse)
+              ? null
+              : (heartedRuns.find(
+                  (run) => verse >= run.start && verse <= run.end,
+                ) ?? null);
             return (
               <button
                 key={verse}
@@ -440,6 +496,9 @@ function VerseRangeGrid({
                 className={cn(
                   "flex h-10 items-center justify-center rounded-md text-sm font-medium transition-colors",
                   getCellStyle(verse),
+                  coverageRun && "bg-muted-foreground/15",
+                  coverageRun && verse > coverageRun.start && "rounded-l-none",
+                  coverageRun && verse < coverageRun.end && "rounded-r-none",
                 )}
               >
                 {verse}
@@ -449,41 +508,82 @@ function VerseRangeGrid({
         </div>
       </ScrollArea>
       {span ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-          <span className="min-w-0 truncate text-sm font-medium">
-            {formatVerseRef(span)}
-          </span>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-muted-foreground"
-              onClick={() => {
-                setRange(null);
-                setHoveredVerse(null);
-              }}
-            >
-              Clear
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8"
-              disabled={spanDisabled || spanPending || spanSelected}
-              onClick={handleAdd}
-            >
-              {spanPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : spanSelected ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Check className="h-4 w-4" aria-hidden />
-                  Added
-                </span>
-              ) : (
-                "Add"
-              )}
-            </Button>
+        <div className="space-y-2">
+          {overlapOffers.length > 0 ? (
+            <div className="space-y-1">
+              {overlapOffers.map((offer) => {
+                const label = formatVerseRef(offer);
+                return (
+                  <div
+                    key={`${offer.book}:${offer.chapter}:${offer.startVerse}-${offer.endVerse}`}
+                    className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5"
+                  >
+                    <p className="text-xs text-muted-foreground">
+                      Overlaps {label}
+                    </p>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-primary hover:underline"
+                      onClick={() => {
+                        setRange({
+                          start: offer.startVerse,
+                          end: offer.endVerse,
+                        });
+                        setHoveredVerse(null);
+                      }}
+                    >
+                      Use {label} instead
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-sm font-medium">
+                {formatVerseRef(span)}
+              </span>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-muted-foreground"
+                  onClick={() => {
+                    setRange(null);
+                    setHoveredVerse(null);
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  disabled={spanDisabled || spanPending || spanSelected}
+                  onClick={handleAdd}
+                >
+                  {spanPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : spanSelected ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Check className="h-4 w-4" aria-hidden />
+                      Added
+                    </span>
+                  ) : (
+                    confirmLabel
+                  )}
+                </Button>
+              </div>
+            </div>
+            <p className="line-clamp-4 text-xs leading-relaxed text-muted-foreground">
+              {esvText
+                ? esvText
+                : esvLoading
+                  ? "Loading verse text…"
+                  : "Verse text is temporarily unavailable."}
+            </p>
           </div>
         </div>
       ) : null}
