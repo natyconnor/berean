@@ -55,8 +55,10 @@ export function VerseBrowsePicker({
   onSelect,
 }: VerseBrowsePickerProps) {
   const [search, setSearch] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null);
+  const [chapterDigits, setChapterDigits] = useState("");
 
   const scopedBooks = useMemo(
     () =>
@@ -86,15 +88,76 @@ export function VerseBrowsePicker({
       ? getChapterVerseCount(selectedBook.name, selectedChapter)
       : null;
 
+  const highlightedChapter = useMemo(() => {
+    if (!selectedBook || !selectedBookRange || !chapterDigits) return null;
+    const n = parseInt(chapterDigits, 10);
+    if (
+      Number.isNaN(n) ||
+      n < selectedBookRange.start ||
+      n > selectedBookRange.end
+    ) {
+      return null;
+    }
+    return n;
+  }, [selectedBook, selectedBookRange, chapterDigits]);
+
+  const chapterInputInvalid =
+    chapterDigits.length > 0 && highlightedChapter === null;
+
+  function bookIndexInScopedList(book: BookInfo) {
+    const index = scopedBooks.findIndex(
+      (candidate) => candidate.name === book.name,
+    );
+    return index >= 0 ? index : 0;
+  }
+
+  function selectBook(book: BookInfo) {
+    const range = getAllowedChapterRange(book, scope);
+    setSelectedBook(book);
+    setSearch("");
+    setHighlightedIndex(bookIndexInScopedList(book));
+    setChapterDigits("");
+    if (book.chapters === 1) {
+      setSelectedChapter(1);
+    } else if (range.start === range.end) {
+      setSelectedChapter(range.start);
+    } else {
+      setSelectedChapter(null);
+    }
+  }
+
+  function selectChapter(chapter: number) {
+    setChapterDigits(String(chapter));
+    setSelectedChapter(chapter);
+  }
+
   if (!selectedBook) {
     return (
       <div className="space-y-2">
         <Input
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setHighlightedIndex(0);
+          }}
           placeholder="Search books…"
           className="h-9"
+          autoFocus
           aria-label="Search Bible books"
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              const book = filteredBooks[highlightedIndex];
+              if (book) selectBook(book);
+            } else if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setHighlightedIndex((index) =>
+                Math.min(index + 1, filteredBooks.length - 1),
+              );
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setHighlightedIndex((index) => Math.max(index - 1, 0));
+            }
+          }}
         />
         <ScrollArea className="h-56 rounded-lg border">
           <div className="p-1.5">
@@ -108,25 +171,35 @@ export function VerseBrowsePicker({
                   <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
                     {testament === "OT" ? "Old Testament" : "New Testament"}
                   </div>
-                  {books.map((book) => (
-                    <button
-                      key={book.name}
-                      type="button"
-                      onClick={() => {
-                        const range = getAllowedChapterRange(book, scope);
-                        setSelectedBook(book);
-                        setSelectedChapter(
-                          range.start === range.end ? range.start : null,
-                        );
-                      }}
-                      className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted"
-                    >
-                      <span>{book.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {book.chapters} ch
-                      </span>
-                    </button>
-                  ))}
+                  {books.map((book) => {
+                    const globalIndex = filteredBooks.indexOf(book);
+                    return (
+                      <button
+                        key={book.name}
+                        type="button"
+                        onMouseEnter={() => setHighlightedIndex(globalIndex)}
+                        onClick={() => selectBook(book)}
+                        className={cn(
+                          "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors cursor-pointer",
+                          globalIndex === highlightedIndex
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-muted",
+                        )}
+                      >
+                        <span>{book.name}</span>
+                        <span
+                          className={cn(
+                            "text-xs",
+                            globalIndex === highlightedIndex
+                              ? "text-primary-foreground/80"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {book.chapters} ch
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -144,11 +217,50 @@ export function VerseBrowsePicker({
           variant="ghost"
           size="sm"
           className="-ml-2 h-8 gap-1.5 text-muted-foreground"
-          onClick={() => setSelectedBook(null)}
+          onClick={() => {
+            setChapterDigits("");
+            setHighlightedIndex(bookIndexInScopedList(selectedBook));
+            setSelectedBook(null);
+          }}
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           {selectedBook.name}
         </Button>
+        <div className="space-y-1">
+          <Input
+            placeholder="Chapter number…"
+            value={chapterDigits}
+            onChange={(event) => {
+              setChapterDigits(event.target.value.replace(/\D/g, ""));
+            }}
+            className="h-9"
+            autoFocus
+            aria-label="Chapter number"
+            aria-invalid={chapterInputInvalid}
+            aria-describedby={
+              chapterInputInvalid
+                ? "verse-browse-picker-chapter-error"
+                : undefined
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (highlightedChapter !== null) {
+                  selectChapter(highlightedChapter);
+                }
+              }
+            }}
+          />
+          {chapterInputInvalid ? (
+            <p
+              id="verse-browse-picker-chapter-error"
+              className="text-xs text-destructive"
+              role="alert"
+            >
+              Invalid chapter number for this book.
+            </p>
+          ) : null}
+        </div>
         <div className="grid grid-cols-6 gap-1">
           {Array.from(
             {
@@ -163,8 +275,13 @@ export function VerseBrowsePicker({
               <button
                 key={chapter}
                 type="button"
-                onClick={() => setSelectedChapter(chapter)}
-                className="h-9 rounded-md bg-muted text-sm font-medium transition-colors hover:bg-primary hover:text-primary-foreground"
+                onClick={() => selectChapter(chapter)}
+                className={cn(
+                  "h-9 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                  chapter === highlightedChapter
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted hover:bg-primary hover:text-primary-foreground",
+                )}
               >
                 {chapter}
               </button>
