@@ -4,11 +4,15 @@ import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 /**
  * How close the user's typed verse came to the actual text.
  *
- * - `exact`: every diff token matched (ignoring case, punctuation, and dashes).
+ * - `exact`: every diff token matched (ignoring case, punctuation, and dashes),
+ *   or the only errors are at most {@link MAX_EXACT_TYPOS} minor typos.
  * - `close`: imperfect, but accuracy at or above {@link REVIEW_LAPSE_ACCURACY}.
  * - `off`: accuracy below {@link REVIEW_LAPSE_ACCURACY}.
  */
 export type VerseAttemptQuality = "exact" | "close" | "off";
+
+/** Minor spelling typos still count as exact if there are at most this many. */
+export const MAX_EXACT_TYPOS = 2;
 
 /** Errors we count when scoring a typed attempt. */
 const ERROR_STATUSES: ReadonlySet<DiffToken["status"]> = new Set([
@@ -43,9 +47,21 @@ export function classifyVerseAttempt(
   if (tokens.length === 0) return null;
 
   const accuracy = verseAttemptAccuracy(tokens);
-  if (accuracy === 100) return "exact";
+  if (accuracy === 100 || isExactExceptTypos(tokens)) return "exact";
   if (accuracy >= REVIEW_LAPSE_ACCURACY) return "close";
   return "off";
+}
+
+/** True when the only errors are at most {@link MAX_EXACT_TYPOS} typos. */
+function isExactExceptTypos(tokens: ReadonlyArray<DiffToken>): boolean {
+  let typos = 0;
+  for (const token of tokens) {
+    if (token.status === "match") continue;
+    if (token.status !== "typo") return false;
+    typos += 1;
+    if (typos > MAX_EXACT_TYPOS) return false;
+  }
+  return true;
 }
 
 /** Stable predicate used by the UI to decide whether any error token exists. */

@@ -238,6 +238,16 @@ describe("learning phase grades", () => {
     expect(next.status).toBe("learning");
   });
 
+  it("From Memory does not bank a near-perfect close recall", () => {
+    const next = scheduleNext(
+      learningAt(3, 0),
+      review({ quality: "close", accuracy: 92 }),
+    );
+    expect(next.learnStage).toBe(MAX_LEARN_STAGE);
+    expect(next.stageReps).toBe(0);
+    expect(next.status).toBe("learning");
+  });
+
   it("off mid-band: loses one banked rep and stays on the band", () => {
     // Guided (stage 1) with 3 reps → Guided with 2
     const next = scheduleNext(learningAt(1, 3), review({ quality: "off" }));
@@ -280,6 +290,17 @@ describe("learning phase grades", () => {
     expect(next.status).toBe("learning");
     expect(next.learnStage).toBe(MAX_LEARN_STAGE);
     expect(next.stageReps).toBe(1);
+  });
+
+  it("the second From Memory exact graduates even on a long verse", () => {
+    const next = scheduleNext(
+      learningAt(3, 1),
+      review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
+    );
+    expect(next.status).toBe("reviewing");
+    expect(next.learnStage).toBe(MAX_LEARN_STAGE);
+    expect(next.stageReps).toBe(0);
+    expect(next.intervalDays).toBe(1);
   });
 
   it("clearing the last From Memory rep graduates to reviewing with a 1-day interval", () => {
@@ -519,33 +540,33 @@ describe("requiredRepsFor length curve", () => {
     expect(requiredRepsFor(0, LONG_VERSE_WORDS)).toBe(1);
   });
 
-  it("returns short-verse minima (3 / 4 / 3) when wordCount is omitted", () => {
+  it("returns short-verse minima (3 / 4 / 2) when wordCount is omitted", () => {
     expect(requiredRepsFor(1)).toBe(3);
     expect(requiredRepsFor(2)).toBe(4);
-    expect(requiredRepsFor(3)).toBe(3);
+    expect(requiredRepsFor(3)).toBe(2);
   });
 
   it("returns short-verse minima for wordCount equal to SHORT_VERSE_WORDS", () => {
     expect(requiredRepsFor(1, SHORT_VERSE_WORDS)).toBe(3);
     expect(requiredRepsFor(2, SHORT_VERSE_WORDS)).toBe(4);
-    expect(requiredRepsFor(3, SHORT_VERSE_WORDS)).toBe(3);
+    expect(requiredRepsFor(3, SHORT_VERSE_WORDS)).toBe(2);
   });
 
-  it("returns long-verse maxima (5 / 6 / 4) for wordCount >= LONG_VERSE_WORDS", () => {
+  it("returns long-verse maxima (5 / 6) with From Memory still at 2", () => {
     expect(requiredRepsFor(1, LONG_VERSE_WORDS)).toBe(5);
     expect(requiredRepsFor(2, LONG_VERSE_WORDS)).toBe(6);
-    expect(requiredRepsFor(3, LONG_VERSE_WORDS)).toBe(4);
+    expect(requiredRepsFor(3, LONG_VERSE_WORDS)).toBe(2);
     expect(requiredRepsFor(1, 50)).toBe(5);
     expect(requiredRepsFor(2, 50)).toBe(6);
-    expect(requiredRepsFor(3, 50)).toBe(4);
+    expect(requiredRepsFor(3, 50)).toBe(2);
   });
 
-  it("interpolates at a midpoint (17 words, t=0.5)", () => {
+  it("interpolates Guided/Challenge at a midpoint (17 words, t=0.5)", () => {
     // Guided: 3 + (5-3)*0.5 = 4; Challenge: 4 + (6-4)*0.5 = 5;
-    // From Memory: 3 + (4-3)*0.5 = 3.5, rounded to 4.
+    // From Memory is always 2.
     expect(requiredRepsFor(1, 17)).toBe(4);
     expect(requiredRepsFor(2, 17)).toBe(5);
-    expect(requiredRepsFor(3, 17)).toBe(4);
+    expect(requiredRepsFor(3, 17)).toBe(2);
   });
 });
 

@@ -185,7 +185,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
   const madeLearningProgress =
     checkedQuality !== null &&
-    isLearningProgressAttempt(checkedQuality, checkedAccuracy);
+    isLearningProgressAttempt(checkedQuality, checkedAccuracy, stageIndex);
 
   useEffect(() => {
     if (!checked) return;

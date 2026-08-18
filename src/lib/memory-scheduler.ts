@@ -65,9 +65,9 @@ export const LONG_VERSE_WORDS = 24;
 /**
  * Reps each band needs at the short and long endpoints (~5 reps/session feel).
  *
- * Read is a single priming pass. The other three are one session's work each,
- * so From Memory carries a real rep count too rather than graduating a verse on
- * one lucky recall.
+ * Read is a single priming pass. Guided and Challenge scale with verse length.
+ * From Memory is always two recalls so a verse cannot graduate on one lucky
+ * pass, without dragging the last step out.
  */
 const BAND_REP_RANGE: Record<
   SupportBand["key"],
@@ -76,7 +76,7 @@ const BAND_REP_RANGE: Record<
   read: [1, 1],
   guided: [3, 5],
   challenge: [4, 6],
-  memory: [3, 4],
+  memory: [2, 2],
 };
 
 /**
@@ -119,9 +119,9 @@ export const SUPPORT_BANDS: readonly SupportBand[] = [
 /**
  * Exact reps needed to clear the band at `stage`, adjusted for verse length.
  *
- * Read (0) is always 1. Guided (1) scales 3→5, Challenge (2) 4→6, and From
- * Memory (3) 3→4, linearly between {@link SHORT_VERSE_WORDS} and
- * {@link LONG_VERSE_WORDS}. Omitting `wordCount` (or passing a value ≤
+ * Read (0) is always 1. Guided (1) scales 3→5 and Challenge (2) 4→6, linearly
+ * between {@link SHORT_VERSE_WORDS} and {@link LONG_VERSE_WORDS}. From Memory
+ * (3) is always 2. Omitting `wordCount` (or passing a value ≤
  * SHORT_VERSE_WORDS) yields the short-verse minima.
  */
 export function requiredRepsFor(stage: number, wordCount?: number): number {
@@ -174,9 +174,11 @@ export const MASTERED_INTERVAL_DAYS = 30;
 export const REVIEW_LAPSE_ACCURACY = 60;
 
 /**
- * Near-perfect learning attempts still bank a rep. This lets one missed word
- * or a small typo count on a longer passage without allowing a merely passing
- * recall to clear a support band.
+ * Near-perfect Read / Guided / Challenge attempts still bank a rep. This lets
+ * one missed word or a small typo count on a longer passage without allowing a
+ * merely passing recall to clear a support band. From Memory requires
+ * `quality === "exact"` (grade-time classification already allows a couple of
+ * typos).
  */
 export const LEARN_PROGRESS_ACCURACY = 85;
 
@@ -280,11 +282,22 @@ export function isReviewPhase(status: MemoryStatus): boolean {
   return status === "reviewing" || status === "mastered";
 }
 
-/** Whether a learning attempt is strong enough to bank progress. */
+/**
+ * Whether a learning attempt is strong enough to bank progress.
+ *
+ * Read / Guided / Challenge accept an exact recall or a close one at
+ * {@link LEARN_PROGRESS_ACCURACY}. From Memory is the last confirmation, so
+ * only `exact` counts — a couple of minor typos still qualify because they
+ * are classified as exact at grade time.
+ */
 export function isLearningProgressAttempt(
   quality: ReviewInput["quality"],
   accuracy: number,
+  learnStage: number,
 ): boolean {
+  if (learnStage >= MAX_LEARN_STAGE) {
+    return quality === "exact";
+  }
   return (
     quality === "exact" ||
     (quality === "close" && accuracy >= LEARN_PROGRESS_ACCURACY)
@@ -338,7 +351,7 @@ export function isLearningLocked(
 }
 
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
-  if (isLearningProgressAttempt(r.quality, r.accuracy)) {
+  if (isLearningProgressAttempt(r.quality, r.accuracy, s.learnStage)) {
     const reps = s.stageReps + 1;
     if (reps >= requiredRepsFor(s.learnStage, r.wordCount)) {
       // Cleared this band on its required reps.
