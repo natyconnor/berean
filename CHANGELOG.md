@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.5](https://github.com/natyconnor/berean/compare/v1.12.4...v1.12.5) (2026-08-18)
+
+
+### Bug Fixes
+
+* schedule reviews at midnight and keep Memory due counts in sync ([#157](https://github.com/natyconnor/berean/issues/157)) ([53b36c4](https://github.com/natyconnor/berean/commit/53b36c42c594d15987a28ecb95e7189a9c75faf7))
+
 ## [1.12.4](https://github.com/natyconnor/berean/compare/v1.12.3...v1.12.4) (2026-08-18)
 
 
