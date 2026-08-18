@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.3](https://github.com/natyconnor/berean/compare/v1.12.2...v1.12.3) (2026-08-18)
+
+
+### Bug Fixes
+
+* Cite a single psalm as Psalm, not Psalms ([#153](https://github.com/natyconnor/berean/issues/153)) ([01babba](https://github.com/natyconnor/berean/commit/01babba9fd6d110294336909a8e830b344dceaa6))
+
 ## [1.12.2](https://github.com/natyconnor/berean/compare/v1.12.1...v1.12.2) (2026-08-10)
 
 
