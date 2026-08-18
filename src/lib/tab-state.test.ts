@@ -126,4 +126,8 @@ describe("tab-state", () => {
     ]);
     expect(result.history).toEqual(["john-1"]);
   });
+
+  it("labels a psalm tab as Psalm rather than Psalms", () => {
+    expect(createTab("psalms-1", "Psalms-1").label).toBe("Psalm 1");
+  });
 });

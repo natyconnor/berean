@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useTabs } from "@/lib/use-tabs";
 import {
+  formatBookChapter,
   isChapterScopeRef,
   toPassageId,
   type VerseRef,
@@ -23,7 +24,7 @@ export function useVerseLinkNavigation(currentChapter?: CurrentChapter) {
   return useCallback(
     (ref: VerseRef) => {
       const passageId = toPassageId(ref.book, ref.chapter);
-      const label = `${ref.book} ${ref.chapter}`;
+      const label = formatBookChapter(ref.book, ref.chapter);
       const search = isChapterScopeRef(ref)
         ? {}
         : { startVerse: ref.startVerse, endVerse: ref.endVerse };

@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { TableOfContents } from "lucide-react";
 import { BIBLE_BOOKS, type BookInfo } from "@/lib/bible-books";
 import { useTabs } from "@/lib/use-tabs";
-import { toPassageId } from "@/lib/verse-ref-utils";
+import { formatBookChapter, toPassageId } from "@/lib/verse-ref-utils";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 
@@ -108,7 +108,7 @@ export function PassageNavigator({
 
   function selectChapter(book: BookInfo, chapter: number) {
     const passageId = toPassageId(book.name, chapter);
-    const label = `${book.name} ${chapter}`;
+    const label = formatBookChapter(book.name, chapter);
     if (onSelectPassage) {
       onSelectPassage(passageId, label);
     } else {

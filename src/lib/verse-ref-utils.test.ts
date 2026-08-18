@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatBookChapter,
   formatVerseRef,
   isChapterScopeRef,
   parseVerseRef,
@@ -95,6 +96,35 @@ describe("formatVerseRef", () => {
         endVerse: 18,
       }),
     ).toBe("John 3:16-18");
+  });
+
+  it("uses Psalm for a specific psalm chapter or verse", () => {
+    expect(formatBookChapter("Psalms", 1)).toBe("Psalm 1");
+    expect(
+      formatVerseRef({
+        book: "Psalms",
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 1,
+        scope: "chapter",
+      }),
+    ).toBe("Psalm 1");
+    expect(
+      formatVerseRef({
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      }),
+    ).toBe("Psalm 23:1");
+    expect(
+      formatVerseRef({
+        book: "Psalms",
+        chapter: 119,
+        startVerse: 1,
+        endVerse: 16,
+      }),
+    ).toBe("Psalm 119:1-16");
   });
 });
 

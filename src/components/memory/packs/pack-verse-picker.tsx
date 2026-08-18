@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { verseMatchesScope, type VerseScope } from "@/lib/verse-scope-match";
 import {
   buildVerseSuggestions,
+  formatBookChapter,
   formatVerseRef,
   parseVerseRef,
   resolveCanonicalBookName,
@@ -23,10 +24,10 @@ import { VerseBrowsePicker } from "./verse-browse-picker";
 function getReferenceBoundsError(ref: VerseRef): string | null {
   const verseCount = getChapterVerseCount(ref.book, ref.chapter);
   if (verseCount === null) {
-    return `${ref.book} ${ref.chapter} is not a valid chapter.`;
+    return `${formatBookChapter(ref.book, ref.chapter)} is not a valid chapter.`;
   }
   if (ref.endVerse > verseCount) {
-    return `${ref.book} ${ref.chapter} only has ${verseCount} verse${
+    return `${formatBookChapter(ref.book, ref.chapter)} only has ${verseCount} verse${
       verseCount === 1 ? "" : "s"
     }.`;
   }

@@ -1,5 +1,5 @@
 import { BIBLE_BOOKS, getBookInfo } from "@/lib/bible-books";
-import { toPassageId } from "@/lib/verse-ref-utils";
+import { formatBookChapter, toPassageId } from "@/lib/verse-ref-utils";
 
 export interface ChapterDestination {
   book: string;
@@ -18,7 +18,7 @@ function toDestination(book: string, chapter: number): ChapterDestination {
     book,
     chapter,
     passageId: toPassageId(book, chapter),
-    label: `${book} ${chapter}`,
+    label: formatBookChapter(book, chapter),
   };
 }
 

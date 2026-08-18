@@ -14,7 +14,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Link2 } from "lucide-react";
 import { useTabs } from "@/lib/use-tabs";
-import { toPassageId } from "@/lib/verse-ref-utils";
+import {
+  formatBookChapter,
+  formatVerseRef,
+  toPassageId,
+} from "@/lib/verse-ref-utils";
 
 interface LinkedVersesPopoverProps {
   verseRefId: Id<"verseRefs">;
@@ -46,10 +50,7 @@ export function LinkedVersesPopover({ verseRefId }: LinkedVersesPopoverProps) {
         </p>
         <div className="flex flex-wrap gap-1">
           {linkedRefs.map((ref) => {
-            const label =
-              ref.startVerse === ref.endVerse
-                ? `${ref.book} ${ref.chapter}:${ref.startVerse}`
-                : `${ref.book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
+            const label = formatVerseRef(ref);
             return (
               <Tooltip key={ref._id}>
                 <TooltipTrigger asChild>
@@ -58,14 +59,14 @@ export function LinkedVersesPopover({ verseRefId }: LinkedVersesPopoverProps) {
                     className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
                     onClick={() => {
                       const id = toPassageId(ref.book, ref.chapter);
-                      openTab(id, `${ref.book} ${ref.chapter}`);
+                      openTab(id, formatBookChapter(ref.book, ref.chapter));
                     }}
                   >
                     {label}
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Open {ref.book} {ref.chapter}
+                  Open {formatBookChapter(ref.book, ref.chapter)}
                 </TooltipContent>
               </Tooltip>
             );

@@ -4,7 +4,11 @@ import { api } from "../../../convex/_generated/api";
 import type { GospelParallel } from "../../../convex/lib/publicValues";
 import { Badge } from "@/components/ui/badge";
 import { useTabs } from "@/lib/use-tabs";
-import { toPassageId } from "@/lib/verse-ref-utils";
+import {
+  formatBookChapter,
+  formatVerseRef,
+  toPassageId,
+} from "@/lib/verse-ref-utils";
 import { BookOpen, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 
@@ -98,10 +102,7 @@ function ParallelItem({
         {parallel.passages
           .filter((p) => !(p.book === book && p.chapter === chapter))
           .map((p) => {
-            const label =
-              p.startVerse === p.endVerse
-                ? `${p.book} ${p.chapter}:${p.startVerse}`
-                : `${p.book} ${p.chapter}:${p.startVerse}-${p.endVerse}`;
+            const label = formatVerseRef(p);
             return (
               <Badge
                 key={`${p.book}-${p.chapter}-${p.startVerse}`}
@@ -109,7 +110,7 @@ function ParallelItem({
                 className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
                 onClick={() => {
                   const id = toPassageId(p.book, p.chapter);
-                  openTab(id, `${p.book} ${p.chapter}`);
+                  openTab(id, formatBookChapter(p.book, p.chapter));
                 }}
               >
                 {label}

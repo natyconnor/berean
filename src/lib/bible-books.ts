@@ -107,3 +107,11 @@ export const BOOK_BY_NAME = new Map(BIBLE_BOOKS.map((b) => [b.name, b]));
 export function getBookInfo(name: string): BookInfo | undefined {
   return BOOK_BY_NAME.get(name);
 }
+
+/**
+ * Reader-facing book name when citing a specific chapter or verse.
+ * Canonical storage and APIs keep "Psalms"; a single psalm is "Psalm".
+ */
+export function displayBookName(book: string): string {
+  return book === "Psalms" ? "Psalm" : book;
+}

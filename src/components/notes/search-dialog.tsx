@@ -18,7 +18,7 @@ import { useTabs } from "@/lib/use-tabs";
 import { logInteraction } from "@/lib/dev-log";
 import { useStarterTagBadgeStyle } from "@/lib/tag-color-styles";
 import { normalizeTags, type TagMatchMode } from "@/lib/tag-utils";
-import { toPassageId } from "@/lib/verse-ref-utils";
+import { formatBookChapter, toPassageId } from "@/lib/verse-ref-utils";
 import { HighlightedText } from "@/components/search/highlighted-text";
 import { TagFilterControl } from "@/components/search/tag-filter-control";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
@@ -147,7 +147,7 @@ export function SearchDialog({ showTrigger = true }: SearchDialogProps) {
       }
 
       const passageId = toPassageId(primaryRef.book, primaryRef.chapter);
-      const label = `${primaryRef.book} ${primaryRef.chapter}`;
+      const label = formatBookChapter(primaryRef.book, primaryRef.chapter);
       logInteraction("quick-search", "result-opened", {
         book: primaryRef.book,
         chapter: primaryRef.chapter,
