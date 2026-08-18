@@ -80,7 +80,9 @@ export function predictLearning(
           learnStage: MAX_LEARN_STAGE,
           stageReps: 0,
           status: "reviewing",
-          ...(now !== undefined ? { dueAt: now } : {}),
+          ...(now !== undefined
+            ? { dueAt: nextLearningSessionDueAt(now) }
+            : {}),
         };
       }
       const sessionEnding = isLearningSessionEndingStage(stage);

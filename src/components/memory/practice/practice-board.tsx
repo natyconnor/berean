@@ -86,6 +86,8 @@ export interface PracticeVerse {
    * today's session is done (soft lock until tomorrow).
    */
   dueAt?: number;
+  /** Last graded attempt; with `dueAt`, distinguishes in-progress from locked. */
+  lastReviewedAt?: number;
 }
 
 interface PracticeBoardProps {
@@ -109,6 +111,7 @@ interface VerseProgress {
   stageReps: number;
   status: MemoryStatus;
   dueAt: number;
+  lastReviewedAt?: number;
 }
 
 interface OrderedVerse {
@@ -118,6 +121,7 @@ interface OrderedVerse {
   stageReps: number;
   status: MemoryStatus;
   dueAt: number;
+  lastReviewedAt?: number;
 }
 
 /**
@@ -129,7 +133,7 @@ interface OrderedVerse {
  */
 function hasSessionWorkLeft(
   kind: MemorySessionKind,
-  progress: Pick<VerseProgress, "status" | "dueAt">,
+  progress: Pick<VerseProgress, "status" | "dueAt" | "lastReviewedAt">,
   now: number,
 ): boolean {
   if (kind === "practice") return true;
@@ -192,6 +196,7 @@ export function PracticeBoard({
       stageReps: normalizeReps(verse.stageReps ?? 0),
       status: normalizeStatus(verse.status),
       dueAt: verse.dueAt ?? now,
+      lastReviewedAt: verse.lastReviewedAt,
     })),
   );
 
@@ -210,6 +215,7 @@ export function PracticeBoard({
           stageReps: verse.stageReps,
           status: verse.status,
           dueAt: verse.dueAt,
+          lastReviewedAt: verse.lastReviewedAt,
         },
       ]),
     ),
@@ -233,11 +239,13 @@ export function PracticeBoard({
           stageReps: progress?.stageReps ?? verse.stageReps,
           status: progress?.status ?? verse.status,
           dueAt: progress?.dueAt ?? verse.dueAt,
+          lastReviewedAt: progress?.lastReviewedAt ?? verse.lastReviewedAt,
           locked: !hasSessionWorkLeft(
             kind,
             {
               status: progress?.status ?? verse.status,
               dueAt: progress?.dueAt ?? verse.dueAt,
+              lastReviewedAt: progress?.lastReviewedAt ?? verse.lastReviewedAt,
             },
             now,
           ),
@@ -257,8 +265,14 @@ export function PracticeBoard({
         stageReps: currentVerse.stageReps,
         status: currentVerse.status,
         dueAt: currentVerse.dueAt,
+        lastReviewedAt: currentVerse.lastReviewedAt,
       })
-    : { learnStage: 0, stageReps: 0, status: "learning", dueAt: now };
+    : {
+        learnStage: 0,
+        stageReps: 0,
+        status: "learning",
+        dueAt: now,
+      };
 
   // Soft lock drives the card's "come back tomorrow" chrome; work-left drives
   // navigation, so a verse that graduates mid-session also hands off cleanly.
@@ -376,6 +390,7 @@ export function PracticeBoard({
                         stageReps: next.stageReps,
                         status: next.status,
                         dueAt: next.dueAt ?? now,
+                        lastReviewedAt: Date.now(),
                       },
                     }));
                   },

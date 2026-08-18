@@ -53,6 +53,7 @@ export function MemoryPackSessionPage({
           stageReps: m.stageReps ?? 0,
           status: m.status,
           dueAt: m.dueAt,
+          lastReviewedAt: m.lastReviewedAt,
         }))
         .filter((verse) => isMemorySessionCandidate(verse, kind, now)),
     [members, kind, now],

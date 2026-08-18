@@ -78,6 +78,7 @@ const packMemberValidator = v.object({
   stageReps: v.number(),
   intervalDays: v.number(),
   dueAt: v.number(),
+  lastReviewedAt: v.optional(v.number()),
   isDue: v.boolean(),
 });
 

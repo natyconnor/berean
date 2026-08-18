@@ -90,8 +90,9 @@ export function ReviewPlayer({
   doneLabel,
   source,
 }: ReviewPlayerProps): JSX.Element {
-  // Live `now` (coarse, ~60s) so late-due verses are reflected while the run is
-  // open. Passed as a query arg; never Date.now() inside Convex.
+  // Shared session clock. Completing an attempt still updates the queue
+  // (same args, reactive data). Passed as a query arg; never Date.now()
+  // inside Convex.
   const now = useLiveNow();
   // With an explicit `source` (a pack's due subset), skip the global queries and
   // let the caller supply the reactive due list + remaining total instead.

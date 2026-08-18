@@ -13,6 +13,8 @@
  *    and graduates.
  *  - Reviewing phase (`reviewing` / `mastered`): the verse is recalled from
  *    hidden and the inter-review interval grows or shrinks with performance.
+ *    Due dates land at local midnight N calendar days later (with a 6-hour
+ *    floor so a late-night 1-day review does not reopen at 12:01am).
  *
  * Early practice (before `dueAt`) may reschedule once from "now" so a successful
  * early review still counts — but further early successes leave the interval
@@ -190,9 +192,6 @@ export const REVIEW_LAPSE_LEARN_STAGE = 1;
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Interval spread applied to due dates so reviews don't bunch up (+/-10%). */
-const FUZZ_RATIO = 0.1;
-
 /**
  * Clearing Guided (1) or Challenge (2) ends today's learning session: advance
  * to the next band and soft-lock until tomorrow. Read (0) stays same-day;
@@ -205,39 +204,52 @@ export function isLearningSessionEndingStage(stage: number): boolean {
 /**
  * Floor on a soft lock, so a session finished just before midnight can't reopen
  * minutes later. Small enough that the verse still comes back the next morning.
+ * Also the gap that distinguishes a session lock (`dueAt` a morning ahead of
+ * `lastReviewedAt`) from an in-progress stamp (`dueAt` ≈ last attempt).
  */
-const MIN_LEARNING_LOCK_MS = 6 * 60 * 60 * 1000;
+export const MIN_LEARNING_LOCK_MS = 6 * 60 * 60 * 1000;
 
 /**
- * When the learner's next session opens: the start of their next local day, so
- * finishing at 8pm reopens the next morning rather than 24 hours later.
+ * When the next session opens: local midnight `intervalDays` calendar days
+ * from today (rounded to a whole day, at least 1). A 6-hour floor keeps a
+ * late-night 1-day gap from reopening minutes after midnight.
  *
  * `tzOffsetMinutes` is the client's `Date.prototype.getTimezoneOffset()`
  * (minutes to add to local time to reach UTC, e.g. 420 for UTC-7). Without it
- * the local day is unknowable, so the lock falls back to a rolling day.
+ * the local day is unknowable, so the due date falls back to a rolling day.
+ */
+export function dueAtInCalendarDays(
+  now: number,
+  intervalDays: number,
+  tzOffsetMinutes?: number,
+): number {
+  const days = Math.max(1, Math.round(intervalDays));
+  if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
+    return now + days * DAY_MS;
+  }
+  const offsetMs = tzOffsetMinutes * 60 * 1000;
+  const localNow = now - offsetMs;
+  const startOfLocalDay = Math.floor(localNow / DAY_MS) * DAY_MS;
+  const calendarDue = startOfLocalDay + days * DAY_MS + offsetMs;
+  return Math.max(calendarDue, now + MIN_LEARNING_LOCK_MS);
+}
+
+/**
+ * When the learner's next learning session opens: the start of their next
+ * local day. Same rule as a 1-day review.
  */
 export function nextLearningSessionDueAt(
   now: number,
   tzOffsetMinutes?: number,
 ): number {
-  if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
-    return now + DAY_MS;
-  }
-  const offsetMs = tzOffsetMinutes * 60 * 1000;
-  const localNow = now - offsetMs;
-  const nextLocalMidnight = (Math.floor(localNow / DAY_MS) + 1) * DAY_MS;
-  return Math.max(nextLocalMidnight + offsetMs, now + MIN_LEARNING_LOCK_MS);
+  return dueAtInCalendarDays(now, 1, tzOffsetMinutes);
 }
 
 /**
- * Slack allowed when comparing a learning `dueAt` against the caller's clock.
- *
- * A learning verse only ever holds one of two due dates: `now` when it is still
- * available this session, or ~24h out when the session ended. Callers compare
- * against a coarse clock (the UI refreshes it every few minutes) that can trail
- * the timestamp an attempt was stamped with, so a bare `dueAt > now` reads a
- * just-recorded rep as locked. The two real values are a day apart, so treating
- * anything inside this window as "available now" cannot confuse them.
+ * Slack allowed when comparing a learning `dueAt` against a caller clock that
+ * has no `lastReviewedAt`. In-progress stamps sit at `now`; session locks sit
+ * a morning ahead. The two real values are hours apart, so a 30-minute window
+ * cannot confuse them — it only covers rows whose last-attempt time is missing.
  */
 export const LEARNING_LOCK_GRACE_MS = 30 * 60 * 1000;
 
@@ -246,30 +258,13 @@ function clampEase(ease: number): number {
 }
 
 /**
- * Deterministic pseudo-random offset in the range [-FUZZ_RATIO, FUZZ_RATIO].
- *
- * Seeded purely off numeric input so the same attempt always yields the same
- * fuzz, keeping unit tests stable while still spreading review load in practice.
+ * Convert an interval (in days) into a concrete `dueAt` timestamp. Lands at
+ * local midnight N calendar days later (6-hour floor). A zero interval means
+ * "again this session", so it stays at `now`.
  */
-function deterministicFuzz(seed: number): number {
-  const x = Math.sin(seed) * 10000;
-  const frac = x - Math.floor(x);
-  return (frac * 2 - 1) * FUZZ_RATIO;
-}
-
-/**
- * Convert an interval (in days) into a concrete `dueAt` timestamp, applying the
- * +/-10% fuzz. A zero interval means "again this session", so it stays at `now`.
- */
-function computeDueAt(
-  input: ReviewInput,
-  priorIntervalDays: number,
-  intervalDays: number,
-): number {
+function computeDueAt(input: ReviewInput, intervalDays: number): number {
   if (intervalDays <= 0) return input.now;
-  const seed = input.now + input.accuracy + priorIntervalDays;
-  const factor = 1 + deterministicFuzz(seed);
-  return Math.round(input.now + intervalDays * factor * DAY_MS);
+  return dueAtInCalendarDays(input.now, intervalDays, input.tzOffsetMinutes);
 }
 
 /** True while the verse is still on the learn ladder (not yet graduated). */
@@ -318,6 +313,21 @@ export function isDueForReview(
   return isReviewPhase(schedule.status) && schedule.dueAt <= now;
 }
 
+/** Status/due fields plus optional `lastReviewedAt` from the persisted row. */
+export type MemoryAvailability = Pick<MemorySchedule, "status" | "dueAt"> & {
+  lastReviewedAt?: number;
+};
+
+/**
+ * True when `dueAt` is a next-session lock rather than an in-progress stamp.
+ * In-progress learning sets both timestamps to the attempt; a session-ending
+ * clear pushes `dueAt` at least {@link MIN_LEARNING_LOCK_MS} ahead.
+ */
+function isLearningSessionClosed(schedule: MemoryAvailability): boolean {
+  if (schedule.lastReviewedAt === undefined) return false;
+  return schedule.dueAt - schedule.lastReviewedAt >= MIN_LEARNING_LOCK_MS;
+}
+
 /**
  * Whether an in-progress learning verse can take a progress-banking attempt
  * now. Only `learning` (already started) qualifies — hearted `new` verses are
@@ -325,15 +335,15 @@ export function isDueForReview(
  * counts until the learner has begun. Soft-locked verses (`dueAt` a session
  * ahead after a session-ending band clear) return false until the next
  * calendar session.
+ *
+ * Pass `lastReviewedAt` when the row has it so an in-progress `dueAt` stamp
+ * is not mistaken for a lock against a stale caller clock.
  */
 export function isDueForLearning(
-  schedule: Pick<MemorySchedule, "status" | "dueAt">,
+  schedule: MemoryAvailability,
   now: number,
 ): boolean {
-  return (
-    schedule.status === "learning" &&
-    schedule.dueAt - now <= LEARNING_LOCK_GRACE_MS
-  );
+  return schedule.status === "learning" && !isLearningLocked(schedule, now);
 }
 
 /**
@@ -341,13 +351,17 @@ export function isDueForLearning(
  * and list CTAs should show a soft-lock "back tomorrow" state.
  */
 export function isLearningLocked(
-  schedule: Pick<MemorySchedule, "status" | "dueAt">,
+  schedule: MemoryAvailability,
   now: number,
 ): boolean {
-  return (
-    isLearningPhase(schedule.status) &&
-    schedule.dueAt - now > LEARNING_LOCK_GRACE_MS
-  );
+  if (!isLearningPhase(schedule.status)) return false;
+  if (
+    schedule.lastReviewedAt !== undefined &&
+    !isLearningSessionClosed(schedule)
+  ) {
+    return false;
+  }
+  return schedule.dueAt - now > LEARNING_LOCK_GRACE_MS;
 }
 
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
@@ -364,7 +378,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
           stageReps: 0,
           ease: s.ease,
           intervalDays,
-          dueAt: computeDueAt(r, s.intervalDays, intervalDays),
+          dueAt: computeDueAt(r, intervalDays),
           consecutiveCorrect: s.consecutiveCorrect + 1,
           lapses: s.lapses,
           earlyReviewApplied: false,
@@ -495,7 +509,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       stageReps: s.stageReps,
       ease: clampEase(s.ease + 0.05),
       intervalDays,
-      dueAt: computeDueAt(r, s.intervalDays, intervalDays),
+      dueAt: computeDueAt(r, intervalDays),
       consecutiveCorrect: s.consecutiveCorrect + 1,
       lapses: s.lapses,
       earlyReviewApplied: isEarly,
@@ -511,7 +525,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     stageReps: s.stageReps,
     ease: s.ease,
     intervalDays,
-    dueAt: computeDueAt(r, s.intervalDays, intervalDays),
+    dueAt: computeDueAt(r, intervalDays),
     consecutiveCorrect: s.consecutiveCorrect,
     lapses: s.lapses,
     earlyReviewApplied: isEarly,

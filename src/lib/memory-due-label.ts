@@ -18,9 +18,10 @@ export function formatMemoryDueLabel(
   status: MemoryStatus,
   dueAt: number,
   now: number,
+  lastReviewedAt?: number,
 ): string | null {
   if (isLearningPhase(status)) {
-    if (!isLearningLocked({ status, dueAt }, now)) return null;
+    if (!isLearningLocked({ status, dueAt, lastReviewedAt }, now)) return null;
     // Fall through to the same relative wording as review.
   }
 
@@ -38,12 +39,14 @@ export function formatMemoryStatusSubtitle({
   statusLabel,
   dueAt,
   now,
+  lastReviewedAt,
 }: {
   status: MemoryStatus;
   statusLabel: string;
   dueAt: number;
   now: number;
+  lastReviewedAt?: number;
 }): string {
-  const dueLabel = formatMemoryDueLabel(status, dueAt, now);
+  const dueLabel = formatMemoryDueLabel(status, dueAt, now, lastReviewedAt);
   return dueLabel === null ? statusLabel : `${statusLabel} · ${dueLabel}`;
 }

@@ -188,13 +188,18 @@ export function VerseDetail({
     stageReps: detail.stageReps,
     status: detail.status,
     dueAt: detail.dueAt,
+    lastReviewedAt: detail.lastReviewedAt,
   };
   // Review-phase verses can start a one-off (including early) review from here;
   // Learning-phase verses use Learn instead (unless soft-locked).
   const showReviewAction =
     onReview !== undefined && isReviewPhase(detail.status);
   const learningLocked = isLearningLocked(
-    { status: detail.status, dueAt: detail.dueAt },
+    {
+      status: detail.status,
+      dueAt: detail.dueAt,
+      lastReviewedAt: detail.lastReviewedAt,
+    },
     now,
   );
 
@@ -226,6 +231,7 @@ export function VerseDetail({
               status: detail.status,
               statusLabel: STATUS_LABELS[detail.status],
               dueAt: detail.dueAt,
+              lastReviewedAt: detail.lastReviewedAt,
               now,
             })}
           </p>

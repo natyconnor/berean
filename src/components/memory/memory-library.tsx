@@ -219,6 +219,7 @@ export function MemoryLibrary({
                             status: row.status,
                             statusLabel: style.label,
                             dueAt: row.dueAt,
+                            lastReviewedAt: row.lastReviewedAt,
                             now,
                           })}
                         </span>

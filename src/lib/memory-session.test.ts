@@ -37,6 +37,28 @@ describe("memory session membership", () => {
     ).toBe(false);
   });
 
+  it("keeps in-progress learning in session when the clock is hours stale", () => {
+    const staleNow = NOW - 3 * 60 * 60 * 1000;
+    expect(
+      isLearningSessionCandidate(
+        { status: "learning", dueAt: NOW, lastReviewedAt: NOW },
+        staleNow,
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      isLearningSessionCandidate(
+        {
+          status: "learning",
+          dueAt: NOW + DAY_MS,
+          lastReviewedAt: NOW,
+        },
+        staleNow,
+        false,
+      ),
+    ).toBe(false);
+  });
+
   it("allows a verse-scoped Learning CTA to start a new verse", () => {
     expect(
       isLearningSessionCandidate({ status: "new", dueAt: NOW }, NOW, true),

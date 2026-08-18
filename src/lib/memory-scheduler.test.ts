@@ -14,6 +14,7 @@ import {
   isDueForReview,
   isLearningLocked,
   nextLearningSessionDueAt,
+  dueAtInCalendarDays,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -66,11 +67,6 @@ function reviewing(overrides: Partial<MemorySchedule> = {}): MemorySchedule {
 function localMidnightUtc(t: number, tzOffsetMinutes: number): number {
   const offsetMs = tzOffsetMinutes * 60 * 1000;
   return Math.floor((t - offsetMs) / DAY_MS) * DAY_MS + offsetMs;
-}
-
-/** Effective interval implied by dueAt, in days (undoes the fuzz). */
-function effectiveIntervalDays(dueAt: number, now: number): number {
-  return (dueAt - now) / DAY_MS;
 }
 
 describe("initialSchedule", () => {
@@ -132,6 +128,7 @@ describe("new -> learning graduation path", () => {
     expect(s.learnStage).toBe(MAX_LEARN_STAGE);
     expect(s.stageReps).toBe(0);
     expect(s.intervalDays).toBe(1);
+    expect(s.dueAt).toBe(sessionNow + DAY_MS);
   });
 });
 
@@ -301,6 +298,7 @@ describe("learning phase grades", () => {
     expect(next.learnStage).toBe(MAX_LEARN_STAGE);
     expect(next.stageReps).toBe(0);
     expect(next.intervalDays).toBe(1);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
   });
 
   it("clearing the last From Memory rep graduates to reviewing with a 1-day interval", () => {
@@ -313,6 +311,7 @@ describe("learning phase grades", () => {
     expect(next.learnStage).toBe(MAX_LEARN_STAGE);
     expect(next.stageReps).toBe(0);
     expect(next.intervalDays).toBe(1);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
   });
 });
 
@@ -324,6 +323,7 @@ describe("reviewing phase grades", () => {
     expect(next.ease).toBeCloseTo(2.35, 5);
     expect(next.consecutiveCorrect).toBe(4);
     expect(next.status).toBe("reviewing");
+    expect(next.dueAt).toBe(NOW + Math.round(5 * 2.3) * DAY_MS);
   });
 
   it("close multiplies interval by ease * 0.8 and leaves ease unchanged", () => {
@@ -333,6 +333,7 @@ describe("reviewing phase grades", () => {
     expect(next.ease).toBeCloseTo(2.3, 5);
     expect(next.consecutiveCorrect).toBe(3);
     expect(next.status).toBe("reviewing");
+    expect(next.dueAt).toBe(NOW + Math.round(5 * 2.3 * 0.8) * DAY_MS);
   });
 
   it("accuracy under 60% lapses: ease -0.2, lapses++, back to Guided learning", () => {
@@ -505,7 +506,9 @@ describe("mastery threshold", () => {
   });
 });
 
-describe("interval fuzz", () => {
+describe("calendar due dates", () => {
+  const tz = 420; // UTC-7
+
   it("is deterministic for identical input", () => {
     const s = reviewing({ intervalDays: 10, ease: 2.3 });
     const a = scheduleNext(s, review({ quality: "exact" }));
@@ -513,19 +516,64 @@ describe("interval fuzz", () => {
     expect(a.dueAt).toBe(b.dueAt);
   });
 
-  it("keeps the due date within +/-10% of the interval", () => {
-    for (const intervalDays of [1, 4, 12] as const) {
-      for (const accuracy of [55, 72, 88, 100]) {
-        const s = reviewing({ intervalDays, ease: 2.4 });
-        const next = scheduleNext(s, review({ quality: "exact", accuracy }));
-        const effective = effectiveIntervalDays(next.dueAt, NOW);
-        expect(effective).toBeGreaterThanOrEqual(next.intervalDays * 0.9);
-        expect(effective).toBeLessThanOrEqual(next.intervalDays * 1.1);
-      }
-    }
+  it("lands a 1-day review at next local midnight, not 24 hours later", () => {
+    const threePm = localMidnightUtc(NOW, tz) + 15 * 60 * 60 * 1000;
+    const next = scheduleNext(
+      reviewing({ intervalDays: 1, ease: 1 }),
+      review({ quality: "exact", now: threePm, tzOffsetMinutes: tz }),
+    );
+    expect(next.dueAt).toBe(dueAtInCalendarDays(threePm, 1, tz));
+    expect(next.dueAt).toBe(localMidnightUtc(threePm, tz) + DAY_MS);
+    expect(next.dueAt - threePm).toBeLessThan(DAY_MS);
   });
 
-  it("leaves within-session retries due immediately (no fuzz on 0 interval)", () => {
+  it("keeps a late-night 1-day review at least 6 hours out", () => {
+    const elevenPm = localMidnightUtc(NOW, tz) + 23 * 60 * 60 * 1000;
+    const next = scheduleNext(
+      reviewing({ intervalDays: 1, ease: 1 }),
+      review({ quality: "exact", now: elevenPm, tzOffsetMinutes: tz }),
+    );
+    expect(next.dueAt - elevenPm).toBeGreaterThanOrEqual(6 * 60 * 60 * 1000);
+    expect(next.dueAt).toBe(elevenPm + 6 * 60 * 60 * 1000);
+  });
+
+  it("queues a multi-day interval at local midnight N days later", () => {
+    const threePm = localMidnightUtc(NOW, tz) + 15 * 60 * 60 * 1000;
+    const next = scheduleNext(
+      reviewing({ intervalDays: 7, ease: 1 }),
+      review({ quality: "exact", now: threePm, tzOffsetMinutes: tz }),
+    );
+    expect(next.dueAt).toBe(localMidnightUtc(threePm, tz) + 7 * DAY_MS);
+  });
+
+  it("does not shift a multi-day due date by the 6-hour floor", () => {
+    const elevenPm = localMidnightUtc(NOW, tz) + 23 * 60 * 60 * 1000;
+    const next = scheduleNext(
+      reviewing({ intervalDays: 7, ease: 1 }),
+      review({ quality: "exact", now: elevenPm, tzOffsetMinutes: tz }),
+    );
+    expect(next.dueAt).toBe(localMidnightUtc(elevenPm, tz) + 7 * DAY_MS);
+    expect(next.dueAt - elevenPm).toBeGreaterThan(6 * 60 * 60 * 1000);
+  });
+
+  it("falls back to a rolling day when the timezone is unknown", () => {
+    const next = scheduleNext(
+      reviewing({ intervalDays: 3, ease: 1 }),
+      review({ quality: "exact" }),
+    );
+    expect(next.dueAt).toBe(NOW + 3 * DAY_MS);
+  });
+
+  it("does not vary dueAt with accuracy (no fuzz)", () => {
+    const s = reviewing({ intervalDays: 4, ease: 2.4 });
+    const dues = [72, 88, 100].map(
+      (accuracy) =>
+        scheduleNext(s, review({ quality: "exact", accuracy })).dueAt,
+    );
+    expect(new Set(dues).size).toBe(1);
+  });
+
+  it("leaves within-session retries due immediately", () => {
     const next = scheduleNext(
       learningAt(1),
       review({ quality: "close", accuracy: 70 }),
@@ -665,5 +713,33 @@ describe("isDueForLearning / isLearningLocked", () => {
     locked.dueAt = nextLearningSessionDueAt(NOW);
     expect(isLearningLocked(locked, staleNow)).toBe(true);
     expect(isDueForLearning(locked, staleNow)).toBe(false);
+  });
+
+  it("does not drop in-progress learning when the caller clock is hours stale", () => {
+    const staleNow = NOW - 3 * 60 * 60 * 1000;
+    const inProgress = { ...learningAt(1), lastReviewedAt: NOW, dueAt: NOW };
+    expect(isLearningLocked(inProgress, staleNow)).toBe(false);
+    expect(isDueForLearning(inProgress, staleNow)).toBe(true);
+  });
+
+  it("still locks a session-ending clear against an hours-stale clock", () => {
+    const staleNow = NOW - 3 * 60 * 60 * 1000;
+    const locked = {
+      ...learningAt(2),
+      lastReviewedAt: NOW,
+      dueAt: nextLearningSessionDueAt(NOW),
+    };
+    expect(isLearningLocked(locked, staleNow)).toBe(true);
+    expect(isDueForLearning(locked, staleNow)).toBe(false);
+  });
+
+  it("unlocks a session-ended verse once now reaches dueAt", () => {
+    const locked = {
+      ...learningAt(2),
+      lastReviewedAt: NOW,
+      dueAt: NOW + DAY_MS,
+    };
+    expect(isDueForLearning(locked, NOW)).toBe(false);
+    expect(isDueForLearning(locked, NOW + DAY_MS)).toBe(true);
   });
 });
