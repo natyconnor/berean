@@ -436,7 +436,7 @@ function PackViewMain({
               <div className="rounded-xl border bg-card px-4 py-10 text-center">
                 <p className="text-sm text-muted-foreground">
                   {isCustom
-                    ? "No verses yet. Add a verse by reference, from your hearted list, or by browsing."
+                    ? "No verses yet. Add a verse from your hearted list or by browsing."
                     : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
                 </p>
               </div>
@@ -651,8 +651,8 @@ function AddVersesDialog({
           </DialogTitle>
           <DialogDescription>
             {scope
-              ? "Type a reference or browse within this pack's scope. Verses you heart here join the pack automatically."
-              : "Type a reference, pick from hearted verses, or browse. Added verses are hearted for Memory."}
+              ? "Browse within this pack's scope. Verses you heart here join the pack automatically."
+              : "Pick from hearted verses or browse. Added verses are hearted for Memory."}
           </DialogDescription>
         </DialogHeader>
         <PackVersePicker

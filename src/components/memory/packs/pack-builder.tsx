@@ -24,7 +24,7 @@ type PackKind = "scope" | "custom";
 /**
  * Creates a pack: a name, a kind toggle (Scope vs Custom), and the matching
  * body. Scope packs embed the shared {@link ScopeForm} with a live member
- * preview; custom packs can stage hearted, typed, or browsed verses. On create
+ * preview; custom packs can stage hearted or browsed verses. On create
  * we navigate straight to the new pack's view.
  */
 export function PackBuilder() {
@@ -235,8 +235,8 @@ export function PackBuilder() {
                   Verses
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Add by reference, choose from hearted verses, or browse the
-                  Bible. Added verses are hearted for Memory.
+                  Choose from hearted verses or browse the Bible. Added verses
+                  are hearted for Memory.
                 </p>
               </div>
               <PackVersePicker
