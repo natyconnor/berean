@@ -26,7 +26,7 @@ describe("AccuracyTrend", () => {
     { dayStart: start + 2 * DAY_MS, average: 87.5, count: 2 },
   ];
 
-  it("shows the exact daily percent and review count on hover", () => {
+  it("shows the exact daily percent and attempt count on hover", () => {
     render(<AccuracyTrend data={data} />);
 
     const svg = screen.getByRole("img", { name: /Accuracy trend/ });
@@ -35,17 +35,17 @@ describe("AccuracyTrend", () => {
 
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("87.5%");
-    expect(tooltip).toHaveTextContent("2 reviews");
+    expect(tooltip).toHaveTextContent("2 attempts");
   });
 
-  it("shows an empty-day tooltip when hovering a day with no reviews", () => {
+  it("shows an empty-day tooltip when hovering a day with no attempts", () => {
     render(<AccuracyTrend data={data} />);
 
     const svg = screen.getByRole("img", { name: /Accuracy trend/ });
     mockSvgRect(svg);
     fireEvent.pointerMove(svg, { clientX: 150, clientY: 20 });
 
-    expect(screen.getByRole("tooltip")).toHaveTextContent("No reviews");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("No attempts");
   });
 
   it("hides the tooltip when the pointer leaves the chart", () => {

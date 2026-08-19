@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { HEATMAP_FUTURE_WEEKS } from "@/lib/practice-heatmap";
 import { PracticeHeatmap } from "./practice-heatmap";
 
 function localDay(year: number, monthIndex: number, day: number): number {
@@ -9,7 +8,7 @@ function localDay(year: number, monthIndex: number, day: number): number {
 }
 
 describe("PracticeHeatmap", () => {
-  it("keeps cells a fixed size and pads through two future weeks", () => {
+  it("keeps cells a fixed size and ends on today without future days", () => {
     const wednesday = localDay(2024, 0, 10);
     render(
       <TooltipProvider delayDuration={0}>
@@ -20,17 +19,9 @@ describe("PracticeHeatmap", () => {
     const today = screen.getByRole("button", { name: /Jan 10/ });
     expect(today).toHaveClass("size-3");
     expect(today).not.toHaveClass("w-full");
-
-    // Rest of the current week (Thu–Sat) plus two future weeks ending Sat 27.
+    expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(
-      screen.getByRole("button", { name: /Jan 13.*0 practices/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Jan 27.*0 practices/ }),
-    ).toBeInTheDocument();
-
-    expect(screen.getAllByRole("button")).toHaveLength(
-      1 + 3 + HEATMAP_FUTURE_WEEKS * 7,
-    );
+      screen.queryByRole("button", { name: /Jan 11.*0 practices/ }),
+    ).not.toBeInTheDocument();
   });
 });

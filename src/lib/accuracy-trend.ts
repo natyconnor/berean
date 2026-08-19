@@ -22,8 +22,8 @@ export function formatAccuracyPercent(average: number): string {
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
 }
 
-export function reviewPhrase(count: number): string {
-  return count === 1 ? "1 review" : `${count} reviews`;
+export function attemptPhrase(count: number): string {
+  return count === 1 ? "1 attempt" : `${count} attempts`;
 }
 
 export function accuracyTooltipCopy(day: DayAccuracy): {
@@ -31,10 +31,10 @@ export function accuracyTooltipCopy(day: DayAccuracy): {
   detail: string;
 } {
   if (day.average === null || day.count === 0) {
-    return { headline: "No reviews", detail: reviewPhrase(0) };
+    return { headline: "No attempts", detail: attemptPhrase(0) };
   }
   return {
     headline: formatAccuracyPercent(day.average),
-    detail: reviewPhrase(day.count),
+    detail: attemptPhrase(day.count),
   };
 }

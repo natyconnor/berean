@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   accuracyTooltipCopy,
+  attemptPhrase,
   formatAccuracyPercent,
   hoverIndexFromX,
-  reviewPhrase,
 } from "./accuracy-trend";
 
 describe("hoverIndexFromX", () => {
@@ -34,16 +34,16 @@ describe("formatAccuracyPercent", () => {
 });
 
 describe("accuracyTooltipCopy", () => {
-  it("shows percent and review count for a graded day", () => {
+  it("shows percent and attempt count for a graded day", () => {
     expect(accuracyTooltipCopy({ dayStart: 1, average: 80, count: 2 })).toEqual(
-      { headline: "80%", detail: "2 reviews" },
+      { headline: "80%", detail: "2 attempts" },
     );
-    expect(reviewPhrase(1)).toBe("1 review");
+    expect(attemptPhrase(1)).toBe("1 attempt");
   });
 
-  it("shows an empty state when the day has no reviews", () => {
+  it("shows an empty state when the day has no logged attempts", () => {
     expect(
       accuracyTooltipCopy({ dayStart: 1, average: null, count: 0 }),
-    ).toEqual({ headline: "No reviews", detail: "0 reviews" });
+    ).toEqual({ headline: "No attempts", detail: "0 attempts" });
   });
 });

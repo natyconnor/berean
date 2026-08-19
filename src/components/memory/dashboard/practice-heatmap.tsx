@@ -6,9 +6,7 @@ import {
 } from "@/components/ui/tooltip";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import {
-  HEATMAP_FUTURE_WEEKS,
   heatmapGridWidthPx,
-  padHeatmapFutureDays,
   toWeeks,
   visibleWeeksFromEnd,
   weeksThatFit,
@@ -55,14 +53,13 @@ function cellStyle(count: number, max: number): CSSProperties {
 
 /**
  * GitHub-style practice heatmap: one fixed-size cell per day. Columns are
- * Sunday-aligned weeks; extra width reveals more history instead of stretching
- * cells. The series is padded through the rest of this week plus two future
- * weeks so upcoming empty days stay visible.
+ * Sunday-aligned weeks ending on today; extra width reveals more history
+ * instead of stretching cells.
  */
 export function PracticeHeatmap({ data }: { data: DayCount[] }) {
   const total = data.reduce((sum, d) => sum + d.count, 0);
   const max = data.reduce((m, d) => Math.max(m, d.count), 0);
-  const weeks = toWeeks(padHeatmapFutureDays(data));
+  const weeks = toWeeks(data);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [fitCount, setFitCount] = useState(weeks.length);
 
@@ -72,10 +69,7 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
 
     const update = () => {
       const fitted = weeksThatFit(el.clientWidth);
-      if (fitted > 0) {
-        // Never clip today: keep the current week plus the padded future weeks.
-        setFitCount(Math.max(fitted, HEATMAP_FUTURE_WEEKS + 1));
-      }
+      if (fitted > 0) setFitCount(fitted);
     };
 
     update();
