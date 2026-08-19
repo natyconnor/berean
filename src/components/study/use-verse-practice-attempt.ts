@@ -37,7 +37,7 @@ interface UseVersePracticeAttemptReturn {
     verseKey: string,
     args: RecordAttemptArgs,
     onAdopt: (next: VersePracticeProgress) => void,
-  ) => Promise<void>;
+  ) => Promise<MemorySchedule | null>;
   /**
    * Record and adopt immediately (or predictLearning on null). Used by Study
    * Read-continue.
@@ -81,7 +81,7 @@ export function useVersePracticeAttempt(
       verseKey: string,
       args: RecordAttemptArgs,
       onAdopt: (next: VersePracticeProgress) => void,
-    ): Promise<void> => {
+    ): Promise<MemorySchedule | null> => {
       const seq = (attemptSeqByVerseId.current.get(verseKey) ?? 0) + 1;
       attemptSeqByVerseId.current.set(verseKey, seq);
       const schedule = await record({
@@ -91,11 +91,12 @@ export function useVersePracticeAttempt(
         mode,
         wordCount: args.wordCount,
       });
-      if (!schedule) return;
+      if (!schedule) return null;
       const applied = appliedSeqByVerseId.current.get(verseKey) ?? 0;
-      if (seq <= applied) return;
+      if (seq <= applied) return schedule;
       appliedSeqByVerseId.current.set(verseKey, seq);
       onAdopt(normalizeVerseProgress(schedule));
+      return schedule;
     },
     [mode, record],
   );

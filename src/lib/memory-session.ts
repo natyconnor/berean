@@ -1,10 +1,13 @@
 import {
   isDueForLearning,
+  isDueForReview,
   isReviewPhase,
   type MemoryStatus,
 } from "./memory-scheduler";
 
-export type MemorySessionKind = "learning" | "practice";
+export type MemorySessionKind = "learning" | "practice" | "review";
+
+export type MemorySessionLabel = "Learning" | "Practice" | "Review";
 
 export interface MemorySessionCandidate {
   status?: MemoryStatus;
@@ -20,6 +23,25 @@ export function isPracticeSessionCandidate(
   candidate: MemorySessionCandidate,
 ): boolean {
   return candidate.status !== undefined && isReviewPhase(candidate.status);
+}
+
+/**
+ * Review is the due queue: graduated verses whose `dueAt` has arrived.
+ */
+export function isReviewSessionCandidate(
+  candidate: MemorySessionCandidate,
+  now: number,
+): boolean {
+  if (candidate.status === undefined || candidate.dueAt === undefined) {
+    return false;
+  }
+  return isDueForReview(
+    {
+      status: candidate.status,
+      dueAt: candidate.dueAt,
+    },
+    now,
+  );
 }
 
 /**
@@ -49,7 +71,11 @@ export function isMemorySessionCandidate(
   now: number,
   includeNew = false,
 ): boolean {
-  return kind === "learning"
-    ? isLearningSessionCandidate(candidate, now, includeNew)
-    : isPracticeSessionCandidate(candidate);
+  if (kind === "learning") {
+    return isLearningSessionCandidate(candidate, now, includeNew);
+  }
+  if (kind === "review") {
+    return isReviewSessionCandidate(candidate, now);
+  }
+  return isPracticeSessionCandidate(candidate);
 }

@@ -5,6 +5,7 @@ import {
   isLearningSessionCandidate,
   isMemorySessionCandidate,
   isPracticeSessionCandidate,
+  isReviewSessionCandidate,
 } from "./memory-session";
 
 const NOW = 1_700_000_000_000;
@@ -78,6 +79,35 @@ describe("memory session membership", () => {
       isMemorySessionCandidate(
         { status: "learning", dueAt: NOW },
         "practice",
+        NOW,
+      ),
+    ).toBe(false);
+    expect(
+      isMemorySessionCandidate(
+        { status: "reviewing", dueAt: NOW - 1 },
+        "review",
+        NOW,
+      ),
+    ).toBe(true);
+    expect(
+      isMemorySessionCandidate(
+        { status: "reviewing", dueAt: NOW + DAY_MS },
+        "review",
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  it("limits Review to due review-phase verses", () => {
+    expect(
+      isReviewSessionCandidate({ status: "reviewing", dueAt: NOW }, NOW),
+    ).toBe(true);
+    expect(
+      isReviewSessionCandidate({ status: "learning", dueAt: NOW }, NOW),
+    ).toBe(false);
+    expect(
+      isReviewSessionCandidate(
+        { status: "reviewing", dueAt: NOW + DAY_MS },
         NOW,
       ),
     ).toBe(false);

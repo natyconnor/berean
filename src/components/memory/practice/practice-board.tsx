@@ -34,9 +34,13 @@ import {
   isLearningPhase,
   isLearningProgressAttempt,
   requiredRepsFor,
+  type MemorySchedule,
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
-import type { MemorySessionKind } from "@/lib/memory-session";
+import type {
+  MemorySessionKind,
+  MemorySessionLabel,
+} from "@/lib/memory-session";
 import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import {
@@ -57,13 +61,16 @@ import {
   classifyVerseAttempt,
   verseAttemptAccuracy,
 } from "../../study/study-attempt-quality";
-import type { CardReference } from "../../study/study-card-model";
+import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
+import { ReviewSummary, type ReviewSessionAttempt } from "../review-summary";
 import { SessionComplete } from "./session-complete";
+
+export type { MemorySessionLabel } from "@/lib/memory-session";
 
 export interface PracticeVerse {
   reference: CardReference;
@@ -103,6 +110,10 @@ interface PracticeBoardProps {
   exitTooltip?: string;
   /** Names the back-button destination on the end-of-session card. */
   exitLabel?: string;
+  /** Verses still due after this run (Review summary only). */
+  remainingDue?: number;
+  /** Restart the review queue when more verses are still due. */
+  onContinueSession?: () => void;
 }
 
 /** Live learning progress the board tracks per verse this session. */
@@ -136,8 +147,22 @@ function hasSessionWorkLeft(
   progress: Pick<VerseProgress, "status" | "dueAt" | "lastReviewedAt">,
   now: number,
 ): boolean {
-  if (kind === "practice") return true;
+  if (kind === "practice" || kind === "review") return true;
   return isLearningPhase(progress.status) && !isLearningLocked(progress, now);
+}
+
+function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
+  if (kind === "learning") return "Learning";
+  if (kind === "review") return "Review";
+  return "Practice";
+}
+
+function recordModeFor(
+  kind: MemorySessionKind,
+): "learn" | "practice" | "review" {
+  if (kind === "learning") return "learn";
+  if (kind === "review") return "review";
+  return "practice";
 }
 
 const SHUFFLE_DURATION_MS = 750;
@@ -165,6 +190,8 @@ export function PracticeBoard({
   onExit,
   exitTooltip,
   exitLabel = "Back to Memory",
+  remainingDue,
+  onContinueSession,
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const now = useLiveNow();
@@ -178,11 +205,13 @@ export function PracticeBoard({
   // Set once every verse has spent its turn and the learner dismisses the last
   // result, so the run ends on a summary instead of a dead card.
   const [finished, setFinished] = useState(false);
+  const [sessionAttempts, setSessionAttempts] = useState<
+    ReviewSessionAttempt[]
+  >([]);
 
-  const { recordWithSeqAdopt } = useVersePracticeAttempt(
-    kind === "learning" ? "learn" : "practice",
-  );
-  const sessionLabel = kind === "learning" ? "Learning" : "Practice";
+  const { recordWithSeqAdopt } = useVersePracticeAttempt(recordModeFor(kind));
+  const sessionLabel = sessionLabelFor(kind);
+  const isReview = kind === "review";
 
   // Snapshot the practice set once when the board mounts. Like ReviewPlayer
   // freezing its due queue, this keeps mid-session heart changes (which mutate
@@ -336,6 +365,17 @@ export function PracticeBoard({
   }
 
   if (finished) {
+    const averageAccuracy =
+      sessionAttempts.length === 0
+        ? null
+        : Math.round(
+            sessionAttempts.reduce(
+              (acc, attempt) => acc + attempt.accuracy,
+              0,
+            ) / sessionAttempts.length,
+          );
+    const remaining = remainingDue ?? 0;
+
     return (
       <PracticeShell
         sessionLabel={sessionLabel}
@@ -343,11 +383,24 @@ export function PracticeBoard({
         onExit={onExit}
         exitTooltip={exitTooltip}
       >
-        <SessionComplete
-          verses={railVerses}
-          exitLabel={exitLabel}
-          onExit={onExit}
-        />
+        {isReview ? (
+          <ReviewSummary
+            attempts={sessionAttempts}
+            averageAccuracy={averageAccuracy}
+            remaining={remaining}
+            onDone={onExit}
+            onContinue={
+              remaining > 0 && onContinueSession ? onContinueSession : undefined
+            }
+            doneLabel={exitLabel}
+          />
+        ) : (
+          <SessionComplete
+            verses={railVerses}
+            exitLabel={exitLabel}
+            onExit={onExit}
+          />
+        )}
       </PracticeShell>
     );
   }
@@ -372,8 +425,28 @@ export function PracticeBoard({
               locked={currentLocked}
               position={boundedIndex}
               total={orderedVerses.length}
+              showScheduleOutcome={isReview}
               onRecord={(tokens, wordCount) => {
                 const verseId = currentVerse.id;
+                const accuracy = verseAttemptAccuracy(tokens);
+                if (isReview) {
+                  const refKey = referenceKey(currentVerse.reference);
+                  setSessionAttempts((prev) => {
+                    const idx = prev.findIndex(
+                      (attempt) => referenceKey(attempt.reference) === refKey,
+                    );
+                    const nextAttempt = {
+                      reference: currentVerse.reference,
+                      accuracy,
+                    };
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = nextAttempt;
+                      return next;
+                    }
+                    return [...prev, nextAttempt];
+                  });
+                }
                 return recordWithSeqAdopt(
                   verseId,
                   {
@@ -449,7 +522,7 @@ export function PracticeBoard({
 }
 
 interface PracticeCardProps {
-  sessionLabel: "Learning" | "Practice";
+  sessionLabel: MemorySessionLabel;
   reference: CardReference;
   /** Server-authoritative band for this verse (0..3). */
   learnStage: number;
@@ -461,10 +534,12 @@ interface PracticeCardProps {
   locked: boolean;
   position: number;
   total: number;
+  /** Review mode: show schedule-consequence copy above the diff. */
+  showScheduleOutcome?: boolean;
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
-  ) => Promise<void>;
+  ) => Promise<MemorySchedule | null>;
   /**
    * This verse is spent for the session, so dismissing the result leaves the
    * card instead of setting up another rep.
@@ -483,6 +558,7 @@ function PracticeCard({
   locked,
   position,
   total,
+  showScheduleOutcome = false,
   onRecord,
   advancesOnContinue = false,
   onContinueAfterResult,
@@ -493,6 +569,8 @@ function PracticeCard({
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
   const [checked, setChecked] = useState(false);
+  const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
+  const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   // Serializes attempt submission for this card: the synchronous in-flight lock
@@ -570,9 +648,15 @@ function PracticeCard({
     // Practice counts fully: every checked attempt records and reschedules. The
     // lock keeps a double-tap from recording twice before the result view
     // (driven by `checked`) mounts and replaces this button.
-    submit(() => {
+    submit(async () => {
       setChecked(true);
-      return onRecord(diffWords(typedAnswer, versePlainText), wordCount ?? 0);
+      setOutcomeNow(Date.now());
+      setNextSchedule(null);
+      const schedule = await onRecord(
+        diffWords(typedAnswer, versePlainText),
+        wordCount ?? 0,
+      );
+      if (schedule) setNextSchedule(schedule);
     });
   }
 
@@ -584,9 +668,15 @@ function PracticeCard({
     // (mutation error, verse not hearted) re-enables Continue rather than
     // stranding it. On the normal success path the band advances and this
     // button is unmounted.
-    submit(() =>
-      onRecord(diffWords(versePlainText, versePlainText), wordCount ?? 0),
-    );
+    submit(async () => {
+      setOutcomeNow(Date.now());
+      setNextSchedule(null);
+      const schedule = await onRecord(
+        diffWords(versePlainText, versePlainText),
+        wordCount ?? 0,
+      );
+      if (schedule) setNextSchedule(schedule);
+    });
   }
 
   function continueAttempt() {
@@ -762,6 +852,9 @@ function PracticeCard({
                     typedAnswer={typedAnswer}
                     versePlainText={versePlainText}
                     diffTokens={checkedDiffTokens}
+                    showScheduleOutcome={showScheduleOutcome}
+                    nextSchedule={nextSchedule}
+                    now={outcomeNow}
                   />
                   <p className="text-center text-sm text-muted-foreground">
                     {`${checkedAccuracy}% recalled.`}
@@ -844,7 +937,7 @@ function PracticeShuffleOverlay({
   verses,
   firstVerse,
 }: {
-  sessionLabel: "Learning" | "Practice";
+  sessionLabel: MemorySessionLabel;
   verses: ReadonlyArray<OrderedVerse>;
   firstVerse: OrderedVerse;
 }): JSX.Element {
@@ -886,7 +979,7 @@ function PracticeShuffleCard({
   verse,
   isLast,
 }: {
-  sessionLabel: "Learning" | "Practice";
+  sessionLabel: MemorySessionLabel;
   index: number;
   verse: OrderedVerse;
   isLast: boolean;
@@ -931,7 +1024,7 @@ function PracticeShuffleCardFace({
   sessionLabel,
   verse,
 }: {
-  sessionLabel: "Learning" | "Practice";
+  sessionLabel: MemorySessionLabel;
   verse: OrderedVerse;
 }): JSX.Element {
   const refLabel = formatVerseRef(verse.reference);
@@ -996,7 +1089,7 @@ function PracticeShell({
   exitTooltip = "Go back to the Memory dashboard",
   children,
 }: {
-  sessionLabel: "Learning" | "Practice";
+  sessionLabel: MemorySessionLabel;
   scopeLabel: string;
   onExit: () => void;
   exitTooltip?: string;
