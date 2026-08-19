@@ -1,6 +1,6 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
+import { paginationOptsValidator, type PaginationResult } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
@@ -13,6 +13,7 @@ import {
 import { findVerseRefId } from "./lib/verseRefs";
 import {
   isDueForLearning,
+  isDueForLibrary,
   isDueForReview,
   isLearningLocked,
   isReviewPhase,
@@ -674,10 +675,10 @@ export const reviewForecast = query({
 
 // ---------- Library + drill-down (PR 7) ----------
 
-const librarySortValidator = v.union(
-  v.literal("dueAt"),
-  v.literal("status"),
-  v.literal("recent"),
+const libraryViewValidator = v.union(
+  v.literal("due"),
+  v.literal("inMemory"),
+  v.literal("notStarted"),
 );
 
 /** One hearted verse: its live memory schedule joined to its reference. */
@@ -741,25 +742,61 @@ function toLibraryItem(
   };
 }
 
+async function toLibraryPage(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  paginated: PaginationResult<Doc<"verseMemory">>,
+  keep: (memory: Doc<"verseMemory">) => boolean,
+): Promise<PaginationResult<LibraryItem>> {
+  const page: LibraryItem[] = [];
+  for (const memory of paginated.page) {
+    if (!isLiveHeartedMemory(memory)) continue;
+    if (!keep(memory)) continue;
+    const saved = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId_verseRefId", (q) =>
+        q.eq("userId", userId).eq("verseRefId", memory.verseRefId),
+      )
+      .unique();
+    if (!saved) continue;
+    const ref = await ctx.db.get(memory.verseRefId);
+    if (!ref || ref.userId !== userId) continue;
+    page.push(toLibraryItem(memory, ref, saved));
+  }
+  return { ...paginated, page };
+}
+
+const emptyLibraryPage: PaginationResult<LibraryItem> = {
+  page: [],
+  isDone: true,
+  continueCursor: "",
+};
+
 /**
  * A page of the user's hearted verses, each joined to its live memory schedule
  * and verse reference. Paginated via `paginationOptsValidator`/`.paginate()`.
  *
- * `sort` picks the index the page is read through so ordering is stable across
+ * `view` picks the index the page is read through so ordering is stable across
  * pages (never a cross-page in-memory sort):
- * - `"dueAt"` — verses by next-due soonest first (`by_userId_dueAt`).
- * - `"status"` — verses grouped by lifecycle status (`by_userId_status`, index
- *   order — alphabetical, not lifecycle order; documented in study-mode.md).
- * - `"recent"` — most recently hearted first (`savedVerses.by_userId_createdAt`).
+ * - `"due"` — due review + unlocked learning (`by_userId_isHearted_dueAt` with
+ *   `dueAt <= now`). Hearted `new` rows share that index and are skipped
+ *   in-page via `isDueForLibrary`. Pass `now`; missing `now` returns an empty
+ *   exhausted page (never `Date.now()`).
+ * - `"inMemory"` — started work (`learning` / `reviewing` / `mastered`) via
+ *   `by_userId_isHearted_status` ascending. Skip `new`. Do not use the dueAt
+ *   index: New rows stamp `dueAt = now` and would fill every early page.
+ *   Status-index order is alphabetical, not lifecycle.
+ * - `"notStarted"` — hearted `new` only (`by_userId_isHearted_status`).
+ *   Pagination order is index order, not Bible order.
  *
- * The canonical set is the user's *hearted* verses. Memory-indexed sorts use
- * `verseMemory.isHearted` to avoid probing `savedVerses` just to exclude
- * un-hearted history rows; `savedVerses` is still loaded for `heartedAt`.
+ * The canonical set is the user's *hearted* verses. Indexes use
+ * `verseMemory.isHearted`; `savedVerses` is still loaded for `heartedAt`.
  */
 export const listLibrary = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    sort: librarySortValidator,
+    view: libraryViewValidator,
+    now: v.optional(v.number()),
   },
   returns: v.object({
     page: v.array(libraryItemValidator),
@@ -777,59 +814,49 @@ export const listLibrary = query({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
-      return { page: [], isDone: true, continueCursor: "" };
+      return emptyLibraryPage;
     }
 
-    if (args.sort === "recent") {
-      const paginated = await ctx.db
-        .query("savedVerses")
-        .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
-        .order("desc")
-        .paginate(args.paginationOpts);
-
-      const page: LibraryItem[] = [];
-      for (const saved of paginated.page) {
-        const ref = await ctx.db.get(saved.verseRefId);
-        if (!ref || ref.userId !== userId) continue;
-        const memory = await findVerseMemory(ctx, userId, saved.verseRefId);
-        if (!memory) continue;
-        page.push(toLibraryItem(memory, ref, saved));
+    if (args.view === "due") {
+      if (args.now === undefined) {
+        return emptyLibraryPage;
       }
-      return { ...paginated, page };
-    }
-
-    const memoryQuery =
-      args.sort === "dueAt"
-        ? ctx.db
-            .query("verseMemory")
-            .withIndex("by_userId_isHearted_dueAt", (q) =>
-              q.eq("userId", userId).eq("isHearted", true),
-            )
-            .order("asc")
-        : ctx.db
-            .query("verseMemory")
-            .withIndex("by_userId_isHearted_status", (q) =>
-              q.eq("userId", userId).eq("isHearted", true),
-            )
-            .order("asc");
-
-    const paginated = await memoryQuery.paginate(args.paginationOpts);
-
-    const page: LibraryItem[] = [];
-    for (const memory of paginated.page) {
-      if (!isLiveHeartedMemory(memory)) continue;
-      const saved = await ctx.db
-        .query("savedVerses")
-        .withIndex("by_userId_verseRefId", (q) =>
-          q.eq("userId", userId).eq("verseRefId", memory.verseRefId),
+      const now = args.now;
+      const paginated = await ctx.db
+        .query("verseMemory")
+        .withIndex("by_userId_isHearted_dueAt", (q) =>
+          q.eq("userId", userId).eq("isHearted", true).lte("dueAt", now),
         )
-        .unique();
-      if (!saved) continue;
-      const ref = await ctx.db.get(memory.verseRefId);
-      if (!ref || ref.userId !== userId) continue;
-      page.push(toLibraryItem(memory, ref, saved));
+        .order("asc")
+        .paginate(args.paginationOpts);
+      return await toLibraryPage(ctx, userId, paginated, (memory) =>
+        isDueForLibrary(memory, now),
+      );
     }
-    return { ...paginated, page };
+
+    if (args.view === "notStarted") {
+      const paginated = await ctx.db
+        .query("verseMemory")
+        .withIndex("by_userId_isHearted_status", (q) =>
+          q.eq("userId", userId).eq("isHearted", true).eq("status", "new"),
+        )
+        .paginate(args.paginationOpts);
+      return await toLibraryPage(ctx, userId, paginated, () => true);
+    }
+
+    const paginated = await ctx.db
+      .query("verseMemory")
+      .withIndex("by_userId_isHearted_status", (q) =>
+        q.eq("userId", userId).eq("isHearted", true),
+      )
+      .order("asc")
+      .paginate(args.paginationOpts);
+    return await toLibraryPage(
+      ctx,
+      userId,
+      paginated,
+      (memory) => memory.status !== "new",
+    );
   },
 });
 
