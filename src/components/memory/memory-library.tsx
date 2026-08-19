@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { GraduationCap, Loader2, Search } from "lucide-react";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -16,6 +16,7 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { LearnVerseDialog } from "./learn-verse-dialog";
 import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
 import { toPracticeVerse } from "./to-practice-verse";
@@ -63,6 +64,7 @@ export function MemoryLibrary({
   const [view, setView] = useState<LibraryView>("due");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Id<"verseRefs"> | null>(null);
+  const [learnOpen, setLearnOpen] = useState(false);
 
   const { results, status, loadMore } = usePaginatedQuery(
     api.verseMemory.listLibrary,
@@ -139,9 +141,12 @@ export function MemoryLibrary({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Library
-        </h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Library
+          </h2>
+          <LearnVerseTrigger onClick={() => setLearnOpen(true)} />
+        </div>
         <div className="flex items-center gap-1">
           {VIEWS.map((tab) => (
             <Button
@@ -177,6 +182,11 @@ export function MemoryLibrary({
         // Genuinely empty: the query is exhausted and no rows loaded anywhere.
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
           <p className="text-sm text-muted-foreground">{EMPTY_COPY[view]}</p>
+          {view === "due" ? (
+            <div className="mt-4">
+              <LearnVerseTrigger onClick={() => setLearnOpen(true)} />
+            </div>
+          ) : null}
         </div>
       ) : !hasResults && !isSwitchingView ? (
         // Empty page(s) so far but more remain — auto-loading; keep Load more
@@ -250,6 +260,20 @@ export function MemoryLibrary({
         </>
       )}
 
+      <LearnVerseDialog
+        open={learnOpen}
+        onOpenChange={setLearnOpen}
+        now={now}
+        onLearnVerse={(verse) => {
+          setLearnOpen(false);
+          onLearnVerse(verse);
+        }}
+        onReviewVerse={(verse) => {
+          setLearnOpen(false);
+          onReviewVerse(verse);
+        }}
+      />
+
       <Dialog
         open={selected !== null}
         onOpenChange={(open) => {
@@ -277,5 +301,20 @@ export function MemoryLibrary({
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+function LearnVerseTrigger({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 shrink-0 gap-1 px-2.5 text-xs"
+      onClick={onClick}
+    >
+      <GraduationCap className="h-3.5 w-3.5" aria-hidden />
+      Learn a verse
+    </Button>
   );
 }
