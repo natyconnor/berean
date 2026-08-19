@@ -1,6 +1,7 @@
 import { ListOrdered, Shuffle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import type { MemorySessionLabel } from "@/lib/memory-session";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,7 @@ interface RailVerse {
 }
 
 interface PracticeVerseRailProps {
-  sessionLabel: "Learning" | "Practice";
+  sessionLabel: MemorySessionLabel;
   verses: ReadonlyArray<RailVerse>;
   activeId: string | null;
   onSelectVerse: (id: string) => void;

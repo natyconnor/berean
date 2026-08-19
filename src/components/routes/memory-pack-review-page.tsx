@@ -1,12 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
-import { ArrowLeft, Loader2, SearchX } from "lucide-react";
+import { ArrowLeft, Loader2, SearchX, Sparkles } from "lucide-react";
 
-import {
-  ReviewPlayer,
-  type ReviewItem,
-} from "@/components/memory/review-player";
+import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
+import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { Route } from "@/routes/memory_.$packId.review";
 
@@ -18,6 +17,7 @@ export function MemoryPackReviewPage() {
   const { packId } = Route.useParams();
   const typedPackId = packId as Id<"packs">;
   const now = useLiveNow();
+  const [sessionEpoch, setSessionEpoch] = useState(0);
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
   const members = useQuery(api.packs.resolveMembers, {
@@ -26,26 +26,36 @@ export function MemoryPackReviewPage() {
   });
 
   const dueMembers = useMemo(
-    () => (members ?? []).filter((m) => m.isDue),
+    () => (members ?? []).filter((member) => member.isDue),
     [members],
   );
-  const reviewDueItems = useMemo<ReviewItem[]>(
+  const reviewVerses = useMemo<PracticeVerse[]>(
     () =>
       members === undefined
         ? []
-        : dueMembers.map((m) => ({
-            verseRefId: m.verseRefId,
-            book: m.book,
-            chapter: m.chapter,
-            startVerse: m.startVerse,
-            endVerse: m.endVerse,
-            status: m.status,
-            learnStage: m.learnStage,
+        : dueMembers.map((member) => ({
+            reference: {
+              book: member.book,
+              chapter: member.chapter,
+              startVerse: member.startVerse,
+              endVerse: member.endVerse,
+            },
+            learnStage: member.learnStage,
+            stageReps: member.stageReps,
+            status: member.status,
+            dueAt: member.dueAt,
+            lastReviewedAt: member.lastReviewedAt,
           })),
     [members, dueMembers],
   );
 
-  if (pack === undefined) {
+  const onExit = () =>
+    void navigate({
+      to: "/memory/$packId",
+      params: { packId: typedPackId },
+    });
+
+  if (pack === undefined || members === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -81,18 +91,33 @@ export function MemoryPackReviewPage() {
   }
 
   return (
-    <ReviewPlayer
-      title={pack.name}
-      backLabel="Pack"
-      source={{
-        dueItems: members === undefined ? undefined : reviewDueItems,
-        remainingDue: members === undefined ? undefined : dueMembers.length,
-      }}
-      onExit={() =>
-        void navigate({
-          to: "/memory/$packId",
-          params: { packId: typedPackId },
-        })
+    <MemorySessionRunner
+      key={`pack-review-${sessionEpoch}`}
+      kind="review"
+      verses={reviewVerses}
+      scopeLabel={pack.name}
+      onExit={onExit}
+      exitTooltip="Go back to the pack"
+      exitLabel="Back to pack"
+      remainingDue={dueMembers.length}
+      onContinueSession={() => setSessionEpoch((value) => value + 1)}
+      emptyState={
+        <div className="flex h-full flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-6 w-6 text-primary" aria-hidden />
+          </div>
+          <div className="max-w-sm space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">
+              All caught up
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              No verses in this pack are due for review right now.
+            </p>
+          </div>
+          <Button variant="outline" onClick={onExit}>
+            Back to pack
+          </Button>
+        </div>
       }
     />
   );

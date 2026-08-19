@@ -14,6 +14,10 @@ interface MemorySessionRunnerProps {
   onExit: () => void;
   exitTooltip?: string;
   exitLabel?: string;
+  /** Verses still due after this run (Review summary only). */
+  remainingDue?: number;
+  /** Restart the review queue when more verses are still due. */
+  onContinueSession?: () => void;
   /** Shown when the session had nothing to run in the first place. */
   emptyState: ReactNode;
 }
