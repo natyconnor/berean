@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -9,6 +9,8 @@ import {
   heatmapGridWidthPx,
   padHeatmapFutureDays,
   toWeeks,
+  visibleWeeksFromEnd,
+  weeksThatFit,
   type DayCount,
 } from "@/lib/practice-heatmap";
 import { chartCardClassName } from "./chart-card";
@@ -60,16 +62,37 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
   const total = data.reduce((sum, d) => sum + d.count, 0);
   const max = data.reduce((m, d) => Math.max(m, d.count), 0);
   const weeks = toWeeks(padHeatmapFutureDays(data));
-  const gridWidthPx = heatmapGridWidthPx(weeks.length);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [fitCount, setFitCount] = useState(weeks.length);
 
-  // A month label shows above the first week whose first real day belongs to a
-  // month we haven't labeled yet.
-  const monthByWeek = weeks.map((week, weekIndex) => {
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const fitted = weeksThatFit(el.clientWidth);
+      if (fitted > 0) setFitCount(fitted);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [weeks.length]);
+
+  const visibleWeeks = visibleWeeksFromEnd(weeks, fitCount);
+  const gridWidthPx = heatmapGridWidthPx(visibleWeeks.length);
+
+  // Recomputed on the visible slice so the leftmost on-screen week still gets
+  // a month label after older columns are clipped.
+  const monthByWeek = visibleWeeks.map((week, weekIndex) => {
     const firstReal = week.find((c): c is DayCount => c !== null);
     if (!firstReal) return "";
     const month = new Date(firstReal.dayStart).getMonth();
     if (weekIndex === 0) return monthLabel(firstReal.dayStart);
-    const prev = weeks[weekIndex - 1].find((c): c is DayCount => c !== null);
+    const prev = visibleWeeks[weekIndex - 1].find(
+      (c): c is DayCount => c !== null,
+    );
     const prevMonth = prev ? new Date(prev.dayStart).getMonth() : -1;
     return month !== prevMonth ? monthLabel(firstReal.dayStart) : "";
   });
@@ -111,9 +134,12 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
               ))}
             </div>
 
-            {/* Clip from the left: fixed cell size, extra width shows more weeks. */}
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-              <div className="ml-auto" style={{ width: gridWidthPx }}>
+            {/* Newest weeks stay on the right; extra width reveals more history. */}
+            <div
+              ref={scrollerRef}
+              className="flex min-h-0 min-w-0 flex-1 justify-end overflow-hidden"
+            >
+              <div className="shrink-0" style={{ width: gridWidthPx }}>
                 <div className="mb-1 flex gap-1" aria-hidden>
                   {monthByWeek.map((m, i) => (
                     <span
@@ -126,7 +152,7 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
                 </div>
 
                 <div className="flex gap-1">
-                  {weeks.map((week, w) => (
+                  {visibleWeeks.map((week, w) => (
                     <div
                       key={w}
                       className="grid w-3 shrink-0 grid-rows-7 gap-1"

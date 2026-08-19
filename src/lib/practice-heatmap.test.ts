@@ -7,6 +7,8 @@ import {
   nextLocalDayStart,
   padHeatmapFutureDays,
   toWeeks,
+  visibleWeeksFromEnd,
+  weeksThatFit,
   type DayCount,
 } from "./practice-heatmap";
 
@@ -98,12 +100,27 @@ describe("toWeeks", () => {
   });
 });
 
-describe("heatmapGridWidthPx", () => {
+describe("heatmapGridWidthPx / weeksThatFit", () => {
   it("uses fixed cell size plus gaps, never stretching", () => {
     expect(heatmapGridWidthPx(0)).toBe(0);
     expect(heatmapGridWidthPx(1)).toBe(HEATMAP_CELL_PX);
     expect(heatmapGridWidthPx(3)).toBe(
       3 * HEATMAP_CELL_PX + 2 * HEATMAP_GAP_PX,
     );
+  });
+
+  it("counts how many week columns fit in a width", () => {
+    expect(weeksThatFit(0)).toBe(0);
+    expect(weeksThatFit(HEATMAP_CELL_PX)).toBe(1);
+    expect(weeksThatFit(heatmapGridWidthPx(12))).toBe(12);
+    expect(weeksThatFit(heatmapGridWidthPx(12) + HEATMAP_CELL_PX - 1)).toBe(12);
+  });
+});
+
+describe("visibleWeeksFromEnd", () => {
+  it("keeps the newest columns so today and future stay visible", () => {
+    expect(visibleWeeksFromEnd(["a", "b", "c", "d"], 2)).toEqual(["c", "d"]);
+    expect(visibleWeeksFromEnd(["a", "b"], 9)).toEqual(["a", "b"]);
+    expect(visibleWeeksFromEnd(["a"], 0)).toEqual([]);
   });
 });

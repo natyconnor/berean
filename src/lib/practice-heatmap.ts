@@ -75,3 +75,25 @@ export function heatmapGridWidthPx(weekCount: number): number {
   if (weekCount <= 0) return 0;
   return weekCount * HEATMAP_CELL_PX + (weekCount - 1) * HEATMAP_GAP_PX;
 }
+
+/**
+ * How many fixed-size week columns fit in `widthPx`. Returns 0 when the
+ * container has not been measured yet so callers can keep a fallback.
+ */
+export function weeksThatFit(widthPx: number): number {
+  if (widthPx <= 0) return 0;
+  return Math.max(
+    1,
+    Math.floor((widthPx + HEATMAP_GAP_PX) / (HEATMAP_CELL_PX + HEATMAP_GAP_PX)),
+  );
+}
+
+/** Keep the newest `count` week columns (today + future stay on the right). */
+export function visibleWeeksFromEnd<T>(
+  weeks: readonly T[],
+  count: number,
+): T[] {
+  if (weeks.length === 0 || count <= 0) return [];
+  if (count >= weeks.length) return [...weeks];
+  return weeks.slice(weeks.length - count);
+}
