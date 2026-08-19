@@ -8,8 +8,8 @@
 #   3. Configure the Convex Auth keys (JWT_PRIVATE_KEY / JWKS / SITE_URL) and,
 #      when available, the optional ESV_API_KEY, on that deployment.
 #
-# The long-running dev servers (Convex backend + Vite) are started separately as
-# environment "terminals"; nothing here should stay running after it returns.
+# The long-running dev servers (Convex backend + Vite) are started separately by
+# scripts/cloud-agent-start.sh; nothing here should stay running after it returns.
 
 set -euo pipefail
 
