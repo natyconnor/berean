@@ -602,7 +602,12 @@ export const reviewActivity = query({
       timeZone,
     );
     const buckets = bucketAccuracyAverages(
-      rows.map((row) => ({ createdAt: row.createdAt, accuracy: row.accuracy })),
+      rows.map((row) => ({
+        createdAt: row.createdAt,
+        accuracy: row.accuracy,
+        mode: row.mode,
+        stage: row.stage,
+      })),
       args.now,
       trendDays,
       timeZone,

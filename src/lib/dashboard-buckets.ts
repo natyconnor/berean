@@ -153,11 +153,20 @@ export function bucketReviewCounts(
 
 /**
  * Average `accuracy` per local day over a `days`-long window ending today,
- * oldest first. Days with no reviews get `null` (rather than 0) so charts can
- * skip them instead of drawing a misleading zero.
+ * oldest first. Days with no graded attempts get `null` (rather than 0) so
+ * charts can skip them instead of drawing a misleading zero.
+ *
+ * Learning **Read** primes (`mode: "learn"` at `stage` 0) are excluded: the
+ * learner only reads the verse and continues, so they should not inflate
+ * accuracy or attempt counts.
  */
 export function bucketAccuracyAverages(
-  reviews: readonly { createdAt: number; accuracy: number }[],
+  reviews: readonly {
+    createdAt: number;
+    accuracy: number;
+    mode?: string;
+    stage?: number;
+  }[],
   now: number,
   days: number,
   timeZone: string = "UTC",
@@ -167,6 +176,7 @@ export function bucketAccuracyAverages(
   const sums = Array.from({ length: days }, () => 0);
   const counts = Array.from({ length: days }, () => 0);
   for (const review of reviews) {
+    if (isReadPrimeAttempt(review)) continue;
     const index = indexByKey.get(zonedDateKey(review.createdAt, timeZone));
     if (index !== undefined) {
       sums[index] += review.accuracy;
@@ -177,6 +187,17 @@ export function bucketAccuracyAverages(
     average: count > 0 ? sums[i] / count : null,
     count,
   }));
+}
+
+/**
+ * True for the learning Read band: `learnStage` 0 recorded as `mode: "learn"`.
+ * The UI banks that rep by submitting the shown text (`Continue`), not a recall.
+ */
+export function isReadPrimeAttempt(row: {
+  mode?: string;
+  stage?: number;
+}): boolean {
+  return row.mode === "learn" && row.stage === 0;
 }
 
 /**
