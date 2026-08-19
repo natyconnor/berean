@@ -182,19 +182,7 @@ export function AccuracyTrend({ data }: { data: DayAccuracy[] }) {
                     opacity={0.15}
                   />
                 )}
-                {points.length === 1 ? (
-                  // A single graded day: a flat reference line at its accuracy.
-                  <line
-                    x1={0}
-                    y1={points[0].y}
-                    x2={VIEW_W}
-                    y2={points[0].y}
-                    stroke={chartColor(1)}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ) : (
+                {points.length >= 2 && (
                   <path
                     d={linePath(points)}
                     fill="none"

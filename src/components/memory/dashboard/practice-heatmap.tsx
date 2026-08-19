@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/tooltip";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import {
+  HEATMAP_FUTURE_WEEKS,
   heatmapGridWidthPx,
   padHeatmapFutureDays,
   toWeeks,
@@ -71,7 +72,10 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
 
     const update = () => {
       const fitted = weeksThatFit(el.clientWidth);
-      if (fitted > 0) setFitCount(fitted);
+      if (fitted > 0) {
+        // Never clip today: keep the current week plus the padded future weeks.
+        setFitCount(Math.max(fitted, HEATMAP_FUTURE_WEEKS + 1));
+      }
     };
 
     update();
