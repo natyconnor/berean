@@ -40,17 +40,17 @@ export function spansOverlap(a: VerseSpan, b: VerseSpan): boolean {
   return a.startVerse <= b.endVerse && b.startVerse <= a.endVerse;
 }
 
-export function overlappingSpans(
+export function overlappingSpans<T extends VerseSpan>(
   selection: VerseSpan,
-  spans: readonly VerseSpan[],
-): VerseSpan[] {
+  spans: readonly T[],
+): T[] {
   return spans.filter((span) => spansOverlap(selection, span));
 }
 
-export function exactSpanMatch(
+export function exactSpanMatch<T extends VerseSpan>(
   selection: VerseSpan,
-  spans: readonly VerseSpan[],
-): VerseSpan | null {
+  spans: readonly T[],
+): T | null {
   return (
     spans.find(
       (span) =>

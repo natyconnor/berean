@@ -85,6 +85,13 @@ export function LearnVerseDialog({
         chapter: v.chapter,
         startVerse: v.startVerse,
         endVerse: v.endVerse,
+        memory: v.memory
+          ? {
+              status: v.memory.status,
+              dueAt: v.memory.dueAt,
+              lastReviewedAt: v.memory.lastReviewedAt,
+            }
+          : undefined,
       })),
     [savedVerses],
   );
@@ -187,6 +194,7 @@ export function LearnVerseDialog({
           isLoadingHearted={open && savedVerses === undefined}
           defaultTab="browse"
           confirmLabel="Learn"
+          now={now}
           isSelected={() => false}
           isPending={(verse) =>
             savedVerses === undefined || pendingKey === packVerseKey(verse)

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, Heart, Loader2 } from "lucide-react";
 
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,15 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { BIBLE_BOOKS, type BookInfo } from "@/lib/bible-books";
 import { getChapterVerseCount } from "@/lib/bible-verse-counts";
 import {
+  alreadyHeartedLeadIn,
+  heartedSpanConfirmAction,
+} from "@/lib/hearted-span-copy";
+import {
+  exactSpanMatch,
   heartedRunsForChapter,
   overlappingSpans,
 } from "@/lib/hearted-verse-coverage";
+import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { VerseScope } from "@/lib/verse-scope-match";
 import { cn } from "@/lib/utils";
@@ -37,6 +43,11 @@ export interface BrowseVerse {
   chapter: number;
   startVerse: number;
   endVerse: number;
+  memory?: {
+    status: MemoryStatus;
+    dueAt?: number;
+    lastReviewedAt?: number;
+  };
 }
 
 interface VerseRange {
@@ -48,6 +59,7 @@ interface VerseBrowsePickerProps {
   scope?: VerseScope;
   heartedVerses?: ReadonlyArray<BrowseVerse>;
   confirmLabel?: string;
+  now?: number;
   isSelected: (verse: BrowseVerse) => boolean;
   isDisabled?: (verse: BrowseVerse) => boolean;
   isPending?: (verse: BrowseVerse) => boolean;
@@ -58,6 +70,7 @@ export function VerseBrowsePicker({
   scope,
   heartedVerses = [],
   confirmLabel = "Add",
+  now,
   isSelected,
   isDisabled,
   isPending,
@@ -324,6 +337,7 @@ export function VerseBrowsePicker({
           verseCount={verseCount}
           heartedVerses={heartedVerses}
           confirmLabel={confirmLabel}
+          now={now}
           isSelected={isSelected}
           isDisabled={isDisabled}
           isPending={isPending}
@@ -340,6 +354,7 @@ function VerseRangeGrid({
   verseCount,
   heartedVerses,
   confirmLabel,
+  now,
   isSelected,
   isDisabled,
   isPending,
@@ -350,6 +365,7 @@ function VerseRangeGrid({
   verseCount: number;
   heartedVerses: ReadonlyArray<BrowseVerse>;
   confirmLabel: string;
+  now?: number;
   isSelected: (verse: BrowseVerse) => boolean;
   isDisabled?: (verse: BrowseVerse) => boolean;
   isPending?: (verse: BrowseVerse) => boolean;
@@ -385,14 +401,20 @@ function VerseRangeGrid({
     [heartedVerses, book, chapter, verseCount],
   );
 
-  const overlapOffers = useMemo(() => {
+  const relatedHearted = useMemo(() => {
     if (!span) return [];
-    return overlappingSpans(span, heartedVerses).filter(
-      (hearted) =>
-        hearted.startVerse !== span.startVerse ||
-        hearted.endVerse !== span.endVerse,
-    );
+    return overlappingSpans(span, heartedVerses);
   }, [span, heartedVerses]);
+
+  const exactHearted = useMemo(
+    () => (span ? exactSpanMatch(span, heartedVerses) : null),
+    [span, heartedVerses],
+  );
+  const confirmAction = heartedSpanConfirmAction(
+    confirmLabel,
+    exactHearted?.memory,
+    now,
+  );
 
   const { data: esvData, loading: esvLoading } = useEsvReference(span);
   const esvText = esvData?.verses
@@ -438,7 +460,7 @@ function VerseRangeGrid({
     }
   }
 
-  function getCellStyle(verse: number): string {
+  function getCellStyle(verse: number, covered: boolean): string {
     if (
       previewRange &&
       verse >= previewRange.start &&
@@ -455,11 +477,22 @@ function VerseRangeGrid({
       }
       return "bg-primary text-primary-foreground";
     }
+    if (covered) {
+      return "bg-rose-500/15 text-foreground hover:bg-rose-500/25 dark:bg-rose-400/20 dark:hover:bg-rose-400/30";
+    }
     return "bg-muted hover:bg-primary/10 hover:text-primary";
   }
 
   function handleAdd() {
-    if (!span || spanDisabled || spanPending || spanSelected) return;
+    if (
+      !span ||
+      spanDisabled ||
+      spanPending ||
+      spanSelected ||
+      confirmAction.disabled
+    ) {
+      return;
+    }
     onSelect(span);
     setRange(null);
     setHoveredVerse(null);
@@ -481,27 +514,47 @@ function VerseRangeGrid({
         >
           {Array.from({ length: verseCount }, (_, index) => {
             const verse = index + 1;
-            const coverageRun = isInSelectionOrPreview(verse)
-              ? null
-              : (heartedRuns.find(
-                  (run) => verse >= run.start && verse <= run.end,
-                ) ?? null);
+            const heartedRun = heartedRuns.find(
+              (run) => verse >= run.start && verse <= run.end,
+            );
+            const paintCoverage =
+              heartedRun !== undefined && !isInSelectionOrPreview(verse);
+            const onPrimaryFill =
+              (previewRange !== null && verse === anchor) ||
+              (previewRange === null &&
+                range !== null &&
+                verse >= range.start &&
+                verse <= range.end);
             return (
               <button
                 key={verse}
                 type="button"
                 onClick={() => handleVerseClick(verse)}
                 onMouseEnter={() => setHoveredVerse(verse)}
-                aria-label={`Verse ${verse}`}
+                aria-label={
+                  heartedRun
+                    ? `Verse ${verse}, already hearted`
+                    : `Verse ${verse}`
+                }
                 className={cn(
-                  "flex h-10 items-center justify-center rounded-md text-sm font-medium transition-colors",
-                  getCellStyle(verse),
-                  coverageRun && "bg-muted-foreground/15",
-                  coverageRun && verse > coverageRun.start && "rounded-l-none",
-                  coverageRun && verse < coverageRun.end && "rounded-r-none",
+                  "relative flex h-10 items-center justify-center rounded-md text-sm font-medium transition-colors",
+                  getCellStyle(verse, paintCoverage),
+                  paintCoverage && verse > heartedRun.start && "rounded-l-none",
+                  paintCoverage && verse < heartedRun.end && "rounded-r-none",
                 )}
               >
                 {verse}
+                {heartedRun ? (
+                  <Heart
+                    className={cn(
+                      "pointer-events-none absolute right-0.5 top-0.5 h-2.5 w-2.5",
+                      onPrimaryFill
+                        ? "fill-rose-200 text-rose-200"
+                        : "fill-rose-500 text-rose-500 dark:fill-rose-400 dark:text-rose-400",
+                    )}
+                    aria-hidden
+                  />
+                ) : null}
               </button>
             );
           })}
@@ -509,32 +562,40 @@ function VerseRangeGrid({
       </ScrollArea>
       {span ? (
         <div className="space-y-2">
-          {overlapOffers.length > 0 ? (
+          {relatedHearted.length > 0 ? (
             <div className="space-y-1">
-              {overlapOffers.map((offer) => {
+              {relatedHearted.map((offer) => {
                 const label = formatVerseRef(offer);
+                const isExact =
+                  offer.startVerse === span.startVerse &&
+                  offer.endVerse === span.endVerse;
                 return (
-                  <div
+                  <p
                     key={`${offer.book}:${offer.chapter}:${offer.startVerse}-${offer.endVerse}`}
-                    className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5"
+                    className="text-xs text-muted-foreground"
                   >
-                    <p className="text-xs text-muted-foreground">
-                      Overlaps {label}
-                    </p>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-primary hover:underline"
-                      onClick={() => {
-                        setRange({
-                          start: offer.startVerse,
-                          end: offer.endVerse,
-                        });
-                        setHoveredVerse(null);
-                      }}
-                    >
-                      Use {label} instead
-                    </button>
-                  </div>
+                    {alreadyHeartedLeadIn(offer.memory?.status)} {label}
+                    {isExact ? (
+                      "."
+                    ) : (
+                      <>
+                        {" — "}
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline"
+                          onClick={() => {
+                            setRange({
+                              start: offer.startVerse,
+                              end: offer.endVerse,
+                            });
+                            setHoveredVerse(null);
+                          }}
+                        >
+                          Use {label} instead?
+                        </button>
+                      </>
+                    )}
+                  </p>
                 );
               })}
             </div>
@@ -560,8 +621,13 @@ function VerseRangeGrid({
                 <Button
                   type="button"
                   size="sm"
-                  className="h-8"
-                  disabled={spanDisabled || spanPending || spanSelected}
+                  className="h-8 whitespace-nowrap"
+                  disabled={
+                    spanDisabled ||
+                    spanPending ||
+                    spanSelected ||
+                    confirmAction.disabled
+                  }
                   onClick={handleAdd}
                 >
                   {spanPending ? (
@@ -572,7 +638,7 @@ function VerseRangeGrid({
                       Added
                     </span>
                   ) : (
-                    confirmLabel
+                    confirmAction.label
                   )}
                 </Button>
               </div>

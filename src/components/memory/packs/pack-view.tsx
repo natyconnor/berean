@@ -638,6 +638,13 @@ function AddVersesDialog({
         chapter: v.chapter,
         startVerse: v.startVerse,
         endVerse: v.endVerse,
+        memory: v.memory
+          ? {
+              status: v.memory.status,
+              dueAt: v.memory.dueAt,
+              lastReviewedAt: v.memory.lastReviewedAt,
+            }
+          : undefined,
       })),
     [savedVerses],
   );

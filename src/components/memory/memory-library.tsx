@@ -314,7 +314,7 @@ function LearnVerseTrigger({ onClick }: { onClick: () => void }) {
       onClick={onClick}
     >
       <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-      Learn a verse
+      Learn a new verse
     </Button>
   );
 }

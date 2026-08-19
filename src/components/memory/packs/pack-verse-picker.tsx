@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { verseMatchesScope, type VerseScope } from "@/lib/verse-scope-match";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { heartedSpanConfirmAction } from "@/lib/hearted-span-copy";
 import { sortByVerseRef } from "../../../../shared/compare-verse-refs";
 
 import type { HeartedVerse, PackableVerse } from "./pack-verse-types";
@@ -19,6 +20,7 @@ interface PackVersePickerProps {
   scope?: VerseScope;
   confirmLabel?: string;
   defaultTab?: PickerTab;
+  now?: number;
   isSelected: (verse: PackableVerse) => boolean;
   isDisabled?: (verse: PackableVerse) => boolean;
   isPending?: (verse: PackableVerse) => boolean;
@@ -31,6 +33,7 @@ export function PackVersePicker({
   scope,
   confirmLabel,
   defaultTab = "hearted",
+  now,
   isSelected,
   isDisabled,
   isPending,
@@ -64,6 +67,7 @@ export function PackVersePicker({
           scope={scope}
           heartedVerses={heartedVerses}
           confirmLabel={confirmLabel}
+          now={now}
           isSelected={isSelected}
           isDisabled={isDisabled}
           isPending={isPending}
@@ -98,6 +102,8 @@ export function PackVersePicker({
               isScoped={scope !== undefined}
               search={heartedSearch}
               onSearchChange={setHeartedSearch}
+              confirmLabel={confirmLabel}
+              now={now}
               isSelected={isSelected}
               isDisabled={isDisabled}
               isPending={isPending}
@@ -108,6 +114,7 @@ export function PackVersePicker({
               scope={scope}
               heartedVerses={heartedVerses}
               confirmLabel={confirmLabel}
+              now={now}
               isSelected={isSelected}
               isDisabled={isDisabled}
               isPending={isPending}
@@ -127,6 +134,8 @@ function HeartedTab({
   isScoped,
   search,
   onSearchChange,
+  confirmLabel,
+  now,
   isSelected,
   isDisabled,
   isPending,
@@ -138,6 +147,8 @@ function HeartedTab({
   isScoped: boolean;
   search: string;
   onSearchChange: (value: string) => void;
+  confirmLabel?: string;
+  now?: number;
   isSelected: (verse: PackableVerse) => boolean;
   isDisabled?: (verse: PackableVerse) => boolean;
   isPending?: (verse: PackableVerse) => boolean;
@@ -184,7 +195,13 @@ function HeartedTab({
           <ul className="space-y-0.5 p-1.5">
             {verses.map((verse) => {
               const selected = isSelected(verse);
-              const disabled = isDisabled?.(verse) ?? false;
+              const action = heartedSpanConfirmAction(
+                confirmLabel ?? "Add",
+                verse.memory,
+                now,
+              );
+              const disabled =
+                (isDisabled?.(verse) ?? false) || action.disabled;
               const pending = isPending?.(verse) ?? false;
               return (
                 <li key={verse.verseRefId}>
@@ -214,6 +231,10 @@ function HeartedTab({
                         className="h-4 w-4 shrink-0 text-primary"
                         aria-hidden
                       />
+                    ) : confirmLabel === "Learn" ? (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {action.label}
+                      </span>
                     ) : null}
                   </button>
                 </li>
