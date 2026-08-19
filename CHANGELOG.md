@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.6](https://github.com/natyconnor/berean/compare/v1.12.5...v1.12.6) (2026-08-19)
+
+
+### Bug Fixes
+
+* Unify review UX with practice board layout ([#162](https://github.com/natyconnor/berean/issues/162)) ([d1d2dd0](https://github.com/natyconnor/berean/commit/d1d2dd0545e393d062358c3f9bccaca5969a2814))
+
 ## [1.12.5](https://github.com/natyconnor/berean/compare/v1.12.4...v1.12.5) (2026-08-18)
 
 
