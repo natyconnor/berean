@@ -1,10 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  largestStartedStatus,
-  MasteryDonut,
-  type MasteryDistribution,
-} from "./mastery-donut";
+import { MasteryDonut, type MasteryDistribution } from "./mastery-donut";
 
 const unstarted: MasteryDistribution = {
   new: 31,
@@ -21,24 +17,6 @@ const mixed: MasteryDistribution = {
   mastered: 3,
   total: 35,
 };
-
-describe("largestStartedStatus", () => {
-  it("picks the status with the most started verses", () => {
-    expect(largestStartedStatus(mixed)).toBe("reviewing");
-  });
-
-  it("keeps the earlier lifecycle step when counts tie", () => {
-    expect(
-      largestStartedStatus({
-        new: 0,
-        learning: 4,
-        reviewing: 4,
-        mastered: 0,
-        total: 8,
-      }),
-    ).toBe("learning");
-  });
-});
 
 describe("MasteryDonut", () => {
   it("ignores unstarted verses in the empty state", () => {
@@ -79,6 +57,23 @@ describe("MasteryDonut", () => {
     // 6 of 14 started are reviewing, the biggest bucket.
     expect(screen.getByText("43%")).toBeInTheDocument();
     expect(screen.getByText("reviewing")).toBeInTheDocument();
+  });
+
+  it("defaults to the earlier status when two buckets tie for largest", () => {
+    render(
+      <MasteryDonut
+        data={{
+          new: 0,
+          learning: 4,
+          reviewing: 4,
+          mastered: 0,
+          total: 8,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("learning")).toBeInTheDocument();
   });
 
   it("shows the hovered arc's share in the middle", () => {

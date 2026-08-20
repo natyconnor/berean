@@ -17,7 +17,7 @@ export interface MasteryDistribution {
 }
 
 /** Status with the most started verses; ties keep the earlier lifecycle step. */
-export function largestStartedStatus(
+function largestStartedStatus(
   data: MasteryDistribution,
 ): (typeof STARTED_MEMORY_STATUS_ORDER)[number] {
   return STARTED_MEMORY_STATUS_ORDER.reduce((best, key) =>
