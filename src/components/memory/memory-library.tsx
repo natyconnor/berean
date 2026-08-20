@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { GraduationCap, Loader2, Search } from "lucide-react";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -16,29 +16,39 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { LearnVerseDialog } from "./learn-verse-dialog";
 import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
 import { toPracticeVerse } from "./to-practice-verse";
 import { VerseDetail } from "./verse-detail";
 
-type LibrarySort = "dueAt" | "status" | "recent";
+type LibraryView = "due" | "inMemory" | "notStarted";
 
-const SORTS: Array<{ key: LibrarySort; label: string }> = [
-  { key: "dueAt", label: "Due" },
-  { key: "status", label: "Status" },
-  { key: "recent", label: "Recent" },
+const VIEWS: Array<{ key: LibraryView; label: string }> = [
+  { key: "due", label: "Due" },
+  { key: "inMemory", label: "In memory" },
+  { key: "notStarted", label: "Not started" },
 ];
 
+const EMPTY_COPY: Record<LibraryView, string> = {
+  due: "Nothing due right now.",
+  inMemory: "Start learning a verse to see it here.",
+  notStarted: "No unstarted hearted verses.",
+};
+
 const INITIAL_PAGE_SIZE = 20;
+/** New rows share the dueAt index and are skipped in-page; a larger first page
+ *  cuts round-trips when many hearted New verses sit inside `dueAt <= now`. */
+const DUE_INITIAL_PAGE_SIZE = 40;
 const LOAD_MORE_PAGE_SIZE = 20;
 
 /**
- * The Library: every hearted verse with its memory state and next-due date,
- * sortable + paginated (`usePaginatedQuery` over `verseMemory.listLibrary`),
- * with a drill-down dialog.
+ * The Library: hearted verses in Due / In memory / Not started views,
+ * paginated (`usePaginatedQuery` over `verseMemory.listLibrary`), with a
+ * drill-down dialog.
  *
- * Search is client-side over the loaded pages' reference labels (it does not
- * fetch unloaded pages) — a documented v1 limitation.
+ * Search is an in-view filter of already-loaded pages (it does not fetch
+ * unloaded pages) — a documented v1 limitation.
  */
 export function MemoryLibrary({
   now,
@@ -51,14 +61,18 @@ export function MemoryLibrary({
   /** Start a review session scoped to one library verse. */
   onReviewVerse: (verse: PracticeVerse) => void;
 }) {
-  const [sort, setSort] = useState<LibrarySort>("dueAt");
+  const [view, setView] = useState<LibraryView>("due");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Id<"verseRefs"> | null>(null);
+  const [learnOpen, setLearnOpen] = useState(false);
 
   const { results, status, loadMore } = usePaginatedQuery(
     api.verseMemory.listLibrary,
-    { sort },
-    { initialNumItems: INITIAL_PAGE_SIZE },
+    view === "due" ? { view, now } : { view },
+    {
+      initialNumItems:
+        view === "due" ? DUE_INITIAL_PAGE_SIZE : INITIAL_PAGE_SIZE,
+    },
   );
 
   const isLoadingFirstPage = status === "LoadingFirstPage";
@@ -67,21 +81,21 @@ export function MemoryLibrary({
   const isExhausted = status === "Exhausted";
   const hasResults = results.length > 0;
 
-  // Keep the last non-empty page for the active sort so a sort switch (or brief
+  // Keep the last non-empty page for the active view so a tab switch (or brief
   // re-fetch) fades over the existing list instead of collapsing to a spinner.
-  // Cached pages return instantly; only a never-seen sort truly reloads.
+  // Cached pages return instantly; only a never-seen view truly reloads.
   // Adjusting state during render when the source list changes is the React-
   // documented pattern for this (not an effect).
   const [heldPage, setHeldPage] = useState<{
-    sort: LibrarySort;
+    view: LibraryView;
     results: typeof results;
   } | null>(null);
-  if (hasResults && (heldPage?.results !== results || heldPage.sort !== sort)) {
-    setHeldPage({ sort, results });
+  if (hasResults && (heldPage?.results !== results || heldPage.view !== view)) {
+    setHeldPage({ view, results });
   }
-  const isSwitchingSort =
-    isLoadingFirstPage && heldPage !== null && heldPage.sort !== sort;
-  const displayResults = isSwitchingSort ? heldPage.results : results;
+  const isSwitchingView =
+    isLoadingFirstPage && heldPage !== null && heldPage.view !== view;
+  const displayResults = isSwitchingView ? heldPage.results : results;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -92,9 +106,9 @@ export function MemoryLibrary({
   }, [displayResults, search]);
 
   // `listLibrary` can legitimately return an empty page while more pages exist
-  // (e.g. a paginated slice whose rows all filtered out to un-hearted memory
-  // rows). Auto-advance past such empty slices so a user with hearted verses
-  // isn't stuck on a false empty state with nothing to click.
+  // (Due/In memory skip New or un-hearted rows in-page). Auto-advance past
+  // such empty slices so a user with matching verses isn't stuck on a false
+  // empty state with nothing to click.
   useEffect(() => {
     if (canLoadMore && !hasResults) {
       loadMore(LOAD_MORE_PAGE_SIZE);
@@ -127,20 +141,23 @@ export function MemoryLibrary({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Library
-        </h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Library
+          </h2>
+          <LearnVerseTrigger onClick={() => setLearnOpen(true)} />
+        </div>
         <div className="flex items-center gap-1">
-          {SORTS.map((s) => (
+          {VIEWS.map((tab) => (
             <Button
-              key={s.key}
-              variant={sort === s.key ? "secondary" : "ghost"}
+              key={tab.key}
+              variant={view === tab.key ? "secondary" : "ghost"}
               size="sm"
               className="h-7 px-2.5 text-xs"
-              onClick={() => setSort(s.key)}
-              aria-pressed={sort === s.key}
+              onClick={() => setView(tab.key)}
+              aria-pressed={view === tab.key}
             >
-              {s.label}
+              {tab.label}
             </Button>
           ))}
         </div>
@@ -151,25 +168,27 @@ export function MemoryLibrary({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filter loaded verses…"
+          placeholder="Filter this list…"
           className="h-9 pl-8"
-          aria-label="Filter hearted verses by reference"
+          aria-label="Filter this list by reference"
         />
       </div>
 
-      {isLoadingFirstPage && !isSwitchingSort ? (
+      {isLoadingFirstPage && !isSwitchingView ? (
         <div className="flex min-h-[16rem] items-center justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : !hasResults && !isSwitchingSort && isExhausted ? (
+      ) : !hasResults && !isSwitchingView && isExhausted ? (
         // Genuinely empty: the query is exhausted and no rows loaded anywhere.
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            No hearted verses yet. Heart a verse in the reader to start building
-            your library.
-          </p>
+          <p className="text-sm text-muted-foreground">{EMPTY_COPY[view]}</p>
+          {view === "due" ? (
+            <div className="mt-4">
+              <LearnVerseTrigger onClick={() => setLearnOpen(true)} />
+            </div>
+          ) : null}
         </div>
-      ) : !hasResults && !isSwitchingSort ? (
+      ) : !hasResults && !isSwitchingView ? (
         // Empty page(s) so far but more remain — auto-loading; keep Load more
         // reachable as a fallback so the user is never stuck.
         <div className="flex flex-col items-center gap-2 py-12">
@@ -188,9 +207,9 @@ export function MemoryLibrary({
           <ul
             className={cn(
               "space-y-1.5 transition-opacity",
-              isSwitchingSort && "pointer-events-none opacity-50",
+              isSwitchingView && "pointer-events-none opacity-50",
             )}
-            aria-busy={isSwitchingSort}
+            aria-busy={isSwitchingView}
           >
             {filtered.map((row) => {
               const style = MEMORY_STATUS_STYLE[row.status];
@@ -241,6 +260,20 @@ export function MemoryLibrary({
         </>
       )}
 
+      <LearnVerseDialog
+        open={learnOpen}
+        onOpenChange={setLearnOpen}
+        now={now}
+        onLearnVerse={(verse) => {
+          setLearnOpen(false);
+          onLearnVerse(verse);
+        }}
+        onReviewVerse={(verse) => {
+          setLearnOpen(false);
+          onReviewVerse(verse);
+        }}
+      />
+
       <Dialog
         open={selected !== null}
         onOpenChange={(open) => {
@@ -268,5 +301,20 @@ export function MemoryLibrary({
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+function LearnVerseTrigger({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 shrink-0 gap-1 px-2.5 text-xs"
+      onClick={onClick}
+    >
+      <GraduationCap className="h-3.5 w-3.5" aria-hidden />
+      Learn a new verse
+    </Button>
   );
 }

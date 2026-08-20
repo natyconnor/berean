@@ -347,6 +347,19 @@ export function isDueForLearning(
 }
 
 /**
+ * Whether a verse belongs in the Library Due view right now.
+ *
+ * Due review and unlocked learning both qualify. Hearted `new` verses and
+ * session-locked learning (“Tomorrow”) do not.
+ */
+export function isDueForLibrary(
+  schedule: MemoryAvailability,
+  now: number,
+): boolean {
+  return isDueForReview(schedule, now) || isDueForLearning(schedule, now);
+}
+
+/**
  * True when the verse is still learning but today's session is done — Practice
  * and list CTAs should show a soft-lock "back tomorrow" state.
  */
