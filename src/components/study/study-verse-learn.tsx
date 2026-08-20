@@ -47,6 +47,7 @@ import type { VerseMemoryCard } from "./study-card-model";
 import { useRecordVerseAttempt } from "./use-record-verse-attempt";
 import { useVersePracticeAttempt } from "./use-verse-practice-attempt";
 import { VerseAttemptResult } from "./study-verse-memory-card";
+import { PreviewFillExactAnswerButton } from "../memory/preview-fill-exact-answer-button";
 
 interface StudyVerseLearnProps {
   card: VerseMemoryCard;
@@ -437,7 +438,18 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
       </CardContent>
 
       <CardFooter className="flex flex-col gap-3 border-t sm:flex-row sm:justify-between">
-        <div className="flex w-full gap-2 sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          {!checked && !isReadPrime ? (
+            <PreviewFillExactAnswerButton
+              versePlainText={versePlainText}
+              onFill={(text) => {
+                interactedRef.current = true;
+                setTypedAnswer(text);
+                setChecked(false);
+              }}
+              disabled={!stageReady || loading || Boolean(error)}
+            />
+          ) : null}
           {checked ? (
             <Button
               type="button"

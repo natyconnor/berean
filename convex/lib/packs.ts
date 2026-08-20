@@ -22,7 +22,11 @@ export type PackMember = {
   status: Doc<"verseMemory">["status"];
   learnStage: number;
   stageReps: number;
+  ease: number;
   intervalDays: number;
+  consecutiveCorrect: number;
+  lapses: number;
+  earlyReviewApplied?: boolean;
   dueAt: number;
   lastReviewedAt?: number;
 };
@@ -52,7 +56,11 @@ function toMember(
     learnStage: memory.learnStage,
     // Schema-optional (always written now); default legacy rows defensively.
     stageReps: memory.stageReps ?? 0,
+    ease: memory.ease,
     intervalDays: memory.intervalDays,
+    consecutiveCorrect: memory.consecutiveCorrect,
+    lapses: memory.lapses,
+    earlyReviewApplied: memory.earlyReviewApplied,
     dueAt: memory.dueAt,
     lastReviewedAt: memory.lastReviewedAt,
   };

@@ -1,6 +1,8 @@
 import {
   isDueForLearning,
   isDueForReview,
+  isLearningLocked,
+  isLearningPhase,
   isReviewPhase,
   type MemoryStatus,
 } from "./memory-scheduler";
@@ -78,4 +80,34 @@ export function isMemorySessionCandidate(
     return isReviewSessionCandidate(candidate, now);
   }
   return isPracticeSessionCandidate(candidate);
+}
+
+/**
+ * Whether this verse still has work left in the current session.
+ *
+ * Learning is rationed one band per day, so a verse drops out once it
+ * soft-locks or graduates. Review is a one-shot due queue: once a grade
+ * reschedules the verse (or lapses it out of review), it is spent and the
+ * board should Continue to the next due verse or the summary. Practice is
+ * optional extra recall with no ration, so it never runs dry.
+ */
+export function hasSessionWorkLeft(
+  kind: MemorySessionKind,
+  progress: MemorySessionCandidate,
+  now: number,
+): boolean {
+  if (kind === "practice") return true;
+  if (kind === "review") return isReviewSessionCandidate(progress, now);
+  if (progress.status === undefined) return false;
+  return (
+    isLearningPhase(progress.status) &&
+    !isLearningLocked(
+      {
+        status: progress.status,
+        dueAt: progress.dueAt ?? now,
+        lastReviewedAt: progress.lastReviewedAt,
+      },
+      now,
+    )
+  );
 }

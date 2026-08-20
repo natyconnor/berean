@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatMemoryDueLabel,
   formatMemoryStatusSubtitle,
+  formatNextReviewPhrase,
 } from "./memory-due-label";
 
 const NOW = 1_700_000_000_000;
@@ -30,6 +31,28 @@ describe("formatMemoryDueLabel", () => {
     expect(formatMemoryDueLabel("mastered", NOW + DAY_MS, NOW)).toBe(
       "Tomorrow",
     );
+  });
+});
+
+describe("formatNextReviewPhrase", () => {
+  it("omits the clause until a schedule exists", () => {
+    expect(formatNextReviewPhrase(null, NOW)).toBeNull();
+    expect(formatNextReviewPhrase(undefined, NOW)).toBeNull();
+  });
+
+  it("says soon while the verse is still learning", () => {
+    expect(
+      formatNextReviewPhrase({ status: "learning", dueAt: NOW + DAY_MS }, NOW),
+    ).toBe("soon");
+  });
+
+  it("lowercases the review due label", () => {
+    expect(
+      formatNextReviewPhrase(
+        { status: "reviewing", dueAt: NOW + 2 * DAY_MS },
+        NOW,
+      ),
+    ).toBe("in 2 days");
   });
 });
 

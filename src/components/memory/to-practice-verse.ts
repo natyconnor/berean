@@ -14,6 +14,11 @@ export function toPracticeVerse(row: {
   status: MemoryStatus;
   dueAt?: number;
   lastReviewedAt?: number;
+  ease?: number;
+  intervalDays?: number;
+  consecutiveCorrect?: number;
+  lapses?: number;
+  earlyReviewApplied?: boolean;
 }): PracticeVerse {
   const reference: CardReference = {
     book: row.book,
@@ -28,5 +33,10 @@ export function toPracticeVerse(row: {
     status: row.status,
     dueAt: row.dueAt,
     lastReviewedAt: row.lastReviewedAt,
+    ease: row.ease,
+    intervalDays: row.intervalDays,
+    consecutiveCorrect: row.consecutiveCorrect,
+    lapses: row.lapses,
+    earlyReviewApplied: row.earlyReviewApplied,
   };
 }
