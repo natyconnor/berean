@@ -33,6 +33,7 @@ import type * as onboarding from "../onboarding.js";
 import type * as packs from "../packs.js";
 import type * as savedVerses from "../savedVerses.js";
 import type * as seed from "../seed.js";
+import type * as seedPreviewMemory from "../seedPreviewMemory.js";
 import type * as studySessions from "../studySessions.js";
 import type * as tags from "../tags.js";
 import type * as userSettings from "../userSettings.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   packs: typeof packs;
   savedVerses: typeof savedVerses;
   seed: typeof seed;
+  seedPreviewMemory: typeof seedPreviewMemory;
   studySessions: typeof studySessions;
   tags: typeof tags;
   userSettings: typeof userSettings;

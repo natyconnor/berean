@@ -12,6 +12,7 @@ import { api } from "../../../convex/_generated/api";
 import { MemoryDashboard } from "./dashboard/dashboard";
 import { MemoryLibrary } from "./memory-library";
 import { PackList } from "./packs/pack-list";
+import { PreviewMemorySeedCard } from "./preview-memory-seed-card";
 
 /**
  * Memory home: the verse-memory experience surfaced at `/memory`. Leads with the
@@ -54,6 +55,12 @@ export function MemoryHome() {
       </header>
       <ScrollArea className="flex-1 min-h-0">
         <div className="mx-auto max-w-6xl space-y-8 px-5 py-6">
+          <PreviewMemorySeedCard
+            now={now}
+            heartedTotal={stats?.total}
+            enabled={Boolean(__IS_PREVIEW__) || import.meta.env.DEV}
+            autoSeed={Boolean(__IS_PREVIEW__)}
+          />
           <MemoryDashboard
             now={now}
             stats={stats}
