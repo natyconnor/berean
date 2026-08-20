@@ -1,7 +1,7 @@
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import {
-  MEMORY_STATUS_ORDER,
   MEMORY_STATUS_STYLE,
+  STARTED_MEMORY_STATUS_ORDER,
 } from "@/lib/memory-status-style";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { cn } from "@/lib/utils";
@@ -15,14 +15,17 @@ export interface MasteryDistribution {
   total: number;
 }
 
-/** Horizontal stacked bar of verses by lifecycle status. */
+/** Horizontal stacked bar of started verses by lifecycle status. */
 export function MasteryBar({ data }: { data: MasteryDistribution }) {
-  const total = data.total;
-  const visible = MEMORY_STATUS_ORDER.filter((key) => data[key] > 0);
+  const total = STARTED_MEMORY_STATUS_ORDER.reduce(
+    (sum, key) => sum + data[key],
+    0,
+  );
+  const visible = STARTED_MEMORY_STATUS_ORDER.filter((key) => data[key] > 0);
 
   const summary =
     total === 0
-      ? "No verses yet."
+      ? "No verses started."
       : visible
           .map(
             (key) =>
@@ -41,7 +44,7 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
 
       {total === 0 ? (
         <p className="mt-3 flex-1 text-sm text-muted-foreground">
-          No verses yet. Heart a verse to start memorizing.
+          No verses started. Start learning a hearted verse to see mastery.
         </p>
       ) : (
         <div className="mt-3 flex flex-1 flex-col justify-center gap-3">
@@ -61,8 +64,8 @@ export function MasteryBar({ data }: { data: MasteryDistribution }) {
               />
             ))}
           </div>
-          <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            {MEMORY_STATUS_ORDER.map((key) => (
+          <ul className="grid grid-cols-3 gap-x-3 gap-y-1.5">
+            {STARTED_MEMORY_STATUS_ORDER.map((key) => (
               <StatusLegendItem key={key} status={key} count={data[key]} />
             ))}
           </ul>

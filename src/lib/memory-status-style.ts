@@ -3,7 +3,8 @@ import type { MemoryStatus } from "./memory-scheduler";
 /**
  * Canonical visual language for the four verse-memory lifecycle statuses,
  * shared by the dashboard Mastery bar and the Library so the two can never
- * drift apart.
+ * drift apart. Mastery charts started work only (`STARTED_MEMORY_STATUS_ORDER`);
+ * New remains a Library "Not started" status.
  *
  * The palette is an intentional *progression* toward mastery rather than an
  * arbitrary set of chart tokens:
@@ -56,6 +57,16 @@ export const MEMORY_STATUS_STYLE: Record<MemoryStatus, MemoryStatusStyle> = {
 /** Lifecycle order: left-to-right reflects progression toward mastery. */
 export const MEMORY_STATUS_ORDER: readonly MemoryStatus[] = [
   "new",
+  "learning",
+  "reviewing",
+  "mastered",
+];
+
+/**
+ * Started work: Learning → Reviewing → Mastered. Hearted `new` verses are a
+ * backlog (Library "Not started"), not a mastery bucket.
+ */
+export const STARTED_MEMORY_STATUS_ORDER: readonly MemoryStatus[] = [
   "learning",
   "reviewing",
   "mastered",
