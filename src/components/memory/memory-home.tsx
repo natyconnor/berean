@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
+import { isPreviewTestToolsEnabled } from "@/lib/preview-test-tools";
 
 import { api } from "../../../convex/_generated/api";
 import { MemoryDashboard } from "./dashboard/dashboard";
@@ -58,7 +59,7 @@ export function MemoryHome() {
           <PreviewMemorySeedCard
             now={now}
             heartedTotal={stats?.total}
-            enabled={Boolean(__IS_PREVIEW__) || import.meta.env.DEV}
+            enabled={isPreviewTestToolsEnabled()}
             autoSeed={Boolean(__IS_PREVIEW__)}
           />
           <MemoryDashboard

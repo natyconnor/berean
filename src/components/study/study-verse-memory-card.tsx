@@ -15,6 +15,7 @@ import { MAX_LEARN_STAGE, type MemorySchedule } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
+import { PreviewFillExactAnswerButton } from "../memory/preview-fill-exact-answer-button";
 import { FlipFaces } from "./flip-faces";
 import {
   classifyVerseAttempt,
@@ -322,6 +323,11 @@ export function StudyVerseMemoryCard({
         placeholder="Type what you remember"
         className="min-h-[160px] w-full max-w-xl resize-none"
         aria-label="Your recalled verse"
+      />
+      <PreviewFillExactAnswerButton
+        versePlainText={versePlainText}
+        onFill={onTypedAnswerChange}
+        disabled={loading || Boolean(error)}
       />
     </div>
   );

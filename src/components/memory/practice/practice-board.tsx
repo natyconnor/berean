@@ -68,6 +68,7 @@ import { LearningJourneyBar } from "./learning-journey-bar";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
 import { ReviewSummary, type ReviewSessionAttempt } from "../review-summary";
+import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
 import { SessionComplete } from "./session-complete";
 
 export type { MemorySessionLabel } from "@/lib/memory-session";
@@ -866,7 +867,14 @@ function PracticeCard({
         </CardContent>
 
         <CardFooter className="flex justify-end border-t">
-          <div className="flex w-full gap-2 sm:w-auto">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+            {!showLocked && !checked && !isReadPrime ? (
+              <PreviewFillExactAnswerButton
+                versePlainText={versePlainText}
+                onFill={setTypedAnswer}
+                disabled={loading || Boolean(error)}
+              />
+            ) : null}
             {showLocked ? null : checked ? (
               <Button
                 ref={reviewActionRef}
