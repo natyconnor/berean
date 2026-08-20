@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.9](https://github.com/natyconnor/berean/compare/v1.12.8...v1.12.9) (2026-08-20)
+
+
+### Bug Fixes
+
+* cap Challenge at 5 reps and keep learning due until the session ends ([#167](https://github.com/natyconnor/berean/issues/167)) ([b04df7c](https://github.com/natyconnor/berean/commit/b04df7c9a718717d2e966bc5a08dcf356ca81b71))
+
 ## [1.12.8](https://github.com/natyconnor/berean/compare/v1.12.7...v1.12.8) (2026-08-20)
 
 
