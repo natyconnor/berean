@@ -5,6 +5,7 @@ import {
   bucketForecastCounts,
   bucketReviewCounts,
   computeStreak,
+  isReadPrimeAttempt,
   normalizeTimeZone,
   overallAccuracy,
   startOfUtcDay,
@@ -113,6 +114,28 @@ describe("bucketAccuracyAverages", () => {
     expect(buckets[0]).toEqual({ average: null, count: 0 });
     expect(buckets[1]).toEqual({ average: 50, count: 1 });
     expect(buckets[2]).toEqual({ average: 90, count: 2 });
+  });
+
+  it("excludes learning Read primes from averages and counts", () => {
+    const buckets = bucketAccuracyAverages(
+      [
+        { createdAt: NOW, accuracy: 100, mode: "learn", stage: 0 },
+        { createdAt: NOW, accuracy: 80, mode: "learn", stage: 1 },
+        { createdAt: NOW, accuracy: 60, mode: "review", stage: 0 },
+      ],
+      NOW,
+      1,
+    );
+    expect(buckets[0]).toEqual({ average: 70, count: 2 });
+  });
+});
+
+describe("isReadPrimeAttempt", () => {
+  it("matches only learn-mode stage 0", () => {
+    expect(isReadPrimeAttempt({ mode: "learn", stage: 0 })).toBe(true);
+    expect(isReadPrimeAttempt({ mode: "learn", stage: 1 })).toBe(false);
+    expect(isReadPrimeAttempt({ mode: "review", stage: 0 })).toBe(false);
+    expect(isReadPrimeAttempt({})).toBe(false);
   });
 });
 

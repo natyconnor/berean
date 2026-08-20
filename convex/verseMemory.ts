@@ -554,7 +554,7 @@ const dayAccuracyValidator = v.object({
 
 /**
  * Per-day practice count and accuracy aggregates for the dashboard. A single
- * review-log window feeds both the 12-week heatmap and 30-day trend.
+ * review-log window feeds both the heatmap (up to a year) and 30-day trend.
  */
 export const reviewActivity = query({
   args: {
@@ -568,7 +568,7 @@ export const reviewActivity = query({
     trend: v.array(dayAccuracyValidator),
   }),
   handler: async (ctx, args) => {
-    const heatmapDays = normalizeDays(args.heatmapDays ?? 84);
+    const heatmapDays = normalizeDays(args.heatmapDays ?? 365);
     const trendDays = normalizeDays(args.trendDays ?? 30);
     const windowDays = Math.max(heatmapDays, trendDays);
     const timeZone = normalizeTimeZone(args.timeZone);
@@ -602,7 +602,12 @@ export const reviewActivity = query({
       timeZone,
     );
     const buckets = bucketAccuracyAverages(
-      rows.map((row) => ({ createdAt: row.createdAt, accuracy: row.accuracy })),
+      rows.map((row) => ({
+        createdAt: row.createdAt,
+        accuracy: row.accuracy,
+        mode: row.mode,
+        stage: row.stage,
+      })),
       args.now,
       trendDays,
       timeZone,

@@ -1,17 +1,21 @@
-import type { CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import {
+  heatmapGridWidthPx,
+  toWeeks,
+  visibleWeeksFromEnd,
+  weeksThatFit,
+  type DayCount,
+} from "@/lib/practice-heatmap";
 import { chartCardClassName } from "./chart-card";
 import { chartColor } from "./svg-chart-helpers";
 
-export interface DayCount {
-  dayStart: number;
-  count: number;
-}
+export type { DayCount };
 
 const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""]; // rows Sun..Sat
 
@@ -48,44 +52,45 @@ function cellStyle(count: number, max: number): CSSProperties {
 }
 
 /**
- * Group days into Sunday-aligned week columns. The first column is padded with
- * leading `null`s so weekday rows line up (row 0 = Sunday).
- *
- * `dayStart` values are local midnights (as UTC instants), so {@link Date#getDay}
- * matches the viewer's weekday.
- */
-function toWeeks(data: DayCount[]): (DayCount | null)[][] {
-  if (data.length === 0) return [];
-  const leadingBlanks = new Date(data[0].dayStart).getDay();
-  const cells: (DayCount | null)[] = [
-    ...Array.from({ length: leadingBlanks }, () => null),
-    ...data,
-  ];
-  const weeks: (DayCount | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    weeks.push(cells.slice(i, i + 7));
-  }
-  return weeks;
-}
-
-/**
- * GitHub-style practice heatmap: one cell per day over the window, columns are
- * weeks (Sunday-aligned) and rows are weekdays. Month labels sit above the
- * column where each new month begins, with weekday guides down the left.
+ * GitHub-style practice heatmap: one fixed-size cell per day. Columns are
+ * Sunday-aligned weeks ending on today; extra width reveals more history
+ * instead of stretching cells.
  */
 export function PracticeHeatmap({ data }: { data: DayCount[] }) {
   const total = data.reduce((sum, d) => sum + d.count, 0);
   const max = data.reduce((m, d) => Math.max(m, d.count), 0);
   const weeks = toWeeks(data);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [fitCount, setFitCount] = useState(weeks.length);
 
-  // A month label shows above the first week whose first real day belongs to a
-  // month we haven't labeled yet.
-  const monthByWeek = weeks.map((week, weekIndex) => {
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const fitted = weeksThatFit(el.clientWidth);
+      if (fitted > 0) setFitCount(fitted);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [weeks.length]);
+
+  const visibleWeeks = visibleWeeksFromEnd(weeks, fitCount);
+  const gridWidthPx = heatmapGridWidthPx(visibleWeeks.length);
+
+  // Recomputed on the visible slice so the leftmost on-screen week still gets
+  // a month label after older columns are clipped.
+  const monthByWeek = visibleWeeks.map((week, weekIndex) => {
     const firstReal = week.find((c): c is DayCount => c !== null);
     if (!firstReal) return "";
     const month = new Date(firstReal.dayStart).getMonth();
     if (weekIndex === 0) return monthLabel(firstReal.dayStart);
-    const prev = weeks[weekIndex - 1].find((c): c is DayCount => c !== null);
+    const prev = visibleWeeks[weekIndex - 1].find(
+      (c): c is DayCount => c !== null,
+    );
     const prevMonth = prev ? new Date(prev.dayStart).getMonth() : -1;
     return month !== prevMonth ? monthLabel(firstReal.dayStart) : "";
   });
@@ -116,78 +121,80 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
         >
           <div className="flex min-h-0 flex-1 gap-1">
             {/* Weekday guides down the left, aligned to the 7 cell rows. */}
-            <div className="grid shrink-0 grid-rows-7 gap-1 pr-0.5 pt-[15px]">
+            <div className="grid shrink-0 grid-rows-7 gap-1 pt-[13px] pr-0.5">
               {WEEKDAY_LABELS.map((wd, i) => (
                 <span
                   key={i}
-                  className="flex h-full items-center text-[9px] leading-none text-muted-foreground"
+                  className="flex h-3 items-center text-[9px] leading-none text-muted-foreground"
                 >
                   {wd}
                 </span>
               ))}
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              {/* Month labels, one grid cell per week column. */}
-              <div
-                className="mb-1 grid shrink-0 gap-1"
-                style={{
-                  gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`,
-                }}
-                aria-hidden
-              >
-                {monthByWeek.map((m, i) => (
-                  <span
-                    key={i}
-                    className="text-[9px] leading-none text-muted-foreground"
-                  >
-                    {m}
-                  </span>
-                ))}
-              </div>
+            {/* Newest weeks stay on the right; extra width reveals more history. */}
+            <div
+              ref={scrollerRef}
+              className="flex min-h-0 min-w-0 flex-1 justify-end overflow-hidden"
+            >
+              <div className="shrink-0" style={{ width: gridWidthPx }}>
+                <div className="mb-1 flex gap-1" aria-hidden>
+                  {monthByWeek.map((m, i) => (
+                    <span
+                      key={i}
+                      className="h-[9px] w-3 shrink-0 text-[9px] leading-none text-muted-foreground"
+                    >
+                      {m}
+                    </span>
+                  ))}
+                </div>
 
-              {/* The cell grid: one column per week, seven weekday rows.
-                  Rows fill the reserved card height (not aspect-square) so a
-                  loaded heatmap can't push the dashboard row taller. */}
-              <div
-                className="grid min-h-0 flex-1 grid-flow-col grid-rows-7 gap-1"
-                style={{
-                  gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`,
-                }}
-              >
-                {weeks.flatMap((week, w) =>
-                  week.map((cell, r) =>
-                    cell === null ? (
-                      <span key={`blank-${w}-${r}`} aria-hidden />
-                    ) : (
-                      <Tooltip key={cell.dayStart}>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            className="min-h-0 w-full rounded-[3px] outline-none transition-[filter] duration-150 hover:brightness-[1.08] focus-visible:ring-2 focus-visible:ring-ring"
-                            aria-label={`${formatDay(cell.dayStart)}: ${practicePhrase(cell.count)}`}
-                            style={cellStyle(cell.count, max)}
+                <div className="flex gap-1">
+                  {visibleWeeks.map((week, w) => (
+                    <div
+                      key={w}
+                      className="grid w-3 shrink-0 grid-rows-7 gap-1"
+                    >
+                      {week.map((cell, r) =>
+                        cell === null ? (
+                          <span
+                            key={`blank-${w}-${r}`}
+                            className="size-3"
+                            aria-hidden
                           />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="tabular-nums">
-                          {formatDay(cell.dayStart)}
-                          <span className="mx-1.5 text-background/50">·</span>
-                          {practicePhrase(cell.count)}
-                        </TooltipContent>
-                      </Tooltip>
-                    ),
-                  ),
-                )}
+                        ) : (
+                          <Tooltip key={cell.dayStart}>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="size-3 rounded-[3px] outline-none transition-[filter] duration-150 hover:brightness-[1.08] focus-visible:ring-2 focus-visible:ring-ring"
+                                aria-label={`${formatDay(cell.dayStart)}: ${practicePhrase(cell.count)}`}
+                                style={cellStyle(cell.count, max)}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="tabular-nums">
+                              {formatDay(cell.dayStart)}
+                              <span className="mx-1.5 text-background/50">
+                                ·
+                              </span>
+                              {practicePhrase(cell.count)}
+                            </TooltipContent>
+                          </Tooltip>
+                        ),
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-2 flex shrink-0 items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+          <div className="mt-auto flex shrink-0 items-center justify-end gap-1.5 pt-2 text-[10px] text-muted-foreground">
             <span>Less</span>
             {[0, 0.4, 0.7, 1].map((t) => (
               <span
                 key={t}
-                className="inline-block h-2.5 w-2.5 rounded-[2px]"
+                className="inline-block size-2.5 rounded-[2px]"
                 aria-hidden
                 style={cellStyle(t === 0 ? 0 : Math.ceil(t * max), max)}
               />

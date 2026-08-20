@@ -14,7 +14,7 @@ import { MasteryBar } from "./mastery-bar";
 import { AccuracyTrend } from "./accuracy-trend";
 import { ReviewForecast } from "./review-forecast";
 
-const HEATMAP_DAYS = 84; // 12 weeks
+const HEATMAP_DAYS = 365; // up to a year; the chart clips to available width
 const TREND_DAYS = 30;
 const FORECAST_DAYS = 14;
 
