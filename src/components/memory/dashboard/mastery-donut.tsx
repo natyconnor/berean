@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import {
   MEMORY_STATUS_STYLE,
@@ -15,6 +16,19 @@ export interface MasteryDistribution {
   total: number;
 }
 
+/** Status with the most started verses; ties keep the earlier lifecycle step. */
+export function largestStartedStatus(
+  data: MasteryDistribution,
+): (typeof STARTED_MEMORY_STATUS_ORDER)[number] {
+  return STARTED_MEMORY_STATUS_ORDER.reduce((best, key) =>
+    data[key] > data[best] ? key : best,
+  );
+}
+
+function startedSharePercent(count: number, total: number): number {
+  return total === 0 ? 0 : Math.round((count / total) * 100);
+}
+
 // The ring is drawn with `pathLength={100}`, so every dash length below is a
 // percentage of the circle and no circumference math is needed.
 const RING_LENGTH = 100;
@@ -25,19 +39,23 @@ const VIEW_SIZE = 42;
 const SEGMENT_GAP = 1.2;
 
 /**
- * Share of started verses per lifecycle status as a donut, with the mastered
- * share called out in the middle. Hearted-but-unstarted (`new`) verses are a
- * backlog, not a mastery bucket, so they are excluded here and surface in the
- * Library's "Not started" view instead.
+ * Share of started verses per lifecycle status as a donut. The hole shows the
+ * hovered status's share, or the largest share when nothing is hovered.
+ * Hearted-but-unstarted (`new`) verses are a backlog, not a mastery bucket, so
+ * they are excluded here and surface in the Library's "Not started" view
+ * instead.
  */
 export function MasteryDonut({ data }: { data: MasteryDistribution }) {
+  const [hovered, setHovered] = useState<
+    (typeof STARTED_MEMORY_STATUS_ORDER)[number] | null
+  >(null);
   const total = STARTED_MEMORY_STATUS_ORDER.reduce(
     (sum, key) => sum + data[key],
     0,
   );
   const visible = STARTED_MEMORY_STATUS_ORDER.filter((key) => data[key] > 0);
-  const masteredPercent =
-    total === 0 ? 0 : Math.round((data.mastered / total) * 100);
+  const focused = hovered ?? largestStartedStatus(data);
+  const focusedPercent = startedSharePercent(data[focused], total);
 
   const summary =
     total === 0
@@ -98,6 +116,7 @@ export function MasteryDonut({ data }: { data: MasteryDistribution }) {
               {arcs.map((arc) => (
                 <circle
                   key={arc.key}
+                  data-status={arc.key}
                   cx={VIEW_SIZE / 2}
                   cy={VIEW_SIZE / 2}
                   r={RING_RADIUS}
@@ -106,26 +125,38 @@ export function MasteryDonut({ data }: { data: MasteryDistribution }) {
                   pathLength={RING_LENGTH}
                   strokeDasharray={`${arc.dash} ${RING_LENGTH - arc.dash}`}
                   strokeDashoffset={-arc.offset}
-                  className={MEMORY_STATUS_STYLE[arc.key].stroke}
+                  pointerEvents="stroke"
+                  className={cn(
+                    MEMORY_STATUS_STYLE[arc.key].stroke,
+                    "cursor-pointer",
+                  )}
+                  onPointerEnter={() => setHovered(arc.key)}
+                  onPointerLeave={() => setHovered(null)}
                 />
               ))}
             </svg>
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center"
+              className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
               aria-hidden
             >
               <span className="text-2xl leading-none font-semibold tabular-nums tracking-tight">
-                {masteredPercent}%
+                {focusedPercent}%
               </span>
               <span className="mt-1 text-[11px] text-muted-foreground">
-                mastered
+                {MEMORY_STATUS_STYLE[focused].label.toLowerCase()}
               </span>
             </div>
           </div>
 
           <ul className="flex shrink-0 flex-col gap-2.5">
             {STARTED_MEMORY_STATUS_ORDER.map((key) => (
-              <StatusLegendItem key={key} status={key} count={data[key]} />
+              <StatusLegendItem
+                key={key}
+                status={key}
+                count={data[key]}
+                onPointerEnter={() => setHovered(key)}
+                onPointerLeave={() => setHovered(null)}
+              />
             ))}
           </ul>
         </div>
@@ -137,18 +168,25 @@ export function MasteryDonut({ data }: { data: MasteryDistribution }) {
 function StatusLegendItem({
   status,
   count,
+  onPointerEnter,
+  onPointerLeave,
 }: {
   status: MemoryStatus;
   count: number;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
 }) {
   const style = MEMORY_STATUS_STYLE[status];
   const muted = count === 0;
   return (
     <li
+      data-status={status}
       className={cn(
-        "flex items-center gap-2 text-xs",
+        "flex cursor-pointer items-center gap-2 text-xs",
         muted ? "text-muted-foreground/60" : "text-muted-foreground",
       )}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       <span
         aria-hidden

@@ -1,6 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { MasteryDonut, type MasteryDistribution } from "./mastery-donut";
+import {
+  largestStartedStatus,
+  MasteryDonut,
+  type MasteryDistribution,
+} from "./mastery-donut";
 
 const unstarted: MasteryDistribution = {
   new: 31,
@@ -17,6 +21,24 @@ const mixed: MasteryDistribution = {
   mastered: 3,
   total: 35,
 };
+
+describe("largestStartedStatus", () => {
+  it("picks the status with the most started verses", () => {
+    expect(largestStartedStatus(mixed)).toBe("reviewing");
+  });
+
+  it("keeps the earlier lifecycle step when counts tie", () => {
+    expect(
+      largestStartedStatus({
+        new: 0,
+        learning: 4,
+        reviewing: 4,
+        mastered: 0,
+        total: 8,
+      }),
+    ).toBe("learning");
+  });
+});
 
 describe("MasteryDonut", () => {
   it("ignores unstarted verses in the empty state", () => {
@@ -51,10 +73,37 @@ describe("MasteryDonut", () => {
     );
   });
 
-  it("shows the mastered share of started verses in the middle", () => {
+  it("shows the largest share in the middle when nothing is hovered", () => {
     render(<MasteryDonut data={mixed} />);
 
-    // 3 of 14 started, not 3 of 35 hearted.
+    // 6 of 14 started are reviewing, the biggest bucket.
+    expect(screen.getByText("43%")).toBeInTheDocument();
+    expect(screen.getByText("reviewing")).toBeInTheDocument();
+  });
+
+  it("shows the hovered arc's share in the middle", () => {
+    const { container } = render(<MasteryDonut data={mixed} />);
+    const learningArc = container.querySelector(
+      'circle[data-status="learning"]',
+    );
+    expect(learningArc).not.toBeNull();
+
+    fireEvent.pointerEnter(learningArc!);
+    expect(screen.getByText("36%")).toBeInTheDocument();
+    expect(screen.getByText("learning")).toBeInTheDocument();
+    expect(screen.queryByText("43%")).not.toBeInTheDocument();
+
+    fireEvent.pointerLeave(learningArc!);
+    expect(screen.getByText("43%")).toBeInTheDocument();
+    expect(screen.getByText("reviewing")).toBeInTheDocument();
+  });
+
+  it("shows the hovered legend row's share in the middle", () => {
+    render(<MasteryDonut data={mixed} />);
+
+    const masteredLegend = screen.getByText("Mastered").closest("li");
+    expect(masteredLegend).not.toBeNull();
+    fireEvent.pointerEnter(masteredLegend!);
     expect(screen.getByText("21%")).toBeInTheDocument();
     expect(screen.getByText("mastered")).toBeInTheDocument();
   });
@@ -87,5 +136,7 @@ describe("MasteryDonut", () => {
     const arcs = container.querySelectorAll("circle[stroke-dasharray]");
     expect(arcs).toHaveLength(1);
     expect(arcs[0]).toHaveAttribute("stroke-dasharray", "100 0");
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("learning")).toBeInTheDocument();
   });
 });
