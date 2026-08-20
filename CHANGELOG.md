@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.10](https://github.com/natyconnor/berean/compare/v1.12.9...v1.12.10) (2026-08-20)
+
+
+### Bug Fixes
+
+* Exclude unstarted verses from the Memory mastery widget ([#169](https://github.com/natyconnor/berean/issues/169)) ([87507c7](https://github.com/natyconnor/berean/commit/87507c756facbfafccfb06df2e0fbf05ac99d54b))
+
 ## [1.12.9](https://github.com/natyconnor/berean/compare/v1.12.8...v1.12.9) (2026-08-20)
 
 
