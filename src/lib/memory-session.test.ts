@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DAY_MS } from "./memory-scheduler";
 import {
+  hasSessionWorkLeft,
   isLearningSessionCandidate,
   isMemorySessionCandidate,
   isPracticeSessionCandidate,
@@ -108,6 +109,58 @@ describe("memory session membership", () => {
     expect(
       isReviewSessionCandidate(
         { status: "reviewing", dueAt: NOW + DAY_MS },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("hasSessionWorkLeft", () => {
+  it("never spends a Practice verse — extra recall has no ration", () => {
+    expect(
+      hasSessionWorkLeft(
+        "practice",
+        { status: "reviewing", dueAt: NOW + DAY_MS },
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("spends a Review verse once it is no longer due", () => {
+    expect(
+      hasSessionWorkLeft("review", { status: "reviewing", dueAt: NOW }, NOW),
+    ).toBe(true);
+    expect(
+      hasSessionWorkLeft(
+        "review",
+        { status: "reviewing", dueAt: NOW + 2 * DAY_MS },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  it("spends a Review verse that lapsed back into learning", () => {
+    expect(
+      hasSessionWorkLeft("review", { status: "learning", dueAt: NOW }, NOW),
+    ).toBe(false);
+  });
+
+  it("keeps a Learning verse until it soft-locks", () => {
+    expect(
+      hasSessionWorkLeft(
+        "learning",
+        { status: "learning", dueAt: NOW, lastReviewedAt: NOW },
+        NOW,
+      ),
+    ).toBe(true);
+    expect(
+      hasSessionWorkLeft(
+        "learning",
+        {
+          status: "learning",
+          dueAt: NOW + DAY_MS,
+          lastReviewedAt: NOW,
+        },
         NOW,
       ),
     ).toBe(false);

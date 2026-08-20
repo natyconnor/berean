@@ -31,15 +31,15 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords } from "@/lib/diff-words";
 import {
   isLearningLocked,
-  isLearningPhase,
   isLearningProgressAttempt,
   requiredRepsFor,
   type MemorySchedule,
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
-import type {
-  MemorySessionKind,
-  MemorySessionLabel,
+import {
+  hasSessionWorkLeft,
+  type MemorySessionKind,
+  type MemorySessionLabel,
 } from "@/lib/memory-session";
 import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
@@ -133,22 +133,6 @@ interface OrderedVerse {
   status: MemoryStatus;
   dueAt: number;
   lastReviewedAt?: number;
-}
-
-/**
- * Whether this verse still has work left in the current session.
- *
- * Learning is rationed one band per day, so a verse drops out of the session
- * once it soft-locks or graduates into review. Practice is optional extra
- * recall with no ration, so it never runs dry.
- */
-function hasSessionWorkLeft(
-  kind: MemorySessionKind,
-  progress: Pick<VerseProgress, "status" | "dueAt" | "lastReviewedAt">,
-  now: number,
-): boolean {
-  if (kind === "practice" || kind === "review") return true;
-  return isLearningPhase(progress.status) && !isLearningLocked(progress, now);
 }
 
 function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
@@ -471,9 +455,9 @@ export function PracticeBoard({
               }}
               advancesOnContinue={!currentHasWorkLeft}
               onContinueAfterResult={() => {
-                // A session-ending clear leaves this card with nothing more to
-                // give today, so hand off to the next verse that still has a
-                // session left rather than parking the learner on a dead end.
+                // A spent verse (learning lock, or a review that just
+                // rescheduled) should hand off to the next verse that still
+                // has a session left rather than parking on a dead end.
                 if (currentHasWorkLeft) return;
                 const nextAvailable = railVerses.findIndex(
                   (verse, index) => index !== boundedIndex && !verse.locked,
@@ -637,8 +621,9 @@ function PracticeCard({
     checkedQuality !== null &&
     isLearningProgressAttempt(checkedQuality, checkedAccuracy, learnStage);
   // Once graduated, another strong recall is just another practice pass — offer
-  // "Try again" instead of implying the learning journey still advances. When
-  // the verse is spent for the session, continuing leaves the card entirely.
+  // "Try again" instead of implying the learning journey still advances. Review
+  // spends the verse after a grade (`advancesOnContinue`), so that path shows
+  // Continue toward the next due verse or the summary instead.
   const offerPracticeAgain =
     !advancesOnContinue &&
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
