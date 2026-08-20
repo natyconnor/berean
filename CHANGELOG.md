@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.7](https://github.com/natyconnor/berean/compare/v1.12.6...v1.12.7) (2026-08-20)
+
+
+### Bug Fixes
+
+* Memory verse picker and Library views ([#160](https://github.com/natyconnor/berean/issues/160)) ([9139704](https://github.com/natyconnor/berean/commit/9139704496c4c88484fb54b11d5ffb6cebcdadf6))
+* Polish Memory dashboard heatmap and accuracy tooltips ([#161](https://github.com/natyconnor/berean/issues/161)) ([9d1065c](https://github.com/natyconnor/berean/commit/9d1065c1f868caf32ed6fc0fe8e2ef7125d58683))
+
 ## [1.12.6](https://github.com/natyconnor/berean/compare/v1.12.5...v1.12.6) (2026-08-19)
 
 
