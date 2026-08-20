@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.11](https://github.com/natyconnor/berean/compare/v1.12.10...v1.12.11) (2026-08-20)
+
+
+### Bug Fixes
+
+* Show hovered mastery segment in the donut hole ([#171](https://github.com/natyconnor/berean/issues/171)) ([282eb84](https://github.com/natyconnor/berean/commit/282eb84a5b9eaff90519678922baa9d730b5aef8))
+
 ## [1.12.10](https://github.com/natyconnor/berean/compare/v1.12.9...v1.12.10) (2026-08-20)
 
 
