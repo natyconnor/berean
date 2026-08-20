@@ -7,6 +7,7 @@ import {
   EASE_START,
   MASTERED_INTERVAL_DAYS,
   MAX_LEARN_STAGE,
+  MIN_LEARNING_LOCK_MS,
   requiredRepsFor,
   SUPPORT_BANDS,
   initialSchedule,
@@ -16,6 +17,7 @@ import {
   isLearningLocked,
   nextLearningSessionDueAt,
   dueAtInCalendarDays,
+  dueIndexUntil,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -196,9 +198,9 @@ describe("learning phase grades", () => {
     expect(s.dueAt).toBe(nextLearningSessionDueAt(NOW));
   });
 
-  it("Challenge needs 6 exacts for a long verse (>=24 words) then locks", () => {
+  it("Challenge needs 5 exacts for a long verse (>=24 words) then locks", () => {
     let s = learningAt(2);
-    for (let rep = 1; rep <= 5; rep += 1) {
+    for (let rep = 1; rep <= 4; rep += 1) {
       s = scheduleNext(
         s,
         review({ quality: "exact", wordCount: LONG_VERSE_WORDS }),
@@ -601,17 +603,17 @@ describe("requiredRepsFor length curve", () => {
     expect(requiredRepsFor(3, SHORT_VERSE_WORDS)).toBe(2);
   });
 
-  it("returns long-verse maxima (5 / 6) with From Memory still at 2", () => {
+  it("returns long-verse maxima (5 / 5) with From Memory still at 2", () => {
     expect(requiredRepsFor(1, LONG_VERSE_WORDS)).toBe(5);
-    expect(requiredRepsFor(2, LONG_VERSE_WORDS)).toBe(6);
+    expect(requiredRepsFor(2, LONG_VERSE_WORDS)).toBe(5);
     expect(requiredRepsFor(3, LONG_VERSE_WORDS)).toBe(2);
     expect(requiredRepsFor(1, 50)).toBe(5);
-    expect(requiredRepsFor(2, 50)).toBe(6);
+    expect(requiredRepsFor(2, 50)).toBe(5);
     expect(requiredRepsFor(3, 50)).toBe(2);
   });
 
   it("interpolates Guided/Challenge at a midpoint (17 words, t=0.5)", () => {
-    // Guided: 3 + (5-3)*0.5 = 4; Challenge: 4 + (6-4)*0.5 = 5;
+    // Guided: 3 + (5-3)*0.5 = 4; Challenge: 4 + (5-4)*0.5 = 4.5 → 5;
     // From Memory is always 2.
     expect(requiredRepsFor(1, 17)).toBe(4);
     expect(requiredRepsFor(2, 17)).toBe(5);
@@ -695,9 +697,9 @@ describe("isDueForLearning / isLearningLocked", () => {
   });
 
   it("does not lock a just-recorded rep when the caller's clock lags", () => {
-    // Attempts are stamped with a fresh Date.now() while the UI compares
-    // against a clock it only refreshes every few minutes, so `dueAt` routinely
-    // lands slightly ahead of `now`. That must not read as a soft lock.
+    // Attempts persist with a fresh Date.now() while the UI compares against
+    // a frozen session clock, so `dueAt` can sit slightly ahead of `now` on
+    // already-stamped rows. That must not read as a soft lock.
     const staleNow = NOW - 5 * 60 * 1000;
     const justPracticed = scheduleNext(
       learningAt(1, 0),
@@ -742,6 +744,42 @@ describe("isDueForLearning / isLearningLocked", () => {
     };
     expect(isDueForLearning(locked, NOW)).toBe(false);
     expect(isDueForLearning(locked, NOW + DAY_MS)).toBe(true);
+  });
+
+  it("keeps the original dueAt on in-progress reps so a frozen query clock still sees the verse", () => {
+    const originalDueAt = NOW - 2 * 60 * 60 * 1000;
+    const next = scheduleNext(
+      { ...learningAt(2, 0), dueAt: originalDueAt },
+      review({ quality: "exact" }),
+    );
+    expect(next.dueAt).toBe(originalDueAt);
+    const frozenNow = originalDueAt + 60 * 1000;
+    expect(next.dueAt).toBeLessThanOrEqual(frozenNow);
+    expect(isDueForLearning({ ...next, lastReviewedAt: NOW }, frozenNow)).toBe(
+      true,
+    );
+  });
+
+  it("due-index scan bound includes in-progress stamps ahead of a frozen now", () => {
+    const frozenNow = NOW - 45 * 60 * 1000;
+    expect(dueIndexUntil(frozenNow)).toBe(frozenNow + MIN_LEARNING_LOCK_MS);
+    expect(NOW).toBeLessThanOrEqual(dueIndexUntil(frozenNow));
+    expect(
+      isDueForLearning(
+        { ...learningAt(2), lastReviewedAt: NOW, dueAt: NOW },
+        frozenNow,
+      ),
+    ).toBe(true);
+    expect(
+      isDueForLearning(
+        {
+          ...learningAt(2),
+          lastReviewedAt: NOW,
+          dueAt: nextLearningSessionDueAt(NOW),
+        },
+        frozenNow,
+      ),
+    ).toBe(false);
   });
 });
 
