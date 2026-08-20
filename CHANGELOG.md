@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.8](https://github.com/natyconnor/berean/compare/v1.12.7...v1.12.8) (2026-08-20)
+
+
+### Bug Fixes
+
+* restore Continue and review summary after a queued review ([#164](https://github.com/natyconnor/berean/issues/164)) ([88b6871](https://github.com/natyconnor/berean/commit/88b687138e1e1e54320807f3bc38b543c96b9041))
+
 ## [1.12.7](https://github.com/natyconnor/berean/compare/v1.12.6...v1.12.7) (2026-08-20)
 
 
