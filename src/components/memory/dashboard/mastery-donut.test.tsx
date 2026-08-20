@@ -117,9 +117,9 @@ describe("MasteryDonut", () => {
       'circle[data-status="reviewing"]',
     );
     const mastered = container.querySelector('circle[data-status="mastered"]');
-    expect(
-      container.querySelectorAll("circle[stroke-dasharray]"),
-    ).toHaveLength(3);
+    expect(container.querySelectorAll("circle[stroke-dasharray]")).toHaveLength(
+      3,
+    );
     expect(learning).toHaveAttribute("stroke-dashoffset", "0");
     expect(reviewing).toHaveAttribute(
       "stroke-dashoffset",

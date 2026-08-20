@@ -55,10 +55,7 @@ const SLICE_SPRING = {
  * A full-ring slice is left centered — sliding the whole donut looks like a
  * layout jump rather than an emphasis.
  */
-function sliceShift(
-  offset: number,
-  share: number,
-): { x: number; y: number } {
+function sliceShift(offset: number, share: number): { x: number; y: number } {
   if (share >= RING_LENGTH - 0.01) return { x: 0, y: 0 };
   // Dash path starts at 3 o'clock and runs clockwise in SVG space; the parent
   // svg is rotated -90deg so offset 0 is 12 o'clock on screen.
