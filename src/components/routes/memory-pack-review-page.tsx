@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2, SearchX, Sparkles } from "lucide-react";
 
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { Route } from "@/routes/memory_.$packId.review";
@@ -33,19 +34,7 @@ export function MemoryPackReviewPage() {
     () =>
       members === undefined
         ? []
-        : dueMembers.map((member) => ({
-            reference: {
-              book: member.book,
-              chapter: member.chapter,
-              startVerse: member.startVerse,
-              endVerse: member.endVerse,
-            },
-            learnStage: member.learnStage,
-            stageReps: member.stageReps,
-            status: member.status,
-            dueAt: member.dueAt,
-            lastReviewedAt: member.lastReviewedAt,
-          })),
+        : dueMembers.map((member) => toPracticeVerse(member)),
     [members, dueMembers],
   );
 

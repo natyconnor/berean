@@ -37,6 +37,10 @@ import {
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
 import {
+  previewNextSchedule,
+  type MemoryScheduleSnapshot,
+} from "@/lib/memory-schedule-preview";
+import {
   hasSessionWorkLeft,
   type MemorySessionKind,
   type MemorySessionLabel,
@@ -96,6 +100,12 @@ export interface PracticeVerse {
   dueAt?: number;
   /** Last graded attempt; with `dueAt`, distinguishes in-progress from locked. */
   lastReviewedAt?: number;
+  /** Live SM-2 fields so review banners can preview "in N days" on Check. */
+  ease?: number;
+  intervalDays?: number;
+  consecutiveCorrect?: number;
+  lapses?: number;
+  earlyReviewApplied?: boolean;
 }
 
 interface PracticeBoardProps {
@@ -124,6 +134,11 @@ interface VerseProgress {
   status: MemoryStatus;
   dueAt: number;
   lastReviewedAt?: number;
+  ease?: number;
+  intervalDays?: number;
+  consecutiveCorrect?: number;
+  lapses?: number;
+  earlyReviewApplied?: boolean;
 }
 
 interface OrderedVerse {
@@ -134,6 +149,61 @@ interface OrderedVerse {
   status: MemoryStatus;
   dueAt: number;
   lastReviewedAt?: number;
+  ease?: number;
+  intervalDays?: number;
+  consecutiveCorrect?: number;
+  lapses?: number;
+  earlyReviewApplied?: boolean;
+}
+
+function scheduleSnapshotFrom(
+  progress: Pick<
+    VerseProgress,
+    | "status"
+    | "learnStage"
+    | "stageReps"
+    | "dueAt"
+    | "ease"
+    | "intervalDays"
+    | "consecutiveCorrect"
+    | "lapses"
+    | "earlyReviewApplied"
+  >,
+): MemoryScheduleSnapshot {
+  return {
+    status: progress.status,
+    learnStage: progress.learnStage,
+    stageReps: progress.stageReps,
+    dueAt: progress.dueAt,
+    ease: progress.ease,
+    intervalDays: progress.intervalDays,
+    consecutiveCorrect: progress.consecutiveCorrect,
+    lapses: progress.lapses,
+    earlyReviewApplied: progress.earlyReviewApplied,
+  };
+}
+
+function scheduleFieldsFrom(verse: {
+  ease?: number;
+  intervalDays?: number;
+  consecutiveCorrect?: number;
+  lapses?: number;
+  earlyReviewApplied?: boolean;
+}): Pick<
+  VerseProgress,
+  | "ease"
+  | "intervalDays"
+  | "consecutiveCorrect"
+  | "lapses"
+  | "earlyReviewApplied"
+> {
+  return {
+    ease: verse.ease,
+    intervalDays: verse.intervalDays,
+    consecutiveCorrect: verse.consecutiveCorrect,
+    lapses: verse.lapses,
+    earlyReviewApplied: verse.earlyReviewApplied,
+  };
 }
 
 function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
@@ -211,6 +281,7 @@ export function PracticeBoard({
       status: normalizeStatus(verse.status),
       dueAt: verse.dueAt ?? now,
       lastReviewedAt: verse.lastReviewedAt,
+      ...scheduleFieldsFrom(verse),
     })),
   );
 
@@ -230,6 +301,7 @@ export function PracticeBoard({
           status: verse.status,
           dueAt: verse.dueAt,
           lastReviewedAt: verse.lastReviewedAt,
+          ...scheduleFieldsFrom(verse),
         },
       ]),
     ),
@@ -280,6 +352,7 @@ export function PracticeBoard({
         status: currentVerse.status,
         dueAt: currentVerse.dueAt,
         lastReviewedAt: currentVerse.lastReviewedAt,
+        ...scheduleFieldsFrom(currentVerse),
       })
     : {
         learnStage: 0,
@@ -407,6 +480,7 @@ export function PracticeBoard({
               learnStage={currentProgress.learnStage}
               stageReps={currentProgress.stageReps}
               status={currentProgress.status}
+              scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
               locked={currentLocked}
               position={boundedIndex}
               total={orderedVerses.length}
@@ -515,6 +589,8 @@ interface PracticeCardProps {
   stageReps: number;
   /** Lifecycle status — fills the journey bar on graduation. */
   status: MemoryStatus;
+  /** Live SM-2 snapshot used to preview the next review interval on Check. */
+  scheduleSnapshot: MemoryScheduleSnapshot;
   /** Soft-locked: today's learning session is done. */
   locked: boolean;
   position: number;
@@ -540,6 +616,7 @@ function PracticeCard({
   learnStage,
   stageReps,
   status,
+  scheduleSnapshot,
   locked,
   position,
   total,
@@ -635,13 +712,28 @@ function PracticeCard({
     // lock keeps a double-tap from recording twice before the result view
     // (driven by `checked`) mounts and replaces this button.
     submit(async () => {
+      const now = Date.now();
+      const tokens = diffWords(typedAnswer, versePlainText);
+      const quality = classifyVerseAttempt(tokens);
+      const accuracy = verseAttemptAccuracy(tokens);
+      // Preview the next interval locally so the result banner never flashes
+      // "soon" while `recordAttempt` is in flight. Server schedule still wins
+      // when it lands.
+      const preview =
+        showScheduleOutcome && quality
+          ? previewNextSchedule(scheduleSnapshot, {
+              quality,
+              accuracy,
+              mode: "review",
+              now,
+              wordCount: wordCount ?? 0,
+              tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+            })
+          : null;
       setChecked(true);
-      setOutcomeNow(Date.now());
-      setNextSchedule(null);
-      const schedule = await onRecord(
-        diffWords(typedAnswer, versePlainText),
-        wordCount ?? 0,
-      );
+      setOutcomeNow(now);
+      setNextSchedule(preview);
+      const schedule = await onRecord(tokens, wordCount ?? 0);
       if (schedule) setNextSchedule(schedule);
     });
   }

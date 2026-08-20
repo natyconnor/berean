@@ -2,7 +2,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { BookOpen, PartyPopper, Sparkles, ThumbsUp } from "lucide-react";
 import type { JSX } from "react";
 
-import { formatMemoryDueLabel } from "@/lib/memory-due-label";
+import { formatNextReviewPhrase } from "@/lib/memory-due-label";
 import { isLearningPhase, type MemorySchedule } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
@@ -40,17 +40,13 @@ const CONFETTI_COLORS = [
   "#ef4444",
 ] as const;
 
-function nextReviewPhrase(
+function nextReviewMessage(
+  lead: "Nailed it" | "Good recall",
   schedule: MemorySchedule | null | undefined,
   now: number,
 ): string {
-  if (!schedule || isLearningPhase(schedule.status)) {
-    return "soon";
-  }
-  return (
-    formatMemoryDueLabel(schedule.status, schedule.dueAt, now)?.toLowerCase() ??
-    "soon"
-  );
+  const phrase = formatNextReviewPhrase(schedule, now);
+  return phrase ? `${lead} — next review ${phrase}` : lead;
 }
 
 export function VerseMemoryFeedback({
@@ -86,7 +82,7 @@ export function VerseMemoryFeedback({
           reduceMotion={!!reduceMotion}
           tone="exact"
           icon={<PartyPopper className="h-4 w-4 shrink-0" aria-hidden />}
-          message={`Nailed it — next review ${nextReviewPhrase(nextSchedule, dueClock)}`}
+          message={nextReviewMessage("Nailed it", nextSchedule, dueClock)}
           sparkle
         />
       );
@@ -98,7 +94,7 @@ export function VerseMemoryFeedback({
         reduceMotion={!!reduceMotion}
         tone="close"
         icon={<ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />}
-        message={`Good recall — next review ${nextReviewPhrase(nextSchedule, dueClock)}`}
+        message={nextReviewMessage("Good recall", nextSchedule, dueClock)}
       />
     );
   }
