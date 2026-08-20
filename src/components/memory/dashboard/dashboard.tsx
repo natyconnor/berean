@@ -10,7 +10,7 @@ import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ChartSkeleton, ChartSlot } from "./chart-card";
 import { KpiRow } from "./kpi-row";
 import { PracticeHeatmap } from "./practice-heatmap";
-import { MasteryBar } from "./mastery-bar";
+import { MasteryDonut } from "./mastery-donut";
 import { AccuracyTrend } from "./accuracy-trend";
 import { ReviewForecast } from "./review-forecast";
 
@@ -105,7 +105,7 @@ export function MemoryDashboard({
           loading={stats === undefined}
           skeleton={<ChartSkeleton title="Mastery" />}
         >
-          {stats ? <MasteryBar data={stats} /> : null}
+          {stats ? <MasteryDonut data={stats} /> : null}
         </ChartSlot>
         <ChartSlot
           loading={activity === undefined}
