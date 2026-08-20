@@ -67,7 +67,8 @@ export const LONG_VERSE_WORDS = 24;
 /**
  * Reps each band needs at the short and long endpoints (~5 reps/session feel).
  *
- * Read is a single priming pass. Guided and Challenge scale with verse length.
+ * Read is a single priming pass. Guided and Challenge scale with verse length,
+ * capped so even a long passage stays at five recalls for the hardest band.
  * From Memory is always two recalls so a verse cannot graduate on one lucky
  * pass, without dragging the last step out.
  */
@@ -77,7 +78,7 @@ const BAND_REP_RANGE: Record<
 > = {
   read: [1, 1],
   guided: [3, 5],
-  challenge: [4, 6],
+  challenge: [4, 5],
   memory: [2, 2],
 };
 
@@ -121,7 +122,7 @@ export const SUPPORT_BANDS: readonly SupportBand[] = [
 /**
  * Exact reps needed to clear the band at `stage`, adjusted for verse length.
  *
- * Read (0) is always 1. Guided (1) scales 3→5 and Challenge (2) 4→6, linearly
+ * Read (0) is always 1. Guided (1) scales 3→5 and Challenge (2) 4→5, linearly
  * between {@link SHORT_VERSE_WORDS} and {@link LONG_VERSE_WORDS}. From Memory
  * (3) is always 2. Omitting `wordCount` (or passing a value ≤
  * SHORT_VERSE_WORDS) yields the short-verse minima.
@@ -205,9 +206,20 @@ export function isLearningSessionEndingStage(stage: number): boolean {
  * Floor on a soft lock, so a session finished just before midnight can't reopen
  * minutes later. Small enough that the verse still comes back the next morning.
  * Also the gap that distinguishes a session lock (`dueAt` a morning ahead of
- * `lastReviewedAt`) from an in-progress stamp (`dueAt` ≈ last attempt).
+ * `lastReviewedAt`) from an in-progress verse (existing `dueAt`, still due).
  */
 export const MIN_LEARNING_LOCK_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Inclusive upper bound for due-index scans that also count in-progress
+ * learning. Attempts persist with a live `Date.now()` while dock/dashboard
+ * queries freeze `now` for the JS session, so an in-progress row can sit
+ * minutes-to-hours ahead of the query clock without being a session lock.
+ * Locks are still excluded by {@link isDueForLearning}.
+ */
+export function dueIndexUntil(now: number): number {
+  return now + MIN_LEARNING_LOCK_MS;
+}
 
 /**
  * When the next session opens: local midnight `intervalDays` calendar days
@@ -255,6 +267,16 @@ export const LEARNING_LOCK_GRACE_MS = 30 * 60 * 1000;
 
 function clampEase(ease: number): number {
   return Math.min(EASE_MAX, Math.max(EASE_MIN, ease));
+}
+
+/**
+ * Stay due on the existing timestamp while today's session is still open.
+ * Attempts use a live `Date.now()` while dock/dashboard queries freeze `now`
+ * for the JS session; pushing `dueAt` forward to the attempt would drop the
+ * verse from `dueAt <= now` scans before the day's reps are finished.
+ */
+function inProgressLearningDueAt(previousDueAt: number, now: number): number {
+  return Math.min(previousDueAt, now);
 }
 
 /**
@@ -319,9 +341,10 @@ export type MemoryAvailability = Pick<MemorySchedule, "status" | "dueAt"> & {
 };
 
 /**
- * True when `dueAt` is a next-session lock rather than an in-progress stamp.
- * In-progress learning sets both timestamps to the attempt; a session-ending
- * clear pushes `dueAt` at least {@link MIN_LEARNING_LOCK_MS} ahead.
+ * True when `dueAt` is a next-session lock rather than an open session.
+ * In-progress learning keeps `dueAt` at the existing due time and stamps
+ * `lastReviewedAt` to the attempt; a session-ending clear pushes `dueAt` at
+ * least {@link MIN_LEARNING_LOCK_MS} ahead.
  */
 function isLearningSessionClosed(schedule: MemoryAvailability): boolean {
   if (schedule.lastReviewedAt === undefined) return false;
@@ -408,7 +431,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
         intervalDays: 0,
         dueAt: sessionEnding
           ? nextLearningSessionDueAt(r.now, r.tzOffsetMinutes)
-          : r.now,
+          : inProgressLearningDueAt(s.dueAt, r.now),
         consecutiveCorrect: s.consecutiveCorrect + 1,
         lapses: s.lapses,
         earlyReviewApplied: false,
@@ -421,7 +444,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       stageReps: reps,
       ease: s.ease,
       intervalDays: 0,
-      dueAt: r.now,
+      dueAt: inProgressLearningDueAt(s.dueAt, r.now),
       consecutiveCorrect: s.consecutiveCorrect + 1,
       lapses: s.lapses,
       earlyReviewApplied: false,
@@ -436,7 +459,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       stageReps: s.stageReps,
       ease: s.ease,
       intervalDays: 0,
-      dueAt: r.now,
+      dueAt: inProgressLearningDueAt(s.dueAt, r.now),
       consecutiveCorrect: s.consecutiveCorrect,
       lapses: s.lapses,
       earlyReviewApplied: false,
@@ -454,7 +477,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       stageReps: s.stageReps - 1,
       ease: s.ease,
       intervalDays: 0,
-      dueAt: r.now,
+      dueAt: inProgressLearningDueAt(s.dueAt, r.now),
       consecutiveCorrect: 0,
       lapses: s.lapses,
       earlyReviewApplied: false,
@@ -468,7 +491,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
       stageReps: Math.max(0, requiredRepsFor(prevStage, r.wordCount) - 1),
       ease: s.ease,
       intervalDays: 0,
-      dueAt: r.now,
+      dueAt: inProgressLearningDueAt(s.dueAt, r.now),
       consecutiveCorrect: 0,
       lapses: s.lapses,
       earlyReviewApplied: false,
@@ -480,7 +503,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     stageReps: 0,
     ease: s.ease,
     intervalDays: 0,
-    dueAt: r.now,
+    dueAt: inProgressLearningDueAt(s.dueAt, r.now),
     consecutiveCorrect: 0,
     lapses: s.lapses,
     earlyReviewApplied: false,

@@ -144,14 +144,14 @@ describe("learningJourneyFraction", () => {
   });
 
   it("length-adjusted Guided reps shift the fraction correctly", () => {
-    // 24-word verse: Guided 5 + Challenge 6 + From Memory 2 → total 1+5+6+2 = 14.
+    // 24-word verse: Guided 5 + Challenge 5 + From Memory 2 → total 1+5+5+2 = 13.
     const longWordCount = 24;
     const longTotal =
       requiredRepsFor(0, longWordCount) +
       requiredRepsFor(1, longWordCount) +
       requiredRepsFor(2, longWordCount) +
       requiredRepsFor(3, longWordCount);
-    expect(longTotal).toBe(14);
+    expect(longTotal).toBe(13);
     // Read cleared (1) + one Guided rep.
     const oneRep = learningJourneyFraction(1, 1, longWordCount);
     expect(oneRep).toBeCloseTo(2 / longTotal, 5);

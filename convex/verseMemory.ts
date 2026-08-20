@@ -12,6 +12,7 @@ import {
 } from "./lib/verseMemory";
 import { findVerseRefId } from "./lib/verseRefs";
 import {
+  dueIndexUntil,
   isDueForLearning,
   isDueForLibrary,
   isDueForReview,
@@ -297,6 +298,11 @@ export const dueForVerse = query({
  * learning verses whose session is available. Hearted `new` verses and
  * soft-locked learning are excluded. Drives the dock badge. Bounded scan —
  * not a full collect. Shares the same `now` snapshot as the dashboard.
+ *
+ * The due-index upper bound is {@link dueIndexUntil} rather than `now`:
+ * in-progress learning can stamp `dueAt` with a live clock while this query
+ * uses a frozen session `now`. Session locks are still excluded by
+ * {@link isDueForLearning}.
  */
 export const dueCount = query({
   args: { now: v.number() },
@@ -310,7 +316,10 @@ export const dueCount = query({
     const dueRows = await ctx.db
       .query("verseMemory")
       .withIndex("by_userId_isHearted_dueAt", (q) =>
-        q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
+        q
+          .eq("userId", userId)
+          .eq("isHearted", true)
+          .lte("dueAt", dueIndexUntil(args.now)),
       )
       .order("asc")
       .take(MAX_DUE_SCAN);
@@ -470,7 +479,9 @@ const memoryStatsValidator = v.object({
  * Per-status counts for the current user, plus due-now tallies:
  * - `due` — review-phase verses (`reviewing` / `mastered` with `dueAt <= now`)
  * - `learningDue` — in-progress `learning` verses available for today's
- *   session (excludes hearted-but-not-started `new` verses)
+ *   session (excludes hearted-but-not-started `new` verses). Same
+ *   {@link dueIndexUntil} bound as {@link dueCount} so a frozen query clock
+ *   does not hide a verse the learner is still working through.
  *
  * Status totals come from denormalized `userMemoryStats` (O(1)). Due counts are
  * still computed live from a bounded due-index scan (time-dependent).
@@ -502,7 +513,10 @@ export const memoryStats = query({
     const dueRows = await ctx.db
       .query("verseMemory")
       .withIndex("by_userId_isHearted_dueAt", (q) =>
-        q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
+        q
+          .eq("userId", userId)
+          .eq("isHearted", true)
+          .lte("dueAt", dueIndexUntil(args.now)),
       )
       .order("asc")
       .take(MAX_DUE_SCAN);
@@ -784,9 +798,11 @@ const emptyLibraryPage: PaginationResult<LibraryItem> = {
  * `view` picks the index the page is read through so ordering is stable across
  * pages (never a cross-page in-memory sort):
  * - `"due"` — due review + unlocked learning (`by_userId_isHearted_dueAt` with
- *   `dueAt <= now`). Hearted `new` rows share that index and are skipped
- *   in-page via `isDueForLibrary`. Pass `now`; missing `now` returns an empty
- *   exhausted page (never `Date.now()`).
+ *   `dueAt <= dueIndexUntil(now)`). Hearted `new` rows share that index and
+ *   are skipped in-page via `isDueForLibrary`. Pass `now`; missing `now`
+ *   returns an empty exhausted page (never `Date.now()`). The scan bound is
+ *   wider than `now` so in-progress learning stamped ahead of a frozen
+ *   session clock still appears until today's reps are finished.
  * - `"inMemory"` — started work (`learning` / `reviewing` / `mastered`) via
  *   `by_userId_isHearted_status` ascending. Skip `new`. Do not use the dueAt
  *   index: New rows stamp `dueAt = now` and would fill every early page.
@@ -830,7 +846,10 @@ export const listLibrary = query({
       const paginated = await ctx.db
         .query("verseMemory")
         .withIndex("by_userId_isHearted_dueAt", (q) =>
-          q.eq("userId", userId).eq("isHearted", true).lte("dueAt", now),
+          q
+            .eq("userId", userId)
+            .eq("isHearted", true)
+            .lte("dueAt", dueIndexUntil(now)),
         )
         .order("asc")
         .paginate(args.paginationOpts);
