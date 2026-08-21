@@ -55,7 +55,9 @@ export function MemoryPackSessionPage({
           dueAt: m.dueAt,
           lastReviewedAt: m.lastReviewedAt,
         }))
-        .filter((verse) => isMemorySessionCandidate(verse, kind, now)),
+        .filter((verse) =>
+          isMemorySessionCandidate(verse, kind, now, kind === "learning"),
+        ),
     [members, kind, now],
   );
   const isLearning = kind === "learning";
