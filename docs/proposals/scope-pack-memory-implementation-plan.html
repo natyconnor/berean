@@ -1,0 +1,1798 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>
+      Berean · Scope-pack auto-heart, cohort learning, and unified recitation —
+      Implementation Plan (for an LLM agent)
+    </title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      pre {
+        background: #2b2416;
+        color: #ede4d0;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+      }
+      pre .c {
+        color: #9d9077;
+      }
+      pre .k {
+        color: #d3ab5e;
+      }
+      pre .s {
+        color: #a8c49a;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      .pr {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .pr > .pr-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .pr .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pr .pr-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .pr .pr-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .pr-body {
+        padding: 8px 20px 20px;
+      }
+      .dep {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin: 6px 0 0;
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow"
+          >Implementation Plan · for an LLM coding agent</span
+        >
+        <h1>Scope-pack auto-heart, cohort learning, and unified recitation</h1>
+        <p class="lede">
+          Opt in to heart a scoped pack as intelligent memory units, learn those
+          units together in one in-order rail, then — once they have graduated —
+          review the whole scope as a single recitation whose schedule stays in
+          lockstep.
+        </p>
+        <div class="meta">
+          <span class="chip">7 pull requests</span>
+          <span class="chip ghost">no new runtime deps</span>
+          <span class="chip ghost">Opus on design PRs 3, 4, 7</span>
+        </div>
+        <div class="callout">
+          <strong>How to use this document.</strong> Each numbered block below
+          is <em>one pull request</em>. Do them in order. Do not start the next
+          PR until the current one is green: implement only what that PR lists,
+          run <code>pnpm run agent:check</code>, satisfy the PR's acceptance
+          criteria, then stop.
+          <strong>Orchestrator model rule:</strong> PRs 3, 4, and 7 are
+          design-implementation PRs. Spawn those implementer subagents with
+          <code>model: "claude-opus-5-thinking-high"</code>. All other PRs use
+          the default inherited model.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <section id="decisions">
+        <div class="eyebrow">Settled decisions</div>
+        <h2>Decisions locked before implementation</h2>
+        <p>
+          Fixed constraints resolved with the product owner. Treat as
+          non-negotiable. Remaining product nits in this table are defaults
+          chosen so implementers do not stall.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Learn vs review card shape</b></td>
+                <td>
+                  Learning a scoped pack is many small cards, one per hearted
+                  span, default in-order in the existing rail. After every
+                  member has graduated, the user may review the whole scope as
+                  <em>one</em> concatenated recitation card.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Existing hearts</b></td>
+                <td>
+                  Auto-heart and Heart remaining never unheart, merge, split, or
+                  retarget an existing span. Occupied verses are holes: new
+                  groups form only in the uncovered gaps.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Chapter cap</b></td>
+                <td>
+                  Auto-heart / Heart remaining is allowed only when the scope
+                  enumerates at most
+                  <code>AUTO_HEART_MAX_CHAPTERS = 20</code> chapters. Larger
+                  scopes (including empty-books “All Scripture”) disable the
+                  control and show a tooltip explaining the 20-chapter ESV
+                  limit. Small books (Jude, Obadiah, Philemon, …) are fine.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Daily learning ration</b></td>
+                <td>
+                  No new cap on how many spans may be enrolled in one day.
+                  “Learn this pack” queues every <code>new</code> / due-for-
+                  learning member into one session. Per-span Guided/Challenge
+                  soft-lock until tomorrow still applies. The user may stop
+                  mid-rail and continue tomorrow.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Unified recitation scheduling</b></td>
+                <td>
+                  Enabling “Review as one passage” pulls every review-phase
+                  member due to <code>now</code>, copies a conservative
+                  canonical schedule onto all of them, and from then on one
+                  recitation grade is written to every member so they stay on
+                  the same <code>dueAt</code>. The pack stores
+                  <code>unifiedReviewEnabled</code>. Global due-queue and
+                  <code>memoryStats.due</code> hide those members and count the
+                  pack as one due item.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Preview</b></td>
+                <td>
+                  Show a compact, chapter-grouped chip list of proposed units
+                  (refs + kept existing hearts), not a wall of verse text.
+                  Default auto-heart checkbox is <em>off</em>.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Grouping caps</b></td>
+                <td>
+                  Hard breaks: occupied verse, chapter boundary, editorial
+                  heading, subheading, paragraph break (<code>\n\n</code>). Soft
+                  merge when the current group does not end a sentence, or both
+                  sides are short (≤ <code>SHORT_VERSE_WORDS</code> = 10),
+                  provided the group stays ≤ 4 verses and ≤ 40 words.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Unified lapse</b></td>
+                <td>
+                  One card, one grade. A lapse on the recitation lapses
+                  <em>every</em> member together (same
+                  <code>scheduleNext</code> output copied to all). Harsh but
+                  consistent with lockstep.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Custom packs / Study</b></td>
+                <td>
+                  Auto-heart, Heart remaining, and unified recitation are
+                  scope-pack only. Study “Memorize this scope” is unchanged in
+                  this plan; the user can heart remaining from the pack that
+                  landing creates.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Turning unified off</b></td>
+                <td>
+                  A pack switch can disable unified recitation. Due dates stay
+                  wherever the last unified grade left them (already in sync).
+                  Members reappear individually in the global due queue. No
+                  attempt to restore pre-unify intervals.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="grounding">
+        <div class="eyebrow">What already exists</div>
+        <h2>Assets to reuse (verified in the codebase)</h2>
+        <p>
+          Do not rebuild these — reuse them. Every path here was confirmed in
+          the current tree.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 42%">Existing asset</th>
+                <th>Role in the new system</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fileref">
+                  convex/schema.ts → packs, savedVerses, verseMemory,
+                  verseRefs
+                </td>
+                <td>
+                  Hearts are exact spans. Scope packs resolve live from
+                  <code>savedVerses ∩ scope</code>. Add optional
+                  <code>unifiedReviewEnabled</code> on <code>packs</code> only.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/savedVerses.ts → toggle / seedVerseMemory
+                </td>
+                <td>
+                  Hearting already seeds <code>status: "new"</code>. Bulk-heart
+                  must reuse the same insert + seed path, never a parallel
+                  write.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/esv.ts → getChaptersBatch / getPassage
+                </td>
+                <td>
+                  Fetch up to 20 chapters for grouping. One-book batch already
+                  exists; call once per book when the scope spans books (total
+                  still ≤ 20).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/hearted-verse-coverage.ts → overlappingSpans,
+                  spanCoversVerse, heartedRunsForChapter
+                </td>
+                <td>
+                  Occupied-verse math for “work around existing hearts.” Do not
+                  invent a second overlap model.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/memory-scheduler.ts → SHORT_VERSE_WORDS,
+                  countVerseWords, scheduleNext, isDueForLearning,
+                  isReviewPhase
+                </td>
+                <td>
+                  Grouping uses the same 10-word short-verse threshold. Unified
+                  grade is one <code>scheduleNext</code> then copied. Learning
+                  soft-lock is unchanged.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/verse-scope-match.ts → verseMatchesScope
+                </td>
+                <td>
+                  Empty <code>books</code> is whole corpus (must fail the
+                  20-chapter cap). Tags do not filter verses.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/bible-verse-counts.ts → getChapterVerseCount
+                </td>
+                <td>
+                  Enumerate verse numbers in a chapter without hitting the ESV
+                  API (coverage + chapter listing).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/bible-books.ts → getBookInfo / BIBLE_BOOKS
+                </td>
+                <td>Chapter counts per book for the 20-chapter cap.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/memory-session.ts → isLearningSessionCandidate
+                  (includeNew)
+                </td>
+                <td>
+                  Pack Learn today omits <code>new</code>. After enroll (new →
+                  learning) the existing filter already includes them.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/practice/practice-board.tsx
+                </td>
+                <td>
+                  Default order is already <code>"in-order"</code>. One-card
+                  unified review hides shuffle (length &lt; 2). Reuse review
+                  chrome; do not fork the grader UI.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/packs/pack-builder.tsx /
+                  pack-view.tsx
+                </td>
+                <td>
+                  Create-time checkbox + preview; pack-view Heart remaining,
+                  Learn this pack, unified switch + Review passage.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/ui/switch.tsx, tooltip.tsx
+                </td>
+                <td>Disabled auto-heart + 20-chapter tooltip.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  shared/esv-api.ts → EsvVerse (heading, subheading, text)
+                </td>
+                <td>
+                  Headings / <code>\n\n</code> paragraph breaks are grouping
+                  hard-stops. Fixtures under
+                  <code>shared/fixtures/esv-html/</code> for tests.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/verseMemory.ts → recordAttempt, dueQueue, memoryStats
+                </td>
+                <td>
+                  Unified recitation must not call per-span
+                  <code>recordAttempt</code>. dueQueue / memoryStats.due must
+                  skip members of a unified pack and count the pack once.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout small">
+          <strong>Gaps this plan adds.</strong> Pure grouping + chapter-count
+          libs (PR 1). <code>savedVerses.heartMany</code> (PR 2). Pack coverage
+          / enroll / unified mutations (PRs 2, 5, 6). Create-time preview and
+          pack-view CTAs (PRs 3–4, Opus). Composite recitation card (PR 7,
+          Opus). No new npm dependencies.
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="architecture">
+        <div class="eyebrow">Shared architecture</div>
+        <h2>Data model &amp; core contracts (referenced by every PR)</h2>
+
+        <h3>Pack schema addition</h3>
+        <p class="muted">
+          The only persisted product flag. Optional so existing packs stay
+          valid without a backfill.
+        </p>
+        <pre><code><span class="c">// convex/schema.ts — packs table, new optional field</span>
+unifiedReviewEnabled: v.optional(v.boolean()),
+<span class="c">// Absent or false → today’s per-span pack Review / global due queue.</span>
+<span class="c">// True → pack Review is one recitation; members are hidden from dueQueue.</span></code></pre>
+
+        <h3>Constants</h3>
+        <pre><code><span class="k">export const</span> AUTO_HEART_MAX_CHAPTERS = <span class="s">20</span>;
+<span class="k">export const</span> MAX_GROUP_VERSES = <span class="s">4</span>;
+<span class="k">export const</span> MAX_GROUP_WORDS = <span class="s">40</span>;
+<span class="c">// Reuse SHORT_VERSE_WORDS = 10 from memory-scheduler.ts</span>
+<span class="k">export const</span> HEART_MANY_CHUNK = <span class="s">40</span>; <span class="c">// max spans per heartMany call</span></code></pre>
+
+        <h3>Chapter enumeration &amp; cap</h3>
+        <pre><code><span class="c">// src/lib/scope-chapter-count.ts (new)</span>
+<span class="k">export function</span> enumerateScopeChapters(scope: VerseScope): Array&lt;{
+  book: string;
+  chapter: number;
+}&gt;;
+<span class="c">// Empty books → [] and countScopeChapters returns Infinity (cap fails).</span>
+<span class="c">// Book without a chapterRange → every chapter of that book via getBookInfo.</span>
+
+<span class="k">export function</span> countScopeChapters(scope: VerseScope): number;
+<span class="c">// Infinity when books.length === 0.</span>
+
+<span class="k">export function</span> autoHeartAllowed(scope: VerseScope): boolean;
+<span class="c">// countScopeChapters(scope) &gt; 0 &amp;&amp; countScopeChapters(scope) &lt;= 20</span></code></pre>
+
+        <h3>Grouping (pure, per chapter)</h3>
+        <pre><code><span class="c">// src/lib/memory-span-group.ts (new)</span>
+<span class="k">export type</span> ProposedHeartGroup = {
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
+  wordCount: number;
+  kind: <span class="s">"proposed"</span> | <span class="s">"kept"</span>; <span class="c">// kept = existing heart, not written</span>
+};
+
+<span class="k">export function</span> verseEndsSentence(text: string): boolean;
+<span class="c">// Trim; strip trailing quotes/brackets; test /[.!?]["'”’)]*$/</span>
+
+<span class="k">export function</span> groupChapterForHearting(
+  book: string,
+  chapter: number,
+  verses: readonly EsvVerse[], <span class="c">// full chapter, sorted by number</span>
+  existingHearts: readonly VerseSpan[],
+): ProposedHeartGroup[];
+<span class="c">// Returns kept groups (exact existing spans in this chapter) plus proposed</span>
+<span class="c">// groups that cover only uncovered verse numbers. Never overlaps a kept span.</span></code></pre>
+        <p class="muted">
+          Walk uncovered verses in order. Start or flush a group on: occupied
+          hole, chapter boundary (caller splits chapters),
+          <code>heading</code> or <code>subheading</code> on the next verse,
+          paragraph break (previous verse text contains or ends with
+          <code>\n\n</code>), or caps (4 verses / 40 words). Otherwise merge if
+          the current group does not <code>verseEndsSentence</code>, or if both
+          the current group and the next verse are ≤ 10 words. Poetry without
+          periods still stops on paragraph, heading, and caps.
+        </p>
+
+        <h3>Coverage</h3>
+        <pre><code><span class="c">// src/lib/scope-verse-coverage.ts (new)</span>
+<span class="k">export function</span> scopeVerseSlots(scope: VerseScope): number; <span class="c">// sum of getChapterVerseCount</span>
+<span class="k">export function</span> coveredVerseCount(
+  scope: VerseScope,
+  hearts: readonly VerseSpan[],
+): number;
+<span class="k">export function</span> scopeCoverageComplete(
+  scope: VerseScope,
+  hearts: readonly VerseSpan[],
+): boolean;
+<span class="c">// True iff every verse number in every enumerated chapter is covered by some heart.</span></code></pre>
+
+        <h3>Bulk heart</h3>
+        <pre><code><span class="c">// convex/savedVerses.ts</span>
+<span class="k">export const</span> heartMany = mutation({
+  args: {
+    spans: v.array(v.object({
+      book: v.string(),
+      chapter: v.number(),
+      startVerse: v.number(),
+      endVerse: v.number(),
+    })),
+    now: v.number(),
+  },
+  returns: v.object({
+    added: v.number(),
+    skippedExact: v.number(),
+    skippedOverlap: v.number(),
+  }),
+});
+<span class="c">// Reject if spans.length &gt; HEART_MANY_CHUNK.</span>
+<span class="c">// For each span: bounds-check; if exact saved row exists → skippedExact;</span>
+<span class="c">// if overlappingSpans(span, userHearts) → skippedOverlap (do not write);</span>
+<span class="c">// else insert savedVerses + seedVerseMemory (same as toggle add path).</span></code></pre>
+
+        <h3>Enroll learning</h3>
+        <pre><code><span class="c">// convex/packs.ts</span>
+<span class="k">export const</span> enrollLearning = mutation({
+  args: { id: v.id(<span class="s">"packs"</span>), now: v.number() },
+  returns: v.object({ enrolled: v.number() }),
+});
+<span class="c">// For each resolved member with status === "new": patch verseMemory to</span>
+<span class="c">// status "learning", dueAt = now, learnStage/stageReps unchanged (0),</span>
+<span class="c">// adjustUserMemoryStats(new → learning). Skip already-learning/reviewing.</span></code></pre>
+
+        <h3>Unified review schedule</h3>
+        <pre><code><span class="c">// src/lib/unified-review-schedule.ts (new)</span>
+<span class="k">export function</span> canonicalUnifiedSchedule(
+  members: readonly MemorySchedule[],
+  now: number,
+): MemorySchedule;
+<span class="c">// Lead = member with smallest intervalDays, then lowest ease, then highest lapses.</span>
+<span class="c">// Result: that lead’s ease/interval/lapses/consecutiveCorrect/status,</span>
+<span class="c">// dueAt = now, earlyReviewApplied = false.</span>
+<span class="c">// If any member is still learning/new, throw (caller must not enable).</span>
+
+<span class="k">export function</span> applyUnifiedGrade(
+  canonical: MemorySchedule,
+  input: ReviewInput, <span class="c">// mode: "review", wordCount = concatenated passage</span>
+): MemorySchedule;
+<span class="c">// scheduleNext(canonical, input) — single call, then copy onto every member.</span></code></pre>
+
+        <h3>Unified mutations</h3>
+        <pre><code><span class="c">// convex/packs.ts</span>
+<span class="k">export const</span> setUnifiedReview = mutation({
+  args: {
+    id: v.id(<span class="s">"packs"</span>),
+    enabled: v.boolean(),
+    now: v.number(),
+  },
+  returns: v.null(),
+});
+<span class="c">// enabled true: require kind==="scope", every member isReviewPhase, ≥1 member.</span>
+<span class="c">// Patch every member verseMemory to canonicalUnifiedSchedule(...); set flag.</span>
+<span class="c">// enabled false: clear flag only; do not rewrite member schedules.</span>
+
+<span class="k">export const</span> recordUnifiedReview = mutation({
+  args: {
+    id: v.id(<span class="s">"packs"</span>),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    now: v.number(),
+    wordCount: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+  },
+  returns: memoryScheduleValidator,
+});
+<span class="c">// Require unifiedReviewEnabled. Build canonical from live members (should</span>
+<span class="c">// already match). next = applyUnifiedGrade. For each member: insert</span>
+<span class="c">// verseMemoryReviews (same quality/accuracy/now), patch schedule to next,</span>
+<span class="c">// adjustUserMemoryStats if status changed. Return next.</span></code></pre>
+
+        <h3>Due-queue exclusion</h3>
+        <p class="muted">
+          When <code>unifiedReviewEnabled</code> is true, members of that pack
+          must not appear as individual due cards. <code>dueQueue</code> and
+          <code>memoryStats.due</code> skip those <code>verseRefId</code>s and
+          add 1 if the pack’s shared <code>dueAt &lt;= now</code> (all members
+          share it after enable). <code>packs.listMine</code>
+          <code>dueCount</code> for a unified pack is 0 or 1, not N.
+          <code>learningDue</code> is unchanged (unified packs have no learning
+          members).
+        </p>
+        <pre><code><span class="c">// Helper in convex/lib/packs.ts</span>
+<span class="k">export async function</span> loadUnifiedReviewVerseRefIds(
+  ctx: QueryCtx,
+  userId: Id&lt;<span class="s">"users"</span>&gt;,
+): Promise&lt;Set&lt;string&gt;&gt;;
+<span class="c">// Packs with unifiedReviewEnabled, resolve members, collect verseRefId strings.</span></code></pre>
+
+        <h3>Composite recitation card</h3>
+        <p class="muted">
+          Do not persist a mega <code>verseRef</code> (refs are single-chapter).
+          The unified session is a pack-level virtual card: concatenate member
+          texts in Bible order (fetch unique chapters via existing ESV cache /
+          <code>useEsvPassage</code>). Label is the pack name. Grade goes to
+          <code>packs.recordUnifiedReview</code>, never
+          <code>verseMemory.recordAttempt</code>.
+        </p>
+        <pre><code><span class="c">// PracticeVerse extension (optional field, default undefined)</span>
+composite?: {
+  packId: Id&lt;<span class="s">"packs"</span>&gt;;
+  members: CardReference[]; <span class="c">// Bible order, the hearted spans</span>
+};
+<span class="c">// When composite is set, the board loads concatenated text, hides shuffle,</span>
+<span class="c">// shows one rail row, and records via recordUnifiedReview.</span></code></pre>
+
+        <h3>Data flow</h3>
+        <p class="muted">
+          User builds a scope pack (≤ 20 chapters) and may check “Heart verses
+          in this scope.” The client enumerates chapters, fetches ESV via
+          <code>getChaptersBatch</code> per book, runs
+          <code>groupChapterForHearting</code> against current hearts, and shows
+          chips. On create it writes the pack, then chunks proposed (not kept)
+          spans through <code>heartMany</code>. On the pack, Heart remaining
+          repeats that gap-fill. Learn this pack calls
+          <code>enrollLearning</code> then
+          <code>/memory/$packId/learn</code> — many in-order cards, same daily
+          band lock. When every member is review-phase, the user enables unified
+          recitation: schedules sync to <code>now</code>, Review becomes one
+          concatenated card, and a single grade keeps every member due together.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="conventions">
+        <div class="eyebrow">Rules for the agent</div>
+        <h2>Conventions every PR must follow</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Workflow</h4>
+            <ul class="clean small">
+              <li>One PR at a time, in order. Read files before editing.</li>
+              <li>
+                After code changes run
+                <code>pnpm run agent:check</code> (format → lint → typecheck).
+              </li>
+              <li>
+                Run <code>pnpm test</code> for any PR that adds/edits a
+                <code>*.test.ts</code> / <code>*.test.tsx</code>.
+              </li>
+              <li>
+                Regenerate Convex types with
+                <code>pnpm run codegen</code> after schema/function changes.
+              </li>
+              <li>
+                Never commit or push from an implementer subagent. The
+                orchestrator checkpoints.
+              </li>
+              <li>
+                Design PRs 3, 4, and 7: orchestrator must spawn the implementer
+                with <code>model: "claude-opus-5-thinking-high"</code>.
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Convex &amp; TypeScript</h4>
+            <ul class="clean small">
+              <li>
+                Every public query/mutation has <code>args</code> <b>and</b>
+                <code>returns</code> validators.
+              </li>
+              <li>
+                Auth via <code>getCurrentUserId</code> /
+                <code>getCurrentUserIdOrNull</code>; verify pack ownership with
+                <code>loadOwnedPack</code>.
+              </li>
+              <li>
+                Never call <code>Date.now()</code> inside a query — pass
+                <code>now</code> in.
+              </li>
+              <li>
+                Query with <code>.withIndex(...)</code>, never
+                <code>.filter(...)</code>. <code>await</code> every promise.
+              </li>
+              <li>
+                No <code>any</code>; use generated <code>Doc&lt;&gt;</code> /
+                <code>Id&lt;&gt;</code> types.
+              </li>
+              <li>
+                Do not touch existing hearts. Overlap → skip, never delete or
+                patch <code>savedVerses</code> rows you did not create.
+              </li>
+              <li>
+                Reuse <code>adjustUserMemoryStats</code> on every status change.
+                Do not reimplement stats math.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="prs">
+        <div class="eyebrow">The build</div>
+        <h2>7 pull requests</h2>
+        <div class="card toc">
+          <a href="#pr1"
+            ><b>PR 1</b> — Grouping, chapter cap, and coverage libs
+            <span class="chip ghost">foundation</span></a
+          >
+          <a href="#pr2"
+            ><b>PR 2</b> — Bulk heart mutation
+            <span class="chip ghost">server</span></a
+          >
+          <a href="#pr3"
+            ><b>PR 3</b> — Pack-builder auto-heart preview
+            <span class="chip ghost">Opus · UI</span></a
+          >
+          <a href="#pr4"
+            ><b>PR 4</b> — Heart remaining and Learn this pack
+            <span class="chip ghost">Opus · UI</span></a
+          >
+          <a href="#pr5"
+            ><b>PR 5</b> — Pack Learn queues new members
+            <span class="chip ghost">wiring</span></a
+          >
+          <a href="#pr6"
+            ><b>PR 6</b> — Unified review backend
+            <span class="chip ghost">server</span></a
+          >
+          <a href="#pr7"
+            ><b>PR 7</b> — One-card recitation UX
+            <span class="chip ghost">Opus · UI</span></a
+          >
+        </div>
+      </section>
+
+      <div class="pr" id="pr1">
+        <div class="pr-head">
+          <div class="num">1</div>
+          <div>
+            <div class="pr-sub">ships silently · foundation</div>
+            <h3 class="pr-title">Grouping, chapter cap, and coverage libs</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> PRs 2–7.
+            <b>Model:</b> inherit.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Pure, unit-tested helpers for enumerating a scope’s chapters,
+            deciding whether auto-heart is allowed, grouping ESV verses into
+            memory spans around existing hearts, and measuring verse coverage.
+            No UI and no Convex changes. The tree stays behavior-identical.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/scope-chapter-count.ts</span>
+              <span class="tag-new">(new)</span> — enumerate / count / cap.
+            </li>
+            <li>
+              <span class="fileref">src/lib/scope-chapter-count.test.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-span-group.ts</span>
+              <span class="tag-new">(new)</span> — grouping + sentence helper.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-span-group.test.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">src/lib/scope-verse-coverage.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">src/lib/scope-verse-coverage.test.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Implement <code>enumerateScopeChapters</code> /
+              <code>countScopeChapters</code> /
+              <code>autoHeartAllowed</code> using
+              <code>getBookInfo</code> and the Architecture cap. Empty
+              <code>books</code> → count <code>Infinity</code>, not 0.
+            </li>
+            <li>
+              Implement <code>verseEndsSentence</code> and
+              <code>groupChapterForHearting</code> exactly as specified in
+              Architecture. Reuse <code>countVerseWords</code>,
+              <code>spanCoversVerse</code>, <code>overlappingSpans</code>. Sort
+              output in verse order: kept spans in place among proposed gaps
+              (so a preview can render a single timeline).
+            </li>
+            <li>
+              Coverage helpers: for each enumerated chapter, verses
+              <code>1..getChapterVerseCount</code> are covered if any heart
+              (any book/chapter match) includes that number.
+            </li>
+            <li>
+              Tests (minimum):
+              <ul>
+                <li>
+                  Jude (1 chapter) allowed; Psalms (150) and empty books not.
+                </li>
+                <li>
+                  John 3-style: short/partial verses merge; a period ends a
+                  group; a heading starts a new group.
+                </li>
+                <li>
+                  Existing heart 3:16 in a 1–21 chapter → groups around 16,
+                  kept chip for 16, no overlap.
+                </li>
+                <li>
+                  Paragraph <code>\n\n</code> is a hard break even without a
+                  period.
+                </li>
+                <li>
+                  Caps: never more than 4 verses or 40 words in a proposed
+                  group.
+                </li>
+                <li>
+                  Coverage complete only when every slot is covered; a hole
+                  fails.
+                </li>
+              </ul>
+            </li>
+            <li>
+              Use small inline verse objects in tests; optionally parse
+              <code>shared/fixtures/esv-html/jude.json</code> via
+              <code>parseEsvHtmlResponse</code> if that stays hermetic.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes;
+              <code>pnpm test</code> passes for the new files.
+            </li>
+            <li>No production UI or Convex files change in this PR.</li>
+            <li>
+              Tests cover cap, overlap-around-existing, sentence merge, heading
+              / paragraph breaks, and coverage completeness.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr2">
+        <div class="pr-head">
+          <div class="num">2</div>
+          <div>
+            <div class="pr-sub">ships silently · server</div>
+            <h3 class="pr-title">Bulk heart mutation</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1. <b>Unblocks:</b> PRs 3–4.
+            <b>Model:</b> inherit.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add an authenticated <code>heartMany</code> mutation that hearts
+            proposed spans in chunks, skipping exact and overlapping existing
+            hearts. No UI yet. Existing <code>toggle</code> behavior is
+            unchanged.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/savedVerses.ts</span> —
+              <code>heartMany</code> mutation; extract a shared “heart this
+              span if absent” helper used by <code>toggle</code> add-path and
+              <code>heartMany</code> so seed/stats stay identical.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/savedVerses.ts</span>
+              <span class="tag-new">(new, only if needed)</span> — helper to
+              keep <code>savedVerses.ts</code> from growing a second write
+              path. Prefer extracting from the existing toggle add branch
+              rather than duplicating inserts.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Factor the “add heart” half of <code>toggle</code> (insert
+              <code>savedVerses</code> + <code>seedVerseMemory</code>) into a
+              helper that returns <code>"added"</code> |
+              <code>"exists"</code>.
+            </li>
+            <li>
+              Implement <code>heartMany</code> per Architecture. Load the
+              user’s saved rows once, join refs, build <code>VerseSpan[]</code>,
+              then for each input span: bounds check via
+              <code>getVerseRefBoundsErrorMessage</code> (invalid → skip as
+              overlap/invalid counted in skippedOverlap, do not throw the whole
+              batch), exact → skippedExact, <code>overlappingSpans</code> →
+              skippedOverlap, else helper add.
+            </li>
+            <li>
+              Throw if <code>spans.length &gt; HEART_MANY_CHUNK</code> so the
+              client is forced to chunk. Use caller <code>now</code> for
+              createdAt/seed (mutations may use Date.now for writes; still
+              accept <code>now</code> for schedule seed consistency).
+            </li>
+            <li>
+              Run <code>pnpm run codegen</code>.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes after codegen.
+            </li>
+            <li>
+              <code>heartMany</code> has args+returns validators, requires
+              auth, never deletes or patches an existing
+              <code>savedVerses</code> row.
+            </li>
+            <li>
+              Chunk size over the cap throws. Empty <code>spans</code> returns
+              zeros.
+            </li>
+            <li>
+              Behavioral: no UI change; toggling a heart in the reader still
+              works as before.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr3">
+        <div class="pr-head">
+          <div class="num">3</div>
+          <div>
+            <div class="pr-sub">design · Opus · pack create</div>
+            <h3 class="pr-title">Pack-builder auto-heart preview</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 1–2. <b>Unblocks:</b> PR 4.
+            <b>Model:</b> <code>claude-opus-5-thinking-high</code> (Opus).
+            Orchestrator must pass this model into the Task tool.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            On New pack, when Kind is Scope, offer an opt-in “Heart verses in
+            this scope” control with an elegant, non-overwhelming preview of
+            proposed memory units and kept existing hearts. Creating the pack
+            with the control on hearts only the proposed gaps. Over-20-chapter
+            scopes disable the control with a tooltip.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/scope-heart-preview.tsx</span
+              >
+              <span class="tag-new">(new)</span> — checkbox/switch, tooltip,
+              chapter-grouped chip preview, loading/error.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/hooks/use-scope-heart-preview.ts</span
+              >
+              <span class="tag-new">(new)</span> — given a scope + hearted
+              list: cap check, fetch chapters via
+              <code>api.esv.getChaptersBatch</code> (one call per book, total
+              chapters ≤ 20), run <code>groupChapterForHearting</code>, return
+              groups + summary counts.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-builder.tsx</span
+              >
+              — mount preview for scope kind; on create, if enabled, chunk
+              proposed spans through <code>heartMany</code> after
+              <code>packs.create</code> (always navigate to the pack even if
+              some chunks fail; surface a non-blocking error like custom-pack
+              add failures).
+            </li>
+            <li>
+              <span class="fileref">src/lib/heart-many-client.ts</span>
+              <span class="tag-new">(new)</span> — chunk helper wrapping
+              <code>heartMany</code> at <code>HEART_MANY_CHUNK</code>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Default the control <em>off</em>. Use the existing Switch. When
+              <code>!autoHeartAllowed(scope)</code>, disable it and wrap with
+              Tooltip: auto-heart is limited to 20 chapters so the Bible text
+              API is not overloaded; narrow the scope (for example one small
+              book or a chapter range).
+            </li>
+            <li>
+              Preview only while the control is on and allowed. Show a skeleton
+              while ESV loads. After load: one summary line (“Psalm 23 · 6
+              verses → 4 new units · 1 already hearted”) then a compact chip
+              row per chapter (<code>1–2</code>, <code>3</code>, …). Kept
+              hearts are visually distinct (muted / “kept”). Do not dump full
+              verse bodies. For many chapters, stack chapter labels + chips in
+              a max-height scroll region (~240px).
+            </li>
+            <li>
+              Fetch: group enumerated chapters by book; call
+              <code>getChaptersBatch</code> per book; write results through
+              <code>setCachedPassage</code> so later reader/practice hits cache.
+            </li>
+            <li>
+              Create: existing <code>packs.create</code> first. Then
+              <code>heartMany</code> only <code>kind === "proposed"</code>
+              spans, chunked. Do not heart <code>kept</code> spans.
+            </li>
+            <li>
+              Empty scope (no books) stays disabled. Custom kind hides this
+              whole section.
+            </li>
+            <li>
+              Visual polish is the point of Opus: spacing, chip density, muted
+              kept-state, loading, and the disabled tooltip must feel like the
+              rest of Memory (see pack-builder footer and ScopeForm), not a
+              debug dump.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes.
+            </li>
+            <li>
+              Creating a scope pack with the control off is unchanged (no
+              hearts written).
+            </li>
+            <li>
+              Mechanical: disabled when <code>countScopeChapters &gt; 20</code>
+              or 0/Infinity; enabled for Jude / a 1-chapter range.
+            </li>
+            <li>
+              Behavioral / visual (manual): preview is scannable at a glance;
+              kept vs proposed are distinguishable; create with control on
+              hearts gaps only.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr4">
+        <div class="pr-head">
+          <div class="num">4</div>
+          <div>
+            <div class="pr-sub">design · Opus · pack view</div>
+            <h3 class="pr-title">Heart remaining and Learn this pack</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 3. <b>Unblocks:</b> PR 5.
+            <b>Model:</b> <code>claude-opus-5-thinking-high</code> (Opus).
+            Orchestrator must pass this model into the Task tool.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            On a scope pack, if coverage is incomplete and the cap allows, offer
+            Heart remaining with the same preview language as create. Offer
+            Learn this pack when there are <code>new</code> members, so the user
+            can queue the whole set instead of starting spans one by one. This
+            PR adds the enroll mutation and the CTAs; the learn session itself
+            is wired in PR 5.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/packs.ts</span> —
+              <code>enrollLearning</code> as specified in Architecture;
+              optional <code>previewCoverage</code> query returning
+              <code>{ chapterCount, slotCount, coveredCount, autoHeartAllowed }</code>
+              for the pack’s scope (pass <code>now</code> unused or omit — no
+              Date.now in queries). Coverage can also be computed client-side
+              from members + <code>scopeVerseSlots</code>; prefer client-side
+              from existing <code>resolveMembers</code> +
+              <code>listAll</code> hearts to avoid a new query unless it stays
+              tiny.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+              — Heart remaining (scope + incomplete + allowed) and Learn this
+              pack (newCount &gt; 0). Reuse
+              <code>ScopeHeartPreview</code> in a dialog for Heart remaining.
+            </li>
+            <li>
+              Reuse
+              <span class="fileref"
+                >src/components/memory/packs/scope-heart-preview.tsx</span
+              >
+              — accept a compact variant for the dialog (same chips).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              <code>enrollLearning</code>: ownership check; resolve members
+              (scope or custom — enroll is useful on custom too; Heart remaining
+              stays scope-only). Patch only <code>new</code> rows. Return how
+              many enrolled. codegen.
+            </li>
+            <li>
+              Pack header: if <code>newCount &gt; 0</code>, primary-outline
+              button “Learn this pack” with a badge of
+              <code>newCount + learningDueCount</code>. Keep existing Continue
+              Learning when <code>learningDueCount &gt; 0</code> and newCount
+              is 0. Clicking Learn this pack calls enroll then
+              <code>onLearn</code> (navigate to pack learn). Disable while
+              enrolling.
+            </li>
+            <li>
+              Heart remaining: only <code>kind === "scope"</code>,
+              <code>autoHeartAllowed(pack.scope)</code>, and
+              <code>!scopeCoverageComplete</code>. If over cap, omit the button
+              (do not show a disabled control on an already-created huge pack;
+              the create-time tooltip already explained it). Dialog: same
+              preview, confirm hearts proposed gaps via chunked
+              <code>heartMany</code>.
+            </li>
+            <li>
+              Empty scope pack copy may mention Heart remaining when the button
+              is shown.
+            </li>
+            <li>
+              Opus: these CTAs must sit cleanly in the existing header button
+              row (Learn / Review / Practice Pack) without wrapping into chaos
+              on small widths — wrap to a second row if needed, keep hierarchy
+              (Learn this pack ≈ Continue Learning, Heart remaining quieter).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes; codegen if Convex
+              changed; <code>pnpm test</code> if enroll gets a pure helper
+              test (optional).
+            </li>
+            <li>
+              <code>enrollLearning</code> is idempotent (second call enrolls
+              0). Does not alter reviewing/mastered rows.
+            </li>
+            <li>
+              Heart remaining never appears on custom packs or when coverage is
+              complete.
+            </li>
+            <li>
+              Behavioral / visual (manual): dialog preview matches create-time
+              language; header buttons remain understandable.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr5">
+        <div class="pr-head">
+          <div class="num">5</div>
+          <div>
+            <div class="pr-sub">wiring · pack learn session</div>
+            <h3 class="pr-title">Pack Learn queues enrolled members</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 4. <b>Unblocks:</b> PRs 6–7 (cohort rail
+            exists before unified review). <b>Model:</b> inherit.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            After enroll, every in-progress pack member that is due for
+            learning appears in the pack Learn rail, in Bible order, with the
+            existing per-span daily lock. No new scheduler rules.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-pack-practice-page.tsx</span
+              >
+              — for <code>kind === "learning"</code>, members that are
+              <code>new</code> OR <code>isDueForLearning</code> (use
+              <code>isLearningSessionCandidate(..., includeNew: true)</code>
+              as a belt-and-suspenders if enroll races). Keep review/practice
+              filters unchanged.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/lib/memory-session.test.ts</span
+              >
+              — add a case documenting pack-learn includeNew behavior if you
+              extract a one-line helper; otherwise skip.
+            </li>
+            <li>
+              Empty-state copy on pack learn: if they came before enroll, still
+              fine; after enroll the rail should not be empty when new verses
+              existed.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Change the learning filter in
+              <code>MemoryPackSessionPage</code> to
+              <code>isMemorySessionCandidate(verse, "learning", now, true)</code>.
+              Practice and review kinds stay default <code>includeNew</code>.
+            </li>
+            <li>
+              Confirm default board order remains <code>"in-order"</code> (it
+              already is). Do not force-hide shuffle; user may still shuffle a
+              cohort. Default in-order satisfies the product request.
+            </li>
+            <li>
+              Locked verses still sit in the rail via existing board lock
+              behavior once today’s band ends; session complete when every
+              enrolled span is locked or graduated for the day.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li><code>pnpm run agent:check</code> passes.</li>
+            <li>
+              Global <code>/memory/learn</code> is unchanged (still
+              includeNew false / today’s learning only).
+            </li>
+            <li>
+              Behavioral: Learn this pack → rail lists all newly enrolled
+              spans in Bible order; finishing Guided on one span locks only
+              that span until tomorrow; others remain playable the same day.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr6">
+        <div class="pr-head">
+          <div class="num">6</div>
+          <div>
+            <div class="pr-sub">server · unified review</div>
+            <h3 class="pr-title">Unified review backend</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 5. <b>Unblocks:</b> PR 7.
+            <b>Model:</b> inherit.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Persist <code>unifiedReviewEnabled</code>, sync member schedules
+            onto a conservative canonical due-now snapshot, record one
+            recitation grade onto every member, and hide those members from the
+            global due queue while counting the pack as a single due item.
+            No recitation UI yet (flag unused by the client except via
+            <code>packs.get</code>).
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/unified-review-schedule.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref"
+                >src/lib/unified-review-schedule.test.ts</span
+              >
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">convex/schema.ts</span> —
+              <code>unifiedReviewEnabled</code> on packs.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/packs.ts</span> —
+              <code>loadUnifiedReviewVerseRefIds</code>; include the flag on
+              pack docs flowing through <code>loadOwnedPack</code> (already
+              returns the doc).
+            </li>
+            <li>
+              <span class="fileref">convex/packs.ts</span> —
+              <code>setUnifiedReview</code>, <code>recordUnifiedReview</code>;
+              <code>get</code> / <code>listMine</code> expose the flag;
+              unified pack <code>dueCount</code> is 0 or 1.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> —
+              <code>dueQueue</code> and <code>memoryStats.due</code> skip
+              unified member ids, then add 1 per due unified pack (query the
+              user’s packs with the flag; a member is due if
+              <code>isDueForReview</code> on any/all — they share dueAt).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Pure canonical + applyUnifiedGrade with tests: mixed intervals
+              pick the smallest; enabling result has <code>dueAt === now</code>
+              and <code>earlyReviewApplied === false</code>;
+              <code>scheduleNext</code> output is what all members receive;
+              learning-phase members make canonical throw.
+            </li>
+            <li>
+              Schema field optional boolean. codegen.
+            </li>
+            <li>
+              <code>setUnifiedReview</code>: scope packs only; all members
+              <code>isReviewPhase</code>; if enabling with 0 members, throw.
+              Disabling only clears the flag.
+            </li>
+            <li>
+              <code>recordUnifiedReview</code>: require flag; refuse if any
+              member is learning-phase (return current canonical without
+              writing, or throw — pick throw with a clear error). Insert one
+              review log per member (heatmap will spike; accepted). Patch all
+              to the same <code>next</code>.
+            </li>
+            <li>
+              dueQueue: after building candidate items, drop those whose
+              verseRefId is in the unified set; append no verse rows for them.
+              memoryStats.due: count due rows that are not in the set, plus
+              number of unified packs whose members are due.
+            </li>
+            <li>
+              listMine: if flag and members.length, dueCount is 1 if
+              <code>isDueForReview(members[0], now)</code> else 0 (schedules
+              are synced; if a desync bug happens, use “any member due” → 1).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and
+              <code>pnpm test</code> pass (new scheduler tests).
+            </li>
+            <li>
+              Existing packs without the field behave as today (flag falsy).
+            </li>
+            <li>
+              Enabling unified does not change learning-phase packs (mutation
+              throws). Disabling does not rewrite dueAt.
+            </li>
+            <li>
+              Behavioral: no visible recitation UI yet; dashboard due count
+              must not jump by N when a test client sets the flag (verify with
+              a Convex-level thought: skip logic is in queries).
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr7">
+        <div class="pr-head">
+          <div class="num">7</div>
+          <div>
+            <div class="pr-sub">design · Opus · recitation</div>
+            <h3 class="pr-title">One-card recitation UX</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 6. <b>Unblocks:</b> nothing (end of plan).
+            <b>Model:</b> <code>claude-opus-5-thinking-high</code> (Opus).
+            Orchestrator must pass this model into the Task tool.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            When every scope-pack member has graduated, make it obvious how to
+            sync reviews into one passage recitation, then actually run that
+            session as a single long card. Afterward they stay due together.
+            This is the product moment of the feature — spend the design effort
+            here.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+              — unified switch + copy; Review button label “Review passage”
+              when enabled and due; confirmation when turning the switch on
+              (pulls reviews to today).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-pack-practice-page.tsx</span
+              >
+              — when <code>kind === "review"</code> and pack flag is on, pass a
+              single composite <code>PracticeVerse</code> instead of N due
+              members.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/practice/practice-board.tsx</span
+              >
+              — render concatenated ESV text for <code>composite</code>; record
+              via <code>packs.recordUnifiedReview</code>; rail shows one row
+              labeled with the pack name; hide shuffle.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/hooks/use-esv-composite-passage.ts</span
+              >
+              <span class="tag-new">(new)</span> — given
+              <code>CardReference[]</code>, fetch unique chapters (cached
+              query / batch) and concatenate covered verse texts in order,
+              separated by a single space (or newline between chapters).
+            </li>
+            <li>
+              Confirm dialog copy in pack-view or a small
+              <span class="fileref"
+                >src/components/memory/packs/enable-unified-review-dialog.tsx</span
+              >
+              <span class="tag-new">(new)</span>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Eligibility: scope pack, ≥1 member, every member
+              <code>isReviewPhase</code>. If some are still learning, do not
+              show the switch (or show it disabled with “Finish learning this
+              pack first”).
+            </li>
+            <li>
+              Switch off → on: dialog explaining that every unit becomes due
+              today and future reviews are one recitation on one schedule.
+              Confirm → <code>setUnifiedReview({ enabled: true, now })</code> →
+              optionally navigate straight into pack review.
+            </li>
+            <li>
+              Switch on → off: <code>setUnifiedReview({ enabled: false })</code>
+              with lighter copy (they remain in sync until individual reviews
+              happen).
+            </li>
+            <li>
+              Pack Review when enabled: one composite card even if some members
+              were not due before enable (enable already pulled them). Word
+              count is concatenated text for the long-verse rep curve on any
+              future learning lapse.
+            </li>
+            <li>
+              Long passage UX: the existing hidden-from-memory textarea must
+              remain usable — min-height grows, scroll inside the card, verse
+              numbers may be omitted in the prompt (it’s one recitation) but
+              the title is the pack name plus a quiet “n verses” subtitle.
+              Do not require typing verse numbers.
+            </li>
+            <li>
+              After a successful grade, session-complete is a single summary
+              (one accuracy). All members now share the next dueAt; pack
+              dueCount is 0 until that day.
+            </li>
+            <li>
+              Opus focus: the enable moment (awkward 2-due-then-2-not problem)
+              should feel like the solution, not a settings footnote. Prefer a
+              short explanation + one confirm over a dense settings panel.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes.
+            </li>
+            <li>
+              Pack review with the flag off is still N due span cards.
+            </li>
+            <li>
+              Composite record path does not call
+              <code>verseMemory.recordAttempt</code>.
+            </li>
+            <li>
+              Behavioral / visual (manual): enable unified on a graduated
+              chapter pack → one card with full text; a grade updates every
+              member’s dueAt identically; global Review no longer lists those
+              spans individually; disable returns them to the global queue
+              still sharing that dueAt.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <section id="risks">
+        <div class="eyebrow">Eyes open</div>
+        <h2>Risks &amp; how the plan answers them</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Risk</th>
+                <th>Mitigation (baked into the PR sequence)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ESV fetch of 20 chapters is slow or 429s</td>
+                <td>
+                  Cap at 20; reuse <code>getChaptersBatch</code> backoff; preview
+                  skeleton; disable rather than attempting Psalms or the whole
+                  Bible (PR 1 + 3).
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Convex write limits on hearting a packed small-book
+                </td>
+                <td>
+                  <code>HEART_MANY_CHUNK = 40</code> client chunking (PR 2–3).
+                </td>
+              </tr>
+              <tr>
+                <td>Grouping glues a psalm into one giant card</td>
+                <td>
+                  Heading / paragraph / 4-verse / 40-word caps (PR 1 tests).
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Unified recitation of 20 chapters is an enormous typed card
+                </td>
+                <td>
+                  Allowed (ambition). Card must scroll; no extra hard cap.
+                  User opted into the scope (PR 7).
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  One lapse resets an entire chapter to Guided
+                </td>
+                <td>
+                  Accepted lockstep rule, documented in Settled decisions.
+                  Conservative canonical schedule (shortest interval) so we do
+                  not over-interval weak verses (PR 6).
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Global due queue still shows 30 John 3 cards
+                </td>
+                <td>
+                  dueQueue / memoryStats.due exclusion + pack dueCount 0|1 (PR
+                  6), wired in UI (PR 7).
+                </td>
+              </tr>
+              <tr>
+                <td>Design-quality preview / recitation UX</td>
+                <td>
+                  PRs 3, 4, 7 implemented by Opus
+                  (<code>claude-opus-5-thinking-high</code>).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        Berean · Scope-pack memory implementation plan · grounded in the
+        current codebase.
+      </footer>
+    </div>
+  </body>
+</html>
