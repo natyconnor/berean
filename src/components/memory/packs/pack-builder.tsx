@@ -9,10 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useScopeHeartPreview } from "@/hooks/use-scope-heart-preview";
 import { ScopeForm } from "@/components/study/scope-form";
 import { useScopeForm } from "@/components/study/use-scope-form";
+import { heartSpansInChunks } from "@/lib/heart-many-client";
 
 import { PackVersePicker } from "./pack-verse-picker";
+import { ScopeHeartPreview } from "./scope-heart-preview";
 import {
   packVerseKey,
   type HeartedVerse,
@@ -33,6 +36,7 @@ export function PackBuilder() {
 
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PackKind>("scope");
+  const [autoHeart, setAutoHeart] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,9 +49,11 @@ export function PackBuilder() {
   );
 
   // Custom pack membership always hearts the verse when the pack is saved.
+  // Scope packs need the same list to tell auto-heart gaps from kept hearts.
+  const wantsHearts = kind === "custom" || (kind === "scope" && autoHeart);
   const savedVerses = useQuery(
     api.savedVerses.listAll,
-    kind === "custom" ? {} : "skip",
+    wantsHearts ? {} : "skip",
   );
   const heartedVerses = useMemo<HeartedVerse[]>(
     () =>
@@ -68,6 +74,13 @@ export function PackBuilder() {
     [savedVerses],
   );
 
+  const heartPreview = useScopeHeartPreview({
+    scope: scopeForPreview,
+    hearts: savedVerses === undefined ? null : heartedVerses,
+    enabled: kind === "scope" && autoHeart,
+  });
+  const autoHeartActive = kind === "scope" && autoHeart && heartPreview.allowed;
+
   const [staged, setStaged] = useState<Map<string, PackableVerse>>(new Map());
 
   const toggleStaged = useCallback((verse: PackableVerse) => {
@@ -85,6 +98,7 @@ export function PackBuilder() {
 
   const createPack = useMutation(api.packs.create);
   const addVerse = useMutation(api.packs.addVerse);
+  const heartMany = useMutation(api.savedVerses.heartMany);
 
   const trimmedName = name.trim();
   const effectiveName =
@@ -96,7 +110,17 @@ export function PackBuilder() {
 
   const canCreate =
     !isCreating &&
+    !(autoHeartActive && heartPreview.loading) &&
     (kind === "scope" || staged.size > 0 || trimmedName.length > 0);
+
+  // Explains both what create will heart and why it waits on the preview.
+  const autoHeartSummary = !autoHeartActive
+    ? ""
+    : heartPreview.loading
+      ? " · preparing hearts\u2026"
+      : heartPreview.error
+        ? ""
+        : ` · ${heartPreview.proposedCount} to heart`;
 
   const handleCreate = useCallback(async () => {
     // Guard against double-submits: the button is disabled while creating, but
@@ -138,6 +162,20 @@ export function PackBuilder() {
         }
       }
 
+      // Only the proposed gaps are hearted; kept spans already exist.
+      if (autoHeartActive && heartPreview.proposedSpans.length > 0) {
+        const result = await heartSpansInChunks(
+          heartMany,
+          heartPreview.proposedSpans,
+          Date.now(),
+        );
+        if (result.failedChunks > 0) {
+          setError(
+            "Some verses couldn't be hearted. You can heart them from the pack.",
+          );
+        }
+      }
+
       void navigate({ to: "/memory/$packId", params: { packId } });
     } catch {
       setError("Couldn't create the pack. Please try again.");
@@ -152,6 +190,9 @@ export function PackBuilder() {
     scopeForPreview,
     staged,
     addVerse,
+    autoHeartActive,
+    heartPreview.proposedSpans,
+    heartMany,
     navigate,
   ]);
 
@@ -220,21 +261,30 @@ export function PackBuilder() {
           </section>
 
           {kind === "scope" ? (
-            <ScopeForm
-              selectedBooks={scopeForm.selectedBooks}
-              chapterRanges={scopeForm.chapterRanges}
-              selectedTags={scopeForm.selectedTags}
-              tagMatchMode={scopeForm.tagMatchMode}
-              onToggleBook={scopeForm.onToggleBook}
-              onSetBooks={scopeForm.onSetBooks}
-              onSetChapterRange={scopeForm.onSetChapterRange}
-              onSelectPreset={scopeForm.onSelectPreset}
-              onToggleTag={scopeForm.onToggleTag}
-              onClearTags={scopeForm.onClearTags}
-              onSetTagMatchMode={scopeForm.onSetTagMatchMode}
-              passageDescription="Choose which books and chapters this pack covers."
-              showTagFilter={false}
-            />
+            <>
+              <ScopeForm
+                selectedBooks={scopeForm.selectedBooks}
+                chapterRanges={scopeForm.chapterRanges}
+                selectedTags={scopeForm.selectedTags}
+                tagMatchMode={scopeForm.tagMatchMode}
+                onToggleBook={scopeForm.onToggleBook}
+                onSetBooks={scopeForm.onSetBooks}
+                onSetChapterRange={scopeForm.onSetChapterRange}
+                onSelectPreset={scopeForm.onSelectPreset}
+                onToggleTag={scopeForm.onToggleTag}
+                onClearTags={scopeForm.onClearTags}
+                onSetTagMatchMode={scopeForm.onSetTagMatchMode}
+                passageDescription="Choose which books and chapters this pack covers."
+                showTagFilter={false}
+              />
+              <ScopeHeartPreview
+                enabled={autoHeart}
+                onEnabledChange={setAutoHeart}
+                scopeLabel={summaryText}
+                preview={heartPreview}
+                disabled={isCreating}
+              />
+            </>
           ) : (
             <section className="space-y-3">
               <div className="space-y-1">
@@ -281,6 +331,7 @@ export function PackBuilder() {
                     }`
                   : "Counting…"
                 : `${staged.size} verse${staged.size !== 1 ? "s" : ""} selected`}
+              {autoHeartSummary}
             </p>
           </div>
           <Button onClick={handleCreate} disabled={!canCreate}>
