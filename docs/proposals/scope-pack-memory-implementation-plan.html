@@ -432,7 +432,7 @@
                   heading, subheading, paragraph break (<code>\n\n</code>). Soft
                   merge when the current group does not end a sentence, or both
                   sides are short (≤ <code>SHORT_VERSE_WORDS</code> = 10),
-                  provided the group stays ≤ 4 verses and ≤ 40 words.
+                  provided the group stays ≤ 4 verses and ≤ 60 words.
                 </td>
               </tr>
               <tr>
@@ -649,7 +649,7 @@ unifiedReviewEnabled: v.optional(v.boolean()),
         <h3>Constants</h3>
         <pre><code><span class="k">export const</span> AUTO_HEART_MAX_CHAPTERS = <span class="s">20</span>;
 <span class="k">export const</span> MAX_GROUP_VERSES = <span class="s">4</span>;
-<span class="k">export const</span> MAX_GROUP_WORDS = <span class="s">40</span>;
+<span class="k">export const</span> MAX_GROUP_WORDS = <span class="s">60</span>;
 <span class="c">// Reuse SHORT_VERSE_WORDS = 10 from memory-scheduler.ts</span>
 <span class="k">export const</span> HEART_MANY_CHUNK = <span class="s">40</span>; <span class="c">// max spans per heartMany call</span></code></pre>
 
@@ -695,7 +695,7 @@ unifiedReviewEnabled: v.optional(v.boolean()),
           hole, chapter boundary (caller splits chapters),
           <code>heading</code> or <code>subheading</code> on the next verse,
           paragraph break (previous verse text contains or ends with
-          <code>\n\n</code>), or caps (4 verses / 40 words). Otherwise merge if
+          <code>\n\n</code>), or caps (4 verses / 60 words). Otherwise merge if
           the current group does not <code>verseEndsSentence</code>, or if both
           the current group and the next verse are ≤ 10 words. Poetry without
           periods still stops on paragraph, heading, and caps.
@@ -1041,7 +1041,7 @@ composite?: {
                   period.
                 </li>
                 <li>
-                  Caps: never more than 4 verses or 40 words in a proposed
+                  Caps: never more than 4 verses or 60 words in a proposed
                   group.
                 </li>
                 <li>
@@ -1746,7 +1746,7 @@ composite?: {
               <tr>
                 <td>Grouping glues a psalm into one giant card</td>
                 <td>
-                  Heading / paragraph / 4-verse / 40-word caps (PR 1 tests).
+                  Heading / paragraph / 4-verse / 60-word caps (PR 1 tests).
                 </td>
               </tr>
               <tr>
