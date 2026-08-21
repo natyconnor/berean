@@ -93,7 +93,11 @@ export function PackList({ now }: { now: number }) {
                         {pack.kind === "scope" ? "Scope" : "Custom"} ·{" "}
                         {pack.verseCount} verse
                         {pack.verseCount !== 1 ? "s" : ""}
-                        {pack.dueCount > 0 ? ` · ${pack.dueCount} due` : ""}
+                        {pack.dueCount === 0
+                          ? ""
+                          : pack.unifiedReviewEnabled
+                            ? " · one recitation due"
+                            : ` · ${pack.dueCount} due`}
                       </span>
                     </span>
                   </Link>

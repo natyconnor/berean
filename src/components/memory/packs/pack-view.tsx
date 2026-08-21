@@ -9,6 +9,7 @@ import {
   Pencil,
   Play,
   Plus,
+  ScrollText,
   SearchX,
   Trash2,
   X,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -55,6 +57,7 @@ import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { VerseDetail } from "@/components/memory/verse-detail";
 import { formatScopeSummary } from "@/components/study/study-scope-summary";
 
+import { EnableUnifiedReviewDialog } from "./enable-unified-review-dialog";
 import { PackVersePicker } from "./pack-verse-picker";
 import { ScopeHeartPreview } from "./scope-heart-preview";
 import {
@@ -227,6 +230,7 @@ function PackViewMain({
   const addVerse = useMutation(api.packs.addVerse);
   const removeVerse = useMutation(api.packs.removeVerse);
   const enrollLearning = useMutation(api.packs.enrollLearning);
+  const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(pack.name);
@@ -240,6 +244,10 @@ function PackViewMain({
   const [isRenaming, setIsRenaming] = useState(false);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [heartRemainingOpen, setHeartRemainingOpen] = useState(false);
+  const [unifiedDialogOpen, setUnifiedDialogOpen] = useState(false);
+  const [isSettingUnified, setIsSettingUnified] = useState(false);
+  const [unifiedError, setUnifiedError] = useState<string | null>(null);
+  const [unifiedJustDisabled, setUnifiedJustDisabled] = useState(false);
   const [removingRefId, setRemovingRefId] = useState<Id<"verseRefs"> | null>(
     null,
   );
@@ -323,6 +331,39 @@ function PackViewMain({
     }
   }, [enrollLearning, isEnrolling, now, onLearn, packId]);
 
+  // Same session clock as enrollLearning: the mutation pulls every member's
+  // `dueAt` to this `now`, which is the clock the due queues read from.
+  const handleEnableUnified = useCallback(async () => {
+    if (isSettingUnified) return;
+    setUnifiedError(null);
+    setIsSettingUnified(true);
+    try {
+      await setUnifiedReview({ id: packId, enabled: true, now });
+      setUnifiedJustDisabled(false);
+      setUnifiedDialogOpen(false);
+      // The point of confirming is to recite it, so go straight there.
+      onReview();
+    } catch {
+      setUnifiedError("Couldn't turn this on. Please try again.");
+    } finally {
+      setIsSettingUnified(false);
+    }
+  }, [isSettingUnified, now, onReview, packId, setUnifiedReview]);
+
+  const handleDisableUnified = useCallback(async () => {
+    if (isSettingUnified) return;
+    setActionError(null);
+    setIsSettingUnified(true);
+    try {
+      await setUnifiedReview({ id: packId, enabled: false, now });
+      setUnifiedJustDisabled(true);
+    } catch {
+      setActionError("Couldn't turn this off. Please try again.");
+    } finally {
+      setIsSettingUnified(false);
+    }
+  }, [isSettingUnified, now, packId, setUnifiedReview]);
+
   const handleRemove = useCallback(
     async (verseRefId: Id<"verseRefs">) => {
       setActionError(null);
@@ -343,6 +384,15 @@ function PackViewMain({
   const canPractice = practiceCount > 0;
   const canEnroll = newCount > 0;
 
+  // Unified recitation: a scope pack whose every member has graduated. While
+  // one is on, the pack counts as a single due item (matching the pack list).
+  const unifiedEnabled = pack.unifiedReviewEnabled === true;
+  const allGraduated = verseCount > 0 && practiceCount === verseCount;
+  const showUnifiedPanel =
+    pack.kind === "scope" && (verseCount > 0 || unifiedEnabled);
+  const effectiveDueCount = unifiedEnabled ? (dueCount > 0 ? 1 : 0) : dueCount;
+  const notDueCount = verseCount - dueCount;
+
   // A scope pack's members are exactly the hearts inside its scope, so they
   // are also the coverage input: no extra query needed to spot the gaps.
   const scope = pack.kind === "scope" ? pack.scope : undefined;
@@ -358,13 +408,16 @@ function PackViewMain({
   );
   // Over-cap scopes offer nothing here: create already explained the limit, and
   // a permanently disabled button on an existing pack would only be noise.
+  // A unified pack also withholds the offer: fresh hearts arrive as new units,
+  // and they would block the recitation this pack is currently scheduled as.
   const canHeartRemaining = useMemo(
     () =>
+      !unifiedEnabled &&
       scope !== undefined &&
       members !== undefined &&
       autoHeartAllowed(scope) &&
       !scopeCoverageComplete(scope, memberSpans),
-    [scope, members, memberSpans],
+    [unifiedEnabled, scope, members, memberSpans],
   );
 
   return (
@@ -392,7 +445,12 @@ function PackViewMain({
             <p className="mt-0.5 text-xs text-muted-foreground">
               {isCustom ? "Custom" : "Scope"} · {verseCount} verse
               {verseCount !== 1 ? "s" : ""}
-              {dueCount > 0 ? ` · ${dueCount} due` : ""}
+              {unifiedEnabled ? " · one recitation" : ""}
+              {effectiveDueCount === 0
+                ? ""
+                : unifiedEnabled
+                  ? " · due today"
+                  : ` · ${dueCount} due`}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -455,10 +513,10 @@ function PackViewMain({
             disabled={!canReview}
           >
             <Play className="h-4 w-4" aria-hidden />
-            Review
-            {dueCount > 0 ? (
+            {unifiedEnabled && canReview ? "Review passage" : "Review"}
+            {effectiveDueCount > 0 ? (
               <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
-                {dueCount}
+                {effectiveDueCount}
               </span>
             ) : null}
           </Button>
@@ -496,7 +554,23 @@ function PackViewMain({
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-2xl px-5 py-6">
+        <div className="mx-auto max-w-2xl space-y-6 px-5 py-6">
+          {showUnifiedPanel ? (
+            <UnifiedReviewPanel
+              packName={pack.name}
+              verseCount={verseCount}
+              enabled={unifiedEnabled}
+              eligible={allGraduated}
+              pending={isSettingUnified}
+              justDisabled={unifiedJustDisabled}
+              onEnable={() => {
+                setUnifiedError(null);
+                setUnifiedDialogOpen(true);
+              }}
+              onDisable={() => void handleDisableUnified()}
+            />
+          ) : null}
+
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -680,6 +754,20 @@ function PackViewMain({
         </DialogContent>
       </Dialog>
 
+      <EnableUnifiedReviewDialog
+        open={unifiedDialogOpen}
+        onOpenChange={(open) => {
+          setUnifiedDialogOpen(open);
+          if (!open) setUnifiedError(null);
+        }}
+        packName={pack.name}
+        verseCount={verseCount}
+        notDueCount={notDueCount}
+        isEnabling={isSettingUnified}
+        error={unifiedError}
+        onConfirm={() => void handleEnableUnified()}
+      />
+
       {scope && canHeartRemaining ? (
         <HeartRemainingDialog
           open={heartRemainingOpen}
@@ -699,6 +787,90 @@ function PackViewMain({
         onAdd={handleAdd}
       />
     </div>
+  );
+}
+
+/**
+ * The switch that turns a graduated scope pack into one recitation.
+ *
+ * A pack of short units drips its reviews out a couple at a time, which is
+ * exactly the wrong shape for a passage you want to say straight through. This
+ * panel names that problem in the copy and offers the one-line fix; the confirm
+ * dialog handles the consequence (everything moves to today).
+ */
+function UnifiedReviewPanel({
+  packName,
+  verseCount,
+  enabled,
+  eligible,
+  pending,
+  justDisabled,
+  onEnable,
+  onDisable,
+}: {
+  packName: string;
+  verseCount: number;
+  enabled: boolean;
+  /** Every member has graduated, so a recitation is possible. */
+  eligible: boolean;
+  pending: boolean;
+  /** Just switched off in this session, so the fallout is worth a line. */
+  justDisabled: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
+}) {
+  const unitLabel = `${verseCount} unit${verseCount === 1 ? "" : "s"}`;
+  const description = enabled
+    ? `${unitLabel} on one schedule. Review is a single card — recite ${packName} straight through, and one grade sets the next date for all of them.`
+    : eligible
+      ? verseCount === 1
+        ? `${packName} is one unit today. Turn this on to review it as a single recitation, and anything you add later joins the same schedule.`
+        : `${unitLabel}, ${verseCount} separate schedules — ${packName} comes back a piece at a time. Turn this on to review it as one recitation instead.`
+      : "Finish learning this pack first — every unit has to graduate before they can share one recitation.";
+
+  return (
+    <section
+      className={cn(
+        "rounded-xl border bg-card p-4 shadow-sm",
+        // Eligible-but-off is an offer, not a setting: give it a little pull.
+        !enabled && eligible && "border-primary/30 bg-primary/[0.03]",
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <ScrollText
+              aria-hidden
+              className={cn(
+                "h-4 w-4",
+                enabled ? "text-primary" : "text-muted-foreground",
+              )}
+            />
+            Recite as one passage
+            {enabled ? (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                On
+              </span>
+            ) : null}
+          </h2>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {description}
+          </p>
+          {!enabled && justDisabled ? (
+            <p className="text-xs leading-5 text-muted-foreground/80">
+              Back to unit-by-unit reviews. They keep the due date they share
+              now until you review them one at a time.
+            </p>
+          ) : null}
+        </div>
+        <Switch
+          checked={enabled}
+          disabled={pending || (!enabled && !eligible)}
+          onCheckedChange={(next) => (next ? onEnable() : onDisable())}
+          aria-label="Recite as one passage"
+        />
+      </div>
+    </section>
   );
 }
 

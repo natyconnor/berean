@@ -68,6 +68,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       removeVerse: "packs.removeVerse",
       rename: "packs.rename",
       resolveMembers: "packs.resolveMembers",
+      setUnifiedReview: "packs.setUnifiedReview",
       touch: "packs.touch",
     },
     savedVerses: {
@@ -127,9 +128,11 @@ function member(
 function renderPack({
   kind = "scope",
   members,
+  unifiedReviewEnabled,
 }: {
   kind?: "scope" | "custom";
   members: ReturnType<typeof member>[];
+  unifiedReviewEnabled?: boolean;
 }) {
   queryResults.set("packs.get", {
     _id: PACK_ID,
@@ -138,6 +141,7 @@ function renderPack({
     scope: kind === "scope" ? psalm23Scope : undefined,
     createdAt: 0,
     lastOpenedAt: 0,
+    unifiedReviewEnabled,
   });
   queryResults.set("packs.resolveMembers", members);
   queryResults.set("savedVerses.listAll", []);
@@ -234,6 +238,17 @@ describe("PackView", () => {
     ).not.toBeInTheDocument();
     covered.unmount();
 
+    // Recited as one passage: a fresh heart would arrive as a new unit and
+    // block the recitation, so the offer is withheld until it is switched off.
+    const unified = renderPack({
+      unifiedReviewEnabled: true,
+      members: [member({ startVerse: 1, endVerse: 2, status: "reviewing" })],
+    });
+    expect(
+      header().queryByRole("button", { name: "Heart remaining" }),
+    ).not.toBeInTheDocument();
+    unified.unmount();
+
     renderPack({
       kind: "custom",
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
@@ -291,6 +306,127 @@ describe("PackView", () => {
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps the recitation switch off-limits until every unit has graduated", () => {
+    const { unmount } = renderPack({
+      members: [
+        member({ startVerse: 1, endVerse: 3, status: "reviewing" }),
+        member({ startVerse: 4, endVerse: 6, status: "learning" }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("switch", { name: "Recite as one passage" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/Finish learning this pack first/),
+    ).toBeInTheDocument();
+    unmount();
+
+    renderPack({
+      members: [
+        member({ startVerse: 1, endVerse: 3, status: "reviewing" }),
+        member({ startVerse: 4, endVerse: 6, status: "mastered" }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("switch", { name: "Recite as one passage" }),
+    ).toBeEnabled();
+  });
+
+  it("hides the recitation switch on a custom pack", () => {
+    renderPack({
+      kind: "custom",
+      members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
+    });
+
+    expect(
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("confirms before syncing reviews, then opens the recitation", async () => {
+    renderPack({
+      members: [
+        member({
+          startVerse: 1,
+          endVerse: 3,
+          status: "reviewing",
+          isDue: true,
+        }),
+        member({ startVerse: 4, endVerse: 6, status: "reviewing" }),
+      ],
+    });
+
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Recite as one passage" }),
+    );
+
+    // The awkward part is named out loud: the unit that isn't due yet moves.
+    expect(
+      await screen.findByText(/Recite Psalm 23 as one passage\?/),
+    ).toBeVisible();
+    expect(screen.getByText(/1 of 2 units isn't due yet/)).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Turn on and recite" }),
+    );
+
+    const setUnified = mutationMock("packs.setUnifiedReview");
+    expect(setUnified).toHaveBeenCalledTimes(1);
+    expect(setUnified).toHaveBeenCalledWith({
+      id: PACK_ID,
+      enabled: true,
+      // The same frozen clock enrollLearning uses, so the pulled-forward
+      // `dueAt` reads as due to the queues.
+      now: getSessionNow(),
+    });
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/memory/$packId/review",
+        params: { packId: PACK_ID },
+      });
+    });
+  });
+
+  it("reviews a unified pack as one due item, and switches back off without a dialog", async () => {
+    renderPack({
+      unifiedReviewEnabled: true,
+      members: [
+        member({
+          startVerse: 1,
+          endVerse: 3,
+          status: "reviewing",
+          isDue: true,
+        }),
+        member({
+          startVerse: 4,
+          endVerse: 6,
+          status: "reviewing",
+          isDue: true,
+        }),
+      ],
+    });
+
+    const review = header().getByRole("button", { name: /Review passage/ });
+    expect(review).toHaveTextContent("1");
+    expect(
+      header().getByText(/one recitation · due today/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Recite as one passage" }),
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const setUnified = mutationMock("packs.setUnifiedReview");
+    expect(setUnified).toHaveBeenCalledWith({
+      id: PACK_ID,
+      enabled: false,
+      now: getSessionNow(),
     });
   });
 });
