@@ -3,14 +3,19 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
-import { seedVerseMemory } from "./lib/verseMemory";
+import {
+  adjustUserMemoryStats,
+  findVerseMemory,
+  isLiveHeartedMemory,
+  seedVerseMemory,
+} from "./lib/verseMemory";
 import {
   filterScopeMembers,
   loadCustomMembers,
   loadHeartedMembers,
   loadOwnedPack,
+  loadPackMembers,
   nextPackOrder,
-  type PackMember,
 } from "./lib/packs";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import { isDueForReview } from "../src/lib/memory-scheduler";
@@ -421,18 +426,48 @@ export const resolveMembers = query({
     const pack = await loadOwnedPack(ctx, args.id, userId);
     if (!pack) return [];
 
-    let members: PackMember[];
-    if (pack.kind === "scope" && pack.scope) {
-      const hearted = await loadHeartedMembers(ctx, userId);
-      members = filterScopeMembers(hearted, pack.scope);
-    } else {
-      members = await loadCustomMembers(ctx, userId, args.id);
-    }
+    const members = await loadPackMembers(ctx, userId, pack);
 
     return members.map((m) => ({
       ...m,
       isDue: isDueForReview(m, args.now),
     }));
+  },
+});
+
+/**
+ * Queue every `new` member of a pack for learning, so the whole set can be
+ * learned in one session instead of one span at a time.
+ *
+ * Only `new` rows move: they become `learning` and due now, keeping their
+ * (zero) learn band and reps. Rows already learning, reviewing, or mastered
+ * keep their schedule untouched, which also makes a repeat call enroll 0.
+ */
+export const enrollLearning = mutation({
+  args: { id: v.id("packs"), now: v.number() },
+  returns: v.object({ enrolled: v.number() }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+
+    const members = await loadPackMembers(ctx, userId, pack);
+
+    let enrolled = 0;
+    for (const member of members) {
+      if (member.status !== "new") continue;
+
+      const memory = await findVerseMemory(ctx, userId, member.verseRefId);
+      if (!memory || memory.status !== "new") continue;
+
+      await ctx.db.patch(memory._id, { status: "learning", dueAt: args.now });
+      if (isLiveHeartedMemory(memory)) {
+        await adjustUserMemoryStats(ctx, userId, args.now, "new", "learning");
+      }
+      enrolled += 1;
+    }
+
+    return { enrolled };
   },
 });
 

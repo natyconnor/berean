@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Dumbbell,
   GraduationCap,
+  Heart,
   Loader2,
   Pencil,
   Play,
@@ -36,19 +37,26 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useScopeHeartPreview } from "@/hooks/use-scope-heart-preview";
+import { heartSpansInChunks } from "@/lib/heart-many-client";
+import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
+import { autoHeartAllowed } from "@/lib/scope-chapter-count";
+import { scopeCoverageComplete } from "@/lib/scope-verse-coverage";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { MemoryVerseListAction } from "@/components/memory/memory-verse-list-action";
 import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { VerseDetail } from "@/components/memory/verse-detail";
+import { formatScopeSummary } from "@/components/study/study-scope-summary";
 
 import { PackVersePicker } from "./pack-verse-picker";
+import { ScopeHeartPreview } from "./scope-heart-preview";
 import {
   packVerseKey,
   type HeartedVerse,
@@ -84,6 +92,10 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
   const learningDueCount = useMemo(
     () => (members ?? []).filter((m) => isDueForLearning(m, now)).length,
     [members, now],
+  );
+  const newCount = useMemo(
+    () => (members ?? []).filter((m) => m.status === "new").length,
+    [members],
   );
   const practiceCount = useMemo(
     () => (members ?? []).filter((m) => isReviewPhase(m.status)).length,
@@ -133,6 +145,7 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
       now={now}
       dueCount={dueMembers.length}
       learningDueCount={learningDueCount}
+      newCount={newCount}
       practiceCount={practiceCount}
       onBack={() => void navigate({ to: "/memory" })}
       onReview={() =>
@@ -180,6 +193,7 @@ function PackViewMain({
   now,
   dueCount,
   learningDueCount,
+  newCount,
   practiceCount,
   onBack,
   onReview,
@@ -195,6 +209,7 @@ function PackViewMain({
   now: number;
   dueCount: number;
   learningDueCount: number;
+  newCount: number;
   practiceCount: number;
   onBack: () => void;
   onReview: () => void;
@@ -211,6 +226,7 @@ function PackViewMain({
   const remove = useMutation(api.packs.remove);
   const addVerse = useMutation(api.packs.addVerse);
   const removeVerse = useMutation(api.packs.removeVerse);
+  const enrollLearning = useMutation(api.packs.enrollLearning);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(pack.name);
@@ -222,6 +238,8 @@ function PackViewMain({
   const [pendingVerseKey, setPendingVerseKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isEnrolling, setIsEnrolling] = useState(false);
+  const [heartRemainingOpen, setHeartRemainingOpen] = useState(false);
   const [removingRefId, setRemovingRefId] = useState<Id<"verseRefs"> | null>(
     null,
   );
@@ -288,6 +306,23 @@ function PackViewMain({
     [addVerse, packId, pendingVerseKey],
   );
 
+  // Enroll on the session clock the queues read from: a live `Date.now()` can
+  // land the fresh `dueAt` far enough ahead of the frozen `now` to look like a
+  // finished learning session, hiding the verses the click just queued.
+  const handleLearnPack = useCallback(async () => {
+    if (isEnrolling) return;
+    setActionError(null);
+    setIsEnrolling(true);
+    try {
+      await enrollLearning({ id: packId, now });
+      onLearn();
+    } catch {
+      setActionError("Couldn't start this pack. Please try again.");
+    } finally {
+      setIsEnrolling(false);
+    }
+  }, [enrollLearning, isEnrolling, now, onLearn, packId]);
+
   const handleRemove = useCallback(
     async (verseRefId: Id<"verseRefs">) => {
       setActionError(null);
@@ -306,6 +341,31 @@ function PackViewMain({
   const canReview = dueCount > 0;
   const canLearn = learningDueCount > 0;
   const canPractice = practiceCount > 0;
+  const canEnroll = newCount > 0;
+
+  // A scope pack's members are exactly the hearts inside its scope, so they
+  // are also the coverage input: no extra query needed to spot the gaps.
+  const scope = pack.kind === "scope" ? pack.scope : undefined;
+  const memberSpans = useMemo<VerseSpan[]>(
+    () =>
+      (members ?? []).map(({ book, chapter, startVerse, endVerse }) => ({
+        book,
+        chapter,
+        startVerse,
+        endVerse,
+      })),
+    [members],
+  );
+  // Over-cap scopes offer nothing here: create already explained the limit, and
+  // a permanently disabled button on an existing pack would only be noise.
+  const canHeartRemaining = useMemo(
+    () =>
+      scope !== undefined &&
+      members !== undefined &&
+      autoHeartAllowed(scope) &&
+      !scopeCoverageComplete(scope, memberSpans),
+    [scope, members, memberSpans],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -359,8 +419,22 @@ function PackViewMain({
             </Button>
           </div>
         </div>
-        <div className="mt-3 flex gap-2">
-          {canLearn ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {canEnroll ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => void handleLearnPack()}
+              disabled={isEnrolling}
+            >
+              <GraduationCap className="h-4 w-4" aria-hidden />
+              {isEnrolling ? "Starting\u2026" : "Learn this pack"}
+              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted-foreground tabular-nums">
+                {newCount + learningDueCount}
+              </span>
+            </Button>
+          ) : canLearn ? (
             <Button
               size="sm"
               variant="outline"
@@ -398,6 +472,17 @@ function PackViewMain({
             <Dumbbell className="h-4 w-4" aria-hidden />
             Practice Pack
           </Button>
+          {canHeartRemaining ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="gap-1.5 text-muted-foreground"
+              onClick={() => setHeartRemainingOpen(true)}
+            >
+              <Heart className="h-4 w-4" aria-hidden />
+              Heart remaining
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -437,7 +522,9 @@ function PackViewMain({
                 <p className="text-sm text-muted-foreground">
                   {isCustom
                     ? "No verses yet. Add a verse from your hearted list or by browsing."
-                    : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
+                    : canHeartRemaining
+                      ? "No verses yet. Heart remaining adds every verse in this scope as short memory units — or heart them in the reader and they'll appear automatically."
+                      : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
                 </p>
               </div>
             ) : (
@@ -593,6 +680,15 @@ function PackViewMain({
         </DialogContent>
       </Dialog>
 
+      {scope && canHeartRemaining ? (
+        <HeartRemainingDialog
+          open={heartRemainingOpen}
+          onOpenChange={setHeartRemainingOpen}
+          scope={scope}
+          hearts={memberSpans}
+        />
+      ) : null}
+
       <AddVersesDialog
         open={addOpen}
         onOpenChange={setAddOpen}
@@ -603,6 +699,91 @@ function PackViewMain({
         onAdd={handleAdd}
       />
     </div>
+  );
+}
+
+/**
+ * Fill a scope pack's coverage gaps with the same proposal the pack builder
+ * shows at create time: chips for the memory units that would be added, kept
+ * hearts left exactly as they are. Confirming hearts only the proposed gaps.
+ */
+function HeartRemainingDialog({
+  open,
+  onOpenChange,
+  scope,
+  hearts,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  scope: NonNullable<Pack["scope"]>;
+  hearts: VerseSpan[];
+}) {
+  const heartMany = useMutation(api.savedVerses.heartMany);
+  const [isHearting, setIsHearting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Passage text is fetched only while the dialog is open.
+  const preview = useScopeHeartPreview({ scope, hearts, enabled: open });
+  const { proposedCount, proposedSpans } = preview;
+
+  const handleHeart = useCallback(async () => {
+    if (isHearting) return;
+    setError(null);
+    setIsHearting(true);
+    const result = await heartSpansInChunks(
+      heartMany,
+      proposedSpans,
+      Date.now(),
+    );
+    setIsHearting(false);
+    if (result.failedChunks > 0) {
+      setError("Some verses couldn't be hearted. Try again to fill the rest.");
+      return;
+    }
+    onOpenChange(false);
+  }, [heartMany, isHearting, onOpenChange, proposedSpans]);
+
+  const canHeart =
+    !isHearting && !preview.loading && !preview.error && proposedCount > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Heart remaining verses</DialogTitle>
+          <DialogDescription>
+            Scope packs draw from the verses you&apos;ve hearted. Heart this
+            scope now to fill in what&apos;s missing.
+          </DialogDescription>
+        </DialogHeader>
+        <ScopeHeartPreview
+          variant="compact"
+          scopeLabel={formatScopeSummary(scope)}
+          preview={preview}
+        />
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isHearting}
+          >
+            Cancel
+          </Button>
+          <Button onClick={() => void handleHeart()} disabled={!canHeart}>
+            {isHearting
+              ? "Hearting\u2026"
+              : preview.loading
+                ? "Preparing\u2026"
+                : `Heart ${proposedCount} new unit${proposedCount === 1 ? "" : "s"}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

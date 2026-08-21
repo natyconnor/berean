@@ -94,6 +94,22 @@ export async function loadHeartedMembers(
   return members;
 }
 
+/**
+ * A pack's current members: scope packs resolve live from hearted verses,
+ * custom packs from their explicit membership rows.
+ */
+export async function loadPackMembers(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  pack: Doc<"packs">,
+): Promise<PackMember[]> {
+  if (pack.kind === "scope" && pack.scope) {
+    const hearted = await loadHeartedMembers(ctx, userId);
+    return filterScopeMembers(hearted, pack.scope);
+  }
+  return await loadCustomMembers(ctx, userId, pack._id);
+}
+
 /** Hearted members that fall inside a scope, in canonical Bible order. */
 export function filterScopeMembers(
   hearted: PackMember[],
