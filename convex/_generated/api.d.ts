@@ -20,6 +20,7 @@ import type * as lib_noteContent from "../lib/noteContent.js";
 import type * as lib_onboarding from "../lib/onboarding.js";
 import type * as lib_packs from "../lib/packs.js";
 import type * as lib_publicValues from "../lib/publicValues.js";
+import type * as lib_savedVerses from "../lib/savedVerses.js";
 import type * as lib_seed_devSeedSupport from "../lib/seed/devSeedSupport.js";
 import type * as lib_tags from "../lib/tags.js";
 import type * as lib_tutorial from "../lib/tutorial.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   "lib/onboarding": typeof lib_onboarding;
   "lib/packs": typeof lib_packs;
   "lib/publicValues": typeof lib_publicValues;
+  "lib/savedVerses": typeof lib_savedVerses;
   "lib/seed/devSeedSupport": typeof lib_seed_devSeedSupport;
   "lib/tags": typeof lib_tags;
   "lib/tutorial": typeof lib_tutorial;
