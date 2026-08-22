@@ -339,11 +339,10 @@
           is <em>one pull request</em>. Do them in order. Do not start the next
           PR until the current one is green: implement only what that PR lists,
           run <code>pnpm run agent:check</code>, satisfy the PR's acceptance
-          criteria, then stop.
-          <strong>Orchestrator model rule:</strong> PRs 3, 4, and 7 are
-          design-implementation PRs. Spawn those implementer subagents with
-          <code>model: "claude-opus-5-thinking-high"</code>. All other PRs use
-          the default inherited model.
+          criteria, then stop. <strong>Orchestrator model rule:</strong> PRs 3,
+          4, and 7 are design-implementation PRs. Spawn those implementer
+          subagents with <code>model: "claude-opus-5-thinking-high"</code>. All
+          other PRs use the default inherited model.
         </div>
       </header>
 
@@ -487,8 +486,7 @@
             <tbody>
               <tr>
                 <td class="fileref">
-                  convex/schema.ts → packs, savedVerses, verseMemory,
-                  verseRefs
+                  convex/schema.ts → packs, savedVerses, verseMemory, verseRefs
                 </td>
                 <td>
                   Hearts are exact spans. Scope packs resolve live from
@@ -529,8 +527,7 @@
               <tr>
                 <td class="fileref">
                   src/lib/memory-scheduler.ts → SHORT_VERSE_WORDS,
-                  countVerseWords, scheduleNext, isDueForLearning,
-                  isReviewPhase
+                  countVerseWords, scheduleNext, isDueForLearning, isReviewPhase
                 </td>
                 <td>
                   Grouping uses the same 10-word short-verse threshold. Unified
@@ -584,8 +581,7 @@
               </tr>
               <tr>
                 <td class="fileref">
-                  src/components/memory/packs/pack-builder.tsx /
-                  pack-view.tsx
+                  src/components/memory/packs/pack-builder.tsx / pack-view.tsx
                 </td>
                 <td>
                   Create-time checkbox + preview; pack-view Heart remaining,
@@ -638,8 +634,8 @@
 
         <h3>Pack schema addition</h3>
         <p class="muted">
-          The only persisted product flag. Optional so existing packs stay
-          valid without a backfill.
+          The only persisted product flag. Optional so existing packs stay valid
+          without a backfill.
         </p>
         <pre><code><span class="c">// convex/schema.ts — packs table, new optional field</span>
 unifiedReviewEnabled: v.optional(v.boolean()),
@@ -839,11 +835,11 @@ composite?: {
           chips. On create it writes the pack, then chunks proposed (not kept)
           spans through <code>heartMany</code>. On the pack, Heart remaining
           repeats that gap-fill. Learn this pack calls
-          <code>enrollLearning</code> then
-          <code>/memory/$packId/learn</code> — many in-order cards, same daily
-          band lock. When every member is review-phase, the user enables unified
-          recitation: schedules sync to <code>now</code>, Review becomes one
-          concatenated card, and a single grade keeps every member due together.
+          <code>enrollLearning</code> then <code>/memory/$packId/learn</code> —
+          many in-order cards, same daily band lock. When every member is
+          review-phase, the user enables unified recitation: schedules sync to
+          <code>now</code>, Review becomes one concatenated card, and a single
+          grade keeps every member due together.
         </p>
       </section>
 
@@ -1005,22 +1001,22 @@ composite?: {
             <li>
               Implement <code>enumerateScopeChapters</code> /
               <code>countScopeChapters</code> /
-              <code>autoHeartAllowed</code> using
-              <code>getBookInfo</code> and the Architecture cap. Empty
-              <code>books</code> → count <code>Infinity</code>, not 0.
+              <code>autoHeartAllowed</code> using <code>getBookInfo</code> and
+              the Architecture cap. Empty <code>books</code> → count
+              <code>Infinity</code>, not 0.
             </li>
             <li>
               Implement <code>verseEndsSentence</code> and
               <code>groupChapterForHearting</code> exactly as specified in
               Architecture. Reuse <code>countVerseWords</code>,
               <code>spanCoversVerse</code>, <code>overlappingSpans</code>. Sort
-              output in verse order: kept spans in place among proposed gaps
-              (so a preview can render a single timeline).
+              output in verse order: kept spans in place among proposed gaps (so
+              a preview can render a single timeline).
             </li>
             <li>
               Coverage helpers: for each enumerated chapter, verses
-              <code>1..getChapterVerseCount</code> are covered if any heart
-              (any book/chapter match) includes that number.
+              <code>1..getChapterVerseCount</code> are covered if any heart (any
+              book/chapter match) includes that number.
             </li>
             <li>
               Tests (minimum):
@@ -1033,8 +1029,8 @@ composite?: {
                   group; a heading starts a new group.
                 </li>
                 <li>
-                  Existing heart 3:16 in a 1–21 chapter → groups around 16,
-                  kept chip for 16, no overlap.
+                  Existing heart 3:16 in a 1–21 chapter → groups around 16, kept
+                  chip for 16, no overlap.
                 </li>
                 <li>
                   Paragraph <code>\n\n</code> is a hard break even without a
@@ -1095,16 +1091,16 @@ composite?: {
           <ul class="clean small">
             <li>
               <span class="fileref">convex/savedVerses.ts</span> —
-              <code>heartMany</code> mutation; extract a shared “heart this
-              span if absent” helper used by <code>toggle</code> add-path and
+              <code>heartMany</code> mutation; extract a shared “heart this span
+              if absent” helper used by <code>toggle</code> add-path and
               <code>heartMany</code> so seed/stats stay identical.
             </li>
             <li>
               <span class="fileref">convex/lib/savedVerses.ts</span>
               <span class="tag-new">(new, only if needed)</span> — helper to
-              keep <code>savedVerses.ts</code> from growing a second write
-              path. Prefer extracting from the existing toggle add branch
-              rather than duplicating inserts.
+              keep <code>savedVerses.ts</code> from growing a second write path.
+              Prefer extracting from the existing toggle add branch rather than
+              duplicating inserts.
             </li>
           </ul>
           <h4>Implementation steps</h4>
@@ -1112,13 +1108,12 @@ composite?: {
             <li>
               Factor the “add heart” half of <code>toggle</code> (insert
               <code>savedVerses</code> + <code>seedVerseMemory</code>) into a
-              helper that returns <code>"added"</code> |
-              <code>"exists"</code>.
+              helper that returns <code>"added"</code> | <code>"exists"</code>.
             </li>
             <li>
-              Implement <code>heartMany</code> per Architecture. Load the
-              user’s saved rows once, join refs, build <code>VerseSpan[]</code>,
-              then for each input span: bounds check via
+              Implement <code>heartMany</code> per Architecture. Load the user’s
+              saved rows once, join refs, build <code>VerseSpan[]</code>, then
+              for each input span: bounds check via
               <code>getVerseRefBoundsErrorMessage</code> (invalid → skip as
               overlap/invalid counted in skippedOverlap, do not throw the whole
               batch), exact → skippedExact, <code>overlappingSpans</code> →
@@ -1130,19 +1125,14 @@ composite?: {
               createdAt/seed (mutations may use Date.now for writes; still
               accept <code>now</code> for schedule seed consistency).
             </li>
-            <li>
-              Run <code>pnpm run codegen</code>.
-            </li>
+            <li>Run <code>pnpm run codegen</code>.</li>
           </ul>
           <h4>Acceptance criteria</h4>
           <ul class="acc small">
+            <li><code>pnpm run agent:check</code> passes after codegen.</li>
             <li>
-              <code>pnpm run agent:check</code> passes after codegen.
-            </li>
-            <li>
-              <code>heartMany</code> has args+returns validators, requires
-              auth, never deletes or patches an existing
-              <code>savedVerses</code> row.
+              <code>heartMany</code> has args+returns validators, requires auth,
+              never deletes or patches an existing <code>savedVerses</code> row.
             </li>
             <li>
               Chunk size over the cap throws. Empty <code>spans</code> returns
@@ -1166,9 +1156,9 @@ composite?: {
         </div>
         <div class="pr-body">
           <p class="dep">
-            <b>Depends on:</b> PRs 1–2. <b>Unblocks:</b> PR 4.
-            <b>Model:</b> <code>claude-opus-5-thinking-high</code> (Opus).
-            Orchestrator must pass this model into the Task tool.
+            <b>Depends on:</b> PRs 1–2. <b>Unblocks:</b> PR 4. <b>Model:</b>
+            <code>claude-opus-5-thinking-high</code> (Opus). Orchestrator must
+            pass this model into the Task tool.
           </p>
           <h4>Goal</h4>
           <p>
@@ -1188,11 +1178,9 @@ composite?: {
               chapter-grouped chip preview, loading/error.
             </li>
             <li>
-              <span class="fileref"
-                >src/hooks/use-scope-heart-preview.ts</span
-              >
-              <span class="tag-new">(new)</span> — given a scope + hearted
-              list: cap check, fetch chapters via
+              <span class="fileref">src/hooks/use-scope-heart-preview.ts</span>
+              <span class="tag-new">(new)</span> — given a scope + hearted list:
+              cap check, fetch chapters via
               <code>api.esv.getChaptersBatch</code> (one call per book, total
               chapters ≤ 20), run <code>groupChapterForHearting</code>, return
               groups + summary counts.
@@ -1225,11 +1213,11 @@ composite?: {
             <li>
               Preview only while the control is on and allowed. Show a skeleton
               while ESV loads. After load: one summary line (“Psalm 23 · 6
-              verses → 4 new units · 1 already hearted”) then a compact chip
-              row per chapter (<code>1–2</code>, <code>3</code>, …). Kept
-              hearts are visually distinct (muted / “kept”). Do not dump full
-              verse bodies. For many chapters, stack chapter labels + chips in
-              a max-height scroll region (~240px).
+              verses → 4 new units · 1 already hearted”) then a compact chip row
+              per chapter (<code>1–2</code>, <code>3</code>, …). Kept hearts are
+              visually distinct (muted / “kept”). Do not dump full verse bodies.
+              For many chapters, stack chapter labels + chips in a max-height
+              scroll region (~240px).
             </li>
             <li>
               Fetch: group enumerated chapters by book; call
@@ -1238,8 +1226,9 @@ composite?: {
             </li>
             <li>
               Create: existing <code>packs.create</code> first. Then
-              <code>heartMany</code> only <code>kind === "proposed"</code>
-              spans, chunked. Do not heart <code>kept</code> spans.
+              <code>heartMany</code> only
+              <code>kind === "proposed"</code> spans, chunked. Do not heart
+              <code>kept</code> spans.
             </li>
             <li>
               Empty scope (no books) stays disabled. Custom kind hides this
@@ -1254,12 +1243,10 @@ composite?: {
           </ul>
           <h4>Acceptance criteria</h4>
           <ul class="acc small">
+            <li><code>pnpm run agent:check</code> passes.</li>
             <li>
-              <code>pnpm run agent:check</code> passes.
-            </li>
-            <li>
-              Creating a scope pack with the control off is unchanged (no
-              hearts written).
+              Creating a scope pack with the control off is unchanged (no hearts
+              written).
             </li>
             <li>
               Mechanical: disabled when <code>countScopeChapters &gt; 20</code>
@@ -1284,9 +1271,9 @@ composite?: {
         </div>
         <div class="pr-body">
           <p class="dep">
-            <b>Depends on:</b> PR 3. <b>Unblocks:</b> PR 5.
-            <b>Model:</b> <code>claude-opus-5-thinking-high</code> (Opus).
-            Orchestrator must pass this model into the Task tool.
+            <b>Depends on:</b> PR 3. <b>Unblocks:</b> PR 5. <b>Model:</b>
+            <code>claude-opus-5-thinking-high</code> (Opus). Orchestrator must
+            pass this model into the Task tool.
           </p>
           <h4>Goal</h4>
           <p>
@@ -1301,9 +1288,12 @@ composite?: {
           <ul class="clean small">
             <li>
               <span class="fileref">convex/packs.ts</span> —
-              <code>enrollLearning</code> as specified in Architecture;
-              optional <code>previewCoverage</code> query returning
-              <code>{ chapterCount, slotCount, coveredCount, autoHeartAllowed }</code>
+              <code>enrollLearning</code> as specified in Architecture; optional
+              <code>previewCoverage</code> query returning
+              <code
+                >{ chapterCount, slotCount, coveredCount, autoHeartAllowed
+                }</code
+              >
               for the pack’s scope (pass <code>now</code> unused or omit — no
               Date.now in queries). Coverage can also be computed client-side
               from members + <code>scopeVerseSlots</code>; prefer client-side
@@ -1339,8 +1329,8 @@ composite?: {
               Pack header: if <code>newCount &gt; 0</code>, primary-outline
               button “Learn this pack” with a badge of
               <code>newCount + learningDueCount</code>. Keep existing Continue
-              Learning when <code>learningDueCount &gt; 0</code> and newCount
-              is 0. Clicking Learn this pack calls enroll then
+              Learning when <code>learningDueCount &gt; 0</code> and newCount is
+              0. Clicking Learn this pack calls enroll then
               <code>onLearn</code> (navigate to pack learn). Disable while
               enrolling.
             </li>
@@ -1368,12 +1358,12 @@ composite?: {
           <ul class="acc small">
             <li>
               <code>pnpm run agent:check</code> passes; codegen if Convex
-              changed; <code>pnpm test</code> if enroll gets a pure helper
-              test (optional).
+              changed; <code>pnpm test</code> if enroll gets a pure helper test
+              (optional).
             </li>
             <li>
-              <code>enrollLearning</code> is idempotent (second call enrolls
-              0). Does not alter reviewing/mastered rows.
+              <code>enrollLearning</code> is idempotent (second call enrolls 0).
+              Does not alter reviewing/mastered rows.
             </li>
             <li>
               Heart remaining never appears on custom packs or when coverage is
@@ -1402,9 +1392,9 @@ composite?: {
           </p>
           <h4>Goal</h4>
           <p>
-            After enroll, every in-progress pack member that is due for
-            learning appears in the pack Learn rail, in Bible order, with the
-            existing per-span daily lock. No new scheduler rules.
+            After enroll, every in-progress pack member that is due for learning
+            appears in the pack Learn rail, in Bible order, with the existing
+            per-span daily lock. No new scheduler rules.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
@@ -1419,9 +1409,7 @@ composite?: {
               filters unchanged.
             </li>
             <li>
-              <span class="fileref"
-                >src/lib/memory-session.test.ts</span
-              >
+              <span class="fileref">src/lib/memory-session.test.ts</span>
               — add a case documenting pack-learn includeNew behavior if you
               extract a one-line helper; otherwise skip.
             </li>
@@ -1436,8 +1424,8 @@ composite?: {
             <li>
               Change the learning filter in
               <code>MemoryPackSessionPage</code> to
-              <code>isMemorySessionCandidate(verse, "learning", now, true)</code>.
-              Practice and review kinds stay default <code>includeNew</code>.
+              <code>isMemorySessionCandidate(verse, "learning", now, true)</code
+              >. Practice and review kinds stay default <code>includeNew</code>.
             </li>
             <li>
               Confirm default board order remains <code>"in-order"</code> (it
@@ -1454,13 +1442,13 @@ composite?: {
           <ul class="acc small">
             <li><code>pnpm run agent:check</code> passes.</li>
             <li>
-              Global <code>/memory/learn</code> is unchanged (still
-              includeNew false / today’s learning only).
+              Global <code>/memory/learn</code> is unchanged (still includeNew
+              false / today’s learning only).
             </li>
             <li>
-              Behavioral: Learn this pack → rail lists all newly enrolled
-              spans in Bible order; finishing Guided on one span locks only
-              that span until tomorrow; others remain playable the same day.
+              Behavioral: Learn this pack → rail lists all newly enrolled spans
+              in Bible order; finishing Guided on one span locks only that span
+              until tomorrow; others remain playable the same day.
             </li>
           </ul>
         </div>
@@ -1484,8 +1472,8 @@ composite?: {
             Persist <code>unifiedReviewEnabled</code>, sync member schedules
             onto a conservative canonical due-now snapshot, record one
             recitation grade onto every member, and hide those members from the
-            global due queue while counting the pack as a single due item.
-            No recitation UI yet (flag unused by the client except via
+            global due queue while counting the pack as a single due item. No
+            recitation UI yet (flag unused by the client except via
             <code>packs.get</code>).
           </p>
           <h4>Files</h4>
@@ -1513,8 +1501,8 @@ composite?: {
             <li>
               <span class="fileref">convex/packs.ts</span> —
               <code>setUnifiedReview</code>, <code>recordUnifiedReview</code>;
-              <code>get</code> / <code>listMine</code> expose the flag;
-              unified pack <code>dueCount</code> is 0 or 1.
+              <code>get</code> / <code>listMine</code> expose the flag; unified
+              pack <code>dueCount</code> is 0 or 1.
             </li>
             <li>
               <span class="fileref">convex/verseMemory.ts</span> —
@@ -1528,14 +1516,13 @@ composite?: {
           <ul class="clean small">
             <li>
               Pure canonical + applyUnifiedGrade with tests: mixed intervals
-              pick the smallest; enabling result has <code>dueAt === now</code>
-              and <code>earlyReviewApplied === false</code>;
+              pick the smallest; enabling result has
+              <code>dueAt === now</code> and
+              <code>earlyReviewApplied === false</code>;
               <code>scheduleNext</code> output is what all members receive;
               learning-phase members make canonical throw.
             </li>
-            <li>
-              Schema field optional boolean. codegen.
-            </li>
+            <li>Schema field optional boolean. codegen.</li>
             <li>
               <code>setUnifiedReview</code>: scope packs only; all members
               <code>isReviewPhase</code>; if enabling with 0 members, throw.
@@ -1545,8 +1532,8 @@ composite?: {
               <code>recordUnifiedReview</code>: require flag; refuse if any
               member is learning-phase (return current canonical without
               writing, or throw — pick throw with a clear error). Insert one
-              review log per member (heatmap will spike; accepted). Patch all
-              to the same <code>next</code>.
+              review log per member (heatmap will spike; accepted). Patch all to
+              the same <code>next</code>.
             </li>
             <li>
               dueQueue: after building candidate items, drop those whose
@@ -1556,15 +1543,15 @@ composite?: {
             </li>
             <li>
               listMine: if flag and members.length, dueCount is 1 if
-              <code>isDueForReview(members[0], now)</code> else 0 (schedules
-              are synced; if a desync bug happens, use “any member due” → 1).
+              <code>isDueForReview(members[0], now)</code> else 0 (schedules are
+              synced; if a desync bug happens, use “any member due” → 1).
             </li>
           </ul>
           <h4>Acceptance criteria</h4>
           <ul class="acc small">
             <li>
-              <code>pnpm run agent:check</code> and
-              <code>pnpm test</code> pass (new scheduler tests).
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass
+              (new scheduler tests).
             </li>
             <li>
               Existing packs without the field behave as today (flag falsy).
@@ -1574,9 +1561,9 @@ composite?: {
               throws). Disabling does not rewrite dueAt.
             </li>
             <li>
-              Behavioral: no visible recitation UI yet; dashboard due count
-              must not jump by N when a test client sets the flag (verify with
-              a Convex-level thought: skip logic is in queries).
+              Behavioral: no visible recitation UI yet; dashboard due count must
+              not jump by N when a test client sets the flag (verify with a
+              Convex-level thought: skip logic is in queries).
             </li>
           </ul>
         </div>
@@ -1610,9 +1597,9 @@ composite?: {
               <span class="fileref"
                 >src/components/memory/packs/pack-view.tsx</span
               >
-              — unified switch + copy; Review button label “Review passage”
-              when enabled and due; confirmation when turning the switch on
-              (pulls reviews to today).
+              — unified switch + copy; Review button label “Review passage” when
+              enabled and due; confirmation when turning the switch on (pulls
+              reviews to today).
             </li>
             <li>
               <span class="fileref"
@@ -1635,9 +1622,9 @@ composite?: {
                 >src/hooks/use-esv-composite-passage.ts</span
               >
               <span class="tag-new">(new)</span> — given
-              <code>CardReference[]</code>, fetch unique chapters (cached
-              query / batch) and concatenate covered verse texts in order,
-              separated by a single space (or newline between chapters).
+              <code>CardReference[]</code>, fetch unique chapters (cached query
+              / batch) and concatenate covered verse texts in order, separated
+              by a single space (or newline between chapters).
             </li>
             <li>
               Confirm dialog copy in pack-view or a small
@@ -1675,9 +1662,9 @@ composite?: {
             <li>
               Long passage UX: the existing hidden-from-memory textarea must
               remain usable — min-height grows, scroll inside the card, verse
-              numbers may be omitted in the prompt (it’s one recitation) but
-              the title is the pack name plus a quiet “n verses” subtitle.
-              Do not require typing verse numbers.
+              numbers may be omitted in the prompt (it’s one recitation) but the
+              title is the pack name plus a quiet “n verses” subtitle. Do not
+              require typing verse numbers.
             </li>
             <li>
               After a successful grade, session-complete is a single summary
@@ -1692,12 +1679,8 @@ composite?: {
           </ul>
           <h4>Acceptance criteria</h4>
           <ul class="acc small">
-            <li>
-              <code>pnpm run agent:check</code> passes.
-            </li>
-            <li>
-              Pack review with the flag off is still N due span cards.
-            </li>
+            <li><code>pnpm run agent:check</code> passes.</li>
+            <li>Pack review with the flag off is still N due span cards.</li>
             <li>
               Composite record path does not call
               <code>verseMemory.recordAttempt</code>.
@@ -1706,8 +1689,8 @@ composite?: {
               Behavioral / visual (manual): enable unified on a graduated
               chapter pack → one card with full text; a grade updates every
               member’s dueAt identically; global Review no longer lists those
-              spans individually; disable returns them to the global queue
-              still sharing that dueAt.
+              spans individually; disable returns them to the global queue still
+              sharing that dueAt.
             </li>
           </ul>
         </div>
@@ -1730,15 +1713,13 @@ composite?: {
               <tr>
                 <td>ESV fetch of 20 chapters is slow or 429s</td>
                 <td>
-                  Cap at 20; reuse <code>getChaptersBatch</code> backoff; preview
-                  skeleton; disable rather than attempting Psalms or the whole
-                  Bible (PR 1 + 3).
+                  Cap at 20; reuse <code>getChaptersBatch</code> backoff;
+                  preview skeleton; disable rather than attempting Psalms or the
+                  whole Bible (PR 1 + 3).
                 </td>
               </tr>
               <tr>
-                <td>
-                  Convex write limits on hearting a packed small-book
-                </td>
+                <td>Convex write limits on hearting a packed small-book</td>
                 <td>
                   <code>HEART_MANY_CHUNK = 40</code> client chunking (PR 2–3).
                 </td>
@@ -1754,14 +1735,12 @@ composite?: {
                   Unified recitation of 20 chapters is an enormous typed card
                 </td>
                 <td>
-                  Allowed (ambition). Card must scroll; no extra hard cap.
-                  User opted into the scope (PR 7).
+                  Allowed (ambition). Card must scroll; no extra hard cap. User
+                  opted into the scope (PR 7).
                 </td>
               </tr>
               <tr>
-                <td>
-                  One lapse resets an entire chapter to Guided
-                </td>
+                <td>One lapse resets an entire chapter to Guided</td>
                 <td>
                   Accepted lockstep rule, documented in Settled decisions.
                   Conservative canonical schedule (shortest interval) so we do
@@ -1769,9 +1748,7 @@ composite?: {
                 </td>
               </tr>
               <tr>
-                <td>
-                  Global due queue still shows 30 John 3 cards
-                </td>
+                <td>Global due queue still shows 30 John 3 cards</td>
                 <td>
                   dueQueue / memoryStats.due exclusion + pack dueCount 0|1 (PR
                   6), wired in UI (PR 7).
@@ -1790,8 +1767,8 @@ composite?: {
       </section>
 
       <footer>
-        Berean · Scope-pack memory implementation plan · grounded in the
-        current codebase.
+        Berean · Scope-pack memory implementation plan · grounded in the current
+        codebase.
       </footer>
     </div>
   </body>
