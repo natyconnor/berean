@@ -48,8 +48,19 @@ import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
+import {
+  heartScopeActionLabel,
+  heartScopeCoverageCopy,
+  heartScopeDialogTitle,
+  heartScopeHasExisting,
+  heartScopeTooltip,
+} from "@/lib/heart-scope-copy";
 import { autoHeartAllowed } from "@/lib/scope-chapter-count";
-import { scopeCoverageComplete } from "@/lib/scope-verse-coverage";
+import {
+  coveredVerseCount,
+  scopeCoverageComplete,
+  scopeVerseSlots,
+} from "@/lib/scope-verse-coverage";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { MemoryVerseListAction } from "@/components/memory/memory-verse-list-action";
@@ -530,16 +541,29 @@ function PackViewMain({
             <Dumbbell className="h-4 w-4" aria-hidden />
             Practice Pack
           </Button>
-          {canHeartRemaining ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="gap-1.5 text-muted-foreground"
-              onClick={() => setHeartRemainingOpen(true)}
-            >
-              <Heart className="h-4 w-4" aria-hidden />
-              Heart remaining
-            </Button>
+          {canHeartRemaining && scope ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-muted-foreground"
+                  onClick={() => setHeartRemainingOpen(true)}
+                >
+                  <Heart className="h-4 w-4" aria-hidden />
+                  {heartScopeActionLabel(
+                    heartScopeHasExisting(
+                      coveredVerseCount(scope, memberSpans),
+                    ),
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                {heartScopeTooltip(
+                  heartScopeHasExisting(coveredVerseCount(scope, memberSpans)),
+                )}
+              </TooltipContent>
+            </Tooltip>
           ) : null}
         </div>
       </header>
@@ -597,7 +621,7 @@ function PackViewMain({
                   {isCustom
                     ? "No verses yet. Add a verse from your hearted list or by browsing."
                     : canHeartRemaining
-                      ? "No verses yet. Heart remaining adds every verse in this scope as short memory units — or heart them in the reader and they'll appear automatically."
+                      ? "No verses yet. Heart all verses adds every verse in this scope as short memory units — or heart them in the reader and they'll appear automatically."
                       : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
                 </p>
               </div>
@@ -774,6 +798,7 @@ function PackViewMain({
           onOpenChange={setHeartRemainingOpen}
           scope={scope}
           hearts={memberSpans}
+          now={now}
         />
       ) : null}
 
@@ -884,11 +909,13 @@ function HeartRemainingDialog({
   onOpenChange,
   scope,
   hearts,
+  now,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   scope: NonNullable<Pack["scope"]>;
   hearts: VerseSpan[];
+  now: number;
 }) {
   const heartMany = useMutation(api.savedVerses.heartMany);
   const [isHearting, setIsHearting] = useState(false);
@@ -897,23 +924,22 @@ function HeartRemainingDialog({
   // Passage text is fetched only while the dialog is open.
   const preview = useScopeHeartPreview({ scope, hearts, enabled: open });
   const { proposedCount, proposedSpans } = preview;
+  const slots = scopeVerseSlots(scope);
+  const covered = coveredVerseCount(scope, hearts);
+  const hasExisting = heartScopeHasExisting(covered);
 
   const handleHeart = useCallback(async () => {
     if (isHearting) return;
     setError(null);
     setIsHearting(true);
-    const result = await heartSpansInChunks(
-      heartMany,
-      proposedSpans,
-      Date.now(),
-    );
+    const result = await heartSpansInChunks(heartMany, proposedSpans, now);
     setIsHearting(false);
     if (result.failedChunks > 0) {
       setError("Some verses couldn't be hearted. Try again to fill the rest.");
       return;
     }
     onOpenChange(false);
-  }, [heartMany, isHearting, onOpenChange, proposedSpans]);
+  }, [heartMany, isHearting, now, onOpenChange, proposedSpans]);
 
   const canHeart =
     !isHearting && !preview.loading && !preview.error && proposedCount > 0;
@@ -922,10 +948,9 @@ function HeartRemainingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Heart remaining verses</DialogTitle>
+          <DialogTitle>{heartScopeDialogTitle(hasExisting)}</DialogTitle>
           <DialogDescription>
-            Scope packs draw from the verses you&apos;ve hearted. Heart this
-            scope now to fill in what&apos;s missing.
+            {heartScopeCoverageCopy(covered, slots)}
           </DialogDescription>
         </DialogHeader>
         <ScopeHeartPreview

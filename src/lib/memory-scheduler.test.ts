@@ -654,6 +654,12 @@ describe("isDueForLearning / isLearningLocked", () => {
     expect(isLearningLocked(initialSchedule(NOW), NOW)).toBe(false);
   });
 
+  it("never locks unstarted new verses, even if dueAt is ahead of the UI clock", () => {
+    const seededAhead = initialSchedule(NOW + 5 * 60 * 1000);
+    expect(isLearningLocked(seededAhead, NOW)).toBe(false);
+    expect(isDueForLearning(seededAhead, NOW)).toBe(false);
+  });
+
   it("soft-locks learning verses with a future dueAt", () => {
     const locked = learningAt(2);
     locked.dueAt = NOW + DAY_MS;

@@ -105,6 +105,8 @@ function member(
   span: Omit<VerseSpan, "book" | "chapter"> & {
     status: MemberStatus;
     isDue?: boolean;
+    dueAt?: number;
+    lastReviewedAt?: number;
   },
 ) {
   return {
@@ -120,7 +122,8 @@ function member(
     intervalDays: 0,
     consecutiveCorrect: 0,
     lapses: 0,
-    dueAt: Date.now() - 1000,
+    dueAt: span.dueAt ?? Date.now() - 1000,
+    lastReviewedAt: span.lastReviewedAt,
     isDue: span.isDue ?? false,
   };
 }
@@ -175,6 +178,46 @@ describe("PackView", () => {
     });
   });
 
+  it("lets unstarted units Learn, and names a session lock Tomorrow", () => {
+    const now = getSessionNow();
+    renderPack({
+      members: [
+        member({
+          startVerse: 1,
+          endVerse: 2,
+          status: "new",
+          // Live heartMany stamp can sit minutes ahead of the frozen UI clock.
+          dueAt: now + 5 * 60 * 1000,
+        }),
+        member({
+          startVerse: 3,
+          endVerse: 3,
+          status: "learning",
+          dueAt: now + 8 * 60 * 60 * 1000,
+          lastReviewedAt: now - 1000,
+        }),
+        member({
+          startVerse: 4,
+          endVerse: 4,
+          status: "learning",
+          dueAt: now,
+          lastReviewedAt: now - 1000,
+        }),
+      ],
+    });
+
+    expect(screen.getByText("New")).toBeInTheDocument();
+    expect(screen.queryByText(/Due today/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Learn" })).toBeEnabled();
+
+    expect(screen.getByText("Learning · Tomorrow")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tomorrow" })).toBeDisabled();
+
+    expect(
+      screen.getByRole("button", { name: "Continue Learning" }),
+    ).toBeEnabled();
+  });
+
   it("queues the whole pack from Learn this pack, then opens the pack session", async () => {
     renderPack({
       members: [
@@ -220,21 +263,38 @@ describe("PackView", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers Heart remaining only for an incomplete scope pack", () => {
+  it("offers Heart remaining only for an incomplete scope pack", async () => {
     const { unmount } = renderPack({
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
     });
-    expect(
-      header().getByRole("button", { name: "Heart remaining" }),
-    ).toBeInTheDocument();
+    const remaining = header().getByRole("button", { name: "Heart remaining" });
+    expect(remaining).toBeInTheDocument();
+    await userEvent.hover(remaining);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Heart the rest of this scope as short memory units, skipping verses you've already hearted.",
+    );
     unmount();
+
+    const empty = renderPack({ members: [] });
+    const heartAll = header().getByRole("button", { name: "Heart all verses" });
+    expect(heartAll).toBeInTheDocument();
+    expect(
+      screen.getByText(/Heart all verses adds every verse in this scope/),
+    ).toBeInTheDocument();
+    await userEvent.hover(heartAll);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Heart every verse in this scope as short memory units you can learn.",
+    );
+    empty.unmount();
 
     // Every verse of Psalm 23 hearted: nothing left to fill in.
     const covered = renderPack({
       members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
     });
     expect(
-      header().queryByRole("button", { name: "Heart remaining" }),
+      header().queryByRole("button", {
+        name: /Heart remaining|Heart all verses/,
+      }),
     ).not.toBeInTheDocument();
     covered.unmount();
 
@@ -245,7 +305,9 @@ describe("PackView", () => {
       members: [member({ startVerse: 1, endVerse: 2, status: "reviewing" })],
     });
     expect(
-      header().queryByRole("button", { name: "Heart remaining" }),
+      header().queryByRole("button", {
+        name: /Heart remaining|Heart all verses/,
+      }),
     ).not.toBeInTheDocument();
     unified.unmount();
 
@@ -254,7 +316,9 @@ describe("PackView", () => {
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
     });
     expect(
-      header().queryByRole("button", { name: "Heart remaining" }),
+      header().queryByRole("button", {
+        name: /Heart remaining|Heart all verses/,
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -269,6 +333,15 @@ describe("PackView", () => {
     await userEvent.click(
       header().getByRole("button", { name: "Heart remaining" }),
     );
+
+    expect(
+      await screen.findByRole("heading", { name: "Heart remaining verses" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "3 of 6 verses are already hearted. Heart the rest as short memory units.",
+      ),
+    ).toBeVisible();
 
     expect(
       await screen.findByText(
@@ -289,6 +362,10 @@ describe("PackView", () => {
     await waitFor(() => {
       expect(heartMany).toHaveBeenCalled();
     });
+    const [heartArgs] = heartMany.mock.calls[0] as [
+      { spans: VerseSpan[]; now: number },
+    ];
+    expect(heartArgs.now).toBe(getSessionNow());
 
     const hearted = new Set<number>();
     for (const [args] of heartMany.mock.calls as Array<

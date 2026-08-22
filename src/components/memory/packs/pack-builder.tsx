@@ -6,6 +6,14 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
@@ -13,6 +21,17 @@ import { useScopeHeartPreview } from "@/hooks/use-scope-heart-preview";
 import { ScopeForm } from "@/components/study/scope-form";
 import { useScopeForm } from "@/components/study/use-scope-form";
 import { heartSpansInChunks } from "@/lib/heart-many-client";
+import {
+  heartScopeCoverageCopy,
+  heartScopeDialogTitle,
+  heartScopeHasExisting,
+} from "@/lib/heart-scope-copy";
+import { autoHeartAllowed } from "@/lib/scope-chapter-count";
+import {
+  coveredVerseCount,
+  scopeCoverageComplete,
+  scopeVerseSlots,
+} from "@/lib/scope-verse-coverage";
 
 import { PackVersePicker } from "./pack-verse-picker";
 import { ScopeHeartPreview } from "./scope-heart-preview";
@@ -29,6 +48,9 @@ type PackKind = "scope" | "custom";
  * body. Scope packs embed the shared {@link ScopeForm} with a live member
  * preview; custom packs can stage hearted or browsed verses. On create
  * we navigate straight to the new pack's view.
+ *
+ * Scope packs that still have unhearted verses prompt once at create-time:
+ * heart the gaps (or the whole scope) as memory units, or skip and heart later.
  */
 export function PackBuilder() {
   const navigate = useNavigate();
@@ -36,7 +58,7 @@ export function PackBuilder() {
 
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PackKind>("scope");
-  const [autoHeart, setAutoHeart] = useState(false);
+  const [heartPromptOpen, setHeartPromptOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,13 +70,7 @@ export function PackBuilder() {
     kind === "scope" ? { scope: scopeForPreview, now } : "skip",
   );
 
-  // Custom pack membership always hearts the verse when the pack is saved.
-  // Scope packs need the same list to tell auto-heart gaps from kept hearts.
-  const wantsHearts = kind === "custom" || (kind === "scope" && autoHeart);
-  const savedVerses = useQuery(
-    api.savedVerses.listAll,
-    wantsHearts ? {} : "skip",
-  );
+  const savedVerses = useQuery(api.savedVerses.listAll, {});
   const heartedVerses = useMemo<HeartedVerse[]>(
     () =>
       (savedVerses ?? []).map((v) => ({
@@ -77,9 +93,8 @@ export function PackBuilder() {
   const heartPreview = useScopeHeartPreview({
     scope: scopeForPreview,
     hearts: savedVerses === undefined ? null : heartedVerses,
-    enabled: kind === "scope" && autoHeart,
+    enabled: kind === "scope" && heartPromptOpen,
   });
-  const autoHeartActive = kind === "scope" && autoHeart && heartPreview.allowed;
 
   const [staged, setStaged] = useState<Map<string, PackableVerse>>(new Map());
 
@@ -108,93 +123,105 @@ export function PackBuilder() {
         ? summaryText
         : "Custom pack";
 
+  const covered =
+    kind === "scope" ? coveredVerseCount(scopeForPreview, heartedVerses) : 0;
+  const slots = kind === "scope" ? scopeVerseSlots(scopeForPreview) : 0;
+  const hasExistingHearts = heartScopeHasExisting(covered);
+  const shouldPromptHeart =
+    kind === "scope" &&
+    savedVerses !== undefined &&
+    autoHeartAllowed(scopeForPreview) &&
+    !scopeCoverageComplete(scopeForPreview, heartedVerses);
+
   const canCreate =
     !isCreating &&
-    !(autoHeartActive && heartPreview.loading) &&
-    (kind === "scope" || staged.size > 0 || trimmedName.length > 0);
+    (kind === "scope"
+      ? savedVerses !== undefined
+      : staged.size > 0 || trimmedName.length > 0);
 
-  // Explains both what create will heart and why it waits on the preview.
-  const autoHeartSummary = !autoHeartActive
-    ? ""
-    : heartPreview.loading
-      ? " · preparing hearts\u2026"
-      : heartPreview.error
-        ? ""
-        : ` · ${heartPreview.proposedCount} to heart`;
+  const finishCreate = useCallback(
+    async (heartProposed: boolean) => {
+      if (isCreating) return;
+      setIsCreating(true);
+      setError(null);
+      try {
+        const packId: Id<"packs"> =
+          kind === "scope"
+            ? await createPack({
+                name: effectiveName,
+                kind: "scope",
+                scope: scopeForPreview,
+              })
+            : await createPack({ name: effectiveName, kind: "custom" });
 
-  const handleCreate = useCallback(async () => {
-    // Guard against double-submits: the button is disabled while creating, but
-    // this also stops a queued second click from firing a duplicate create.
-    if (isCreating) return;
-    setIsCreating(true);
-    setError(null);
-    try {
-      const packId: Id<"packs"> =
-        kind === "scope"
-          ? await createPack({
-              name: effectiveName,
-              kind: "scope",
-              scope: scopeForPreview,
-            })
-          : await createPack({ name: effectiveName, kind: "custom" });
-
-      // The pack now exists, so the user should always land on it — even if a
-      // verse fails to add. Surface a non-blocking notice but still navigate.
-      if (kind === "custom") {
-        let addFailed = false;
-        for (const verse of staged.values()) {
-          try {
-            await addVerse({
-              id: packId,
-              book: verse.book,
-              chapter: verse.chapter,
-              startVerse: verse.startVerse,
-              endVerse: verse.endVerse,
-            });
-          } catch {
-            addFailed = true;
+        // The pack now exists, so the user should always land on it — even if a
+        // verse fails to add. Surface a non-blocking notice but still navigate.
+        if (kind === "custom") {
+          let addFailed = false;
+          for (const verse of staged.values()) {
+            try {
+              await addVerse({
+                id: packId,
+                book: verse.book,
+                chapter: verse.chapter,
+                startVerse: verse.startVerse,
+                endVerse: verse.endVerse,
+              });
+            } catch {
+              addFailed = true;
+            }
+          }
+          if (addFailed) {
+            setError(
+              "Some verses couldn't be added. You can add them from the pack.",
+            );
           }
         }
-        if (addFailed) {
-          setError(
-            "Some verses couldn't be added. You can add them from the pack.",
-          );
-        }
-      }
 
-      // Only the proposed gaps are hearted; kept spans already exist.
-      if (autoHeartActive && heartPreview.proposedSpans.length > 0) {
-        const result = await heartSpansInChunks(
-          heartMany,
-          heartPreview.proposedSpans,
-          Date.now(),
-        );
-        if (result.failedChunks > 0) {
-          setError(
-            "Some verses couldn't be hearted. You can heart them from the pack.",
+        if (heartProposed && heartPreview.proposedSpans.length > 0) {
+          const result = await heartSpansInChunks(
+            heartMany,
+            heartPreview.proposedSpans,
+            now,
           );
+          if (result.failedChunks > 0) {
+            setError(
+              "Some verses couldn't be hearted. You can heart them from the pack.",
+            );
+          }
         }
-      }
 
-      void navigate({ to: "/memory/$packId", params: { packId } });
-    } catch {
-      setError("Couldn't create the pack. Please try again.");
-    } finally {
-      setIsCreating(false);
+        setHeartPromptOpen(false);
+        void navigate({ to: "/memory/$packId", params: { packId } });
+      } catch {
+        setError("Couldn't create the pack. Please try again.");
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [
+      isCreating,
+      kind,
+      createPack,
+      effectiveName,
+      scopeForPreview,
+      staged,
+      addVerse,
+      heartPreview.proposedSpans,
+      heartMany,
+      now,
+      navigate,
+    ],
+  );
+
+  const handleCreateClick = useCallback(() => {
+    if (isCreating) return;
+    if (shouldPromptHeart) {
+      setHeartPromptOpen(true);
+      return;
     }
-  }, [
-    isCreating,
-    kind,
-    createPack,
-    effectiveName,
-    scopeForPreview,
-    staged,
-    addVerse,
-    autoHeartActive,
-    heartPreview.proposedSpans,
-    heartMany,
-    navigate,
-  ]);
+    void finishCreate(false);
+  }, [finishCreate, isCreating, shouldPromptHeart]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -261,30 +288,21 @@ export function PackBuilder() {
           </section>
 
           {kind === "scope" ? (
-            <>
-              <ScopeForm
-                selectedBooks={scopeForm.selectedBooks}
-                chapterRanges={scopeForm.chapterRanges}
-                selectedTags={scopeForm.selectedTags}
-                tagMatchMode={scopeForm.tagMatchMode}
-                onToggleBook={scopeForm.onToggleBook}
-                onSetBooks={scopeForm.onSetBooks}
-                onSetChapterRange={scopeForm.onSetChapterRange}
-                onSelectPreset={scopeForm.onSelectPreset}
-                onToggleTag={scopeForm.onToggleTag}
-                onClearTags={scopeForm.onClearTags}
-                onSetTagMatchMode={scopeForm.onSetTagMatchMode}
-                passageDescription="Choose which books and chapters this pack covers."
-                showTagFilter={false}
-              />
-              <ScopeHeartPreview
-                enabled={autoHeart}
-                onEnabledChange={setAutoHeart}
-                scopeLabel={summaryText}
-                preview={heartPreview}
-                disabled={isCreating}
-              />
-            </>
+            <ScopeForm
+              selectedBooks={scopeForm.selectedBooks}
+              chapterRanges={scopeForm.chapterRanges}
+              selectedTags={scopeForm.selectedTags}
+              tagMatchMode={scopeForm.tagMatchMode}
+              onToggleBook={scopeForm.onToggleBook}
+              onSetBooks={scopeForm.onSetBooks}
+              onSetChapterRange={scopeForm.onSetChapterRange}
+              onSelectPreset={scopeForm.onSelectPreset}
+              onToggleTag={scopeForm.onToggleTag}
+              onClearTags={scopeForm.onClearTags}
+              onSetTagMatchMode={scopeForm.onSetTagMatchMode}
+              passageDescription="Choose which books and chapters this pack covers."
+              showTagFilter={false}
+            />
           ) : (
             <section className="space-y-3">
               <div className="space-y-1">
@@ -331,14 +349,62 @@ export function PackBuilder() {
                     }`
                   : "Counting…"
                 : `${staged.size} verse${staged.size !== 1 ? "s" : ""} selected`}
-              {autoHeartSummary}
             </p>
           </div>
-          <Button onClick={handleCreate} disabled={!canCreate}>
+          <Button onClick={handleCreateClick} disabled={!canCreate}>
             {isCreating ? "Creating\u2026" : "Create pack"}
           </Button>
         </div>
       </footer>
+
+      <Dialog
+        open={heartPromptOpen}
+        onOpenChange={(open) => {
+          if (!isCreating) setHeartPromptOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {heartScopeDialogTitle(hasExistingHearts)}
+            </DialogTitle>
+            <DialogDescription>
+              {heartScopeCoverageCopy(covered, slots)}
+            </DialogDescription>
+          </DialogHeader>
+          <ScopeHeartPreview
+            variant="compact"
+            scopeLabel={summaryText}
+            preview={heartPreview}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => void finishCreate(false)}
+              disabled={isCreating}
+            >
+              Create without hearting
+            </Button>
+            <Button
+              onClick={() => void finishCreate(true)}
+              disabled={
+                isCreating ||
+                heartPreview.loading ||
+                Boolean(heartPreview.error) ||
+                heartPreview.proposedCount === 0
+              }
+            >
+              {isCreating
+                ? "Hearting\u2026"
+                : heartPreview.loading
+                  ? "Preparing\u2026"
+                  : `Heart ${heartPreview.proposedCount} new unit${
+                      heartPreview.proposedCount === 1 ? "" : "s"
+                    }`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
