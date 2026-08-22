@@ -385,12 +385,15 @@ export function isDueForLibrary(
 /**
  * True when the verse is still learning but today's session is done — Practice
  * and list CTAs should show a soft-lock "back tomorrow" state.
+ *
+ * Hearted `new` verses are never locked: they have not started a session, even
+ * if `dueAt` was stamped with a live clock ahead of a frozen UI `now`.
  */
 export function isLearningLocked(
   schedule: MemoryAvailability,
   now: number,
 ): boolean {
-  if (!isLearningPhase(schedule.status)) return false;
+  if (schedule.status !== "learning") return false;
   if (
     schedule.lastReviewedAt !== undefined &&
     !isLearningSessionClosed(schedule)

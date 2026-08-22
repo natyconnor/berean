@@ -10,6 +10,12 @@ import {
   adjustUserMemoryStats,
   findSavedVerse,
 } from "./lib/verseMemory";
+import {
+  countDueUnifiedReviewPacks,
+  loadUnifiedReviewPacks,
+  loadUnifiedReviewVerseRefIds,
+  unifiedReviewPhaseVerseRefIds,
+} from "./lib/packs";
 import { findVerseRefId } from "./lib/verseRefs";
 import {
   dueIndexUntil,
@@ -166,6 +172,7 @@ export const dueQueue = query({
 
     const limit = args.limit ?? DEFAULT_DUE_LIMIT;
     const scanCap = Math.min(MAX_DUE_SCAN, Math.max(limit * 4, limit));
+    const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(ctx, userId);
 
     const dueRows = await ctx.db
       .query("verseMemory")
@@ -197,6 +204,9 @@ export const dueQueue = query({
 
     for (const row of dueRows) {
       if (items.length >= limit) break;
+      // Hide review-phase unified members (counted as one pack item in stats).
+      // Learning-phase members are not review-due and stay in learningDue.
+      if (unifiedVerseRefIds.has(row.verseRefId)) continue;
       if (!isDueForReview(row, args.now)) continue;
 
       const ref = await ctx.db.get(row.verseRefId);
@@ -324,13 +334,24 @@ export const dueCount = query({
       .order("asc")
       .take(MAX_DUE_SCAN);
 
+    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const unifiedReviewVerseRefIds =
+      unifiedReviewPhaseVerseRefIds(unifiedPacks);
+
     let count = 0;
     for (const row of dueRows) {
-      if (isDueForReview(row, args.now) || isDueForLearning(row, args.now)) {
+      if (isDueForLearning(row, args.now)) {
+        count += 1;
+        continue;
+      }
+      if (
+        isDueForReview(row, args.now) &&
+        !unifiedReviewVerseRefIds.has(row.verseRefId)
+      ) {
         count += 1;
       }
     }
-    return count;
+    return count + countDueUnifiedReviewPacks(unifiedPacks, args.now);
   },
 });
 
@@ -521,12 +542,19 @@ export const memoryStats = query({
       .order("asc")
       .take(MAX_DUE_SCAN);
 
+    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const unifiedReviewVerseRefIds =
+      unifiedReviewPhaseVerseRefIds(unifiedPacks);
+
     let due = 0;
     let learningDue = 0;
     for (const row of dueRows) {
-      if (isDueForReview(row, args.now)) due += 1;
+      if (isDueForReview(row, args.now)) {
+        if (!unifiedReviewVerseRefIds.has(row.verseRefId)) due += 1;
+      }
       if (isDueForLearning(row, args.now)) learningDue += 1;
     }
+    due += countDueUnifiedReviewPacks(unifiedPacks, args.now);
 
     if (!rollup) {
       // Pre-backfill fallback: count from hearted rows once.

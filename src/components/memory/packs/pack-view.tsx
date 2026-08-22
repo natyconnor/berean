@@ -4,10 +4,12 @@ import {
   ArrowLeft,
   Dumbbell,
   GraduationCap,
+  Heart,
   Loader2,
   Pencil,
   Play,
   Plus,
+  ScrollText,
   SearchX,
   Trash2,
   X,
@@ -29,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -36,19 +39,38 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useScopeHeartPreview } from "@/hooks/use-scope-heart-preview";
+import { heartSpansInChunks } from "@/lib/heart-many-client";
+import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
+import {
+  heartScopeActionLabel,
+  heartScopeCoverageCopy,
+  heartScopeDialogTitle,
+  heartScopeHasExisting,
+  heartScopeTooltip,
+} from "@/lib/heart-scope-copy";
+import { autoHeartAllowed } from "@/lib/scope-chapter-count";
+import {
+  coveredVerseCount,
+  scopeCoverageComplete,
+  scopeVerseSlots,
+} from "@/lib/scope-verse-coverage";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { MemoryVerseListAction } from "@/components/memory/memory-verse-list-action";
 import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { VerseDetail } from "@/components/memory/verse-detail";
+import { formatScopeSummary } from "@/components/study/study-scope-summary";
 
+import { EnableUnifiedReviewDialog } from "./enable-unified-review-dialog";
 import { PackVersePicker } from "./pack-verse-picker";
+import { ScopeHeartPreview } from "./scope-heart-preview";
 import {
   packVerseKey,
   type HeartedVerse,
@@ -84,6 +106,10 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
   const learningDueCount = useMemo(
     () => (members ?? []).filter((m) => isDueForLearning(m, now)).length,
     [members, now],
+  );
+  const newCount = useMemo(
+    () => (members ?? []).filter((m) => m.status === "new").length,
+    [members],
   );
   const practiceCount = useMemo(
     () => (members ?? []).filter((m) => isReviewPhase(m.status)).length,
@@ -133,6 +159,7 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
       now={now}
       dueCount={dueMembers.length}
       learningDueCount={learningDueCount}
+      newCount={newCount}
       practiceCount={practiceCount}
       onBack={() => void navigate({ to: "/memory" })}
       onReview={() =>
@@ -180,6 +207,7 @@ function PackViewMain({
   now,
   dueCount,
   learningDueCount,
+  newCount,
   practiceCount,
   onBack,
   onReview,
@@ -195,6 +223,7 @@ function PackViewMain({
   now: number;
   dueCount: number;
   learningDueCount: number;
+  newCount: number;
   practiceCount: number;
   onBack: () => void;
   onReview: () => void;
@@ -211,6 +240,8 @@ function PackViewMain({
   const remove = useMutation(api.packs.remove);
   const addVerse = useMutation(api.packs.addVerse);
   const removeVerse = useMutation(api.packs.removeVerse);
+  const enrollLearning = useMutation(api.packs.enrollLearning);
+  const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(pack.name);
@@ -222,6 +253,12 @@ function PackViewMain({
   const [pendingVerseKey, setPendingVerseKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isEnrolling, setIsEnrolling] = useState(false);
+  const [heartRemainingOpen, setHeartRemainingOpen] = useState(false);
+  const [unifiedDialogOpen, setUnifiedDialogOpen] = useState(false);
+  const [isSettingUnified, setIsSettingUnified] = useState(false);
+  const [unifiedError, setUnifiedError] = useState<string | null>(null);
+  const [unifiedJustDisabled, setUnifiedJustDisabled] = useState(false);
   const [removingRefId, setRemovingRefId] = useState<Id<"verseRefs"> | null>(
     null,
   );
@@ -288,6 +325,56 @@ function PackViewMain({
     [addVerse, packId, pendingVerseKey],
   );
 
+  // Enroll on the session clock the queues read from: a live `Date.now()` can
+  // land the fresh `dueAt` far enough ahead of the frozen `now` to look like a
+  // finished learning session, hiding the verses the click just queued.
+  const handleLearnPack = useCallback(async () => {
+    if (isEnrolling) return;
+    setActionError(null);
+    setIsEnrolling(true);
+    try {
+      await enrollLearning({ id: packId, now });
+      onLearn();
+    } catch {
+      setActionError("Couldn't start this pack. Please try again.");
+    } finally {
+      setIsEnrolling(false);
+    }
+  }, [enrollLearning, isEnrolling, now, onLearn, packId]);
+
+  // Same session clock as enrollLearning: the mutation pulls every member's
+  // `dueAt` to this `now`, which is the clock the due queues read from.
+  const handleEnableUnified = useCallback(async () => {
+    if (isSettingUnified) return;
+    setUnifiedError(null);
+    setIsSettingUnified(true);
+    try {
+      await setUnifiedReview({ id: packId, enabled: true, now });
+      setUnifiedJustDisabled(false);
+      setUnifiedDialogOpen(false);
+      // The point of confirming is to recite it, so go straight there.
+      onReview();
+    } catch {
+      setUnifiedError("Couldn't turn this on. Please try again.");
+    } finally {
+      setIsSettingUnified(false);
+    }
+  }, [isSettingUnified, now, onReview, packId, setUnifiedReview]);
+
+  const handleDisableUnified = useCallback(async () => {
+    if (isSettingUnified) return;
+    setActionError(null);
+    setIsSettingUnified(true);
+    try {
+      await setUnifiedReview({ id: packId, enabled: false, now });
+      setUnifiedJustDisabled(true);
+    } catch {
+      setActionError("Couldn't turn this off. Please try again.");
+    } finally {
+      setIsSettingUnified(false);
+    }
+  }, [isSettingUnified, now, packId, setUnifiedReview]);
+
   const handleRemove = useCallback(
     async (verseRefId: Id<"verseRefs">) => {
       setActionError(null);
@@ -306,6 +393,43 @@ function PackViewMain({
   const canReview = dueCount > 0;
   const canLearn = learningDueCount > 0;
   const canPractice = practiceCount > 0;
+  const canEnroll = newCount > 0;
+
+  // Unified recitation: a scope pack whose every member has graduated. While
+  // one is on, the pack counts as a single due item (matching the pack list).
+  const unifiedEnabled = pack.unifiedReviewEnabled === true;
+  const allGraduated = verseCount > 0 && practiceCount === verseCount;
+  const showUnifiedPanel =
+    pack.kind === "scope" && (verseCount > 0 || unifiedEnabled);
+  const effectiveDueCount = unifiedEnabled ? (dueCount > 0 ? 1 : 0) : dueCount;
+  const notDueCount = verseCount - dueCount;
+
+  // A scope pack's members are exactly the hearts inside its scope, so they
+  // are also the coverage input: no extra query needed to spot the gaps.
+  const scope = pack.kind === "scope" ? pack.scope : undefined;
+  const memberSpans = useMemo<VerseSpan[]>(
+    () =>
+      (members ?? []).map(({ book, chapter, startVerse, endVerse }) => ({
+        book,
+        chapter,
+        startVerse,
+        endVerse,
+      })),
+    [members],
+  );
+  // Over-cap scopes offer nothing here: create already explained the limit, and
+  // a permanently disabled button on an existing pack would only be noise.
+  // A unified pack also withholds the offer: fresh hearts arrive as new units,
+  // and they would block the recitation this pack is currently scheduled as.
+  const canHeartRemaining = useMemo(
+    () =>
+      !unifiedEnabled &&
+      scope !== undefined &&
+      members !== undefined &&
+      autoHeartAllowed(scope) &&
+      !scopeCoverageComplete(scope, memberSpans),
+    [unifiedEnabled, scope, members, memberSpans],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -332,7 +456,12 @@ function PackViewMain({
             <p className="mt-0.5 text-xs text-muted-foreground">
               {isCustom ? "Custom" : "Scope"} · {verseCount} verse
               {verseCount !== 1 ? "s" : ""}
-              {dueCount > 0 ? ` · ${dueCount} due` : ""}
+              {unifiedEnabled ? " · one recitation" : ""}
+              {effectiveDueCount === 0
+                ? ""
+                : unifiedEnabled
+                  ? " · due today"
+                  : ` · ${dueCount} due`}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -359,8 +488,22 @@ function PackViewMain({
             </Button>
           </div>
         </div>
-        <div className="mt-3 flex gap-2">
-          {canLearn ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {canEnroll ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => void handleLearnPack()}
+              disabled={isEnrolling}
+            >
+              <GraduationCap className="h-4 w-4" aria-hidden />
+              {isEnrolling ? "Starting\u2026" : "Learn this pack"}
+              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted-foreground tabular-nums">
+                {newCount + learningDueCount}
+              </span>
+            </Button>
+          ) : canLearn ? (
             <Button
               size="sm"
               variant="outline"
@@ -381,10 +524,10 @@ function PackViewMain({
             disabled={!canReview}
           >
             <Play className="h-4 w-4" aria-hidden />
-            Review
-            {dueCount > 0 ? (
+            {unifiedEnabled && canReview ? "Review passage" : "Review"}
+            {effectiveDueCount > 0 ? (
               <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
-                {dueCount}
+                {effectiveDueCount}
               </span>
             ) : null}
           </Button>
@@ -398,6 +541,30 @@ function PackViewMain({
             <Dumbbell className="h-4 w-4" aria-hidden />
             Practice Pack
           </Button>
+          {canHeartRemaining && scope ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-muted-foreground"
+                  onClick={() => setHeartRemainingOpen(true)}
+                >
+                  <Heart className="h-4 w-4" aria-hidden />
+                  {heartScopeActionLabel(
+                    heartScopeHasExisting(
+                      coveredVerseCount(scope, memberSpans),
+                    ),
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                {heartScopeTooltip(
+                  heartScopeHasExisting(coveredVerseCount(scope, memberSpans)),
+                )}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
       </header>
 
@@ -411,7 +578,23 @@ function PackViewMain({
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-2xl px-5 py-6">
+        <div className="mx-auto max-w-2xl space-y-6 px-5 py-6">
+          {showUnifiedPanel ? (
+            <UnifiedReviewPanel
+              packName={pack.name}
+              verseCount={verseCount}
+              enabled={unifiedEnabled}
+              eligible={allGraduated}
+              pending={isSettingUnified}
+              justDisabled={unifiedJustDisabled}
+              onEnable={() => {
+                setUnifiedError(null);
+                setUnifiedDialogOpen(true);
+              }}
+              onDisable={() => void handleDisableUnified()}
+            />
+          ) : null}
+
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -437,7 +620,9 @@ function PackViewMain({
                 <p className="text-sm text-muted-foreground">
                   {isCustom
                     ? "No verses yet. Add a verse from your hearted list or by browsing."
-                    : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
+                    : canHeartRemaining
+                      ? "No verses yet. Heart all verses adds every verse in this scope as short memory units — or heart them in the reader and they'll appear automatically."
+                      : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
                 </p>
               </div>
             ) : (
@@ -593,6 +778,30 @@ function PackViewMain({
         </DialogContent>
       </Dialog>
 
+      <EnableUnifiedReviewDialog
+        open={unifiedDialogOpen}
+        onOpenChange={(open) => {
+          setUnifiedDialogOpen(open);
+          if (!open) setUnifiedError(null);
+        }}
+        packName={pack.name}
+        verseCount={verseCount}
+        notDueCount={notDueCount}
+        isEnabling={isSettingUnified}
+        error={unifiedError}
+        onConfirm={() => void handleEnableUnified()}
+      />
+
+      {scope && canHeartRemaining ? (
+        <HeartRemainingDialog
+          open={heartRemainingOpen}
+          onOpenChange={setHeartRemainingOpen}
+          scope={scope}
+          hearts={memberSpans}
+          now={now}
+        />
+      ) : null}
+
       <AddVersesDialog
         open={addOpen}
         onOpenChange={setAddOpen}
@@ -603,6 +812,175 @@ function PackViewMain({
         onAdd={handleAdd}
       />
     </div>
+  );
+}
+
+/**
+ * The switch that turns a graduated scope pack into one recitation.
+ *
+ * A pack of short units drips its reviews out a couple at a time, which is
+ * exactly the wrong shape for a passage you want to say straight through. This
+ * panel names that problem in the copy and offers the one-line fix; the confirm
+ * dialog handles the consequence (everything moves to today).
+ */
+function UnifiedReviewPanel({
+  packName,
+  verseCount,
+  enabled,
+  eligible,
+  pending,
+  justDisabled,
+  onEnable,
+  onDisable,
+}: {
+  packName: string;
+  verseCount: number;
+  enabled: boolean;
+  /** Every member has graduated, so a recitation is possible. */
+  eligible: boolean;
+  pending: boolean;
+  /** Just switched off in this session, so the fallout is worth a line. */
+  justDisabled: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
+}) {
+  const unitLabel = `${verseCount} unit${verseCount === 1 ? "" : "s"}`;
+  const description = enabled
+    ? `${unitLabel} on one schedule. Review is a single card — recite ${packName} straight through, and one grade sets the next date for all of them.`
+    : eligible
+      ? verseCount === 1
+        ? `${packName} is one unit today. Turn this on to review it as a single recitation, and anything you add later joins the same schedule.`
+        : `${unitLabel}, ${verseCount} separate schedules — ${packName} comes back a piece at a time. Turn this on to review it as one recitation instead.`
+      : "Finish learning this pack first — every unit has to graduate before they can share one recitation.";
+
+  return (
+    <section
+      className={cn(
+        "rounded-xl border bg-card p-4 shadow-sm",
+        // Eligible-but-off is an offer, not a setting: give it a little pull.
+        !enabled && eligible && "border-primary/30 bg-primary/[0.03]",
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <ScrollText
+              aria-hidden
+              className={cn(
+                "h-4 w-4",
+                enabled ? "text-primary" : "text-muted-foreground",
+              )}
+            />
+            Recite as one passage
+            {enabled ? (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                On
+              </span>
+            ) : null}
+          </h2>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {description}
+          </p>
+          {!enabled && justDisabled ? (
+            <p className="text-xs leading-5 text-muted-foreground/80">
+              Back to unit-by-unit reviews. They keep the due date they share
+              now until you review them one at a time.
+            </p>
+          ) : null}
+        </div>
+        <Switch
+          checked={enabled}
+          disabled={pending || (!enabled && !eligible)}
+          onCheckedChange={(next) => (next ? onEnable() : onDisable())}
+          aria-label="Recite as one passage"
+        />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Fill a scope pack's coverage gaps with the same proposal the pack builder
+ * shows at create time: chips for the memory units that would be added, kept
+ * hearts left exactly as they are. Confirming hearts only the proposed gaps.
+ */
+function HeartRemainingDialog({
+  open,
+  onOpenChange,
+  scope,
+  hearts,
+  now,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  scope: NonNullable<Pack["scope"]>;
+  hearts: VerseSpan[];
+  now: number;
+}) {
+  const heartMany = useMutation(api.savedVerses.heartMany);
+  const [isHearting, setIsHearting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Passage text is fetched only while the dialog is open.
+  const preview = useScopeHeartPreview({ scope, hearts, enabled: open });
+  const { proposedCount, proposedSpans } = preview;
+  const slots = scopeVerseSlots(scope);
+  const covered = coveredVerseCount(scope, hearts);
+  const hasExisting = heartScopeHasExisting(covered);
+
+  const handleHeart = useCallback(async () => {
+    if (isHearting) return;
+    setError(null);
+    setIsHearting(true);
+    const result = await heartSpansInChunks(heartMany, proposedSpans, now);
+    setIsHearting(false);
+    if (result.failedChunks > 0) {
+      setError("Some verses couldn't be hearted. Try again to fill the rest.");
+      return;
+    }
+    onOpenChange(false);
+  }, [heartMany, isHearting, now, onOpenChange, proposedSpans]);
+
+  const canHeart =
+    !isHearting && !preview.loading && !preview.error && proposedCount > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{heartScopeDialogTitle(hasExisting)}</DialogTitle>
+          <DialogDescription>
+            {heartScopeCoverageCopy(covered, slots)}
+          </DialogDescription>
+        </DialogHeader>
+        <ScopeHeartPreview
+          variant="compact"
+          scopeLabel={formatScopeSummary(scope)}
+          preview={preview}
+        />
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isHearting}
+          >
+            Cancel
+          </Button>
+          <Button onClick={() => void handleHeart()} disabled={!canHeart}>
+            {isHearting
+              ? "Hearting\u2026"
+              : preview.loading
+                ? "Preparing\u2026"
+                : `Heart ${proposedCount} new unit${proposedCount === 1 ? "" : "s"}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

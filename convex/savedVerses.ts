@@ -3,13 +3,19 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
+import { heartSpanIfAbsent, loadUserHeartSpans } from "./lib/savedVerses";
 import {
   adjustUserMemoryStats,
   deletePackMembershipsForVerse,
+  findSavedVerse,
   findVerseMemory,
-  seedVerseMemory,
 } from "./lib/verseMemory";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
+import {
+  exactSpanMatch,
+  HEART_MANY_CHUNK,
+  overlappingSpans,
+} from "../src/lib/hearted-verse-coverage";
 
 /**
  * The verse's live memory schedule, when a `verseMemory` row exists. Included
@@ -173,19 +179,14 @@ export const toggle = mutation({
       throw new Error(boundsError);
     }
 
-    const verseRefId = await findOrCreateVerseRefId(ctx, userId, {
+    const span = {
       book: args.book,
       chapter: args.chapter,
       startVerse: args.startVerse,
       endVerse: args.endVerse,
-    });
-
-    const existing = await ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId_verseRefId", (q) =>
-        q.eq("userId", userId).eq("verseRefId", verseRefId),
-      )
-      .unique();
+    };
+    const verseRefId = await findOrCreateVerseRefId(ctx, userId, span);
+    const existing = await findSavedVerse(ctx, userId, verseRefId);
 
     if (existing) {
       // Un-hearting removes the bookmark and drops the verse from Memory:
@@ -209,19 +210,75 @@ export const toggle = mutation({
       return "removed" as const;
     }
 
-    const now = Date.now();
-    await ctx.db.insert("savedVerses", {
-      userId,
-      verseRefId,
-      book: args.book,
-      chapter: args.chapter,
-      createdAt: now,
-    });
-
     // Hearting a verse seeds its memory record (idempotent: a re-heart after
     // un-hearting reuses the existing row rather than creating a duplicate).
-    await seedVerseMemory(ctx, userId, verseRefId, now);
-
+    await heartSpanIfAbsent(ctx, userId, span, Date.now());
     return "added" as const;
+  },
+});
+
+const heartManySpan = v.object({
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+});
+
+export const heartMany = mutation({
+  args: {
+    spans: v.array(heartManySpan),
+    now: v.number(),
+  },
+  returns: v.object({
+    added: v.number(),
+    skippedExact: v.number(),
+    skippedOverlap: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    if (args.spans.length > HEART_MANY_CHUNK) {
+      throw new Error(
+        `heartMany accepts at most ${HEART_MANY_CHUNK} spans per call.`,
+      );
+    }
+
+    if (args.spans.length === 0) {
+      return { added: 0, skippedExact: 0, skippedOverlap: 0 };
+    }
+
+    const userHearts = await loadUserHeartSpans(ctx, userId);
+    let added = 0;
+    let skippedExact = 0;
+    let skippedOverlap = 0;
+
+    for (const span of args.spans) {
+      const boundsError = getVerseRefBoundsErrorMessage(span);
+      if (boundsError) {
+        skippedOverlap += 1;
+        continue;
+      }
+
+      if (exactSpanMatch(span, userHearts)) {
+        skippedExact += 1;
+        continue;
+      }
+
+      if (overlappingSpans(span, userHearts).length > 0) {
+        skippedOverlap += 1;
+        continue;
+      }
+
+      const result = await heartSpanIfAbsent(ctx, userId, span, args.now);
+      if (result === "exists") {
+        skippedExact += 1;
+        continue;
+      }
+
+      userHearts.push(span);
+      added += 1;
+    }
+
+    return { added, skippedExact, skippedOverlap };
   },
 });

@@ -11,6 +11,10 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 export interface ReviewSessionAttempt {
   reference: CardReference;
   accuracy: number;
+  /** Overrides the reference label (a pack recited as one passage). */
+  label?: string;
+  /** Whether to offer the per-verse Practice shortcut. Defaults to true. */
+  offerPractice?: boolean;
 }
 
 interface ReviewSummaryProps {
@@ -80,7 +84,7 @@ export function ReviewSummary({
         {hasAttempts && (
           <ul className="divide-y rounded-lg border text-left">
             {attempts.map((attempt) => {
-              const label = formatVerseRef(attempt.reference);
+              const label = attempt.label ?? formatVerseRef(attempt.reference);
               return (
                 <li
                   key={label}
@@ -92,20 +96,22 @@ export function ReviewSummary({
                       {attempt.accuracy}% recalled
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => {
-                      void navigate({
-                        to: "/memory/practice",
-                        search: memoryPracticeSearch(attempt.reference),
-                      });
-                    }}
-                  >
-                    Practice
-                  </Button>
+                  {attempt.offerPractice === false ? null : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => {
+                        void navigate({
+                          to: "/memory/practice",
+                          search: memoryPracticeSearch(attempt.reference),
+                        });
+                      }}
+                    >
+                      Practice
+                    </Button>
+                  )}
                 </li>
               );
             })}

@@ -2,6 +2,7 @@ import {
   type JSX,
   type KeyboardEvent,
   type ReactNode,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -9,6 +10,7 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useMutation } from "convex/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,10 +27,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  useEsvCompositePassage,
+  type CompositePassageSegment,
+} from "@/hooks/use-esv-composite-passage";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
-import { diffWords } from "@/lib/diff-words";
+import { devLog } from "@/lib/dev-log";
+import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
   isLearningLocked,
   isLearningProgressAttempt,
@@ -60,6 +67,8 @@ import {
 } from "@/lib/verse-practice-progress";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
 import {
   classifyVerseAttempt,
@@ -76,6 +85,17 @@ import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-butto
 import { SessionComplete } from "./session-complete";
 
 export type { MemorySessionLabel } from "@/lib/memory-session";
+
+/**
+ * A pack recited as one passage: every hearted span, in Bible order, graded
+ * once. The board loads the concatenated text and sends the grade to
+ * `packs.recordUnifiedReview`, which copies it onto every member — no
+ * per-verse `verseMemory.recordAttempt`, and no mega verse reference.
+ */
+export interface PracticeCompositeSet {
+  packId: Id<"packs">;
+  members: CardReference[];
+}
 
 export interface PracticeVerse {
   reference: CardReference;
@@ -106,6 +126,11 @@ export interface PracticeVerse {
   consecutiveCorrect?: number;
   lapses?: number;
   earlyReviewApplied?: boolean;
+  /**
+   * Present on the single card of a unified pack review: the members whose
+   * text is concatenated into one recitation.
+   */
+  composite?: PracticeCompositeSet;
 }
 
 interface PracticeBoardProps {
@@ -154,7 +179,10 @@ interface OrderedVerse {
   consecutiveCorrect?: number;
   lapses?: number;
   earlyReviewApplied?: boolean;
+  composite?: PracticeCompositeSet;
 }
+
+const NO_COMPOSITE_MEMBERS: CardReference[] = [];
 
 function scheduleSnapshotFrom(
   progress: Pick<
@@ -265,6 +293,7 @@ export function PracticeBoard({
   >([]);
 
   const { recordWithSeqAdopt } = useVersePracticeAttempt(recordModeFor(kind));
+  const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const sessionLabel = sessionLabelFor(kind);
   const isReview = kind === "review";
 
@@ -274,8 +303,11 @@ export function PracticeBoard({
   // especially dangerous under Shuffle, where the order would silently shift.
   const [baseVerses] = useState<OrderedVerse[]>(() =>
     verses.map((verse) => ({
-      id: verseRefKey(verse.reference),
+      id: verse.composite
+        ? `unified:${verse.composite.packId}`
+        : verseRefKey(verse.reference),
       reference: verse.reference,
+      composite: verse.composite,
       learnStage: normalizeStageIndex(verse.learnStage),
       stageReps: normalizeReps(verse.stageReps ?? 0),
       status: normalizeStatus(verse.status),
@@ -321,6 +353,9 @@ export function PracticeBoard({
         const progress = progressByVerseId[verse.id];
         return {
           ...verse,
+          // A composite row stands for the whole pack, so it is labeled with
+          // the pack name rather than one member's reference.
+          label: verse.composite ? scopeLabel : undefined,
           learnStage: progress?.learnStage ?? verse.learnStage,
           stageReps: progress?.stageReps ?? verse.stageReps,
           status: progress?.status ?? verse.status,
@@ -337,7 +372,7 @@ export function PracticeBoard({
           ),
         };
       }),
-    [orderedVerses, progressByVerseId, now, kind],
+    [orderedVerses, progressByVerseId, now, kind, scopeLabel],
   );
 
   const boundedIndex =
@@ -366,17 +401,58 @@ export function PracticeBoard({
   const currentLocked = isLearningLocked(currentProgress, now);
   const currentHasWorkLeft = hasSessionWorkLeft(kind, currentProgress, now);
 
+  // A composite session is exactly one card, so the pack's concatenated text
+  // replaces the per-verse fetch (and its word count drives the long-passage
+  // rep curve if a future lapse drops the pack back into learning).
+  const composite = baseVerses[0]?.composite ?? null;
+  const compositePassage = useEsvCompositePassage(
+    composite?.members ?? NO_COMPOSITE_MEMBERS,
+    { enabled: composite !== null },
+  );
+
   // Fetch the active verse's text (cache-shared with PracticeCard) so the rail
   // and card can show a length-accurate journey bar via learningJourneyFraction.
   const { data: activeVerseData } = useEsvReference(
-    currentVerse?.reference ?? null,
+    composite ? null : (currentVerse?.reference ?? null),
   );
-  const currentWordCount = useMemo(
-    () =>
-      activeVerseData
-        ? countVerseWords(activeVerseData.verses.map((v) => v.text).join(" "))
-        : undefined,
-    [activeVerseData],
+  const currentWordCount = useMemo(() => {
+    if (composite) {
+      return compositePassage.text === ""
+        ? undefined
+        : countVerseWords(compositePassage.text);
+    }
+    return activeVerseData
+      ? countVerseWords(activeVerseData.verses.map((v) => v.text).join(" "))
+      : undefined;
+  }, [activeVerseData, composite, compositePassage.text]);
+
+  // One recitation grade, copied by the server onto every pack member. Never
+  // rejects, mirroring `useRecordVerseAttempt`, so a failed write can't strand
+  // the card mid-result.
+  const recordComposite = useCallback(
+    async (
+      packId: Id<"packs">,
+      tokens: ReadonlyArray<DiffToken>,
+      wordCount: number,
+    ): Promise<MemorySchedule | null> => {
+      const quality = classifyVerseAttempt(tokens);
+      if (!quality) return null;
+      const attemptedAt = Date.now();
+      try {
+        return await recordUnifiedReview({
+          id: packId,
+          quality,
+          accuracy: verseAttemptAccuracy(tokens),
+          now: attemptedAt,
+          wordCount,
+          tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+        });
+      } catch (error) {
+        devLog.warn("packs", "recordUnifiedReview failed", error);
+        return null;
+      }
+    },
+    [recordUnifiedReview],
   );
 
   useEffect(() => {
@@ -485,6 +561,24 @@ export function PracticeBoard({
               position={boundedIndex}
               total={orderedVerses.length}
               showScheduleOutcome={isReview}
+              composite={
+                composite
+                  ? {
+                      title: scopeLabel,
+                      // The verses the learner actually recites, not the number
+                      // of memory units they were learned in.
+                      verseCount: composite.members.reduce(
+                        (total, member) =>
+                          total + member.endVerse - member.startVerse + 1,
+                        0,
+                      ),
+                      text: compositePassage.text,
+                      segments: compositePassage.segments,
+                      loading: compositePassage.loading,
+                      error: compositePassage.error,
+                    }
+                  : null
+              }
               onRecord={(tokens, wordCount) => {
                 const verseId = currentVerse.id;
                 const accuracy = verseAttemptAccuracy(tokens);
@@ -497,6 +591,10 @@ export function PracticeBoard({
                     const nextAttempt = {
                       reference: currentVerse.reference,
                       accuracy,
+                      // One recitation, one row: the pack name, and no
+                      // per-verse practice shortcut to a single member.
+                      label: composite ? scopeLabel : undefined,
+                      offerPractice: composite === null,
                     };
                     if (idx >= 0) {
                       const next = [...prev];
@@ -504,6 +602,31 @@ export function PracticeBoard({
                       return next;
                     }
                     return [...prev, nextAttempt];
+                  });
+                }
+                if (composite) {
+                  return recordComposite(
+                    composite.packId,
+                    tokens,
+                    wordCount,
+                  ).then((next) => {
+                    if (!next) return null;
+                    setProgressByVerseId((prev) => ({
+                      ...prev,
+                      [verseId]: {
+                        learnStage: next.learnStage,
+                        stageReps: next.stageReps,
+                        status: next.status,
+                        dueAt: next.dueAt,
+                        lastReviewedAt: Date.now(),
+                        ease: next.ease,
+                        intervalDays: next.intervalDays,
+                        consecutiveCorrect: next.consecutiveCorrect,
+                        lapses: next.lapses,
+                        earlyReviewApplied: next.earlyReviewApplied,
+                      },
+                    }));
+                    return next;
                   });
                 }
                 return recordWithSeqAdopt(
@@ -573,11 +696,23 @@ export function PracticeBoard({
             currentStatus={currentProgress.status}
             currentWordCount={currentWordCount}
             currentLocked={currentLocked}
+            allowReorder={composite === null}
           />
         </div>
       </div>
     </PracticeShell>
   );
+}
+
+/** The pack passage a composite card recites, in place of one verse's text. */
+interface CompositeCardPassage {
+  /** Pack name, shown instead of a verse reference. */
+  title: string;
+  verseCount: number;
+  text: string;
+  segments: CompositePassageSegment[];
+  loading: boolean;
+  error: string | null;
 }
 
 interface PracticeCardProps {
@@ -597,6 +732,8 @@ interface PracticeCardProps {
   total: number;
   /** Review mode: show schedule-consequence copy above the diff. */
   showScheduleOutcome?: boolean;
+  /** Set when this card is a whole pack recited as one passage. */
+  composite?: CompositeCardPassage | null;
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
@@ -621,6 +758,7 @@ function PracticeCard({
   position,
   total,
   showScheduleOutcome = false,
+  composite = null,
   onRecord,
   advancesOnContinue = false,
   onContinueAfterResult,
@@ -643,8 +781,17 @@ function PracticeCard({
   const { submit, pending: submitPending } = useSubmitLock();
 
   const refLabel = formatVerseRef(reference);
-  const { data, loading, error } = useEsvReference(reference);
-  const versePlainText = data ? data.verses.map((v) => v.text).join(" ") : "";
+  // A composite card recites many spans, so it takes its text from the pack's
+  // concatenated passage instead of a single chapter slice.
+  const single = useEsvReference(composite ? null : reference);
+  const data = composite ? null : single.data;
+  const loading = composite ? composite.loading : single.loading;
+  const error = composite ? composite.error : single.error;
+  const versePlainText = composite
+    ? composite.text
+    : data
+      ? data.verses.map((v) => v.text).join(" ")
+      : "";
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(learnStage, status);
@@ -678,7 +825,9 @@ function PracticeCard({
     : isReadPrime
       ? "Read it through, then continue"
       : hintStage === "hidden"
-        ? "Recall the verse from memory"
+        ? composite
+          ? "Recite the whole passage from memory"
+          : "Recall the verse from memory"
         : "Type what you remember";
 
   const canCheckAnswer =
@@ -836,11 +985,13 @@ function PracticeCard({
               {sessionLabel} · {stageInfo.label}
             </p>
             <CardTitle className="mt-2 text-3xl tracking-tight">
-              {refLabel}
+              {composite ? composite.title : refLabel}
             </CardTitle>
           </div>
           <p className="text-sm text-muted-foreground">
-            Verse {position + 1} of {total}
+            {composite
+              ? `${composite.verseCount} verse${composite.verseCount === 1 ? "" : "s"} · one recitation`
+              : `Verse ${position + 1} of ${total}`}
           </p>
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
@@ -885,6 +1036,9 @@ function PracticeCard({
                   <div
                     className={cn(
                       "min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
+                      // A whole passage scrolls inside the card instead of
+                      // pushing the answer box off the screen.
+                      composite && "max-h-[45vh] overflow-y-auto",
                       stageColor.panel,
                     )}
                   >
@@ -901,8 +1055,9 @@ function PracticeCard({
                     ) : hintStage === "hidden" ? (
                       <div className="flex h-full min-h-[140px] items-center justify-center text-center">
                         <p className="max-w-sm text-sm text-muted-foreground">
-                          No hint text. Type the verse from memory, then check
-                          your answer.
+                          {composite
+                            ? "No hint text. Type the passage from memory — verse numbers not needed — then check your answer."
+                            : "No hint text. Type the verse from memory, then check your answer."}
                         </p>
                       </div>
                     ) : (
@@ -916,9 +1071,22 @@ function PracticeCard({
                       value={typedAnswer}
                       onChange={(event) => setTypedAnswer(event.target.value)}
                       onKeyDown={handleAnswerKeyDown}
-                      placeholder="Type what you remember"
-                      className="min-h-[170px] resize-none bg-background/80"
-                      aria-label="Your recalled verse"
+                      placeholder={
+                        composite
+                          ? "Type the passage from memory"
+                          : "Type what you remember"
+                      }
+                      className={cn(
+                        "bg-background/80",
+                        composite
+                          ? "min-h-[300px] max-h-[60vh] resize-y"
+                          : "min-h-[170px] resize-none",
+                      )}
+                      aria-label={
+                        composite
+                          ? "Your recited passage"
+                          : "Your recalled verse"
+                      }
                     />
                   )}
                 </>
@@ -938,18 +1106,32 @@ function PracticeCard({
                     {`${checkedAccuracy}% recalled.`}
                   </p>
                   {checkedQuality !== "exact" && (
-                    <div className="rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6">
+                    <div
+                      className={cn(
+                        "rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6",
+                        composite && "max-h-[45vh] overflow-y-auto",
+                      )}
+                    >
                       <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         Full text
                       </p>
-                      {data?.verses.map((verse) => (
-                        <p key={verse.number}>
-                          <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
-                            {verse.number}
-                          </span>
-                          {verse.text}
-                        </p>
-                      ))}
+                      {composite
+                        ? composite.segments.map((segment) => (
+                            <p key={referenceKey(segment.reference)}>
+                              <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
+                                {formatVerseRef(segment.reference)}
+                              </span>
+                              {segment.text}
+                            </p>
+                          ))
+                        : data?.verses.map((verse) => (
+                            <p key={verse.number}>
+                              <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
+                                {verse.number}
+                              </span>
+                              {verse.text}
+                            </p>
+                          ))}
                     </div>
                   )}
                 </div>

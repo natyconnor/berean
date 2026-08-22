@@ -23,7 +23,9 @@ export function formatMemoryDueLabel(
 ): string | null {
   if (isLearningPhase(status)) {
     if (!isLearningLocked({ status, dueAt, lastReviewedAt }, now)) return null;
-    // Fall through to the same relative wording as review.
+    // Locked learning is always "come back tomorrow", even when the next
+    // local midnight is still "today" on the calendar rounding used below.
+    return "Tomorrow";
   }
 
   const diff = dueAt - now;
