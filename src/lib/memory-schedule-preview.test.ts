@@ -83,7 +83,7 @@ describe("previewNextSchedule", () => {
     const next = previewNextSchedule(reviewingSnapshot(), reviewInput());
     expect(next).not.toBeNull();
     const phrase = formatNextReviewPhrase(next, NOW);
-    expect(phrase).toMatch(/^(tomorrow|in \d+ days)$/);
+    expect(phrase).toMatch(/^(due today|tomorrow|in \d+ days)$/);
   });
 
   it("does not guess a due phrase when the interval is missing", () => {
