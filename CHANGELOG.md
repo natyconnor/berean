@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.12](https://github.com/natyconnor/berean/compare/v1.12.11...v1.12.12) (2026-08-25)
+
+
+### Bug Fixes
+
+* Label grouped passage notes with the union range ([#177](https://github.com/natyconnor/berean/issues/177)) ([05faf33](https://github.com/natyconnor/berean/commit/05faf336251ebc563df78ceccd8070d2137236de))
+
 ## [1.12.11](https://github.com/natyconnor/berean/compare/v1.12.10...v1.12.11) (2026-08-20)
 
 
