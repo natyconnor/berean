@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRef, unionVerseRefs } from "@/lib/verse-ref-utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { NoteBody } from "@/lib/note-inline-content";
@@ -103,6 +103,11 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
 
   if (notes.length === 0 && !isExitingLast) return null;
 
+  const groupVerseRef = unionVerseRefs(notes.map((note) => note.verseRef));
+  const groupVerseRefLabel = groupVerseRef
+    ? formatVerseRef(groupVerseRef)
+    : "";
+
   const isReadMode = viewMode === "read";
   const supportsInlineEditing = !!onSaveEdit && !!onCancelEdit;
   const hasEditsInGroup =
@@ -133,7 +138,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
         notes.length > 0 ? (
           <PassageNotesPill
             count={notes.length}
-            verseRefLabel={formatVerseRef(notes[0].verseRef)}
+            verseRefLabel={groupVerseRefLabel}
             onClick={onOpen}
             isGlowing={isGlowing}
           />
@@ -143,6 +148,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
         notes.length > 0 ? (
           <CollapsedPassageBubble
             notes={notes}
+            verseRefLabel={groupVerseRefLabel}
             previewLength={previewLength}
             currentChapter={currentChapter}
             compact={compact}
@@ -171,7 +177,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
               <div className="flex items-center gap-1.5">
                 <BookOpen className="h-3 w-3 text-amber-600 dark:text-[var(--cl-passage-ink)] shrink-0" />
                 <span className="text-[10px] font-semibold text-amber-700 dark:text-[var(--cl-passage-ink)] uppercase tracking-wide">
-                  {formatVerseRef(notes[0].verseRef)}
+                  {groupVerseRefLabel}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -269,6 +275,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
 
 function CollapsedPassageBubble({
   notes,
+  verseRefLabel,
   previewLength,
   currentChapter,
   compact,
@@ -279,6 +286,7 @@ function CollapsedPassageBubble({
   onMouseLeave,
 }: {
   notes: PassageNote[];
+  verseRefLabel: string;
   previewLength: number;
   currentChapter?: CurrentChapter;
   compact: boolean;
@@ -326,7 +334,7 @@ function CollapsedPassageBubble({
                 compact ? "text-[8px]" : "text-[10px]",
               )}
             >
-              {formatVerseRef(notes[0].verseRef)}
+              {verseRefLabel}
             </span>
             {notes.length > 1 && (
               <Badge
