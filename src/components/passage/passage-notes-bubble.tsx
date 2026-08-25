@@ -104,9 +104,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
   if (notes.length === 0 && !isExitingLast) return null;
 
   const groupVerseRef = unionVerseRefs(notes.map((note) => note.verseRef));
-  const groupVerseRefLabel = groupVerseRef
-    ? formatVerseRef(groupVerseRef)
-    : "";
+  const groupVerseRefLabel = groupVerseRef ? formatVerseRef(groupVerseRef) : "";
 
   const isReadMode = viewMode === "read";
   const supportsInlineEditing = !!onSaveEdit && !!onCancelEdit;
