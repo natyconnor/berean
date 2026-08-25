@@ -26,7 +26,7 @@ type PackKind = "scope" | "custom";
  * body. Scope packs embed the shared {@link ScopeForm} with a live member
  * preview; custom packs can stage hearted or browsed verses. On create
  * we navigate straight to the new pack's view. Incomplete scope packs arrive
- * with a pointer on Heart all / Heart remaining.
+ * with a pointer on Memorize whole passage.
  */
 export function PackBuilder() {
   const navigate = useNavigate();

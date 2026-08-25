@@ -133,17 +133,19 @@ function renderPack({
   members,
   unifiedReviewEnabled,
   heartHint,
+  scope = psalm23Scope,
 }: {
   kind?: "scope" | "custom";
   members: ReturnType<typeof member>[];
   unifiedReviewEnabled?: boolean;
   heartHint?: boolean;
+  scope?: typeof psalm23Scope;
 }) {
   queryResults.set("packs.get", {
     _id: PACK_ID,
     name: "Psalm 23",
     kind,
-    scope: kind === "scope" ? psalm23Scope : undefined,
+    scope: kind === "scope" ? scope : undefined,
     createdAt: 0,
     lastOpenedAt: 0,
     unifiedReviewEnabled,
@@ -265,27 +267,33 @@ describe("PackView", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers Heart remaining only for an incomplete scope pack", async () => {
+  it("offers Memorize whole passage only for an incomplete scope pack", async () => {
     const { unmount } = renderPack({
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
     });
-    const remaining = header().getByRole("button", { name: "Heart remaining" });
+    const remaining = header().getByRole("button", {
+      name: "Memorize whole passage",
+    });
     expect(remaining).toBeInTheDocument();
     await userEvent.hover(remaining);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Heart the rest of this scope as short memory passages, skipping verses you've already hearted.",
+      "Want to memorize this whole passage? Click here to automatically heart all the verses",
     );
     unmount();
 
     const empty = renderPack({ members: [] });
-    const heartAll = header().getByRole("button", { name: "Heart all verses" });
+    const heartAll = header().getByRole("button", {
+      name: "Memorize whole passage",
+    });
     expect(heartAll).toBeInTheDocument();
     expect(
-      screen.getByText(/Heart all verses adds every verse in this scope/),
+      screen.getByText(
+        /Memorize whole passage hearts every verse in this scope/,
+      ),
     ).toBeInTheDocument();
     await userEvent.hover(heartAll);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Heart every verse in this scope as short memory passages you can learn.",
+      "Want to memorize this whole passage? Click here to automatically heart all the verses",
     );
     empty.unmount();
 
@@ -295,7 +303,7 @@ describe("PackView", () => {
     });
     expect(
       header().queryByRole("button", {
-        name: /Heart remaining|Heart all verses/,
+        name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
     covered.unmount();
@@ -308,7 +316,7 @@ describe("PackView", () => {
     });
     expect(
       header().queryByRole("button", {
-        name: /Heart remaining|Heart all verses/,
+        name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
     unified.unmount();
@@ -319,12 +327,12 @@ describe("PackView", () => {
     });
     expect(
       header().queryByRole("button", {
-        name: /Heart remaining|Heart all verses/,
+        name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
   });
 
-  it("hearts only the gaps from the Heart remaining dialog", async () => {
+  it("hearts only the gaps from the Memorize whole passage dialog", async () => {
     renderPack({
       members: [
         member({ startVerse: 1, endVerse: 2, status: "new" }),
@@ -333,15 +341,15 @@ describe("PackView", () => {
     });
 
     await userEvent.click(
-      header().getByRole("button", { name: "Heart remaining" }),
+      header().getByRole("button", { name: "Memorize whole passage" }),
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Heart remaining verses" }),
+      await screen.findByRole("heading", { name: "Memorize whole passage" }),
     ).toBeVisible();
     expect(
       screen.getByText(
-        "3 of 6 verses are already hearted. If you want to memorize the rest of this chapter (or these chapters) together, we can auto-heart the remaining verses as short memory units so you can start learning.",
+        "3 of 6 verses are already hearted. If you want to memorize the rest of this chapter together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
       ),
     ).toBeVisible();
 
@@ -388,14 +396,36 @@ describe("PackView", () => {
     });
   });
 
-  it("points at Heart all verses after creating an empty scope pack", () => {
+  it("names these chapters when the scope spans more than one", async () => {
+    renderPack({
+      scope: {
+        books: ["Psalms"],
+        chapterRanges: [{ book: "Psalms", startChapter: 23, endChapter: 24 }],
+        tags: [],
+        tagMatchMode: "any",
+      },
+      members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
+    });
+
+    await userEvent.click(
+      header().getByRole("button", { name: "Memorize whole passage" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "2 of 16 verses are already hearted. If you want to memorize the rest of these chapters together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("points at Memorize whole passage after creating an empty scope pack", () => {
     renderPack({ members: [], heartHint: true });
 
     expect(
-      header().getByRole("button", { name: "Heart all verses" }),
+      header().getByRole("button", { name: "Memorize whole passage" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Heart all verses fills this pack with short memory passages you can learn.",
+      "Want to memorize this whole passage? Click here to automatically heart all the verses",
     );
   });
 

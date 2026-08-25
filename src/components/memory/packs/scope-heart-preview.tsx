@@ -190,7 +190,7 @@ function HeartProposal({ scopeLabel, preview }: ScopeHeartPreviewBaseProps) {
  * The opt-in "Heart verses in this scope" control plus its proposal preview.
  * Over-cap or empty scopes disable the switch and explain why. The `compact`
  * variant drops the switch and renders the proposal on its own, for surfaces
- * that already committed to hearting (the pack's Heart remaining dialog).
+ * that already committed to hearting (the pack's Memorize whole passage dialog).
  */
 export function ScopeHeartPreview(props: ScopeHeartPreviewProps) {
   const { scopeLabel, preview } = props;

@@ -59,11 +59,13 @@ import {
   heartScopeConfirmLabel,
   heartScopeCoverageCopy,
   heartScopeDialogTitle,
-  heartScopeHasExisting,
   heartScopeHintCopy,
   heartScopeTooltip,
 } from "@/lib/heart-scope-copy";
-import { autoHeartAllowed } from "@/lib/scope-chapter-count";
+import {
+  autoHeartAllowed,
+  countScopeChapters,
+} from "@/lib/scope-chapter-count";
 import {
   coveredVerseCount,
   scopeCoverageComplete,
@@ -96,7 +98,7 @@ export function PackView({
   heartHint = false,
 }: {
   packId: Id<"packs">;
-  /** After create: point at Heart all / Heart remaining so the CTA is obvious. */
+  /** After create: point at Memorize whole passage so the CTA is obvious. */
   heartHint?: boolean;
 }) {
   const now = useLiveNow();
@@ -464,9 +466,6 @@ function PackViewMain({
       !scopeCoverageComplete(scope, memberSpans),
     [unifiedEnabled, scope, members, memberSpans],
   );
-  const hasExistingHearts = Boolean(
-    scope && heartScopeHasExisting(coveredVerseCount(scope, memberSpans)),
-  );
   const heartHintOpen = heartHint && canHeartRemaining && !heartHintDismissed;
 
   const dismissHeartHint = useCallback(() => {
@@ -587,7 +586,6 @@ function PackViewMain({
           </Button>
           {canHeartRemaining && scope ? (
             <HeartScopeButton
-              hasExistingHearts={hasExistingHearts}
               hintOpen={heartHintOpen}
               onHintOpenChange={(open) => {
                 if (!open) dismissHeartHint();
@@ -654,7 +652,7 @@ function PackViewMain({
                   {isCustom
                     ? "No verses yet. Add a verse from your hearted list or by browsing."
                     : canHeartRemaining
-                      ? "No verses yet. Heart all verses adds every verse in this scope as short memory units — or heart them in the reader and they'll appear automatically."
+                      ? "No verses yet. Memorize whole passage hearts every verse in this scope as short memory passages — or heart them in the reader and they'll appear automatically."
                       : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
                 </p>
               </div>
@@ -849,12 +847,10 @@ function PackViewMain({
 }
 
 function HeartScopeButton({
-  hasExistingHearts,
   hintOpen,
   onHintOpenChange,
   onClick,
 }: {
-  hasExistingHearts: boolean;
   hintOpen: boolean;
   onHintOpenChange: (open: boolean) => void;
   onClick: () => void;
@@ -867,7 +863,7 @@ function HeartScopeButton({
       onClick={onClick}
     >
       <Heart className="h-4 w-4" aria-hidden />
-      {heartScopeActionLabel(hasExistingHearts)}
+      {heartScopeActionLabel()}
     </Button>
   );
 
@@ -881,7 +877,7 @@ function HeartScopeButton({
           className="w-72 p-3 text-xs leading-5"
           role="status"
         >
-          {heartScopeHintCopy(hasExistingHearts)}
+          {heartScopeHintCopy()}
         </PopoverContent>
       </Popover>
     );
@@ -891,7 +887,7 @@ function HeartScopeButton({
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent className="max-w-xs">
-        {heartScopeTooltip(hasExistingHearts)}
+        {heartScopeTooltip()}
       </TooltipContent>
     </Tooltip>
   );
@@ -1008,7 +1004,7 @@ function HeartRemainingDialog({
   const { proposedCount, proposedSpans } = preview;
   const slots = scopeVerseSlots(scope);
   const covered = coveredVerseCount(scope, hearts);
-  const hasExisting = heartScopeHasExisting(covered);
+  const chapterCount = countScopeChapters(scope);
 
   const handleHeart = useCallback(async () => {
     if (isHearting) return;
@@ -1030,9 +1026,9 @@ function HeartRemainingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{heartScopeDialogTitle(hasExisting)}</DialogTitle>
+          <DialogTitle>{heartScopeDialogTitle()}</DialogTitle>
           <DialogDescription>
-            {heartScopeCoverageCopy(covered, slots)}
+            {heartScopeCoverageCopy(covered, slots, chapterCount)}
           </DialogDescription>
         </DialogHeader>
         <ScopeHeartPreview

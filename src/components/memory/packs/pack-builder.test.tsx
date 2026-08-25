@@ -90,7 +90,7 @@ describe("PackBuilder", () => {
     mutationMock("packs.create").mockResolvedValue("pack_new");
   });
 
-  it("creates a scope pack and points at Heart all on the pack page", async () => {
+  it("creates a scope pack and points at Memorize whole passage on the pack page", async () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PackBuilder />

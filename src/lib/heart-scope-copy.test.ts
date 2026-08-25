@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  HEART_SCOPE_ACTION_LABEL,
+  HEART_SCOPE_TOOLTIP,
   heartScopeActionLabel,
   heartScopeConfirmLabel,
   heartScopeCoverageCopy,
@@ -12,60 +14,56 @@ import {
 } from "./heart-scope-copy";
 
 describe("heartScopeActionLabel", () => {
-  it("says Heart all verses when nothing in the scope is hearted", () => {
+  it("is Memorize whole passage whether some verses are already hearted or not", () => {
     expect(heartScopeHasExisting(0)).toBe(false);
-    expect(heartScopeActionLabel(false)).toBe("Heart all verses");
-    expect(heartScopeDialogTitle(false)).toBe("Heart all verses");
-  });
-
-  it("says Heart remaining once some verses are already hearted", () => {
     expect(heartScopeHasExisting(2)).toBe(true);
-    expect(heartScopeActionLabel(true)).toBe("Heart remaining");
-    expect(heartScopeDialogTitle(true)).toBe("Heart remaining verses");
+    expect(heartScopeActionLabel()).toBe(HEART_SCOPE_ACTION_LABEL);
+    expect(heartScopeDialogTitle()).toBe("Memorize whole passage");
   });
 });
 
 describe("heartScopeCoverageCopy", () => {
   it("names an empty scope", () => {
-    expect(heartScopeCoverageCopy(0, 0)).toBe(
+    expect(heartScopeCoverageCopy(0, 0, 1)).toBe(
       "This scope has no verses to heart.",
     );
   });
 
-  it("says none are hearted yet", () => {
-    expect(heartScopeCoverageCopy(0, 6)).toBe(
-      "None of these 6 verses are hearted yet. If you want to memorize the whole chapter (or all the chapters) together, we can auto-heart them as short memory units so you can start learning.",
+  it("says none are hearted yet in a single chapter", () => {
+    expect(heartScopeCoverageCopy(0, 6, 1)).toBe(
+      "None of these 6 verses are hearted yet. If you want to memorize the whole chapter together, we can auto-heart them as short memory passages so you can start learning.",
     );
   });
 
-  it("counts a partial fill", () => {
-    expect(heartScopeCoverageCopy(2, 6)).toBe(
-      "2 of 6 verses are already hearted. If you want to memorize the rest of this chapter (or these chapters) together, we can auto-heart the remaining verses as short memory units so you can start learning.",
+  it("says none are hearted yet across several chapters", () => {
+    expect(heartScopeCoverageCopy(0, 50, 3)).toBe(
+      "None of these 50 verses are hearted yet. If you want to memorize these chapters together, we can auto-heart them as short memory passages so you can start learning.",
+    );
+  });
+
+  it("counts a partial fill in a single chapter", () => {
+    expect(heartScopeCoverageCopy(1, 31, 1)).toBe(
+      "1 of 31 verses is already hearted. If you want to memorize the rest of this chapter together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
+    );
+  });
+
+  it("counts a partial fill across several chapters", () => {
+    expect(heartScopeCoverageCopy(2, 50, 3)).toBe(
+      "2 of 50 verses are already hearted. If you want to memorize the rest of these chapters together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
     );
   });
 
   it("names a complete fill", () => {
-    expect(heartScopeCoverageCopy(6, 6)).toBe(
+    expect(heartScopeCoverageCopy(6, 6, 1)).toBe(
       "All 6 verses are already hearted.",
     );
   });
 });
 
 describe("heartScopeTooltip", () => {
-  it("explains all vs remaining", () => {
-    expect(heartScopeTooltip(false)).toMatch(/every verse/i);
-    expect(heartScopeTooltip(true)).toMatch(/rest of this scope/i);
-  });
-});
-
-describe("heartScopeHintCopy", () => {
-  it("points at Heart all vs Heart remaining", () => {
-    expect(heartScopeHintCopy(false)).toMatch(
-      /Heart all verses fills this pack/,
-    );
-    expect(heartScopeHintCopy(true)).toMatch(
-      /Heart remaining fills in the rest/,
-    );
+  it("invites auto-hearting the whole passage", () => {
+    expect(heartScopeTooltip()).toBe(HEART_SCOPE_TOOLTIP);
+    expect(heartScopeHintCopy()).toBe(HEART_SCOPE_TOOLTIP);
   });
 });
 
