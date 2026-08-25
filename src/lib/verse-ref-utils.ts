@@ -52,6 +52,22 @@ export function unionVerseRefs(refs: readonly VerseRef[]): VerseRef | null {
   };
 }
 
+export function formatVerseRange(
+  ref: Pick<VerseRef, "startVerse" | "endVerse">,
+): string {
+  if (ref.startVerse === ref.endVerse) return String(ref.startVerse);
+  return `${ref.startVerse}-${ref.endVerse}`;
+}
+
+export function verseRefsHaveMixedRanges(refs: readonly VerseRef[]): boolean {
+  if (refs.length < 2) return false;
+  const first = refs[0];
+  return refs.some(
+    (ref) =>
+      ref.startVerse !== first.startVerse || ref.endVerse !== first.endVerse,
+  );
+}
+
 interface ParseVerseRefOptions {
   defaultBook?: string;
   defaultChapter?: number;

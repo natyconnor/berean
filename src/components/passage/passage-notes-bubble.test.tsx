@@ -70,10 +70,39 @@ describe("PassageNotesBubble overlapping ranges", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("labels an expanded group with the union range", () => {
+  it("labels an expanded group with the union, and each note with its own range", () => {
     renderBubble(true);
 
     expect(screen.getByText("2 Samuel 23:9-12")).toBeInTheDocument();
-    expect(screen.queryByText("2 Samuel 23:9-11")).not.toBeInTheDocument();
+    expect(screen.getByText("9-11")).toBeInTheDocument();
+    expect(screen.getByText("9-12")).toBeInTheDocument();
+  });
+
+  it("does not label each card when every note shares the same range", () => {
+    render(
+      <TooltipProvider>
+        <PassageNotesBubble
+          notes={[
+            overlappingNotes[0],
+            passageNote({
+              noteId: "note-9-11-b" as Id<"notes">,
+              content: "A second note on the same span.",
+              verseRef: overlappingNotes[0].verseRef,
+              createdAt: 2,
+            }),
+          ]}
+          isOpen={true}
+          isGlowing={false}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onAddNote={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText("2 Samuel 23:9-11")).toBeInTheDocument();
+    expect(screen.queryByText("9-11")).not.toBeInTheDocument();
   });
 });

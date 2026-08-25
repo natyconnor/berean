@@ -5,6 +5,8 @@ import {
   isChapterScopeRef,
   parseVerseRef,
   unionVerseRefs,
+  formatVerseRange,
+  verseRefsHaveMixedRanges,
 } from "./verse-ref-utils";
 
 describe("parseVerseRef", () => {
@@ -159,6 +161,41 @@ describe("unionVerseRefs", () => {
       startVerse: 9,
       endVerse: 12,
     });
+  });
+});
+
+describe("formatVerseRange", () => {
+  it("formats a single verse and a span", () => {
+    expect(formatVerseRange({ startVerse: 9, endVerse: 9 })).toBe("9");
+    expect(formatVerseRange({ startVerse: 7, endVerse: 8 })).toBe("7-8");
+  });
+});
+
+describe("verseRefsHaveMixedRanges", () => {
+  const john17 = {
+    book: "John",
+    chapter: 1,
+    startVerse: 7,
+    endVerse: 9,
+  };
+
+  it("is false for one ref or identical ranges", () => {
+    expect(verseRefsHaveMixedRanges([john17])).toBe(false);
+    expect(
+      verseRefsHaveMixedRanges([
+        john17,
+        { ...john17, startVerse: 7, endVerse: 9 },
+      ]),
+    ).toBe(false);
+  });
+
+  it("is true when end verses differ", () => {
+    expect(
+      verseRefsHaveMixedRanges([
+        john17,
+        { ...john17, startVerse: 7, endVerse: 8 },
+      ]),
+    ).toBe(true);
   });
 });
 

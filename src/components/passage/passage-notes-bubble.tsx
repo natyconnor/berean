@@ -8,7 +8,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatVerseRef, unionVerseRefs } from "@/lib/verse-ref-utils";
+import {
+  formatVerseRange,
+  formatVerseRef,
+  unionVerseRefs,
+  verseRefsHaveMixedRanges,
+} from "@/lib/verse-ref-utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { NoteBody } from "@/lib/note-inline-content";
@@ -103,8 +108,10 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
 
   if (notes.length === 0 && !isExitingLast) return null;
 
-  const groupVerseRef = unionVerseRefs(notes.map((note) => note.verseRef));
+  const noteRefs = notes.map((note) => note.verseRef);
+  const groupVerseRef = unionVerseRefs(noteRefs);
   const groupVerseRefLabel = groupVerseRef ? formatVerseRef(groupVerseRef) : "";
+  const showPerNoteRanges = verseRefsHaveMixedRanges(noteRefs);
 
   const isReadMode = viewMode === "read";
   const supportsInlineEditing = !!onSaveEdit && !!onCancelEdit;
@@ -256,6 +263,7 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                 ) : (
                   <ExpandedPassageNote
                     note={note}
+                    showRangeLabel={showPerNoteRanges}
                     currentChapter={currentChapter}
                     density={isReadMode ? "reading" : "default"}
                     onEdit={() => onEdit(note.noteId)}
@@ -412,12 +420,14 @@ function PassageNotesPill({
 
 function ExpandedPassageNote({
   note,
+  showRangeLabel,
   currentChapter,
   density = "default",
   onEdit,
   onDelete,
 }: {
   note: PassageNote;
+  showRangeLabel: boolean;
   currentChapter?: { book: string; chapter: number };
   density?: "default" | "reading";
   onEdit: () => void;
@@ -435,13 +445,25 @@ function ExpandedPassageNote({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <NoteContent
-          content={note.content}
-          body={note.body}
-          density={density}
-          currentChapter={currentChapter}
-          className={isReading ? "flex-1 text-foreground" : "flex-1"}
-        />
+        <div className="min-w-0 flex-1">
+          {showRangeLabel && (
+            <div
+              className={cn(
+                "font-semibold text-amber-700 dark:text-[var(--cl-passage-ink)] uppercase tracking-wide",
+                isReading ? "mb-1.5 text-[11px]" : "mb-1 text-[10px]",
+              )}
+            >
+              {formatVerseRange(note.verseRef)}
+            </div>
+          )}
+          <NoteContent
+            content={note.content}
+            body={note.body}
+            density={density}
+            currentChapter={currentChapter}
+            className={isReading ? "text-foreground" : undefined}
+          />
+        </div>
         <NoteCardActions
           onEdit={onEdit}
           onDelete={onDelete}
