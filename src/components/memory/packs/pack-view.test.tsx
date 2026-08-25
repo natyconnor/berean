@@ -175,6 +175,16 @@ function verses() {
   return within(section);
 }
 
+/** The mid-page Learn whole passage card (complete scopes still being learned). */
+function packLearn() {
+  const heading = screen.getByRole("heading", { name: "Learn whole passage" });
+  const section = heading.closest("section");
+  if (!section) {
+    throw new Error("Learn whole passage heading is not inside a section");
+  }
+  return within(section);
+}
+
 describe("PackView", () => {
   beforeEach(() => {
     queryResults.clear();
@@ -270,8 +280,11 @@ describe("PackView", () => {
     });
 
     expect(
-      header().getByRole("button", { name: /Continue Learning/ }),
+      packLearn().getByRole("button", { name: /Continue Learning/ }),
     ).toBeInTheDocument();
+    expect(
+      header().queryByRole("button", { name: /Continue Learning/ }),
+    ).not.toBeInTheDocument();
     expect(
       header().queryByRole("button", { name: /Learn this pack/ }),
     ).not.toBeInTheDocument();
@@ -322,6 +335,9 @@ describe("PackView", () => {
         name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add verses" }),
+    ).not.toBeInTheDocument();
     covered.unmount();
 
     // Recited as one passage: a fresh heart would arrive as a new unit and
@@ -346,6 +362,9 @@ describe("PackView", () => {
         name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
+    expect(
+      verses().getByRole("button", { name: "Add verses" }),
+    ).toBeInTheDocument();
   });
 
   it("hearts only the gaps from the Memorize whole passage dialog", async () => {
@@ -445,7 +464,45 @@ describe("PackView", () => {
     );
   });
 
-  it("keeps the recitation switch off-limits until every unit has graduated", () => {
+  it("promotes Learn whole passage after the scope is fully hearted", async () => {
+    renderPack({
+      members: [
+        member({ startVerse: 1, endVerse: 2, status: "new" }),
+        member({ startVerse: 3, endVerse: 6, status: "new" }),
+      ],
+    });
+
+    expect(
+      header().queryByRole("button", { name: /Learn this pack/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add verses" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Starting one verse at a time splits the passage/),
+    ).toBeInTheDocument();
+
+    const learn = packLearn().getByRole("button", {
+      name: /Learn whole passage/,
+    });
+    expect(learn).toHaveTextContent("2");
+
+    await userEvent.click(learn);
+
+    const enroll = mutationMock("packs.enrollLearning");
+    expect(enroll).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/memory/$packId/learn",
+        params: { packId: PACK_ID },
+      });
+    });
+  });
+
+  it("offers Learn whole passage instead of Recite until every unit has graduated", () => {
     const { unmount } = renderPack({
       members: [
         member({ startVerse: 1, endVerse: 3, status: "reviewing" }),
@@ -454,11 +511,12 @@ describe("PackView", () => {
     });
 
     expect(
-      screen.getByRole("switch", { name: "Recite as one passage" }),
-    ).toBeDisabled();
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Finish learning this pack first/),
+      packLearn().getByRole("button", { name: /Continue Learning/ }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/stays together/)).toBeInTheDocument();
     unmount();
 
     renderPack({
@@ -471,6 +529,9 @@ describe("PackView", () => {
     expect(
       screen.getByRole("switch", { name: "Recite as one passage" }),
     ).toBeEnabled();
+    expect(
+      screen.queryByRole("heading", { name: "Learn whole passage" }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides Recite as one passage when only one hearted member is in scope", () => {

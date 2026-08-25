@@ -446,14 +446,33 @@ function PackViewMain({
       })),
     [members],
   );
+  const scopeFilled =
+    scope !== undefined &&
+    members !== undefined &&
+    scopeCoverageComplete(scope, memberSpans);
+  // After Memorize whole passage (or any path that fills the scope), Add verses
+  // has nothing left to heart. Custom packs keep the control; incomplete scopes
+  // still use it to pick individual verses.
+  const showAddVerses = isCustom || !scopeFilled;
   // Recite-as-one-passage is only an option for a contiguous block (or the
   // whole scope) of more than one hearted member — a single passage has
   // nothing to join. Stay visible while unified is already on so it can be
-  // switched off. Empty packs wait until there are passages to join.
+  // switched off. While the pack is still being learned, the Learn-whole-
+  // passage card occupies this slot so a disabled Recite switch doesn't bury
+  // the next step.
+  const showPackLearnBanner =
+    pack.kind === "scope" &&
+    scopeFilled &&
+    !unifiedEnabled &&
+    !allGraduated &&
+    verseCount > 0 &&
+    (canEnroll || canLearn);
   const showUnifiedPanel =
     pack.kind === "scope" &&
     (unifiedEnabled ||
-      (verseCount > 1 && packAllowsUnifiedRecitation(memberSpans, scope)));
+      (verseCount > 1 &&
+        allGraduated &&
+        packAllowsUnifiedRecitation(memberSpans, scope)));
   // Over-cap scopes offer nothing here: create already explained the limit, and
   // a permanently disabled button on an existing pack would only be noise.
   // A unified pack also withholds the offer: fresh hearts arrive as new units,
@@ -464,8 +483,8 @@ function PackViewMain({
       scope !== undefined &&
       members !== undefined &&
       autoHeartAllowed(scope) &&
-      !scopeCoverageComplete(scope, memberSpans),
-    [unifiedEnabled, scope, members, memberSpans],
+      !scopeFilled,
+    [unifiedEnabled, scope, members, scopeFilled],
   );
   const heartHintOpen = heartHint && canHeartRemaining && !heartHintDismissed;
 
@@ -533,7 +552,7 @@ function PackViewMain({
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {canEnroll ? (
+          {showPackLearnBanner ? null : canEnroll ? (
             <Button
               size="sm"
               variant="outline"
@@ -599,7 +618,19 @@ function PackViewMain({
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-2xl space-y-6 px-5 py-6">
-          {showUnifiedPanel ? (
+          {showPackLearnBanner ? (
+            <PackLearnPanel
+              packName={pack.name}
+              verseCount={verseCount}
+              newCount={newCount}
+              queueCount={
+                canEnroll ? newCount + learningDueCount : learningDueCount
+              }
+              canEnroll={canEnroll}
+              pending={isEnrolling}
+              onLearn={() => (canEnroll ? void handleLearnPack() : onLearn())}
+            />
+          ) : showUnifiedPanel ? (
             <UnifiedReviewPanel
               packName={pack.name}
               verseCount={verseCount}
@@ -633,15 +664,17 @@ function PackViewMain({
                     }}
                   />
                 ) : null}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1.5"
-                  onClick={() => setAddOpen(true)}
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden />
-                  Add verses
-                </Button>
+                {showAddVerses ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5"
+                    onClick={() => setAddOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden />
+                    Add verses
+                  </Button>
+                ) : null}
               </div>
             </div>
 
@@ -893,6 +926,71 @@ function HeartScopeButton({
         {heartScopeTooltip()}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/**
+ * After a scope is fully hearted, the next step is learning the passage as a
+ * queue — not one row at a time. This card sits in the Recite slot until every
+ * unit has graduated, so a disabled Recite switch doesn't steal the click.
+ */
+function PackLearnPanel({
+  packName,
+  verseCount,
+  newCount,
+  queueCount,
+  canEnroll,
+  pending,
+  onLearn,
+}: {
+  packName: string;
+  verseCount: number;
+  newCount: number;
+  queueCount: number;
+  canEnroll: boolean;
+  pending: boolean;
+  onLearn: () => void;
+}) {
+  const someStarted = newCount > 0 && newCount < verseCount;
+  const description = canEnroll
+    ? someStarted
+      ? `Some verses are already in progress. This queues the rest so you can learn ${packName} together, in order.`
+      : `Starting one verse at a time splits the passage. This queues every new unit in order so you learn ${packName} together.`
+    : `Continue in order so ${packName} stays together.`;
+  const label = pending
+    ? "Starting\u2026"
+    : canEnroll
+      ? "Learn whole passage"
+      : "Continue Learning";
+
+  return (
+    <section className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <GraduationCap aria-hidden className="h-4 w-4 text-primary" />
+            Learn whole passage
+          </h2>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {description}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          className="gap-1.5 shrink-0"
+          onClick={onLearn}
+          disabled={pending}
+        >
+          <GraduationCap className="h-4 w-4" aria-hidden />
+          {label}
+          {queueCount > 0 && !pending ? (
+            <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
+              {queueCount}
+            </span>
+          ) : null}
+        </Button>
+      </div>
+    </section>
   );
 }
 
