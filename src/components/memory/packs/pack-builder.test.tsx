@@ -7,11 +7,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { PackBuilder } from "./pack-builder";
 
-const { queryResults, mutationMocks, navigateMock } = vi.hoisted(() => ({
-  queryResults: new Map<string, unknown>(),
-  mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
-  navigateMock: vi.fn(),
-}));
+const { queryResults, mutationMocks, navigateMock, scopeFormIsComplete } =
+  vi.hoisted(() => ({
+    queryResults: new Map<string, unknown>(),
+    mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
+    navigateMock: vi.fn(),
+    scopeFormIsComplete: { current: true },
+  }));
 
 function mutationMock(name: string) {
   const existing = mutationMocks.get(name);
@@ -75,6 +77,7 @@ vi.mock("@/components/study/use-scope-form", () => ({
     scope: psalm1Scope,
     scopeForPreview: psalm1Scope,
     summaryText: "Psalm 1",
+    isComplete: scopeFormIsComplete.current,
   }),
 }));
 
@@ -88,6 +91,7 @@ describe("PackBuilder", () => {
       dueCount: 0,
     });
     mutationMock("packs.create").mockResolvedValue("pack_new");
+    scopeFormIsComplete.current = true;
   });
 
   it("creates a scope pack and points at Memorize whole passage on the pack page", async () => {
@@ -111,5 +115,17 @@ describe("PackBuilder", () => {
         search: { heartHint: true },
       });
     });
+  });
+
+  it("does not create until every selected book has a chapter range", () => {
+    scopeFormIsComplete.current = false;
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PackBuilder />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Create pack" })).toBeDisabled();
+    expect(screen.getByText("Select chapters to continue")).toBeInTheDocument();
   });
 });

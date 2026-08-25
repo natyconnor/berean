@@ -447,12 +447,13 @@ function PackViewMain({
     [members],
   );
   // Recite-as-one-passage is only an option for a contiguous block (or the
-  // whole scope). Stay visible while unified is already on so it can be
+  // whole scope) of more than one hearted member — a single passage has
+  // nothing to join. Stay visible while unified is already on so it can be
   // switched off. Empty packs wait until there are passages to join.
   const showUnifiedPanel =
     pack.kind === "scope" &&
     (unifiedEnabled ||
-      (verseCount > 0 && packAllowsUnifiedRecitation(memberSpans, scope)));
+      (verseCount > 1 && packAllowsUnifiedRecitation(memberSpans, scope)));
   // Over-cap scopes offer nothing here: create already explained the limit, and
   // a permanently disabled button on an existing pack would only be noise.
   // A unified pack also withholds the offer: fresh hearts arrive as new units,
@@ -584,18 +585,6 @@ function PackViewMain({
             <Dumbbell className="h-4 w-4" aria-hidden />
             Practice Pack
           </Button>
-          {canHeartRemaining && scope ? (
-            <HeartScopeButton
-              hintOpen={heartHintOpen}
-              onHintOpenChange={(open) => {
-                if (!open) dismissHeartHint();
-              }}
-              onClick={() => {
-                dismissHeartHint();
-                setHeartRemainingOpen(true);
-              }}
-            />
-          ) : null}
         </div>
       </header>
 
@@ -631,15 +620,29 @@ function PackViewMain({
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 Verses
               </h2>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1.5"
-                onClick={() => setAddOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5" aria-hidden />
-                Add verses
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                {canHeartRemaining && scope ? (
+                  <HeartScopeButton
+                    hintOpen={heartHintOpen}
+                    onHintOpenChange={(open) => {
+                      if (!open) dismissHeartHint();
+                    }}
+                    onClick={() => {
+                      dismissHeartHint();
+                      setHeartRemainingOpen(true);
+                    }}
+                  />
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5"
+                  onClick={() => setAddOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add verses
+                </Button>
+              </div>
             </div>
 
             {members === undefined ? (
@@ -858,11 +861,11 @@ function HeartScopeButton({
   const button = (
     <Button
       size="sm"
-      variant="ghost"
-      className="gap-1.5 text-muted-foreground"
+      variant="outline"
+      className="h-7 gap-1.5"
       onClick={onClick}
     >
-      <Heart className="h-4 w-4" aria-hidden />
+      <Heart className="h-3.5 w-3.5" aria-hidden />
       {heartScopeActionLabel()}
     </Button>
   );

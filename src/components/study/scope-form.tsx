@@ -21,6 +21,11 @@ interface ScopeFormProps extends ScopeFormControls {
    * book/chapter only, so tags would misleadingly imply they narrow membership.
    */
   showTagFilter?: boolean;
+  /**
+   * Pack builder: chapter grids start empty instead of highlighting every
+   * chapter of a selected book.
+   */
+  emptyChapterSelection?: boolean;
 }
 
 /**
@@ -44,6 +49,7 @@ export function ScopeForm({
   passageDescription = "Choose which books and chapters to study.",
   tagsDescription = "Optionally filter to notes with specific tags.",
   showTagFilter = true,
+  emptyChapterSelection = false,
 }: ScopeFormProps) {
   const resolveTagStyle = useStarterTagBadgeStyle();
   const catalog = useQuery(api.tags.listCatalog);
@@ -72,6 +78,7 @@ export function ScopeForm({
           onToggleBook={onToggleBook}
           onSetBooks={onSetBooks}
           onSetChapterRange={onSetChapterRange}
+          emptyChapterSelection={emptyChapterSelection}
         />
       </section>
 

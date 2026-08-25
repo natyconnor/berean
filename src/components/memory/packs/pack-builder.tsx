@@ -37,12 +37,12 @@ export function PackBuilder() {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const scopeForm = useScopeForm();
-  const { scopeForPreview, summaryText } = scopeForm;
+  const scopeForm = useScopeForm({ requireChapterSelection: true });
+  const { scopeForPreview, summaryText, isComplete } = scopeForm;
 
   const scopePreview = useQuery(
     api.packs.previewScopeCount,
-    kind === "scope" ? { scope: scopeForPreview, now } : "skip",
+    kind === "scope" && isComplete ? { scope: scopeForPreview, now } : "skip",
   );
 
   const savedVerses = useQuery(
@@ -96,10 +96,11 @@ export function PackBuilder() {
 
   const canCreate =
     !isCreating &&
-    (kind === "scope" || staged.size > 0 || trimmedName.length > 0);
+    (kind === "scope" ? isComplete : staged.size > 0 || trimmedName.length > 0);
 
   const handleCreate = useCallback(async () => {
     if (isCreating) return;
+    if (kind === "scope" && !isComplete) return;
     setIsCreating(true);
     setError(null);
     try {
@@ -155,6 +156,7 @@ export function PackBuilder() {
     staged,
     addVerse,
     navigate,
+    isComplete,
   ]);
 
   return (
@@ -236,6 +238,7 @@ export function PackBuilder() {
               onSetTagMatchMode={scopeForm.onSetTagMatchMode}
               passageDescription="Choose which books and chapters this pack covers."
               showTagFilter={false}
+              emptyChapterSelection
             />
           ) : (
             <section className="space-y-3">
@@ -273,15 +276,17 @@ export function PackBuilder() {
             <p className="truncate text-sm font-medium">{effectiveName}</p>
             <p className="text-xs text-muted-foreground">
               {kind === "scope"
-                ? scopePreview
-                  ? `${scopePreview.verseCount} verse${
-                      scopePreview.verseCount !== 1 ? "s" : ""
-                    }${
-                      scopePreview.dueCount > 0
-                        ? ` · ${scopePreview.dueCount} due`
-                        : ""
-                    }`
-                  : "Counting…"
+                ? !isComplete
+                  ? "Select chapters to continue"
+                  : scopePreview
+                    ? `${scopePreview.verseCount} verse${
+                        scopePreview.verseCount !== 1 ? "s" : ""
+                      }${
+                        scopePreview.dueCount > 0
+                          ? ` · ${scopePreview.dueCount} due`
+                          : ""
+                      }`
+                    : "Counting…"
                 : `${staged.size} verse${staged.size !== 1 ? "s" : ""} selected`}
             </p>
           </div>

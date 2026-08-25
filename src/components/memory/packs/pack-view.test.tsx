@@ -165,6 +165,16 @@ function header() {
   return within(screen.getByRole("banner"));
 }
 
+/** The Verses section, where Add verses and Memorize whole passage live. */
+function verses() {
+  const heading = screen.getByRole("heading", { name: "Verses" });
+  const section = heading.closest("section");
+  if (!section) {
+    throw new Error("Verses heading is not inside a section");
+  }
+  return within(section);
+}
+
 describe("PackView", () => {
   beforeEach(() => {
     queryResults.clear();
@@ -271,10 +281,16 @@ describe("PackView", () => {
     const { unmount } = renderPack({
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
     });
-    const remaining = header().getByRole("button", {
+    const remaining = verses().getByRole("button", {
       name: "Memorize whole passage",
     });
     expect(remaining).toBeInTheDocument();
+    expect(
+      header().queryByRole("button", { name: "Memorize whole passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      verses().getByRole("button", { name: "Add verses" }),
+    ).toBeInTheDocument();
     await userEvent.hover(remaining);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Want to memorize this whole passage? Click here to automatically heart all the verses",
@@ -282,7 +298,7 @@ describe("PackView", () => {
     unmount();
 
     const empty = renderPack({ members: [] });
-    const heartAll = header().getByRole("button", {
+    const heartAll = verses().getByRole("button", {
       name: "Memorize whole passage",
     });
     expect(heartAll).toBeInTheDocument();
@@ -302,7 +318,7 @@ describe("PackView", () => {
       members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
     });
     expect(
-      header().queryByRole("button", {
+      screen.queryByRole("button", {
         name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
@@ -315,7 +331,7 @@ describe("PackView", () => {
       members: [member({ startVerse: 1, endVerse: 2, status: "reviewing" })],
     });
     expect(
-      header().queryByRole("button", {
+      screen.queryByRole("button", {
         name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
@@ -326,7 +342,7 @@ describe("PackView", () => {
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
     });
     expect(
-      header().queryByRole("button", {
+      screen.queryByRole("button", {
         name: "Memorize whole passage",
       }),
     ).not.toBeInTheDocument();
@@ -341,7 +357,7 @@ describe("PackView", () => {
     });
 
     await userEvent.click(
-      header().getByRole("button", { name: "Memorize whole passage" }),
+      verses().getByRole("button", { name: "Memorize whole passage" }),
     );
 
     expect(
@@ -408,7 +424,7 @@ describe("PackView", () => {
     });
 
     await userEvent.click(
-      header().getByRole("button", { name: "Memorize whole passage" }),
+      verses().getByRole("button", { name: "Memorize whole passage" }),
     );
 
     expect(
@@ -422,7 +438,7 @@ describe("PackView", () => {
     renderPack({ members: [], heartHint: true });
 
     expect(
-      header().getByRole("button", { name: "Memorize whole passage" }),
+      verses().getByRole("button", { name: "Memorize whole passage" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
       "Want to memorize this whole passage? Click here to automatically heart all the verses",
@@ -455,6 +471,16 @@ describe("PackView", () => {
     expect(
       screen.getByRole("switch", { name: "Recite as one passage" }),
     ).toBeEnabled();
+  });
+
+  it("hides Recite as one passage when only one hearted member is in scope", () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
+    });
+
+    expect(
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides Recite as one passage when the members are not a contiguous block", () => {
