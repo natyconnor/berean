@@ -32,6 +32,42 @@ export function formatVerseRef(ref: VerseRef): string {
   return `${book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
 }
 
+/** Smallest start through largest end, using the first ref's book and chapter. */
+export function unionVerseRefs(refs: readonly VerseRef[]): VerseRef | null {
+  if (refs.length === 0) return null;
+
+  const first = refs[0];
+  let startVerse = first.startVerse;
+  let endVerse = first.endVerse;
+  for (const ref of refs) {
+    startVerse = Math.min(startVerse, ref.startVerse);
+    endVerse = Math.max(endVerse, ref.endVerse);
+  }
+
+  return {
+    book: first.book,
+    chapter: first.chapter,
+    startVerse,
+    endVerse,
+  };
+}
+
+export function formatVerseRange(
+  ref: Pick<VerseRef, "startVerse" | "endVerse">,
+): string {
+  if (ref.startVerse === ref.endVerse) return String(ref.startVerse);
+  return `${ref.startVerse}-${ref.endVerse}`;
+}
+
+export function verseRefsHaveMixedRanges(refs: readonly VerseRef[]): boolean {
+  if (refs.length < 2) return false;
+  const first = refs[0];
+  return refs.some(
+    (ref) =>
+      ref.startVerse !== first.startVerse || ref.endVerse !== first.endVerse,
+  );
+}
+
 interface ParseVerseRefOptions {
   defaultBook?: string;
   defaultChapter?: number;
