@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.13](https://github.com/natyconnor/berean/compare/v1.12.12...v1.12.13) (2026-08-25)
+
+
+### Bug Fixes
+
+* Slow post-graduation review spacing ([#179](https://github.com/natyconnor/berean/issues/179)) ([d5b302e](https://github.com/natyconnor/berean/commit/d5b302eeb3e6c8e201f49f9e5a600f977fd0ae54))
+
 ## [1.12.12](https://github.com/natyconnor/berean/compare/v1.12.11...v1.12.12) (2026-08-25)
 
 
