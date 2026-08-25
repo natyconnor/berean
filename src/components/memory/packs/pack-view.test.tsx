@@ -132,10 +132,12 @@ function renderPack({
   kind = "scope",
   members,
   unifiedReviewEnabled,
+  heartHint,
 }: {
   kind?: "scope" | "custom";
   members: ReturnType<typeof member>[];
   unifiedReviewEnabled?: boolean;
+  heartHint?: boolean;
 }) {
   queryResults.set("packs.get", {
     _id: PACK_ID,
@@ -151,7 +153,7 @@ function renderPack({
 
   return render(
     <TooltipProvider delayDuration={0}>
-      <PackView packId={PACK_ID as never} />
+      <PackView packId={PACK_ID as never} heartHint={heartHint} />
     </TooltipProvider>,
   );
 }
@@ -271,7 +273,7 @@ describe("PackView", () => {
     expect(remaining).toBeInTheDocument();
     await userEvent.hover(remaining);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Heart the rest of this scope as short memory units, skipping verses you've already hearted.",
+      "Heart the rest of this scope as short memory passages, skipping verses you've already hearted.",
     );
     unmount();
 
@@ -283,7 +285,7 @@ describe("PackView", () => {
     ).toBeInTheDocument();
     await userEvent.hover(heartAll);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Heart every verse in this scope as short memory units you can learn.",
+      "Heart every verse in this scope as short memory passages you can learn.",
     );
     empty.unmount();
 
@@ -339,7 +341,7 @@ describe("PackView", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "3 of 6 verses are already hearted. Heart the rest as short memory units.",
+        "3 of 6 verses are already hearted. If you want to memorize the rest of this chapter (or these chapters) together, we can auto-heart the remaining verses as short memory units so you can start learning.",
       ),
     ).toBeVisible();
 
@@ -347,14 +349,14 @@ describe("PackView", () => {
       await screen.findByText(
         (_, element) =>
           element?.tagName === "P" &&
-          /^Psalm 23 · 6 verses → \d+ new units? · 2 already hearted$/.test(
+          /^Psalm 23 · 6 verses → \d+ new passages? · 2 already hearted$/.test(
             element.textContent ?? "",
           ),
       ),
     ).toBeVisible();
 
     const confirm = await screen.findByRole("button", {
-      name: /^Heart \d+ new units?$/,
+      name: /^Heart \d+ new passages?$/,
     });
     await userEvent.click(confirm);
 
@@ -386,6 +388,17 @@ describe("PackView", () => {
     });
   });
 
+  it("points at Heart all verses after creating an empty scope pack", () => {
+    renderPack({ members: [], heartHint: true });
+
+    expect(
+      header().getByRole("button", { name: "Heart all verses" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Heart all verses fills this pack with short memory passages you can learn.",
+    );
+  });
+
   it("keeps the recitation switch off-limits until every unit has graduated", () => {
     const { unmount } = renderPack({
       members: [
@@ -412,6 +425,33 @@ describe("PackView", () => {
     expect(
       screen.getByRole("switch", { name: "Recite as one passage" }),
     ).toBeEnabled();
+  });
+
+  it("hides Recite as one passage when the members are not a contiguous block", () => {
+    renderPack({
+      members: [
+        member({ startVerse: 1, endVerse: 2, status: "reviewing" }),
+        member({ startVerse: 5, endVerse: 6, status: "reviewing" }),
+      ],
+    });
+
+    expect(
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps Recite as one passage visible while unified is already on", () => {
+    renderPack({
+      unifiedReviewEnabled: true,
+      members: [
+        member({ startVerse: 1, endVerse: 2, status: "reviewing" }),
+        member({ startVerse: 5, endVerse: 6, status: "reviewing" }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("switch", { name: "Recite as one passage" }),
+    ).toBeInTheDocument();
   });
 
   it("hides the recitation switch on a custom pack", () => {

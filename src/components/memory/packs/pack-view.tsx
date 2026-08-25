@@ -33,6 +33,11 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -48,11 +53,14 @@ import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
+import { packAllowsUnifiedRecitation } from "@/lib/contiguous-spans";
 import {
   heartScopeActionLabel,
+  heartScopeConfirmLabel,
   heartScopeCoverageCopy,
   heartScopeDialogTitle,
   heartScopeHasExisting,
+  heartScopeHintCopy,
   heartScopeTooltip,
 } from "@/lib/heart-scope-copy";
 import { autoHeartAllowed } from "@/lib/scope-chapter-count";
@@ -83,7 +91,14 @@ import {
  * `/memory/$packId/practice`. Custom packs additionally support add / remove
  * of their hand-picked membership.
  */
-export function PackView({ packId }: { packId: Id<"packs"> }) {
+export function PackView({
+  packId,
+  heartHint = false,
+}: {
+  packId: Id<"packs">;
+  /** After create: point at Heart all / Heart remaining so the CTA is obvious. */
+  heartHint?: boolean;
+}) {
   const now = useLiveNow();
   const navigate = useNavigate();
 
@@ -157,10 +172,19 @@ export function PackView({ packId }: { packId: Id<"packs"> }) {
       pack={pack}
       members={members}
       now={now}
+      heartHint={heartHint}
       dueCount={dueMembers.length}
       learningDueCount={learningDueCount}
       newCount={newCount}
       practiceCount={practiceCount}
+      onClearHeartHint={() =>
+        void navigate({
+          to: "/memory/$packId",
+          params: { packId },
+          search: {},
+          replace: true,
+        })
+      }
       onBack={() => void navigate({ to: "/memory" })}
       onReview={() =>
         void navigate({
@@ -205,10 +229,12 @@ function PackViewMain({
   pack,
   members,
   now,
+  heartHint,
   dueCount,
   learningDueCount,
   newCount,
   practiceCount,
+  onClearHeartHint,
   onBack,
   onReview,
   onLearn,
@@ -221,10 +247,12 @@ function PackViewMain({
   pack: Pack;
   members: Member[] | undefined;
   now: number;
+  heartHint: boolean;
   dueCount: number;
   learningDueCount: number;
   newCount: number;
   practiceCount: number;
+  onClearHeartHint: () => void;
   onBack: () => void;
   onReview: () => void;
   onLearn: () => void;
@@ -255,6 +283,7 @@ function PackViewMain({
   const [isRenaming, setIsRenaming] = useState(false);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [heartRemainingOpen, setHeartRemainingOpen] = useState(false);
+  const [heartHintDismissed, setHeartHintDismissed] = useState(false);
   const [unifiedDialogOpen, setUnifiedDialogOpen] = useState(false);
   const [isSettingUnified, setIsSettingUnified] = useState(false);
   const [unifiedError, setUnifiedError] = useState<string | null>(null);
@@ -399,8 +428,6 @@ function PackViewMain({
   // one is on, the pack counts as a single due item (matching the pack list).
   const unifiedEnabled = pack.unifiedReviewEnabled === true;
   const allGraduated = verseCount > 0 && practiceCount === verseCount;
-  const showUnifiedPanel =
-    pack.kind === "scope" && (verseCount > 0 || unifiedEnabled);
   const effectiveDueCount = unifiedEnabled ? (dueCount > 0 ? 1 : 0) : dueCount;
   const notDueCount = verseCount - dueCount;
 
@@ -417,6 +444,13 @@ function PackViewMain({
       })),
     [members],
   );
+  // Recite-as-one-passage is only an option for a contiguous block (or the
+  // whole scope). Stay visible while unified is already on so it can be
+  // switched off. Empty packs wait until there are passages to join.
+  const showUnifiedPanel =
+    pack.kind === "scope" &&
+    (unifiedEnabled ||
+      (verseCount > 0 && packAllowsUnifiedRecitation(memberSpans, scope)));
   // Over-cap scopes offer nothing here: create already explained the limit, and
   // a permanently disabled button on an existing pack would only be noise.
   // A unified pack also withholds the offer: fresh hearts arrive as new units,
@@ -430,6 +464,16 @@ function PackViewMain({
       !scopeCoverageComplete(scope, memberSpans),
     [unifiedEnabled, scope, members, memberSpans],
   );
+  const hasExistingHearts = Boolean(
+    scope && heartScopeHasExisting(coveredVerseCount(scope, memberSpans)),
+  );
+  const heartHintOpen = heartHint && canHeartRemaining && !heartHintDismissed;
+
+  const dismissHeartHint = useCallback(() => {
+    if (heartHintDismissed) return;
+    setHeartHintDismissed(true);
+    if (heartHint) onClearHeartHint();
+  }, [heartHint, heartHintDismissed, onClearHeartHint]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -542,28 +586,17 @@ function PackViewMain({
             Practice Pack
           </Button>
           {canHeartRemaining && scope ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-muted-foreground"
-                  onClick={() => setHeartRemainingOpen(true)}
-                >
-                  <Heart className="h-4 w-4" aria-hidden />
-                  {heartScopeActionLabel(
-                    heartScopeHasExisting(
-                      coveredVerseCount(scope, memberSpans),
-                    ),
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                {heartScopeTooltip(
-                  heartScopeHasExisting(coveredVerseCount(scope, memberSpans)),
-                )}
-              </TooltipContent>
-            </Tooltip>
+            <HeartScopeButton
+              hasExistingHearts={hasExistingHearts}
+              hintOpen={heartHintOpen}
+              onHintOpenChange={(open) => {
+                if (!open) dismissHeartHint();
+              }}
+              onClick={() => {
+                dismissHeartHint();
+                setHeartRemainingOpen(true);
+              }}
+            />
           ) : null}
         </div>
       </header>
@@ -815,6 +848,55 @@ function PackViewMain({
   );
 }
 
+function HeartScopeButton({
+  hasExistingHearts,
+  hintOpen,
+  onHintOpenChange,
+  onClick,
+}: {
+  hasExistingHearts: boolean;
+  hintOpen: boolean;
+  onHintOpenChange: (open: boolean) => void;
+  onClick: () => void;
+}) {
+  const button = (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="gap-1.5 text-muted-foreground"
+      onClick={onClick}
+    >
+      <Heart className="h-4 w-4" aria-hidden />
+      {heartScopeActionLabel(hasExistingHearts)}
+    </Button>
+  );
+
+  if (hintOpen) {
+    return (
+      <Popover open modal={false} onOpenChange={onHintOpenChange}>
+        <PopoverTrigger asChild>{button}</PopoverTrigger>
+        <PopoverContent
+          side="bottom"
+          align="end"
+          className="w-72 p-3 text-xs leading-5"
+          role="status"
+        >
+          {heartScopeHintCopy(hasExistingHearts)}
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        {heartScopeTooltip(hasExistingHearts)}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * The switch that turns a graduated scope pack into one recitation.
  *
@@ -976,7 +1058,7 @@ function HeartRemainingDialog({
               ? "Hearting\u2026"
               : preview.loading
                 ? "Preparing\u2026"
-                : `Heart ${proposedCount} new unit${proposedCount === 1 ? "" : "s"}`}
+                : heartScopeConfirmLabel(proposedCount)}
           </Button>
         </DialogFooter>
       </DialogContent>

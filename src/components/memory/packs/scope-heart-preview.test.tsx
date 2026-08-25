@@ -95,7 +95,7 @@ describe("ScopeHeartPreview", () => {
     });
     expect(control).not.toBeChecked();
     expect(control).toBeEnabled();
-    expect(screen.queryByText(/new unit/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/new passage/)).not.toBeInTheDocument();
   });
 
   it("summarizes the proposal and marks kept hearts apart from new units", async () => {
@@ -126,7 +126,7 @@ describe("ScopeHeartPreview", () => {
         (_, element) =>
           element?.tagName === "P" &&
           element.textContent ===
-            "Psalm 23 · 6 verses → 2 new units · 1 already hearted",
+            "Psalm 23 · 6 verses → 2 new passages · 1 already hearted",
       ),
     ).toBeVisible();
 
@@ -136,7 +136,7 @@ describe("ScopeHeartPreview", () => {
     expect(keptChip.className).toContain("text-muted-foreground");
     expect(proposedChip).toHaveTextContent("4–6");
     expect(proposedChip.className).toContain("bg-primary/15");
-    expect(screen.getByText("Kept — already hearted")).toBeInTheDocument();
+    expect(screen.getByText("New passage")).toBeInTheDocument();
   });
 
   it("shows a skeleton while the passage text loads", () => {

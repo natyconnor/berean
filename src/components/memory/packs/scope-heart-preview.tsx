@@ -130,7 +130,7 @@ function HeartProposal({ scopeLabel, preview }: ScopeHeartPreviewBaseProps) {
         <span className="font-medium text-foreground">{scopeLabel}</span>
         {` · ${plural(verseCount, "verse")} \u2192 `}
         <span className="font-medium text-foreground">
-          {plural(proposedCount, "new unit")}
+          {plural(proposedCount, "new passage")}
         </span>
         {keptCount > 0 ? ` · ${keptCount} already hearted` : ""}
       </p>
@@ -172,7 +172,7 @@ function HeartProposal({ scopeLabel, preview }: ScopeHeartPreviewBaseProps) {
         {proposedCount > 0 && (
           <span className="inline-flex items-center gap-1.5">
             <LegendSwatch kind="proposed" />
-            New unit
+            New passage
           </span>
         )}
         {keptCount > 0 && (
@@ -223,7 +223,7 @@ export function ScopeHeartPreview(props: ScopeHeartPreviewProps) {
         </label>
         <p id={HELPER_ID} className="mt-0.5 text-xs text-muted-foreground">
           {allowed
-            ? `${plural(chapterCount, "chapter")} · adds short memory units for verses you haven't hearted`
+            ? `${plural(chapterCount, "chapter")} · adds short memory passages for verses you haven't hearted`
             : `Limited to ${AUTO_HEART_MAX_CHAPTERS} chapters`}
         </p>
       </div>
