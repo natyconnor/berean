@@ -41,7 +41,7 @@ const CONFETTI_COLORS = [
 ] as const;
 
 function nextReviewMessage(
-  lead: "Nailed it" | "Partial recall",
+  lead: "Nailed it" | "Not bad, but some mistakes",
   schedule: MemorySchedule | null | undefined,
   now: number,
 ): string {
@@ -94,7 +94,11 @@ export function VerseMemoryFeedback({
         reduceMotion={!!reduceMotion}
         tone="close"
         icon={<ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />}
-        message={nextReviewMessage("Partial recall", nextSchedule, dueClock)}
+        message={nextReviewMessage(
+          "Not bad, but some mistakes",
+          nextSchedule,
+          dueClock,
+        )}
       />
     );
   }
