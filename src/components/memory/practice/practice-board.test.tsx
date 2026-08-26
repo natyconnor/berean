@@ -189,7 +189,10 @@ describe("PracticeBoard composite recitation", () => {
     fetchChaptersBatchMock.mockRejectedValue(new Error("ESV is down"));
     renderComposite();
 
-    expect(await screen.findByText("Could not load verse text.")).toBeVisible();
+    expect(
+      await screen.findByText("Could not load verse text."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(
