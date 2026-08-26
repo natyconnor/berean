@@ -65,6 +65,12 @@ interface VerseAttemptResultProps {
   diffTokens?: ReadonlyArray<DiffToken>;
   /** Review mode: show schedule-consequence copy above the diff. */
   showScheduleOutcome?: boolean;
+  /**
+   * From Memory learning requires a perfect recall to bank a rep. Passed
+   * through to the close-attempt banner so it can explain why Continue is
+   * still "Try again".
+   */
+  requireExactToAdvance?: boolean;
   nextSchedule?: MemorySchedule | null;
   now?: number;
 }
@@ -177,6 +183,7 @@ export function VerseAttemptResult({
   versePlainText,
   diffTokens: providedDiffTokens,
   showScheduleOutcome = false,
+  requireExactToAdvance = false,
   nextSchedule = null,
   now,
 }: VerseAttemptResultProps): JSX.Element | null {
@@ -197,6 +204,7 @@ export function VerseAttemptResult({
           quality={attemptQuality}
           attemptKey={attemptKey}
           showScheduleOutcome={showScheduleOutcome}
+          requireExactToAdvance={requireExactToAdvance}
           nextSchedule={nextSchedule}
           now={now}
         />
