@@ -184,4 +184,16 @@ describe("PracticeBoard composite recitation", () => {
       row.queryByRole("button", { name: "Practice" }),
     ).not.toBeInTheDocument();
   });
+
+  it("offers retry when the composite passage fails to load", async () => {
+    fetchChaptersBatchMock.mockRejectedValue(new Error("ESV is down"));
+    renderComposite();
+
+    expect(await screen.findByText("Could not load verse text.")).toBeVisible();
+    fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByLabelText("Your recited passage"),
+    ).toBeInTheDocument();
+  });
 });

@@ -95,6 +95,8 @@ export type { MemorySessionLabel } from "@/lib/memory-session";
 export interface PracticeCompositeSet {
   packId: Id<"packs">;
   members: CardReference[];
+  /** Pack name, used when this card sits in a mixed global review queue. */
+  packName?: string;
 }
 
 export interface PracticeVerse {
@@ -355,7 +357,9 @@ export function PracticeBoard({
           ...verse,
           // A composite row stands for the whole pack, so it is labeled with
           // the pack name rather than one member's reference.
-          label: verse.composite ? scopeLabel : undefined,
+          label: verse.composite
+            ? (verse.composite.packName ?? scopeLabel)
+            : undefined,
           learnStage: progress?.learnStage ?? verse.learnStage,
           stageReps: progress?.stageReps ?? verse.stageReps,
           status: progress?.status ?? verse.status,
@@ -401,10 +405,9 @@ export function PracticeBoard({
   const currentLocked = isLearningLocked(currentProgress, now);
   const currentHasWorkLeft = hasSessionWorkLeft(kind, currentProgress, now);
 
-  // A composite session is exactly one card, so the pack's concatenated text
-  // replaces the per-verse fetch (and its word count drives the long-passage
-  // rep curve if a future lapse drops the pack back into learning).
-  const composite = baseVerses[0]?.composite ?? null;
+  // The active card's passage: a unified pack is one concatenated recitation,
+  // even when it sits next to ordinary verses in the global review queue.
+  const composite = currentVerse?.composite ?? null;
   const compositePassage = useEsvCompositePassage(
     composite?.members ?? NO_COMPOSITE_MEMBERS,
     { enabled: composite !== null },
@@ -564,7 +567,7 @@ export function PracticeBoard({
               composite={
                 composite
                   ? {
-                      title: scopeLabel,
+                      title: composite.packName ?? scopeLabel,
                       // The verses the learner actually recites, not the number
                       // of memory units they were learned in.
                       verseCount: composite.members.reduce(
@@ -576,6 +579,7 @@ export function PracticeBoard({
                       segments: compositePassage.segments,
                       loading: compositePassage.loading,
                       error: compositePassage.error,
+                      retry: compositePassage.retry,
                     }
                   : null
               }
@@ -593,7 +597,9 @@ export function PracticeBoard({
                       accuracy,
                       // One recitation, one row: the pack name, and no
                       // per-verse practice shortcut to a single member.
-                      label: composite ? scopeLabel : undefined,
+                      label: composite
+                        ? (composite.packName ?? scopeLabel)
+                        : undefined,
                       offerPractice: composite === null,
                     };
                     if (idx >= 0) {
@@ -696,7 +702,7 @@ export function PracticeBoard({
             currentStatus={currentProgress.status}
             currentWordCount={currentWordCount}
             currentLocked={currentLocked}
-            allowReorder={composite === null}
+            allowReorder={orderedVerses.length > 1}
           />
         </div>
       </div>
@@ -713,6 +719,7 @@ interface CompositeCardPassage {
   segments: CompositePassageSegment[];
   loading: boolean;
   error: string | null;
+  retry: () => void;
 }
 
 interface PracticeCardProps {
@@ -787,6 +794,7 @@ function PracticeCard({
   const data = composite ? null : single.data;
   const loading = composite ? composite.loading : single.loading;
   const error = composite ? composite.error : single.error;
+  const retryLoad = composite ? composite.retry : single.retry;
   const versePlainText = composite
     ? composite.text
     : data
@@ -1049,9 +1057,14 @@ function PracticeCard({
                         <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
                       </div>
                     ) : error ? (
-                      <p className="text-sm text-destructive">
-                        Could not load verse text.
-                      </p>
+                      <div className="space-y-3">
+                        <p className="text-sm text-destructive">
+                          Could not load verse text.
+                        </p>
+                        <Button size="sm" variant="outline" onClick={retryLoad}>
+                          Retry
+                        </Button>
+                      </div>
                     ) : hintStage === "hidden" ? (
                       <div className="flex h-full min-h-[140px] items-center justify-center text-center">
                         <p className="max-w-sm text-sm text-muted-foreground">

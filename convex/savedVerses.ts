@@ -233,6 +233,7 @@ export const heartMany = mutation({
     added: v.number(),
     skippedExact: v.number(),
     skippedOverlap: v.number(),
+    skippedInvalid: v.number(),
   }),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
@@ -244,18 +245,24 @@ export const heartMany = mutation({
     }
 
     if (args.spans.length === 0) {
-      return { added: 0, skippedExact: 0, skippedOverlap: 0 };
+      return {
+        added: 0,
+        skippedExact: 0,
+        skippedOverlap: 0,
+        skippedInvalid: 0,
+      };
     }
 
     const userHearts = await loadUserHeartSpans(ctx, userId);
     let added = 0;
     let skippedExact = 0;
     let skippedOverlap = 0;
+    let skippedInvalid = 0;
 
     for (const span of args.spans) {
       const boundsError = getVerseRefBoundsErrorMessage(span);
       if (boundsError) {
-        skippedOverlap += 1;
+        skippedInvalid += 1;
         continue;
       }
 
@@ -279,6 +286,6 @@ export const heartMany = mutation({
       added += 1;
     }
 
-    return { added, skippedExact, skippedOverlap };
+    return { added, skippedExact, skippedOverlap, skippedInvalid };
   },
 });

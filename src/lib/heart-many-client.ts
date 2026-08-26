@@ -4,6 +4,7 @@ export interface HeartManyResult {
   added: number;
   skippedExact: number;
   skippedOverlap: number;
+  skippedInvalid: number;
 }
 
 /** The `api.savedVerses.heartMany` mutation, as `useMutation` returns it. */
@@ -54,6 +55,7 @@ export async function heartSpansInChunks(
     added: 0,
     skippedExact: 0,
     skippedOverlap: 0,
+    skippedInvalid: 0,
     failedChunks: 0,
   };
 
@@ -63,6 +65,7 @@ export async function heartSpansInChunks(
       totals.added += result.added;
       totals.skippedExact += result.skippedExact;
       totals.skippedOverlap += result.skippedOverlap;
+      totals.skippedInvalid += result.skippedInvalid;
     } catch {
       totals.failedChunks += 1;
     }

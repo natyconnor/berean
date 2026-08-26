@@ -1,40 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { ScopeHeartPreviewState } from "@/hooks/use-scope-heart-preview";
 import type { ProposedHeartGroup } from "@/lib/memory-span-group";
-import { AUTO_HEART_MAX_CHAPTERS } from "@/lib/scope-chapter-count";
 import { cn } from "@/lib/utils";
 
-const SWITCH_ID = "scope-auto-heart";
-const HELPER_ID = "scope-auto-heart-help";
-
-interface ScopeHeartPreviewBaseProps {
+interface ScopeHeartPreviewProps {
   /** Scope summary, used as the preview's lead-in ("Psalm 23 · 6 verses …"). */
   scopeLabel: string;
   preview: ScopeHeartPreviewState;
 }
-
-export interface ScopeHeartPreviewSectionProps extends ScopeHeartPreviewBaseProps {
-  /** Default: the opt-in switch plus the proposal it reveals. */
-  variant?: "section";
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
-  /** Locked while the pack is being created. */
-  disabled?: boolean;
-}
-
-export interface ScopeHeartPreviewCompactProps extends ScopeHeartPreviewBaseProps {
-  /** The proposal alone, for a dialog whose confirm button is the opt-in. */
-  variant: "compact";
-}
-
-type ScopeHeartPreviewProps =
-  ScopeHeartPreviewSectionProps | ScopeHeartPreviewCompactProps;
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -44,13 +17,6 @@ function groupLabel(group: ProposedHeartGroup): string {
   return group.startVerse === group.endVerse
     ? `${group.startVerse}`
     : `${group.startVerse}\u2013${group.endVerse}`;
-}
-
-function disabledReason(chapterCount: number): string {
-  if (!Number.isFinite(chapterCount) || chapterCount === 0) {
-    return "Choose at least one book to heart verses from.";
-  }
-  return `This scope covers ${plural(chapterCount, "chapter")}. Hearting a scope is limited to ${AUTO_HEART_MAX_CHAPTERS} chapters so the Bible text API isn't overloaded — narrow the scope, for example one small book or a chapter range.`;
 }
 
 function LegendSwatch({ kind }: { kind: ProposedHeartGroup["kind"] }) {
@@ -90,7 +56,7 @@ function PreviewSkeleton() {
  * by chapter. Kept hearts render muted so a glance separates what is new from
  * what already exists.
  */
-function HeartProposal({ scopeLabel, preview }: ScopeHeartPreviewBaseProps) {
+function HeartProposal({ scopeLabel, preview }: ScopeHeartPreviewProps) {
   const {
     loading,
     error,
@@ -187,86 +153,16 @@ function HeartProposal({ scopeLabel, preview }: ScopeHeartPreviewBaseProps) {
 }
 
 /**
- * The opt-in "Heart verses in this scope" control plus its proposal preview.
- * Over-cap or empty scopes disable the switch and explain why. The `compact`
- * variant drops the switch and renders the proposal on its own, for surfaces
- * that already committed to hearting (the pack's Memorize whole passage dialog).
+ * The auto-heart proposal for a scope pack. Used in the Memorize whole passage
+ * dialog after the caller has already committed to hearting.
  */
-export function ScopeHeartPreview(props: ScopeHeartPreviewProps) {
-  const { scopeLabel, preview } = props;
-
-  if (props.variant === "compact") {
-    return (
-      <div className="rounded-lg border bg-card px-3 py-2.5">
-        <HeartProposal scopeLabel={scopeLabel} preview={preview} />
-      </div>
-    );
-  }
-
-  const { enabled, onEnabledChange, disabled = false } = props;
-  const { allowed, chapterCount } = preview;
-  const isOn = enabled && allowed;
-
-  const control = (
-    <div className="flex items-center justify-between gap-4 px-3 py-2.5">
-      <div className="min-w-0">
-        <label
-          htmlFor={SWITCH_ID}
-          className={cn(
-            "text-sm font-medium",
-            allowed
-              ? "cursor-pointer"
-              : "cursor-not-allowed text-muted-foreground",
-          )}
-        >
-          Heart verses in this scope
-        </label>
-        <p id={HELPER_ID} className="mt-0.5 text-xs text-muted-foreground">
-          {allowed
-            ? `${plural(chapterCount, "chapter")} · adds short memory passages for verses you haven't hearted`
-            : `Limited to ${AUTO_HEART_MAX_CHAPTERS} chapters`}
-        </p>
-      </div>
-      <Switch
-        id={SWITCH_ID}
-        aria-describedby={HELPER_ID}
-        checked={isOn}
-        disabled={!allowed || disabled}
-        onCheckedChange={onEnabledChange}
-      />
-    </div>
-  );
-
+export function ScopeHeartPreview({
+  scopeLabel,
+  preview,
+}: ScopeHeartPreviewProps) {
   return (
-    <section className="space-y-3">
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Memory
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Scope packs draw from the verses you&apos;ve hearted. Heart this scope
-          now to fill in what&apos;s missing.
-        </p>
-      </div>
-
-      <div className="rounded-lg border bg-card">
-        {allowed ? (
-          control
-        ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>{control}</TooltipTrigger>
-            <TooltipContent className="max-w-xs">
-              {disabledReason(chapterCount)}
-            </TooltipContent>
-          </Tooltip>
-        )}
-
-        {isOn && (
-          <div className="border-t px-3 py-2.5">
-            <HeartProposal scopeLabel={scopeLabel} preview={preview} />
-          </div>
-        )}
-      </div>
-    </section>
+    <div className="rounded-lg border bg-card px-3 py-2.5">
+      <HeartProposal scopeLabel={scopeLabel} preview={preview} />
+    </div>
   );
 }

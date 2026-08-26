@@ -12,9 +12,12 @@ import {
 } from "./lib/verseMemory";
 import {
   countDueUnifiedReviewPacks,
+  dueUnifiedPackDueAt,
   loadUnifiedReviewPacks,
   loadUnifiedReviewVerseRefIds,
+  unifiedPackForecastDueAt,
   unifiedReviewPhaseVerseRefIds,
+  type PackMember,
 } from "./lib/packs";
 import { findVerseRefId } from "./lib/verseRefs";
 import {
@@ -108,6 +111,55 @@ const verseMemoryValidator = v.object({
 });
 
 /** A due row joined to its resolved verse reference. */
+const dueQueueVerseItem = v.object({
+  kind: v.literal("verse"),
+  _id: v.id("verseMemory"),
+  verseRefId: v.id("verseRefs"),
+  status: statusValidator,
+  learnStage: v.number(),
+  stageReps: v.optional(v.number()),
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  earlyReviewApplied: v.optional(v.boolean()),
+  lastReviewedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+});
+
+/** One recitation card for a unified pack: counted as a single due item. */
+const dueQueuePackItem = v.object({
+  kind: v.literal("pack"),
+  packId: v.id("packs"),
+  packName: v.string(),
+  dueAt: v.number(),
+  status: statusValidator,
+  learnStage: v.number(),
+  stageReps: v.optional(v.number()),
+  ease: v.number(),
+  intervalDays: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  earlyReviewApplied: v.optional(v.boolean()),
+  lastReviewedAt: v.optional(v.number()),
+  members: v.array(
+    v.object({
+      book: v.string(),
+      chapter: v.number(),
+      startVerse: v.number(),
+      endVerse: v.number(),
+    }),
+  ),
+});
+
+const dueQueueEntry = v.union(dueQueueVerseItem, dueQueuePackItem);
+
+/** A verse-scoped due row (no pack card). */
 const dueQueueItem = v.object({
   _id: v.id("verseMemory"),
   verseRefId: v.id("verseRefs"),
@@ -127,6 +179,68 @@ const dueQueueItem = v.object({
   startVerse: v.number(),
   endVerse: v.number(),
 });
+
+const MAX_UNIFIED_DUE_SCAN = 2000;
+
+function dueScanCap(limit: number, unifiedMemberCount: number): number {
+  return Math.min(
+    MAX_UNIFIED_DUE_SCAN,
+    Math.max(MAX_DUE_SCAN, unifiedMemberCount + Math.max(limit * 4, limit)),
+  );
+}
+
+function toDueQueueVerseItem(row: Doc<"verseMemory">, ref: Doc<"verseRefs">) {
+  return {
+    kind: "verse" as const,
+    _id: row._id,
+    verseRefId: row.verseRefId,
+    status: row.status,
+    learnStage: row.learnStage,
+    stageReps: row.stageReps,
+    ease: row.ease,
+    intervalDays: row.intervalDays,
+    dueAt: row.dueAt,
+    consecutiveCorrect: row.consecutiveCorrect,
+    lapses: row.lapses,
+    earlyReviewApplied: row.earlyReviewApplied,
+    lastReviewedAt: row.lastReviewedAt,
+    createdAt: row.createdAt,
+    book: ref.book,
+    chapter: ref.chapter,
+    startVerse: ref.startVerse,
+    endVerse: ref.endVerse,
+  };
+}
+
+function toDueQueuePackItem(
+  pack: Doc<"packs">,
+  members: readonly PackMember[],
+  dueAt: number,
+) {
+  const lead = members.find((member) => member.dueAt === dueAt) ?? members[0];
+  if (!lead) return null;
+  return {
+    kind: "pack" as const,
+    packId: pack._id,
+    packName: pack.name,
+    dueAt,
+    status: lead.status,
+    learnStage: lead.learnStage,
+    stageReps: lead.stageReps,
+    ease: lead.ease,
+    intervalDays: lead.intervalDays,
+    consecutiveCorrect: lead.consecutiveCorrect,
+    lapses: lead.lapses,
+    earlyReviewApplied: lead.earlyReviewApplied,
+    lastReviewedAt: lead.lastReviewedAt,
+    members: members.map((member) => ({
+      book: member.book,
+      chapter: member.chapter,
+      startVerse: member.startVerse,
+      endVerse: member.endVerse,
+    })),
+  };
+}
 
 function toRowView(row: Doc<"verseMemory">) {
   return {
@@ -158,12 +272,14 @@ function toRowView(row: Doc<"verseMemory">) {
  * history, but drops out of the live due queue until re-hearted.
  * `now` is passed in by the caller so the query stays deterministic/cacheable.
  *
- * Reads are bounded: we `.take()` from the due index (with overscan) instead of
- * collecting every hearted due row for the user.
+ * Unified packs are one card: their review-phase members are skipped as verse
+ * rows and the pack is inserted as a single item, sorted by dueAt with the
+ * rest of the queue. Scan overscan grows with unified membership so skipping
+ * those rows cannot starve other dues.
  */
 export const dueQueue = query({
   args: { now: v.number(), limit: v.optional(v.number()) },
-  returns: v.array(dueQueueItem),
+  returns: v.array(dueQueueEntry),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
@@ -171,8 +287,9 @@ export const dueQueue = query({
     }
 
     const limit = args.limit ?? DEFAULT_DUE_LIMIT;
-    const scanCap = Math.min(MAX_DUE_SCAN, Math.max(limit * 4, limit));
-    const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(ctx, userId);
+    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const unifiedVerseRefIds = unifiedReviewPhaseVerseRefIds(unifiedPacks);
+    const scanCap = dueScanCap(limit, unifiedVerseRefIds.size);
 
     const dueRows = await ctx.db
       .query("verseMemory")
@@ -182,58 +299,31 @@ export const dueQueue = query({
       .order("asc")
       .take(scanCap);
 
-    const items: Array<{
-      _id: Id<"verseMemory">;
-      verseRefId: Id<"verseRefs">;
-      status: Doc<"verseMemory">["status"];
-      learnStage: number;
-      stageReps?: number;
-      ease: number;
-      intervalDays: number;
-      dueAt: number;
-      consecutiveCorrect: number;
-      lapses: number;
-      earlyReviewApplied?: boolean;
-      lastReviewedAt?: number;
-      createdAt: number;
-      book: string;
-      chapter: number;
-      startVerse: number;
-      endVerse: number;
-    }> = [];
-
+    const verseItems: Array<ReturnType<typeof toDueQueueVerseItem>> = [];
     for (const row of dueRows) {
-      if (items.length >= limit) break;
-      // Hide review-phase unified members (counted as one pack item in stats).
-      // Learning-phase members are not review-due and stay in learningDue.
+      // `limit` verses plus every due pack is enough for the merge: packs only
+      // insert into the earliest slots, they never require verses further down.
+      if (verseItems.length >= limit) break;
       if (unifiedVerseRefIds.has(row.verseRefId)) continue;
       if (!isDueForReview(row, args.now)) continue;
 
       const ref = await ctx.db.get(row.verseRefId);
       if (!ref || ref.userId !== userId) continue;
-
-      items.push({
-        _id: row._id,
-        verseRefId: row.verseRefId,
-        status: row.status,
-        learnStage: row.learnStage,
-        stageReps: row.stageReps,
-        ease: row.ease,
-        intervalDays: row.intervalDays,
-        dueAt: row.dueAt,
-        consecutiveCorrect: row.consecutiveCorrect,
-        lapses: row.lapses,
-        earlyReviewApplied: row.earlyReviewApplied,
-        lastReviewedAt: row.lastReviewedAt,
-        createdAt: row.createdAt,
-        book: ref.book,
-        chapter: ref.chapter,
-        startVerse: ref.startVerse,
-        endVerse: ref.endVerse,
-      });
+      verseItems.push(toDueQueueVerseItem(row, ref));
     }
 
-    return items;
+    const packItems: Array<NonNullable<ReturnType<typeof toDueQueuePackItem>>> =
+      [];
+    for (const { pack, members } of unifiedPacks) {
+      const dueAt = dueUnifiedPackDueAt(members, args.now);
+      if (dueAt === null) continue;
+      const item = toDueQueuePackItem(pack, members, dueAt);
+      if (item) packItems.push(item);
+    }
+
+    return [...verseItems, ...packItems]
+      .sort((a, b) => a.dueAt - b.dueAt)
+      .slice(0, limit);
   },
 });
 
@@ -277,6 +367,9 @@ export const dueForVerse = query({
     const memory = await findVerseMemory(ctx, userId, verseRefId);
     if (!memory || !isLiveHeartedMemory(memory)) return null;
     if (!isReviewPhase(memory.status)) return null;
+
+    const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(ctx, userId);
+    if (unifiedVerseRefIds.has(verseRefId)) return null;
 
     const ref = await ctx.db.get(verseRefId);
     if (!ref || ref.userId !== userId) return null;
@@ -393,6 +486,18 @@ export const recordAttempt = mutation({
       args.verseRefId,
       args.now,
     );
+
+    if (isReviewPhase(memory.status)) {
+      const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(
+        ctx,
+        userId,
+      );
+      if (unifiedVerseRefIds.has(args.verseRefId)) {
+        throw new Error(
+          "This verse is part of a pack recited as one passage. Review it from the pack.",
+        );
+      }
+    }
 
     const current: MemorySchedule = {
       status: memory.status,
@@ -707,12 +812,21 @@ export const reviewForecast = query({
       )
       .take(MAX_DUE_SCAN);
 
+    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const unifiedReviewVerseRefIds =
+      unifiedReviewPhaseVerseRefIds(unifiedPacks);
+
     const dueAts: number[] = [];
     for (const row of rows) {
       // Soft-locked learning verses have dueAt in the future and would appear
       // in the window; exclude them — forecast is review-phase only.
       if (!isReviewPhase(row.status)) continue;
+      if (unifiedReviewVerseRefIds.has(row.verseRefId)) continue;
       dueAts.push(row.dueAt);
+    }
+    for (const { members } of unifiedPacks) {
+      const dueAt = unifiedPackForecastDueAt(members);
+      if (dueAt !== null && dueAt < windowEnd) dueAts.push(dueAt);
     }
 
     const counts = bucketForecastCounts(dueAts, args.now, days, timeZone);
@@ -871,6 +985,10 @@ export const listLibrary = query({
         return emptyLibraryPage;
       }
       const now = args.now;
+      const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(
+        ctx,
+        userId,
+      );
       const paginated = await ctx.db
         .query("verseMemory")
         .withIndex("by_userId_isHearted_dueAt", (q) =>
@@ -881,8 +999,13 @@ export const listLibrary = query({
         )
         .order("asc")
         .paginate(args.paginationOpts);
-      return await toLibraryPage(ctx, userId, paginated, (memory) =>
-        isDueForLibrary(memory, now),
+      return await toLibraryPage(
+        ctx,
+        userId,
+        paginated,
+        (memory) =>
+          isDueForLibrary(memory, now) &&
+          !unifiedVerseRefIds.has(memory.verseRefId),
       );
     }
 

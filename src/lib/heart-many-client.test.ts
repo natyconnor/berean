@@ -46,9 +46,12 @@ describe("chunkHeartSpans", () => {
 
 describe("heartSpansInChunks", () => {
   it("sums results across chunks", async () => {
-    const heartMany = vi
-      .fn<HeartManyCall>()
-      .mockResolvedValue({ added: 2, skippedExact: 1, skippedOverlap: 0 });
+    const heartMany = vi.fn<HeartManyCall>().mockResolvedValue({
+      added: 2,
+      skippedExact: 1,
+      skippedOverlap: 0,
+      skippedInvalid: 0,
+    });
 
     const result = await heartSpansInChunks(heartMany, spans(45), 1000);
 
@@ -61,6 +64,34 @@ describe("heartSpansInChunks", () => {
       added: 4,
       skippedExact: 2,
       skippedOverlap: 0,
+      skippedInvalid: 0,
+      failedChunks: 0,
+    });
+  });
+
+  it("sums skippedInvalid apart from overlap", async () => {
+    const heartMany = vi
+      .fn<HeartManyCall>()
+      .mockResolvedValueOnce({
+        added: 1,
+        skippedExact: 0,
+        skippedOverlap: 0,
+        skippedInvalid: 2,
+      })
+      .mockResolvedValueOnce({
+        added: 0,
+        skippedExact: 0,
+        skippedOverlap: 1,
+        skippedInvalid: 1,
+      });
+
+    const result = await heartSpansInChunks(heartMany, spans(45), 1000);
+
+    expect(result).toEqual({
+      added: 1,
+      skippedExact: 0,
+      skippedOverlap: 1,
+      skippedInvalid: 3,
       failedChunks: 0,
     });
   });
@@ -69,7 +100,12 @@ describe("heartSpansInChunks", () => {
     const heartMany = vi
       .fn<HeartManyCall>()
       .mockRejectedValueOnce(new Error("network"))
-      .mockResolvedValueOnce({ added: 3, skippedExact: 0, skippedOverlap: 1 });
+      .mockResolvedValueOnce({
+        added: 3,
+        skippedExact: 0,
+        skippedOverlap: 1,
+        skippedInvalid: 0,
+      });
 
     const result = await heartSpansInChunks(heartMany, spans(45), 1000);
 
@@ -78,6 +114,7 @@ describe("heartSpansInChunks", () => {
       added: 3,
       skippedExact: 0,
       skippedOverlap: 1,
+      skippedInvalid: 0,
       failedChunks: 1,
     });
   });

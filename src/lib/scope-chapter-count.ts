@@ -1,5 +1,5 @@
-import { getBookInfo } from "@/lib/bible-books";
-import type { VerseScope } from "@/lib/verse-scope-match";
+import { getBookInfo } from "./bible-books";
+import type { VerseScope } from "./verse-scope-match";
 
 /** Scopes larger than this cannot be auto-hearted in one pass. */
 export const AUTO_HEART_MAX_CHAPTERS = 20;

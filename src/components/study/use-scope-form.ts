@@ -41,8 +41,8 @@ export interface UseScopeFormResult extends ScopeFormControls {
   /** Human summary used as a default name / footer label. */
   summaryText: string;
   /**
-   * False while a listed multi-chapter book still has no range. Study always
-   * reports true (omitting a range means every chapter).
+   * False while no book is listed, or a listed multi-chapter book still has
+   * no range. Study always reports true (omitting a range means every chapter).
    */
   isComplete: boolean;
 }
@@ -113,18 +113,31 @@ export function useScopeForm(
 
   const isComplete = useMemo(() => {
     if (!requireChapterSelection) return true;
-    return selectedBooks.every(
-      (book) => !bookNeedsChapterRange(book) || chapterRanges.has(book),
+    // `[].every(...)` is vacuously true; a blank builder is not ready to create.
+    return (
+      selectedBooks.length > 0 &&
+      selectedBooks.every(
+        (book) => !bookNeedsChapterRange(book) || chapterRanges.has(book),
+      )
     );
   }, [requireChapterSelection, selectedBooks, chapterRanges]);
 
-  const onToggleBook = useCallback((bookName: string) => {
-    setSelectedBooks((prev) =>
-      prev.includes(bookName)
-        ? prev.filter((b) => b !== bookName)
-        : [...prev, bookName],
-    );
-  }, []);
+  const onToggleBook = useCallback(
+    (bookName: string) => {
+      const removing = selectedBooks.includes(bookName);
+      setSelectedBooks((prev) =>
+        removing ? prev.filter((b) => b !== bookName) : [...prev, bookName],
+      );
+      if (!removing) return;
+      setChapterRanges((ranges) => {
+        if (!ranges.has(bookName)) return ranges;
+        const next = new Map(ranges);
+        next.delete(bookName);
+        return next;
+      });
+    },
+    [selectedBooks],
+  );
 
   const onSetBooks = useCallback((books: string[]) => {
     setSelectedBooks(books);

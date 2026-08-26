@@ -176,10 +176,22 @@ export async function loadUnifiedReviewPacks(
     .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
     .collect();
 
+  const unifiedPacks = packs.filter((pack) => pack.unifiedReviewEnabled);
+  if (unifiedPacks.length === 0) return [];
+
+  // Scope packs all share the same hearted set — load it once instead of
+  // collecting every heart again per pack on dueCount / dueQueue.
+  const needsHearted = unifiedPacks.some(
+    (pack) => pack.kind === "scope" && pack.scope,
+  );
+  const hearted = needsHearted ? await loadHeartedMembers(ctx, userId) : null;
+
   const unified: Array<{ pack: Doc<"packs">; members: PackMember[] }> = [];
-  for (const pack of packs) {
-    if (!pack.unifiedReviewEnabled) continue;
-    const members = await loadPackMembers(ctx, userId, pack);
+  for (const pack of unifiedPacks) {
+    const members =
+      pack.kind === "scope" && pack.scope && hearted
+        ? filterScopeMembers(hearted, pack.scope)
+        : await loadCustomMembers(ctx, userId, pack._id);
     unified.push({ pack, members });
   }
   return unified;
@@ -212,18 +224,51 @@ export async function loadUnifiedReviewVerseRefIds(
   );
 }
 
+function everyMemberInReview(members: readonly PackMember[]): boolean {
+  return (
+    members.length > 0 &&
+    members.every((member) => isReviewPhase(member.status))
+  );
+}
+
 /**
- * How many unified packs are due as a single item. Schedules are synced after
- * enable; if they drift, any due member counts the pack as 1.
+ * How many unified packs are due as a single item. Only packs whose members
+ * are all in review phase can be recited; mixed packs (a lapse still learning)
+ * stay out of the due queue until Learn finishes. If schedules drift, any due
+ * member counts the pack as 1.
  */
+export function dueUnifiedPackDueAt(
+  members: readonly PackMember[],
+  now: number,
+): number | null {
+  if (!everyMemberInReview(members)) return null;
+  let min: number | null = null;
+  for (const member of members) {
+    if (!isDueForReview(member, now)) continue;
+    if (min === null || member.dueAt < min) min = member.dueAt;
+  }
+  return min;
+}
+
+/** Shared dueAt for forecast: soonest member, even if not due yet. */
+export function unifiedPackForecastDueAt(
+  members: readonly PackMember[],
+): number | null {
+  if (!everyMemberInReview(members)) return null;
+  let min: number | null = null;
+  for (const member of members) {
+    if (min === null || member.dueAt < min) min = member.dueAt;
+  }
+  return min;
+}
+
 export function countDueUnifiedReviewPacks(
   packs: readonly { members: readonly PackMember[] }[],
   now: number,
 ): number {
   let due = 0;
   for (const { members } of packs) {
-    if (members.length === 0) continue;
-    if (members.some((member) => isDueForReview(member, now))) due += 1;
+    if (dueUnifiedPackDueAt(members, now) !== null) due += 1;
   }
   return due;
 }

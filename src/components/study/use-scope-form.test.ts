@@ -15,6 +15,15 @@ describe("useScopeForm", () => {
     expect(result.current.chapterRanges.has("Genesis")).toBe(false);
   });
 
+  it("is incomplete with no books selected in pack-builder mode", () => {
+    const { result } = renderHook(() =>
+      useScopeForm({ requireChapterSelection: true }),
+    );
+
+    expect(result.current.isComplete).toBe(false);
+    expect(result.current.selectedBooks).toEqual([]);
+  });
+
   it("requires a chapter range for multi-chapter books in pack-builder mode", () => {
     const { result } = renderHook(() =>
       useScopeForm({ requireChapterSelection: true }),
@@ -41,6 +50,33 @@ describe("useScopeForm", () => {
     });
 
     expect(result.current.isComplete).toBe(true);
+  });
+
+  it("clears a book's chapter range when it is deselected", () => {
+    const { result } = renderHook(() =>
+      useScopeForm({ requireChapterSelection: true }),
+    );
+
+    act(() => {
+      result.current.onToggleBook("Genesis");
+      result.current.onSetChapterRange("Genesis", { start: 1, end: 1 });
+    });
+    expect(result.current.chapterRanges.get("Genesis")).toEqual({
+      start: 1,
+      end: 1,
+    });
+
+    act(() => {
+      result.current.onToggleBook("Genesis");
+    });
+    expect(result.current.selectedBooks).toEqual([]);
+    expect(result.current.chapterRanges.has("Genesis")).toBe(false);
+
+    act(() => {
+      result.current.onToggleBook("Genesis");
+    });
+    expect(result.current.chapterRanges.has("Genesis")).toBe(false);
+    expect(result.current.isComplete).toBe(false);
   });
 
   it("fills explicit full ranges when a pack-builder preset is applied", () => {

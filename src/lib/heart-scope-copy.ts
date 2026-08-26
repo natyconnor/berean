@@ -5,6 +5,7 @@
 
 export const HEART_SCOPE_ACTION_LABEL = "Memorize whole passage";
 
+/** Invitation copy; no trailing period so tooltip and create-pointer stay identical. */
 export const HEART_SCOPE_TOOLTIP =
   "Want to memorize this whole passage? Click here to automatically heart all the verses";
 

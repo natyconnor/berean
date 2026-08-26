@@ -1,7 +1,7 @@
-import { getChapterVerseCount } from "@/lib/bible-verse-counts";
-import { spanCoversVerse, type VerseSpan } from "@/lib/hearted-verse-coverage";
-import { enumerateScopeChapters } from "@/lib/scope-chapter-count";
-import type { VerseScope } from "@/lib/verse-scope-match";
+import { getChapterVerseCount } from "./bible-verse-counts";
+import { spanCoversVerse, type VerseSpan } from "./hearted-verse-coverage";
+import { enumerateScopeChapters } from "./scope-chapter-count";
+import type { VerseScope } from "./verse-scope-match";
 
 function heartsCoverVerse(
   hearts: readonly VerseSpan[],

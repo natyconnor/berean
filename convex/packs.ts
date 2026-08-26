@@ -1,7 +1,7 @@
 import { query, mutation, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
 import {
@@ -31,6 +31,7 @@ import {
   canonicalUnifiedSchedule,
 } from "../src/lib/unified-review-schedule";
 import { scopesEqual } from "../src/lib/scope-equality";
+import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
 import { verseMatchesScope } from "../src/lib/verse-scope-match";
 
 /**
@@ -595,8 +596,20 @@ export const setUnifiedReview = mutation({
     }
 
     const members = await loadPackMembers(ctx, userId, pack);
-    if (members.length === 0) {
-      throw new Error("Cannot enable unified review on an empty pack");
+    if (members.length < 2) {
+      throw new Error("Unified review needs more than one hearted member");
+    }
+    if (!pack.scope) {
+      throw new Error("Unified review is only available for scope packs");
+    }
+    const memberSpans = members.map((member) => ({
+      book: member.book,
+      chapter: member.chapter,
+      startVerse: member.startVerse,
+      endVerse: member.endVerse,
+    }));
+    if (!packAllowsUnifiedRecitation(memberSpans, pack.scope)) {
+      throw new Error("Unified review needs a contiguous passage");
     }
     if (!members.every((member) => isReviewPhase(member.status))) {
       throw new Error(
@@ -644,6 +657,9 @@ export const recordUnifiedReview = mutation({
     if (!pack.unifiedReviewEnabled) {
       throw new Error("Unified review is not enabled for this pack");
     }
+    if (pack.kind !== "scope") {
+      throw new Error("Unified review is only available for scope packs");
+    }
 
     const members = await loadPackMembers(ctx, userId, pack);
     if (members.length === 0) {
@@ -653,6 +669,18 @@ export const recordUnifiedReview = mutation({
       throw new Error(
         "Cannot record a unified review while any member is still learning",
       );
+    }
+
+    const memories: Array<{
+      member: PackMember;
+      memory: Doc<"verseMemory">;
+    }> = [];
+    for (const member of members) {
+      const memory = await findVerseMemory(ctx, userId, member.verseRefId);
+      if (!memory) {
+        throw new Error("Unified review is missing a verse memory row");
+      }
+      memories.push({ member, memory });
     }
 
     const canonical = canonicalUnifiedSchedule(
@@ -668,10 +696,7 @@ export const recordUnifiedReview = mutation({
       tzOffsetMinutes: args.tzOffsetMinutes,
     });
 
-    for (const member of members) {
-      const memory = await findVerseMemory(ctx, userId, member.verseRefId);
-      if (!memory) continue;
-
+    for (const { member, memory } of memories) {
       await ctx.db.insert("verseMemoryReviews", {
         userId,
         verseRefId: member.verseRefId,

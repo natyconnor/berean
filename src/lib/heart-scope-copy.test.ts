@@ -64,6 +64,7 @@ describe("heartScopeTooltip", () => {
   it("invites auto-hearting the whole passage", () => {
     expect(heartScopeTooltip()).toBe(HEART_SCOPE_TOOLTIP);
     expect(heartScopeHintCopy()).toBe(HEART_SCOPE_TOOLTIP);
+    expect(HEART_SCOPE_TOOLTIP.endsWith(".")).toBe(false);
   });
 });
 

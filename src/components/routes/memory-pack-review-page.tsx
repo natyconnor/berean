@@ -82,7 +82,7 @@ export function MemoryPackReviewPage() {
   // recites together — the conservative canonical schedule (same helper the
   // mutation uses) drives the card's "next review in N days" preview.
   const compositeVerse = useMemo<PracticeVerse | null>(() => {
-    if (pack?.unifiedReviewEnabled !== true) return null;
+    if (pack == null || pack.unifiedReviewEnabled !== true) return null;
     if (members === undefined || members.length === 0) return null;
     if (!members.every((member) => isReviewPhase(member.status))) return null;
     if (dueMembers.length === 0) return null;
@@ -104,16 +104,11 @@ export function MemoryPackReviewPage() {
       earlyReviewApplied: canonical.earlyReviewApplied,
       composite: {
         packId: typedPackId,
+        packName: pack.name,
         members: members.map(memberReference),
       },
     };
-  }, [
-    pack?.unifiedReviewEnabled,
-    members,
-    dueMembers.length,
-    now,
-    typedPackId,
-  ]);
+  }, [pack, members, dueMembers.length, now, typedPackId]);
 
   const reviewVerses = useMemo<PracticeVerse[]>(() => {
     if (members === undefined) return [];

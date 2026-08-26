@@ -65,4 +65,20 @@ describe("StudyScopeBookPicker", () => {
     await userEvent.click(screen.getByRole("button", { name: "Select all" }));
     expect(screen.getByText(/All 50 chapters/)).toBeInTheDocument();
   });
+
+  it("clears the chapter grid when a book is toggled off in the list", async () => {
+    render(<PickerHarness emptyChapterSelection />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Genesis/ }));
+    await userEvent.click(screen.getByRole("button", { name: "1" }));
+    expect(screen.getByText(/Chapter 1/)).toBeInTheDocument();
+
+    const selectedRows = screen.getAllByRole("button", { name: /Genesis/ });
+    const listRow = selectedRows.at(-1);
+    if (!listRow) throw new Error("expected Genesis list row");
+    await userEvent.click(listRow);
+    await userEvent.click(screen.getByRole("button", { name: /Genesis/ }));
+
+    expect(screen.getByText(/No chapters selected/)).toBeInTheDocument();
+  });
 });

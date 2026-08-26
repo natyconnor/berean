@@ -125,4 +125,31 @@ describe("useEsvCompositePassage", () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.text).toBe("");
   });
+
+  it("errors instead of concatenating a partial passage when a span is missing", async () => {
+    fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
+
+    const { result } = renderHook(() =>
+      useEsvCompositePassage([span(23, 1, 1), span(24, 1, 1)]),
+    );
+
+    await waitFor(() => {
+      expect(result.current.error).toBe("Could not load the full passage");
+    });
+    expect(result.current.text).toBe("");
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("errors when a span's verses are missing from the loaded chapter", async () => {
+    fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
+
+    const { result } = renderHook(() =>
+      useEsvCompositePassage([span(23, 99, 99)]),
+    );
+
+    await waitFor(() => {
+      expect(result.current.error).toBe("Could not load the full passage");
+    });
+    expect(result.current.text).toBe("");
+  });
 });

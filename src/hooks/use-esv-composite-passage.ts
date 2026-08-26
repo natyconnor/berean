@@ -198,12 +198,13 @@ export function useEsvCompositePassage(
   }, [active, chapters, chaptersKey, fetchChaptersBatch, retryNonce]);
 
   const settled = loaded.key === chaptersKey;
-  const error = active && settled ? loaded.error : null;
-  const loading = active && error === null && !settled;
-
-  const composed = useMemo(() => {
+  const composed = (() => {
     if (!active || !settled || loaded.error !== null) {
-      return { text: "", segments: [] as CompositePassageSegment[] };
+      return {
+        text: "",
+        segments: [] as CompositePassageSegment[],
+        missing: false,
+      };
     }
 
     const segments: CompositePassageSegment[] = [];
@@ -213,9 +214,21 @@ export function useEsvCompositePassage(
     for (const reference of spans) {
       const key = chapterKey(reference.book, reference.chapter);
       const data = loaded.byChapter.get(key);
-      if (!data) continue;
+      if (!data) {
+        return {
+          text: "",
+          segments: [] as CompositePassageSegment[],
+          missing: true,
+        };
+      }
       const segment = spanText(data, reference);
-      if (segment.length === 0) continue;
+      if (segment.length === 0) {
+        return {
+          text: "",
+          segments: [] as CompositePassageSegment[],
+          missing: true,
+        };
+      }
 
       if (text.length > 0) {
         text +=
@@ -226,8 +239,14 @@ export function useEsvCompositePassage(
       segments.push({ reference, text: segment });
     }
 
-    return { text, segments };
-  }, [active, settled, loaded, spans]);
+    return { text, segments, missing: false };
+  })();
+
+  const composeError = composed.missing
+    ? "Could not load the full passage"
+    : null;
+  const error = active && settled ? (loaded.error ?? composeError) : null;
+  const loading = active && error === null && !settled;
 
   return {
     text: composed.text,

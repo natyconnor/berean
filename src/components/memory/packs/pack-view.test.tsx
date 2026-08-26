@@ -199,6 +199,7 @@ describe("PackView", () => {
       added: 1,
       skippedExact: 0,
       skippedOverlap: 0,
+      skippedInvalid: 0,
     });
   });
 
@@ -350,6 +351,9 @@ describe("PackView", () => {
       screen.queryByRole("button", {
         name: "Memorize whole passage",
       }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add verses" }),
     ).not.toBeInTheDocument();
     unified.unmount();
 
@@ -518,6 +522,34 @@ describe("PackView", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/stays together/)).toBeInTheDocument();
     unmount();
+
+    const lockedNow = getSessionNow();
+    const locked = renderPack({
+      members: [
+        member({
+          startVerse: 1,
+          endVerse: 3,
+          status: "learning",
+          dueAt: lockedNow + 8 * 60 * 60 * 1000,
+          lastReviewedAt: lockedNow - 1000,
+        }),
+        member({
+          startVerse: 4,
+          endVerse: 6,
+          status: "learning",
+          dueAt: lockedNow + 8 * 60 * 60 * 1000,
+          lastReviewedAt: lockedNow - 1000,
+        }),
+      ],
+    });
+    expect(
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      packLearn().getByRole("button", { name: /Continue Learning · Tomorrow/ }),
+    ).toBeDisabled();
+    expect(screen.getByText(/Come back tomorrow/)).toBeInTheDocument();
+    locked.unmount();
 
     renderPack({
       members: [

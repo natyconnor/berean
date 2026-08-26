@@ -1,8 +1,8 @@
-import { getChapterVerseCount } from "@/lib/bible-verse-counts";
-import type { VerseSpan } from "@/lib/hearted-verse-coverage";
-import { enumerateScopeChapters } from "@/lib/scope-chapter-count";
-import { scopeCoverageComplete } from "@/lib/scope-verse-coverage";
-import type { VerseScope } from "@/lib/verse-scope-match";
+import { getChapterVerseCount } from "./bible-verse-counts";
+import type { VerseSpan } from "./hearted-verse-coverage";
+import { enumerateScopeChapters } from "./scope-chapter-count";
+import { scopeCoverageComplete } from "./scope-verse-coverage";
+import type { VerseScope } from "./verse-scope-match";
 
 function coverKey(chapter: number, verse: number): string {
   return `${chapter}:${verse}`;

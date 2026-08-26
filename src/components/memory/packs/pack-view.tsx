@@ -452,21 +452,23 @@ function PackViewMain({
     scopeCoverageComplete(scope, memberSpans);
   // After Memorize whole passage (or any path that fills the scope), Add verses
   // has nothing left to heart. Custom packs keep the control; incomplete scopes
-  // still use it to pick individual verses.
-  const showAddVerses = isCustom || !scopeFilled;
+  // still use it to pick individual verses. Hide it while members are loading
+  // (so a full scope doesn't flash the button) and while unified recitation is
+  // on: a fresh heart would arrive as a new unit and block the recitation.
+  const showAddVerses =
+    isCustom || (members !== undefined && !scopeFilled && !unifiedEnabled);
   // Recite-as-one-passage is only an option for a contiguous block (or the
   // whole scope) of more than one hearted member — a single passage has
   // nothing to join. Stay visible while unified is already on so it can be
   // switched off. While the pack is still being learned, the Learn-whole-
   // passage card occupies this slot so a disabled Recite switch doesn't bury
-  // the next step.
+  // the next step — including when every unit is locked until tomorrow.
   const showPackLearnBanner =
     pack.kind === "scope" &&
     scopeFilled &&
     !unifiedEnabled &&
     !allGraduated &&
-    verseCount > 0 &&
-    (canEnroll || canLearn);
+    verseCount > 0;
   const showUnifiedPanel =
     pack.kind === "scope" &&
     (unifiedEnabled ||
@@ -627,6 +629,7 @@ function PackViewMain({
                 canEnroll ? newCount + learningDueCount : learningDueCount
               }
               canEnroll={canEnroll}
+              canLearn={canLearn}
               pending={isEnrolling}
               onLearn={() => (canEnroll ? void handleLearnPack() : onLearn())}
             />
@@ -940,6 +943,7 @@ function PackLearnPanel({
   newCount,
   queueCount,
   canEnroll,
+  canLearn,
   pending,
   onLearn,
 }: {
@@ -948,20 +952,26 @@ function PackLearnPanel({
   newCount: number;
   queueCount: number;
   canEnroll: boolean;
+  canLearn: boolean;
   pending: boolean;
   onLearn: () => void;
 }) {
+  const lockedUntilTomorrow = !canEnroll && !canLearn;
   const someStarted = newCount > 0 && newCount < verseCount;
   const description = canEnroll
     ? someStarted
       ? `Some verses are already in progress. This queues the rest so you can learn ${packName} together, in order.`
       : `Starting one verse at a time splits the passage. This queues every new unit in order so you learn ${packName} together.`
-    : `Continue in order so ${packName} stays together.`;
+    : lockedUntilTomorrow
+      ? `Today's session is done. Come back tomorrow to keep learning ${packName} together.`
+      : `Continue in order so ${packName} stays together.`;
   const label = pending
     ? "Starting\u2026"
     : canEnroll
       ? "Learn whole passage"
-      : "Continue Learning";
+      : lockedUntilTomorrow
+        ? "Continue Learning · Tomorrow"
+        : "Continue Learning";
 
   return (
     <section className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4 shadow-sm">
@@ -979,7 +989,7 @@ function PackLearnPanel({
           size="sm"
           className="gap-1.5 shrink-0"
           onClick={onLearn}
-          disabled={pending}
+          disabled={pending || lockedUntilTomorrow}
         >
           <GraduationCap className="h-4 w-4" aria-hidden />
           {label}
@@ -1133,7 +1143,6 @@ function HeartRemainingDialog({
           </DialogDescription>
         </DialogHeader>
         <ScopeHeartPreview
-          variant="compact"
           scopeLabel={formatScopeSummary(scope)}
           preview={preview}
         />
