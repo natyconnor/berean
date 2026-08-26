@@ -62,6 +62,10 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { verseRefKey } from "../../../../shared/verse-ref-key";
 import {
+  fromMemoryPromptLine,
+  isFromMemoryLearning,
+} from "../../study/from-memory-messages";
+import {
   classifyVerseAttempt,
   verseAttemptAccuracy,
 } from "../../study/study-attempt-quality";
@@ -673,13 +677,16 @@ function PracticeCard({
   const showLocked = locked && !checked;
 
   const isReadPrime = hintStage === "full";
+  const fromMemoryLearn = isFromMemoryLearning(learnStage, status);
   const promptLine = showLocked
     ? "Done for today — come back tomorrow"
     : isReadPrime
       ? "Read it through, then continue"
-      : hintStage === "hidden"
-        ? "Recall the verse from memory"
-        : "Type what you remember";
+      : fromMemoryLearn
+        ? fromMemoryPromptLine(stageReps)
+        : hintStage === "hidden"
+          ? "Recall the verse from memory"
+          : "Type what you remember";
 
   const canCheckAnswer =
     !locked &&
@@ -931,6 +938,7 @@ function PracticeCard({
                     versePlainText={versePlainText}
                     diffTokens={checkedDiffTokens}
                     showScheduleOutcome={showScheduleOutcome}
+                    requireExactToAdvance={fromMemoryLearn}
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
                   />
