@@ -40,6 +40,10 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { LearningJourneyBar } from "../memory/practice/learning-journey-bar";
 import { PRACTICE_STAGES } from "../memory/practice/practice-stages";
 import {
+  fromMemoryPromptLine,
+  isFromMemoryLearning,
+} from "./from-memory-messages";
+import {
   classifyVerseAttempt,
   verseAttemptAccuracy,
 } from "./study-attempt-quality";
@@ -166,11 +170,14 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   }, [versePlainText, stageIndex, repsIndex]);
 
   const isReadPrime = hintStage === "full";
+  const fromMemoryLearn = isFromMemoryLearning(stageIndex, status);
   const promptLine = isReadPrime
     ? "Read it through, then continue"
-    : hintStage === "hidden"
-      ? "Recall the verse from memory"
-      : "Type what you remember";
+    : fromMemoryLearn
+      ? fromMemoryPromptLine(repsIndex)
+      : hintStage === "hidden"
+        ? "Recall the verse from memory"
+        : "Type what you remember";
 
   const canCheckAnswer =
     !loading &&
@@ -414,6 +421,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               typedAnswer={typedAnswer}
               versePlainText={versePlainText}
               diffTokens={checkedDiffTokens}
+              requireExactToAdvance={fromMemoryLearn}
             />
             <p className="text-center text-sm text-muted-foreground">
               {`${checkedAccuracy}% recalled.`}

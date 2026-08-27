@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.12.14](https://github.com/natyconnor/berean/compare/v1.12.13...v1.12.14) (2026-08-26)
+
+
+### Bug Fixes
+
+* Clarify From Memory needs a perfect recall to advance ([#181](https://github.com/natyconnor/berean/issues/181)) ([240b596](https://github.com/natyconnor/berean/commit/240b5963faf8bbb069319f9a5f60de535dadff30))
+
+## [1.12.13](https://github.com/natyconnor/berean/compare/v1.12.12...v1.12.13) (2026-08-25)
+
+
+### Bug Fixes
+
+* Slow post-graduation review spacing ([#179](https://github.com/natyconnor/berean/issues/179)) ([d5b302e](https://github.com/natyconnor/berean/commit/d5b302eeb3e6c8e201f49f9e5a600f977fd0ae54))
+
+## [1.12.12](https://github.com/natyconnor/berean/compare/v1.12.11...v1.12.12) (2026-08-25)
+
+
+### Bug Fixes
+
+* Label grouped passage notes with the union range ([#177](https://github.com/natyconnor/berean/issues/177)) ([05faf33](https://github.com/natyconnor/berean/commit/05faf336251ebc563df78ceccd8070d2137236de))
+
 ## [1.12.11](https://github.com/natyconnor/berean/compare/v1.12.10...v1.12.11) (2026-08-20)
 
 

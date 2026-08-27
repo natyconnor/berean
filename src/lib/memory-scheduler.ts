@@ -12,7 +12,10 @@
  *    the verse until tomorrow (`dueAt` in the future). Day 3 clears From Memory
  *    and graduates.
  *  - Reviewing phase (`reviewing` / `mastered`): the verse is recalled from
- *    hidden and the inter-review interval grows or shrinks with performance.
+ *    hidden. After graduating, exact recalls stay daily for
+ *    {@link REVIEW_DAILY_REPS} reviews, then every other day for
+ *    {@link REVIEW_EVERY_OTHER_REPS} reviews; only then does the interval
+ *    multiply by ease. Imperfect-but-passing recalls keep the current gap.
  *    Due dates land at local midnight N calendar days later (with a 6-hour
  *    floor so a late-night 1-day review does not reopen at 12:01am).
  *
@@ -28,6 +31,11 @@ export type MemoryStatus = "new" | "learning" | "reviewing" | "mastered";
 export interface MemorySchedule {
   status: MemoryStatus;
   learnStage: number;
+  /**
+   * Learning: exact reps banked on the current support band.
+   * Reviewing: exact recalls at the current early interval (daily, then
+   * every-other-day). Unused once the interval has started growing with ease.
+   */
   stageReps: number;
   ease: number;
   intervalDays: number;
@@ -172,9 +180,28 @@ export const MASTERED_INTERVAL_DAYS = 30;
 
 /**
  * Review accuracy below this lapses back into learning. At or above, imperfect
- * recalls stay in the review queue with conservative interval growth.
+ * recalls stay in the review queue but do not stretch the interval.
  */
 export const REVIEW_LAPSE_ACCURACY = 60;
+
+/**
+ * Exact reviewing recalls while the interval is still 1 day. The verse stays
+ * due tomorrow until this many exacts have landed, then moves to every other
+ * day.
+ */
+export const REVIEW_DAILY_REPS = 4;
+
+/**
+ * Exact reviewing recalls while the interval is 2 days. After this many, the
+ * interval starts multiplying by ease.
+ */
+export const REVIEW_EVERY_OTHER_REPS = 4;
+
+/** Interval (days) used for the post-graduation daily streak. */
+export const REVIEW_DAILY_INTERVAL_DAYS = 1;
+
+/** Interval (days) used for the every-other-day streak. */
+export const REVIEW_EVERY_OTHER_INTERVAL_DAYS = 2;
 
 /**
  * Near-perfect Read / Guided / Challenge attempts still bank a rep. This lets
@@ -513,6 +540,81 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   };
 }
 
+/**
+ * Which post-graduation band the current interval belongs to.
+ *
+ * Intervals still at 1 day are the daily streak; 2 days is every-other-day.
+ * Anything longer (including leftover SM-2 growth from before this ladder)
+ * multiplies by ease on each exact.
+ */
+function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
+  const rounded = Math.max(1, Math.round(intervalDays));
+  if (rounded <= 1) return 1;
+  if (rounded === 2) return 2;
+  return "growing";
+}
+
+function nextReviewingOnExact(
+  s: MemorySchedule,
+): Pick<
+  MemorySchedule,
+  "status" | "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+> {
+  const step = reviewingIntervalStep(s.intervalDays);
+  const consecutiveCorrect = s.consecutiveCorrect + 1;
+
+  if (step === 1) {
+    const reps = s.stageReps + 1;
+    if (reps >= REVIEW_DAILY_REPS) {
+      return {
+        status: "reviewing",
+        intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+        ease: s.ease,
+        stageReps: 0,
+        consecutiveCorrect,
+      };
+    }
+    return {
+      status: "reviewing",
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      ease: s.ease,
+      stageReps: reps,
+      consecutiveCorrect,
+    };
+  }
+
+  if (step === 2) {
+    const reps = s.stageReps + 1;
+    if (reps >= REVIEW_EVERY_OTHER_REPS) {
+      const intervalDays = REVIEW_EVERY_OTHER_INTERVAL_DAYS * s.ease;
+      return {
+        status:
+          intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
+        intervalDays,
+        ease: clampEase(s.ease + 0.05),
+        stageReps: 0,
+        consecutiveCorrect,
+      };
+    }
+    return {
+      status: "reviewing",
+      intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+      ease: s.ease,
+      stageReps: reps,
+      consecutiveCorrect,
+    };
+  }
+
+  const intervalDays = s.intervalDays * s.ease;
+  return {
+    status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
+    intervalDays,
+    ease: clampEase(s.ease + 0.05),
+    stageReps: 0,
+    consecutiveCorrect,
+  };
+}
+
 function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   const isEarly = r.now < s.dueAt;
 
@@ -540,26 +642,21 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   }
 
   if (r.quality === "exact") {
-    // exact: full interval growth and a small ease bump.
-    const intervalDays = s.intervalDays * s.ease;
+    const next = nextReviewingOnExact(s);
     return {
-      status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
+      ...next,
       learnStage: s.learnStage,
-      stageReps: s.stageReps,
-      ease: clampEase(s.ease + 0.05),
-      intervalDays,
-      dueAt: computeDueAt(r, intervalDays),
-      consecutiveCorrect: s.consecutiveCorrect + 1,
+      dueAt: computeDueAt(r, next.intervalDays),
       lapses: s.lapses,
       earlyReviewApplied: isEarly,
     };
   }
 
-  // close (and former "off but ≥60%"): grow the interval conservatively;
-  // leave ease untouched.
-  const intervalDays = s.intervalDays * s.ease * 0.8;
+  // close (and former "off but ≥60%"): keep the current gap. A messy recall
+  // should not earn more time before the next review.
+  const intervalDays = Math.max(REVIEW_DAILY_INTERVAL_DAYS, s.intervalDays);
   return {
-    status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
+    status: s.status,
     learnStage: s.learnStage,
     stageReps: s.stageReps,
     ease: s.ease,

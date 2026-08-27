@@ -4,6 +4,9 @@ import {
   formatVerseRef,
   isChapterScopeRef,
   parseVerseRef,
+  unionVerseRefs,
+  formatVerseRange,
+  verseRefsHaveMixedRanges,
 } from "./verse-ref-utils";
 
 describe("parseVerseRef", () => {
@@ -125,6 +128,74 @@ describe("formatVerseRef", () => {
         endVerse: 16,
       }),
     ).toBe("Psalm 119:1-16");
+  });
+});
+
+describe("unionVerseRefs", () => {
+  it("returns null for an empty list", () => {
+    expect(unionVerseRefs([])).toBeNull();
+  });
+
+  it("returns a copy of a single ref", () => {
+    expect(
+      unionVerseRefs([
+        { book: "2 Samuel", chapter: 23, startVerse: 9, endVerse: 11 },
+      ]),
+    ).toEqual({
+      book: "2 Samuel",
+      chapter: 23,
+      startVerse: 9,
+      endVerse: 11,
+    });
+  });
+
+  it("unions overlapping ranges that share a start verse", () => {
+    expect(
+      unionVerseRefs([
+        { book: "2 Samuel", chapter: 23, startVerse: 9, endVerse: 11 },
+        { book: "2 Samuel", chapter: 23, startVerse: 9, endVerse: 12 },
+      ]),
+    ).toEqual({
+      book: "2 Samuel",
+      chapter: 23,
+      startVerse: 9,
+      endVerse: 12,
+    });
+  });
+});
+
+describe("formatVerseRange", () => {
+  it("formats a single verse and a span", () => {
+    expect(formatVerseRange({ startVerse: 9, endVerse: 9 })).toBe("9");
+    expect(formatVerseRange({ startVerse: 7, endVerse: 8 })).toBe("7-8");
+  });
+});
+
+describe("verseRefsHaveMixedRanges", () => {
+  const john17 = {
+    book: "John",
+    chapter: 1,
+    startVerse: 7,
+    endVerse: 9,
+  };
+
+  it("is false for one ref or identical ranges", () => {
+    expect(verseRefsHaveMixedRanges([john17])).toBe(false);
+    expect(
+      verseRefsHaveMixedRanges([
+        john17,
+        { ...john17, startVerse: 7, endVerse: 9 },
+      ]),
+    ).toBe(false);
+  });
+
+  it("is true when end verses differ", () => {
+    expect(
+      verseRefsHaveMixedRanges([
+        john17,
+        { ...john17, startVerse: 7, endVerse: 8 },
+      ]),
+    ).toBe(true);
   });
 });
 

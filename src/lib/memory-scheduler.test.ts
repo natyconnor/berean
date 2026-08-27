@@ -9,6 +9,10 @@ import {
   MAX_LEARN_STAGE,
   MIN_LEARNING_LOCK_MS,
   requiredRepsFor,
+  REVIEW_DAILY_INTERVAL_DAYS,
+  REVIEW_DAILY_REPS,
+  REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+  REVIEW_EVERY_OTHER_REPS,
   SUPPORT_BANDS,
   initialSchedule,
   isDueForLearning,
@@ -329,14 +333,15 @@ describe("reviewing phase grades", () => {
     expect(next.dueAt).toBe(NOW + Math.round(5 * 2.3) * DAY_MS);
   });
 
-  it("close multiplies interval by ease * 0.8 and leaves ease unchanged", () => {
+  it("close keeps the current interval and leaves ease unchanged", () => {
     const s = reviewing({ intervalDays: 5, ease: 2.3, consecutiveCorrect: 3 });
     const next = scheduleNext(s, review({ quality: "close" }));
-    expect(next.intervalDays).toBeCloseTo(5 * 2.3 * 0.8, 5);
+    expect(next.intervalDays).toBe(5);
     expect(next.ease).toBeCloseTo(2.3, 5);
     expect(next.consecutiveCorrect).toBe(3);
+    expect(next.stageReps).toBe(0);
     expect(next.status).toBe("reviewing");
-    expect(next.dueAt).toBe(NOW + Math.round(5 * 2.3 * 0.8) * DAY_MS);
+    expect(next.dueAt).toBe(NOW + 5 * DAY_MS);
   });
 
   it("accuracy under 60% lapses: ease -0.2, lapses++, back to Guided learning", () => {
@@ -356,17 +361,83 @@ describe("reviewing phase grades", () => {
     expect(next.earlyReviewApplied).toBe(false);
   });
 
-  it("accuracy at 60%+ stays reviewing with close-style growth even if quality is off", () => {
+  it("accuracy at 60%+ stays reviewing without stretching the interval even if quality is off", () => {
     const s = reviewing({ intervalDays: 5, ease: 2.3, consecutiveCorrect: 3 });
     const next = scheduleNext(
       s,
       review({ quality: "off", accuracy: 70, mode: "review" }),
     );
     expect(next.status).toBe("reviewing");
-    expect(next.intervalDays).toBeCloseTo(5 * 2.3 * 0.8, 5);
+    expect(next.intervalDays).toBe(5);
     expect(next.ease).toBeCloseTo(2.3, 5);
     expect(next.consecutiveCorrect).toBe(3);
     expect(next.lapses).toBe(0);
+  });
+});
+
+describe("post-graduation review ladder", () => {
+  function exactAt(s: MemorySchedule, now: number): MemorySchedule {
+    return scheduleNext(s, review({ quality: "exact", now, mode: "review" }));
+  }
+
+  it("keeps a newly graduated verse daily for REVIEW_DAILY_REPS exacts", () => {
+    let s = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      ease: 2.3,
+      consecutiveCorrect: 0,
+      stageReps: 0,
+    });
+    for (let i = 1; i < REVIEW_DAILY_REPS; i += 1) {
+      s = exactAt(s, s.dueAt);
+      expect(s.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+      expect(s.stageReps).toBe(i);
+      expect(s.ease).toBe(2.3);
+      expect(s.status).toBe("reviewing");
+    }
+    s = exactAt(s, s.dueAt);
+    expect(s.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+    expect(s.stageReps).toBe(0);
+    expect(s.ease).toBe(2.3);
+  });
+
+  it("then stays every other day for REVIEW_EVERY_OTHER_REPS exacts before growing", () => {
+    let s = reviewing({
+      intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+      ease: 2.3,
+      consecutiveCorrect: REVIEW_DAILY_REPS,
+      stageReps: 0,
+    });
+    for (let i = 1; i < REVIEW_EVERY_OTHER_REPS; i += 1) {
+      s = exactAt(s, s.dueAt);
+      expect(s.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+      expect(s.stageReps).toBe(i);
+      expect(s.ease).toBe(2.3);
+    }
+    s = exactAt(s, s.dueAt);
+    expect(s.intervalDays).toBeCloseTo(
+      REVIEW_EVERY_OTHER_INTERVAL_DAYS * 2.3,
+      5,
+    );
+    expect(s.ease).toBeCloseTo(2.35, 5);
+    expect(s.stageReps).toBe(0);
+  });
+
+  it("does not count a close recall toward the daily streak", () => {
+    const s = reviewing({
+      intervalDays: 1,
+      ease: 2.3,
+      consecutiveCorrect: 2,
+      stageReps: 2,
+    });
+    const next = scheduleNext(
+      s,
+      review({ quality: "close", accuracy: 82, mode: "review" }),
+    );
+    expect(next.intervalDays).toBe(1);
+    expect(next.stageReps).toBe(2);
+    expect(next.consecutiveCorrect).toBe(2);
+    expect(next.ease).toBe(2.3);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
   });
 });
 
@@ -437,7 +508,7 @@ describe("early review boost (once per interval)", () => {
     });
     const first = scheduleNext(s, review({ quality: "close" }));
     expect(first.earlyReviewApplied).toBe(true);
-    expect(first.intervalDays).toBeCloseTo(5 * 2.3 * 0.8, 5);
+    expect(first.intervalDays).toBe(5);
 
     const second = scheduleNext(
       first,

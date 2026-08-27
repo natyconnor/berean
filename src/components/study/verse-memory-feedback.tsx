@@ -6,6 +6,7 @@ import { formatNextReviewPhrase } from "@/lib/memory-due-label";
 import { isLearningPhase, type MemorySchedule } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
+import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
 import type { VerseAttemptQuality } from "./study-attempt-quality";
 
 interface VerseMemoryFeedbackProps {
@@ -21,6 +22,11 @@ interface VerseMemoryFeedbackProps {
    * celebration-only banners used on the deck/practice faces.
    */
   showScheduleOutcome?: boolean;
+  /**
+   * From Memory is the only learning band that requires a perfect recall.
+   * When true, a close attempt explains that 100% is needed to advance.
+   */
+  requireExactToAdvance?: boolean;
   /** Next schedule from `recordAttempt` (or a local optimistic fallback). */
   nextSchedule?: MemorySchedule | null;
   /** Clock used for due labels. Defaults to `Date.now()`. */
@@ -41,7 +47,7 @@ const CONFETTI_COLORS = [
 ] as const;
 
 function nextReviewMessage(
-  lead: "Nailed it" | "Good recall",
+  lead: "Nailed it" | "Not bad, but some mistakes",
   schedule: MemorySchedule | null | undefined,
   now: number,
 ): string {
@@ -53,6 +59,7 @@ export function VerseMemoryFeedback({
   quality,
   attemptKey,
   showScheduleOutcome = false,
+  requireExactToAdvance = false,
   nextSchedule = null,
   now,
 }: VerseMemoryFeedbackProps): JSX.Element | null {
@@ -94,7 +101,11 @@ export function VerseMemoryFeedback({
         reduceMotion={!!reduceMotion}
         tone="close"
         icon={<ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />}
-        message={nextReviewMessage("Good recall", nextSchedule, dueClock)}
+        message={nextReviewMessage(
+          "Not bad, but some mistakes",
+          nextSchedule,
+          dueClock,
+        )}
       />
     );
   }
@@ -142,6 +153,10 @@ export function VerseMemoryFeedback({
   }
 
   // quality === "close"
+  const closeMessage = requireExactToAdvance
+    ? FROM_MEMORY_CLOSE_MESSAGE
+    : "Good job — really close!";
+
   return (
     <motion.div
       key={`close-${attemptKey}`}
@@ -151,14 +166,19 @@ export function VerseMemoryFeedback({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: "easeOut" }}
       className={cn(
-        "mx-auto flex w-fit max-w-full items-center gap-2",
-        "rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-1.5",
-        "text-sm font-medium text-amber-700 shadow-sm",
-        "dark:text-amber-300",
+        "mx-auto flex w-fit items-start gap-2",
+        "border border-amber-500/40 bg-amber-500/10 text-sm font-medium",
+        "text-amber-700 shadow-sm dark:text-amber-300",
+        requireExactToAdvance
+          ? "max-w-md rounded-2xl px-4 py-2 text-left leading-snug"
+          : "max-w-full items-center rounded-full px-4 py-1.5",
       )}
     >
-      <ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />
-      <span>Good job — really close!</span>
+      <ThumbsUp
+        className={cn("h-4 w-4 shrink-0", requireExactToAdvance && "mt-0.5")}
+        aria-hidden
+      />
+      <span>{closeMessage}</span>
     </motion.div>
   );
 }

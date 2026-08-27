@@ -139,6 +139,9 @@ describe("PracticeBoard composite recitation", () => {
       container.querySelector('[data-slot="card-title"]'),
     ).toHaveTextContent("Psalm 23");
     expect(screen.getByText("2 verses · one recitation")).toBeInTheDocument();
+    expect(
+      screen.getByText("Recite the whole passage from memory"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Passage")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /Shuffle/ }),
