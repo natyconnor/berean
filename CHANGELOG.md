@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/natyconnor/berean/compare/v1.12.14...v1.13.0) (2026-08-28)
+
+
+### Features
+
+* Scope-pack auto-heart, cohort learning, and unified recitation ([#174](https://github.com/natyconnor/berean/issues/174)) ([8e7e67d](https://github.com/natyconnor/berean/commit/8e7e67d30faf6e9e7a993a71538d11747f8602bd))
+
 ## [1.12.14](https://github.com/natyconnor/berean/compare/v1.12.13...v1.12.14) (2026-08-26)
 
 
