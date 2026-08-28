@@ -18,6 +18,8 @@ interface RailVerse {
   stageReps: number;
   status: MemoryStatus;
   locked?: boolean;
+  /** Overrides the reference label (a composite row names its pack). */
+  label?: string;
 }
 
 interface PracticeVerseRailProps {
@@ -42,6 +44,11 @@ interface PracticeVerseRailProps {
   currentWordCount?: number;
   /** Soft-locked: today's learning session is done for the active verse. */
   currentLocked?: boolean;
+  /**
+   * Whether the Shuffle / In-order toggle may appear. A composite recitation
+   * is one card in passage order, so it turns reordering off entirely.
+   */
+  allowReorder?: boolean;
   className?: string;
 }
 
@@ -64,10 +71,17 @@ export function PracticeVerseRail({
   currentStatus,
   currentWordCount,
   currentLocked = false,
+  allowReorder = true,
   className,
 }: PracticeVerseRailProps) {
-  const canReorder = verses.length >= 2;
+  const canReorder = allowReorder && verses.length >= 2;
   const currentChrome = practiceChromeFor(currentLearnStage, currentStatus);
+  // A labeled row stands for a whole pack passage, not a single verse.
+  const listHeading = verses.some((verse) => verse.label !== undefined)
+    ? "Passage"
+    : verses.length === 1
+      ? "Verse"
+      : "Verses";
 
   return (
     <div className={cn("rounded-xl border bg-card p-4 shadow-sm", className)}>
@@ -149,7 +163,7 @@ export function PracticeVerseRail({
 
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {verses.length === 1 ? "Verse" : "Verses"}
+            {listHeading}
           </p>
           <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1">
             <AnimatePresence initial={false}>
@@ -162,6 +176,7 @@ export function PracticeVerseRail({
                   verse.status,
                 );
                 const locked = verse.locked === true;
+                const label = verse.label ?? formatVerseRef(verse.reference);
                 return (
                   <motion.button
                     layout
@@ -176,8 +191,8 @@ export function PracticeVerseRail({
                     )}
                     onClick={() => onSelectVerse(verse.id)}
                     aria-current={active ? "true" : undefined}
-                    aria-label={`${formatVerseRef(verse.reference)} (${stage.label} band${locked ? ", done for today" : ""})`}
-                    title={`${formatVerseRef(verse.reference)} · ${stage.label}${locked ? " · Tomorrow" : ""}`}
+                    aria-label={`${label} (${stage.label} band${locked ? ", done for today" : ""})`}
+                    title={`${label} · ${stage.label}${locked ? " · Tomorrow" : ""}`}
                     transition={{ layout: { duration: 0.28, ease: "easeOut" } }}
                   >
                     <span
@@ -187,9 +202,7 @@ export function PracticeVerseRail({
                       )}
                       aria-hidden
                     />
-                    <span className="truncate">
-                      {formatVerseRef(verse.reference)}
-                    </span>
+                    <span className="truncate">{label}</span>
                     {locked ? (
                       <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
                         Done

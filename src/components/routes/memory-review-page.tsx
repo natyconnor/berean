@@ -6,31 +6,17 @@ import { Clock3, Loader2, Sparkles } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
-import { toPracticeVerse } from "@/components/memory/to-practice-verse";
+import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
-import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/review";
 
-function dueRowToPracticeVerse(row: {
-  book: string;
-  chapter: number;
-  startVerse: number;
-  endVerse: number;
-  learnStage: number;
-  stageReps?: number;
-  status: MemoryStatus;
-  dueAt: number;
-  lastReviewedAt?: number;
-  ease?: number;
-  intervalDays?: number;
-  consecutiveCorrect?: number;
-  lapses?: number;
-  earlyReviewApplied?: boolean;
-}): PracticeVerse {
-  return toPracticeVerse(row);
+function dueRowToPracticeVerse(
+  row: Parameters<typeof dueQueueEntryToPracticeVerse>[0],
+): PracticeVerse {
+  return dueQueueEntryToPracticeVerse(row);
 }
 
 function ReviewCaughtUp({

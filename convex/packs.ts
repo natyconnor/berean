@@ -1,20 +1,37 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
-import { seedVerseMemory } from "./lib/verseMemory";
+import {
+  adjustUserMemoryStats,
+  findVerseMemory,
+  isLiveHeartedMemory,
+  seedVerseMemory,
+} from "./lib/verseMemory";
 import {
   filterScopeMembers,
   loadCustomMembers,
   loadHeartedMembers,
   loadOwnedPack,
+  loadPackMembers,
   nextPackOrder,
   type PackMember,
 } from "./lib/packs";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
-import { isDueForReview } from "../src/lib/memory-scheduler";
+import {
+  isDueForReview,
+  isLearningPhase,
+  isReviewPhase,
+  type MemorySchedule,
+} from "../src/lib/memory-scheduler";
+import {
+  applyUnifiedGrade,
+  canonicalUnifiedSchedule,
+} from "../src/lib/unified-review-schedule";
 import { scopesEqual } from "../src/lib/scope-equality";
+import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
 import { verseMatchesScope } from "../src/lib/verse-scope-match";
 
 /**
@@ -56,6 +73,7 @@ const packValidator = v.object({
   scope: v.optional(scopeValidator),
   createdAt: v.number(),
   lastOpenedAt: v.number(),
+  unifiedReviewEnabled: v.optional(v.boolean()),
 });
 
 const packListItem = v.object({
@@ -65,6 +83,25 @@ const packListItem = v.object({
   verseCount: v.number(),
   dueCount: v.number(),
   lastOpenedAt: v.number(),
+  unifiedReviewEnabled: v.optional(v.boolean()),
+});
+
+const qualityValidator = v.union(
+  v.literal("exact"),
+  v.literal("close"),
+  v.literal("off"),
+);
+
+const memoryScheduleValidator = v.object({
+  status: statusValidator,
+  learnStage: v.number(),
+  stageReps: v.number(),
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  earlyReviewApplied: v.boolean(),
 });
 
 const packMemberValidator = v.object({
@@ -212,6 +249,10 @@ export const listMine = query({
         }
       }
 
+      if (pack.unifiedReviewEnabled && verseCount > 0) {
+        dueCount = dueCount > 0 ? 1 : 0;
+      }
+
       page.push({
         _id: pack._id,
         name: pack.name,
@@ -219,6 +260,7 @@ export const listMine = query({
         verseCount,
         dueCount,
         lastOpenedAt: pack.lastOpenedAt,
+        unifiedReviewEnabled: pack.unifiedReviewEnabled,
       });
     }
 
@@ -243,6 +285,7 @@ export const get = query({
       scope: pack.scope,
       createdAt: pack.createdAt,
       lastOpenedAt: pack.lastOpenedAt,
+      unifiedReviewEnabled: pack.unifiedReviewEnabled,
     };
   },
 });
@@ -421,18 +464,48 @@ export const resolveMembers = query({
     const pack = await loadOwnedPack(ctx, args.id, userId);
     if (!pack) return [];
 
-    let members: PackMember[];
-    if (pack.kind === "scope" && pack.scope) {
-      const hearted = await loadHeartedMembers(ctx, userId);
-      members = filterScopeMembers(hearted, pack.scope);
-    } else {
-      members = await loadCustomMembers(ctx, userId, args.id);
-    }
+    const members = await loadPackMembers(ctx, userId, pack);
 
     return members.map((m) => ({
       ...m,
       isDue: isDueForReview(m, args.now),
     }));
+  },
+});
+
+/**
+ * Queue every `new` member of a pack for learning, so the whole set can be
+ * learned in one session instead of one span at a time.
+ *
+ * Only `new` rows move: they become `learning` and due now, keeping their
+ * (zero) learn band and reps. Rows already learning, reviewing, or mastered
+ * keep their schedule untouched, which also makes a repeat call enroll 0.
+ */
+export const enrollLearning = mutation({
+  args: { id: v.id("packs"), now: v.number() },
+  returns: v.object({ enrolled: v.number() }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+
+    const members = await loadPackMembers(ctx, userId, pack);
+
+    let enrolled = 0;
+    for (const member of members) {
+      if (member.status !== "new") continue;
+
+      const memory = await findVerseMemory(ctx, userId, member.verseRefId);
+      if (!memory || memory.status !== "new") continue;
+
+      await ctx.db.patch(memory._id, { status: "learning", dueAt: args.now });
+      if (isLiveHeartedMemory(memory)) {
+        await adjustUserMemoryStats(ctx, userId, args.now, "new", "learning");
+      }
+      enrolled += 1;
+    }
+
+    return { enrolled };
   },
 });
 
@@ -451,5 +524,201 @@ export const previewScopeCount = query({
       if (isDueForReview(m, args.now)) dueCount += 1;
     }
     return { verseCount: members.length, dueCount };
+  },
+});
+
+function toSchedule(member: PackMember): MemorySchedule {
+  return {
+    status: member.status,
+    learnStage: member.learnStage,
+    stageReps: member.stageReps,
+    ease: member.ease,
+    intervalDays: member.intervalDays,
+    dueAt: member.dueAt,
+    consecutiveCorrect: member.consecutiveCorrect,
+    lapses: member.lapses,
+    earlyReviewApplied: member.earlyReviewApplied ?? false,
+  };
+}
+
+async function patchMemberSchedule(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  verseRefId: PackMember["verseRefId"],
+  next: MemorySchedule,
+  now: number,
+  lastReviewedAt?: number,
+): Promise<void> {
+  const memory = await findVerseMemory(ctx, userId, verseRefId);
+  if (!memory) return;
+
+  if (memory.status !== next.status && isLiveHeartedMemory(memory)) {
+    await adjustUserMemoryStats(ctx, userId, now, memory.status, next.status);
+  }
+
+  await ctx.db.patch(memory._id, {
+    status: next.status,
+    learnStage: next.learnStage,
+    stageReps: next.stageReps,
+    ease: next.ease,
+    intervalDays: next.intervalDays,
+    dueAt: next.dueAt,
+    consecutiveCorrect: next.consecutiveCorrect,
+    lapses: next.lapses,
+    earlyReviewApplied: next.earlyReviewApplied,
+    ...(lastReviewedAt !== undefined ? { lastReviewedAt } : {}),
+  });
+}
+
+/**
+ * Turn unified recitation on or off for a scope pack. Enabling snapshots every
+ * member onto a conservative due-now schedule. Disabling only clears the flag.
+ */
+export const setUnifiedReview = mutation({
+  args: {
+    id: v.id("packs"),
+    enabled: v.boolean(),
+    now: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+
+    if (!args.enabled) {
+      await ctx.db.patch(args.id, { unifiedReviewEnabled: false });
+      return null;
+    }
+
+    if (pack.kind !== "scope") {
+      throw new Error("Unified review is only available for scope packs");
+    }
+
+    const members = await loadPackMembers(ctx, userId, pack);
+    if (members.length < 2) {
+      throw new Error("Unified review needs more than one hearted member");
+    }
+    if (!pack.scope) {
+      throw new Error("Unified review is only available for scope packs");
+    }
+    const memberSpans = members.map((member) => ({
+      book: member.book,
+      chapter: member.chapter,
+      startVerse: member.startVerse,
+      endVerse: member.endVerse,
+    }));
+    if (!packAllowsUnifiedRecitation(memberSpans, pack.scope)) {
+      throw new Error("Unified review needs a contiguous passage");
+    }
+    if (!members.every((member) => isReviewPhase(member.status))) {
+      throw new Error(
+        "Unified review requires every member to be in review phase",
+      );
+    }
+
+    const canonical = canonicalUnifiedSchedule(
+      members.map(toSchedule),
+      args.now,
+    );
+    for (const member of members) {
+      await patchMemberSchedule(
+        ctx,
+        userId,
+        member.verseRefId,
+        canonical,
+        args.now,
+      );
+    }
+    await ctx.db.patch(args.id, { unifiedReviewEnabled: true });
+    return null;
+  },
+});
+
+/**
+ * Record one recitation grade onto every member of a unified pack. Members
+ * share the resulting schedule. Heatmap logs one review per member.
+ */
+export const recordUnifiedReview = mutation({
+  args: {
+    id: v.id("packs"),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    now: v.number(),
+    wordCount: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+  },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+    if (!pack.unifiedReviewEnabled) {
+      throw new Error("Unified review is not enabled for this pack");
+    }
+    if (pack.kind !== "scope") {
+      throw new Error("Unified review is only available for scope packs");
+    }
+
+    const members = await loadPackMembers(ctx, userId, pack);
+    if (members.length === 0) {
+      throw new Error("Cannot record a unified review on an empty pack");
+    }
+    if (members.some((member) => isLearningPhase(member.status))) {
+      throw new Error(
+        "Cannot record a unified review while any member is still learning",
+      );
+    }
+
+    const memories: Array<{
+      member: PackMember;
+      memory: Doc<"verseMemory">;
+    }> = [];
+    for (const member of members) {
+      const memory = await findVerseMemory(ctx, userId, member.verseRefId);
+      if (!memory) {
+        throw new Error("Unified review is missing a verse memory row");
+      }
+      memories.push({ member, memory });
+    }
+
+    const canonical = canonicalUnifiedSchedule(
+      members.map(toSchedule),
+      args.now,
+    );
+    const next = applyUnifiedGrade(canonical, {
+      quality: args.quality,
+      accuracy: args.accuracy,
+      mode: "review",
+      now: args.now,
+      wordCount: args.wordCount,
+      tzOffsetMinutes: args.tzOffsetMinutes,
+    });
+
+    for (const { member, memory } of memories) {
+      await ctx.db.insert("verseMemoryReviews", {
+        userId,
+        verseRefId: member.verseRefId,
+        verseMemoryId: memory._id,
+        quality: args.quality,
+        accuracy: args.accuracy,
+        stage: memory.learnStage,
+        mode: "review",
+        durationMs: args.durationMs,
+        createdAt: args.now,
+      });
+
+      await patchMemberSchedule(
+        ctx,
+        userId,
+        member.verseRefId,
+        next,
+        args.now,
+        args.now,
+      );
+    }
+
+    return next;
   },
 });

@@ -23,6 +23,11 @@ interface StudyScopeBookPickerProps {
   onToggleBook: (bookName: string) => void;
   onSetBooks: (books: string[]) => void;
   onSetChapterRange: (book: string, range: ChapterRange | null) => void;
+  /**
+   * Pack builder: a listed book starts with no chapters highlighted. Study
+   * keeps the older default where omitting a range means every chapter.
+   */
+  emptyChapterSelection?: boolean;
 }
 
 export function StudyScopeBookPicker({
@@ -30,6 +35,7 @@ export function StudyScopeBookPicker({
   chapterRanges,
   onToggleBook,
   onSetChapterRange,
+  emptyChapterSelection = false,
 }: StudyScopeBookPickerProps) {
   const [search, setSearch] = useState("");
   const [editingRangeBook, setEditingRangeBook] = useState<string | null>(null);
@@ -118,6 +124,7 @@ export function StudyScopeBookPicker({
           bookName={editingRangeBook}
           bookInfo={BIBLE_BOOKS.find((b) => b.name === editingRangeBook)!}
           range={chapterRanges.get(editingRangeBook) ?? null}
+          emptyChapterSelection={emptyChapterSelection}
           onSetRange={(range) => onSetChapterRange(editingRangeBook, range)}
           onClose={() => setEditingRangeBook(null)}
         />
@@ -160,6 +167,7 @@ export function StudyScopeBookPicker({
         <ChapterGrid
           bookInfo={singleBook}
           range={chapterRanges.get(singleBook.name) ?? null}
+          emptyChapterSelection={emptyChapterSelection}
           onSetRange={(range) => onSetChapterRange(singleBook.name, range)}
         />
       )}
@@ -204,15 +212,20 @@ function BookRow({
 function ChapterGrid({
   bookInfo,
   range,
+  emptyChapterSelection,
   onSetRange,
 }: {
   bookInfo: BookInfo;
   range: ChapterRange | null;
+  emptyChapterSelection: boolean;
   onSetRange: (range: ChapterRange | null) => void;
 }) {
   const [hoveredChapter, setHoveredChapter] = useState<number | null>(null);
 
-  const isAllSelected = range === null;
+  const isNoneSelected = emptyChapterSelection && range === null;
+  const isAllSelected = emptyChapterSelection
+    ? range !== null && range.start === 1 && range.end === bookInfo.chapters
+    : range === null;
   const isSingleChapter = range !== null && range.start === range.end;
   const anchor = isSingleChapter ? range.start : null;
 
@@ -225,10 +238,12 @@ function ChapterGrid({
       : null;
 
   function handleChapterClick(ch: number) {
-    if (isAllSelected) {
+    if (isNoneSelected || isAllSelected) {
       onSetRange({ start: ch, end: ch });
       return;
     }
+
+    if (range === null) return;
 
     if (isSingleChapter) {
       if (ch === range.start) {
@@ -256,6 +271,10 @@ function ChapterGrid({
   }
 
   function getCellStyle(ch: number): string {
+    if (isNoneSelected) {
+      return "bg-background hover:bg-primary/10 hover:text-primary";
+    }
+
     if (isAllSelected) {
       return "bg-primary text-primary-foreground";
     }
@@ -277,11 +296,15 @@ function ChapterGrid({
     return "bg-background hover:bg-primary/10 hover:text-primary";
   }
 
-  const rangeLabel = isAllSelected
-    ? `All ${bookInfo.chapters} chapters`
-    : isSingleChapter
-      ? `Chapter ${range.start}`
-      : `Chapters ${range.start}\u2013${range.end}`;
+  const rangeLabel = isNoneSelected
+    ? "No chapters selected"
+    : isAllSelected
+      ? `All ${bookInfo.chapters} chapters`
+      : range !== null && isSingleChapter
+        ? `Chapter ${range.start}`
+        : range
+          ? `Chapters ${range.start}\u2013${range.end}`
+          : "No chapters selected";
 
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-2">
@@ -289,7 +312,15 @@ function ChapterGrid({
         <p className="text-xs font-semibold">
           {bookInfo.name} &middot; {rangeLabel}
         </p>
-        {!isAllSelected && (
+        {isNoneSelected ? (
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            onClick={() => onSetRange({ start: 1, end: bookInfo.chapters })}
+          >
+            Select all
+          </button>
+        ) : !isAllSelected || emptyChapterSelection ? (
           <button
             type="button"
             className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
@@ -297,14 +328,16 @@ function ChapterGrid({
           >
             Clear selection
           </button>
-        )}
+        ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
-        {isAllSelected
-          ? "Click a chapter to narrow the scope, or two to pick a range"
-          : isSingleChapter
-            ? "Click another chapter to select a range, or click again to deselect"
-            : "Click inside the range to narrow, or outside to expand it"}
+        {isNoneSelected
+          ? "Click a chapter to start, or Select all to include every chapter"
+          : isAllSelected
+            ? "Click a chapter to narrow the scope, or two to pick a range"
+            : isSingleChapter
+              ? "Click another chapter to select a range, or click again to deselect"
+              : "Click inside the range to narrow, or outside to expand it"}
       </p>
       <div
         className="grid grid-cols-8 gap-1"
@@ -335,12 +368,14 @@ function ChapterRangeEditor({
   bookName,
   bookInfo,
   range,
+  emptyChapterSelection,
   onSetRange,
   onClose,
 }: {
   bookName: string;
   bookInfo: BookInfo;
   range: ChapterRange | null;
+  emptyChapterSelection: boolean;
   onSetRange: (range: ChapterRange | null) => void;
   onClose: () => void;
 }) {
@@ -358,7 +393,7 @@ function ChapterRangeEditor({
 
   function handleApply() {
     if (isValid) {
-      if (start === 1 && end === bookInfo.chapters) {
+      if (!emptyChapterSelection && start === 1 && end === bookInfo.chapters) {
         onSetRange(null);
       } else {
         onSetRange({ start, end });
@@ -368,7 +403,11 @@ function ChapterRangeEditor({
   }
 
   function handleClear() {
-    onSetRange(null);
+    if (emptyChapterSelection) {
+      onSetRange({ start: 1, end: bookInfo.chapters });
+    } else {
+      onSetRange(null);
+    }
     onClose();
   }
 

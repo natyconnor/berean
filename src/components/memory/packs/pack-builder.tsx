@@ -25,7 +25,8 @@ type PackKind = "scope" | "custom";
  * Creates a pack: a name, a kind toggle (Scope vs Custom), and the matching
  * body. Scope packs embed the shared {@link ScopeForm} with a live member
  * preview; custom packs can stage hearted or browsed verses. On create
- * we navigate straight to the new pack's view.
+ * we navigate straight to the new pack's view. Incomplete scope packs arrive
+ * with a pointer on Memorize whole passage.
  */
 export function PackBuilder() {
   const navigate = useNavigate();
@@ -36,15 +37,14 @@ export function PackBuilder() {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const scopeForm = useScopeForm();
-  const { scopeForPreview, summaryText } = scopeForm;
+  const scopeForm = useScopeForm({ requireChapterSelection: true });
+  const { scopeForPreview, summaryText, isComplete } = scopeForm;
 
   const scopePreview = useQuery(
     api.packs.previewScopeCount,
-    kind === "scope" ? { scope: scopeForPreview, now } : "skip",
+    kind === "scope" && isComplete ? { scope: scopeForPreview, now } : "skip",
   );
 
-  // Custom pack membership always hearts the verse when the pack is saved.
   const savedVerses = useQuery(
     api.savedVerses.listAll,
     kind === "custom" ? {} : "skip",
@@ -96,12 +96,11 @@ export function PackBuilder() {
 
   const canCreate =
     !isCreating &&
-    (kind === "scope" || staged.size > 0 || trimmedName.length > 0);
+    (kind === "scope" ? isComplete : staged.size > 0 || trimmedName.length > 0);
 
   const handleCreate = useCallback(async () => {
-    // Guard against double-submits: the button is disabled while creating, but
-    // this also stops a queued second click from firing a duplicate create.
     if (isCreating) return;
+    if (kind === "scope" && !isComplete) return;
     setIsCreating(true);
     setError(null);
     try {
@@ -138,7 +137,11 @@ export function PackBuilder() {
         }
       }
 
-      void navigate({ to: "/memory/$packId", params: { packId } });
+      void navigate({
+        to: "/memory/$packId",
+        params: { packId },
+        search: kind === "scope" ? { heartHint: true } : {},
+      });
     } catch {
       setError("Couldn't create the pack. Please try again.");
     } finally {
@@ -153,6 +156,7 @@ export function PackBuilder() {
     staged,
     addVerse,
     navigate,
+    isComplete,
   ]);
 
   return (
@@ -234,6 +238,7 @@ export function PackBuilder() {
               onSetTagMatchMode={scopeForm.onSetTagMatchMode}
               passageDescription="Choose which books and chapters this pack covers."
               showTagFilter={false}
+              emptyChapterSelection
             />
           ) : (
             <section className="space-y-3">
@@ -271,19 +276,21 @@ export function PackBuilder() {
             <p className="truncate text-sm font-medium">{effectiveName}</p>
             <p className="text-xs text-muted-foreground">
               {kind === "scope"
-                ? scopePreview
-                  ? `${scopePreview.verseCount} verse${
-                      scopePreview.verseCount !== 1 ? "s" : ""
-                    }${
-                      scopePreview.dueCount > 0
-                        ? ` · ${scopePreview.dueCount} due`
-                        : ""
-                    }`
-                  : "Counting…"
+                ? !isComplete
+                  ? "Select chapters to continue"
+                  : scopePreview
+                    ? `${scopePreview.verseCount} verse${
+                        scopePreview.verseCount !== 1 ? "s" : ""
+                      }${
+                        scopePreview.dueCount > 0
+                          ? ` · ${scopePreview.dueCount} due`
+                          : ""
+                      }`
+                    : "Counting…"
                 : `${staged.size} verse${staged.size !== 1 ? "s" : ""} selected`}
             </p>
           </div>
-          <Button onClick={handleCreate} disabled={!canCreate}>
+          <Button onClick={() => void handleCreate()} disabled={!canCreate}>
             {isCreating ? "Creating\u2026" : "Create pack"}
           </Button>
         </div>

@@ -37,6 +37,7 @@ export function useEsvReference(
     data: chapterData,
     loading,
     error,
+    retry,
   } = useCachedEsvQuery(chapterQuery, { enabled });
 
   const data = useMemo((): EsvChapterData | null => {
@@ -67,6 +68,7 @@ export function useEsvReference(
     data,
     loading,
     error,
+    retry,
     /** Human-readable verse range (e.g. `John 3:16-18`). Passage fetch uses chapter key. */
     query: rangeLabel,
     /** True when a chapter-scoped preview is truncated after the first three verses. */

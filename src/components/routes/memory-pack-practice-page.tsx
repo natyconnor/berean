@@ -5,7 +5,9 @@ import { ArrowLeft, Loader2, SearchX } from "lucide-react";
 
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { isReviewPhase } from "@/lib/memory-scheduler";
 import {
   isMemorySessionCandidate,
   type MemorySessionKind,
@@ -39,25 +41,60 @@ export function MemoryPackSessionPage({
     now,
   });
 
-  const sessionVerses = useMemo<PracticeVerse[]>(
-    () =>
-      (members ?? [])
-        .map((m) => ({
-          reference: {
-            book: m.book,
-            chapter: m.chapter,
-            startVerse: m.startVerse,
-            endVerse: m.endVerse,
-          },
-          learnStage: m.learnStage,
-          stageReps: m.stageReps ?? 0,
-          status: m.status,
-          dueAt: m.dueAt,
-          lastReviewedAt: m.lastReviewedAt,
-        }))
-        .filter((verse) => isMemorySessionCandidate(verse, kind, now)),
-    [members, kind, now],
-  );
+  const unifiedEnabled = pack?.unifiedReviewEnabled === true;
+  const sessionVerses = useMemo<PracticeVerse[]>(() => {
+    if (members === undefined) return [];
+    if (
+      kind !== "learning" &&
+      unifiedEnabled &&
+      members.length > 0 &&
+      members.every((member) => isReviewPhase(member.status))
+    ) {
+      const lead = members[0];
+      if (!lead) return [];
+      return [
+        dueQueueEntryToPracticeVerse({
+          kind: "pack",
+          packId: typedPackId,
+          packName: pack?.name ?? "",
+          dueAt: lead.dueAt,
+          status: lead.status,
+          learnStage: lead.learnStage,
+          stageReps: lead.stageReps,
+          ease: lead.ease,
+          intervalDays: lead.intervalDays,
+          consecutiveCorrect: lead.consecutiveCorrect,
+          lapses: lead.lapses,
+          earlyReviewApplied: lead.earlyReviewApplied,
+          lastReviewedAt: lead.lastReviewedAt,
+          members: members.map((member) => ({
+            book: member.book,
+            chapter: member.chapter,
+            startVerse: member.startVerse,
+            endVerse: member.endVerse,
+          })),
+        }),
+      ];
+    }
+    return members
+      .map((m) => ({
+        reference: {
+          book: m.book,
+          chapter: m.chapter,
+          startVerse: m.startVerse,
+          endVerse: m.endVerse,
+        },
+        learnStage: m.learnStage,
+        stageReps: m.stageReps ?? 0,
+        status: m.status,
+        dueAt: m.dueAt,
+        lastReviewedAt: m.lastReviewedAt,
+      }))
+      .filter((verse) => {
+        if (unifiedEnabled && isReviewPhase(verse.status)) return false;
+        return isMemorySessionCandidate(verse, kind, now, kind === "learning");
+      });
+  }, [members, kind, now, unifiedEnabled, pack?.name, typedPackId]);
   const isLearning = kind === "learning";
 
   if (pack === undefined || members === undefined) {

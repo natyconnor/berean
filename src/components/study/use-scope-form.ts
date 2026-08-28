@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
+import { getBookInfo } from "@/lib/bible-books";
 import type { TagMatchMode } from "@/lib/tag-utils";
 
 import type { ChapterRange } from "./study-scope-book-picker";
@@ -39,6 +40,30 @@ export interface UseScopeFormResult extends ScopeFormControls {
   scopeForPreview: ScopeForPreview;
   /** Human summary used as a default name / footer label. */
   summaryText: string;
+  /**
+   * False while no book is listed, or a listed multi-chapter book still has
+   * no range. Study always reports true (omitting a range means every chapter).
+   */
+  isComplete: boolean;
+}
+
+export interface UseScopeFormOptions {
+  /**
+   * Pack builder: picking a book does not imply all of its chapters. The
+   * user has to choose a range before the scope is ready to preview or create.
+   * Study leaves this off so a listed book still means the whole book.
+   */
+  requireChapterSelection?: boolean;
+}
+
+function bookNeedsChapterRange(bookName: string): boolean {
+  return (getBookInfo(bookName)?.chapters ?? 0) > 1;
+}
+
+function fullChapterRange(bookName: string): ChapterRange | null {
+  const chapters = getBookInfo(bookName)?.chapters;
+  if (!chapters) return null;
+  return { start: 1, end: chapters };
 }
 
 /**
@@ -46,7 +71,10 @@ export interface UseScopeFormResult extends ScopeFormControls {
  * builder and the Memory scope-pack builder. Kept UI-free so both surfaces can
  * render their own chrome (header/footer/preview) around a `ScopeForm`.
  */
-export function useScopeForm(): UseScopeFormResult {
+export function useScopeForm(
+  options: UseScopeFormOptions = {},
+): UseScopeFormResult {
+  const requireChapterSelection = options.requireChapterSelection === true;
   const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
   const [chapterRanges, setChapterRanges] = useState<Map<string, ChapterRange>>(
     new Map(),
@@ -83,13 +111,33 @@ export function useScopeForm(): UseScopeFormResult {
 
   const summaryText = formatScopeSummary(scope);
 
-  const onToggleBook = useCallback((bookName: string) => {
-    setSelectedBooks((prev) =>
-      prev.includes(bookName)
-        ? prev.filter((b) => b !== bookName)
-        : [...prev, bookName],
+  const isComplete = useMemo(() => {
+    if (!requireChapterSelection) return true;
+    // `[].every(...)` is vacuously true; a blank builder is not ready to create.
+    return (
+      selectedBooks.length > 0 &&
+      selectedBooks.every(
+        (book) => !bookNeedsChapterRange(book) || chapterRanges.has(book),
+      )
     );
-  }, []);
+  }, [requireChapterSelection, selectedBooks, chapterRanges]);
+
+  const onToggleBook = useCallback(
+    (bookName: string) => {
+      const removing = selectedBooks.includes(bookName);
+      setSelectedBooks((prev) =>
+        removing ? prev.filter((b) => b !== bookName) : [...prev, bookName],
+      );
+      if (!removing) return;
+      setChapterRanges((ranges) => {
+        if (!ranges.has(bookName)) return ranges;
+        const next = new Map(ranges);
+        next.delete(bookName);
+        return next;
+      });
+    },
+    [selectedBooks],
+  );
 
   const onSetBooks = useCallback((books: string[]) => {
     setSelectedBooks(books);
@@ -113,9 +161,20 @@ export function useScopeForm(): UseScopeFormResult {
 
   const onSelectPreset = useCallback(
     (books: string[]) => {
-      onSetBooks(books);
+      setSelectedBooks(books);
+      if (!requireChapterSelection) {
+        setChapterRanges(new Map());
+        return;
+      }
+      const next = new Map<string, ChapterRange>();
+      for (const book of books) {
+        if (!bookNeedsChapterRange(book)) continue;
+        const range = fullChapterRange(book);
+        if (range) next.set(book, range);
+      }
+      setChapterRanges(next);
     },
-    [onSetBooks],
+    [requireChapterSelection],
   );
 
   const onToggleTag = useCallback((tag: string) => {
@@ -147,5 +206,6 @@ export function useScopeForm(): UseScopeFormResult {
     scope,
     scopeForPreview,
     summaryText,
+    isComplete,
   };
 }

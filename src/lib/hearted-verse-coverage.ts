@@ -5,6 +5,9 @@
  * `heartedVerses` array. Different books or chapters never overlap.
  */
 
+/** Max spans per `heartMany` call; the client must chunk larger batches. */
+export const HEART_MANY_CHUNK = 40;
+
 export type VerseSpan = {
   book: string;
   chapter: number;

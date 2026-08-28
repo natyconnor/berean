@@ -214,6 +214,10 @@ export default defineSchema({
     ),
     createdAt: v.number(),
     lastOpenedAt: v.number(),
+    // Absent or false → today's per-span pack Review / global due queue.
+    // True → pack Review is one recitation; members are hidden from dueQueue
+    // as individual cards and the pack is queued as a single item.
+    unifiedReviewEnabled: v.optional(v.boolean()),
   }).index("by_userId_lastOpenedAt", ["userId", "lastOpenedAt"]),
 
   packVerses: defineTable({
