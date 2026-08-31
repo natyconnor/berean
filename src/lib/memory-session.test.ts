@@ -7,6 +7,7 @@ import {
   isMemorySessionCandidate,
   isPracticeSessionCandidate,
   isReviewSessionCandidate,
+  reviewPhaseListAction,
 } from "./memory-session";
 
 const NOW = 1_700_000_000_000;
@@ -112,6 +113,21 @@ describe("memory session membership", () => {
         NOW,
       ),
     ).toBe(false);
+  });
+
+  it("uses Review when due and Practice when the next review is still ahead", () => {
+    expect(
+      reviewPhaseListAction({ status: "reviewing", dueAt: NOW }, NOW),
+    ).toBe("review");
+    expect(
+      reviewPhaseListAction({ status: "mastered", dueAt: NOW - 1 }, NOW),
+    ).toBe("review");
+    expect(
+      reviewPhaseListAction({ status: "reviewing", dueAt: NOW + DAY_MS }, NOW),
+    ).toBe("practice");
+    expect(reviewPhaseListAction({ status: "reviewing" }, NOW)).toBe(
+      "practice",
+    );
   });
 });
 

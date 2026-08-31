@@ -47,6 +47,17 @@ export function isReviewSessionCandidate(
 }
 
 /**
+ * Pack / library CTA for a graduated verse: Review only when it is due.
+ * Extra recall before then is Practice, matching pack-level Review vs Practice.
+ */
+export function reviewPhaseListAction(
+  candidate: MemorySessionCandidate,
+  now: number,
+): "review" | "practice" {
+  return isReviewSessionCandidate(candidate, now) ? "review" : "practice";
+}
+
+/**
  * An unscoped Learning session contains only started verses that are available
  * today. A scoped Learn CTA may also start a brand-new verse.
  */

@@ -54,12 +54,15 @@ export function MemoryLibrary({
   now,
   onLearnVerse,
   onReviewVerse,
+  onPracticeVerse,
 }: {
   now: number;
   /** Start a Learning session scoped to one library verse. */
   onLearnVerse: (verse: PracticeVerse) => void;
   /** Start a review session scoped to one library verse. */
   onReviewVerse: (verse: PracticeVerse) => void;
+  /** Extra recall for a graduated verse that is not due yet. */
+  onPracticeVerse: (verse: PracticeVerse) => void;
 }) {
   const [view, setView] = useState<LibraryView>("due");
   const [search, setSearch] = useState("");
@@ -250,6 +253,7 @@ export function MemoryLibrary({
                       now={now}
                       onLearn={onLearnVerse}
                       onReview={onReviewVerse}
+                      onPractice={onPracticeVerse}
                     />
                   </MemoryListRow>
                 </li>
@@ -271,6 +275,10 @@ export function MemoryLibrary({
         onReviewVerse={(verse) => {
           setLearnOpen(false);
           onReviewVerse(verse);
+        }}
+        onPracticeVerse={(verse) => {
+          setLearnOpen(false);
+          onPracticeVerse(verse);
         }}
       />
 
@@ -295,6 +303,10 @@ export function MemoryLibrary({
               onReview={(verse) => {
                 setSelected(null);
                 onReviewVerse(verse);
+              }}
+              onPractice={(verse) => {
+                setSelected(null);
+                onPracticeVerse(verse);
               }}
             />
           ) : null}

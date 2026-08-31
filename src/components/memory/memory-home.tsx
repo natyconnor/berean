@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
+import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { isPreviewTestToolsEnabled } from "@/lib/preview-test-tools";
 
@@ -90,6 +91,12 @@ export function MemoryHome() {
                   void navigate({
                     to: "/memory/review",
                     search: memoryReviewSearch(verse.reference),
+                  });
+                }}
+                onPracticeVerse={(verse) => {
+                  void navigate({
+                    to: "/memory/practice",
+                    search: memoryPracticeSearch(verse.reference),
                   });
                 }}
               />

@@ -1,4 +1,5 @@
 import { isLearningLocked, type MemoryStatus } from "./memory-scheduler";
+import { reviewPhaseListAction } from "./memory-session";
 
 export type HeartedSpanMemory = {
   status: MemoryStatus;
@@ -12,8 +13,8 @@ export type HeartedSpanMemory = {
  * Status maps to what Learn/Add will actually do:
  * - new / unknown → saved, not started
  * - learning → already in the Learn flow
- * - reviewing → Learn confirm opens Review
- * - mastered → Learn confirm opens Review
+ * - reviewing / mastered, due → Learn confirm opens Review
+ * - reviewing / mastered, not due → Learn confirm opens Practice
  */
 export function alreadyHeartedLeadIn(status?: MemoryStatus): string {
   switch (status) {
@@ -61,7 +62,15 @@ export function heartedSpanConfirmAction(
       : { label: "Continue Learning", disabled: false };
   }
   if (memory.status === "reviewing" || memory.status === "mastered") {
-    return { label: "Review", disabled: false };
+    const label =
+      now !== undefined &&
+      reviewPhaseListAction(
+        { status: memory.status, dueAt: memory.dueAt },
+        now,
+      ) === "review"
+        ? "Review"
+        : "Practice";
+    return { label, disabled: false };
   }
   return { label: "Learn", disabled: false };
 }

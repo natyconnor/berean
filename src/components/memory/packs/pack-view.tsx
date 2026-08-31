@@ -52,6 +52,7 @@ import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
+import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { packAllowsUnifiedRecitation } from "@/lib/contiguous-spans";
 import {
@@ -218,6 +219,12 @@ export function PackView({
           search: memoryReviewSearch(verse.reference),
         })
       }
+      onPracticeVerse={(verse) =>
+        void navigate({
+          to: "/memory/practice",
+          search: memoryPracticeSearch(verse.reference),
+        })
+      }
       onDeleted={() => void navigate({ to: "/memory" })}
     />
   );
@@ -243,6 +250,7 @@ function PackViewMain({
   onPractice,
   onLearnVerse,
   onReviewVerse,
+  onPracticeVerse,
   onDeleted,
 }: {
   packId: Id<"packs">;
@@ -261,6 +269,7 @@ function PackViewMain({
   onPractice: () => void;
   onLearnVerse: (verse: PracticeVerse) => void;
   onReviewVerse: (verse: PracticeVerse) => void;
+  onPracticeVerse: (verse: PracticeVerse) => void;
   onDeleted: () => void;
 }) {
   const isCustom = pack.kind === "custom";
@@ -582,20 +591,13 @@ function PackViewMain({
               </span>
             </Button>
           ) : null}
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={onReview}
-            disabled={!canReview}
-          >
-            <Play className="h-4 w-4" aria-hidden />
-            {unifiedEnabled && canReview ? "Review passage" : "Review"}
-            {effectiveDueCount > 0 ? (
-              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
-                {effectiveDueCount}
-              </span>
-            ) : null}
-          </Button>
+          <PackReviewButton
+            canReview={canReview}
+            canPractice={canPractice}
+            unifiedEnabled={unifiedEnabled}
+            dueCount={effectiveDueCount}
+            onReview={onReview}
+          />
           <Button
             size="sm"
             variant="outline"
@@ -738,6 +740,7 @@ function PackViewMain({
                         now={now}
                         onLearn={onLearnVerse}
                         onReview={onReviewVerse}
+                        onPractice={onPracticeVerse}
                       />
                       {isCustom && (
                         <Button
@@ -781,6 +784,10 @@ function PackViewMain({
               onReview={(verse) => {
                 setSelectedVerseRefId(null);
                 onReviewVerse(verse);
+              }}
+              onPractice={(verse) => {
+                setSelectedVerseRefId(null);
+                onPracticeVerse(verse);
               }}
             />
           ) : null}
@@ -882,6 +889,52 @@ function PackViewMain({
         onAdd={handleAdd}
       />
     </div>
+  );
+}
+
+function PackReviewButton({
+  canReview,
+  canPractice,
+  unifiedEnabled,
+  dueCount,
+  onReview,
+}: {
+  canReview: boolean;
+  canPractice: boolean;
+  unifiedEnabled: boolean;
+  dueCount: number;
+  onReview: () => void;
+}) {
+  const button = (
+    <Button
+      size="sm"
+      className="gap-1.5"
+      onClick={onReview}
+      disabled={!canReview}
+    >
+      <Play className="h-4 w-4" aria-hidden />
+      {unifiedEnabled && canReview ? "Review passage" : "Review"}
+      {dueCount > 0 ? (
+        <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
+          {dueCount}
+        </span>
+      ) : null}
+    </Button>
+  );
+
+  if (canReview) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">{button}</span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        {canPractice
+          ? "Nothing is due for review. Practice instead, or come back when a verse is scheduled."
+          : "Verses enter Review after they finish Learning."}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
