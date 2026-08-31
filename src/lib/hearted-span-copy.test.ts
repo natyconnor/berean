@@ -60,12 +60,33 @@ describe("heartedSpanConfirmAction", () => {
     ).toEqual({ label: "Tomorrow", disabled: true });
   });
 
-  it("uses Review for reviewing and mastered", () => {
+  it("uses Review for due reviewing and mastered verses", () => {
     expect(
-      heartedSpanConfirmAction("Learn", { status: "reviewing" }, now),
+      heartedSpanConfirmAction(
+        "Learn",
+        { status: "reviewing", dueAt: now },
+        now,
+      ),
     ).toEqual({ label: "Review", disabled: false });
+    expect(
+      heartedSpanConfirmAction(
+        "Learn",
+        { status: "mastered", dueAt: now - 1 },
+        now,
+      ),
+    ).toEqual({ label: "Review", disabled: false });
+  });
+
+  it("uses Practice when the next review is still ahead", () => {
+    expect(
+      heartedSpanConfirmAction(
+        "Learn",
+        { status: "reviewing", dueAt: now + 86_400_000 },
+        now,
+      ),
+    ).toEqual({ label: "Practice", disabled: false });
     expect(
       heartedSpanConfirmAction("Learn", { status: "mastered" }, now),
-    ).toEqual({ label: "Review", disabled: false });
+    ).toEqual({ label: "Practice", disabled: false });
   });
 });

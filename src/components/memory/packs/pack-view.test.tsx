@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { DAY_MS } from "@/lib/memory-scheduler";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 
 import { PackView } from "./pack-view";
@@ -694,5 +695,85 @@ describe("PackView", () => {
       enabled: false,
       now: getSessionNow(),
     });
+  });
+
+  it("reviews a due verse and practices one that is not due yet", async () => {
+    const now = getSessionNow();
+    renderPack({
+      kind: "custom",
+      members: [
+        member({
+          startVerse: 1,
+          endVerse: 1,
+          status: "reviewing",
+          isDue: true,
+          dueAt: now,
+        }),
+        member({
+          startVerse: 2,
+          endVerse: 2,
+          status: "reviewing",
+          isDue: false,
+          dueAt: now + 4 * DAY_MS,
+        }),
+      ],
+    });
+
+    expect(header().getByRole("button", { name: /^Review/ })).toBeEnabled();
+    expect(verses().getByRole("button", { name: "Review" })).toBeEnabled();
+    expect(verses().getByRole("button", { name: "Practice" })).toBeEnabled();
+
+    await userEvent.click(verses().getByRole("button", { name: "Review" }));
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/memory/review",
+      search: {
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      },
+    });
+
+    await userEvent.click(verses().getByRole("button", { name: "Practice" }));
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/memory/practice",
+      search: {
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 2,
+        endVerse: 2,
+      },
+    });
+  });
+
+  it("offers Practice on individual verses when pack Review is disabled", () => {
+    const now = getSessionNow();
+    renderPack({
+      kind: "custom",
+      members: [
+        member({
+          startVerse: 1,
+          endVerse: 1,
+          status: "reviewing",
+          isDue: false,
+          dueAt: now + DAY_MS,
+        }),
+        member({
+          startVerse: 2,
+          endVerse: 2,
+          status: "mastered",
+          isDue: false,
+          dueAt: now + 3 * DAY_MS,
+        }),
+      ],
+    });
+
+    expect(header().getByRole("button", { name: /^Review$/ })).toBeDisabled();
+    expect(
+      verses().queryByRole("button", { name: "Review" }),
+    ).not.toBeInTheDocument();
+    expect(verses().getAllByRole("button", { name: "Practice" })).toHaveLength(
+      2,
+    );
   });
 });

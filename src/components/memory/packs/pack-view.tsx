@@ -52,6 +52,7 @@ import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
+import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { packAllowsUnifiedRecitation } from "@/lib/contiguous-spans";
 import {
@@ -218,6 +219,12 @@ export function PackView({
           search: memoryReviewSearch(verse.reference),
         })
       }
+      onPracticeVerse={(verse) =>
+        void navigate({
+          to: "/memory/practice",
+          search: memoryPracticeSearch(verse.reference),
+        })
+      }
       onDeleted={() => void navigate({ to: "/memory" })}
     />
   );
@@ -243,6 +250,7 @@ function PackViewMain({
   onPractice,
   onLearnVerse,
   onReviewVerse,
+  onPracticeVerse,
   onDeleted,
 }: {
   packId: Id<"packs">;
@@ -261,6 +269,7 @@ function PackViewMain({
   onPractice: () => void;
   onLearnVerse: (verse: PracticeVerse) => void;
   onReviewVerse: (verse: PracticeVerse) => void;
+  onPracticeVerse: (verse: PracticeVerse) => void;
   onDeleted: () => void;
 }) {
   const isCustom = pack.kind === "custom";
@@ -738,6 +747,7 @@ function PackViewMain({
                         now={now}
                         onLearn={onLearnVerse}
                         onReview={onReviewVerse}
+                        onPractice={onPracticeVerse}
                       />
                       {isCustom && (
                         <Button
@@ -781,6 +791,10 @@ function PackViewMain({
               onReview={(verse) => {
                 setSelectedVerseRefId(null);
                 onReviewVerse(verse);
+              }}
+              onPractice={(verse) => {
+                setSelectedVerseRefId(null);
+                onPracticeVerse(verse);
               }}
             />
           ) : null}

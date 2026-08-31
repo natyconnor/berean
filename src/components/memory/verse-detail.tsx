@@ -1,4 +1,4 @@
-import { GraduationCap, Play } from "lucide-react";
+import { Dumbbell, GraduationCap, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -7,6 +7,7 @@ import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import {
+  isDueForReview,
   isLearningLocked,
   isReviewPhase,
   MAX_LEARN_STAGE,
@@ -150,6 +151,7 @@ export function VerseDetail({
   now,
   onLearn,
   onReview,
+  onPractice,
 }: {
   verseRefId: Id<"verseRefs">;
   now: number;
@@ -157,6 +159,8 @@ export function VerseDetail({
   onLearn: (verse: PracticeVerse) => void;
   /** Start review for this verse when it is due. */
   onReview?: (verse: PracticeVerse) => void;
+  /** Extra recall when the next scheduled review is still ahead. */
+  onPractice?: (verse: PracticeVerse) => void;
 }) {
   const detail = useQuery(api.verseMemory.verseDetail, {
     verseRefId,
@@ -190,10 +194,16 @@ export function VerseDetail({
     dueAt: detail.dueAt,
     lastReviewedAt: detail.lastReviewedAt,
   };
-  // Review-phase verses can start a one-off (including early) review from here;
-  // Learning-phase verses use Learn instead (unless soft-locked).
+  // Review-phase verses that are due start Review. Already-reviewed verses
+  // (due later) start Practice instead, matching pack-level Review vs Practice.
+  const dueForReview = isDueForReview(
+    { status: detail.status, dueAt: detail.dueAt },
+    now,
+  );
   const showReviewAction =
-    onReview !== undefined && isReviewPhase(detail.status);
+    onReview !== undefined && isReviewPhase(detail.status) && dueForReview;
+  const showPracticeAction =
+    onPractice !== undefined && isReviewPhase(detail.status) && !dueForReview;
   const learningLocked = isLearningLocked(
     {
       status: detail.status,
@@ -246,7 +256,17 @@ export function VerseDetail({
               <Play className="h-4 w-4" aria-hidden />
               Review
             </Button>
-          ) : (
+          ) : showPracticeAction ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => onPractice?.(actionVerse)}
+            >
+              <Dumbbell className="h-4 w-4" aria-hidden />
+              Practice
+            </Button>
+          ) : isReviewPhase(detail.status) ? null : (
             <Button
               variant="outline"
               size="sm"

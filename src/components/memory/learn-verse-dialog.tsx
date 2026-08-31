@@ -13,6 +13,7 @@ import {
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { exactSpanMatch, type VerseSpan } from "@/lib/hearted-verse-coverage";
 import { isLearningLocked, type MemoryStatus } from "@/lib/memory-scheduler";
+import { reviewPhaseListAction } from "@/lib/memory-session";
 
 import { api } from "../../../convex/_generated/api";
 import { PackVersePicker } from "./packs/pack-verse-picker";
@@ -55,7 +56,8 @@ function findExactHeartedRow(
 
 /**
  * Dashboard Learn picker: Browse-first, confirmLabel Learn. Hearts unhearted
- * spans then routes like library row CTAs (Learn vs Review vs stay put).
+ * spans then routes like library row CTAs (Learn vs Review vs Practice vs stay
+ * put).
  */
 export function LearnVerseDialog({
   open,
@@ -63,12 +65,14 @@ export function LearnVerseDialog({
   now,
   onLearnVerse,
   onReviewVerse,
+  onPracticeVerse,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   now: number;
   onLearnVerse: (verse: PracticeVerse) => void;
   onReviewVerse: (verse: PracticeVerse) => void;
+  onPracticeVerse: (verse: PracticeVerse) => void;
 }) {
   const savedVerses = useQuery(api.savedVerses.listAll, open ? {} : "skip");
   const toggleSaved = useMutation(api.savedVerses.toggle);
@@ -144,7 +148,12 @@ export function LearnVerseDialog({
             (memory.status === "reviewing" || memory.status === "mastered")
           ) {
             onOpenChange(false);
-            onReviewVerse(practiceVerseFromSpan(span, memory));
+            const practiceVerse = practiceVerseFromSpan(span, memory);
+            if (reviewPhaseListAction(practiceVerse, now) === "review") {
+              onReviewVerse(practiceVerse);
+            } else {
+              onPracticeVerse(practiceVerse);
+            }
             return;
           }
 
@@ -161,6 +170,7 @@ export function LearnVerseDialog({
       now,
       onLearnVerse,
       onOpenChange,
+      onPracticeVerse,
       onReviewVerse,
       savedVerses,
       submit,
