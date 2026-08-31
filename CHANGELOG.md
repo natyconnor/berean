@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/natyconnor/berean/compare/v1.13.0...v1.13.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* allow Enter to continue from the learning Read step ([#186](https://github.com/natyconnor/berean/issues/186)) ([53b5d8b](https://github.com/natyconnor/berean/commit/53b5d8bf6e024070545cd0399a961a9561b40b93))
+
 ## [1.13.0](https://github.com/natyconnor/berean/compare/v1.12.14...v1.13.0) (2026-08-28)
 
 
