@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.2](https://github.com/natyconnor/berean/compare/v1.13.1...v1.13.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* Offer Practice on verses that are not due for review ([#188](https://github.com/natyconnor/berean/issues/188)) ([dbf7f0e](https://github.com/natyconnor/berean/commit/dbf7f0e101645d7eee83611fb8672780a1533dc6))
+
 ## [1.13.1](https://github.com/natyconnor/berean/compare/v1.13.0...v1.13.1) (2026-08-31)
 
 
