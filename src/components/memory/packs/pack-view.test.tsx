@@ -746,7 +746,7 @@ describe("PackView", () => {
     });
   });
 
-  it("offers Practice on individual verses when pack Review is disabled", () => {
+  it("offers Practice on individual verses when pack Review is disabled", async () => {
     const now = getSessionNow();
     renderPack({
       kind: "custom",
@@ -768,12 +768,31 @@ describe("PackView", () => {
       ],
     });
 
-    expect(header().getByRole("button", { name: /^Review$/ })).toBeDisabled();
+    const review = header().getByRole("button", { name: /^Review$/ });
+    expect(review).toBeDisabled();
     expect(
       verses().queryByRole("button", { name: "Review" }),
     ).not.toBeInTheDocument();
     expect(verses().getAllByRole("button", { name: "Practice" })).toHaveLength(
       2,
+    );
+
+    await userEvent.hover(review.parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Nothing is due for review. Practice instead, or come back when a verse is scheduled.",
+    );
+  });
+
+  it("explains a disabled Review when no verse has graduated yet", async () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 2, status: "learning" })],
+    });
+
+    const review = header().getByRole("button", { name: /^Review$/ });
+    expect(review).toBeDisabled();
+    await userEvent.hover(review.parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Verses enter Review after they finish Learning.",
     );
   });
 });

@@ -591,20 +591,13 @@ function PackViewMain({
               </span>
             </Button>
           ) : null}
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={onReview}
-            disabled={!canReview}
-          >
-            <Play className="h-4 w-4" aria-hidden />
-            {unifiedEnabled && canReview ? "Review passage" : "Review"}
-            {effectiveDueCount > 0 ? (
-              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
-                {effectiveDueCount}
-              </span>
-            ) : null}
-          </Button>
+          <PackReviewButton
+            canReview={canReview}
+            canPractice={canPractice}
+            unifiedEnabled={unifiedEnabled}
+            dueCount={effectiveDueCount}
+            onReview={onReview}
+          />
           <Button
             size="sm"
             variant="outline"
@@ -896,6 +889,52 @@ function PackViewMain({
         onAdd={handleAdd}
       />
     </div>
+  );
+}
+
+function PackReviewButton({
+  canReview,
+  canPractice,
+  unifiedEnabled,
+  dueCount,
+  onReview,
+}: {
+  canReview: boolean;
+  canPractice: boolean;
+  unifiedEnabled: boolean;
+  dueCount: number;
+  onReview: () => void;
+}) {
+  const button = (
+    <Button
+      size="sm"
+      className="gap-1.5"
+      onClick={onReview}
+      disabled={!canReview}
+    >
+      <Play className="h-4 w-4" aria-hidden />
+      {unifiedEnabled && canReview ? "Review passage" : "Review"}
+      {dueCount > 0 ? (
+        <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
+          {dueCount}
+        </span>
+      ) : null}
+    </Button>
+  );
+
+  if (canReview) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">{button}</span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        {canPractice
+          ? "Nothing is due for review. Practice instead, or come back when a verse is scheduled."
+          : "Verses enter Review after they finish Learning."}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
