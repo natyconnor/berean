@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { useEnterToClick } from "@/hooks/use-enter-to-click";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
@@ -195,49 +196,14 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     checkedQuality !== null &&
     isLearningProgressAttempt(checkedQuality, checkedAccuracy, stageIndex);
 
-  useEffect(() => {
-    if (!checked) return;
-    reviewActionRef.current?.focus();
-  }, [checked]);
+  // Read Continue and the result-view Continue / Try again share one control
+  // (only one is mounted at a time) so Enter can advance both steps.
+  useEnterToClick(reviewActionRef, checked || isReadPrime);
 
   useEffect(() => {
-    if (!checked) return;
-    function handleResultEnter(event: globalThis.KeyboardEvent) {
-      if (
-        event.key !== "Enter" ||
-        event.shiftKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey
-      )
-        return;
-      const active = document.activeElement;
-      if (active) {
-        const tag = active.tagName.toUpperCase();
-        // Let editable fields handle their own Enter.
-        if (
-          tag === "TEXTAREA" ||
-          tag === "INPUT" ||
-          (active as HTMLElement).isContentEditable
-        )
-          return;
-        // Let other interactive controls (buttons, links, role=button/link)
-        // activate naturally — only intercept when focus is on reviewActionRef
-        // itself (or nowhere interactive).
-        const role = active.getAttribute("role") ?? "";
-        const isInteractive =
-          tag === "BUTTON" ||
-          tag === "A" ||
-          role === "button" ||
-          role === "link";
-        if (isInteractive && active !== reviewActionRef.current) return;
-      }
-      event.preventDefault();
-      reviewActionRef.current?.click();
-    }
-    window.addEventListener("keydown", handleResultEnter);
-    return () => window.removeEventListener("keydown", handleResultEnter);
-  }, [checked]);
+    if (!checked && !isReadPrime) return;
+    reviewActionRef.current?.focus();
+  }, [checked, isReadPrime]);
 
   function focusAnswerInput() {
     window.requestAnimationFrame(() => {
@@ -484,6 +450,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               variant="default"
               className="flex-1 sm:flex-none"
               onClick={continueRead}
+              ref={reviewActionRef}
               disabled={!stageReady || !canContinueRead || submitPending}
             >
               Continue

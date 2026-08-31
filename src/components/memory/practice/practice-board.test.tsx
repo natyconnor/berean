@@ -9,13 +9,19 @@ import type { EsvChapterData } from "../../../../shared/esv-api";
 
 import { PracticeBoard, type PracticeVerse } from "./practice-board";
 
-const { queryResults, mutationMocks, navigateMock, fetchChaptersBatchMock } =
-  vi.hoisted(() => ({
-    queryResults: new Map<string, unknown>(),
-    mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
-    navigateMock: vi.fn(),
-    fetchChaptersBatchMock: vi.fn(),
-  }));
+const {
+  queryResults,
+  mutationMocks,
+  navigateMock,
+  fetchChaptersBatchMock,
+  getPassageMock,
+} = vi.hoisted(() => ({
+  queryResults: new Map<string, unknown>(),
+  mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
+  navigateMock: vi.fn(),
+  fetchChaptersBatchMock: vi.fn(),
+  getPassageMock: vi.fn(),
+}));
 
 function mutationMock(name: string) {
   const existing = mutationMocks.get(name);
@@ -27,7 +33,8 @@ function mutationMock(name: string) {
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
-  useAction: () => fetchChaptersBatchMock,
+  useAction: (name: string) =>
+    name === "esv.getChaptersBatch" ? fetchChaptersBatchMock : getPassageMock,
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -40,7 +47,10 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
-    esv: { getChaptersBatch: "esv.getChaptersBatch", getPassage: "esv.get" },
+    esv: {
+      getChaptersBatch: "esv.getChaptersBatch",
+      getPassage: "esv.getPassage",
+    },
     packs: { recordUnifiedReview: "packs.recordUnifiedReview" },
     savedVerses: { listAll: "savedVerses.listAll" },
     verseMemory: { recordAttempt: "verseMemory.recordAttempt" },
@@ -107,6 +117,8 @@ describe("PracticeBoard composite recitation", () => {
     queryResults.set("savedVerses.listAll", []);
     fetchChaptersBatchMock.mockReset();
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
     mutationMock("packs.recordUnifiedReview").mockResolvedValue({
       status: "reviewing",
       learnStage: 3,
@@ -201,5 +213,93 @@ describe("PracticeBoard composite recitation", () => {
     expect(
       await screen.findByLabelText("Your recited passage"),
     ).toBeInTheDocument();
+  });
+});
+
+const VERSE_REF_ID = "vr_ps23_1" as Id<"verseRefs">;
+
+const learningVerse: PracticeVerse = {
+  reference: span(1, 1),
+  learnStage: 0,
+  stageReps: 0,
+  status: "learning",
+  dueAt: getSessionNow() - 1000,
+};
+
+describe("PracticeBoard learning Read prime", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listAll", [
+      {
+        verseRefId: VERSE_REF_ID,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      },
+    ]);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 1,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + 1000,
+      consecutiveCorrect: 1,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+  });
+
+  it("advances from Read when Enter is pressed", async () => {
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[learningVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Read it through, then continue")).toBeVisible();
+    });
+    const continueButton = await screen.findByRole("button", {
+      name: /Continue/,
+    });
+    await waitFor(() => {
+      expect(continueButton).toBeEnabled();
+    });
+
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    const [args] = mutationMock("verseMemory.recordAttempt").mock.calls[0] as [
+      { verseRefId: string; mode: string; stage: number; quality: string },
+    ];
+    expect(args.verseRefId).toBe(VERSE_REF_ID);
+    expect(args.mode).toBe("learn");
+    expect(args.stage).toBe(0);
+    expect(args.quality).toBe("exact");
+
+    expect(
+      await screen.findByText("Type what you remember"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Read it through, then continue"),
+    ).not.toBeInTheDocument();
   });
 });
