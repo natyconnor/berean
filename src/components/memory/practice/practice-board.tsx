@@ -53,6 +53,7 @@ import {
   type MemorySessionKind,
   type MemorySessionLabel,
 } from "@/lib/memory-session";
+import { compareSessionOrderItems } from "@/lib/memory-session-order";
 import { buildPracticeOrder, type PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 import {
@@ -262,8 +263,11 @@ const DEAL_FLY_IN_S = 0.16;
 const DEAL_FADE_OUT_S = 0.12;
 
 /**
- * Shared Learning / Practice board: one verse card at a time, a verse rail to
- * jump around, a Shuffle / In-order toggle, and prev/next navigation.
+ * Shared Learning / Practice / Review board: one verse card at a time, a
+ * verse rail to jump around, a Shuffle / In-order toggle, and prev/next
+ * navigation. "In order" is canonical Bible order so a mixed Continue Learning
+ * or Review queue keeps chapter (and pack) verses together instead of
+ * hearted-at / due-at order.
  *
  * Attempts use the session's explicit `learn` or `practice` mode and count
  * fully. The card is driven entirely by the server's
@@ -347,7 +351,7 @@ export function PracticeBoard({
   );
 
   const orderedVerses = useMemo(
-    () => buildPracticeOrder(baseVerses, order, seed),
+    () => buildPracticeOrder(baseVerses, order, seed, compareSessionOrderItems),
     [baseVerses, order, seed],
   );
 

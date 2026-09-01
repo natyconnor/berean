@@ -44,6 +44,24 @@ describe("buildPracticeOrder", () => {
     expect(buildPracticeOrder([], "shuffle", 5)).toEqual([]);
     expect(buildPracticeOrder(["only"], "shuffle", 5)).toEqual(["only"]);
   });
+
+  it("sorts in-order mode when a comparator is provided", () => {
+    const result = buildPracticeOrder(items, "in-order", 0, (a, b) =>
+      b.localeCompare(a),
+    );
+    expect(result).toEqual(["e", "d", "c", "b", "a"]);
+  });
+
+  it("does not use the comparator while shuffling", () => {
+    const sorted = buildPracticeOrder(items, "in-order", 0, (a, b) =>
+      a.localeCompare(b),
+    );
+    const shuffled = buildPracticeOrder(items, "shuffle", 7, (a, b) =>
+      a.localeCompare(b),
+    );
+    expect(shuffled).not.toEqual(sorted);
+    expect([...shuffled].sort()).toEqual([...items].sort());
+  });
 });
 
 describe("createSeededRandom", () => {

@@ -1,11 +1,11 @@
 /**
  * Pure ordering helpers for the Practice board.
  *
- * Practice plays a chosen set of verses one at a time, either in their given
- * order or in a shuffled sequence. The shuffle is driven by a small seeded PRNG
- * so a given `(items, seed)` pair always produces the same order — this keeps
- * the sequence stable across re-renders and makes the logic unit-testable
- * without depending on `Math.random()`.
+ * Practice plays a chosen set of verses one at a time, either in canonical
+ * order (via an optional comparator) or in a shuffled sequence. The shuffle is
+ * driven by a small seeded PRNG so a given `(items, seed)` pair always
+ * produces the same order — this keeps the sequence stable across re-renders
+ * and makes the logic unit-testable without depending on `Math.random()`.
  */
 
 export type PracticeOrder = "in-order" | "shuffle";
@@ -27,7 +27,10 @@ export function createSeededRandom(seed: number): () => number {
 /**
  * Build the ordered practice set from a verse list.
  *
- * - `"in-order"` returns a shallow copy in the original order.
+ * - `"in-order"` returns a shallow copy. When `compare` is provided, that
+ *   copy is sorted (memory sessions pass canonical Bible order so a mixed
+ *   Continue Learning queue is not newest-hearted-first). Without `compare`,
+ *   the original sequence is preserved.
  * - `"shuffle"` returns a seeded Fisher–Yates permutation; the same `seed`
  *   always yields the same order, and a new `seed` reshuffles.
  *
@@ -37,9 +40,14 @@ export function buildPracticeOrder<T>(
   items: readonly T[],
   order: PracticeOrder,
   seed = 0,
+  compare?: (a: T, b: T) => number,
 ): T[] {
   const result = [...items];
-  if (order === "in-order" || result.length <= 1) return result;
+  if (result.length <= 1) return result;
+  if (order === "in-order") {
+    if (compare) result.sort(compare);
+    return result;
+  }
 
   const random = createSeededRandom(seed);
   for (let i = result.length - 1; i > 0; i -= 1) {

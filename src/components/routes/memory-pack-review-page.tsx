@@ -17,6 +17,7 @@ import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { isReviewPhase, type MemorySchedule } from "@/lib/memory-scheduler";
+import { sortSessionVerses } from "@/lib/memory-session-order";
 import { canonicalUnifiedSchedule } from "@/lib/unified-review-schedule";
 import { Route } from "@/routes/memory_.$packId.review";
 
@@ -115,7 +116,9 @@ export function MemoryPackReviewPage() {
     // While the flag is on, the recitation is the only way to review this pack:
     // either the one composite card or nothing at all.
     if (unifiedEnabled) return compositeVerse ? [compositeVerse] : [];
-    return dueMembers.map((member) => toPracticeVerse(member));
+    return sortSessionVerses(
+      dueMembers.map((member) => toPracticeVerse(member)),
+    );
   }, [members, dueMembers, compositeVerse, unifiedEnabled]);
 
   // One recitation is one due item, matching the pack list's 0|1 due count.
