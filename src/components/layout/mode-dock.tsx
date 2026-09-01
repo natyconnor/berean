@@ -19,6 +19,7 @@ import {
   rememberModeLocation,
   resolveModeHref,
   readModeLastLocations,
+  modeNavigateTargetFromHref,
   type AppMode,
 } from "@/lib/mode-last-location";
 import { useTabs } from "@/lib/use-tabs";
@@ -227,6 +228,11 @@ export function ModeDock() {
             ? memoryHref
             : studyHref;
       logInteraction("mode-dock", `${mode}-opened`, { trigger });
+      const target = modeNavigateTargetFromHref(href);
+      if (target) {
+        void navigate(target);
+        return;
+      }
       void navigate({ href });
     },
     [navigate, notesHref, memoryHref, studyHref],

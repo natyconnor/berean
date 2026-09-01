@@ -6,6 +6,9 @@
  * not always the Memory dashboard.
  */
 
+import { validateMemoryPackSearch } from "@/lib/memory-pack-search";
+import { validateMemoryVerseSearch } from "@/lib/memory-verse-search";
+
 export type AppMode = "notes" | "memory" | "study";
 
 export type ModeLastLocations = Partial<Record<AppMode, string>>;
@@ -123,4 +126,152 @@ export function resolveModeHref(
   if (href && isValidModeHref(mode, href)) return href;
   if (fallback && isValidModeHref(mode, fallback)) return fallback;
   return DEFAULT_MODE_HREFS[mode];
+}
+
+export type ModeNavigateTarget =
+  | {
+      to: "/passage/$passageId";
+      params: { passageId: string };
+      search: {
+        startVerse?: number;
+        endVerse?: number;
+        mode?: "compose" | "read";
+        source?: "search";
+      };
+    }
+  | { to: "/memory" }
+  | { to: "/memory/new" }
+  | {
+      to: "/memory/learn" | "/memory/practice" | "/memory/review";
+      search: ReturnType<typeof validateMemoryVerseSearch>;
+    }
+  | {
+      to: "/memory/$packId";
+      params: { packId: string };
+      search: ReturnType<typeof validateMemoryPackSearch>;
+    }
+  | {
+      to:
+        | "/memory/$packId/learn"
+        | "/memory/$packId/practice"
+        | "/memory/$packId/review";
+      params: { packId: string };
+      search: ReturnType<typeof validateMemoryVerseSearch>;
+    }
+  | { to: "/study" }
+  | { to: "/study/new" }
+  | { to: "/study/$sessionId"; params: { sessionId: string } };
+
+function parsePositiveInt(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) return undefined;
+  const rounded = Math.floor(numeric);
+  return rounded > 0 ? rounded : undefined;
+}
+
+function passageSearchFromParams(params: URLSearchParams): {
+  startVerse?: number;
+  endVerse?: number;
+  mode?: "compose" | "read";
+  source?: "search";
+} {
+  const startVerse = parsePositiveInt(params.get("startVerse"));
+  const endVerseCandidate = parsePositiveInt(params.get("endVerse"));
+  const endVerse =
+    typeof startVerse === "number" && typeof endVerseCandidate === "number"
+      ? Math.max(startVerse, endVerseCandidate)
+      : startVerse;
+  const modeRaw = params.get("mode");
+  const mode =
+    modeRaw === "compose" || modeRaw === "read" ? modeRaw : undefined;
+  const source = params.get("source") === "search" ? "search" : undefined;
+  return {
+    ...(startVerse !== undefined ? { startVerse, endVerse } : {}),
+    ...(mode ? { mode } : {}),
+    ...(source ? { source } : {}),
+  };
+}
+
+/**
+ * Turn a stored mode href into a typed TanStack `navigate()` target so dock
+ * switches use the same route table as in-app links (not a raw `href` string).
+ */
+export function modeNavigateTargetFromHref(
+  href: string,
+): ModeNavigateTarget | null {
+  if (!href.startsWith("/") || href.startsWith("//") || href.includes("..")) {
+    return null;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(href, "http://berean.local");
+  } catch {
+    return null;
+  }
+
+  const parts = url.pathname.split("/").filter(Boolean);
+  const searchRecord = Object.fromEntries(url.searchParams.entries());
+  const verseSearch = validateMemoryVerseSearch(searchRecord);
+
+  if (parts[0] === "passage" && parts.length === 2 && parts[1]) {
+    return {
+      to: "/passage/$passageId",
+      params: { passageId: decodeURIComponent(parts[1]) },
+      search: passageSearchFromParams(url.searchParams),
+    };
+  }
+
+  if (parts[0] === "memory") {
+    if (parts.length === 1) return { to: "/memory" };
+    if (parts.length === 2 && parts[1] === "new") return { to: "/memory/new" };
+    if (parts.length === 2 && parts[1] === "learn") {
+      return { to: "/memory/learn", search: verseSearch };
+    }
+    if (parts.length === 2 && parts[1] === "practice") {
+      return { to: "/memory/practice", search: verseSearch };
+    }
+    if (parts.length === 2 && parts[1] === "review") {
+      return { to: "/memory/review", search: verseSearch };
+    }
+    if (parts.length === 2 && parts[1]) {
+      return {
+        to: "/memory/$packId",
+        params: { packId: parts[1] },
+        search: validateMemoryPackSearch(searchRecord),
+      };
+    }
+    if (parts.length === 3 && parts[1] && parts[2] === "learn") {
+      return {
+        to: "/memory/$packId/learn",
+        params: { packId: parts[1] },
+        search: verseSearch,
+      };
+    }
+    if (parts.length === 3 && parts[1] && parts[2] === "practice") {
+      return {
+        to: "/memory/$packId/practice",
+        params: { packId: parts[1] },
+        search: verseSearch,
+      };
+    }
+    if (parts.length === 3 && parts[1] && parts[2] === "review") {
+      return {
+        to: "/memory/$packId/review",
+        params: { packId: parts[1] },
+        search: verseSearch,
+      };
+    }
+  }
+
+  if (parts[0] === "study") {
+    if (parts.length === 1) return { to: "/study" };
+    if (parts.length === 2 && parts[1] === "new") return { to: "/study/new" };
+    if (parts.length === 2 && parts[1]) {
+      return { to: "/study/$sessionId", params: { sessionId: parts[1] } };
+    }
+  }
+
+  return null;
 }

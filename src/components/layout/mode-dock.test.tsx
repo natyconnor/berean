@@ -80,7 +80,11 @@ describe("ModeDock last-mode restore", () => {
     expect(memoryLink).toHaveAttribute("href", "/memory/pack-abc");
 
     await user.click(memoryLink);
-    expect(mocks.navigate).toHaveBeenCalledWith({ href: "/memory/pack-abc" });
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/$packId",
+      params: { packId: "pack-abc" },
+      search: {},
+    });
   });
 
   it("restores the last Notes href, including search, after leaving Memory", async () => {
@@ -105,7 +109,13 @@ describe("ModeDock last-mode restore", () => {
 
     await user.click(notesLink);
     expect(mocks.navigate).toHaveBeenCalledWith({
-      href: "/passage/Romans-8?startVerse=28&mode=compose",
+      to: "/passage/$passageId",
+      params: { passageId: "Romans-8" },
+      search: {
+        startVerse: 28,
+        endVerse: 28,
+        mode: "compose",
+      },
     });
   });
 

@@ -5,6 +5,7 @@ import {
   DEFAULT_MODE_HREFS,
   isValidModeHref,
   modeForPathname,
+  modeNavigateTargetFromHref,
   readModeLastLocations,
   rememberModeLocation,
   resolveModeHref,
@@ -84,5 +85,41 @@ describe("mode-last-location", () => {
     expect(
       resolveModeHref("notes", { notes: "/settings" }, "/passage/John-1"),
     ).toBe("/passage/John-1");
+  });
+
+  it("parses stored hrefs into typed navigate targets", () => {
+    expect(modeNavigateTargetFromHref("/memory")).toEqual({ to: "/memory" });
+    expect(modeNavigateTargetFromHref("/memory/pack-abc")).toEqual({
+      to: "/memory/$packId",
+      params: { packId: "pack-abc" },
+      search: {},
+    });
+    expect(
+      modeNavigateTargetFromHref(
+        "/passage/Romans-8?startVerse=28&mode=compose",
+      ),
+    ).toEqual({
+      to: "/passage/$passageId",
+      params: { passageId: "Romans-8" },
+      search: {
+        startVerse: 28,
+        endVerse: 28,
+        mode: "compose",
+      },
+    });
+    expect(
+      modeNavigateTargetFromHref(
+        "/memory/review?book=John&chapter=3&startVerse=16",
+      ),
+    ).toEqual({
+      to: "/memory/review",
+      search: {
+        book: "John",
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+      },
+    });
+    expect(modeNavigateTargetFromHref("/settings")).toBeNull();
   });
 });
