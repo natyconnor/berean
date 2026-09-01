@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.3](https://github.com/natyconnor/berean/compare/v1.13.2...v1.13.3) (2026-09-01)
+
+
+### Bug Fixes
+
+* Restore last Notes and Memory screens from the Mode Dock ([#190](https://github.com/natyconnor/berean/issues/190)) ([448c66c](https://github.com/natyconnor/berean/commit/448c66c9977fbbb634b0256fa84cd4466cf3f063))
+
 ## [1.13.2](https://github.com/natyconnor/berean/compare/v1.13.1...v1.13.2) (2026-08-31)
 
 
