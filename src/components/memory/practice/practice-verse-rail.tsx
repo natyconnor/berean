@@ -81,7 +81,7 @@ export function PracticeVerseRail({
   const canReorder = allowReorder && verses.length >= 2;
   const currentChrome = practiceChromeFor(currentLearnStage, currentStatus);
   const groups = groupSessionVersesByChapter(verses);
-  const showChapterHeadings = order === "in-order" && groups.length > 1;
+  const showChapterHeadings = groups.length > 1;
   // A labeled row stands for a whole pack passage, not a single verse.
   const listHeading = verses.some((verse) => verse.label !== undefined)
     ? "Passage"
@@ -112,6 +112,7 @@ export function PracticeVerseRail({
                 )}
                 onClick={() => onOrderChange("shuffle")}
                 aria-pressed={order === "shuffle"}
+                title="Shuffle packs and chapters. Verses within a set stay in Scripture order."
               >
                 <motion.span
                   key={shuffleNonce}
@@ -144,7 +145,7 @@ export function PracticeVerseRail({
             <p className="text-[11px] leading-snug text-muted-foreground">
               {order === "in-order"
                 ? "Scripture order. Verses from the same chapter stay together."
-                : "Random order for this run."}
+                : "Sets stay together. Only the set order is random."}
             </p>
           </div>
         )}

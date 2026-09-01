@@ -4,6 +4,8 @@ import {
 } from "../../shared/compare-verse-refs";
 import type { VerseRefKeyInput } from "../../shared/verse-ref-key";
 
+import { buildPracticeOrder, type PracticeOrder } from "./practice-order";
+
 /**
  * A session card's ordering key: an ordinary verse, or a unified pack whose
  * members should sit at the earliest verse in that passage.
@@ -69,4 +71,36 @@ export function groupSessionVersesByChapter<T extends SessionOrderItem>(
     groups.push({ book: ref.book, chapter: ref.chapter, items: [item] });
   }
   return groups;
+}
+
+/**
+ * How many shuffleable sets are in this queue. One chapter (or one unified
+ * pack card) is one set — Shuffle is a no-op when this is 0 or 1.
+ */
+export function sessionClusterCount(
+  items: readonly SessionOrderItem[],
+): number {
+  return groupSessionVersesByChapter(sortSessionVerses(items)).length;
+}
+
+/**
+ * Order a mixed session queue.
+ *
+ * - `"in-order"` is canonical Bible order, with same-chapter verses as one
+ *   block (a chapter pack stays together).
+ * - `"shuffle"` permutes those chapter / pack blocks only. Verses inside a
+ *   block stay in Scripture order.
+ */
+export function orderSessionVerses<T extends SessionOrderItem>(
+  items: readonly T[],
+  order: PracticeOrder,
+  seed = 0,
+): T[] {
+  const sorted = sortSessionVerses(items);
+  if (order === "in-order" || sorted.length <= 1) return sorted;
+  const clusters = groupSessionVersesByChapter(sorted);
+  if (clusters.length <= 1) return sorted;
+  return buildPracticeOrder(clusters, "shuffle", seed).flatMap(
+    (cluster) => cluster.items,
+  );
 }

@@ -397,8 +397,23 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     ]);
 
     await userEvent.click(screen.getByRole("button", { name: "Shuffle" }));
-    expect(screen.queryByText("Psalm 8")).not.toBeInTheDocument();
-    expect(screen.getByText("Random order for this run.")).toBeVisible();
+    expect(screen.getByText("Psalm 8")).toBeVisible();
+    expect(screen.getByText("Luke 9")).toBeVisible();
+    expect(
+      screen.getByText("Sets stay together. Only the set order is random."),
+    ).toBeVisible();
+    const shuffled = verseRailLabels();
+    expect(shuffled).toContain("Psalm 8:2");
+    expect(
+      shuffled.slice(
+        shuffled.indexOf("Psalm 8:2"),
+        shuffled.indexOf("Psalm 8:2") + 3,
+      ),
+    ).toEqual(["Psalm 8:2", "Psalm 8:3-4", "Psalm 8:5"]);
+    expect(
+      shuffled.join() === "Luke 9:23-24,Psalm 8:2,Psalm 8:3-4,Psalm 8:5" ||
+        shuffled.join() === "Psalm 8:2,Psalm 8:3-4,Psalm 8:5,Luke 9:23-24",
+    ).toBe(true);
 
     await userEvent.click(screen.getByRole("button", { name: "In order" }));
     expect(verseRailLabels()).toEqual([
@@ -409,5 +424,34 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     ]);
     expect(screen.getByText("Psalm 8")).toBeVisible();
     expect(screen.getByText("Luke 9")).toBeVisible();
+  });
+
+  it("hides Shuffle when the queue is a single chapter set", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[
+            learningRef("Psalms", 8, 5),
+            learningRef("Psalms", 8, 3, 4),
+            learningRef("Psalms", 8, 2),
+          ]}
+          scopeLabel="Psalm 8"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Psalm 8:2 \(Guided band\)/ }),
+    ).toBeVisible();
+    expect(verseRailLabels()).toEqual([
+      "Psalm 8:2",
+      "Psalm 8:3-4",
+      "Psalm 8:5",
+    ]);
+    expect(
+      screen.queryByRole("button", { name: "Shuffle" }),
+    ).not.toBeInTheDocument();
   });
 });
