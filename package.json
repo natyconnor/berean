@@ -9,7 +9,7 @@
     "agent:check": "pnpm run format && pnpm run lint && pnpm run typecheck",
     "codegen": "pnpm exec convex codegen --typecheck disable",
     "build": "vite build",
-    "build:vercel": "pnpm exec convex deploy --cmd 'pnpm run build' --cmd-url-env-var-name VITE_CONVEX_URL",
+    "build:vercel": "bash scripts/vercel-build.sh",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

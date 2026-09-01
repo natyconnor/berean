@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+} from "react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import { Brain, BookOpen, NotebookPen } from "lucide-react";
 import { useQuery } from "convex/react";
@@ -9,6 +15,13 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { cn } from "@/lib/utils";
 import { logInteraction } from "@/lib/dev-log";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
+import {
+  rememberModeLocation,
+  resolveModeHref,
+  readModeLastLocations,
+  modeNavigateTargetFromHref,
+  type AppMode,
+} from "@/lib/mode-last-location";
 import { useTabs } from "@/lib/use-tabs";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
@@ -26,7 +39,18 @@ const SCROLL_HIDE_THRESHOLD = 24;
 const SCROLL_IDLE_MS = 500;
 
 /** The three navigable modes, in dock order. */
-type Mode = "notes" | "memory" | "study";
+type Mode = AppMode;
+
+function shouldHandleSpaClick(event: MouseEvent<HTMLAnchorElement>): boolean {
+  return (
+    !event.defaultPrevented &&
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.shiftKey
+  );
+}
 
 function isEditorElement(element: Element | null): boolean {
   if (!element) return false;
@@ -44,6 +68,9 @@ function isEditorElement(element: Element | null): boolean {
  * so it never affects layout flow, and it's engineered to slide out of the way
  * while you work. Notes and Memory are always available; Study unlocks once
  * enough notes exist.
+ *
+ * Dock switches restore the last href visited inside that mode (pack, review,
+ * passage with search) instead of always jumping to the mode's home.
  */
 export function ModeDock() {
   const location = useLocation();
@@ -67,6 +94,27 @@ export function ModeDock() {
   const isNotesRoute = location.pathname.startsWith("/passage");
   const isMemoryRoute = location.pathname.startsWith("/memory");
   const isStudyRoute = location.pathname.startsWith("/study");
+
+  const [lastLocations, setLastLocations] = useState(readModeLastLocations);
+  // Derive during render when the route changes so dock hrefs update before
+  // paint. Session storage is written inside `rememberModeLocation`.
+  const nextLocations = rememberModeLocation(
+    location.pathname,
+    location.href,
+    lastLocations,
+  );
+  if (nextLocations) {
+    setLastLocations(nextLocations);
+  }
+  const storedLocations = nextLocations ?? lastLocations;
+
+  const notesHref = resolveModeHref(
+    "notes",
+    storedLocations,
+    `/passage/${backPassageId}`,
+  );
+  const memoryHref = resolveModeHref("memory", storedLocations);
+  const studyHref = resolveModeHref("study", storedLocations);
 
   // Local-only visibility state (never persisted): scroll + editor focus.
   const [scrollHidden, setScrollHidden] = useState(false);
@@ -173,23 +221,21 @@ export function ModeDock() {
 
   const goToMode = useCallback(
     (mode: Mode, trigger: string) => {
-      if (mode === "notes") {
-        logInteraction("mode-dock", "notes-opened", { trigger });
-        void navigate({
-          to: "/passage/$passageId",
-          params: { passageId: backPassageId },
-        });
+      const href =
+        mode === "notes"
+          ? notesHref
+          : mode === "memory"
+            ? memoryHref
+            : studyHref;
+      logInteraction("mode-dock", `${mode}-opened`, { trigger });
+      const target = modeNavigateTargetFromHref(href);
+      if (target) {
+        void navigate(target);
         return;
       }
-      if (mode === "memory") {
-        logInteraction("mode-dock", "memory-opened", { trigger });
-        void navigate({ to: "/memory" });
-        return;
-      }
-      logInteraction("mode-dock", "study-opened", { trigger });
-      void navigate({ to: "/study" });
+      void navigate({ href });
     },
-    [navigate, backPassageId],
+    [navigate, notesHref, memoryHref, studyHref],
   );
 
   const activeMode: Mode = isStudyRoute
@@ -255,20 +301,21 @@ export function ModeDock() {
           hidden && "pointer-events-none",
         )}
       >
-        <Link
-          to="/passage/$passageId"
-          params={{ passageId: backPassageId }}
+        <a
+          href={notesHref}
           title={`Notes (${toggleShortcutLabel} cycles)`}
           aria-label="Notes"
           aria-current={isNotesRoute ? "page" : undefined}
-          onClick={() =>
-            logInteraction("mode-dock", "notes-opened", { trigger: "click" })
-          }
+          onClick={(event) => {
+            if (!shouldHandleSpaClick(event)) return;
+            event.preventDefault();
+            goToMode("notes", "click");
+          }}
           className={segmentClassName(isNotesRoute)}
         >
           <NotebookPen className="h-4 w-4" />
           <span>Notes</span>
-        </Link>
+        </a>
         <FeatureCallout
           state={memoryHint}
           title="Memory lives here"
@@ -283,18 +330,18 @@ export function ModeDock() {
           side="top"
           align="center"
         >
-          <Link
-            to="/memory"
+          <a
+            href={memoryHref}
             title={`Memory (${toggleShortcutLabel} cycles)`}
             aria-label="Memory"
             aria-current={isMemoryRoute ? "page" : undefined}
-            onClick={() => {
-              logInteraction("mode-dock", "memory-opened", {
-                trigger: "click",
-              });
+            onClick={(event) => {
+              if (!shouldHandleSpaClick(event)) return;
+              event.preventDefault();
               if (!memoryHint.completed && !memoryHint.dismissed) {
                 memoryHint.complete();
               }
+              goToMode("memory", "click");
             }}
             className={segmentClassName(isMemoryRoute)}
           >
@@ -315,7 +362,7 @@ export function ModeDock() {
                 {dueCount}
               </span>
             ) : null}
-          </Link>
+          </a>
         </FeatureCallout>
         {studyUnlocked ? (
           <FeatureCallout
@@ -332,24 +379,24 @@ export function ModeDock() {
             side="top"
             align="center"
           >
-            <Link
-              to="/study"
+            <a
+              href={studyHref}
               title={`Study (${toggleShortcutLabel} cycles)`}
               aria-label="Study"
               aria-current={isStudyRoute ? "page" : undefined}
-              onClick={() => {
-                logInteraction("mode-dock", "study-opened", {
-                  trigger: "click",
-                });
+              onClick={(event) => {
+                if (!shouldHandleSpaClick(event)) return;
+                event.preventDefault();
                 if (!studyHint.completed && !studyHint.dismissed) {
                   studyHint.complete();
                 }
+                goToMode("study", "click");
               }}
               className={segmentClassName(isStudyRoute)}
             >
               <BookOpen className="h-4 w-4" />
               <span>Study</span>
-            </Link>
+            </a>
           </FeatureCallout>
         ) : null}
       </motion.nav>
