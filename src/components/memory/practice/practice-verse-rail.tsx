@@ -179,9 +179,9 @@ export function PracticeVerseRail({
           </p>
           <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1">
             <AnimatePresence initial={false}>
-              {groups.map((group) => (
+              {groups.map((group, groupIndex) => (
                 <div
-                  key={`${group.book}:${group.chapter}`}
+                  key={`${group.book}:${group.chapter}:${group.items[0]?.id ?? groupIndex}`}
                   className="flex flex-col gap-1.5"
                 >
                   {showChapterHeadings ? (
