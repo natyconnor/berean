@@ -3,7 +3,11 @@ import { BookOpen, PartyPopper, Sparkles, ThumbsUp } from "lucide-react";
 import type { JSX } from "react";
 
 import { formatNextReviewPhrase } from "@/lib/memory-due-label";
-import { isLearningPhase, type MemorySchedule } from "@/lib/memory-scheduler";
+import {
+  isLearningPhase,
+  reviewGradeOutcome,
+  type MemorySchedule,
+} from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
 import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
@@ -31,6 +35,8 @@ interface VerseMemoryFeedbackProps {
   nextSchedule?: MemorySchedule | null;
   /** Clock used for due labels. Defaults to `Date.now()`. */
   now?: number;
+  /** Percent recalled; required to band retry vs hold on Review. */
+  accuracy?: number;
 }
 
 const CONFETTI_COUNT = 10;
@@ -47,7 +53,7 @@ const CONFETTI_COLORS = [
 ] as const;
 
 function nextReviewMessage(
-  lead: "Nailed it" | "Not bad, but some mistakes",
+  lead: string,
   schedule: MemorySchedule | null | undefined,
   now: number,
 ): string {
@@ -62,27 +68,36 @@ export function VerseMemoryFeedback({
   requireExactToAdvance = false,
   nextSchedule = null,
   now,
+  accuracy,
 }: VerseMemoryFeedbackProps): JSX.Element | null {
   const reduceMotion = useReducedMotion();
   const dueClock = now ?? 0;
 
   if (showScheduleOutcome) {
-    if (
-      quality === "off" ||
-      (nextSchedule && isLearningPhase(nextSchedule.status))
-    ) {
+    const scored =
+      accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
+    const outcome = reviewGradeOutcome(quality, scored);
+    const lapsedToLearning =
+      nextSchedule !== null &&
+      nextSchedule !== undefined &&
+      isLearningPhase(nextSchedule.status);
+
+    if (outcome === "lapse" || lapsedToLearning) {
+      const message = lapsedToLearning
+        ? "Needs practice — back to Challenge."
+        : nextReviewMessage("Needs practice", nextSchedule, dueClock);
       return (
         <ScheduleBanner
           attemptKey={`lapse-${attemptKey}`}
           reduceMotion={!!reduceMotion}
           tone="lapse"
           icon={<BookOpen className="h-4 w-4 shrink-0" aria-hidden />}
-          message="Needs practice — removing this verse from the review queue."
+          message={message}
         />
       );
     }
 
-    if (quality === "exact") {
+    if (outcome === "exact") {
       return (
         <ScheduleBanner
           attemptKey={`exact-${attemptKey}`}
@@ -91,6 +106,18 @@ export function VerseMemoryFeedback({
           icon={<PartyPopper className="h-4 w-4 shrink-0" aria-hidden />}
           message={nextReviewMessage("Nailed it", nextSchedule, dueClock)}
           sparkle
+        />
+      );
+    }
+
+    if (outcome === "retry") {
+      return (
+        <ScheduleBanner
+          attemptKey={`retry-${attemptKey}`}
+          reduceMotion={!!reduceMotion}
+          tone="close"
+          icon={<ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />}
+          message="Almost — try again to earn a longer wait."
         />
       );
     }

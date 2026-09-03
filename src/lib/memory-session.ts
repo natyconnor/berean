@@ -97,10 +97,11 @@ export function isMemorySessionCandidate(
  * Whether this verse still has work left in the current session.
  *
  * Learning is rationed one band per day, so a verse drops out once it
- * soft-locks or graduates. Review is a one-shot due queue: once a grade
- * reschedules the verse (or lapses it out of review), it is spent and the
- * board should Continue to the next due verse or the summary. Practice is
- * optional extra recall with no ration, so it never runs dry.
+ * soft-locks or graduates. Review stays on the verse when a close grade is
+ * strong enough to retry (still due); once a grade reschedules it or lapses
+ * it out of review, it is spent and the board should Continue to the next
+ * due verse or the summary. Practice is optional extra recall with no ration,
+ * so it never runs dry.
  */
 export function hasSessionWorkLeft(
   kind: MemorySessionKind,

@@ -865,8 +865,8 @@ function PracticeCard({
     isLearningProgressAttempt(checkedQuality, checkedAccuracy, learnStage);
   // Once graduated, another strong recall is just another practice pass — offer
   // "Try again" instead of implying the learning journey still advances. Review
-  // spends the verse after a grade (`advancesOnContinue`), so that path shows
-  // Continue toward the next due verse or the summary instead.
+  // spends the verse after a hold, stretch, or lapse (`advancesOnContinue`);
+  // an 80%+ retry stays due so this path still shows Try again.
   const offerPracticeAgain =
     !advancesOnContinue &&
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
