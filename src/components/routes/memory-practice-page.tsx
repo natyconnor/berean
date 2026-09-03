@@ -14,6 +14,7 @@ import {
   isMemorySessionCandidate,
   type MemorySessionKind,
 } from "@/lib/memory-session";
+import { sortSessionVerses } from "@/lib/memory-session-order";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/practice";
 
@@ -110,7 +111,7 @@ function scopeMemorySessionVerses(
   if (savedVerses === undefined) return [];
 
   const scoped = hasPracticeVerseScope(search);
-  return savedVerses.flatMap((verse) => {
+  const verses = savedVerses.flatMap((verse) => {
     if (
       scoped &&
       !(
@@ -154,4 +155,5 @@ function scopeMemorySessionVerses(
       },
     ];
   });
+  return sortSessionVerses(verses);
 }

@@ -303,3 +303,155 @@ describe("PracticeBoard learning Read prime", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+function learningRef(
+  book: string,
+  chapter: number,
+  startVerse: number,
+  endVerse = startVerse,
+): PracticeVerse {
+  return {
+    reference: { book, chapter, startVerse, endVerse },
+    learnStage: 1,
+    stageReps: 0,
+    status: "learning",
+    dueAt: getSessionNow() - 1000,
+  };
+}
+
+const psalm8: EsvChapterData = {
+  canonical: "Psalm 8",
+  copyright: "test",
+  verses: [
+    { number: 2, text: "Out of the mouth of babies and infants." },
+    { number: 3, text: "When I look at your heavens." },
+    { number: 4, text: "What is man that you are mindful of him." },
+    {
+      number: 5,
+      text: "Yet you have made him a little lower than the heavenly beings.",
+    },
+  ],
+};
+
+const luke9: EsvChapterData = {
+  canonical: "Luke 9",
+  copyright: "test",
+  verses: [
+    { number: 23, text: "And he said to all, If anyone would come after me." },
+    { number: 24, text: "For whoever would save his life will lose it." },
+  ],
+};
+
+function verseRailLabels(): string[] {
+  return screen
+    .getAllByRole("button", { name: /band/ })
+    .map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "");
+}
+
+describe("PracticeBoard in-order Scripture sequence", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listAll", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockImplementation(({ query }: { query: string }) =>
+      Promise.resolve(query === "Luke 9" ? luke9 : psalm8),
+    );
+  });
+
+  it("keeps a mixed Continue Learning queue in Bible order with chapter groups", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[
+            learningRef("Luke", 9, 23, 24),
+            learningRef("Psalms", 8, 5),
+            learningRef("Psalms", 8, 3, 4),
+            learningRef("Psalms", 8, 2),
+          ]}
+          scopeLabel="Today's learning"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Psalm 8:2 \(Guided band\)/ }),
+    ).toBeVisible();
+    expect(screen.getByText("Psalm 8")).toBeVisible();
+    expect(screen.getByText("Luke 9")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Scripture order. Verses from the same chapter stay together.",
+      ),
+    ).toBeVisible();
+    expect(verseRailLabels()).toEqual([
+      "Psalm 8:2",
+      "Psalm 8:3-4",
+      "Psalm 8:5",
+      "Luke 9:23-24",
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Shuffle" }));
+    expect(screen.getByText("Psalm 8")).toBeVisible();
+    expect(screen.getByText("Luke 9")).toBeVisible();
+    expect(
+      screen.getByText("Sets stay together. Only the set order is random."),
+    ).toBeVisible();
+    const shuffled = verseRailLabels();
+    expect(shuffled).toContain("Psalm 8:2");
+    expect(
+      shuffled.slice(
+        shuffled.indexOf("Psalm 8:2"),
+        shuffled.indexOf("Psalm 8:2") + 3,
+      ),
+    ).toEqual(["Psalm 8:2", "Psalm 8:3-4", "Psalm 8:5"]);
+    expect(
+      shuffled.join() === "Luke 9:23-24,Psalm 8:2,Psalm 8:3-4,Psalm 8:5" ||
+        shuffled.join() === "Psalm 8:2,Psalm 8:3-4,Psalm 8:5,Luke 9:23-24",
+    ).toBe(true);
+
+    await userEvent.click(screen.getByRole("button", { name: "In order" }));
+    expect(verseRailLabels()).toEqual([
+      "Psalm 8:2",
+      "Psalm 8:3-4",
+      "Psalm 8:5",
+      "Luke 9:23-24",
+    ]);
+    expect(screen.getByText("Psalm 8")).toBeVisible();
+    expect(screen.getByText("Luke 9")).toBeVisible();
+  });
+
+  it("hides Shuffle when the queue is a single chapter set", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[
+            learningRef("Psalms", 8, 5),
+            learningRef("Psalms", 8, 3, 4),
+            learningRef("Psalms", 8, 2),
+          ]}
+          scopeLabel="Psalm 8"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Psalm 8:2 \(Guided band\)/ }),
+    ).toBeVisible();
+    expect(verseRailLabels()).toEqual([
+      "Psalm 8:2",
+      "Psalm 8:3-4",
+      "Psalm 8:5",
+    ]);
+    expect(
+      screen.queryByRole("button", { name: "Shuffle" }),
+    ).not.toBeInTheDocument();
+  });
+});

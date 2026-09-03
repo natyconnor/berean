@@ -12,6 +12,7 @@ import {
   isMemorySessionCandidate,
   type MemorySessionKind,
 } from "@/lib/memory-session";
+import { sortSessionVerses } from "@/lib/memory-session-order";
 import { Route } from "@/routes/memory_.$packId.practice";
 
 import { api } from "../../../convex/_generated/api";
@@ -76,24 +77,31 @@ export function MemoryPackSessionPage({
         }),
       ];
     }
-    return members
-      .map((m) => ({
-        reference: {
-          book: m.book,
-          chapter: m.chapter,
-          startVerse: m.startVerse,
-          endVerse: m.endVerse,
-        },
-        learnStage: m.learnStage,
-        stageReps: m.stageReps ?? 0,
-        status: m.status,
-        dueAt: m.dueAt,
-        lastReviewedAt: m.lastReviewedAt,
-      }))
-      .filter((verse) => {
-        if (unifiedEnabled && isReviewPhase(verse.status)) return false;
-        return isMemorySessionCandidate(verse, kind, now, kind === "learning");
-      });
+    return sortSessionVerses(
+      members
+        .map((m) => ({
+          reference: {
+            book: m.book,
+            chapter: m.chapter,
+            startVerse: m.startVerse,
+            endVerse: m.endVerse,
+          },
+          learnStage: m.learnStage,
+          stageReps: m.stageReps ?? 0,
+          status: m.status,
+          dueAt: m.dueAt,
+          lastReviewedAt: m.lastReviewedAt,
+        }))
+        .filter((verse) => {
+          if (unifiedEnabled && isReviewPhase(verse.status)) return false;
+          return isMemorySessionCandidate(
+            verse,
+            kind,
+            now,
+            kind === "learning",
+          );
+        }),
+    );
   }, [members, kind, now, unifiedEnabled, pack?.name, typedPackId]);
   const isLearning = kind === "learning";
 

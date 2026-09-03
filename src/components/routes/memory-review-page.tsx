@@ -10,6 +10,7 @@ import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-ve
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
+import { sortSessionVerses } from "@/lib/memory-session-order";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/review";
 
@@ -112,7 +113,7 @@ export function MemoryReviewPage() {
   }
 
   const globalVerses = useMemo(
-    () => (globalDue ?? []).map(dueRowToPracticeVerse),
+    () => sortSessionVerses((globalDue ?? []).map(dueRowToPracticeVerse)),
     [globalDue],
   );
   const remainingDue = hasScope
