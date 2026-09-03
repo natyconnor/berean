@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.4](https://github.com/natyconnor/berean/compare/v1.13.3...v1.13.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* Keep learning and review verses in Scripture order ([#192](https://github.com/natyconnor/berean/issues/192)) ([d80ca77](https://github.com/natyconnor/berean/commit/d80ca77a638314a2413dd2e01fa322fdacc0265d))
+
 ## [1.13.3](https://github.com/natyconnor/berean/compare/v1.13.2...v1.13.3) (2026-09-01)
 
 
