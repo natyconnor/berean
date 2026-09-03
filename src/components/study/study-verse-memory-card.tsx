@@ -193,6 +193,7 @@ export function VerseAttemptResult({
   const diffTokens =
     providedDiffTokens ?? diffWords(typedAnswer, versePlainText);
   const attemptQuality = classifyVerseAttempt(diffTokens);
+  const attemptAccuracy = verseAttemptAccuracy(diffTokens);
   // Used as a motion key so the feedback banner re-plays its entrance when
   // the user tries a different attempt, but not on every keystroke.
   const attemptKey = trimmedTyped;
@@ -207,6 +208,7 @@ export function VerseAttemptResult({
           requireExactToAdvance={requireExactToAdvance}
           nextSchedule={nextSchedule}
           now={now}
+          accuracy={attemptAccuracy}
         />
       )}
       <motion.div
