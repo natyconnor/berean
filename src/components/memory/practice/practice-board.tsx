@@ -793,9 +793,9 @@ function PracticeCard({
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
-  // click) into a single recorded attempt, and `submitPending` drives the
-  // button loading state while it's in flight. One lock suffices because only
-  // one submit path (Read prime *or* check-answer) is mounted at a time.
+  // click) into a single recorded attempt, and `submitPending` shows a spinner
+  // on the disabled control while it's in flight. One lock suffices because
+  // only one submit path (Read prime *or* check-answer) is mounted at a time.
   const { submit, pending: submitPending } = useSubmitLock();
 
   const refLabel = formatVerseRef(reference);
@@ -879,17 +879,17 @@ function PracticeCard({
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
-    // Practice counts fully: every checked attempt records and reschedules.
-    // Stay on Check answer (spinner via `loading`) until the record settles so
-    // the control itself shows that a submit is in flight instead of swapping
-    // to a disabled Continue. The lock still collapses a same-tick double-tap.
+    // Practice counts fully: every checked attempt records and reschedules. The
+    // lock keeps a double-tap from recording twice before the result view
+    // (driven by `checked`) mounts and replaces this button. Continue stays
+    // disabled with a spinner until the record settles.
     submit(async () => {
       const now = Date.now();
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       const accuracy = verseAttemptAccuracy(tokens);
       // Preview the next interval locally so the result banner never flashes
-      // "soon" if `recordAttempt` returns null. Server schedule still wins
+      // "soon" while `recordAttempt` is in flight. Server schedule still wins
       // when it lands.
       const preview =
         showScheduleOutcome && quality
@@ -902,10 +902,11 @@ function PracticeCard({
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
             })
           : null;
-      const schedule = await onRecord(tokens, wordCount ?? 0);
       setChecked(true);
       setOutcomeNow(now);
-      setNextSchedule(schedule ?? preview);
+      setNextSchedule(preview);
+      const schedule = await onRecord(tokens, wordCount ?? 0);
+      if (schedule) setNextSchedule(schedule);
     });
   }
 
@@ -1079,7 +1080,6 @@ function PracticeCard({
                           ? "Your recited passage"
                           : "Your recalled verse"
                       }
-                      readOnly={submitPending}
                     />
                   )}
                 </>
@@ -1140,7 +1140,7 @@ function PracticeCard({
               <PreviewFillExactAnswerButton
                 versePlainText={versePlainText}
                 onFill={setTypedAnswer}
-                disabled={loading || Boolean(error) || submitPending}
+                disabled={loading || Boolean(error)}
               />
             ) : null}
             {showLocked ? null : checked ? (

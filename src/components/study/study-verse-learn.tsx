@@ -97,10 +97,10 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   // Serializes attempt submission: the synchronous in-flight lock collapses
   // same-tick double activations (double-tap, touch+mouse, Enter + click) into
-  // a single recorded attempt, and `submitPending` drives the button loading
-  // state while it's in flight. One lock suffices because only one submit path
-  // (Read prime, check-answer, or the result-view Continue) is mounted at a
-  // time.
+  // a single recorded attempt, and `submitPending` shows a spinner on the
+  // disabled control while it's in flight. One lock suffices because only one
+  // submit path (Read prime, check-answer, or the result-view Continue) is
+  // mounted at a time.
   const { submit, pending: submitPending } = useSubmitLock();
 
   const applyProgress = useCallback(
@@ -250,18 +250,18 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     if (!canCheckAnswer || checked) return;
     interactedRef.current = true;
     // Record the graded attempt but keep the review stable: hold the returned
-    // rung and adopt it only after the learner continues. Stay on Check answer
-    // (spinner via `loading`) until the record settles so the control itself
-    // shows that a submit is in flight instead of swapping to a disabled
-    // Continue. The lock still collapses a same-tick double-tap.
-    submit(async () => {
-      await recordDeferred({
+    // rung and adopt it only after the learner continues. The lock keeps a
+    // double-tap from recording twice before the result view (driven by
+    // `checked`) mounts and replaces this button. Continue stays disabled with
+    // a spinner until the record settles.
+    submit(() => {
+      setChecked(true);
+      return recordDeferred({
         reference: card.reference,
         tokens: diffWords(typedAnswer, versePlainText),
         stage: stageIndex,
         wordCount,
       });
-      setChecked(true);
     });
   }
 
@@ -378,7 +378,6 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
                 placeholder="Type what you remember"
                 className="min-h-[150px] resize-none"
                 aria-label="Your recalled verse"
-                readOnly={submitPending}
               />
             )}
           </>
@@ -424,9 +423,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
                 setTypedAnswer(text);
                 setChecked(false);
               }}
-              disabled={
-                !stageReady || loading || Boolean(error) || submitPending
-              }
+              disabled={!stageReady || loading || Boolean(error)}
             />
           ) : null}
           {checked ? (
