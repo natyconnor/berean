@@ -97,9 +97,10 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   // Serializes attempt submission: the synchronous in-flight lock collapses
   // same-tick double activations (double-tap, touch+mouse, Enter + click) into
-  // a single recorded attempt, and `submitPending` disables the control while
-  // it's in flight. One lock suffices because only one submit path (Read prime,
-  // check-answer, or the result-view Continue) is mounted at a time.
+  // a single recorded attempt, and `submitPending` shows a spinner on the
+  // disabled control while it's in flight. One lock suffices because only one
+  // submit path (Read prime, check-answer, or the result-view Continue) is
+  // mounted at a time.
   const { submit, pending: submitPending } = useSubmitLock();
 
   const applyProgress = useCallback(
@@ -251,7 +252,8 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     // Record the graded attempt but keep the review stable: hold the returned
     // rung and adopt it only after the learner continues. The lock keeps a
     // double-tap from recording twice before the result view (driven by
-    // `checked`) mounts and replaces this button.
+    // `checked`) mounts and replaces this button. Continue stays disabled with
+    // a spinner until the record settles.
     submit(() => {
       setChecked(true);
       return recordDeferred({
@@ -435,7 +437,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               // from swallowing the next check (resetting the question mid-flight
               // would strand it) and ensures the adopted band/reps land before
               // the next rep renders, so it can't re-record stale.
-              disabled={submitPending}
+              loading={submitPending}
             >
               {madeLearningProgress ? (
                 <ArrowRight className="h-4 w-4" aria-hidden />
@@ -451,7 +453,8 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               className="flex-1 sm:flex-none"
               onClick={continueRead}
               ref={reviewActionRef}
-              disabled={!stageReady || !canContinueRead || submitPending}
+              disabled={!stageReady || !canContinueRead}
+              loading={submitPending}
             >
               Continue
               <ArrowRight className="h-4 w-4" aria-hidden />
@@ -463,6 +466,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               className="flex-1 sm:flex-none"
               onClick={checkAnswer}
               disabled={!stageReady || !canCheckAnswer}
+              loading={submitPending}
             >
               <CheckCircle2 className="h-4 w-4" aria-hidden />
               Check answer

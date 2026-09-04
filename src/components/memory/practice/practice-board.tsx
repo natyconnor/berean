@@ -793,9 +793,9 @@ function PracticeCard({
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
-  // click) into a single recorded attempt, and `submitPending` disables the
-  // control while it's in flight. One lock suffices because only one submit
-  // path (Read prime *or* check-answer) is mounted at a time.
+  // click) into a single recorded attempt, and `submitPending` shows a spinner
+  // on the disabled control while it's in flight. One lock suffices because
+  // only one submit path (Read prime *or* check-answer) is mounted at a time.
   const { submit, pending: submitPending } = useSubmitLock();
 
   const refLabel = formatVerseRef(reference);
@@ -881,7 +881,8 @@ function PracticeCard({
     if (!canCheckAnswer || checked) return;
     // Practice counts fully: every checked attempt records and reschedules. The
     // lock keeps a double-tap from recording twice before the result view
-    // (driven by `checked`) mounts and replaces this button.
+    // (driven by `checked`) mounts and replaces this button. Continue stays
+    // disabled with a spinner until the record settles.
     submit(async () => {
       const now = Date.now();
       const tokens = diffWords(typedAnswer, versePlainText);
@@ -1153,7 +1154,7 @@ function PracticeCard({
                 // lock from swallowing the next check (resetting the question
                 // mid-flight would strand it) and ensures the adopted band/reps
                 // land before the next rep renders, so it can't re-record stale.
-                disabled={submitPending}
+                loading={submitPending}
               >
                 {offerPracticeAgain ? (
                   <RotateCcw className="h-4 w-4" aria-hidden />
@@ -1169,7 +1170,8 @@ function PracticeCard({
                 variant="default"
                 className="flex-1 sm:flex-none"
                 onClick={continueRead}
-                disabled={!canContinueRead || submitPending}
+                disabled={!canContinueRead}
+                loading={submitPending}
               >
                 Continue
                 <ArrowRight className="h-4 w-4" aria-hidden />
@@ -1181,6 +1183,7 @@ function PracticeCard({
                 className="flex-1 sm:flex-none"
                 onClick={checkAnswer}
                 disabled={!canCheckAnswer}
+                loading={submitPending}
               >
                 <CheckCircle2 className="h-4 w-4" aria-hidden />
                 Check answer
