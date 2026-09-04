@@ -304,6 +304,86 @@ describe("PracticeBoard learning Read prime", () => {
   });
 });
 
+const guidedVerse: PracticeVerse = {
+  ...learningVerse,
+  learnStage: 1,
+};
+
+describe("PracticeBoard recall submit loading", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listAll", [
+      {
+        verseRefId: VERSE_REF_ID,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      },
+    ]);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+  });
+
+  it("shows a spinner on Check answer while the recall is saving", async () => {
+    let resolveRecord!: (value: unknown) => void;
+    const pendingRecord = new Promise((resolve) => {
+      resolveRecord = resolve;
+    });
+    mutationMock("verseMemory.recordAttempt").mockReturnValue(pendingRecord);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[guidedVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    await waitFor(() => {
+      expect(check).toBeEnabled();
+    });
+
+    await userEvent.click(check);
+
+    await waitFor(() => {
+      expect(check).toBeDisabled();
+      expect(check).toHaveAttribute("aria-busy", "true");
+    });
+    expect(check.querySelector("[data-icon=spinner]")).not.toBeNull();
+    expect(screen.queryByText("100% recalled.")).not.toBeInTheDocument();
+
+    resolveRecord({
+      status: "learning",
+      learnStage: 1,
+      stageReps: 1,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + 1000,
+      consecutiveCorrect: 1,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+
+    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Check answer/ }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 function learningRef(
   book: string,
   chapter: number,
