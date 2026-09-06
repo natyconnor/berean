@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.5](https://github.com/natyconnor/berean/compare/v1.13.4...v1.13.5) (2026-09-06)
+
+
+### Bug Fixes
+
+* Show a loading spinner on recall submit buttons ([#195](https://github.com/natyconnor/berean/issues/195)) ([efe2fc7](https://github.com/natyconnor/berean/commit/efe2fc702eeddc357005ed720eda44c84d4bc959))
+
 ## [1.13.4](https://github.com/natyconnor/berean/compare/v1.13.3...v1.13.4) (2026-09-03)
 
 
