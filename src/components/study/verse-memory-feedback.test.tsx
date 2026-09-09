@@ -126,7 +126,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      /A good chunk stuck — next review/,
+      /Mostly there, but it needs some work — next review/,
     );
   });
 

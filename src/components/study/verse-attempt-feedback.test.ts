@@ -219,12 +219,12 @@ describe("reviewFeedbackMessage", () => {
   it("keeps the next-review clause on hold and later-ladder lapses", () => {
     expect(
       reviewFeedbackMessage({
-        lead: "A good chunk stuck",
+        lead: "Mostly there, but it needs some work",
         outcome: "hold",
         nextSchedule: reviewingTomorrow,
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toMatch(/^A good chunk stuck — next review /);
+    ).toMatch(/^Mostly there, but it needs some work — next review /);
   });
 });

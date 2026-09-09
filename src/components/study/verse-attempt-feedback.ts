@@ -29,11 +29,11 @@ type AccuracyLead = {
  */
 export const RETRY_ACCURACY_LEADS: readonly AccuracyLead[] = [
   { min: 98, lead: "One breath away from perfect" },
-  { min: 96, lead: "Whisper-close to word-for-word" },
-  { min: 93, lead: "You've got this verse cold" },
+  { min: 96, lead: "So close to perfect" },
+  { min: 93, lead: "You've pretty much got this" },
   { min: 90, lead: "Tiny slip — the verse is in there" },
-  { min: 87, lead: "Really strong recall" },
-  { min: 84, lead: "So close to stretching the wait" },
+  { min: 87, lead: "That was pretty good" },
+  { min: 84, lead: "You're getting there" },
   { min: 80, lead: "Almost there" },
 ];
 
@@ -41,10 +41,10 @@ export const RETRY_ACCURACY_LEADS: readonly AccuracyLead[] = [
 export const HOLD_ACCURACY_LEADS: readonly AccuracyLead[] = [
   { min: 77, lead: "Solid recall, with a few holes" },
   { min: 73, lead: "The shape of the verse is there" },
-  { min: 70, lead: "A good chunk stuck" },
+  { min: 70, lead: "Mostly there, but it needs some work" },
   { min: 66, lead: "More right than wrong" },
   { min: 63, lead: "You remembered a good bit" },
-  { min: 60, lead: "Enough to keep the same interval" },
+  { min: 60, lead: "Enough to keep the same review interval" },
 ];
 
 /** Fine-grained lapse copy (below 60). */
