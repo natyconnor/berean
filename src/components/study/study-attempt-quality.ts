@@ -64,6 +64,41 @@ function isExactExceptTypos(tokens: ReadonlyArray<DiffToken>): boolean {
   return true;
 }
 
+/** How a graded attempt missed, split by diff status. */
+export interface AttemptErrorCounts {
+  matches: number;
+  typos: number;
+  mismatches: number;
+  missing: number;
+  extra: number;
+}
+
+/** Wrong / missing / extra words — not spelling typos. */
+export function wordErrorCount(counts: AttemptErrorCounts): number {
+  return counts.mismatches + counts.missing + counts.extra;
+}
+
+/** Tally match / typo / mismatch / missing / extra tokens. */
+export function countAttemptErrors(
+  tokens: ReadonlyArray<DiffToken>,
+): AttemptErrorCounts {
+  const counts: AttemptErrorCounts = {
+    matches: 0,
+    typos: 0,
+    mismatches: 0,
+    missing: 0,
+    extra: 0,
+  };
+  for (const token of tokens) {
+    if (token.status === "match") counts.matches += 1;
+    else if (token.status === "typo") counts.typos += 1;
+    else if (token.status === "mismatch") counts.mismatches += 1;
+    else if (token.status === "missing") counts.missing += 1;
+    else if (token.status === "extra") counts.extra += 1;
+  }
+  return counts;
+}
+
 /** Stable predicate used by the UI to decide whether any error token exists. */
 export function hasAttemptErrors(tokens: ReadonlyArray<DiffToken>): boolean {
   return tokens.some((t) => ERROR_STATUSES.has(t.status));

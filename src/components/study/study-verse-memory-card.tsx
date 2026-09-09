@@ -19,6 +19,7 @@ import { PreviewFillExactAnswerButton } from "../memory/preview-fill-exact-answe
 import { FlipFaces } from "./flip-faces";
 import {
   classifyVerseAttempt,
+  countAttemptErrors,
   verseAttemptAccuracy,
 } from "./study-attempt-quality";
 import type {
@@ -193,6 +194,8 @@ export function VerseAttemptResult({
   const diffTokens =
     providedDiffTokens ?? diffWords(typedAnswer, versePlainText);
   const attemptQuality = classifyVerseAttempt(diffTokens);
+  const attemptAccuracy = verseAttemptAccuracy(diffTokens);
+  const attemptErrors = countAttemptErrors(diffTokens);
   // Used as a motion key so the feedback banner re-plays its entrance when
   // the user tries a different attempt, but not on every keystroke.
   const attemptKey = trimmedTyped;
@@ -207,6 +210,8 @@ export function VerseAttemptResult({
           requireExactToAdvance={requireExactToAdvance}
           nextSchedule={nextSchedule}
           now={now}
+          accuracy={attemptAccuracy}
+          errors={attemptErrors}
         />
       )}
       <motion.div
