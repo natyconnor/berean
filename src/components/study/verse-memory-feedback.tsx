@@ -2,7 +2,6 @@ import { motion, useReducedMotion } from "framer-motion";
 import { BookOpen, PartyPopper, Sparkles, ThumbsUp } from "lucide-react";
 import type { JSX } from "react";
 
-import { formatNextReviewPhrase } from "@/lib/memory-due-label";
 import {
   isLearningPhase,
   reviewGradeOutcome,
@@ -11,7 +10,14 @@ import {
 import { cn } from "@/lib/utils";
 
 import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
-import type { VerseAttemptQuality } from "./study-attempt-quality";
+import type {
+  AttemptErrorCounts,
+  VerseAttemptQuality,
+} from "./study-attempt-quality";
+import {
+  attemptFeedbackLead,
+  reviewFeedbackMessage,
+} from "./verse-attempt-feedback";
 
 interface VerseMemoryFeedbackProps {
   quality: VerseAttemptQuality;
@@ -37,6 +43,8 @@ interface VerseMemoryFeedbackProps {
   now?: number;
   /** Percent recalled; required to band retry vs hold on Review. */
   accuracy?: number;
+  /** Diff error tallies — unlocks one-word-off and typo-only copy. */
+  errors?: AttemptErrorCounts;
 }
 
 const CONFETTI_COUNT = 10;
@@ -52,15 +60,6 @@ const CONFETTI_COLORS = [
   "#ef4444",
 ] as const;
 
-function nextReviewMessage(
-  lead: string,
-  schedule: MemorySchedule | null | undefined,
-  now: number,
-): string {
-  const phrase = formatNextReviewPhrase(schedule, now);
-  return phrase ? `${lead} — next review ${phrase}` : lead;
-}
-
 export function VerseMemoryFeedback({
   quality,
   attemptKey,
@@ -69,23 +68,35 @@ export function VerseMemoryFeedback({
   nextSchedule = null,
   now,
   accuracy,
+  errors,
 }: VerseMemoryFeedbackProps): JSX.Element | null {
   const reduceMotion = useReducedMotion();
   const dueClock = now ?? 0;
+  const scored =
+    accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
+  const outcome = reviewGradeOutcome(quality, scored);
+  const lead = attemptFeedbackLead({
+    accuracy: scored,
+    outcome,
+    errors,
+  });
 
   if (showScheduleOutcome) {
-    const scored =
-      accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
-    const outcome = reviewGradeOutcome(quality, scored);
     const lapsedToLearning =
       nextSchedule !== null &&
       nextSchedule !== undefined &&
       isLearningPhase(nextSchedule.status);
+    const bannerOutcome =
+      lapsedToLearning && outcome !== "lapse" ? "lapse" : outcome;
+    const message = reviewFeedbackMessage({
+      lead,
+      outcome: bannerOutcome,
+      nextSchedule,
+      now: dueClock,
+      lapsedToLearning,
+    });
 
-    if (outcome === "lapse" || lapsedToLearning) {
-      const message = lapsedToLearning
-        ? "Needs practice — back to Challenge."
-        : nextReviewMessage("Needs practice", nextSchedule, dueClock);
+    if (bannerOutcome === "lapse") {
       return (
         <ScheduleBanner
           attemptKey={`lapse-${attemptKey}`}
@@ -97,42 +108,26 @@ export function VerseMemoryFeedback({
       );
     }
 
-    if (outcome === "exact") {
+    if (bannerOutcome === "exact") {
       return (
         <ScheduleBanner
           attemptKey={`exact-${attemptKey}`}
           reduceMotion={!!reduceMotion}
           tone="exact"
           icon={<PartyPopper className="h-4 w-4 shrink-0" aria-hidden />}
-          message={nextReviewMessage("Nailed it", nextSchedule, dueClock)}
+          message={message}
           sparkle
-        />
-      );
-    }
-
-    if (outcome === "retry") {
-      return (
-        <ScheduleBanner
-          attemptKey={`retry-${attemptKey}`}
-          reduceMotion={!!reduceMotion}
-          tone="close"
-          icon={<ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />}
-          message="Almost — try again to earn a longer wait."
         />
       );
     }
 
     return (
       <ScheduleBanner
-        attemptKey={`close-${attemptKey}`}
+        attemptKey={`${bannerOutcome}-${attemptKey}`}
         reduceMotion={!!reduceMotion}
         tone="close"
         icon={<ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />}
-        message={nextReviewMessage(
-          "Not bad, but some mistakes",
-          nextSchedule,
-          dueClock,
-        )}
+        message={message}
       />
     );
   }
@@ -180,9 +175,7 @@ export function VerseMemoryFeedback({
   }
 
   // quality === "close"
-  const closeMessage = requireExactToAdvance
-    ? FROM_MEMORY_CLOSE_MESSAGE
-    : "Good job — really close!";
+  const closeMessage = requireExactToAdvance ? FROM_MEMORY_CLOSE_MESSAGE : lead;
 
   return (
     <motion.div

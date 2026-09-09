@@ -24,10 +24,23 @@ vi.mock("framer-motion", () => ({
 }));
 
 describe("VerseMemoryFeedback", () => {
-  it("celebrates a near-miss on bands that still accept close recalls", () => {
-    render(<VerseMemoryFeedback quality="close" attemptKey="guided-close" />);
+  it("celebrates a one-word miss on bands that still accept close recalls", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={91}
+        errors={{
+          matches: 10,
+          typos: 0,
+          mismatches: 1,
+          missing: 0,
+          extra: 0,
+        }}
+        attemptKey="guided-close"
+      />,
+    );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Good job — really close!",
+      "Oh so close! Just one word off",
     );
   });
 
@@ -66,7 +79,28 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Almost — try again to earn a longer wait.",
+      "Almost there — try again to earn a longer wait.",
+    );
+  });
+
+  it("calls out a single wrong word on Review retry", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={91}
+        errors={{
+          matches: 10,
+          typos: 0,
+          mismatches: 1,
+          missing: 0,
+          extra: 0,
+        }}
+        attemptKey="review-one-word"
+        showScheduleOutcome
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Oh so close! Just one word off — try again to earn a longer wait.",
     );
   });
 
@@ -92,7 +126,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      /Not bad, but some mistakes — next review/,
+      /A good chunk stuck — next review/,
     );
   });
 
@@ -118,7 +152,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Needs practice — back to Challenge.",
+      "A handful of words came back — back to Challenge.",
     );
   });
 
@@ -144,7 +178,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      /Needs practice — next review/,
+      /A handful of words came back — next review/,
     );
   });
 });
