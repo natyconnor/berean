@@ -13,12 +13,18 @@ import {
 import {
   countDueUnifiedReviewPacks,
   dueUnifiedPackDueAt,
+  loadPassageMemoryByUser,
   loadUnifiedReviewPacks,
   loadUnifiedReviewVerseRefIds,
   unifiedPackForecastDueAt,
   unifiedReviewPhaseVerseRefIds,
   type PackMember,
 } from "./lib/packs";
+import {
+  toReviewingPassagePackItem,
+  type DueQueuePassagePackItem,
+} from "./lib/passageMemory";
+import { dueQueuePackItemValidator } from "./lib/passageValues";
 import { findVerseRefId } from "./lib/verseRefs";
 import {
   dueIndexUntil,
@@ -30,6 +36,11 @@ import {
   scheduleNext,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
+import {
+  countDuePassageLearning,
+  countDuePassageReviews,
+  isPassageDueForReview,
+} from "../src/lib/passage-due";
 import {
   bucketAccuracyAverages,
   bucketForecastCounts,
@@ -132,30 +143,8 @@ const dueQueueVerseItem = v.object({
   endVerse: v.number(),
 });
 
-/** One recitation card for a unified pack: counted as a single due item. */
-const dueQueuePackItem = v.object({
-  kind: v.literal("pack"),
-  packId: v.id("packs"),
-  packName: v.string(),
-  dueAt: v.number(),
-  status: statusValidator,
-  learnStage: v.number(),
-  stageReps: v.optional(v.number()),
-  ease: v.number(),
-  intervalDays: v.number(),
-  consecutiveCorrect: v.number(),
-  lapses: v.number(),
-  earlyReviewApplied: v.optional(v.boolean()),
-  lastReviewedAt: v.optional(v.number()),
-  members: v.array(
-    v.object({
-      book: v.string(),
-      chapter: v.number(),
-      startVerse: v.number(),
-      endVerse: v.number(),
-    }),
-  ),
-});
+/** One recitation card for a unified or reviewing passage pack. */
+export const dueQueuePackItem = dueQueuePackItemValidator;
 
 const dueQueueEntry = v.union(dueQueueVerseItem, dueQueuePackItem);
 
@@ -276,6 +265,12 @@ function toRowView(row: Doc<"verseMemory">) {
  * rows and the pack is inserted as a single item, sorted by dueAt with the
  * rest of the queue. Scan overscan grows with unified membership so skipping
  * those rows cannot starve other dues.
+ *
+ * Reviewing/mastered `passageMemory` rows are also one pack card, with
+ * `members` from frozen pieces. Building passages are not review-due.
+ * Leftover hearts in a passage pack stay in this verse scan — they are not
+ * added to `unifiedReviewPhaseVerseRefIds` (the unified flag is cleared on
+ * start, and packs with a passage row are excluded from that set).
  */
 export const dueQueue = query({
   args: { now: v.number(), limit: v.optional(v.number()) },
@@ -312,12 +307,23 @@ export const dueQueue = query({
       verseItems.push(toDueQueueVerseItem(row, ref));
     }
 
-    const packItems: Array<NonNullable<ReturnType<typeof toDueQueuePackItem>>> =
-      [];
+    const packItems: Array<
+      | NonNullable<ReturnType<typeof toDueQueuePackItem>>
+      | DueQueuePassagePackItem
+    > = [];
     for (const { pack, members } of unifiedPacks) {
       const dueAt = dueUnifiedPackDueAt(members, args.now);
       if (dueAt === null) continue;
       const item = toDueQueuePackItem(pack, members, dueAt);
+      if (item) packItems.push(item);
+    }
+
+    const passageRows = await loadPassageMemoryByUser(ctx, userId);
+    for (const row of passageRows) {
+      if (!isPassageDueForReview(row, args.now)) continue;
+      const pack = await ctx.db.get(row.packId);
+      if (!pack || pack.userId !== userId) continue;
+      const item = toReviewingPassagePackItem(pack, row);
       if (item) packItems.push(item);
     }
 
@@ -408,7 +414,7 @@ export const dueForVerse = query({
  * {@link isDueForLearning}.
  */
 export const dueCount = query({
-  args: { now: v.number() },
+  args: { now: v.number(), tzOffsetMinutes: v.optional(v.number()) },
   returns: v.number(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
@@ -430,6 +436,8 @@ export const dueCount = query({
     const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
+    const passageRows = await loadPassageMemoryByUser(ctx, userId);
+    const tzOffsetMinutes = args.tzOffsetMinutes ?? 0;
 
     let count = 0;
     for (const row of dueRows) {
@@ -444,7 +452,12 @@ export const dueCount = query({
         count += 1;
       }
     }
-    return count + countDueUnifiedReviewPacks(unifiedPacks, args.now);
+    return (
+      count +
+      countDueUnifiedReviewPacks(unifiedPacks, args.now) +
+      countDuePassageReviews(passageRows, args.now) +
+      countDuePassageLearning(passageRows, args.now, tzOffsetMinutes)
+    );
   },
 });
 
@@ -604,16 +617,22 @@ const memoryStatsValidator = v.object({
 /**
  * Per-status counts for the current user, plus due-now tallies:
  * - `due` — review-phase verses (`reviewing` / `mastered` with `dueAt <= now`)
+ *   plus due reviewing/mastered passage packs (1 each)
  * - `learningDue` — in-progress `learning` verses available for today's
- *   session (excludes hearted-but-not-started `new` verses). Same
- *   {@link dueIndexUntil} bound as {@link dueCount} so a frozen query clock
- *   does not hide a verse the learner is still working through.
+ *   session (excludes hearted-but-not-started `new` verses), plus building
+ *   passage packs with a learning session today (1 each). Soft-locked
+ *   frontier with no remaining introduces does not inflate this count (rope
+ *   practice stays available from the pack). Same {@link dueIndexUntil} bound
+ *   as {@link dueCount} so a frozen query clock does not hide a verse the
+ *   learner is still working through. Pass `tzOffsetMinutes` so introduce
+ *   budget uses the viewer's local day.
+
  *
  * Status totals come from denormalized `userMemoryStats` (O(1)). Due counts are
  * still computed live from a bounded due-index scan (time-dependent).
  */
 export const memoryStats = query({
-  args: { now: v.number() },
+  args: { now: v.number(), tzOffsetMinutes: v.optional(v.number()) },
   returns: memoryStatsValidator,
   handler: async (ctx, args) => {
     const empty = {
@@ -650,6 +669,8 @@ export const memoryStats = query({
     const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
+    const passageRows = await loadPassageMemoryByUser(ctx, userId);
+    const tzOffsetMinutes = args.tzOffsetMinutes ?? 0;
 
     let due = 0;
     let learningDue = 0;
@@ -660,6 +681,12 @@ export const memoryStats = query({
       if (isDueForLearning(row, args.now)) learningDue += 1;
     }
     due += countDueUnifiedReviewPacks(unifiedPacks, args.now);
+    due += countDuePassageReviews(passageRows, args.now);
+    learningDue += countDuePassageLearning(
+      passageRows,
+      args.now,
+      tzOffsetMinutes,
+    );
 
     if (!rollup) {
       // Pre-backfill fallback: count from hearted rows once.

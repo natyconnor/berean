@@ -52,6 +52,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       getPassage: "esv.getPassage",
     },
     packs: { recordUnifiedReview: "packs.recordUnifiedReview" },
+    passageMemory: { recordAttempt: "passageMemory.recordAttempt" },
     savedVerses: { listAll: "savedVerses.listAll" },
     verseMemory: { recordAttempt: "verseMemory.recordAttempt" },
   },
@@ -182,6 +183,7 @@ describe("PracticeBoard composite recitation", () => {
 
     // The composite grade never touches the per-verse mutation.
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
 
     expect(await screen.findByText("100% recalled.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
@@ -198,6 +200,60 @@ describe("PracticeBoard composite recitation", () => {
     expect(
       row.queryByRole("button", { name: "Practice" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("grades a reviewing passage through passageMemory, not unified review", async () => {
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue({
+      status: "reviewing",
+      stageReps: 0,
+      ease: 2.35,
+      intervalDays: 2.3,
+      dueAt: getSessionNow() + 2 * 24 * 60 * 60 * 1000,
+      consecutiveCorrect: 2,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[
+            {
+              ...compositeVerse,
+              composite: {
+                ...compositeVerse.composite!,
+                passageStatus: "reviewing",
+              },
+            },
+          ]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(answer);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    await waitFor(() => {
+      expect(check).toBeEnabled();
+    });
+    await userEvent.click(check);
+
+    const recordPassage = mutationMock("passageMemory.recordAttempt");
+    await waitFor(() => {
+      expect(recordPassage).toHaveBeenCalledTimes(1);
+    });
+    const [args] = recordPassage.mock.calls[0] as [
+      { packId: string; kind: string; quality: string; accuracy: number },
+    ];
+    expect(args.packId).toBe(PACK_ID);
+    expect(args.kind).toBe("review");
+    expect(args.quality).toBe("exact");
+    expect(mutationMock("packs.recordUnifiedReview")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
   });
 
   it("offers retry when the composite passage fails to load", async () => {

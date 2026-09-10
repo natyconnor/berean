@@ -16,9 +16,16 @@ import {
   loadHeartedMembers,
   loadOwnedPack,
   loadPackMembers,
+  loadPassageMemoryByUser,
   nextPackOrder,
+  passageMemoryByPackId,
   type PackMember,
 } from "./lib/packs";
+import { passageStatusValidator } from "./lib/passageValues";
+import {
+  isPassageDueForReview,
+  passageRopeCounts,
+} from "../src/lib/passage-due";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import {
   isDueForReview,
@@ -84,6 +91,10 @@ const packListItem = v.object({
   dueCount: v.number(),
   lastOpenedAt: v.number(),
   unifiedReviewEnabled: v.optional(v.boolean()),
+  passageStatus: v.optional(passageStatusValidator),
+  solidCount: v.optional(v.number()),
+  attachedCount: v.optional(v.number()),
+  pieceCount: v.optional(v.number()),
 });
 
 const qualityValidator = v.union(
@@ -219,6 +230,9 @@ export const listMine = query({
     const memoryByRef = new Map(
       memories.map((m) => [m.verseRefId, m] as const),
     );
+    const passageByPackId = passageMemoryByPackId(
+      await loadPassageMemoryByUser(ctx, userId),
+    );
 
     const page = [];
     for (const pack of paginated.page) {
@@ -251,6 +265,25 @@ export const listMine = query({
 
       if (pack.unifiedReviewEnabled && verseCount > 0) {
         dueCount = dueCount > 0 ? 1 : 0;
+      }
+
+      const passage = passageByPackId.get(pack._id);
+      if (passage) {
+        const rope = passageRopeCounts(passage.pieces);
+        page.push({
+          _id: pack._id,
+          name: pack.name,
+          kind: pack.kind,
+          verseCount,
+          dueCount: isPassageDueForReview(passage, args.now) ? 1 : 0,
+          lastOpenedAt: pack.lastOpenedAt,
+          unifiedReviewEnabled: pack.unifiedReviewEnabled,
+          passageStatus: passage.status,
+          solidCount: rope.solidCount,
+          attachedCount: rope.attachedCount,
+          pieceCount: rope.pieceCount,
+        });
+        continue;
       }
 
       page.push({

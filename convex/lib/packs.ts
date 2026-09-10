@@ -8,6 +8,40 @@ import {
 import { sortByVerseRef } from "../../shared/compare-verse-refs";
 import { isDueForReview, isReviewPhase } from "../../src/lib/memory-scheduler";
 
+/** Every `passageMemory` row for this user (`by_userId`, never `.filter`). */
+export async function loadPassageMemoryByUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<Doc<"passageMemory">[]> {
+  return await ctx.db
+    .query("passageMemory")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+}
+
+export function passageMemoryByPackId(
+  rows: readonly Doc<"passageMemory">[],
+): Map<Id<"packs">, Doc<"passageMemory">> {
+  return new Map(rows.map((row) => [row.packId, row]));
+}
+
+/** Frozen piece spans for a passage pack card (composite recitation members). */
+export function passagePiecesAsMembers(
+  pieces: Doc<"passageMemory">["pieces"],
+): Array<{
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
+}> {
+  return pieces.map((piece) => ({
+    book: piece.book,
+    chapter: piece.chapter,
+    startVerse: piece.startVerse,
+    endVerse: piece.endVerse,
+  }));
+}
+
 /**
  * A pack member: a verse reference joined to its live `verseMemory` schedule.
  * `isDue` is intentionally *not* part of this shape — it depends on `now` and
@@ -165,7 +199,9 @@ export async function loadCustomMembers(
 /**
  * Scope packs with unified recitation on, joined to their live members.
  * Used to hide those verses from the global due queue and count each pack
- * as a single due item.
+ * as a single due item. Packs that already have a `passageMemory` row are
+ * excluded: leftover hearts stay in the verse due scan, and review goes
+ * through `passageMemory` (the unified flag is cleared on start).
  */
 export async function loadUnifiedReviewPacks(
   ctx: QueryCtx | MutationCtx,
@@ -176,7 +212,11 @@ export async function loadUnifiedReviewPacks(
     .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
     .collect();
 
-  const unifiedPacks = packs.filter((pack) => pack.unifiedReviewEnabled);
+  const passageRows = await loadPassageMemoryByUser(ctx, userId);
+  const passagePackIds = new Set(passageRows.map((row) => row.packId));
+  const unifiedPacks = packs.filter(
+    (pack) => pack.unifiedReviewEnabled && !passagePackIds.has(pack._id),
+  );
   if (unifiedPacks.length === 0) return [];
 
   // Scope packs all share the same hearted set — load it once instead of

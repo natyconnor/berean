@@ -87,3 +87,36 @@ export type PassagePieceValue = Infer<typeof passagePieceValidator>;
 export type PassageView = Infer<typeof passageViewValidator>;
 export type PassageAttemptQuality = Infer<typeof qualityValidator>;
 export type PassageAttemptKind = Infer<typeof passageAttemptKindValidator>;
+
+const memoryStatusValidator = v.union(
+  v.literal("new"),
+  v.literal("learning"),
+  v.literal("reviewing"),
+  v.literal("mastered"),
+);
+
+/** Unified or passage pack card in the global Learn / Review queues. */
+export const dueQueuePackItemValidator = v.object({
+  kind: v.literal("pack"),
+  packId: v.id("packs"),
+  packName: v.string(),
+  dueAt: v.number(),
+  status: memoryStatusValidator,
+  learnStage: v.number(),
+  stageReps: v.optional(v.number()),
+  ease: v.number(),
+  intervalDays: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  earlyReviewApplied: v.optional(v.boolean()),
+  lastReviewedAt: v.optional(v.number()),
+  members: v.array(
+    v.object({
+      book: v.string(),
+      chapter: v.number(),
+      startVerse: v.number(),
+      endVerse: v.number(),
+    }),
+  ),
+  passageStatus: v.optional(passageStatusValidator),
+});

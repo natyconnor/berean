@@ -12,9 +12,93 @@ import type { PlanStartResult } from "../../src/lib/passage-start";
 import {
   MAX_LEARN_STAGE,
   type MemorySchedule,
+  type MemoryStatus,
 } from "../../src/lib/memory-scheduler";
-import { loadOwnedPack, type PackMember } from "./packs";
+import { passageLearningDueAt } from "../../src/lib/passage-due";
+import {
+  loadOwnedPack,
+  passagePiecesAsMembers,
+  type PackMember,
+} from "./packs";
 import type { PassageView } from "./passageValues";
+
+/** Pack card for global Learn / Review. Members are frozen pieces, not hearts. */
+export type DueQueuePassagePackItem = {
+  kind: "pack";
+  packId: Id<"packs">;
+  packName: string;
+  dueAt: number;
+  status: MemoryStatus;
+  learnStage: number;
+  stageReps: number;
+  ease: number;
+  intervalDays: number;
+  consecutiveCorrect: number;
+  lapses: number;
+  earlyReviewApplied?: boolean;
+  lastReviewedAt?: number;
+  members: Array<{
+    book: string;
+    chapter: number;
+    startVerse: number;
+    endVerse: number;
+  }>;
+  passageStatus: Doc<"passageMemory">["status"];
+};
+
+export function toDueQueuePassagePackItem(
+  pack: Doc<"packs">,
+  row: Doc<"passageMemory">,
+  args: {
+    dueAt: number;
+    status: MemoryStatus;
+    learnStage: number;
+  },
+): DueQueuePassagePackItem | null {
+  const members = passagePiecesAsMembers(row.pieces);
+  if (members.length === 0) return null;
+  return {
+    kind: "pack",
+    packId: pack._id,
+    packName: pack.name,
+    dueAt: args.dueAt,
+    status: args.status,
+    learnStage: args.learnStage,
+    stageReps: row.stageReps,
+    ease: row.ease,
+    intervalDays: row.intervalDays,
+    consecutiveCorrect: row.consecutiveCorrect,
+    lapses: row.lapses,
+    earlyReviewApplied: row.earlyReviewApplied,
+    lastReviewedAt: row.lastSessionAt,
+    members,
+    passageStatus: row.status,
+  };
+}
+
+export function toReviewingPassagePackItem(
+  pack: Doc<"packs">,
+  row: Doc<"passageMemory">,
+): DueQueuePassagePackItem | null {
+  return toDueQueuePassagePackItem(pack, row, {
+    dueAt: row.dueAt,
+    status: row.status === "mastered" ? "mastered" : "reviewing",
+    learnStage: MAX_LEARN_STAGE,
+  });
+}
+
+export function toBuildingPassagePackItem(
+  pack: Doc<"packs">,
+  row: Doc<"passageMemory">,
+  now: number,
+): DueQueuePassagePackItem | null {
+  const frontier = row.pieces[frontierIndex(row.pieces)];
+  return toDueQueuePassagePackItem(pack, row, {
+    dueAt: passageLearningDueAt(row.pieces, now),
+    status: "learning",
+    learnStage: frontier?.learnStage ?? 0,
+  });
+}
 
 /**
  * Owned `passageMemory` row for a pack, or `null` when the pack is missing,

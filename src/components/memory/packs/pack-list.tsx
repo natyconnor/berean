@@ -6,6 +6,7 @@ import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { MemoryListRow } from "@/components/memory/memory-surface";
+import { packListSubtitle } from "@/components/memory/packs/pack-list-subtitle";
 
 const INITIAL_PAGE_SIZE = 10;
 const LOAD_MORE_PAGE_SIZE = 10;
@@ -90,14 +91,7 @@ export function PackList({ now }: { now: number }) {
                         {pack.name}
                       </span>
                       <span className="block text-xs text-muted-foreground">
-                        {pack.kind === "scope" ? "Scope" : "Custom"} ·{" "}
-                        {pack.verseCount} verse
-                        {pack.verseCount !== 1 ? "s" : ""}
-                        {pack.dueCount === 0
-                          ? ""
-                          : pack.unifiedReviewEnabled
-                            ? " · one recitation due"
-                            : ` · ${pack.dueCount} due`}
+                        {packListSubtitle(pack)}
                       </span>
                     </span>
                   </Link>

@@ -28,7 +28,10 @@ export function MemoryHome() {
   const now = useLiveNow();
   const navigate = useNavigate();
 
-  const stats = useQuery(api.verseMemory.memoryStats, { now });
+  const stats = useQuery(api.verseMemory.memoryStats, {
+    now,
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+  });
   const canPractice = (stats?.reviewing ?? 0) + (stats?.mastered ?? 0) > 0;
 
   return (

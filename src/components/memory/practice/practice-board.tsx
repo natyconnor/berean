@@ -40,6 +40,7 @@ import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
   isLearningLocked,
   isLearningProgressAttempt,
+  MAX_LEARN_STAGE,
   requiredRepsFor,
   type MemorySchedule,
   type MemoryStatus,
@@ -106,6 +107,12 @@ export interface PracticeCompositeSet {
   members: CardReference[];
   /** Pack name, used when this card sits in a mixed global review queue. */
   packName?: string;
+  /**
+   * Present on passage-mode pack cards. Reviewing/mastered grade through
+   * `passageMemory.recordAttempt`. Absent on unified recitation cards — those
+   * stay on `packs.recordUnifiedReview` until the user opts in on the pack.
+   */
+  passageStatus?: "building" | "reviewing" | "mastered";
 }
 
 export interface PracticeVerse {
@@ -307,6 +314,7 @@ export function PracticeBoard({
 
   const { recordWithSeqAdopt } = useVersePracticeAttempt(recordModeFor(kind));
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
+  const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);
   const sessionLabel = sessionLabelFor(kind);
   const isReview = kind === "review";
 
@@ -440,33 +448,63 @@ export function PracticeBoard({
       : undefined;
   }, [activeVerseData, composite, compositePassage.text]);
 
-  // One recitation grade, copied by the server onto every pack member. Never
-  // rejects, mirroring `useRecordVerseAttempt`, so a failed write can't strand
-  // the card mid-result.
+  // One recitation grade. Unified packs copy onto every hearted member.
+  // Passage-mode reviewing packs grade the frozen passage row. Never
+  // auto-starts passage mode from global Review.
   const recordComposite = useCallback(
     async (
       packId: Id<"packs">,
       tokens: ReadonlyArray<DiffToken>,
       wordCount: number,
+      passageStatus: PracticeCompositeSet["passageStatus"],
     ): Promise<MemorySchedule | null> => {
       const quality = classifyVerseAttempt(tokens);
       if (!quality) return null;
       const attemptedAt = Date.now();
+      const tzOffsetMinutes = new Date(attemptedAt).getTimezoneOffset();
+      const accuracy = verseAttemptAccuracy(tokens);
       try {
+        if (passageStatus === "reviewing" || passageStatus === "mastered") {
+          const view = await recordPassageAttempt({
+            packId,
+            kind: "review",
+            quality,
+            accuracy,
+            now: attemptedAt,
+            tzOffsetMinutes,
+          });
+          return {
+            status: view.status === "mastered" ? "mastered" : "reviewing",
+            learnStage: MAX_LEARN_STAGE,
+            stageReps: view.stageReps,
+            ease: view.ease,
+            intervalDays: view.intervalDays,
+            dueAt: view.dueAt,
+            consecutiveCorrect: view.consecutiveCorrect,
+            lapses: view.lapses,
+            earlyReviewApplied: view.earlyReviewApplied ?? false,
+          };
+        }
         return await recordUnifiedReview({
           id: packId,
           quality,
-          accuracy: verseAttemptAccuracy(tokens),
+          accuracy,
           now: attemptedAt,
           wordCount,
-          tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+          tzOffsetMinutes,
         });
       } catch (error) {
-        devLog.warn("packs", "recordUnifiedReview failed", error);
+        devLog.warn(
+          "packs",
+          passageStatus
+            ? "passageMemory.recordAttempt failed"
+            : "recordUnifiedReview failed",
+          error,
+        );
         return null;
       }
     },
-    [recordUnifiedReview],
+    [recordPassageAttempt, recordUnifiedReview],
   );
 
   useEffect(() => {
@@ -626,6 +664,7 @@ export function PracticeBoard({
                     composite.packId,
                     tokens,
                     wordCount,
+                    composite.passageStatus,
                   ).then((next) => {
                     if (!next) return null;
                     setProgressByVerseId((prev) => ({

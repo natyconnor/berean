@@ -12,20 +12,23 @@ import {
   patchPassageMemory,
   requireOwnedPack,
   requirePassageForPack,
+  toBuildingPassagePackItem,
   toPassageSchedule,
   toPassageView,
 } from "./lib/passageMemory";
 import {
+  dueQueuePackItemValidator,
   passageAttemptKindValidator,
   passageViewValidator,
   pieceBaseValidator,
   qualityValidator,
 } from "./lib/passageValues";
-import { loadPackMembers } from "./lib/packs";
+import { loadPackMembers, loadPassageMemoryByUser } from "./lib/packs";
 import { unheartByVerseRefId } from "./lib/savedVerses";
 import { findVerseRefId } from "./lib/verseRefs";
 import { SHORT_VERSE_WORDS } from "../src/lib/memory-scheduler";
 import { packAllowsPassageMode } from "../src/lib/passage-eligibility";
+import { isPassageDueForLearning } from "../src/lib/passage-due";
 import {
   isPassagePieceLocked,
   localDayIndex,
@@ -339,5 +342,35 @@ export const dismissMigrationBanner = mutation({
       updatedAt: Date.now(),
     });
     return null;
+  },
+});
+
+/**
+ * Building passage packs with a learning session available today. Only packs
+ * that already have a `passageMemory` row appear — an eligible collection
+ * without opt-in is not a Learn card. Reviewing/mastered rows belong in
+ * `verseMemory.dueQueue`, not here.
+ */
+export const dueForLearning = query({
+  args: { now: v.number(), tzOffsetMinutes: v.number() },
+  returns: v.array(dueQueuePackItemValidator),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+
+    const rows = await loadPassageMemoryByUser(ctx, userId);
+    const items: Array<
+      NonNullable<ReturnType<typeof toBuildingPassagePackItem>>
+    > = [];
+    for (const row of rows) {
+      if (!isPassageDueForLearning(row, args.now, args.tzOffsetMinutes)) {
+        continue;
+      }
+      const pack = await ctx.db.get(row.packId);
+      if (!pack || pack.userId !== userId) continue;
+      const item = toBuildingPassagePackItem(pack, row, args.now);
+      if (item) items.push(item);
+    }
+    return items.sort((a, b) => a.dueAt - b.dueAt);
   },
 });

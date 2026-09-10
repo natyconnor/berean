@@ -57,6 +57,8 @@ export type DueQueuePackEntry = {
   earlyReviewApplied?: boolean;
   lastReviewedAt?: number;
   members: CardReference[];
+  /** Set when this card is a passage-mode pack (frozen pieces as members). */
+  passageStatus?: "building" | "reviewing" | "mastered";
 };
 
 export type DueQueueVerseEntry = {
@@ -77,7 +79,7 @@ export type DueQueueVerseEntry = {
   earlyReviewApplied?: boolean;
 };
 
-/** Map a global due-queue row (verse or unified pack card) for Practice. */
+/** Map a global due-queue row (verse or pack card) for Practice. */
 export function dueQueueEntryToPracticeVerse(
   entry: DueQueueVerseEntry | DueQueuePackEntry,
 ): PracticeVerse {
@@ -101,7 +103,9 @@ export function dueQueueEntryToPracticeVerse(
       composite: {
         packId: entry.packId,
         packName: entry.packName,
+        // Reviewing passages recite frozen pieces; unified packs recite hearts.
         members: entry.members,
+        ...(entry.passageStatus ? { passageStatus: entry.passageStatus } : {}),
       },
     };
   }
