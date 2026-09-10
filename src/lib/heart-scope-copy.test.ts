@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CREATE_AND_START_PASSAGE_LABEL,
   HEART_SCOPE_ACTION_LABEL,
   HEART_SCOPE_TOOLTIP,
   heartScopeActionLabel,
@@ -11,6 +12,7 @@ import {
   heartScopeHintCopy,
   heartScopeProposedLabel,
   heartScopeTooltip,
+  packBuilderStartPassageLabel,
 } from "./heart-scope-copy";
 
 describe("heartScopeActionLabel", () => {
@@ -19,6 +21,19 @@ describe("heartScopeActionLabel", () => {
     expect(heartScopeHasExisting(2)).toBe(true);
     expect(heartScopeActionLabel()).toBe(HEART_SCOPE_ACTION_LABEL);
     expect(heartScopeDialogTitle()).toBe("Memorize whole passage");
+  });
+
+  it("does not reuse Memorize whole passage for eligible pack create", () => {
+    expect(packBuilderStartPassageLabel(true)).toBe(
+      CREATE_AND_START_PASSAGE_LABEL,
+    );
+    expect(packBuilderStartPassageLabel(true)).not.toBe(
+      HEART_SCOPE_ACTION_LABEL,
+    );
+    expect(packBuilderStartPassageLabel(false)).toBeNull();
+    expect(CREATE_AND_START_PASSAGE_LABEL).toBe(
+      "Create and start passage learning",
+    );
   });
 });
 

@@ -12,6 +12,10 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { ScopeForm } from "@/components/study/scope-form";
 import { useScopeForm } from "@/components/study/use-scope-form";
 
+import { packBuilderStartPassageLabel } from "@/lib/heart-scope-copy";
+import { memoryPackSearchAfterCreate } from "@/lib/memory-pack-search";
+import { packAllowsPassageMode } from "@/lib/passage-eligibility";
+
 import { PackVersePicker } from "./pack-verse-picker";
 import {
   packVerseKey,
@@ -24,9 +28,11 @@ type PackKind = "scope" | "custom";
 /**
  * Creates a pack: a name, a kind toggle (Scope vs Custom), and the matching
  * body. Scope packs embed the shared {@link ScopeForm} with a live member
- * preview; custom packs can stage hearted or browsed verses. On create
- * we navigate straight to the new pack's view. Incomplete scope packs arrive
- * with a pointer on Memorize whole passage.
+ * preview; custom packs can stage hearted or browsed verses. On create we
+ * navigate straight to the new pack's view. Eligible scopes open as heart
+ * collections; an optional shortcut lands with `startPassage` so the pack
+ * page can start mode once. Ineligible incomplete scopes still point at
+ * Memorize whole passage.
  */
 export function PackBuilder() {
   const navigate = useNavigate();
@@ -98,66 +104,78 @@ export function PackBuilder() {
     !isCreating &&
     (kind === "scope" ? isComplete : staged.size > 0 || trimmedName.length > 0);
 
-  const handleCreate = useCallback(async () => {
-    if (isCreating) return;
-    if (kind === "scope" && !isComplete) return;
-    setIsCreating(true);
-    setError(null);
-    try {
-      const packId: Id<"packs"> =
-        kind === "scope"
-          ? await createPack({
-              name: effectiveName,
-              kind: "scope",
-              scope: scopeForPreview,
-            })
-          : await createPack({ name: effectiveName, kind: "custom" });
+  const allowsPassage =
+    kind === "scope" && packAllowsPassageMode(scopeForPreview);
+  const startPassageLabel = packBuilderStartPassageLabel(allowsPassage);
 
-      // The pack now exists, so the user should always land on it — even if a
-      // verse fails to add. Surface a non-blocking notice but still navigate.
-      if (kind === "custom") {
-        let addFailed = false;
-        for (const verse of staged.values()) {
-          try {
-            await addVerse({
-              id: packId,
-              book: verse.book,
-              chapter: verse.chapter,
-              startVerse: verse.startVerse,
-              endVerse: verse.endVerse,
-            });
-          } catch {
-            addFailed = true;
+  const handleCreate = useCallback(
+    async (options?: { startPassage?: boolean }) => {
+      if (isCreating) return;
+      if (kind === "scope" && !isComplete) return;
+      setIsCreating(true);
+      setError(null);
+      try {
+        const packId: Id<"packs"> =
+          kind === "scope"
+            ? await createPack({
+                name: effectiveName,
+                kind: "scope",
+                scope: scopeForPreview,
+              })
+            : await createPack({ name: effectiveName, kind: "custom" });
+
+        // The pack now exists, so the user should always land on it — even if a
+        // verse fails to add. Surface a non-blocking notice but still navigate.
+        if (kind === "custom") {
+          let addFailed = false;
+          for (const verse of staged.values()) {
+            try {
+              await addVerse({
+                id: packId,
+                book: verse.book,
+                chapter: verse.chapter,
+                startVerse: verse.startVerse,
+                endVerse: verse.endVerse,
+              });
+            } catch {
+              addFailed = true;
+            }
+          }
+          if (addFailed) {
+            setError(
+              "Some verses couldn't be added. You can add them from the pack.",
+            );
           }
         }
-        if (addFailed) {
-          setError(
-            "Some verses couldn't be added. You can add them from the pack.",
-          );
-        }
-      }
 
-      void navigate({
-        to: "/memory/$packId",
-        params: { packId },
-        search: kind === "scope" ? { heartHint: true } : {},
-      });
-    } catch {
-      setError("Couldn't create the pack. Please try again.");
-    } finally {
-      setIsCreating(false);
-    }
-  }, [
-    isCreating,
-    kind,
-    createPack,
-    effectiveName,
-    scopeForPreview,
-    staged,
-    addVerse,
-    navigate,
-    isComplete,
-  ]);
+        void navigate({
+          to: "/memory/$packId",
+          params: { packId },
+          search: memoryPackSearchAfterCreate({
+            kind,
+            allowsPassage,
+            startPassage: options?.startPassage,
+          }),
+        });
+      } catch {
+        setError("Couldn't create the pack. Please try again.");
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [
+      isCreating,
+      kind,
+      createPack,
+      effectiveName,
+      scopeForPreview,
+      staged,
+      addVerse,
+      navigate,
+      isComplete,
+      allowsPassage,
+    ],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -290,9 +308,20 @@ export function PackBuilder() {
                 : `${staged.size} verse${staged.size !== 1 ? "s" : ""} selected`}
             </p>
           </div>
-          <Button onClick={() => void handleCreate()} disabled={!canCreate}>
-            {isCreating ? "Creating\u2026" : "Create pack"}
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {startPassageLabel ? (
+              <Button
+                variant="outline"
+                onClick={() => void handleCreate({ startPassage: true })}
+                disabled={!canCreate}
+              >
+                {startPassageLabel}
+              </Button>
+            ) : null}
+            <Button onClick={() => void handleCreate()} disabled={!canCreate}>
+              {isCreating ? "Creating\u2026" : "Create pack"}
+            </Button>
+          </div>
         </div>
       </footer>
     </div>

@@ -1,9 +1,15 @@
 /**
- * Shared labels for hearting a scope pack: the pack-view CTA, its tooltip,
- * the pointer shown after create, and the heart dialog.
+ * Shared labels for hearting an *ineligible* incomplete scope pack: the
+ * pack-view CTA, its tooltip, the pointer shown after create, and the heart
+ * dialog. Eligible packs must not use {@link HEART_SCOPE_ACTION_LABEL} — they
+ * stay collections until the user starts passage mode.
  */
 
 export const HEART_SCOPE_ACTION_LABEL = "Memorize whole passage";
+
+/** Builder shortcut for eligible scopes. Still creates a normal collection. */
+export const CREATE_AND_START_PASSAGE_LABEL =
+  "Create and start passage learning";
 
 /** Invitation copy; no trailing period so tooltip and create-pointer stay identical. */
 export const HEART_SCOPE_TOOLTIP =
@@ -13,8 +19,19 @@ export function heartScopeHasExisting(coveredVerseCount: number): boolean {
   return coveredVerseCount > 0;
 }
 
+/** Auto-heart CTA. Callers must not use this for passage-eligible packs. */
 export function heartScopeActionLabel(): string {
   return HEART_SCOPE_ACTION_LABEL;
+}
+
+/**
+ * Optional builder control. Eligible packs get the start-passage shortcut;
+ * ineligible incomplete packs keep today's Create-only + auto-heart path.
+ */
+export function packBuilderStartPassageLabel(
+  passageEligible: boolean,
+): string | null {
+  return passageEligible ? CREATE_AND_START_PASSAGE_LABEL : null;
 }
 
 export function heartScopeDialogTitle(): string {
