@@ -41,7 +41,7 @@ export function MemoryHome() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Memory</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Review what you’re learning, or start a verse
+              Review verses and passages, or start something new
             </p>
           </div>
           <Button

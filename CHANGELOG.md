@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+
+### Features
+
+* Passage mode on eligible scope packs with a scaffolded rope and opt-in migration
+
 ## [1.13.5](https://github.com/natyconnor/berean/compare/v1.13.4...v1.13.5) (2026-09-06)
 
 

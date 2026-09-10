@@ -423,6 +423,9 @@ describe("PackView", () => {
         /Heart verses within this scope — from here or in the reader/,
       ),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/learn the range as a passage without hearting/i),
+    ).toBeInTheDocument();
     empty.unmount();
 
     renderPack({
@@ -902,6 +905,9 @@ describe("PackView", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Passage map" })).toBeVisible();
+    expect(
+      screen.getByText("Passage · 1 solid · 1 on rope · 4 pieces"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Piece status legend")).toBeInTheDocument();
     expect(screen.getByText("Psalm 23:1")).toBeInTheDocument();
     expect(
@@ -935,6 +941,12 @@ describe("PackView", () => {
       members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
       passage: passageRow({ status: "reviewing" }),
     });
+
+    expect(
+      screen.getByText(
+        "Passage · 1 solid · 1 on rope · 4 pieces · one recitation due",
+      ),
+    ).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Stop passage learning" }),
@@ -1024,6 +1036,30 @@ describe("PackView", () => {
       startPassage: true,
     });
     expect(mutationMock("passageMemory.start")).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains empty related hearts without auto-heart or Recite copy", () => {
+    renderPack({
+      members: [],
+      passage: passageRow(),
+    });
+
+    expect(screen.getByText(/No related hearts/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/passage pieces stay independent/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Memorize whole passage/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Learn whole passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Stop passage learning" }),
+    ).toBeInTheDocument();
   });
 
   it("does not auto-start from the search flag when a passage row already exists", async () => {

@@ -10,7 +10,10 @@ import {
 import {
   chromeStage,
   computeStallCue,
+  DONE_FOR_NOW_LABEL,
+  FRONTIER_LOCKED_COPY,
   frontierHint,
+  INTRODUCE_ANOTHER_LABEL,
   joinPieceTexts,
   PASSAGE_SESSION_PHASE_LABELS,
   pieceCardTitle,
@@ -19,9 +22,12 @@ import {
   remainingAddsIn,
   repairPromptIndexes,
   ropeWindowPieceIndexes,
+  SECTION_COMPLETE_COPY,
+  SECTION_RECITE_LABEL,
   sectionIndexes,
   sessionFromView,
   tzOffsetMinutesAt,
+  usedIntroducesToday,
   verseCountIn,
   windowTitle,
   type RopeStartOverride,
@@ -40,6 +46,8 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import {
   compositeHintForWindow,
   dueFrontierIndex,
+  frontierIndex,
+  isPassagePieceLocked,
   rehearsalStartIndex,
   ropePieceIndexes,
   sectionStartIndex,
@@ -308,8 +316,17 @@ export function PassageSession({
     (ropePieceIndexes(state.pieces)[0] ?? 0) < defaultRehearsalStart;
 
   const remaining = remainingAddsIn(state);
+  const introduceIsNudge = usedIntroducesToday(state) === 0;
   const showIntroducePanel =
     !isMaintenance && !holdResult && state.phase === "offer-introduce";
+  const frontierPiece = state.pieces[frontierIndex(state.pieces)];
+  const showFrontierLocked =
+    !isMaintenance &&
+    !holdResult &&
+    state.phase !== "frontier" &&
+    state.phase !== "stall-repair" &&
+    state.phase !== "section-complete" &&
+    Boolean(frontierPiece && isPassagePieceLocked(frontierPiece, state.now));
 
   return (
     <PassageSessionShell
@@ -322,6 +339,7 @@ export function PassageSession({
       {showIntroducePanel ? (
         <IntroducePanel
           remaining={remaining}
+          nudge={introduceIsNudge}
           onIntroduce={() => {
             void handleIntroduce();
           }}
@@ -336,9 +354,9 @@ export function PassageSession({
         />
       ) : null}
 
-      {state.phase === "frontier-locked" && !holdResult ? (
+      {showFrontierLocked ? (
         <p className="mb-4 text-center text-sm text-muted-foreground">
-          Come back tomorrow for this piece — you can still practice the rope.
+          {FRONTIER_LOCKED_COPY}
         </p>
       ) : null}
 
@@ -405,24 +423,29 @@ export function PassageSession({
 
 function IntroducePanel({
   remaining,
+  nudge,
   onIntroduce,
   onDone,
 }: {
   remaining: number;
+  /** Rope-only day: encourage an introduce without blocking exit or the rope. */
+  nudge: boolean;
   onIntroduce: () => void;
   onDone: () => void;
 }): JSX.Element {
   return (
     <div className="mx-auto mb-6 max-w-md space-y-3 text-center">
       <p className="text-sm text-muted-foreground">
-        Introduce the next unreached piece? {remaining} left today.
+        {nudge
+          ? `You haven't introduced a new piece yet today. ${remaining} left.`
+          : `Introduce another piece? ${remaining} left today.`}
       </p>
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button type="button" onClick={onIntroduce}>
-          Introduce next piece
+          {INTRODUCE_ANOTHER_LABEL}
         </Button>
         <Button type="button" variant="outline" onClick={onDone}>
-          Done for now
+          {DONE_FOR_NOW_LABEL}
         </Button>
       </div>
     </div>
@@ -438,12 +461,10 @@ function SectionCompletePanel({
 }): JSX.Element {
   return (
     <div className="mx-auto mb-6 max-w-md space-y-3 text-center">
-      <p className="text-sm text-muted-foreground">
-        This section is solid. Recite it as one optional pass, or continue.
-      </p>
+      <p className="text-sm text-muted-foreground">{SECTION_COMPLETE_COPY}</p>
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button type="button" onClick={onRecite}>
-          Recite this section
+          {SECTION_RECITE_LABEL}
         </Button>
         <Button type="button" variant="outline" onClick={onSkip}>
           Continue
@@ -546,7 +567,10 @@ function buildingRecall(args: {
   } = args;
   const phase = state.phase;
 
-  if (phase === "offer-introduce") return null;
+  // After a rope-only session the introduce offer sits above the rope so
+  // exit and mixed-support practice stay available. First-piece sessions
+  // have no rope yet, so the offer is the only card.
+  if (phase === "offer-introduce" && ropeIndexes.length === 0) return null;
 
   if (phase === "section-complete") {
     if (!recitingSection) return null;
@@ -633,6 +657,7 @@ function buildingRecall(args: {
     "frontier-locked",
     "budget-exhausted",
     "passage-complete",
+    "offer-introduce",
   ];
   if (!ropePhases.includes(phase)) return null;
   if (ropeIndexes.length === 0) return null;

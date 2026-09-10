@@ -62,8 +62,9 @@ export function PackList({ now }: { now: number }) {
             aria-hidden
           />
           <p className="text-sm text-muted-foreground">
-            No packs yet. Group verses by scope (a book, chapter, or tag) or
-            hand-pick a custom set.
+            No packs yet. Group verses by scope (a book, chapter, or tag) —
+            eligible scopes can be learned as a passage — or hand-pick a custom
+            set.
           </p>
           <Button asChild size="sm" className="mt-4 gap-1.5">
             <Link to="/memory/new">

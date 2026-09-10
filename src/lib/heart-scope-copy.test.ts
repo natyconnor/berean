@@ -4,6 +4,8 @@ import {
   CREATE_AND_START_PASSAGE_LABEL,
   HEART_SCOPE_ACTION_LABEL,
   HEART_SCOPE_TOOLTIP,
+  LEARN_AS_PASSAGE_LABEL,
+  STOP_PASSAGE_LEARNING_LABEL,
   heartScopeActionLabel,
   heartScopeConfirmLabel,
   heartScopeCoverageCopy,
@@ -34,6 +36,10 @@ describe("heartScopeActionLabel", () => {
     expect(CREATE_AND_START_PASSAGE_LABEL).toBe(
       "Create and start passage learning",
     );
+    expect(LEARN_AS_PASSAGE_LABEL).toBe("Learn as a passage");
+    expect(STOP_PASSAGE_LEARNING_LABEL).toBe("Stop passage learning");
+    expect(LEARN_AS_PASSAGE_LABEL).not.toBe(HEART_SCOPE_ACTION_LABEL);
+    expect(STOP_PASSAGE_LEARNING_LABEL).not.toBe(HEART_SCOPE_ACTION_LABEL);
   });
 });
 

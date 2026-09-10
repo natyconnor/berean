@@ -7,6 +7,12 @@
 
 export const HEART_SCOPE_ACTION_LABEL = "Memorize whole passage";
 
+/** Eligible pack-view CTA. Never reuse {@link HEART_SCOPE_ACTION_LABEL} here. */
+export const LEARN_AS_PASSAGE_LABEL = "Learn as a passage";
+
+/** Removes the passage row; pack returns to a heart collection. */
+export const STOP_PASSAGE_LEARNING_LABEL = "Stop passage learning";
+
 /** Builder shortcut for eligible scopes. Still creates a normal collection. */
 export const CREATE_AND_START_PASSAGE_LABEL =
   "Create and start passage learning";

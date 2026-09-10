@@ -4,11 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
+import { DAY_MS } from "@/lib/memory-scheduler";
 import { compositeHintForWindow } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
+import {
+  DONE_FOR_NOW_LABEL,
+  FRONTIER_LOCKED_COPY,
+  INTRODUCE_ANOTHER_LABEL,
+  SECTION_COMPLETE_COPY,
+  SECTION_RECITE_LABEL,
+} from "./passage-session-model";
 import { PassageSession } from "./passage-session";
 import type { PassageView } from "./passage-session-types";
 
@@ -111,14 +119,14 @@ function passageView(
   };
 }
 
-function renderSession(view: PassageView) {
+function renderSession(view: PassageView, onExit: () => void = () => {}) {
   return render(
     <TooltipProvider delayDuration={0}>
       <PassageSession
         packId={PACK_ID}
         view={view}
         packName="Psalm 23"
-        onExit={() => {}}
+        onExit={onExit}
       />
     </TooltipProvider>,
   );
@@ -191,7 +199,7 @@ describe("PassageSession", () => {
     ).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Introduce next piece" }),
+      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
     );
 
     await waitFor(() => {
@@ -216,7 +224,7 @@ describe("PassageSession", () => {
     ).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Introduce next piece" }),
+      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -232,7 +240,10 @@ describe("PassageSession", () => {
       screen.queryByText("Read it through, then continue"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Introduce next piece" }),
+      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
     ).toBeInTheDocument();
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
   });
@@ -312,5 +323,99 @@ describe("PassageSession", () => {
     expect(args.kind).toBe("rope");
     expect(args.packId).toBe(PACK_ID);
     expect(args.accuracy).toBeLessThan(85);
+  });
+
+  it("keeps Done for now as an exit from the introduce offer", async () => {
+    const onExit = vi.fn();
+    renderSession(
+      passageView([piece(0, "unreached"), piece(1, "unreached")]),
+      onExit,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("passageMemory.introduceNext")).not.toHaveBeenCalled();
+  });
+
+  it("shows frontier-locked copy while the rope is still available", async () => {
+    renderSession(
+      passageView([
+        piece(0, "attached", {
+          learnStage: 2,
+          dueAt: getSessionNow() + DAY_MS,
+        }),
+        piece(1, "unreached"),
+      ]),
+    );
+
+    expect(screen.getByText(FRONTIER_LOCKED_COPY)).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Your recited passage"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("nudges introduce after a rope-only session without blocking the rope or exit", async () => {
+    const onExit = vi.fn();
+    const pieces = [
+      piece(0, "attached", {
+        learnStage: 2,
+        dueAt: getSessionNow() + DAY_MS,
+      }),
+      piece(1, "unreached"),
+    ];
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView(pieces, { addsOnDay: 0, remainingIntroduces: 5 }),
+    );
+    renderSession(passageView(pieces, { addsOnDay: 0 }), onExit);
+
+    const answer = await screen.findByLabelText("Your recited passage");
+    await screen.findByLabelText("Rope hint");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    await waitFor(() => {
+      expect(check).toBeEnabled();
+    });
+    await userEvent.click(check);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Continue" }),
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: Introduce" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/haven't introduced a new piece yet today/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(FRONTIER_LOCKED_COPY)).toBeInTheDocument();
+    expect(screen.getByLabelText("Your recited passage")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the planned section-complete and introduce labels", () => {
+    expect(INTRODUCE_ANOTHER_LABEL).toBe("Introduce another piece");
+    expect(DONE_FOR_NOW_LABEL).toBe("Done for now");
+    expect(FRONTIER_LOCKED_COPY).toMatch(
+      /Come back tomorrow for this piece — you can still practice the rope/,
+    );
+    expect(SECTION_COMPLETE_COPY).toMatch(/This section is solid/);
+    expect(SECTION_RECITE_LABEL).toBe("Recite this section");
   });
 });

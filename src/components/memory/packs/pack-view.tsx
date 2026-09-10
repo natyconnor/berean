@@ -56,6 +56,7 @@ import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { packAllowsUnifiedRecitation } from "@/lib/contiguous-spans";
+import { isPassageDueForReview } from "@/lib/passage-due";
 import { packAllowsPassageMode } from "@/lib/passage-eligibility";
 import {
   heartScopeActionLabel,
@@ -64,6 +65,8 @@ import {
   heartScopeDialogTitle,
   heartScopeHintCopy,
   heartScopeTooltip,
+  LEARN_AS_PASSAGE_LABEL,
+  STOP_PASSAGE_LEARNING_LABEL,
 } from "@/lib/heart-scope-copy";
 import {
   autoHeartAllowed,
@@ -82,6 +85,7 @@ import { VerseDetail } from "@/components/memory/verse-detail";
 import { formatScopeSummary } from "@/components/study/study-scope-summary";
 
 import { EnableUnifiedReviewDialog } from "./enable-unified-review-dialog";
+import { packListSubtitle } from "./pack-list-subtitle";
 import { PackVersePicker } from "./pack-verse-picker";
 import { PassageMap } from "./passage-map";
 import { PassageMigrationBanner } from "./passage-migration-banner";
@@ -668,14 +672,29 @@ function PackViewMain({
               {pack.name}
             </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {isCustom ? "Custom" : "Scope"} · {verseCount} verse
-              {verseCount !== 1 ? "s" : ""}
-              {unifiedEnabled ? " · one recitation" : ""}
-              {effectiveDueCount === 0
-                ? ""
-                : unifiedEnabled
-                  ? " · due today"
-                  : ` · ${dueCount} due`}
+              {passageActive && passage
+                ? packListSubtitle({
+                    kind: pack.kind,
+                    verseCount,
+                    dueCount: isPassageDueForReview(passage, now) ? 1 : 0,
+                    passageStatus: passage.status,
+                    solidCount: passage.pieces.filter(
+                      (piece) => piece.attachment === "solid",
+                    ).length,
+                    attachedCount: passage.pieces.filter(
+                      (piece) => piece.attachment === "attached",
+                    ).length,
+                    pieceCount: passage.pieces.length,
+                  })
+                : `${isCustom ? "Custom" : "Scope"} · ${verseCount} verse${
+                    verseCount !== 1 ? "s" : ""
+                  }${unifiedEnabled ? " · one recitation" : ""}${
+                    effectiveDueCount === 0
+                      ? ""
+                      : unifiedEnabled
+                        ? " · due today"
+                        : ` · ${dueCount} due`
+                  }`}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -894,8 +913,8 @@ function PackViewMain({
                     : canHeartRemaining
                       ? "No verses yet. Memorize whole passage hearts every verse in this scope as short memory passages — or heart them in the reader and they'll appear automatically."
                       : passageActive
-                        ? "No related hearts. Hearting a verse in this scope still adds it here."
-                        : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
+                        ? "No related hearts. Hearting a verse in this scope still adds it here as its own card — passage pieces stay independent."
+                        : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically. You can also learn the range as a passage without hearting."}
                 </p>
               </div>
             ) : (
@@ -1059,7 +1078,7 @@ function PackViewMain({
       <Dialog open={stopConfirmOpen} onOpenChange={setStopConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Stop passage learning?</DialogTitle>
+            <DialogTitle>{STOP_PASSAGE_LEARNING_LABEL}?</DialogTitle>
             <DialogDescription>
               This returns the pack to a heart collection. Your hearts are kept.
               Passage progress on the map will be removed.
@@ -1078,7 +1097,9 @@ function PackViewMain({
               onClick={() => void handleStopPassage()}
               disabled={isStoppingPassage}
             >
-              {isStoppingPassage ? "Stopping\u2026" : "Stop passage learning"}
+              {isStoppingPassage
+                ? "Stopping\u2026"
+                : STOP_PASSAGE_LEARNING_LABEL}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1136,7 +1157,7 @@ function StartPassagePanel({
         <div className="min-w-0 space-y-1">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <ScrollText aria-hidden className="h-4 w-4 text-primary" />
-            Learn as a passage
+            {LEARN_AS_PASSAGE_LABEL}
           </h2>
           <p className="text-xs leading-5 text-muted-foreground">
             Memorize {packName} as one growing recitation — not a queue of
@@ -1151,7 +1172,7 @@ function StartPassagePanel({
           disabled={pending}
         >
           <GraduationCap className="h-4 w-4" aria-hidden />
-          {pending ? "Starting\u2026" : "Learn as a passage"}
+          {pending ? "Starting\u2026" : LEARN_AS_PASSAGE_LABEL}
         </Button>
       </div>
     </section>
@@ -1192,7 +1213,7 @@ function PassageModePanel({
           onClick={onStop}
           disabled={pendingStop}
         >
-          {pendingStop ? "Stopping\u2026" : "Stop passage learning"}
+          {pendingStop ? "Stopping\u2026" : STOP_PASSAGE_LEARNING_LABEL}
         </Button>
       </div>
     </section>

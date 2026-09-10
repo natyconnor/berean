@@ -35,6 +35,19 @@ export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
     "frontier-locked": "Frontier locked",
   };
 
+/** Soft-locked frontier; rope practice stays available. */
+export const FRONTIER_LOCKED_COPY =
+  "Come back tomorrow for this piece — you can still practice the rope.";
+
+export const INTRODUCE_ANOTHER_LABEL = "Introduce another piece";
+
+export const DONE_FOR_NOW_LABEL = "Done for now";
+
+export const SECTION_COMPLETE_COPY =
+  "This section is solid. Recite it as one optional pass, or continue.";
+
+export const SECTION_RECITE_LABEL = "Recite this section";
+
 const STALL_CUE_PREVIOUS_WORDS = 6;
 
 export type RopeStartOverride = "rehearsal" | "section" | "beginning";
@@ -237,6 +250,12 @@ export function remainingAddsIn(state: PassageSessionState): number {
     addDayKey: state.addDayKey,
     todayKey: localDayIndex(state.now, state.tzOffsetMinutes),
   });
+}
+
+/** Introductions already counted on the viewer's local day. */
+export function usedIntroducesToday(state: PassageSessionState): number {
+  const todayKey = localDayIndex(state.now, state.tzOffsetMinutes);
+  return state.addDayKey === todayKey ? state.addsOnDay : 0;
 }
 
 export function sectionIndexes(pieces: readonly PassagePiece[]): number[] {
