@@ -324,8 +324,9 @@
         <h1>Passage Memory</h1>
         <p class="lede">
           Turn contiguous scope packs into a dedicated progressive-part loop:
-          encode the next piece, recite the chain you already have, and keep
-          ordinary hearted verses as independent memory cards.
+          encode the next piece, recite a short recent chain, pass at 85% (not
+          word-perfect), and keep ordinary hearted verses as independent memory
+          cards.
         </p>
         <div class="meta">
           <span class="chip">8 pull requests</span>
@@ -403,8 +404,21 @@
                 <td>
                   A piece can join in one session. Frontier ladder is Read (1) →
                   Guided (2 first-letter reps) → From Memory of the piece (1
-                  exact). Skip Challenge and skip the verse-memory overnight
-                  lock. The join recitation is the hard recall.
+                  pass at ≥85%). Skip Challenge and skip the verse-memory
+                  overnight lock. The join recitation is the connecting recall.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Pass threshold</b></td>
+                <td>
+                  Passage attempts pass at
+                  <code>accuracy &gt;= LEARN_PROGRESS_ACCURACY</code> (85),
+                  same bar as verse Guided banking. Applies to frontier Guided,
+                  frontier From Memory, prefix continue, join, stall-repair
+                  clear, section-complete, and finished-passage review
+                  scheduling. Do <b>not</b> require <code>exact</code> to move
+                  on — long typed chains make word-perfect gating frustrating.
+                  Below 85% is a retry / stall, not a permanent day lock.
                 </td>
               </tr>
               <tr>
@@ -412,28 +426,36 @@
                 <td>
                   Large sections start at a new chapter or an ESV
                   heading/subheading (grouping already splits pieces there).
-                  Building recitation does <b>not</b> always start at verse 1:
-                  rehearsal start is
+                  Building warm-up does <b>not</b> always start at verse 1:
+                  default rehearsal start is
                   <code
                     >max(sectionStart, joinedCount -
                     PASSAGE_REHEARSAL_MAX_PIECES)</code
                   >
-                  with <code>PASSAGE_REHEARSAL_MAX_PIECES = 8</code>. Explicit
-                  actions: “From the start of this section” and “From the
-                  beginning of the passage”. After the last piece of a section
-                  joins, prompt a full-section recitation. Finished passages
-                  review as the whole passage.
+                  with <code>PASSAGE_REHEARSAL_MAX_PIECES = 3</code>, then
+                  trimmed so the window’s word count stays ≤
+                  <code>PASSAGE_REHEARSAL_MAX_WORDS = 120</code> (drop oldest
+                  pieces in the window first). Explicit actions: “From the
+                  start of this section” and “From the beginning of the
+                  passage” (no word cap — deliberate long practice). After the
+                  last piece of a section joins, <b>offer</b> a full-section
+                  recitation (optional). Finished passages review as the whole
+                  passage.
                 </td>
               </tr>
               <tr>
                 <td><b>Stalls</b></td>
                 <td>
-                  An <code>off</code> prefix or join recitation is a stall, not
-                  a skip-to-next-card. Find the first non-typo error, map it to
-                  a piece, cue with the end of the previous piece plus first
+                  A failed prefix or join (&lt;85%) is a stall, not a
+                  skip-to-next-card. Find the first non-typo error, map it to a
+                  piece, cue with the end of the previous piece plus first
                   letters of the stalled piece, then retry from one piece
-                  earlier. Prefix <code>off</code> blocks adding today until
-                  repaired. Join requires <code>exact</code>.
+                  earlier. After a successful repair (≥85%), <b>continue</b>
+                  the interrupted flow (prefix → frontier encode when adds
+                  remain; join → retry join). Prefix failure must
+                  <b>not</b> lock out adding for the rest of the day — repair
+                  then continue into the new piece. Join passes at ≥85%, not
+                  <code>exact</code>.
                 </td>
               </tr>
               <tr>
@@ -837,11 +859,14 @@ passageReviews: defineTable({
 
 <span class="c">// src/lib/passage-frontier.ts</span>
 <span class="k">export const</span> PASSAGE_MAX_ADDS_PER_DAY = 5;
-<span class="k">export const</span> PASSAGE_REHEARSAL_MAX_PIECES = 8;
+<span class="k">export const</span> PASSAGE_REHEARSAL_MAX_PIECES = 3;
+<span class="k">export const</span> PASSAGE_REHEARSAL_MAX_WORDS = 120;
+<span class="k">export const</span> PASSAGE_PASS_ACCURACY = LEARN_PROGRESS_ACCURACY; <span class="c">// 85</span>
 <span class="k">export const</span> FRONTIER_GUIDED_REPS = 2;
 <span class="k">export const</span> FRONTIER_MEMORY_REPS = 1;
 <span class="c">// Read is 1 rep. Guided uses learnStage 1. Skip Challenge (stage 2).
-// From Memory uses learnStage 3 so hintForProgress stays hidden.</span>
+// From Memory uses learnStage 3 so hintForProgress stays hidden.
+// Pass = accuracy &gt;= PASSAGE_PASS_ACCURACY (exact not required).</span>
 
 <span class="k">export function</span> localDayIndex(now: number, tzOffsetMinutes: number): number;
 <span class="c">// Math.floor((now - tzOffsetMinutes * 60_000) / DAY_MS)</span>
@@ -860,11 +885,16 @@ passageReviews: defineTable({
 <span class="k">export function</span> rehearsalStartIndex(
   pieces: readonly PassagePiece[],
   joinedCount: number,
+  pieceWordCounts?: readonly number[],
 ): number;
 <span class="c">// If joinedCount === 0 return 0.
 // target = joinedCount - 1 (last joined).
-// return max(sectionStartIndex(pieces, target), joinedCount - PASSAGE_REHEARSAL_MAX_PIECES)
-// clamped to >= 0.</span>
+// start = max(sectionStartIndex(pieces, target), joinedCount - PASSAGE_REHEARSAL_MAX_PIECES)
+// clamped to &gt;= 0.
+// If pieceWordCounts provided, while wordSum(pieces[start..joinedCount)) &gt;
+// PASSAGE_REHEARSAL_MAX_WORDS and start &lt; joinedCount - 1, increment start
+// (drop oldest). Explicit “section start” / “passage start” bypasses this
+// helper and uses sectionStartIndex / 0 with no word cap.</span>
 
 <span class="k">export type</span> HeartedMemorySpan = VerseSpan &amp; {
   status: MemoryStatus;
@@ -920,18 +950,19 @@ passageReviews: defineTable({
   state: PassageSessionState,
   event: PassageSessionEvent,
 ): PassageSessionState;
-<span class="c">// Prefix exact|close → frontier-read (if remainingAdds&gt;0) else offer-next/budget
-// Prefix off → stall-repair (kind prefix)
-// Frontier read always advances to guided after one successful prime (exact|close)
-// Guided banks FRONTIER_GUIDED_REPS exact|close (accuracy &gt;= LEARN_PROGRESS_ACCURACY)
-//   then frontier-memory. Off steps back to read.
-// Frontier memory requires exact → join
-// Join exact → increment joinedCount conceptually (event consumed by mutation);
-//   if that piece was last in its section → section-complete
+<span class="c">// Helper: attemptPasses = accuracy &gt;= PASSAGE_PASS_ACCURACY (85).
+// Prefix pass → frontier-read (if remainingAdds&gt;0) else offer-next/budget
+// Prefix fail → stall-repair (kind prefix); after repair pass → frontier-read
+//   (or offer-next if no adds). Never set a day-long “adds blocked” flag.
+// Frontier read: one successful prime (pass) → guided; fail → stay / retry read
+// Guided banks FRONTIER_GUIDED_REPS passes then frontier-memory.
+//   Fail steps back to read.
+// Frontier memory: one pass → join. Fail stays on memory (retry).
+// Join pass → increment joinedCount conceptually (mutation joinNextPiece);
+//   if that piece was last in its section → section-complete (offer, optional)
 //   else if remainingAdds-1 &gt; 0 → offer-next else budget-exhausted
-// Join close|off → stall-repair (kind join)
-// From stall-repair, exact retry of the repair window returns to the
-//   interrupted phase (prefix or join). close stays in repair. off stays.</span>
+// Join fail → stall-repair (kind join); after repair pass → retry join
+// Stall-repair: pass returns to the interrupted phase. Fail stays in repair.</span>
 
 <span class="c">// src/lib/passage-stall.ts</span>
 <span class="k">export function</span> stallPieceIndex(
@@ -1069,15 +1100,17 @@ dismissMigrationBanner: mutation({
           pieces with <code>buildPassagePieces</code>, and calls
           <code>passageMemory.materialize</code>. That row is now the source of
           truth for the pack’s passage loop. A Learn session runs
-          <code>reducePassageSession</code>: recite the rehearsal window (typed
-          composite text), encode only the frontier piece with the compressed
-          ladder, recite window + new piece, and on exact join call
+          <code>reducePassageSession</code>: recite the short rehearsal window
+          (typed composite text, last ≤3 pieces / ≤120 words), encode only the
+          frontier piece with the compressed ladder, recite window + new piece,
+          and on a ≥85% join call
           <code>joinNextPiece</code>. Independent hearts in the same chapters
           keep their own <code>recordAttempt</code> path. When
           <code>joinedCount === pieces.length</code>, Review presents one
           composite card of every piece;
           <code>recordAttempt({ kind: "review" })</code> runs
-          <code>scheduleNext</code> on the passage row only. Opening an old
+          <code>scheduleNext</code> on the passage row only (pass at ≥85%).
+          Opening an old
           auto-hearted pack follows the same materialize path once; matching
           hearts disappear from the library, leftover hearts remain, and unified
           mode turns off.
@@ -1212,9 +1245,10 @@ dismissMigrationBanner: mutation({
           <h4>Goal</h4>
           <p>
             Land the pure TypeScript model for pieces, sections, frontier
-            inference, daily add budget, rehearsal window, stall mapping,
-            auto-heart detection, and the session phase machine. No schema, no
-            UI. Existing Memory behavior is unchanged.
+            inference, daily add budget, short rehearsal window (3 pieces /
+            120 words), 85% pass threshold, stall mapping, auto-heart
+            detection, and the session phase machine. No schema, no UI.
+            Existing Memory behavior is unchanged.
           </p>
           <h4>Files</h4>
           <ul class="clean small">
@@ -1264,8 +1298,9 @@ dismissMigrationBanner: mutation({
             <li>
               <span class="fileref">src/lib/passage-session.test.ts</span>
               <span class="tag-new">(new)</span> — first piece (skip prefix),
-              prefix off blocks add, join exact, budget 5, section-complete when
-              last piece in a section joins.
+              prefix fail → repair → continue to frontier (adds still
+              available), join pass at ≥85%, join fail → repair → retry join,
+              budget 5, section-complete when last piece in a section joins.
             </li>
           </ul>
           <h4>Implementation steps</h4>
@@ -1304,9 +1339,12 @@ dismissMigrationBanner: mutation({
               new section; <code>inferJoinedCount</code> stops at a gap even if
               later verses are mastered; auto-heart heuristic true only on exact
               piece/heart bijection + full coverage; remainingAdds resets on a
-              new <code>localDayIndex</code>; stall maps the first mismatch onto
-              the correct piece; reducer skips prefix when
-              <code>joinedCount === 0</code> and refuses a sixth join.
+              new <code>localDayIndex</code>;
+              <code>rehearsalStartIndex</code> caps at 3 pieces and trims to
+              ≤120 words; stall maps the first mismatch onto the correct piece;
+              reducer skips prefix when <code>joinedCount === 0</code>, passes
+              join at 85% without requiring exact, continues to frontier after
+              prefix repair, and refuses a sixth join.
             </li>
             <li>Behavioral / visual: none (no UI).</li>
           </ul>
@@ -1479,7 +1517,9 @@ dismissMigrationBanner: mutation({
             <li>
               <code>recordAttempt</code> kind <code>review</code> requires
               status reviewing/mastered; applies <code>scheduleNext</code> /
-              <code>applyUnifiedGrade</code> to the passage row only. Building
+              <code>applyUnifiedGrade</code> to the passage row only. Treat
+              accuracy ≥85% as a successful review grade for scheduling (map to
+              the existing quality path without requiring exact). Building
               kinds patch <code>frontierLearnStage</code> /
               <code>lastSessionAt</code> and insert <code>passageReviews</code>.
               Do not call <code>verseMemory.recordAttempt</code>.
@@ -1583,29 +1623,34 @@ dismissMigrationBanner: mutation({
           <h4>Implementation steps</h4>
           <ul class="clean small">
             <li>
-              Load rehearsal / join member lists from
-              <code>pieces.slice(rehearsalStart, joinedCount)</code> and include
-              the frontier piece for join. Feed those spans to
-              <code>useEsvCompositePassage</code>.
+              Load default rehearsal / join member lists via
+              <code>rehearsalStartIndex</code> (≤3 pieces, ≤120 words) ending at
+              <code>joinedCount</code>; include the frontier piece for join.
+              Feed those spans to <code>useEsvCompositePassage</code>.
             </li>
             <li>
               Frontier card uses the single frontier span as
               <code>CardReference</code> and <code>hintForProgress</code> with
-              <code>learnStage</code> 0 / 1 / 3.
+              <code>learnStage</code> 0 / 1 / 3. Advance frontier / join when
+              <code>accuracy &gt;= PASSAGE_PASS_ACCURACY</code> (85), not only
+              on <code>exact</code>.
             </li>
             <li>
               Stall repair: mask the stalled piece with first-letters; show the
               last ~8 words of the previous piece as a cue; recitation window is
               <code>repairStartIndex</code> through the previous window end.
+              After a ≥85% repair, continue into frontier (prefix stall) or
+              retry join (join stall) — never day-lock adds.
             </li>
             <li>
               “From the start of this section” / “From the beginning” override
-              rehearsal start locally for the current prefix/join only; do not
-              persist.
+              rehearsal start locally for the current prefix/join only (no word
+              cap); do not persist.
             </li>
             <li>
               After join, show offer-next with remainingAdds. Disable add when
-              remainingAdds is 0.
+              remainingAdds is 0. Section-complete is an optional offer, not a
+              hard gate.
             </li>
             <li>Do not shuffle. Do not use the verse rail of PracticeBoard.</li>
           </ul>
@@ -1625,9 +1670,9 @@ dismissMigrationBanner: mutation({
             </li>
             <li>
               Behavioral / visual (manual): type through one empty-prefix piece
-              (Read → Guided → From Memory → join) on a fixture pack once PR 5
-              can materialize; until then this PR is exercised by tests +
-              optional locally-inserted row.
+              (Read → Guided → From Memory → join at ≥85%) on a fixture pack
+              once PR 5 can materialize; until then this PR is exercised by
+              tests + optional locally-inserted row.
             </li>
           </ul>
         </div>
@@ -1968,9 +2013,10 @@ dismissMigrationBanner: mutation({
               <span class="fileref"
                 >src/components/memory/passage/passage-session.tsx</span
               >
-              — section-complete prompt (“Recite this section from the start?”)
-              and budget-exhausted “Come back tomorrow to add more — you can
-              still practice what you know.”
+              — section-complete offer (“Recite this section from the start?” —
+              optional; Skip continues to offer-next / done) and
+              budget-exhausted “Come back tomorrow to add more — you can still
+              practice what you know.”
             </li>
             <li>
               <span class="fileref">src/components/memory/memory-home.tsx</span>
@@ -2059,8 +2105,11 @@ dismissMigrationBanner: mutation({
               <tr>
                 <td>Long typed recitations are painful</td>
                 <td>
-                  Rehearsal window caps building recitation at 8 pieces (PR 1).
-                  Speaking is an explicit later feature, not this plan.
+                  Default warm-up caps at 3 pieces and 120 words (PR 1). Explicit
+                  “section start” / “passage start” and optional
+                  section-complete are how users practice long chains. Speaking
+                  is an explicit later feature, not this plan. Pass bar is 85%,
+                  not exact, so long joins are not word-perfect gated.
                 </td>
               </tr>
               <tr>
