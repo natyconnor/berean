@@ -2,6 +2,11 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
 import { noteBodyValue } from "./lib/noteContent";
+import {
+  passagePieceValidator,
+  passageStatusValidator,
+  qualityValidator,
+} from "./lib/passageValues";
 
 export default defineSchema({
   ...authTables,
@@ -313,4 +318,53 @@ export default defineSchema({
       "verseRefId",
       "createdAt",
     ]),
+
+  /**
+   * 1:1 with a pack while passage mode is active. Pieces are frozen at start.
+   * Per-piece `dueAt` is the learning soft-lock; row `dueAt` is maintenance
+   * when status is reviewing | mastered.
+   */
+  passageMemory: defineTable({
+    userId: v.id("users"),
+    packId: v.id("packs"),
+    status: passageStatusValidator,
+    pieces: v.array(passagePieceValidator),
+    addDayKey: v.optional(v.number()),
+    addsOnDay: v.number(),
+    ease: v.number(),
+    intervalDays: v.number(),
+    dueAt: v.number(),
+    consecutiveCorrect: v.number(),
+    lapses: v.number(),
+    earlyReviewApplied: v.optional(v.boolean()),
+    lastSessionAt: v.optional(v.number()),
+    migratedAt: v.optional(v.number()),
+    unheartedCount: v.optional(v.number()),
+    keptHeartCount: v.optional(v.number()),
+    migrationBannerDismissed: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_packId", ["packId"])
+    .index("by_userId", ["userId"])
+    .index("by_userId_status_dueAt", ["userId", "status", "dueAt"]),
+
+  passageReviews: defineTable({
+    userId: v.id("users"),
+    packId: v.id("packs"),
+    passageMemoryId: v.id("passageMemory"),
+    kind: v.union(
+      v.literal("rope"),
+      v.literal("repair"),
+      v.literal("review"),
+      v.literal("frontier"),
+    ),
+    pieceIndex: v.optional(v.number()),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    durationMs: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_packId", ["packId"]),
 });
