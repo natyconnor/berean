@@ -45,6 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useScopeHeartPreview } from "@/hooks/use-scope-heart-preview";
+import { useStartPassage } from "@/hooks/use-start-passage";
 import { heartSpansInChunks } from "@/lib/heart-many-client";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
@@ -55,6 +56,7 @@ import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { packAllowsUnifiedRecitation } from "@/lib/contiguous-spans";
+import { packAllowsPassageMode } from "@/lib/passage-eligibility";
 import {
   heartScopeActionLabel,
   heartScopeConfirmLabel,
@@ -81,12 +83,30 @@ import { formatScopeSummary } from "@/components/study/study-scope-summary";
 
 import { EnableUnifiedReviewDialog } from "./enable-unified-review-dialog";
 import { PackVersePicker } from "./pack-verse-picker";
+import { PassageMap } from "./passage-map";
+import { PassageMigrationBanner } from "./passage-migration-banner";
 import { ScopeHeartPreview } from "./scope-heart-preview";
 import {
   packVerseKey,
   type HeartedVerse,
   type PackableVerse,
 } from "./pack-verse-types";
+
+function searchStartStorageKey(packId: string): string {
+  return `berean:passage-search-start:${packId}`;
+}
+
+/** True once per pack per tab so Strict Mode / a lingering flag cannot re-fire. */
+function consumeSearchStart(packId: string): boolean {
+  const key = searchStartStorageKey(packId);
+  try {
+    if (sessionStorage.getItem(key) === "1") return false;
+    sessionStorage.setItem(key, "1");
+    return true;
+  } catch {
+    return true;
+  }
+}
 
 /**
  * A single pack: header + counts, its resolved members, and Review / Practice
@@ -97,16 +117,35 @@ import {
 export function PackView({
   packId,
   heartHint = false,
+  startPassage = false,
 }: {
   packId: Id<"packs">;
   /** After create: point at Memorize whole passage so the CTA is obvious. */
   heartHint?: boolean;
+  /**
+   * One-shot builder shortcut. Invokes `passageMemory.start` once after the
+   * pack loads; never runs merely because the pack was opened.
+   */
+  startPassage?: boolean;
 }) {
   const now = useLiveNow();
   const navigate = useNavigate();
+  const tzOffsetMinutes = new Date(now).getTimezoneOffset();
+  const onClearHeartHint = useCallback(() => {
+    void navigate({
+      to: "/memory/$packId",
+      params: { packId },
+      search: {},
+      replace: true,
+    });
+  }, [navigate, packId]);
 
   const pack = useQuery(api.packs.get, { id: packId });
   const members = useQuery(api.packs.resolveMembers, { id: packId, now });
+  const passage = useQuery(
+    api.passageMemory.getForPack,
+    pack === null ? "skip" : { packId, now, tzOffsetMinutes },
+  );
   const touch = useMutation(api.packs.touch);
 
   const hasTouched = useRef(false);
@@ -134,7 +173,7 @@ export function PackView({
     [members],
   );
 
-  if (pack === undefined) {
+  if (pack === undefined || (pack !== null && passage === undefined)) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -174,20 +213,15 @@ export function PackView({
       packId={packId}
       pack={pack}
       members={members}
+      passage={passage ?? null}
       now={now}
       heartHint={heartHint}
+      startPassage={startPassage}
       dueCount={dueMembers.length}
       learningDueCount={learningDueCount}
       newCount={newCount}
       practiceCount={practiceCount}
-      onClearHeartHint={() =>
-        void navigate({
-          to: "/memory/$packId",
-          params: { packId },
-          search: {},
-          replace: true,
-        })
-      }
+      onClearHeartHint={onClearHeartHint}
       onBack={() => void navigate({ to: "/memory" })}
       onReview={() =>
         void navigate({
@@ -232,13 +266,18 @@ export function PackView({
 
 type Pack = NonNullable<FunctionReturnType<typeof api.packs.get>>;
 type Member = FunctionReturnType<typeof api.packs.resolveMembers>[number];
+type PassageRow = NonNullable<
+  FunctionReturnType<typeof api.passageMemory.getForPack>
+>;
 
 function PackViewMain({
   packId,
   pack,
   members,
+  passage,
   now,
   heartHint,
+  startPassage,
   dueCount,
   learningDueCount,
   newCount,
@@ -256,8 +295,10 @@ function PackViewMain({
   packId: Id<"packs">;
   pack: Pack;
   members: Member[] | undefined;
+  passage: PassageRow | null;
   now: number;
   heartHint: boolean;
+  startPassage: boolean;
   dueCount: number;
   learningDueCount: number;
   newCount: number;
@@ -274,6 +315,12 @@ function PackViewMain({
 }) {
   const isCustom = pack.kind === "custom";
   const verseCount = members?.length ?? 0;
+  const scope = pack.kind === "scope" ? pack.scope : undefined;
+  const allowsPassage =
+    pack.kind === "scope" &&
+    scope !== undefined &&
+    packAllowsPassageMode(scope);
+  const passageActive = passage !== null;
 
   const rename = useMutation(api.packs.rename);
   const remove = useMutation(api.packs.remove);
@@ -281,6 +328,15 @@ function PackViewMain({
   const removeVerse = useMutation(api.packs.removeVerse);
   const enrollLearning = useMutation(api.packs.enrollLearning);
   const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
+  const stopPassage = useMutation(api.passageMemory.stop);
+  const dismissMigrationBanner = useMutation(
+    api.passageMemory.dismissMigrationBanner,
+  );
+  const {
+    start: startPassageLearning,
+    pending: isStartingPassage,
+    error: startPassageError,
+  } = useStartPassage({ packId, scope, now });
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(pack.name);
@@ -302,6 +358,8 @@ function PackViewMain({
   const [removingRefId, setRemovingRefId] = useState<Id<"verseRefs"> | null>(
     null,
   );
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
+  const [isStoppingPassage, setIsStoppingPassage] = useState(false);
 
   const memberRefIds = useMemo(
     () => new Set((members ?? []).map((m) => String(m.verseRefId))),
@@ -430,6 +488,71 @@ function PackViewMain({
     [removeVerse, packId],
   );
 
+  const handleStartPassage = useCallback(async () => {
+    if (!allowsPassage) return;
+    setActionError(null);
+    try {
+      await startPassageLearning();
+    } catch {
+      setActionError("Couldn't start passage learning. Please try again.");
+    }
+  }, [allowsPassage, startPassageLearning]);
+
+  const handleStopPassage = useCallback(async () => {
+    if (isStoppingPassage) return;
+    setActionError(null);
+    setIsStoppingPassage(true);
+    try {
+      await stopPassage({ packId });
+      setStopConfirmOpen(false);
+    } catch {
+      setActionError("Couldn't stop passage learning. Please try again.");
+    } finally {
+      setIsStoppingPassage(false);
+    }
+  }, [isStoppingPassage, packId, stopPassage]);
+
+  const requestStopPassage = useCallback(() => {
+    if (!passage) return;
+    if (passage.status === "reviewing" || passage.status === "mastered") {
+      setStopConfirmOpen(true);
+      return;
+    }
+    void handleStopPassage();
+  }, [handleStopPassage, passage]);
+
+  const handleDismissMigrationBanner = useCallback(async () => {
+    try {
+      await dismissMigrationBanner({ packId });
+    } catch {
+      setActionError("Couldn't dismiss that notice. Please try again.");
+    }
+  }, [dismissMigrationBanner, packId]);
+
+  useEffect(() => {
+    if (!startPassage) return;
+    if (passage !== null || !allowsPassage) {
+      onClearHeartHint();
+      return;
+    }
+    if (!consumeSearchStart(String(packId))) {
+      onClearHeartHint();
+      return;
+    }
+    // Start before clearing search. Do not defer via a timeout: navigating
+    // `startPassage` off must not cancel an in-flight start.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot URL start
+    void handleStartPassage();
+    onClearHeartHint();
+  }, [
+    allowsPassage,
+    handleStartPassage,
+    onClearHeartHint,
+    packId,
+    passage,
+    startPassage,
+  ]);
+
   const canReview = dueCount > 0;
   const canLearn = learningDueCount > 0;
   const canPractice = practiceCount > 0;
@@ -444,7 +567,6 @@ function PackViewMain({
 
   // A scope pack's members are exactly the hearts inside its scope, so they
   // are also the coverage input: no extra query needed to spot the gaps.
-  const scope = pack.kind === "scope" ? pack.scope : undefined;
   const memberSpans = useMemo<VerseSpan[]>(
     () =>
       (members ?? []).map(({ book, chapter, startVerse, endVerse }) => ({
@@ -465,37 +587,55 @@ function PackViewMain({
   // (so a full scope doesn't flash the button) and while unified recitation is
   // on: a fresh heart would arrive as a new unit and block the recitation.
   const showAddVerses =
-    isCustom || (members !== undefined && !scopeFilled && !unifiedEnabled);
+    isCustom ||
+    (members !== undefined &&
+      !scopeFilled &&
+      !unifiedEnabled &&
+      !passageActive);
   // Recite-as-one-passage is only an option for a contiguous block (or the
   // whole scope) of more than one hearted member — a single passage has
   // nothing to join. Stay visible while unified is already on so it can be
   // switched off. While the pack is still being learned, the Learn-whole-
   // passage card occupies this slot so a disabled Recite switch doesn't bury
   // the next step — including when every unit is locked until tomorrow.
+  // Eligible packs use Learn as a passage instead; hide this once a passage
+  // row exists.
   const showPackLearnBanner =
+    !allowsPassage &&
+    !passageActive &&
     pack.kind === "scope" &&
     scopeFilled &&
     !unifiedEnabled &&
     !allGraduated &&
     verseCount > 0;
   const showUnifiedPanel =
+    !passageActive &&
     pack.kind === "scope" &&
     (unifiedEnabled ||
       (verseCount > 1 &&
         allGraduated &&
         packAllowsUnifiedRecitation(memberSpans, scope)));
+  const showStartPassagePanel = allowsPassage && !passageActive;
+  const showMigrationBanner =
+    passageActive &&
+    passage.migratedAt !== undefined &&
+    passage.migrationBannerDismissed !== true &&
+    (passage.unheartedCount ?? 0) > 0;
   // Over-cap scopes offer nothing here: create already explained the limit, and
   // a permanently disabled button on an existing pack would only be noise.
   // A unified pack also withholds the offer: fresh hearts arrive as new units,
   // and they would block the recitation this pack is currently scheduled as.
+  // Eligible packs use Learn as a passage instead of auto-heart.
   const canHeartRemaining = useMemo(
     () =>
+      !allowsPassage &&
+      !passageActive &&
       !unifiedEnabled &&
       scope !== undefined &&
       members !== undefined &&
       autoHeartAllowed(scope) &&
       !scopeFilled,
-    [unifiedEnabled, scope, members, scopeFilled],
+    [allowsPassage, passageActive, unifiedEnabled, scope, members, scopeFilled],
   );
   const heartHintOpen = heartHint && canHeartRemaining && !heartHintDismissed;
 
@@ -563,66 +703,109 @@ function PackViewMain({
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {showPackLearnBanner ? null : canEnroll ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => void handleLearnPack()}
-              disabled={isEnrolling}
-            >
-              <GraduationCap className="h-4 w-4" aria-hidden />
-              {isEnrolling ? "Starting\u2026" : "Learn this pack"}
-              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted-foreground tabular-nums">
-                {newCount + learningDueCount}
-              </span>
-            </Button>
-          ) : canLearn ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={onLearn}
-            >
-              <GraduationCap className="h-4 w-4" aria-hidden />
-              Continue Learning
-              <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted-foreground tabular-nums">
-                {learningDueCount}
-              </span>
-            </Button>
-          ) : null}
-          <PackReviewButton
-            canReview={canReview}
-            canPractice={canPractice}
-            unifiedEnabled={unifiedEnabled}
-            dueCount={effectiveDueCount}
-            onReview={onReview}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={onPractice}
-            disabled={!canPractice}
-          >
-            <Dumbbell className="h-4 w-4" aria-hidden />
-            Practice Pack
-          </Button>
+          {passageActive ? (
+            passage.status === "building" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={onLearn}
+              >
+                <GraduationCap className="h-4 w-4" aria-hidden />
+                Continue
+              </Button>
+            ) : (
+              <Button size="sm" className="gap-1.5" onClick={onReview}>
+                <Play className="h-4 w-4" aria-hidden />
+                Review
+              </Button>
+            )
+          ) : (
+            <>
+              {showPackLearnBanner ? null : canEnroll ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => void handleLearnPack()}
+                  disabled={isEnrolling}
+                >
+                  <GraduationCap className="h-4 w-4" aria-hidden />
+                  {isEnrolling ? "Starting\u2026" : "Learn this pack"}
+                  <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted-foreground tabular-nums">
+                    {newCount + learningDueCount}
+                  </span>
+                </Button>
+              ) : canLearn ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={onLearn}
+                >
+                  <GraduationCap className="h-4 w-4" aria-hidden />
+                  Continue Learning
+                  <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted-foreground tabular-nums">
+                    {learningDueCount}
+                  </span>
+                </Button>
+              ) : null}
+              <PackReviewButton
+                canReview={canReview}
+                canPractice={canPractice}
+                unifiedEnabled={unifiedEnabled}
+                dueCount={effectiveDueCount}
+                onReview={onReview}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={onPractice}
+                disabled={!canPractice}
+              >
+                <Dumbbell className="h-4 w-4" aria-hidden />
+                Practice Pack
+              </Button>
+            </>
+          )}
         </div>
       </header>
 
-      {actionError ? (
+      {actionError || startPassageError ? (
         <div
           role="alert"
           className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-sm text-destructive"
         >
-          {actionError}
+          {actionError ?? startPassageError}
         </div>
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-2xl space-y-6 px-5 py-6">
-          {showPackLearnBanner ? (
+          {showMigrationBanner && passage ? (
+            <PassageMigrationBanner
+              unheartedCount={passage.unheartedCount ?? 0}
+              keptHeartCount={passage.keptHeartCount ?? 0}
+              onDismiss={() => void handleDismissMigrationBanner()}
+            />
+          ) : null}
+
+          {passageActive && passage ? (
+            <PassageModePanel
+              status={passage.status}
+              pieces={passage.pieces}
+              pendingStop={isStoppingPassage}
+              onContinue={passage.status === "building" ? onLearn : onReview}
+              onStop={requestStopPassage}
+            />
+          ) : showStartPassagePanel ? (
+            <StartPassagePanel
+              packName={pack.name}
+              pending={isStartingPassage}
+              onStart={() => void handleStartPassage()}
+            />
+          ) : showPackLearnBanner ? (
             <PackLearnPanel
               packName={pack.name}
               verseCount={verseCount}
@@ -651,10 +834,26 @@ function PackViewMain({
             />
           ) : null}
 
+          {showStartPassagePanel && showUnifiedPanel ? (
+            <UnifiedReviewPanel
+              packName={pack.name}
+              verseCount={verseCount}
+              enabled={unifiedEnabled}
+              eligible={allGraduated}
+              pending={isSettingUnified}
+              justDisabled={unifiedJustDisabled}
+              onEnable={() => {
+                setUnifiedError(null);
+                setUnifiedDialogOpen(true);
+              }}
+              onDisable={() => void handleDisableUnified()}
+            />
+          ) : null}
+
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Verses
+                {passageActive ? "Related hearts" : "Verses"}
               </h2>
               <div className="flex shrink-0 items-center gap-2">
                 {canHeartRemaining && scope ? (
@@ -694,7 +893,9 @@ function PackViewMain({
                     ? "No verses yet. Add a verse from your hearted list or by browsing."
                     : canHeartRemaining
                       ? "No verses yet. Memorize whole passage hearts every verse in this scope as short memory passages — or heart them in the reader and they'll appear automatically."
-                      : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
+                      : passageActive
+                        ? "No related hearts. Hearting a verse in this scope still adds it here."
+                        : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically."}
                 </p>
               </div>
             ) : (
@@ -855,6 +1056,34 @@ function PackViewMain({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={stopConfirmOpen} onOpenChange={setStopConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Stop passage learning?</DialogTitle>
+            <DialogDescription>
+              This returns the pack to a heart collection. Your hearts are kept.
+              Passage progress on the map will be removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setStopConfirmOpen(false)}
+              disabled={isStoppingPassage}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleStopPassage()}
+              disabled={isStoppingPassage}
+            >
+              {isStoppingPassage ? "Stopping\u2026" : "Stop passage learning"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <EnableUnifiedReviewDialog
         open={unifiedDialogOpen}
         onOpenChange={(open) => {
@@ -889,6 +1118,84 @@ function PackViewMain({
         onAdd={handleAdd}
       />
     </div>
+  );
+}
+
+function StartPassagePanel({
+  packName,
+  pending,
+  onStart,
+}: {
+  packName: string;
+  pending: boolean;
+  onStart: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <ScrollText aria-hidden className="h-4 w-4 text-primary" />
+            Learn as a passage
+          </h2>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Memorize {packName} as one growing recitation — not a queue of
+            hearts. You can still heart individual verses; they stay
+            independent.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          className="gap-1.5 shrink-0"
+          onClick={onStart}
+          disabled={pending}
+        >
+          <GraduationCap className="h-4 w-4" aria-hidden />
+          {pending ? "Starting\u2026" : "Learn as a passage"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function PassageModePanel({
+  status,
+  pieces,
+  pendingStop,
+  onContinue,
+  onStop,
+}: {
+  status: PassageRow["status"];
+  pieces: PassageRow["pieces"];
+  pendingStop: boolean;
+  onContinue: () => void;
+  onStop: () => void;
+}) {
+  const continueLabel = status === "building" ? "Continue" : "Review";
+
+  return (
+    <section className="space-y-4 rounded-xl border border-primary/30 bg-primary/[0.03] p-4 shadow-sm">
+      <PassageMap pieces={pieces} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" className="gap-1.5" onClick={onContinue}>
+          {status === "building" ? (
+            <GraduationCap className="h-4 w-4" aria-hidden />
+          ) : (
+            <Play className="h-4 w-4" aria-hidden />
+          )}
+          {continueLabel}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={onStop}
+          disabled={pendingStop}
+        >
+          {pendingStop ? "Stopping\u2026" : "Stop passage learning"}
+        </Button>
+      </div>
+    </section>
   );
 }
 

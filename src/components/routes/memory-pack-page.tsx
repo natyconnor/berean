@@ -4,8 +4,12 @@ import { Route } from "@/routes/memory/$packId";
 
 export function MemoryPackPage() {
   const { packId } = Route.useParams();
-  const { heartHint } = Route.useSearch();
+  const { heartHint, startPassage } = Route.useSearch();
   return (
-    <PackView packId={packId as Id<"packs">} heartHint={heartHint === true} />
+    <PackView
+      packId={packId as Id<"packs">}
+      heartHint={heartHint === true}
+      startPassage={startPassage === true}
+    />
   );
 }

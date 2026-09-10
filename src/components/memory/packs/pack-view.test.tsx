@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes, ReactNode } from "react";
+import { useState, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,6 +76,12 @@ vi.mock("../../../../convex/_generated/api", () => ({
       heartMany: "savedVerses.heartMany",
       listAll: "savedVerses.listAll",
     },
+    passageMemory: {
+      getForPack: "passageMemory.getForPack",
+      start: "passageMemory.start",
+      stop: "passageMemory.stop",
+      dismissMigrationBanner: "passageMemory.dismissMigrationBanner",
+    },
   },
 }));
 
@@ -83,6 +89,17 @@ const PACK_ID = "pack_1";
 const psalm23Scope = {
   books: ["Psalms"],
   chapterRanges: [{ book: "Psalms", startChapter: 23, endChapter: 23 }],
+  tags: [],
+  tagMatchMode: "any" as const,
+};
+
+/** Multi-book: auto-heart allowed, passage mode is not. */
+const ineligibleMultiBookScope = {
+  books: ["Psalms", "John"],
+  chapterRanges: [
+    { book: "Psalms", startChapter: 23, endChapter: 23 },
+    { book: "John", startChapter: 3, endChapter: 3 },
+  ],
   tags: [],
   tagMatchMode: "any" as const,
 };
@@ -129,18 +146,79 @@ function member(
   };
 }
 
+function passageRow(extra?: {
+  status?: "building" | "reviewing" | "mastered";
+  attachments?: Array<"unreached" | "learning" | "attached" | "solid">;
+  migratedAt?: number;
+  unheartedCount?: number;
+  keptHeartCount?: number;
+  migrationBannerDismissed?: boolean;
+}) {
+  const now = getSessionNow();
+  const attachments = extra?.attachments ?? [
+    "unreached",
+    "learning",
+    "attached",
+    "solid",
+  ];
+  const pieces = attachments.map((attachment, index) => ({
+    index,
+    book: "Psalms",
+    chapter: 23,
+    startVerse: index + 1,
+    endVerse: index + 1,
+    sectionIndex: 0,
+    attachment,
+    learnStage: attachment === "unreached" ? 0 : 1,
+    stageReps: 0,
+  }));
+  return {
+    _id: "passage_1",
+    packId: PACK_ID,
+    status: extra?.status ?? "building",
+    pieces,
+    addsOnDay: 0,
+    ease: 2.3,
+    intervalDays: 0,
+    dueAt: now,
+    consecutiveCorrect: 0,
+    lapses: 0,
+    stageReps: 0,
+    createdAt: now,
+    updatedAt: now,
+    remainingIntroduces: 5,
+    frontierIndex: 0,
+    rehearsalStartIndex: 0,
+    ropePieceIndexes: pieces
+      .map((piece, index) =>
+        piece.attachment === "attached" || piece.attachment === "solid"
+          ? index
+          : -1,
+      )
+      .filter((index) => index >= 0),
+    migratedAt: extra?.migratedAt,
+    unheartedCount: extra?.unheartedCount,
+    keptHeartCount: extra?.keptHeartCount,
+    migrationBannerDismissed: extra?.migrationBannerDismissed,
+  };
+}
+
 function renderPack({
   kind = "scope",
   members,
   unifiedReviewEnabled,
   heartHint,
+  startPassage,
+  passage = null,
   scope = psalm23Scope,
 }: {
   kind?: "scope" | "custom";
   members: ReturnType<typeof member>[];
   unifiedReviewEnabled?: boolean;
   heartHint?: boolean;
-  scope?: typeof psalm23Scope;
+  startPassage?: boolean;
+  passage?: ReturnType<typeof passageRow> | null;
+  scope?: typeof psalm23Scope | typeof ineligibleMultiBookScope;
 }) {
   queryResults.set("packs.get", {
     _id: PACK_ID,
@@ -153,10 +231,15 @@ function renderPack({
   });
   queryResults.set("packs.resolveMembers", members);
   queryResults.set("savedVerses.listAll", []);
+  queryResults.set("passageMemory.getForPack", passage);
 
   return render(
     <TooltipProvider delayDuration={0}>
-      <PackView packId={PACK_ID as never} heartHint={heartHint} />
+      <PackView
+        packId={PACK_ID as never}
+        heartHint={heartHint}
+        startPassage={startPassage}
+      />
     </TooltipProvider>,
   );
 }
@@ -176,12 +259,20 @@ function verses() {
   return within(section);
 }
 
-/** The mid-page Learn whole passage card (complete scopes still being learned). */
-function packLearn() {
-  const heading = screen.getByRole("heading", { name: "Learn whole passage" });
+function relatedHearts() {
+  const heading = screen.getByRole("heading", { name: "Related hearts" });
   const section = heading.closest("section");
   if (!section) {
-    throw new Error("Learn whole passage heading is not inside a section");
+    throw new Error("Related hearts heading is not inside a section");
+  }
+  return within(section);
+}
+
+function startPassagePanel() {
+  const heading = screen.getByRole("heading", { name: "Learn as a passage" });
+  const section = heading.closest("section");
+  if (!section) {
+    throw new Error("Learn as a passage heading is not inside a section");
   }
   return within(section);
 }
@@ -202,6 +293,11 @@ describe("PackView", () => {
       skippedOverlap: 0,
       skippedInvalid: 0,
     });
+    mutationMock("passageMemory.start").mockResolvedValue(passageRow());
+    mutationMock("passageMemory.stop").mockResolvedValue(null);
+    mutationMock("passageMemory.dismissMigrationBanner").mockResolvedValue(
+      null,
+    );
   });
 
   it("lets unstarted units Learn, and names a session lock Tomorrow", () => {
@@ -242,6 +338,13 @@ describe("PackView", () => {
     expect(
       screen.getByRole("button", { name: "Continue Learning" }),
     ).toBeEnabled();
+    expect(
+      startPassagePanel().getByRole("button", { name: "Learn as a passage" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Memorize whole passage" }),
+    ).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
   });
 
   it("queues the whole pack from Learn this pack, then opens the pack session", async () => {
@@ -282,18 +385,64 @@ describe("PackView", () => {
     });
 
     expect(
-      packLearn().getByRole("button", { name: /Continue Learning/ }),
+      startPassagePanel().getByRole("button", { name: /Learn as a passage/ }),
     ).toBeInTheDocument();
     expect(
-      header().queryByRole("button", { name: /Continue Learning/ }),
-    ).not.toBeInTheDocument();
+      header().getByRole("button", { name: /Continue Learning/ }),
+    ).toBeInTheDocument();
     expect(
-      header().queryByRole("button", { name: /Learn this pack/ }),
+      screen.queryByRole("heading", { name: "Learn whole passage" }),
     ).not.toBeInTheDocument();
   });
 
-  it("offers Memorize whole passage only for an incomplete scope pack", async () => {
+  it("offers Learn as a passage on eligible packs instead of auto-heart", () => {
     const { unmount } = renderPack({
+      members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
+    });
+    expect(
+      startPassagePanel().getByRole("button", { name: "Learn as a passage" }),
+    ).toBeInTheDocument();
+    expect(
+      verses().queryByRole("button", { name: "Memorize whole passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      verses().getByRole("button", { name: "Add verses" }),
+    ).toBeInTheDocument();
+    expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
+    unmount();
+
+    const empty = renderPack({ members: [] });
+    expect(
+      startPassagePanel().getByRole("button", { name: "Learn as a passage" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Memorize whole passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Heart verses within this scope — from here or in the reader/,
+      ),
+    ).toBeInTheDocument();
+    empty.unmount();
+
+    renderPack({
+      kind: "custom",
+      members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
+    });
+    expect(
+      screen.queryByRole("heading", { name: "Learn as a passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Memorize whole passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      verses().getByRole("button", { name: "Add verses" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Memorize whole passage only for an incomplete ineligible scope pack", async () => {
+    const { unmount } = renderPack({
+      scope: ineligibleMultiBookScope,
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
     });
     const remaining = verses().getByRole("button", {
@@ -301,7 +450,7 @@ describe("PackView", () => {
     });
     expect(remaining).toBeInTheDocument();
     expect(
-      header().queryByRole("button", { name: "Memorize whole passage" }),
+      screen.queryByRole("heading", { name: "Learn as a passage" }),
     ).not.toBeInTheDocument();
     expect(
       verses().getByRole("button", { name: "Add verses" }),
@@ -312,51 +461,19 @@ describe("PackView", () => {
     );
     unmount();
 
-    const empty = renderPack({ members: [] });
-    const heartAll = verses().getByRole("button", {
-      name: "Memorize whole passage",
+    const empty = renderPack({
+      scope: ineligibleMultiBookScope,
+      members: [],
     });
-    expect(heartAll).toBeInTheDocument();
+    expect(
+      verses().getByRole("button", { name: "Memorize whole passage" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         /Memorize whole passage hearts every verse in this scope/,
       ),
     ).toBeInTheDocument();
-    await userEvent.hover(heartAll);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Want to memorize this whole passage? Click here to automatically heart all the verses",
-    );
     empty.unmount();
-
-    // Every verse of Psalm 23 hearted: nothing left to fill in.
-    const covered = renderPack({
-      members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
-    });
-    expect(
-      screen.queryByRole("button", {
-        name: "Memorize whole passage",
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Add verses" }),
-    ).not.toBeInTheDocument();
-    covered.unmount();
-
-    // Recited as one passage: a fresh heart would arrive as a new unit and
-    // block the recitation, so the offer is withheld until it is switched off.
-    const unified = renderPack({
-      unifiedReviewEnabled: true,
-      members: [member({ startVerse: 1, endVerse: 2, status: "reviewing" })],
-    });
-    expect(
-      screen.queryByRole("button", {
-        name: "Memorize whole passage",
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Add verses" }),
-    ).not.toBeInTheDocument();
-    unified.unmount();
 
     renderPack({
       kind: "custom",
@@ -374,6 +491,7 @@ describe("PackView", () => {
 
   it("hearts only the gaps from the Memorize whole passage dialog", async () => {
     renderPack({
+      scope: ineligibleMultiBookScope,
       members: [
         member({ startVerse: 1, endVerse: 2, status: "new" }),
         member({ startVerse: 3, endVerse: 3, status: "new" }),
@@ -389,18 +507,14 @@ describe("PackView", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "3 of 6 verses are already hearted. If you want to memorize the rest of this chapter together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
+        "3 of 42 verses are already hearted. If you want to memorize the rest of these chapters together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
       ),
     ).toBeVisible();
 
     expect(
-      await screen.findByText(
-        (_, element) =>
-          element?.tagName === "P" &&
-          /^Psalm 23 · 6 verses → \d+ new passages? · 2 already hearted$/.test(
-            element.textContent ?? "",
-          ),
-      ),
+      await screen.findByRole("button", {
+        name: /^Heart \d+ new passages?$/,
+      }),
     ).toBeVisible();
 
     const confirm = await screen.findByRole("button", {
@@ -417,19 +531,24 @@ describe("PackView", () => {
     ];
     expect(heartArgs.now).toBe(getSessionNow());
 
-    const hearted = new Set<number>();
+    const heartedPsalms = new Set<number>();
     for (const [args] of heartMany.mock.calls as Array<
       [{ spans: VerseSpan[]; now: number }]
     >) {
       for (const span of args.spans) {
-        expect(span.book).toBe("Psalms");
-        expect(span.chapter).toBe(23);
-        for (let verse = span.startVerse; verse <= span.endVerse; verse += 1) {
-          hearted.add(verse);
+        if (span.book === "Psalms" && span.chapter === 23) {
+          for (
+            let verse = span.startVerse;
+            verse <= span.endVerse;
+            verse += 1
+          ) {
+            heartedPsalms.add(verse);
+          }
         }
       }
     }
-    expect([...hearted].sort((a, b) => a - b)).toEqual([4, 5, 6]);
+    expect([...heartedPsalms].sort((a, b) => a - b)).toEqual([4, 5, 6]);
+    expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -438,12 +557,7 @@ describe("PackView", () => {
 
   it("names these chapters when the scope spans more than one", async () => {
     renderPack({
-      scope: {
-        books: ["Psalms"],
-        chapterRanges: [{ book: "Psalms", startChapter: 23, endChapter: 24 }],
-        tags: [],
-        tagMatchMode: "any",
-      },
+      scope: ineligibleMultiBookScope,
       members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
     });
 
@@ -453,13 +567,17 @@ describe("PackView", () => {
 
     expect(
       await screen.findByText(
-        "2 of 16 verses are already hearted. If you want to memorize the rest of these chapters together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
+        "2 of 42 verses are already hearted. If you want to memorize the rest of these chapters together, we can auto-heart the remaining verses as short memory passages so you can start learning.",
       ),
     ).toBeVisible();
   });
 
-  it("points at Memorize whole passage after creating an empty scope pack", () => {
-    renderPack({ members: [], heartHint: true });
+  it("points at Memorize whole passage after creating an empty ineligible scope pack", () => {
+    renderPack({
+      scope: ineligibleMultiBookScope,
+      members: [],
+      heartHint: true,
+    });
 
     expect(
       verses().getByRole("button", { name: "Memorize whole passage" }),
@@ -469,7 +587,8 @@ describe("PackView", () => {
     );
   });
 
-  it("promotes Learn whole passage after the scope is fully hearted", async () => {
+  it("starts passage mode from Learn as a passage without hearting", async () => {
+    mutationMock("passageMemory.start").mockResolvedValue(passageRow());
     renderPack({
       members: [
         member({ startVerse: 1, endVerse: 2, status: "new" }),
@@ -478,36 +597,39 @@ describe("PackView", () => {
     });
 
     expect(
-      header().queryByRole("button", { name: /Learn this pack/ }),
-    ).not.toBeInTheDocument();
-    expect(
       screen.queryByRole("button", { name: "Add verses" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("switch", { name: "Recite as one passage" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Starting one verse at a time splits the passage/),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Learn whole passage" }),
+    ).not.toBeInTheDocument();
 
-    const learn = packLearn().getByRole("button", {
-      name: /Learn whole passage/,
-    });
-    expect(learn).toHaveTextContent("2");
+    await userEvent.click(
+      startPassagePanel().getByRole("button", { name: "Learn as a passage" }),
+    );
 
-    await userEvent.click(learn);
-
-    const enroll = mutationMock("packs.enrollLearning");
-    expect(enroll).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith({
-        to: "/memory/$packId/learn",
-        params: { packId: PACK_ID },
-      });
+      expect(mutationMock("passageMemory.start")).toHaveBeenCalledTimes(1);
     });
+    const [startArgs] = mutationMock("passageMemory.start").mock.calls[0] as [
+      {
+        packId: string;
+        pieces: unknown[];
+        now: number;
+        tzOffsetMinutes: number;
+      },
+    ];
+    expect(startArgs.packId).toBe(PACK_ID);
+    expect(startArgs.pieces.length).toBeGreaterThan(0);
+    expect(startArgs.now).toBe(getSessionNow());
+    expect(startArgs.tzOffsetMinutes).toEqual(expect.any(Number));
+    expect(mutationMock("savedVerses.heartMany")).not.toHaveBeenCalled();
+    expect(mutationMock("packs.enrollLearning")).not.toHaveBeenCalled();
   });
 
-  it("offers Learn whole passage instead of Recite until every unit has graduated", () => {
+  it("keeps Recite available on eligible packs until a passage row exists", () => {
     const { unmount } = renderPack({
       members: [
         member({ startVerse: 1, endVerse: 3, status: "reviewing" }),
@@ -519,38 +641,12 @@ describe("PackView", () => {
       screen.queryByRole("switch", { name: "Recite as one passage" }),
     ).not.toBeInTheDocument();
     expect(
-      packLearn().getByRole("button", { name: /Continue Learning/ }),
+      startPassagePanel().getByRole("button", { name: "Learn as a passage" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/stays together/)).toBeInTheDocument();
-    unmount();
-
-    const lockedNow = getSessionNow();
-    const locked = renderPack({
-      members: [
-        member({
-          startVerse: 1,
-          endVerse: 3,
-          status: "learning",
-          dueAt: lockedNow + 8 * 60 * 60 * 1000,
-          lastReviewedAt: lockedNow - 1000,
-        }),
-        member({
-          startVerse: 4,
-          endVerse: 6,
-          status: "learning",
-          dueAt: lockedNow + 8 * 60 * 60 * 1000,
-          lastReviewedAt: lockedNow - 1000,
-        }),
-      ],
-    });
     expect(
-      screen.queryByRole("switch", { name: "Recite as one passage" }),
+      screen.queryByRole("heading", { name: "Learn whole passage" }),
     ).not.toBeInTheDocument();
-    expect(
-      packLearn().getByRole("button", { name: /Continue Learning · Tomorrow/ }),
-    ).toBeDisabled();
-    expect(screen.getByText(/Come back tomorrow/)).toBeInTheDocument();
-    locked.unmount();
+    unmount();
 
     renderPack({
       members: [
@@ -562,6 +658,9 @@ describe("PackView", () => {
     expect(
       screen.getByRole("switch", { name: "Recite as one passage" }),
     ).toBeEnabled();
+    expect(
+      startPassagePanel().getByRole("button", { name: "Learn as a passage" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Learn whole passage" }),
     ).not.toBeInTheDocument();
@@ -794,5 +893,150 @@ describe("PackView", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Verses enter Review after they finish Learning.",
     );
+  });
+
+  it("shows the passage map and Stop when a passage row exists", async () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
+      passage: passageRow(),
+    });
+
+    expect(screen.getByRole("heading", { name: "Passage map" })).toBeVisible();
+    expect(screen.getByLabelText("Piece status legend")).toBeInTheDocument();
+    expect(screen.getByText("Psalm 23:1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Stop passage learning" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Learn as a passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Learn whole passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "Recite as one passage" }),
+    ).not.toBeInTheDocument();
+    expect(
+      relatedHearts().getByRole("button", { name: "Learn" }),
+    ).toBeEnabled();
+    expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stop passage learning" }),
+    );
+    expect(mutationMock("passageMemory.stop")).toHaveBeenCalledWith({
+      packId: PACK_ID,
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("confirms before stopping a reviewing passage", async () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
+      passage: passageRow({ status: "reviewing" }),
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stop passage learning" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Stop passage learning?" }),
+    ).toBeVisible();
+    expect(mutationMock("passageMemory.stop")).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Stop passage learning" }),
+    );
+    expect(mutationMock("passageMemory.stop")).toHaveBeenCalledWith({
+      packId: PACK_ID,
+    });
+  });
+
+  it("shows the migration banner until it is dismissed", async () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
+      passage: passageRow({
+        migratedAt: getSessionNow(),
+        unheartedCount: 3,
+        keptHeartCount: 1,
+      }),
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /unhearted 3 auto-hearted units/,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /1 heart you shaped yourself is still listed/,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Got it" }));
+    expect(
+      mutationMock("passageMemory.dismissMigrationBanner"),
+    ).toHaveBeenCalledWith({ packId: PACK_ID });
+  });
+
+  it("invokes start once from the startPassage search flag", async () => {
+    const members = [member({ startVerse: 1, endVerse: 2, status: "new" })];
+    queryResults.set("packs.get", {
+      _id: PACK_ID,
+      name: "Psalm 23",
+      kind: "scope",
+      scope: psalm23Scope,
+      createdAt: 0,
+      lastOpenedAt: 0,
+    });
+    queryResults.set("packs.resolveMembers", members);
+    queryResults.set("savedVerses.listAll", []);
+    queryResults.set("passageMemory.getForPack", null);
+
+    let clearSearch = () => {};
+    navigateMock.mockImplementation(() => {
+      clearSearch();
+    });
+
+    function Harness() {
+      const [startPassage, setStartPassage] = useState(true);
+      clearSearch = () => setStartPassage(false);
+      return (
+        <TooltipProvider delayDuration={0}>
+          <PackView packId={PACK_ID as never} startPassage={startPassage} />
+        </TooltipProvider>
+      );
+    }
+
+    const { unmount } = render(<Harness />);
+
+    await waitFor(() => {
+      expect(mutationMock("passageMemory.start")).toHaveBeenCalledTimes(1);
+    });
+    expect(mutationMock("savedVerses.heartMany")).not.toHaveBeenCalled();
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/memory/$packId",
+      params: { packId: PACK_ID },
+      search: {},
+      replace: true,
+    });
+    unmount();
+
+    renderPack({
+      members,
+      startPassage: true,
+    });
+    expect(mutationMock("passageMemory.start")).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not auto-start from the search flag when a passage row already exists", async () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 2, status: "new" })],
+      startPassage: true,
+      passage: passageRow(),
+    });
+
+    expect(screen.getByRole("heading", { name: "Passage map" })).toBeVisible();
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalled();
+    });
+    expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
   });
 });
