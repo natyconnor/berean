@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import type { CardReference } from "@/components/study/study-card-model";
@@ -60,6 +61,11 @@ export function MemoryPackReviewPage() {
   const members = useQuery(api.packs.resolveMembers, {
     id: typedPackId,
     now,
+  });
+  const passage = useQuery(api.passageMemory.getForPack, {
+    packId: typedPackId,
+    now,
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
   });
 
   const dueMembers = useMemo(
@@ -134,7 +140,7 @@ export function MemoryPackReviewPage() {
       params: { packId: typedPackId },
     });
 
-  if (pack === undefined || members === undefined) {
+  if (pack === undefined || passage === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -165,6 +171,26 @@ export function MemoryPackReviewPage() {
             Back to Memory
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  if (passage) {
+    return (
+      <PassageSession
+        packId={typedPackId}
+        view={passage}
+        packName={pack.name}
+        onExit={onExit}
+        exitTooltip="Go back to the pack"
+      />
+    );
+  }
+
+  if (members === undefined) {
+    return (
+      <div className="flex h-full items-center justify-center bg-background">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
