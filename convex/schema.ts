@@ -336,6 +336,8 @@ export default defineSchema({
     dueAt: v.number(),
     consecutiveCorrect: v.number(),
     lapses: v.number(),
+    // Reviewing-phase exact-rep counter for scheduleNext (daily / every-other).
+    stageReps: v.number(),
     earlyReviewApplied: v.optional(v.boolean()),
     lastSessionAt: v.optional(v.number()),
     migratedAt: v.optional(v.number()),

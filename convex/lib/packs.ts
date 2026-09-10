@@ -76,7 +76,7 @@ function toMember(
  * are skipped rather than fabricated. Bounded by the user's hearted set.
  */
 export async function loadHeartedMembers(
-  ctx: QueryCtx,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<PackMember[]> {
   const saved = await ctx.db
@@ -100,7 +100,7 @@ export async function loadHeartedMembers(
  * custom packs from their explicit membership rows.
  */
 export async function loadPackMembers(
-  ctx: QueryCtx,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   pack: Doc<"packs">,
 ): Promise<PackMember[]> {
@@ -132,7 +132,7 @@ export function filterScopeMembers(
  * Bounded by pack size.
  */
 export async function loadCustomMembers(
-  ctx: QueryCtx,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   packId: Id<"packs">,
 ): Promise<PackMember[]> {
@@ -168,7 +168,7 @@ export async function loadCustomMembers(
  * as a single due item.
  */
 export async function loadUnifiedReviewPacks(
-  ctx: QueryCtx,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<Array<{ pack: Doc<"packs">; members: PackMember[] }>> {
   const packs = await ctx.db
@@ -216,7 +216,7 @@ export function unifiedReviewPhaseVerseRefIds(
  * (a unified recitation can lapse everyone back into learning).
  */
 export async function loadUnifiedReviewVerseRefIds(
-  ctx: QueryCtx,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<Set<string>> {
   return unifiedReviewPhaseVerseRefIds(

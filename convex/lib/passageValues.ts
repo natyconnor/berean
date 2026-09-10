@@ -19,6 +19,13 @@ export const qualityValidator = v.union(
   v.literal("off"),
 );
 
+export const passageAttemptKindValidator = v.union(
+  v.literal("rope"),
+  v.literal("repair"),
+  v.literal("review"),
+  v.literal("frontier"),
+);
+
 export const pieceBaseValidator = v.object({
   index: v.number(),
   book: v.string(),
@@ -60,6 +67,7 @@ export const passageViewValidator = v.object({
   dueAt: v.number(),
   consecutiveCorrect: v.number(),
   lapses: v.number(),
+  stageReps: v.number(),
   earlyReviewApplied: v.optional(v.boolean()),
   lastSessionAt: v.optional(v.number()),
   migratedAt: v.optional(v.number()),
@@ -78,3 +86,4 @@ export type PieceBase = Infer<typeof pieceBaseValidator>;
 export type PassagePieceValue = Infer<typeof passagePieceValidator>;
 export type PassageView = Infer<typeof passageViewValidator>;
 export type PassageAttemptQuality = Infer<typeof qualityValidator>;
+export type PassageAttemptKind = Infer<typeof passageAttemptKindValidator>;

@@ -6,8 +6,14 @@ import {
   rehearsalStartIndex,
   remainingIntroduces,
   ropePieceIndexes,
+  type HeartedMemorySpan,
 } from "../../src/lib/passage-frontier";
-import { loadOwnedPack } from "./packs";
+import type { PlanStartResult } from "../../src/lib/passage-start";
+import {
+  MAX_LEARN_STAGE,
+  type MemorySchedule,
+} from "../../src/lib/memory-scheduler";
+import { loadOwnedPack, type PackMember } from "./packs";
 import type { PassageView } from "./passageValues";
 
 /**
@@ -22,12 +28,169 @@ export async function loadPassageForPack(
   const pack = await loadOwnedPack(ctx, packId, userId);
   if (!pack) return null;
 
-  const row = await ctx.db
+  const row = await findPassageByPackId(ctx, packId);
+  if (!row || row.userId !== userId) return null;
+  return row;
+}
+
+export async function findPassageByPackId(
+  ctx: QueryCtx | MutationCtx,
+  packId: Id<"packs">,
+): Promise<Doc<"passageMemory"> | null> {
+  return await ctx.db
     .query("passageMemory")
     .withIndex("by_packId", (q) => q.eq("packId", packId))
     .unique();
-  if (!row || row.userId !== userId) return null;
+}
+
+export async function requireOwnedPack(
+  ctx: QueryCtx | MutationCtx,
+  packId: Id<"packs">,
+  userId: Id<"users">,
+): Promise<Doc<"packs">> {
+  const pack = await loadOwnedPack(ctx, packId, userId);
+  if (!pack) throw new Error("Pack not found");
+  return pack;
+}
+
+export async function requirePassageForPack(
+  ctx: QueryCtx | MutationCtx,
+  packId: Id<"packs">,
+  userId: Id<"users">,
+): Promise<Doc<"passageMemory">> {
+  const pack = await requireOwnedPack(ctx, packId, userId);
+  const row = await findPassageByPackId(ctx, pack._id);
+  if (!row || row.userId !== userId) {
+    throw new Error("Passage mode is not active");
+  }
   return row;
+}
+
+export function memberToHeart(member: PackMember): HeartedMemorySpan {
+  return {
+    book: member.book,
+    chapter: member.chapter,
+    startVerse: member.startVerse,
+    endVerse: member.endVerse,
+    status: member.status,
+    learnStage: member.learnStage,
+    stageReps: member.stageReps,
+  };
+}
+
+export function memberToSchedule(member: PackMember): MemorySchedule {
+  return {
+    status: member.status,
+    learnStage: member.learnStage,
+    stageReps: member.stageReps,
+    ease: member.ease,
+    intervalDays: member.intervalDays,
+    dueAt: member.dueAt,
+    consecutiveCorrect: member.consecutiveCorrect,
+    lapses: member.lapses,
+    earlyReviewApplied: member.earlyReviewApplied ?? false,
+  };
+}
+
+export function toPassageSchedule(row: Doc<"passageMemory">): MemorySchedule {
+  return {
+    status: row.status === "mastered" ? "mastered" : "reviewing",
+    learnStage: MAX_LEARN_STAGE,
+    stageReps: row.stageReps,
+    ease: row.ease,
+    intervalDays: row.intervalDays,
+    dueAt: row.dueAt,
+    consecutiveCorrect: row.consecutiveCorrect,
+    lapses: row.lapses,
+    earlyReviewApplied: row.earlyReviewApplied ?? false,
+  };
+}
+
+export async function insertPassageMemory(
+  ctx: MutationCtx,
+  args: {
+    userId: Id<"users">;
+    packId: Id<"packs">;
+    plan: PlanStartResult;
+    now: number;
+  },
+): Promise<Doc<"passageMemory">> {
+  const id = await ctx.db.insert("passageMemory", {
+    userId: args.userId,
+    packId: args.packId,
+    status: args.plan.status,
+    pieces: args.plan.pieces,
+    addsOnDay: 0,
+    ease: args.plan.schedule.ease,
+    intervalDays: args.plan.schedule.intervalDays,
+    dueAt: args.plan.schedule.dueAt,
+    consecutiveCorrect: args.plan.schedule.consecutiveCorrect,
+    lapses: args.plan.schedule.lapses,
+    stageReps: args.plan.schedule.stageReps,
+    earlyReviewApplied: args.plan.schedule.earlyReviewApplied,
+    migratedAt: args.now,
+    unheartedCount: args.plan.unheartedCount,
+    keptHeartCount: args.plan.keptHeartCount,
+    createdAt: args.now,
+    updatedAt: args.now,
+  });
+  const row = await ctx.db.get(id);
+  if (!row) throw new Error("Failed to create passage memory");
+  return row;
+}
+
+export async function patchPassageMemory(
+  ctx: MutationCtx,
+  id: Id<"passageMemory">,
+  patch: Partial<
+    Omit<Doc<"passageMemory">, "_id" | "_creationTime" | "userId" | "packId">
+  >,
+): Promise<Doc<"passageMemory">> {
+  await ctx.db.patch(id, patch);
+  const row = await ctx.db.get(id);
+  if (!row) throw new Error("Failed to update passage memory");
+  return row;
+}
+
+export async function deletePassageAndReviews(
+  ctx: MutationCtx,
+  row: Doc<"passageMemory">,
+): Promise<void> {
+  const reviews = await ctx.db
+    .query("passageReviews")
+    .withIndex("by_packId", (q) => q.eq("packId", row.packId))
+    .collect();
+  for (const review of reviews) {
+    await ctx.db.delete(review._id);
+  }
+  await ctx.db.delete(row._id);
+}
+
+export async function insertPassageReview(
+  ctx: MutationCtx,
+  args: {
+    userId: Id<"users">;
+    packId: Id<"packs">;
+    passageMemoryId: Id<"passageMemory">;
+    kind: Doc<"passageReviews">["kind"];
+    quality: Doc<"passageReviews">["quality"];
+    accuracy: number;
+    now: number;
+    durationMs?: number;
+    pieceIndex?: number;
+  },
+): Promise<void> {
+  await ctx.db.insert("passageReviews", {
+    userId: args.userId,
+    packId: args.packId,
+    passageMemoryId: args.passageMemoryId,
+    kind: args.kind,
+    quality: args.quality,
+    accuracy: args.accuracy,
+    createdAt: args.now,
+    ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
+    ...(args.pieceIndex !== undefined ? { pieceIndex: args.pieceIndex } : {}),
+  });
 }
 
 /**
@@ -53,6 +216,7 @@ export function toPassageView(
     dueAt: row.dueAt,
     consecutiveCorrect: row.consecutiveCorrect,
     lapses: row.lapses,
+    stageReps: row.stageReps,
     earlyReviewApplied: row.earlyReviewApplied,
     lastSessionAt: row.lastSessionAt,
     migratedAt: row.migratedAt,
