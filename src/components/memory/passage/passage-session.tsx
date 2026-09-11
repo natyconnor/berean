@@ -1,5 +1,12 @@
-import { type JSX, type ReactNode, useMemo, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import {
+  type JSX,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useMutation } from "convex/react";
 
 import {
@@ -13,8 +20,10 @@ import {
   DONE_FOR_NOW_LABEL,
   FRONTIER_LOCKED_COPY,
   frontierHint,
-  INTRODUCE_ANOTHER_LABEL,
+  hasStartedPassage,
   joinPieceTexts,
+  latestLockedPiece,
+  nextUnreachedPiece,
   PASSAGE_SESSION_PHASE_LABELS,
   pieceCardTitle,
   pieceReference,
@@ -27,12 +36,12 @@ import {
   sectionIndexes,
   sessionFromView,
   tzOffsetMinutesAt,
-  usedIntroducesToday,
   verseCountIn,
   windowTitle,
   type RopeStartOverride,
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
+import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -46,15 +55,16 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import {
   compositeHintForWindow,
   dueFrontierIndex,
-  frontierIndex,
-  isPassagePieceLocked,
+  localDayIndex,
   rehearsalStartIndex,
+  remainingIntroduces,
   ropePieceIndexes,
   sectionStartIndex,
 } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
   reducePassageSession,
+  reconcilePassagePhase,
   type PassageSessionPhase,
   type PassageSessionState,
 } from "@/lib/passage-session";
@@ -153,6 +163,8 @@ export function PassageSession({
       });
   const recall = holdResult && heldRecall ? heldRecall : liveRecall;
 
+  const autoIntroduceStarted = useRef(false);
+
   async function persist(
     next: PassageSessionState,
     quality: VerseAttemptQuality | undefined,
@@ -178,6 +190,7 @@ export function PassageSession({
           pieces: nextView.pieces,
           addsOnDay: nextView.addsOnDay,
           addDayKey: nextView.addDayKey,
+          now: attemptedAt,
           pendingMutation: undefined,
         });
         setPersistError(null);
@@ -193,20 +206,36 @@ export function PassageSession({
         tzOffsetMinutes: tz,
         durationMs,
         pieceIndex: pending.pieceIndex,
+        wordCount:
+          pending.kind === "frontier"
+            ? (next.pieceWordCounts?.[pending.pieceIndex ?? 0] ?? undefined)
+            : undefined,
+      });
+      const remaining = remainingIntroduces({
+        addsOnDay: nextView.addsOnDay,
+        addDayKey: nextView.addDayKey,
+        todayKey: localDayIndex(attemptedAt, tz),
       });
       setState({
         ...next,
         pieces: nextView.pieces,
         addsOnDay: nextView.addsOnDay,
         addDayKey: nextView.addDayKey,
+        now: attemptedAt,
         pendingMutation: undefined,
+        phase: reconcilePassagePhase(
+          next.phase,
+          nextView.pieces,
+          remaining,
+          attemptedAt,
+        ),
       });
       setPersistError(null);
       return true;
     } catch {
       setPersistError(
         pending.name === "introduceNext"
-          ? "Couldn't introduce the next piece. Please try again."
+          ? "Couldn't start the next verse. Please try again."
           : "Couldn't save that attempt. Please try again.",
       );
       return false;
@@ -260,18 +289,19 @@ export function PassageSession({
     return true;
   }
 
-  async function handleIntroduce() {
+  async function handleIntroduce(): Promise<boolean> {
     const next = reducePassageSession(withWordCounts(state), {
       type: "introduce",
       now: Date.now(),
     });
     const saved = await persist(next, undefined);
-    if (!saved) return;
+    if (!saved) return false;
     setRopeOverride("rehearsal");
     setStallCue(null);
     setHoldResult(false);
     setHeldRecall(null);
     setRecitingSection(false);
+    return true;
   }
 
   function handleContinueAfterResult() {
@@ -297,9 +327,30 @@ export function PassageSession({
     setRecitingSection(false);
   }
 
+  const remaining = remainingAddsIn(state);
+  const effectivePhase = isMaintenance
+    ? state.phase
+    : reconcilePassagePhase(state.phase, state.pieces, remaining, state.now);
+  const needsFirstVerse =
+    !isMaintenance &&
+    effectivePhase === "offer-introduce" &&
+    !hasStartedPassage(state.pieces);
+
+  useEffect(() => {
+    if (!needsFirstVerse || autoIntroduceStarted.current) return;
+    autoIntroduceStarted.current = true;
+    void handleIntroduce().then((saved) => {
+      if (!saved) autoIntroduceStarted.current = false;
+    });
+    // Auto-start only the first verse of a new passage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot
+  }, [needsFirstVerse]);
+
   const phaseLabel = isMaintenance
     ? "Review"
-    : PASSAGE_SESSION_PHASE_LABELS[state.phase];
+    : liveRecall?.mode === "frontier"
+      ? (PRACTICE_STAGES[liveRecall.learnStage]?.label ?? "Learn")
+      : PASSAGE_SESSION_PHASE_LABELS[effectivePhase];
 
   const defaultRehearsalStart = rehearsalStartIndex(
     state.pieces,
@@ -308,25 +359,30 @@ export function PassageSession({
   const lastRope = ropePieceIndexes(state.pieces).at(-1) ?? 0;
   const showSectionStart =
     !isMaintenance &&
-    state.phase === "rope" &&
+    effectivePhase === "rope" &&
     sectionStartIndex(state.pieces, lastRope) < defaultRehearsalStart;
   const showBeginningStart =
     !isMaintenance &&
-    state.phase === "rope" &&
+    effectivePhase === "rope" &&
     (ropePieceIndexes(state.pieces)[0] ?? 0) < defaultRehearsalStart;
 
-  const remaining = remainingAddsIn(state);
-  const introduceIsNudge = usedIntroducesToday(state) === 0;
-  const showIntroducePanel =
-    !isMaintenance && !holdResult && state.phase === "offer-introduce";
-  const frontierPiece = state.pieces[frontierIndex(state.pieces)];
-  const showFrontierLocked =
+  const showNextVersePanel =
     !isMaintenance &&
     !holdResult &&
-    state.phase !== "frontier" &&
-    state.phase !== "stall-repair" &&
-    state.phase !== "section-complete" &&
-    Boolean(frontierPiece && isPassagePieceLocked(frontierPiece, state.now));
+    !needsFirstVerse &&
+    effectivePhase === "offer-introduce";
+  const showDoneToday =
+    !isMaintenance &&
+    !holdResult &&
+    (effectivePhase === "frontier-locked" ||
+      effectivePhase === "budget-exhausted");
+  const nextPiece = nextUnreachedPiece(state.pieces);
+  const finishedPiece = latestLockedPiece(state.pieces, state.now);
+  const showRecall =
+    Boolean(recall) &&
+    !showNextVersePanel &&
+    !showDoneToday &&
+    !needsFirstVerse;
 
   return (
     <PassageSessionShell
@@ -336,40 +392,54 @@ export function PassageSession({
       exitTooltip={exitTooltip}
       persistError={persistError}
     >
-      {showIntroducePanel ? (
-        <IntroducePanel
-          remaining={remaining}
-          nudge={introduceIsNudge}
-          onIntroduce={() => {
+      {needsFirstVerse ? (
+        persistError ? (
+          <NextVersePanel
+            finishedTitle={null}
+            nextTitle={
+              nextPiece ? pieceCardTitle(nextPiece) : "the first verse"
+            }
+            onStart={() => {
+              void handleIntroduce();
+            }}
+            onDone={onExit}
+          />
+        ) : (
+          <div className="flex justify-center py-16">
+            <Loader2
+              className="h-5 w-5 animate-spin text-muted-foreground"
+              aria-label="Starting the first verse"
+            />
+          </div>
+        )
+      ) : null}
+
+      {showNextVersePanel ? (
+        <NextVersePanel
+          finishedTitle={finishedPiece ? pieceCardTitle(finishedPiece) : null}
+          nextTitle={nextPiece ? pieceCardTitle(nextPiece) : "the next verse"}
+          onStart={() => {
             void handleIntroduce();
           }}
           onDone={onExit}
         />
       ) : null}
 
-      {state.phase === "section-complete" && !holdResult && !recitingSection ? (
+      {effectivePhase === "section-complete" &&
+      !holdResult &&
+      !recitingSection ? (
         <SectionCompletePanel
           onRecite={() => setRecitingSection(true)}
           onSkip={handleSkipSection}
         />
       ) : null}
 
-      {showFrontierLocked ? (
-        <p className="mb-4 text-center text-sm text-muted-foreground">
-          {FRONTIER_LOCKED_COPY}
-        </p>
-      ) : null}
+      {showDoneToday ? <DoneTodayPanel onDone={onExit} /> : null}
 
-      {state.phase === "budget-exhausted" && !holdResult && !recall ? (
-        <p className="mb-4 text-center text-sm text-muted-foreground">
-          Daily introduce budget is used. You can still practice the rope.
-        </p>
-      ) : null}
-
-      {recall ? (
+      {showRecall && recall ? (
         <div className="space-y-3">
           {recall.mode === "rope" &&
-          state.phase === "rope" &&
+          effectivePhase === "rope" &&
           (showSectionStart || showBeginningStart) ? (
             <div className="flex flex-wrap justify-center gap-2">
               {showSectionStart ? (
@@ -397,7 +467,11 @@ export function PassageSession({
           <PassageRecallCard
             key={`${recall.mode}:${recall.title}`}
             mode={recall.mode}
-            phaseLabel={phaseLabel}
+            phaseLabel={
+              recall.mode === "frontier"
+                ? (PRACTICE_STAGES[recall.learnStage]?.label ?? "Learn")
+                : phaseLabel
+            }
             title={recall.title}
             subtitle={recall.subtitle}
             promptLine={recall.promptLine}
@@ -421,33 +495,43 @@ export function PassageSession({
   );
 }
 
-function IntroducePanel({
-  remaining,
-  nudge,
-  onIntroduce,
+function NextVersePanel({
+  finishedTitle,
+  nextTitle,
+  onStart,
   onDone,
 }: {
-  remaining: number;
-  /** Rope-only day: encourage an introduce without blocking exit or the rope. */
-  nudge: boolean;
-  onIntroduce: () => void;
+  finishedTitle: string | null;
+  nextTitle: string;
+  onStart: () => void;
   onDone: () => void;
 }): JSX.Element {
   return (
-    <div className="mx-auto mb-6 max-w-md space-y-3 text-center">
+    <div className="mx-auto max-w-md space-y-3 text-center">
       <p className="text-sm text-muted-foreground">
-        {nudge
-          ? `You haven't introduced a new piece yet today. ${remaining} left.`
-          : `Introduce another piece? ${remaining} left today.`}
+        {finishedTitle
+          ? `${finishedTitle} is set for today. Start ${nextTitle} next?`
+          : `Start ${nextTitle}?`}
       </p>
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button type="button" onClick={onIntroduce}>
-          {INTRODUCE_ANOTHER_LABEL}
+        <Button type="button" onClick={onStart}>
+          {`Start ${nextTitle}`}
         </Button>
         <Button type="button" variant="outline" onClick={onDone}>
           {DONE_FOR_NOW_LABEL}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function DoneTodayPanel({ onDone }: { onDone: () => void }): JSX.Element {
+  return (
+    <div className="mx-auto max-w-md space-y-3 text-center">
+      <p className="text-sm text-muted-foreground">{FRONTIER_LOCKED_COPY}</p>
+      <Button type="button" onClick={onDone}>
+        {DONE_FOR_NOW_LABEL}
+      </Button>
     </div>
   );
 }
@@ -511,7 +595,7 @@ function ropeRecall(
   compositeLoading: boolean,
   compositeError: string | null,
   retry: () => void,
-  subtitle: string,
+  subtitle: string | undefined,
   promptLine: string,
 ): BuiltRecall {
   const start = indexes[0] ?? 0;
@@ -536,7 +620,7 @@ function ropeRecall(
           message:
             "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
         }
-      : { type: "text", text: hintText, label: "Rope hint" },
+      : { type: "text", text: hintText, label: "Hint" },
     learnStage: chromeStage(pieces, indexes),
     stageReps: 0,
     status: "learning",
@@ -567,10 +651,13 @@ function buildingRecall(args: {
   } = args;
   const phase = state.phase;
 
-  // After a rope-only session the introduce offer sits above the rope so
-  // exit and mixed-support practice stay available. First-piece sessions
-  // have no rope yet, so the offer is the only card.
-  if (phase === "offer-introduce" && ropeIndexes.length === 0) return null;
+  if (
+    phase === "offer-introduce" ||
+    phase === "frontier-locked" ||
+    phase === "budget-exhausted"
+  ) {
+    return null;
+  }
 
   if (phase === "section-complete") {
     if (!recitingSection) return null;
@@ -584,7 +671,7 @@ function buildingRecall(args: {
       compositeLoading,
       compositeError,
       retry,
-      "Section recitation",
+      "This section",
       "Recite this section from memory",
     );
   }
@@ -596,8 +683,8 @@ function buildingRecall(args: {
     return {
       mode: "repair",
       title: windowTitle(packName, state.pieces, indexes),
-      subtitle: "Repair the stall",
-      promptLine: "Type the repair window from memory",
+      subtitle: "Try this part again",
+      promptLine: "Type this part from memory",
       versePlainText: joinPieceTexts(state.pieces, indexes, pieceTexts),
       loading: compositeLoading,
       error: compositeError,
@@ -605,7 +692,7 @@ function buildingRecall(args: {
       hint: {
         type: "text",
         text: compositeHintForWindow(state.pieces, start, end, pieceTexts),
-        label: "Rope hint",
+        label: "Hint",
       },
       learnStage: chromeStage(state.pieces, indexes),
       stageReps: 0,
@@ -652,13 +739,7 @@ function buildingRecall(args: {
     };
   }
 
-  const ropePhases: PassageSessionPhase[] = [
-    "rope",
-    "frontier-locked",
-    "budget-exhausted",
-    "passage-complete",
-    "offer-introduce",
-  ];
+  const ropePhases: PassageSessionPhase[] = ["rope", "passage-complete"];
   if (!ropePhases.includes(phase)) return null;
   if (ropeIndexes.length === 0) return null;
 
@@ -670,8 +751,8 @@ function buildingRecall(args: {
     compositeLoading,
     compositeError,
     retry,
-    "Mixed-support recitation",
-    "Type the window using the mixed-support hints",
+    undefined,
+    "Type the verses. The letters are there to help.",
   );
 }
 

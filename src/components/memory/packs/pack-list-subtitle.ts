@@ -9,14 +9,13 @@ export type PackListRow = {
   pieceCount?: number;
 };
 
-/** Home pack-row subtitle. Passage packs show rope progress, not heart counts. */
+/** Home pack-row subtitle. Passage packs show memorized progress, not heart counts. */
 export function packListSubtitle(pack: PackListRow): string {
   if (pack.passageStatus) {
     const solid = pack.solidCount ?? 0;
-    const attached = pack.attachedCount ?? 0;
     const pieces = pack.pieceCount ?? 0;
-    const due = pack.dueCount > 0 ? " · one recitation due" : "";
-    return `Passage · ${solid} solid · ${attached} on rope · ${pieces} piece${pieces === 1 ? "" : "s"}${due}`;
+    const due = pack.dueCount > 0 ? " · due today" : "";
+    return `Passage · ${solid} of ${pieces} memorized${due}`;
   }
   const kindLabel = pack.kind === "scope" ? "Scope" : "Custom";
   const verses = `${pack.verseCount} verse${pack.verseCount !== 1 ? "s" : ""}`;

@@ -56,7 +56,8 @@ function AppShellSurface({ children }: { children: ReactNode }) {
     >
       <TabBar />
       <FeedbackFab />
-      <div className="flex-1 overflow-hidden">{children}</div>
+      {/* pb-20 keeps page actions above the floating Mode Dock (bottom-4). */}
+      <div className="flex-1 overflow-hidden pb-20">{children}</div>
       <ModeDock />
       <MemoryLaunchAnnouncementDialog />
     </div>

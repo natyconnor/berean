@@ -14,8 +14,21 @@ export const LEARN_AS_PASSAGE_LABEL = "Learn as a passage";
 export const STOP_PASSAGE_LEARNING_LABEL = "Stop passage learning";
 
 /** Builder shortcut for eligible scopes. Still creates a normal collection. */
-export const CREATE_AND_START_PASSAGE_LABEL =
-  "Create and start passage learning";
+export const CREATE_AND_START_PASSAGE_LABEL = "Create and start learning";
+
+/** Pack-view CTA once a passage row exists but no verse has been started. */
+export const START_LEARNING_LABEL = "Start Learning";
+
+/** Pack-view CTA once at least one verse is in progress. */
+export const CONTINUE_PASSAGE_LABEL = "Continue";
+
+export function passageLearnButtonLabel(
+  pieces: readonly { attachment: string }[],
+): string {
+  return pieces.some((piece) => piece.attachment !== "unreached")
+    ? CONTINUE_PASSAGE_LABEL
+    : START_LEARNING_LABEL;
+}
 
 /** Invitation copy; no trailing period so tooltip and create-pointer stay identical. */
 export const HEART_SCOPE_TOOLTIP =

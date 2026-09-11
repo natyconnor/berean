@@ -143,7 +143,7 @@ describe("PackBuilder", () => {
     renderBuilder();
 
     expect(
-      screen.getByRole("button", { name: "Create and start passage learning" }),
+      screen.getByRole("button", { name: "Create and start learning" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: HEART_SCOPE_ACTION_LABEL }),
@@ -175,7 +175,7 @@ describe("PackBuilder", () => {
     renderBuilder();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Create and start passage learning" }),
+      screen.getByRole("button", { name: "Create and start learning" }),
     );
 
     await waitFor(() => {
@@ -199,7 +199,7 @@ describe("PackBuilder", () => {
 
     expect(
       screen.queryByRole("button", {
-        name: "Create and start passage learning",
+        name: "Create and start learning",
       }),
     ).not.toBeInTheDocument();
     expect(
@@ -224,7 +224,7 @@ describe("PackBuilder", () => {
 
     expect(screen.getByRole("button", { name: "Create pack" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Create and start passage learning" }),
+      screen.getByRole("button", { name: "Create and start learning" }),
     ).toBeDisabled();
     expect(screen.getByText("Select chapters to continue")).toBeInTheDocument();
   });

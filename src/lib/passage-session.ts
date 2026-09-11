@@ -102,11 +102,16 @@ function sectionAllSolid(
   );
 }
 
-function phaseAfterWarmup(
-  pieces: readonly PassagePiece[],
-  remaining: number,
-  now: number,
-): PassageSessionPhase {
+/**
+ * Next phase from piece state. Due verses always win — never open on a
+ * mixed-support recitation when the learner still has a verse to work.
+ */
+export function sessionPhaseForPieces(args: {
+  pieces: readonly PassagePiece[];
+  remainingIntroduces: number;
+  now: number;
+}): PassageSessionPhase {
+  const { pieces, remainingIntroduces: remaining, now } = args;
   if (allSolid(pieces)) return "passage-complete";
   if (dueFrontierIndex(pieces, now) !== null) return "frontier";
   if (remaining > 0 && hasUnreached(pieces)) return "offer-introduce";
@@ -114,6 +119,18 @@ function phaseAfterWarmup(
   if (frontier && isPassagePieceLocked(frontier, now)) return "frontier-locked";
   if (hasUnreached(pieces)) return "budget-exhausted";
   return "frontier-locked";
+}
+
+function phaseAfterWarmup(
+  pieces: readonly PassagePiece[],
+  remaining: number,
+  now: number,
+): PassageSessionPhase {
+  return sessionPhaseForPieces({
+    pieces,
+    remainingIntroduces: remaining,
+    now,
+  });
 }
 
 function ropeWindow(state: PassageSessionState): {
@@ -186,33 +203,34 @@ function clearSignals(
 
 /**
  * Opening phase for a passage session.
- * All solid → passage-complete. Any attached/solid → rope warm-up.
- * Else frontier if due; introduce if only unreached and budget remains;
- * frontier-locked when the frontier is soft-locked, the rope is empty, and
- * nothing can be introduced.
+ * All solid → passage-complete. A due learning/attached verse → that verse.
+ * Else offer the next unreached verse when budget remains; otherwise the
+ * current verse is done for today.
  */
 export function initialPassageSessionPhase(args: {
   pieces: readonly PassagePiece[];
   remainingIntroduces: number;
   now: number;
 }): PassageSessionPhase {
-  const { pieces, remainingIntroduces: remaining, now } = args;
-  if (allSolid(pieces)) return "passage-complete";
+  return sessionPhaseForPieces(args);
+}
 
-  const rope = ropePieceIndexes(pieces);
-  if (rope.length > 0) return "rope";
-
-  if (dueFrontierIndex(pieces, now) !== null) return "frontier";
-
-  const frontier = pieces[frontierIndex(pieces)];
-  const locked = Boolean(frontier && isPassagePieceLocked(frontier, now));
-  const canAdd = remaining > 0 && hasUnreached(pieces);
-
-  if (canAdd) return "offer-introduce";
-  if (locked && rope.length === 0) return "frontier-locked";
-  if (hasUnreached(pieces)) return "budget-exhausted";
-  if (pieces.length === 0 && remaining > 0) return "offer-introduce";
-  return "frontier-locked";
+/**
+ * After persisting, server pieces can lock a verse the local reducer still
+ * thought was due (word-count mismatch). Never keep `frontier` with no due
+ * verse — that rendered a blank session.
+ */
+export function reconcilePassagePhase(
+  phase: PassageSessionPhase,
+  pieces: readonly PassagePiece[],
+  remainingIntroduces: number,
+  now: number,
+): PassageSessionPhase {
+  if (phase === "stall-repair" || phase === "section-complete") return phase;
+  if (phase === "frontier" && dueFrontierIndex(pieces, now) === null) {
+    return sessionPhaseForPieces({ pieces, remainingIntroduces, now });
+  }
+  return phase;
 }
 
 function introducePiece(
@@ -459,12 +477,14 @@ export function reducePassageSession(
   }
 
   if (
-    state.phase === "rope" ||
-    state.phase === "frontier-locked" ||
-    state.phase === "budget-exhausted" ||
     state.phase === "offer-introduce" ||
-    state.phase === "passage-complete"
+    state.phase === "frontier-locked" ||
+    state.phase === "budget-exhausted"
   ) {
+    return { ...clearSignals(state, now), phase: state.phase };
+  }
+
+  if (state.phase === "rope" || state.phase === "passage-complete") {
     if (
       ropePieceIndexes(state.pieces).length === 0 &&
       state.phase !== "passage-complete"

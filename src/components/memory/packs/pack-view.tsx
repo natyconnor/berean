@@ -66,6 +66,7 @@ import {
   heartScopeHintCopy,
   heartScopeTooltip,
   LEARN_AS_PASSAGE_LABEL,
+  passageLearnButtonLabel,
   STOP_PASSAGE_LEARNING_LABEL,
 } from "@/lib/heart-scope-copy";
 import {
@@ -731,7 +732,7 @@ function PackViewMain({
                 onClick={onLearn}
               >
                 <GraduationCap className="h-4 w-4" aria-hidden />
-                Continue
+                {passageLearnButtonLabel(passage.pieces)}
               </Button>
             ) : (
               <Button size="sm" className="gap-1.5" onClick={onReview}>
@@ -1192,7 +1193,8 @@ function PassageModePanel({
   onContinue: () => void;
   onStop: () => void;
 }) {
-  const continueLabel = status === "building" ? "Continue" : "Review";
+  const continueLabel =
+    status === "building" ? passageLearnButtonLabel(pieces) : "Review";
 
   return (
     <section className="space-y-4 rounded-xl border border-primary/30 bg-primary/[0.03] p-4 shadow-sm">

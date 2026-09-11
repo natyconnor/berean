@@ -209,7 +209,6 @@ export function PassageRecallCard({
                 aria-hidden
               />
               {phaseLabel}
-              {mode === "frontier" ? ` · ${stageInfo.label}` : null}
             </p>
             <CardTitle className="mt-2 text-3xl tracking-tight">
               {title}
@@ -377,10 +376,10 @@ function StallCue({ text }: { text: string }): JSX.Element {
   return (
     <div
       className="rounded-xl border bg-background/75 px-4 py-3 text-left text-sm leading-6"
-      aria-label="Previous-piece cue"
+      aria-label="Starting hint"
     >
       <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Stall cue
+        Starting hint
       </p>
       <p className="whitespace-pre-wrap font-mono tracking-wide text-muted-foreground">
         {text}

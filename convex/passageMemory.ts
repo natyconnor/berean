@@ -214,6 +214,7 @@ export const recordAttempt = mutation({
     tzOffsetMinutes: v.number(),
     durationMs: v.optional(v.number()),
     pieceIndex: v.optional(v.number()),
+    wordCount: v.optional(v.number()),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -254,7 +255,7 @@ export const recordAttempt = mutation({
           accuracy: args.accuracy,
           now: args.now,
           tzOffsetMinutes: args.tzOffsetMinutes,
-          wordCount: SHORT_VERSE_WORDS,
+          wordCount: resolvedPassageWordCount(args.wordCount),
         });
         pieces = row.pieces.map((current, index) =>
           index === args.pieceIndex ? progressed : current,
@@ -374,3 +375,14 @@ export const dueForLearning = query({
     return items.sort((a, b) => a.dueAt - b.dueAt);
   },
 });
+
+function resolvedPassageWordCount(wordCount: number | undefined): number {
+  if (
+    wordCount === undefined ||
+    !Number.isFinite(wordCount) ||
+    wordCount <= 0
+  ) {
+    return SHORT_VERSE_WORDS;
+  }
+  return Math.min(500, Math.round(wordCount));
+}

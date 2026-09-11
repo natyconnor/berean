@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { packListSubtitle } from "./pack-list-subtitle";
 
 describe("packListSubtitle", () => {
-  it("shows rope progress for a passage pack", () => {
+  it("shows memorized progress for a passage pack", () => {
     expect(
       packListSubtitle({
         kind: "scope",
@@ -14,10 +14,10 @@ describe("packListSubtitle", () => {
         attachedCount: 1,
         pieceCount: 11,
       }),
-    ).toBe("Passage · 4 solid · 1 on rope · 11 pieces");
+    ).toBe("Passage · 4 of 11 memorized");
   });
 
-  it("appends one recitation due for a reviewing passage", () => {
+  it("appends due today for a reviewing passage", () => {
     expect(
       packListSubtitle({
         kind: "scope",
@@ -28,7 +28,7 @@ describe("packListSubtitle", () => {
         attachedCount: 0,
         pieceCount: 11,
       }),
-    ).toBe("Passage · 11 solid · 0 on rope · 11 pieces · one recitation due");
+    ).toBe("Passage · 11 of 11 memorized · due today");
   });
 
   it("keeps collection copy when there is no passage row", () => {

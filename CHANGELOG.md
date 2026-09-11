@@ -7,6 +7,10 @@
 
 * Passage mode on eligible scope packs with a scaffolded rope and opt-in migration
 
+### Bug Fixes
+
+* Passage learning starts at the first verse, prompts the next verse after Guided, and keeps the Mode Dock from covering bottom actions
+
 ## [1.13.5](https://github.com/natyconnor/berean/compare/v1.13.4...v1.13.5) (2026-09-06)
 
 

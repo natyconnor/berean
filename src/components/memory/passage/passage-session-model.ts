@@ -11,6 +11,7 @@ import {
   ropePieceIndexes,
   sectionStartIndex,
   localDayIndex,
+  isPassagePieceLocked,
 } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
@@ -25,26 +26,24 @@ import type { PassageView } from "./passage-session-types";
 
 export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
   {
-    rope: "Rope",
-    "stall-repair": "Stall repair",
-    frontier: "Frontier",
-    "offer-introduce": "Introduce",
-    "section-complete": "Section complete",
-    "passage-complete": "Passage complete",
-    "budget-exhausted": "Budget exhausted",
-    "frontier-locked": "Frontier locked",
+    rope: "Practice",
+    "stall-repair": "Practice",
+    frontier: "Learn",
+    "offer-introduce": "Learn",
+    "section-complete": "Learn",
+    "passage-complete": "Review",
+    "budget-exhausted": "Learn",
+    "frontier-locked": "Learn",
   };
 
-/** Soft-locked frontier; rope practice stays available. */
+/** Soft-locked current verse; no more work on it today. */
 export const FRONTIER_LOCKED_COPY =
-  "Come back tomorrow for this piece — you can still practice the rope.";
+  "This verse is set for today. Come back tomorrow to keep going with it.";
 
-export const INTRODUCE_ANOTHER_LABEL = "Introduce another piece";
-
-export const DONE_FOR_NOW_LABEL = "Done for now";
+export const DONE_FOR_NOW_LABEL = "That's enough for today";
 
 export const SECTION_COMPLETE_COPY =
-  "This section is solid. Recite it as one optional pass, or continue.";
+  "You've finished this section. Recite it together, or keep going.";
 
 export const SECTION_RECITE_LABEL = "Recite this section";
 
@@ -252,10 +251,25 @@ export function remainingAddsIn(state: PassageSessionState): number {
   });
 }
 
-/** Introductions already counted on the viewer's local day. */
-export function usedIntroducesToday(state: PassageSessionState): number {
-  const todayKey = localDayIndex(state.now, state.tzOffsetMinutes);
-  return state.addDayKey === todayKey ? state.addsOnDay : 0;
+export function hasStartedPassage(pieces: readonly PassagePiece[]): boolean {
+  return pieces.some((piece) => piece.attachment !== "unreached");
+}
+
+export function nextUnreachedPiece(
+  pieces: readonly PassagePiece[],
+): PassagePiece | undefined {
+  return pieces.find((piece) => piece.attachment === "unreached");
+}
+
+export function latestLockedPiece(
+  pieces: readonly PassagePiece[],
+  now: number,
+): PassagePiece | undefined {
+  for (let index = pieces.length - 1; index >= 0; index -= 1) {
+    const piece = pieces[index];
+    if (piece && isPassagePieceLocked(piece, now)) return piece;
+  }
+  return undefined;
 }
 
 export function sectionIndexes(pieces: readonly PassagePiece[]): number[] {

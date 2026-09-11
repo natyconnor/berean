@@ -9,6 +9,7 @@ import {
 import type { PassagePiece } from "./passage-pieces";
 import {
   initialPassageSessionPhase,
+  reconcilePassagePhase,
   reducePassageSession,
   repairWindowStart,
   type PassageSessionState,
@@ -132,7 +133,7 @@ describe("reducePassageSession", () => {
     expect(current.pieces[0]?.learnStage).toBe(2);
   });
 
-  it("soft-locks after Guided and still allows rope recitation", () => {
+  it("soft-locks after Guided and offers the next verse instead of rope", () => {
     let current = reducePassageSession(
       session([piece(0, "unreached"), piece(1, "unreached")]),
       { type: "introduce" },
@@ -145,15 +146,12 @@ describe("reducePassageSession", () => {
     const locked = current.pieces[0];
     expect(locked?.dueAt).toBeGreaterThan(current.now);
     expect(locked?.learnStage).toBe(2);
+    expect(current.phase).toBe("offer-introduce");
 
-    const beforeStage = locked?.learnStage;
-    const ropePass = pass(current);
-    expect(ropePass.pieces[0]?.learnStage).toBe(beforeStage);
-    expect(ropePass.pieces[0]?.attachment).toBe("attached");
-    expect(ropePass.pendingMutation).toMatchObject({
-      name: "recordAttempt",
-      kind: "rope",
-    });
+    const ignored = pass(current);
+    expect(ignored.phase).toBe("offer-introduce");
+    expect(ignored.pendingMutation).toBeUndefined();
+    expect(ignored.pieces[0]?.learnStage).toBe(locked?.learnStage);
   });
 
   it("repairs a rope fail then continues", () => {
@@ -321,5 +319,41 @@ describe("reducePassageSession", () => {
     expect(nextDay.pieces[0]?.attachment).toBe("learning");
     expect(nextDay.addsOnDay).toBe(1);
     expect(nextDay.addDayKey).toBe(todayKey + 1);
+  });
+
+  it("opens on the due verse, not a mixed recitation, when attached pieces exist", () => {
+    const start = session([
+      piece(0, "attached", { learnStage: 2 }),
+      piece(1, "unreached"),
+    ]);
+    expect(start.phase).toBe("frontier");
+  });
+
+  it("offers the next verse when the current one is locked", () => {
+    const start = session([
+      piece(0, "attached", {
+        learnStage: 2,
+        dueAt: NOW + DAY_MS,
+      }),
+      piece(1, "unreached"),
+    ]);
+    expect(start.phase).toBe("offer-introduce");
+  });
+
+  it("reconciles a frontier phase with no due verse after the server locks it", () => {
+    expect(
+      reconcilePassagePhase(
+        "frontier",
+        [
+          piece(0, "attached", {
+            learnStage: 2,
+            dueAt: NOW + DAY_MS,
+          }),
+          piece(1, "unreached"),
+        ],
+        4,
+        NOW,
+      ),
+    ).toBe("offer-introduce");
   });
 });

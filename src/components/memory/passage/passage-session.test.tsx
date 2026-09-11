@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { DAY_MS } from "@/lib/memory-scheduler";
-import { compositeHintForWindow } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -13,7 +12,6 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   DONE_FOR_NOW_LABEL,
   FRONTIER_LOCKED_COPY,
-  INTRODUCE_ANOTHER_LABEL,
   SECTION_COMPLETE_COPY,
   SECTION_RECITE_LABEL,
 } from "./passage-session-model";
@@ -152,7 +150,7 @@ describe("PassageSession", () => {
     );
   });
 
-  it("starts on rope, not frontier, when attached pieces exist", async () => {
+  it("jumps into a due verse instead of a mixed recitation", async () => {
     renderSession(
       passageView([
         piece(0, "attached", { learnStage: 2 }),
@@ -161,46 +159,35 @@ describe("PassageSession", () => {
     );
 
     expect(
-      screen.getByRole("status", { name: "Session phase: Rope" }),
+      screen.getByRole("status", { name: "Session phase: Challenge" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: Rope" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Session phase: Frontier" }),
     ).not.toBeInTheDocument();
     expect(
-      await screen.findByLabelText("Your recited passage"),
+      await screen.findByText("Type what you remember"),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Your recalled verse")).toBeInTheDocument();
     expect(
-      screen.queryByText("Read it through, then continue"),
+      screen.queryByLabelText("Your recited passage"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows a per-piece composite hint on the rope", async () => {
-    const pieces = [
-      piece(0, "solid", { learnStage: 3 }),
-      piece(1, "attached", { learnStage: 2, stageReps: 0 }),
-    ];
-    renderSession(passageView(pieces));
-
-    const hint = await screen.findByLabelText("Rope hint");
-    const expected = compositeHintForWindow(pieces, 0, 2, [
-      PASSAGE_ONE,
-      PASSAGE_TWO,
-    ]);
-    expect(hint).toHaveTextContent(expected);
-    expect(hint.textContent).not.toContain("Lord");
-    expect(hint.textContent).not.toContain("Blessed");
-  });
-
-  it("calls introduceNext from the introduce phase", async () => {
+  it("auto-starts the first verse instead of an introduce screen", async () => {
     renderSession(passageView([piece(0, "unreached"), piece(1, "unreached")]));
 
     expect(
-      screen.getByRole("status", { name: "Session phase: Introduce" }),
+      screen.getByLabelText("Starting the first verse"),
     ).toBeInTheDocument();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
-    );
+    expect(
+      screen.queryByText(/introduced a new piece/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /introduce/i }),
+    ).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(mutationMock("passageMemory.introduceNext")).toHaveBeenCalled();
@@ -211,36 +198,29 @@ describe("PassageSession", () => {
     expect(args.now).toEqual(expect.any(Number));
     expect(args.tzOffsetMinutes).toEqual(expect.any(Number));
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
+
+    expect(
+      await screen.findByText("Read it through, then continue"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Session phase: Read" }),
+    ).toBeInTheDocument();
   });
 
-  it("does not show a frontier drill when introduceNext fails", async () => {
+  it("lets the learner retry when auto-start fails", async () => {
     mutationMock("passageMemory.introduceNext").mockRejectedValue(
       new Error("ConvexError"),
     );
     renderSession(passageView([piece(0, "unreached"), piece(1, "unreached")]));
 
-    expect(
-      screen.getByRole("status", { name: "Session phase: Introduce" }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
-    );
-
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /couldn't introduce the next piece/i,
+      /couldn't start the next verse/i,
     );
-    expect(
-      screen.getByRole("status", { name: "Session phase: Introduce" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("status", { name: "Session phase: Frontier" }),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Read it through, then continue"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
+      screen.getByRole("button", { name: "Start Psalm 23:1" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
@@ -248,98 +228,8 @@ describe("PassageSession", () => {
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
   });
 
-  it("keeps the rope phase when recordAttempt fails", async () => {
-    mutationMock("passageMemory.recordAttempt").mockRejectedValue(
-      new Error("ConvexError"),
-    );
-    renderSession(
-      passageView([
-        piece(0, "solid", { learnStage: 3 }),
-        piece(1, "attached", { learnStage: 2 }),
-      ]),
-    );
-
-    const answer = await screen.findByLabelText("Your recited passage");
-    await screen.findByLabelText("Rope hint");
-    await userEvent.click(answer);
-    await userEvent.paste(`${PASSAGE_ONE} WRONG`);
-
-    const check = screen.getByRole("button", { name: /Check answer/ });
-    await waitFor(() => {
-      expect(check).toBeEnabled();
-    });
-    await userEvent.click(check);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /couldn't save that attempt/i,
-    );
-    expect(
-      screen.getByRole("status", { name: "Session phase: Rope" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("status", { name: "Session phase: Stall repair" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Previous-piece cue"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Check answer/ }),
-    ).toBeInTheDocument();
-  });
-
-  it("maps a rope fail onto stall repair with a previous-piece cue", async () => {
-    renderSession(
-      passageView([
-        piece(0, "solid", { learnStage: 3 }),
-        piece(1, "attached", { learnStage: 2 }),
-      ]),
-    );
-
-    const answer = await screen.findByLabelText("Your recited passage");
-    await screen.findByLabelText("Rope hint");
-    await userEvent.click(answer);
-    await userEvent.paste(`${PASSAGE_ONE} WRONG`);
-
-    const check = screen.getByRole("button", { name: /Check answer/ });
-    await waitFor(() => {
-      expect(check).toBeEnabled();
-    });
-    await userEvent.click(check);
-
-    expect(
-      await screen.findByRole("status", {
-        name: "Session phase: Stall repair",
-      }),
-    ).toBeInTheDocument();
-    const cue = await screen.findByLabelText("Previous-piece cue");
-    expect(cue).toHaveTextContent(/shall not want/i);
-    expect(cue.textContent).toMatch(/H/);
-
-    await waitFor(() => {
-      expect(mutationMock("passageMemory.recordAttempt")).toHaveBeenCalled();
-    });
-    const [args] = mutationMock("passageMemory.recordAttempt").mock
-      .calls[0] as [{ kind: string; packId: string; accuracy: number }];
-    expect(args.kind).toBe("rope");
-    expect(args.packId).toBe(PACK_ID);
-    expect(args.accuracy).toBeLessThan(85);
-  });
-
-  it("keeps Done for now as an exit from the introduce offer", async () => {
+  it("prompts the next verse without a recitation box after today's work", async () => {
     const onExit = vi.fn();
-    renderSession(
-      passageView([piece(0, "unreached"), piece(1, "unreached")]),
-      onExit,
-    );
-
-    await userEvent.click(
-      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
-    );
-    expect(onExit).toHaveBeenCalledTimes(1);
-    expect(mutationMock("passageMemory.introduceNext")).not.toHaveBeenCalled();
-  });
-
-  it("shows frontier-locked copy while the rope is still available", async () => {
     renderSession(
       passageView([
         piece(0, "attached", {
@@ -348,74 +238,81 @@ describe("PassageSession", () => {
         }),
         piece(1, "unreached"),
       ]),
+      onExit,
     );
 
-    expect(screen.getByText(FRONTIER_LOCKED_COPY)).toBeInTheDocument();
     expect(
-      await screen.findByLabelText("Your recited passage"),
+      screen.getByText(/Psalm 23:1 is set for today. Start Psalm 23:2 next/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("nudges introduce after a rope-only session without blocking the rope or exit", async () => {
-    const onExit = vi.fn();
-    const pieces = [
-      piece(0, "attached", {
-        learnStage: 2,
-        dueAt: getSessionNow() + DAY_MS,
-      }),
-      piece(1, "unreached"),
-    ];
-    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
-      passageView(pieces, { addsOnDay: 0, remainingIntroduces: 5 }),
-    );
-    renderSession(passageView(pieces, { addsOnDay: 0 }), onExit);
-
-    const answer = await screen.findByLabelText("Your recited passage");
-    await screen.findByLabelText("Rope hint");
-    await userEvent.click(answer);
-    await userEvent.paste(PASSAGE_ONE);
-
-    const check = screen.getByRole("button", { name: /Check answer/ });
-    await waitFor(() => {
-      expect(check).toBeEnabled();
-    });
-    await userEvent.click(check);
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Continue" }),
-    );
-
-    expect(
-      screen.getByRole("status", { name: "Session phase: Introduce" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: INTRODUCE_ANOTHER_LABEL }),
+      screen.getByRole("button", { name: "Start Psalm 23:2" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/haven't introduced a new piece yet today/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(FRONTIER_LOCKED_COPY)).toBeInTheDocument();
-    expect(screen.getByLabelText("Your recited passage")).toBeInTheDocument();
+      screen.queryByLabelText("Your recited passage"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Your recalled verse"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/rope/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/frontier/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/mixed-support/i)).not.toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
     );
     expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("passageMemory.introduceNext")).not.toHaveBeenCalled();
   });
 
-  it("keeps the planned section-complete and introduce labels", () => {
-    expect(INTRODUCE_ANOTHER_LABEL).toBe("Introduce another piece");
-    expect(DONE_FOR_NOW_LABEL).toBe("Done for now");
-    expect(FRONTIER_LOCKED_COPY).toMatch(
-      /Come back tomorrow for this piece — you can still practice the rope/,
+  it("does not render a blank Learn screen when the current verse is locked", () => {
+    renderSession(
+      passageView([
+        piece(0, "attached", {
+          learnStage: 2,
+          dueAt: getSessionNow() + DAY_MS,
+        }),
+      ]),
     );
-    expect(SECTION_COMPLETE_COPY).toMatch(/This section is solid/);
+
+    expect(screen.getByText(FRONTIER_LOCKED_COPY)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Your recalled verse"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Your recited passage"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sends the verse word count with a frontier attempt", async () => {
+    renderSession(
+      passageView([piece(0, "learning", { learnStage: 0, stageReps: 0 })]),
+    );
+
+    expect(
+      await screen.findByText("Read it through, then continue"),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(mutationMock("passageMemory.recordAttempt")).toHaveBeenCalled();
+    });
+    const [args] = mutationMock("passageMemory.recordAttempt").mock
+      .calls[0] as [{ kind: string; wordCount?: number }];
+    expect(args.kind).toBe("frontier");
+    expect(args.wordCount).toBeGreaterThan(0);
+  });
+
+  it("uses plain language for the remaining session copy", () => {
+    expect(DONE_FOR_NOW_LABEL).toBe("That's enough for today");
+    expect(FRONTIER_LOCKED_COPY).toMatch(/set for today/);
+    expect(FRONTIER_LOCKED_COPY).not.toMatch(/rope/i);
+    expect(SECTION_COMPLETE_COPY).toMatch(/finished this section/);
     expect(SECTION_RECITE_LABEL).toBe("Recite this section");
   });
 });
