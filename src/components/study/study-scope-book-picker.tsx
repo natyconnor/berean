@@ -340,25 +340,31 @@ function ChapterGrid({
               : "Click inside the range to narrow, or outside to expand it"}
       </p>
       <div
-        className="grid grid-cols-8 gap-1"
-        onMouseLeave={() => setHoveredChapter(null)}
+        className="max-h-[min(18rem,45vh)] overflow-y-auto overscroll-contain rounded-sm"
+        role="region"
+        aria-label="Chapter list"
       >
-        {Array.from({ length: bookInfo.chapters }, (_, i) => i + 1).map(
-          (ch) => (
-            <button
-              key={ch}
-              type="button"
-              className={cn(
-                "h-8 w-full rounded-sm text-xs font-medium transition-colors cursor-pointer",
-                getCellStyle(ch),
-              )}
-              onClick={() => handleChapterClick(ch)}
-              onMouseEnter={() => setHoveredChapter(ch)}
-            >
-              {ch}
-            </button>
-          ),
-        )}
+        <div
+          className="grid grid-cols-8 gap-1"
+          onMouseLeave={() => setHoveredChapter(null)}
+        >
+          {Array.from({ length: bookInfo.chapters }, (_, i) => i + 1).map(
+            (ch) => (
+              <button
+                key={ch}
+                type="button"
+                className={cn(
+                  "h-8 w-full rounded-sm text-xs font-medium transition-colors cursor-pointer",
+                  getCellStyle(ch),
+                )}
+                onClick={() => handleChapterClick(ch)}
+                onMouseEnter={() => setHoveredChapter(ch)}
+              >
+                {ch}
+              </button>
+            ),
+          )}
+        </div>
       </div>
     </div>
   );

@@ -66,6 +66,8 @@ interface PassageRecallCardProps {
   hint: PassageRecallHint;
   /** Extra cue shown after a failed rope attempt and during stall-repair. */
   stallCue?: string | null;
+  /** Label for the stall cue (bridge vs recovery). */
+  stallCueLabel?: string;
   learnStage: number;
   stageReps: number;
   status: MemoryStatus;
@@ -88,6 +90,7 @@ export function PassageRecallCard({
   retry,
   hint,
   stallCue = null,
+  stallCueLabel = "Starting hint",
   learnStage,
   stageReps,
   status,
@@ -236,13 +239,13 @@ export function PassageRecallCard({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {stallCue ? <StallCue text={stallCue} /> : null}
+          {stallCue ? <StallCue text={stallCue} label={stallCueLabel} /> : null}
           {!checked && (
             <>
               <div
                 className={cn(
-                  "min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
-                  compositeField && "max-h-[45vh] overflow-y-auto",
+                  "min-h-[140px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
+                  compositeField && "max-h-[min(14rem,32vh)] overflow-y-auto",
                   stageColor.panel,
                 )}
               >
@@ -290,7 +293,7 @@ export function PassageRecallCard({
                   className={cn(
                     "bg-background/80",
                     compositeField
-                      ? "min-h-[300px] max-h-[60vh] resize-y"
+                      ? "min-h-[180px] max-h-[36vh] resize-y"
                       : "min-h-[170px] resize-none",
                   )}
                   aria-label={fieldLabel}
@@ -314,7 +317,7 @@ export function PassageRecallCard({
           )}
         </CardContent>
 
-        <CardFooter className="flex justify-end border-t">
+        <CardFooter className="sticky bottom-0 z-10 flex justify-end border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
             {!checked && !isReadPrime ? (
               <PreviewFillExactAnswerButton
@@ -372,16 +375,29 @@ export function PassageRecallCard({
   );
 }
 
-function StallCue({ text }: { text: string }): JSX.Element {
+function StallCue({
+  text,
+  label,
+}: {
+  text: string;
+  label: string;
+}): JSX.Element {
+  const bridgeOnly = label === "Pick up after";
   return (
     <div
       className="rounded-xl border bg-background/75 px-4 py-3 text-left text-sm leading-6"
-      aria-label="Starting hint"
+      aria-label={label}
     >
       <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Starting hint
+        {label}
       </p>
-      <p className="whitespace-pre-wrap font-mono tracking-wide text-muted-foreground">
+      <p
+        className={
+          bridgeOnly
+            ? "whitespace-pre-wrap text-foreground"
+            : "whitespace-pre-wrap font-mono tracking-wide text-muted-foreground"
+        }
+      >
         {text}
       </p>
     </div>
