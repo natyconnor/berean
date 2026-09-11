@@ -24,7 +24,11 @@ import {
   FRONTIER_LOCKED_COPY,
   frontierHint,
   NEXT_VERSE_PROMPT_COPY,
+  PRACTICE_ROPE_PROMPT_COPY,
+  PRACTICE_WHAT_YOU_KNOW_LABEL,
   START_VERSE_PROMPT_COPY,
+  WARMUP_PROMPT_COPY,
+  WARMUP_SKIP_LABEL,
   hasStartedPassage,
   joinPieceTexts,
   latestLockedPiece,
@@ -333,6 +337,18 @@ export function PassageSession({
     }
   }
 
+  function handleSkipWarmup() {
+    const next = reducePassageSession(withWordCounts(state), {
+      type: "continue",
+      now: Date.now(),
+    });
+    setState(next);
+    setHoldResult(false);
+    setHeldRecall(null);
+    setStallCue(null);
+    setRopeOverride("rehearsal");
+  }
+
   function handleSkipSection() {
     const next = reducePassageSession(withWordCounts(state), {
       type: "continue",
@@ -469,6 +485,14 @@ export function PassageSession({
       {showDoneToday ? (
         <DoneTodayPanel
           finishedTitle={finishedPiece ? pieceCardTitle(finishedPiece) : null}
+          canPractice={ropePieceIndexes(state.pieces).length >= 2}
+          onPractice={() => {
+            setState((current) => ({
+              ...current,
+              phase: "rope",
+              pendingMutation: undefined,
+            }));
+          }}
           onDone={onExit}
         />
       ) : null}
@@ -477,8 +501,8 @@ export function PassageSession({
         <div className="space-y-3">
           {recall.mode === "rope" &&
           effectivePhase === "rope" &&
-          (showSectionStart || showBeginningStart) ? (
-            <div className="flex flex-wrap justify-center gap-2">
+          !holdResult ? (
+            <div className="flex flex-wrap items-center justify-center gap-2">
               {showSectionStart ? (
                 <Button
                   type="button"
@@ -499,6 +523,14 @@ export function PassageSession({
                   From the beginning of the passage
                 </Button>
               ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleSkipWarmup}
+              >
+                {WARMUP_SKIP_LABEL}
+              </Button>
             </div>
           ) : null}
           <PassageRecallCard
@@ -563,9 +595,13 @@ function NextVersePanel({
 
 function DoneTodayPanel({
   finishedTitle,
+  canPractice,
+  onPractice,
   onDone,
 }: {
   finishedTitle: string | null;
+  canPractice: boolean;
+  onPractice: () => void;
   onDone: () => void;
 }): JSX.Element {
   return (
@@ -574,7 +610,16 @@ function DoneTodayPanel({
       description={FRONTIER_LOCKED_COPY}
       success
     >
-      <Button type="button" onClick={onDone}>
+      {canPractice ? (
+        <Button type="button" onClick={onPractice}>
+          {PRACTICE_WHAT_YOU_KNOW_LABEL}
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant={canPractice ? "outline" : "default"}
+        onClick={onDone}
+      >
         {DONE_FOR_NOW_LABEL}
       </Button>
     </CheckpointCard>
@@ -876,7 +921,7 @@ function buildingRecall(args: {
     compositeError,
     retry,
     undefined,
-    "Type the verses. The letters are there to help.",
+    phase === "rope" ? WARMUP_PROMPT_COPY : PRACTICE_ROPE_PROMPT_COPY,
   );
 }
 

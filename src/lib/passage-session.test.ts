@@ -12,6 +12,7 @@ import {
   reconcilePassagePhase,
   reducePassageSession,
   repairWindowStart,
+  sessionPhaseForPieces,
   type PassageSessionState,
 } from "./passage-session";
 
@@ -365,7 +366,22 @@ describe("reducePassageSession", () => {
     expect(nextDay.addDayKey).toBe(todayKey + 1);
   });
 
-  it("opens on the due verse, not a mixed recitation, when attached pieces exist", () => {
+  it("opens with a warm-up when at least two pieces are already practiced", () => {
+    const start = session([
+      piece(0, "attached", {
+        learnStage: 2,
+        dueAt: NOW + DAY_MS,
+      }),
+      piece(1, "attached", {
+        learnStage: 2,
+        dueAt: NOW + DAY_MS,
+      }),
+      piece(2, "unreached"),
+    ]);
+    expect(start.phase).toBe("rope");
+  });
+
+  it("opens on the due verse when fewer than two pieces are practiced", () => {
     const start = session([
       piece(0, "attached", { learnStage: 2 }),
       piece(1, "unreached"),
@@ -373,7 +389,7 @@ describe("reducePassageSession", () => {
     expect(start.phase).toBe("frontier");
   });
 
-  it("offers the next verse when the current one is locked", () => {
+  it("offers the next verse when the current one is locked and no warm-up applies", () => {
     const start = session([
       piece(0, "attached", {
         learnStage: 2,
@@ -382,6 +398,44 @@ describe("reducePassageSession", () => {
       piece(1, "unreached"),
     ]);
     expect(start.phase).toBe("offer-introduce");
+  });
+
+  it("keeps offering the next verse after warm-up when budget remains", () => {
+    const warmed = session(
+      [
+        piece(0, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(1, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(2, "unreached"),
+      ],
+      { phase: "rope" },
+    );
+    const next = reducePassageSession(warmed, { type: "continue" });
+    expect(next.phase).toBe("offer-introduce");
+  });
+
+  it("ends the day when practiced verses are locked and nothing else is due", () => {
+    expect(
+      sessionPhaseForPieces({
+        pieces: [
+          piece(0, "attached", {
+            learnStage: 2,
+            dueAt: NOW + DAY_MS,
+          }),
+          piece(1, "attached", {
+            learnStage: 2,
+            dueAt: NOW + DAY_MS,
+          }),
+        ],
+        remainingIntroduces: 0,
+        now: NOW,
+      }),
+    ).toBe("frontier-locked");
   });
 
   it("reconciles a frontier phase with no due verse after the server locks it", () => {

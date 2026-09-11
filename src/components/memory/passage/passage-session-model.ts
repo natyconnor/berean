@@ -26,7 +26,7 @@ import type { PassageView } from "./passage-session-types";
 
 export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
   {
-    rope: "Practice",
+    rope: "Warm up",
     "stall-repair": "Practice",
     frontier: "Learn",
     "offer-introduce": "Learn",
@@ -59,6 +59,16 @@ export const CONNECT_COPY =
 export const CONNECT_RECITE_LABEL = "Recite together";
 
 export const CONNECT_TITLE = "Connect these verses";
+
+export const WARMUP_PROMPT_COPY =
+  "Warm up with what you've learned so far — then keep going.";
+
+export const WARMUP_SKIP_LABEL = "Skip warm-up";
+
+export const PRACTICE_ROPE_PROMPT_COPY =
+  "Practice these verses together. Hints fade as they get solid.";
+
+export const PRACTICE_WHAT_YOU_KNOW_LABEL = "Practice what you know";
 
 const STALL_CUE_PREVIOUS_WORDS = 6;
 

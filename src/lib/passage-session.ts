@@ -105,8 +105,9 @@ function sectionAllSolid(
 }
 
 /**
- * Next phase from piece state. Due verses always win — never open on a
- * mixed-support recitation when the learner still has a verse to work.
+ * Ongoing phase from piece state (after a warm-up or connect finishes).
+ * Due verses and new introduces win. Warm-up is only forced on session open
+ * via {@link initialPassageSessionPhase}; once that pass ends, move on.
  */
 export function sessionPhaseForPieces(args: {
   pieces: readonly PassagePiece[];
@@ -226,15 +227,17 @@ function clearSignals(
 
 /**
  * Opening phase for a passage session.
- * All solid → passage-complete. A due learning/attached verse → that verse.
- * Else offer the next unreached verse when budget remains; otherwise the
- * current verse is done for today.
+ * When at least two pieces are already on the practice rope, warm up with
+ * them first (rehearsal window). Otherwise start the due verse or offer the
+ * next introduce — same priority as {@link sessionPhaseForPieces}.
  */
 export function initialPassageSessionPhase(args: {
   pieces: readonly PassagePiece[];
   remainingIntroduces: number;
   now: number;
 }): PassageSessionPhase {
+  if (allSolid(args.pieces)) return "passage-complete";
+  if (ropePieceIndexes(args.pieces).length >= 2) return "rope";
   return sessionPhaseForPieces(args);
 }
 

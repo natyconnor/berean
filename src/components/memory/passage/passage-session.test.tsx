@@ -16,8 +16,11 @@ import {
   DONE_FOR_NOW_LABEL,
   FRONTIER_LOCKED_COPY,
   NEXT_VERSE_PROMPT_COPY,
+  PRACTICE_WHAT_YOU_KNOW_LABEL,
   SECTION_COMPLETE_COPY,
   SECTION_RECITE_LABEL,
+  WARMUP_PROMPT_COPY,
+  WARMUP_SKIP_LABEL,
 } from "./passage-session-model";
 import { PassageSession } from "./passage-session";
 import type { PassageView } from "./passage-session-types";
@@ -320,6 +323,10 @@ describe("PassageSession", () => {
     expect(CONNECT_TITLE).toBe("Connect these verses");
     expect(CONNECT_COPY).toMatch(/Link the verse you just learned/);
     expect(CONNECT_RECITE_LABEL).toBe("Recite together");
+    expect(WARMUP_PROMPT_COPY).toMatch(/Warm up/i);
+    expect(WARMUP_PROMPT_COPY).not.toMatch(/rope/i);
+    expect(WARMUP_SKIP_LABEL).toBe("Skip warm-up");
+    expect(PRACTICE_WHAT_YOU_KNOW_LABEL).toBe("Practice what you know");
     expect(SECTION_COMPLETE_COPY).toMatch(/finished this section/);
     expect(SECTION_RECITE_LABEL).toBe("Recite this section");
   });
