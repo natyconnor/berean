@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { useMutation } from "convex/react";
 
 import {
@@ -20,6 +20,8 @@ import {
   DONE_FOR_NOW_LABEL,
   FRONTIER_LOCKED_COPY,
   frontierHint,
+  NEXT_VERSE_PROMPT_COPY,
+  START_VERSE_PROMPT_COPY,
   hasStartedPassage,
   joinPieceTexts,
   latestLockedPiece,
@@ -44,6 +46,13 @@ import type { PassageView } from "@/components/memory/passage/passage-session-ty
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -434,7 +443,12 @@ export function PassageSession({
         />
       ) : null}
 
-      {showDoneToday ? <DoneTodayPanel onDone={onExit} /> : null}
+      {showDoneToday ? (
+        <DoneTodayPanel
+          finishedTitle={finishedPiece ? pieceCardTitle(finishedPiece) : null}
+          onDone={onExit}
+        />
+      ) : null}
 
       {showRecall && recall ? (
         <div className="space-y-3">
@@ -507,32 +521,40 @@ function NextVersePanel({
   onDone: () => void;
 }): JSX.Element {
   return (
-    <div className="mx-auto max-w-md space-y-3 text-center">
-      <p className="text-sm text-muted-foreground">
-        {finishedTitle
-          ? `${finishedTitle} is set for today. Start ${nextTitle} next?`
-          : `Start ${nextTitle}?`}
-      </p>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button type="button" onClick={onStart}>
-          {`Start ${nextTitle}`}
-        </Button>
-        <Button type="button" variant="outline" onClick={onDone}>
-          {DONE_FOR_NOW_LABEL}
-        </Button>
-      </div>
-    </div>
+    <CheckpointCard
+      title={finishedTitle ?? nextTitle}
+      description={
+        finishedTitle ? NEXT_VERSE_PROMPT_COPY : START_VERSE_PROMPT_COPY
+      }
+      success={Boolean(finishedTitle)}
+    >
+      <Button type="button" onClick={onStart}>
+        {`Start ${nextTitle}`}
+      </Button>
+      <Button type="button" variant="outline" onClick={onDone}>
+        {DONE_FOR_NOW_LABEL}
+      </Button>
+    </CheckpointCard>
   );
 }
 
-function DoneTodayPanel({ onDone }: { onDone: () => void }): JSX.Element {
+function DoneTodayPanel({
+  finishedTitle,
+  onDone,
+}: {
+  finishedTitle: string | null;
+  onDone: () => void;
+}): JSX.Element {
   return (
-    <div className="mx-auto max-w-md space-y-3 text-center">
-      <p className="text-sm text-muted-foreground">{FRONTIER_LOCKED_COPY}</p>
+    <CheckpointCard
+      title={finishedTitle ?? "That's enough for today"}
+      description={FRONTIER_LOCKED_COPY}
+      success
+    >
       <Button type="button" onClick={onDone}>
         {DONE_FOR_NOW_LABEL}
       </Button>
-    </div>
+    </CheckpointCard>
   );
 }
 
@@ -544,16 +566,48 @@ function SectionCompletePanel({
   onSkip: () => void;
 }): JSX.Element {
   return (
-    <div className="mx-auto mb-6 max-w-md space-y-3 text-center">
-      <p className="text-sm text-muted-foreground">{SECTION_COMPLETE_COPY}</p>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button type="button" onClick={onRecite}>
-          {SECTION_RECITE_LABEL}
-        </Button>
-        <Button type="button" variant="outline" onClick={onSkip}>
-          Continue
-        </Button>
-      </div>
+    <CheckpointCard
+      title="Section complete"
+      description={SECTION_COMPLETE_COPY}
+    >
+      <Button type="button" onClick={onRecite}>
+        {SECTION_RECITE_LABEL}
+      </Button>
+      <Button type="button" variant="outline" onClick={onSkip}>
+        Continue
+      </Button>
+    </CheckpointCard>
+  );
+}
+
+function CheckpointCard({
+  title,
+  description,
+  success = false,
+  children,
+}: {
+  title: string;
+  description: string;
+  success?: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="flex min-h-[55vh] items-center justify-center">
+      <Card className="mx-auto w-full max-w-xl overflow-hidden">
+        <CardHeader className="gap-3 text-center">
+          {success ? (
+            <CheckCircle2
+              className="mx-auto h-8 w-8 text-primary"
+              aria-hidden
+            />
+          ) : null}
+          <CardTitle className="text-3xl tracking-tight">{title}</CardTitle>
+          <CardDescription className="text-sm">{description}</CardDescription>
+        </CardHeader>
+        <CardFooter className="flex flex-wrap items-center justify-center gap-2 border-t">
+          {children}
+        </CardFooter>
+      </Card>
     </div>
   );
 }

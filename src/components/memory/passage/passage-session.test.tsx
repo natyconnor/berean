@@ -12,6 +12,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   DONE_FOR_NOW_LABEL,
   FRONTIER_LOCKED_COPY,
+  NEXT_VERSE_PROMPT_COPY,
   SECTION_COMPLETE_COPY,
   SECTION_RECITE_LABEL,
 } from "./passage-session-model";
@@ -241,9 +242,8 @@ describe("PassageSession", () => {
       onExit,
     );
 
-    expect(
-      screen.getByText(/Psalm 23:1 is set for today. Start Psalm 23:2 next/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Psalm 23:1")).toBeInTheDocument();
+    expect(screen.getByText(NEXT_VERSE_PROMPT_COPY)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Start Psalm 23:2" }),
     ).toBeInTheDocument();
@@ -312,6 +312,8 @@ describe("PassageSession", () => {
     expect(DONE_FOR_NOW_LABEL).toBe("That's enough for today");
     expect(FRONTIER_LOCKED_COPY).toMatch(/set for today/);
     expect(FRONTIER_LOCKED_COPY).not.toMatch(/rope/i);
+    expect(NEXT_VERSE_PROMPT_COPY).toMatch(/Start the next one/);
+    expect(NEXT_VERSE_PROMPT_COPY).not.toMatch(/rope|frontier|introduce/i);
     expect(SECTION_COMPLETE_COPY).toMatch(/finished this section/);
     expect(SECTION_RECITE_LABEL).toBe("Recite this section");
   });

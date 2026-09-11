@@ -40,6 +40,11 @@ export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
 export const FRONTIER_LOCKED_COPY =
   "This verse is set for today. Come back tomorrow to keep going with it.";
 
+export const NEXT_VERSE_PROMPT_COPY =
+  "That's enough for this verse today. Start the next one?";
+
+export const START_VERSE_PROMPT_COPY = "Ready to begin this verse?";
+
 export const DONE_FOR_NOW_LABEL = "That's enough for today";
 
 export const SECTION_COMPLETE_COPY =
