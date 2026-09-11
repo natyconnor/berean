@@ -9,8 +9,10 @@ import {
 import type { PassagePiece } from "./passage-pieces";
 import {
   initialPassageSessionPhase,
+  reconcilePassagePhase,
   reducePassageSession,
   repairWindowStart,
+  sessionPhaseForPieces,
   type PassageSessionState,
 } from "./passage-session";
 
@@ -132,7 +134,7 @@ describe("reducePassageSession", () => {
     expect(current.pieces[0]?.learnStage).toBe(2);
   });
 
-  it("soft-locks after Guided and still allows rope recitation", () => {
+  it("soft-locks after Guided and offers the next verse instead of rope", () => {
     let current = reducePassageSession(
       session([piece(0, "unreached"), piece(1, "unreached")]),
       { type: "introduce" },
@@ -145,15 +147,56 @@ describe("reducePassageSession", () => {
     const locked = current.pieces[0];
     expect(locked?.dueAt).toBeGreaterThan(current.now);
     expect(locked?.learnStage).toBe(2);
+    expect(current.phase).toBe("offer-introduce");
 
-    const beforeStage = locked?.learnStage;
-    const ropePass = pass(current);
-    expect(ropePass.pieces[0]?.learnStage).toBe(beforeStage);
-    expect(ropePass.pieces[0]?.attachment).toBe("attached");
-    expect(ropePass.pendingMutation).toMatchObject({
-      name: "recordAttempt",
-      kind: "rope",
-    });
+    const ignored = pass(current);
+    expect(ignored.phase).toBe("offer-introduce");
+    expect(ignored.pendingMutation).toBeUndefined();
+    expect(ignored.pieces[0]?.learnStage).toBe(locked?.learnStage);
+  });
+
+  it("offers a rolling pair connect after every attached piece from the second on", () => {
+    let current = session([
+      piece(0, "unreached"),
+      piece(1, "unreached"),
+      piece(2, "unreached"),
+      piece(3, "unreached"),
+    ]);
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[0]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("offer-introduce");
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[1]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("connect");
+    expect(current.rehearsalRopeIndexes).toEqual([0, 1]);
+
+    current = reducePassageSession(current, { type: "continue" });
+    expect(current.phase).toBe("offer-introduce");
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[2]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("connect");
+    expect(current.rehearsalRopeIndexes).toEqual([1, 2]);
+
+    current = reducePassageSession(current, { type: "continue" });
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[3]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("connect");
+    expect(current.rehearsalRopeIndexes).toEqual([2, 3]);
   });
 
   it("repairs a rope fail then continues", () => {
@@ -321,5 +364,94 @@ describe("reducePassageSession", () => {
     expect(nextDay.pieces[0]?.attachment).toBe("learning");
     expect(nextDay.addsOnDay).toBe(1);
     expect(nextDay.addDayKey).toBe(todayKey + 1);
+  });
+
+  it("opens with a warm-up when at least two pieces are already practiced", () => {
+    const start = session([
+      piece(0, "attached", {
+        learnStage: 2,
+        dueAt: NOW + DAY_MS,
+      }),
+      piece(1, "attached", {
+        learnStage: 2,
+        dueAt: NOW + DAY_MS,
+      }),
+      piece(2, "unreached"),
+    ]);
+    expect(start.phase).toBe("rope");
+  });
+
+  it("opens on the due verse when fewer than two pieces are practiced", () => {
+    const start = session([
+      piece(0, "attached", { learnStage: 2 }),
+      piece(1, "unreached"),
+    ]);
+    expect(start.phase).toBe("frontier");
+  });
+
+  it("offers the next verse when the current one is locked and no warm-up applies", () => {
+    const start = session([
+      piece(0, "attached", {
+        learnStage: 2,
+        dueAt: NOW + DAY_MS,
+      }),
+      piece(1, "unreached"),
+    ]);
+    expect(start.phase).toBe("offer-introduce");
+  });
+
+  it("keeps offering the next verse after warm-up when budget remains", () => {
+    const warmed = session(
+      [
+        piece(0, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(1, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(2, "unreached"),
+      ],
+      { phase: "rope" },
+    );
+    const next = reducePassageSession(warmed, { type: "continue" });
+    expect(next.phase).toBe("offer-introduce");
+  });
+
+  it("ends the day when practiced verses are locked and nothing else is due", () => {
+    expect(
+      sessionPhaseForPieces({
+        pieces: [
+          piece(0, "attached", {
+            learnStage: 2,
+            dueAt: NOW + DAY_MS,
+          }),
+          piece(1, "attached", {
+            learnStage: 2,
+            dueAt: NOW + DAY_MS,
+          }),
+        ],
+        remainingIntroduces: 0,
+        now: NOW,
+      }),
+    ).toBe("frontier-locked");
+  });
+
+  it("reconciles a frontier phase with no due verse after the server locks it", () => {
+    expect(
+      reconcilePassagePhase(
+        "frontier",
+        [
+          piece(0, "attached", {
+            learnStage: 2,
+            dueAt: NOW + DAY_MS,
+          }),
+          piece(1, "unreached"),
+        ],
+        4,
+        NOW,
+      ),
+    ).toBe("offer-introduce");
   });
 });

@@ -126,6 +126,12 @@ function renderBuilder() {
   );
 }
 
+async function advanceToNameStep() {
+  await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+  expect(screen.getByLabelText("Pack name")).toBeInTheDocument();
+}
+
 describe("PackBuilder", () => {
   beforeEach(() => {
     queryResults.clear();
@@ -139,11 +145,35 @@ describe("PackBuilder", () => {
     resetEligibleJohn3();
   });
 
-  it("creates an eligible scope pack as a collection without auto-start", async () => {
+  it("walks type → scope → name before create actions", async () => {
     renderBuilder();
 
     expect(
-      screen.getByRole("button", { name: "Create and start passage learning" }),
+      screen.getByText("What kind of pack are you making?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create pack" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("scope form")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create pack" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByLabelText("Pack name")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create pack" }),
+    ).toBeInTheDocument();
+  });
+
+  it("creates an eligible scope pack as a collection without auto-start", async () => {
+    renderBuilder();
+    await advanceToNameStep();
+
+    expect(
+      screen.getByRole("button", { name: "Create and start learning" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: HEART_SCOPE_ACTION_LABEL }),
@@ -173,9 +203,10 @@ describe("PackBuilder", () => {
 
   it("offers a shortcut that lands with startPassage", async () => {
     renderBuilder();
+    await advanceToNameStep();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Create and start passage learning" }),
+      screen.getByRole("button", { name: "Create and start learning" }),
     );
 
     await waitFor(() => {
@@ -196,10 +227,11 @@ describe("PackBuilder", () => {
     scopeFormState.summaryText = "John 1, Acts 1";
     scopeFormState.selectedBooks = ["John", "Acts"];
     renderBuilder();
+    await advanceToNameStep();
 
     expect(
       screen.queryByRole("button", {
-        name: "Create and start passage learning",
+        name: "Create and start learning",
       }),
     ).not.toBeInTheDocument();
     expect(
@@ -218,15 +250,16 @@ describe("PackBuilder", () => {
     expect(mutationMocks.get("savedVerses.heartMany")).toBeUndefined();
   });
 
-  it("does not create until every selected book has a chapter range", () => {
+  it("does not continue from scope until every selected book has a chapter range", async () => {
     scopeFormState.isComplete = false;
     renderBuilder();
 
-    expect(screen.getByRole("button", { name: "Create pack" })).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Create and start passage learning" }),
-    ).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
     expect(screen.getByText("Select chapters to continue")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create pack" }),
+    ).not.toBeInTheDocument();
   });
 });
 

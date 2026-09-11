@@ -905,9 +905,7 @@ describe("PackView", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Passage map" })).toBeVisible();
-    expect(
-      screen.getByText("Passage · 1 solid · 1 on rope · 4 pieces"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Passage · 1 of 4 memorized")).toBeInTheDocument();
     expect(screen.getByLabelText("Piece status legend")).toBeInTheDocument();
     expect(screen.getByText("Psalm 23:1")).toBeInTheDocument();
     expect(
@@ -936,6 +934,36 @@ describe("PackView", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("says Start Learning before any verse has been started", () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 6, status: "new" })],
+      passage: passageRow({
+        attachments: ["unreached", "unreached", "unreached"],
+      }),
+    });
+
+    expect(
+      screen.getAllByRole("button", { name: "Start Learning" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "Continue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says Continue once a verse is in progress", () => {
+    renderPack({
+      members: [member({ startVerse: 1, endVerse: 6, status: "new" })],
+      passage: passageRow(),
+    });
+
+    expect(
+      screen.getAllByRole("button", { name: "Continue" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "Start Learning" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("confirms before stopping a reviewing passage", async () => {
     renderPack({
       members: [member({ startVerse: 1, endVerse: 6, status: "reviewing" })],
@@ -943,9 +971,7 @@ describe("PackView", () => {
     });
 
     expect(
-      screen.getByText(
-        "Passage · 1 solid · 1 on rope · 4 pieces · one recitation due",
-      ),
+      screen.getByText("Passage · 1 of 4 memorized · due today"),
     ).toBeInTheDocument();
 
     await userEvent.click(

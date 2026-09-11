@@ -6,6 +6,8 @@ import {
   HEART_SCOPE_TOOLTIP,
   LEARN_AS_PASSAGE_LABEL,
   STOP_PASSAGE_LEARNING_LABEL,
+  CONTINUE_PASSAGE_LABEL,
+  START_LEARNING_LABEL,
   heartScopeActionLabel,
   heartScopeConfirmLabel,
   heartScopeCoverageCopy,
@@ -15,6 +17,7 @@ import {
   heartScopeProposedLabel,
   heartScopeTooltip,
   packBuilderStartPassageLabel,
+  passageLearnButtonLabel,
 } from "./heart-scope-copy";
 
 describe("heartScopeActionLabel", () => {
@@ -33,9 +36,7 @@ describe("heartScopeActionLabel", () => {
       HEART_SCOPE_ACTION_LABEL,
     );
     expect(packBuilderStartPassageLabel(false)).toBeNull();
-    expect(CREATE_AND_START_PASSAGE_LABEL).toBe(
-      "Create and start passage learning",
-    );
+    expect(CREATE_AND_START_PASSAGE_LABEL).toBe("Create and start learning");
     expect(LEARN_AS_PASSAGE_LABEL).toBe("Learn as a passage");
     expect(STOP_PASSAGE_LEARNING_LABEL).toBe("Stop passage learning");
     expect(LEARN_AS_PASSAGE_LABEL).not.toBe(HEART_SCOPE_ACTION_LABEL);
@@ -94,5 +95,25 @@ describe("heartScopeConfirmLabel", () => {
     expect(heartScopeProposedLabel(1)).toBe("1 new passage");
     expect(heartScopeProposedLabel(4)).toBe("4 new passages");
     expect(heartScopeConfirmLabel(4)).toBe("Heart 4 new passages");
+  });
+});
+
+describe("passageLearnButtonLabel", () => {
+  it("says Start Learning before any verse is in progress", () => {
+    expect(
+      passageLearnButtonLabel([
+        { attachment: "unreached" },
+        { attachment: "unreached" },
+      ]),
+    ).toBe(START_LEARNING_LABEL);
+  });
+
+  it("says Continue once a verse has been started", () => {
+    expect(
+      passageLearnButtonLabel([
+        { attachment: "learning" },
+        { attachment: "unreached" },
+      ]),
+    ).toBe(CONTINUE_PASSAGE_LABEL);
   });
 });

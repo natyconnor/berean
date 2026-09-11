@@ -6,6 +6,15 @@
 ### Features
 
 * Passage mode on eligible scope packs with a scaffolded rope and opt-in migration
+* Pack creation walks type → scope or verses → name before create
+
+### Bug Fixes
+
+* Passage learning starts at the first verse, prompts the next verse after Guided, and keeps the Mode Dock from covering bottom actions
+* Soft-locked verses prompt a rolling pair connect after every new part from the second on
+* Soft-lock copy says the verse is down for the day
+* Pack wizard actions sit under the step content with clearer create icons
+* Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
 ## [1.13.5](https://github.com/natyconnor/berean/compare/v1.13.4...v1.13.5) (2026-09-06)
 

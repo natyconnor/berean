@@ -28,6 +28,8 @@ import type { VerseScope } from "./verse-scope-match";
 export const PASSAGE_MAX_ADDS_PER_DAY = 5;
 export const PASSAGE_REHEARSAL_MAX_PIECES = 3;
 export const PASSAGE_REHEARSAL_MAX_WORDS = 120;
+/** How many recent rope pieces to connect after each soft-lock. */
+export const PASSAGE_CONNECT_PAIR_SIZE = 2;
 export const PASSAGE_PASS_ACCURACY = LEARN_PROGRESS_ACCURACY;
 
 export type HeartedMemorySpan = VerseSpan & {
@@ -97,6 +99,19 @@ export function ropePieceIndexes(pieces: readonly PassagePiece[]): number[] {
     if (piece && isRopeAttachment(piece.attachment)) indexes.push(index);
   }
   return indexes;
+}
+
+/**
+ * After each soft-lock once the rope has at least
+ * {@link PASSAGE_CONNECT_PAIR_SIZE} pieces, return the newest pair to connect.
+ * This is the rolling link step: verse 2→1-2, verse 3→2-3, verse 4→3-4.
+ */
+export function connectPairIndexes(
+  pieces: readonly PassagePiece[],
+): number[] | null {
+  const rope = ropePieceIndexes(pieces);
+  if (rope.length < PASSAGE_CONNECT_PAIR_SIZE) return null;
+  return rope.slice(-PASSAGE_CONNECT_PAIR_SIZE);
 }
 
 export function sectionStartIndex(

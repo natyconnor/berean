@@ -1,5 +1,6 @@
 import type { DiffToken } from "./diff-words";
 import {
+  connectPairIndexes,
   dueFrontierIndex,
   frontierIndex,
   isPassagePieceLocked,
@@ -19,6 +20,7 @@ export type PassageSessionPhase =
   | "frontier"
   | "offer-introduce"
   | "section-complete"
+  | "connect"
   | "passage-complete"
   | "budget-exhausted"
   | "frontier-locked";
@@ -102,11 +104,17 @@ function sectionAllSolid(
   );
 }
 
-function phaseAfterWarmup(
-  pieces: readonly PassagePiece[],
-  remaining: number,
-  now: number,
-): PassageSessionPhase {
+/**
+ * Ongoing phase from piece state (after a warm-up or connect finishes).
+ * Due verses and new introduces win. Warm-up is only forced on session open
+ * via {@link initialPassageSessionPhase}; once that pass ends, move on.
+ */
+export function sessionPhaseForPieces(args: {
+  pieces: readonly PassagePiece[];
+  remainingIntroduces: number;
+  now: number;
+}): PassageSessionPhase {
+  const { pieces, remainingIntroduces: remaining, now } = args;
   if (allSolid(pieces)) return "passage-complete";
   if (dueFrontierIndex(pieces, now) !== null) return "frontier";
   if (remaining > 0 && hasUnreached(pieces)) return "offer-introduce";
@@ -114,6 +122,18 @@ function phaseAfterWarmup(
   if (frontier && isPassagePieceLocked(frontier, now)) return "frontier-locked";
   if (hasUnreached(pieces)) return "budget-exhausted";
   return "frontier-locked";
+}
+
+function phaseAfterWarmup(
+  pieces: readonly PassagePiece[],
+  remaining: number,
+  now: number,
+): PassageSessionPhase {
+  return sessionPhaseForPieces({
+    pieces,
+    remainingIntroduces: remaining,
+    now,
+  });
 }
 
 function ropeWindow(state: PassageSessionState): {
@@ -125,6 +145,27 @@ function ropeWindow(state: PassageSessionState): {
   if (rope.length === 0) {
     return { start: 0, end: 0, ropeIndexes: [] };
   }
+
+  const useStoredPair =
+    state.rehearsalRopeIndexes &&
+    state.rehearsalRopeIndexes.length > 0 &&
+    (state.phase === "connect" ||
+      (state.phase === "stall-repair" && state.interruptedPhase === "connect"));
+  if (useStoredPair && state.rehearsalRopeIndexes) {
+    const ropeIndexes = state.rehearsalRopeIndexes.filter((index) => {
+      const piece = state.pieces[index];
+      return (
+        piece &&
+        (piece.attachment === "attached" || piece.attachment === "solid")
+      );
+    });
+    if (ropeIndexes.length > 0) {
+      const start = ropeIndexes[0] ?? 0;
+      const end = (ropeIndexes[ropeIndexes.length - 1] ?? 0) + 1;
+      return { start, end, ropeIndexes };
+    }
+  }
+
   const last = rope[rope.length - 1] ?? 0;
   const start = rehearsalStartIndex(state.pieces, state.pieceWordCounts);
   const ropeIndexes: number[] = [];
@@ -186,33 +227,42 @@ function clearSignals(
 
 /**
  * Opening phase for a passage session.
- * All solid → passage-complete. Any attached/solid → rope warm-up.
- * Else frontier if due; introduce if only unreached and budget remains;
- * frontier-locked when the frontier is soft-locked, the rope is empty, and
- * nothing can be introduced.
+ * When at least two pieces are already on the practice rope, warm up with
+ * them first (rehearsal window). Otherwise start the due verse or offer the
+ * next introduce — same priority as {@link sessionPhaseForPieces}.
  */
 export function initialPassageSessionPhase(args: {
   pieces: readonly PassagePiece[];
   remainingIntroduces: number;
   now: number;
 }): PassageSessionPhase {
-  const { pieces, remainingIntroduces: remaining, now } = args;
-  if (allSolid(pieces)) return "passage-complete";
+  if (allSolid(args.pieces)) return "passage-complete";
+  if (ropePieceIndexes(args.pieces).length >= 2) return "rope";
+  return sessionPhaseForPieces(args);
+}
 
-  const rope = ropePieceIndexes(pieces);
-  if (rope.length > 0) return "rope";
-
-  if (dueFrontierIndex(pieces, now) !== null) return "frontier";
-
-  const frontier = pieces[frontierIndex(pieces)];
-  const locked = Boolean(frontier && isPassagePieceLocked(frontier, now));
-  const canAdd = remaining > 0 && hasUnreached(pieces);
-
-  if (canAdd) return "offer-introduce";
-  if (locked && rope.length === 0) return "frontier-locked";
-  if (hasUnreached(pieces)) return "budget-exhausted";
-  if (pieces.length === 0 && remaining > 0) return "offer-introduce";
-  return "frontier-locked";
+/**
+ * After persisting, server pieces can lock a verse the local reducer still
+ * thought was due (word-count mismatch). Never keep `frontier` with no due
+ * verse — that rendered a blank session.
+ */
+export function reconcilePassagePhase(
+  phase: PassageSessionPhase,
+  pieces: readonly PassagePiece[],
+  remainingIntroduces: number,
+  now: number,
+): PassageSessionPhase {
+  if (
+    phase === "stall-repair" ||
+    phase === "section-complete" ||
+    phase === "connect"
+  ) {
+    return phase;
+  }
+  if (phase === "frontier" && dueFrontierIndex(pieces, now) === null) {
+    return sessionPhaseForPieces({ pieces, remainingIntroduces, now });
+  }
+  return phase;
 }
 
 function introducePiece(
@@ -331,6 +381,25 @@ function applyFrontierAttempt(
     };
   }
 
+  // After Guided soft-locks a piece onto the rope, connect it to the previous
+  // one whenever at least two pieces are attached — including on day 1.
+  if (piece.attachment !== "attached" && nextPiece.attachment === "attached") {
+    const pair = connectPairIndexes(pieces);
+    if (pair) {
+      return {
+        ...state,
+        now,
+        pieces,
+        phase: "connect",
+        pendingMutation,
+        stallIndex: undefined,
+        interruptedPhase: undefined,
+        rehearsalStart: pair[0],
+        rehearsalRopeIndexes: pair,
+      };
+    }
+  }
+
   const remaining = remainingIn(state, now);
   return {
     ...state,
@@ -365,9 +434,10 @@ function applyRopeAttempt(
   };
 
   if (accuracy >= PASSAGE_PASS_ACCURACY) {
+    const resume = state.interruptedPhase;
     const nextPhase =
-      kind === "repair" && state.interruptedPhase
-        ? state.interruptedPhase
+      kind === "repair" && resume && resume !== "connect"
+        ? resume
         : phaseAfterWarmup(state.pieces, remainingIn(state, now), now);
     return {
       ...state,
@@ -398,7 +468,9 @@ function applyRopeAttempt(
     stallIndex: localStall,
     rehearsalStart: window.start,
     rehearsalRopeIndexes: mappingIndexes,
-    interruptedPhase: state.interruptedPhase ?? continuePhase,
+    interruptedPhase:
+      state.interruptedPhase ??
+      (state.phase === "connect" ? "connect" : continuePhase),
   };
 }
 
@@ -443,7 +515,7 @@ export function reducePassageSession(
     return applyFrontierAttempt(state, accuracy, now);
   }
 
-  if (state.phase === "section-complete") {
+  if (state.phase === "section-complete" || state.phase === "connect") {
     if (accuracy >= PASSAGE_PASS_ACCURACY) {
       return {
         ...clearSignals(state, now),
@@ -459,12 +531,14 @@ export function reducePassageSession(
   }
 
   if (
-    state.phase === "rope" ||
-    state.phase === "frontier-locked" ||
-    state.phase === "budget-exhausted" ||
     state.phase === "offer-introduce" ||
-    state.phase === "passage-complete"
+    state.phase === "frontier-locked" ||
+    state.phase === "budget-exhausted"
   ) {
+    return { ...clearSignals(state, now), phase: state.phase };
+  }
+
+  if (state.phase === "rope" || state.phase === "passage-complete") {
     if (
       ropePieceIndexes(state.pieces).length === 0 &&
       state.phase !== "passage-complete"
