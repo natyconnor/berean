@@ -1,0 +1,2130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>
+      Berean · Passage Memory — Implementation Plan (for an LLM agent)
+    </title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      pre {
+        background: #2b2416;
+        color: #ede4d0;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+      }
+      pre .c {
+        color: #9d9077;
+      }
+      pre .k {
+        color: #d3ab5e;
+      }
+      pre .s {
+        color: #a8c49a;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      .pr {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .pr > .pr-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .pr .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pr .pr-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .pr .pr-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .pr-body {
+        padding: 8px 20px 20px;
+      }
+      .dep {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin: 6px 0 0;
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow"
+          >Implementation Plan · for an LLM coding agent</span
+        >
+        <h1>Passage Memory</h1>
+        <p class="lede">
+          An explicit mode on eligible scope packs: learn a contiguous passage
+          as a scaffolded rope — multi-day fading hints per piece, short mixed
+          support recitations, pass at 85%, and ordinary hearts stay
+          independent.
+        </p>
+        <div class="meta">
+          <span class="chip">8 pull requests</span>
+          <span class="chip ghost">no new runtime deps</span>
+        </div>
+        <div class="callout">
+          <strong>How to use this document.</strong> Each numbered block below
+          is <em>one pull request</em>. Do them in order. Do not start the next
+          PR until the current one is green: implement only what that PR lists,
+          run <code>pnpm run agent:check</code>, satisfy the PR's acceptance
+          criteria, then stop.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <section id="decisions">
+        <div class="eyebrow">Settled decisions</div>
+        <h2>Decisions locked before implementation</h2>
+        <p>
+          Fixed constraints from the product owner plus defaults locked so
+          implementers do not fork the model. Treat as non-negotiable.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Mode on a scope pack, not a new object</b></td>
+                <td>
+                  Passage learning is an <b>opt-in mode</b> on an eligible scope
+                  pack — not a separate top-level concept, and not automatic on
+                  create. Default scope packs remain heart collections. Schema
+                  <code>packs.kind</code> stays <code>"scope" | "custom"</code>.
+                  The passage row is 1:1 with the pack while the mode is active.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Opt-in and undo</b></td>
+                <td>
+                  Eligible pack view primary CTA:
+                  <b>“Learn as a passage”</b> →
+                  <code>passageMemory.start</code>. Optional builder shortcut:
+                  “Create and start passage learning” still creates a normal
+                  scope pack, then lands with intent to start (same mutation;
+                  not silent). While <code>status === "building"</code>, offer
+                  <b>“Stop passage learning”</b> →
+                  <code>passageMemory.stop</code> removes the passage row and
+                  returns the pack to a plain heart collection (hearts
+                  untouched). After reviewing/mastered, stop requires confirm;
+                  same cleanup. Never auto-start merely because the pack was
+                  opened.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Progressive part, not a verse queue</b></td>
+                <td>
+                  A passage has a frozen piece list, a scaffolded rope, and a
+                  frontier. Pieces are not hearts and are not independent SRS
+                  cards in the global verse queue. Do not auto-heart a chapter
+                  in order to learn it.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Piece size</b></td>
+                <td>
+                  Reuse <code>groupChapterForHearting</code> with
+                  <b>empty</b> existing hearts so user hearts never fragment the
+                  piece list. Same caps: <code>MAX_GROUP_VERSES = 4</code>,
+                  <code>MAX_GROUP_WORDS = 60</code>, sentence / heading /
+                  paragraph splits.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Independent hearts</b></td>
+                <td>
+                  Hearting a verse inside a passage scope still creates a normal
+                  <code>savedVerses</code> + <code>verseMemory</code>
+                  card. Users can Learn / Review / Practice that heart on its
+                  own. Unhearting it does not change passage pieces. Passage
+                  progress never writes those rows (except the one-time
+                  migration unheart below). Duplicate due items are OK.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Scaffolded rope (not same-day encode)</b></td>
+                <td>
+                  Keep the full verse-style fade ladder on each piece:
+                  <b>Read → Guided → Challenge → From Memory</b>, with the same
+                  overnight soft-lock after clearing Guided or Challenge (reuse
+                  <code>isLearningSessionEndingStage</code> /
+                  <code>dueAtInCalendarDays</code>). Do <b>not</b> compress to a
+                  one-session Read→Memory→join. Soft-lock is
+                  <b>per piece</b> (the piece that just ended a session band);
+                  rope rehearsal of other attached/solid pieces remains
+                  available the same day.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Attach ≠ solid</b></td>
+                <td>
+                  Per piece <code>attachment</code>: <code>unreached</code> →
+                  <code>learning</code> (introduced, Read/Guided) →
+                  <code>attached</code> (on the rope) → <code>solid</code>.
+                  <b>Attach</b> only after the piece <b>clears Guided</b> (Read
+                  alone does not attach — it is not yet learning). While
+                  <code>attached</code>, the piece still walks Challenge → From
+                  Memory over later days. <b>Solid</b> when From Memory clears
+                  (graduate that piece). Connecting practice uses attached +
+                  solid pieces; learning-only pieces are drilled alone until
+                  attach.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Mixed-support rope recitation</b></td>
+                <td>
+                  Prefix / section / passage practice is one typed attempt over
+                  the rehearsal window, but the
+                  <b>prompt is a composite mask</b>: each piece’s hint density
+                  comes from its own <code>learnStage</code> via
+                  <code>hintForProgress</code>
+                  (solid → blank; attached Challenge → cloze; attached Guided
+                  should not happen — Guided clears before attach; learning
+                  pieces are not in the rope). Grade with word diff + 85% pass;
+                  stall-map to the weak piece. This is how different memory
+                  levels meet in a single test.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Daily introduce budget</b></td>
+                <td>
+                  <code>PASSAGE_MAX_ADDS_PER_DAY = 5</code> counts pieces
+                  <b>introduced</b> (first entering Read / leaving
+                  <code>unreached</code>), not attaches or solids. Encourage at
+                  least one introduction per local day while building. After an
+                  introduction session ends (or the frontier soft-locks), offer
+                  “Introduce another piece” vs “Done for now” when budget
+                  remains and the next piece is unreached.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Pass threshold</b></td>
+                <td>
+                  Passage attempts pass at
+                  <code>accuracy &gt;= LEARN_PROGRESS_ACCURACY</code> (85), same
+                  bar as verse Guided banking. Applies to frontier band reps,
+                  rope recitation, stall-repair clear, section-complete, and
+                  finished-passage review scheduling. Do <b>not</b> require
+                  <code>exact</code> to move on. Below 85% is a retry / stall,
+                  not a day-long add lock.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Sections + rehearsal window</b></td>
+                <td>
+                  Large sections start at a new chapter or an ESV
+                  heading/subheading. Default rope warm-up does <b>not</b>
+                  always start at verse 1: rehearsal start is
+                  <code
+                    >max(sectionStart, ropeEnd -
+                    PASSAGE_REHEARSAL_MAX_PIECES)</code
+                  >
+                  with <code>PASSAGE_REHEARSAL_MAX_PIECES = 3</code>, then
+                  trimmed so the window’s word count stays ≤
+                  <code>PASSAGE_REHEARSAL_MAX_WORDS = 120</code> (drop oldest
+                  first). Window includes only <code>attached</code> +
+                  <code>solid</code> pieces. Explicit actions: “From the start
+                  of this section” and “From the beginning of the passage” (no
+                  word cap). After the last piece of a section becomes solid,
+                  <b>offer</b> optional full-section recitation. When every
+                  piece is solid, status → reviewing; Review is the whole
+                  passage (blank).
+                </td>
+              </tr>
+              <tr>
+                <td><b>Stalls</b></td>
+                <td>
+                  A failed rope recitation (&lt;85%) is a stall, not
+                  skip-to-next-card. Map the first non-typo error to a piece,
+                  cue with the end of the previous piece plus first letters of
+                  the stalled piece, retry from one piece earlier. After repair
+                  ≥85%, <b>continue</b> (back to rope practice or frontier
+                  drill). Rough warm-up must not block introducing a new piece
+                  for the rest of the day — repair, then continue.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Speaking mode</b></td>
+                <td>
+                  Out of scope. Typed recall (existing textarea + word diff)
+                  remains the only input. Do not add mic / speech APIs.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Who can start passage mode</b></td>
+                <td>
+                  Eligible: <code>kind === "scope"</code>, contiguous chapters
+                  in <b>one book</b> (<code>scopeChaptersAreContiguous</code>),
+                  chapter count 1–20 (<code>AUTO_HEART_MAX_CHAPTERS</code>).
+                  Custom packs, tagged whole-corpus scopes, multi-book scopes,
+                  and over-cap ranges stay heart collections only (no CTA).
+                </td>
+              </tr>
+              <tr>
+                <td><b>Migration of auto-hearted packs</b></td>
+                <td>
+                  Runs inside <code>passageMemory.start</code> when the user
+                  opts in (also if they start from a global unified pack card
+                  via an ensure/start path) — <b>not</b> on every pack open.
+                  Idempotent: existing row → return it. Else compute canonical
+                  pieces (empty hearts). Infer per-piece attachment / stages
+                  from covering hearts (review/mastered → <code>solid</code>;
+                  learning-phase coverage → map stage; else unreached). If
+                  <code>looksLikeAutoHeartedPassage</code>, unheart matching
+                  spans via existing unheart path (keep
+                  <code>verseMemory</code> history). Keep non-matching
+                  user-shaped hearts. Clear <code>unifiedReviewEnabled</code>.
+                  One-time banner with unheart/keep counts. Never regroup pieces
+                  after start.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Unified recitation</b></td>
+                <td>
+                  Keep <code>setUnifiedReview</code> /
+                  <code>recordUnifiedReview</code> for packs that never start
+                  passage mode. Once a passage row exists, review through
+                  <code>passageMemory</code> only. Do not delete unified code in
+                  this plan.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Global queues</b></td>
+                <td>
+                  Building passages appear in Learning as <b>one card</b> when
+                  any piece is due for learning (frontier due) or rope practice
+                  is available — not as N verse cards. Reviewing passages appear
+                  in Review as one card. Remaining hearts in the scope stay
+                  visible as individual due verses.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="grounding">
+        <div class="eyebrow">What already exists</div>
+        <h2>Assets to reuse (verified in the codebase)</h2>
+        <p>
+          Do not rebuild these — reuse them. Every path here was confirmed in
+          the tree before writing the plan.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 42%">Existing asset</th>
+                <th>Role in the new system</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fileref">
+                  src/lib/memory-span-group.ts → groupChapterForHearting
+                </td>
+                <td>
+                  Canonical piece grouping. Always call with
+                  <code>existingHearts = []</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/scope-chapter-count.ts → AUTO_HEART_MAX_CHAPTERS,
+                  enumerateScopeChapters, autoHeartAllowed
+                </td>
+                <td>Eligibility cap (20 chapters) and chapter walk.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/contiguous-spans.ts → scopeChaptersAreContiguous,
+                  packAllowsUnifiedRecitation
+                </td>
+                <td>
+                  Single-book contiguous range check. Passage eligibility wraps
+                  this plus the chapter cap.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/scope-verse-coverage.ts → scopeCoverageComplete
+                </td>
+                <td>Auto-heart signature: full coverage of the scope.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/memory-scheduler.ts → scheduleNext, initialSchedule,
+                  dueAtInCalendarDays, ReviewInput
+                </td>
+                <td>
+                  Maintenance SRS for a <b>finished</b> passage. While building,
+                  reuse learning-phase overnight soft-locks <b>per piece</b> on
+                  the frontier (Guided/Challenge clear).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/unified-review-schedule.ts → canonicalUnifiedSchedule,
+                  applyUnifiedGrade
+                </td>
+                <td>
+                  Infer the opening maintenance schedule from existing
+                  review-phase hearts at migration; apply grades to the passage
+                  row going forward.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/diff-words.ts,
+                  src/components/study/study-attempt-quality.ts
+                </td>
+                <td>Typed grading: exact / close / off + accuracy.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/verse-hint.ts → maskVerseText, hintForProgress,
+                  countVerseWords
+                </td>
+                <td>
+                  Frontier Guided first-letters; stall-repair first-letter cue.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/hooks/use-esv-composite-passage.ts →
+                  useEsvCompositePassage
+                </td>
+                <td>
+                  Concatenated recitation text with no verse numbers. Prefix /
+                  join / finished review all use this.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/hooks/use-scope-heart-preview.ts, convex/esv.ts →
+                  getChaptersBatch
+                </td>
+                <td>
+                  Fetch chapter HTML/headings to build pieces. Extract shared
+                  chapter loading if both hooks would duplicate fetch/cache.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/schema.ts → packs, packVerses, verseMemory, savedVerses
+                </td>
+                <td>
+                  Pack remains the named container. Hearts remain the verse
+                  library. New tables sit beside these.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">convex/packs.ts, convex/lib/packs.ts</td>
+                <td>
+                  CRUD, <code>loadOwnedPack</code>,
+                  <code>loadPackMembers</code> (overlapping hearts), unified
+                  fallback. Add passage APIs alongside, do not overload
+                  <code>enrollLearning</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/savedVerses.ts → toggle, heartMany
+                </td>
+                <td>
+                  Independent hearting unchanged. Migration unheart must use the
+                  same delete + <code>isHearted: false</code> + stats adjust +
+                  <code>deletePackMembershipsForVerse</code> path. Extract a
+                  helper rather than copy-paste.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/verseMemory.ts → dueQueue, memoryStats, recordAttempt
+                </td>
+                <td>
+                  Extend due/learn counts with passage cards. After a pack has a
+                  passage row, do not hide leftover hearts via
+                  <code>unifiedReviewPhaseVerseRefIds</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/lib/auth.ts → getCurrentUserId, getCurrentUserIdOrNull
+                </td>
+                <td>Auth on every public function.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/practice/practice-board.tsx,
+                  practice-stages.ts, learning-journey-bar.tsx
+                </td>
+                <td>
+                  Reuse hint/result/textarea patterns. Passage sessions are a
+                  phase machine, not a verse rail — do not enqueue N pieces as
+                  <code>PracticeVerse[]</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/packs/pack-view.tsx, pack-builder.tsx,
+                  pack-list.tsx, enable-unified-review-dialog.tsx,
+                  scope-heart-preview.tsx
+                </td>
+                <td>
+                  Eligible packs: show “Learn as a passage” instead of
+                  auto-heart / Learn whole passage. Keep Recite/unified only
+                  when no passage row exists. Passage-active packs show the map
+                  + Continue/Stop.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/routes/memory-pack-practice-page.tsx,
+                  memory-learn-page.tsx, memory-review-page.tsx
+                </td>
+                <td>
+                  Wire passage sessions into pack learn/review and global queues
+                  only when a passage row exists.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/heart-scope-copy.ts, src/lib/memory-pack-search.ts
+                </td>
+                <td>
+                  Retire “Memorize whole passage” / auto-heart copy for eligible
+                  packs; optional <code>startPassage</code> search flag for
+                  builder shortcut (not silent start).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/to-practice-verse.ts →
+                  dueQueueEntryToPracticeVerse
+                </td>
+                <td>
+                  Extend pack-queue mapping so a reviewing passage card recites
+                  frozen pieces, not live hearts.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">shared/esv-api.ts → EsvVerse.heading</td>
+                <td>Section boundaries without new NLP.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/memory-scheduler.ts → requiredRepsFor,
+                  isLearningSessionEndingStage, dueAtInCalendarDays,
+                  SUPPORT_BANDS / learn stages 0–3
+                </td>
+                <td>
+                  Per-piece fade ladder and soft-locks. Do not skip Challenge.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/verse-hint.ts → hintForProgress, maskVerseText
+                </td>
+                <td>Per-piece mask density inside composite rope prompts.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout small">
+          <strong>Gaps this plan adds.</strong> No passage entity exists today —
+          only hearts-in-scope plus <code>unifiedReviewEnabled</code>. PR 1 adds
+          pure libs (pieces, rope attachment, scaffolded session). PR 2 adds
+          <code>passageMemory</code> + <code>passageReviews</code>. PR 3 adds
+          start/stop/introduce/grade mutations. Later PRs add the session UI,
+          pack-view CTA, builder shortcut, and global queues. There is no Convex
+          test runner; prove logic with Vitest on pure <code>src/lib</code>
+          modules and existing RTL pack/board tests.
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="architecture">
+        <div class="eyebrow">Shared architecture</div>
+        <h2>Data model &amp; core contracts (referenced by every PR)</h2>
+
+        <h3>Mental model</h3>
+        <p>
+          A <b>heart</b> is still a user-chosen verse (or short span) in
+          <code>savedVerses</code> with its own <code>verseMemory</code> ladder.
+          A <b>scope pack</b> is a named collection (hearts in range).
+          <b>Passage mode</b> is an opt-in overlay on an eligible scope pack:
+          the user is memorizing that range as one growing, scaffolded
+          recitation. <b>Pieces</b> are derived groupings stored on the passage
+          row, never as hearts. Each piece has an <code>attachment</code>:
+          <code>unreached</code> → <code>learning</code> (Read/Guided) →
+          <code>attached</code> (on the rope after Guided clears; still
+          Challenge / From Memory) → <code>solid</code> (From Memory cleared).
+          The <b>rope</b> = attached + solid pieces. The <b>frontier</b> =
+          lowest index that is not solid (learning or attached). Unreached
+          pieces show on the map but are not in any queue until introduced.
+        </p>
+
+        <h3>Data model</h3>
+        <pre><code><span class="c">// convex/schema.ts — add these tables. Do not add pack.kind values.</span>
+
+<span class="c">// 1:1 with a pack while passage mode is active. Pieces frozen at start.</span>
+passageMemory: defineTable({
+  userId: v.id("users"),
+  packId: v.id("packs"),
+  status: v.union(
+    v.literal("building"),
+    v.literal("reviewing"),
+    v.literal("mastered"),
+  ),
+  pieces: v.array(v.object({
+    index: v.number(),          <span class="c">// 0..n-1, Scripture order</span>
+    book: v.string(),
+    chapter: v.number(),
+    startVerse: v.number(),
+    endVerse: v.number(),
+    sectionIndex: v.number(),
+    sectionLabel: v.optional(v.string()),
+    attachment: v.union(
+      v.literal("unreached"),
+      v.literal("learning"),
+      v.literal("attached"),
+      v.literal("solid"),
+    ),
+    learnStage: v.number(),     <span class="c">// 0 Read .. 3 From Memory; meaningful if not unreached/solid</span>
+    stageReps: v.number(),
+    dueAt: v.optional(v.number()), <span class="c">// per-piece soft-lock / learning due</span>
+  })),
+  addDayKey: v.optional(v.number()), <span class="c">// local day index for introduce budget</span>
+  addsOnDay: v.number(),             <span class="c">// introductions today</span>
+  <span class="c">// Maintenance schedule when status is reviewing | mastered.</span>
+  ease: v.number(),
+  intervalDays: v.number(),
+  dueAt: v.number(),
+  consecutiveCorrect: v.number(),
+  lapses: v.number(),
+  earlyReviewApplied: v.optional(v.boolean()),
+  lastSessionAt: v.optional(v.number()),
+  migratedAt: v.optional(v.number()),
+  unheartedCount: v.optional(v.number()),
+  keptHeartCount: v.optional(v.number()),
+  migrationBannerDismissed: v.optional(v.boolean()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_packId", ["packId"])
+  .index("by_userId", ["userId"])
+  .index("by_userId_status_dueAt", ["userId", "status", "dueAt"]),
+
+passageReviews: defineTable({
+  userId: v.id("users"),
+  packId: v.id("packs"),
+  passageMemoryId: v.id("passageMemory"),
+  kind: v.union(
+    v.literal("rope"),       <span class="c">// mixed-support prefix / section / whole</span>
+    v.literal("repair"),
+    v.literal("review"),     <span class="c">// finished passage maintenance</span>
+    v.literal("frontier"),   <span class="c">// single-piece band drill</span>
+  ),
+  pieceIndex: v.optional(v.number()),
+  quality: v.union(v.literal("exact"), v.literal("close"), v.literal("off")),
+  accuracy: v.number(),
+  durationMs: v.optional(v.number()),
+  createdAt: v.number(),
+})
+  .index("by_userId_createdAt", ["userId", "createdAt"])
+  .index("by_packId", ["packId"]),
+</code></pre>
+
+        <h3>Key module / function contracts</h3>
+        <pre><code><span class="c">// src/lib/passage-eligibility.ts</span>
+<span class="k">export function</span> packAllowsPassageMode(scope: VerseScope): boolean;
+<span class="c">// true iff scopeChaptersAreContiguous(scope)
+//   && chapterCount in 1..=AUTO_HEART_MAX_CHAPTERS</span>
+
+<span class="c">// src/lib/passage-pieces.ts</span>
+<span class="k">export type</span> PassagePieceBase = {
+  index: number;
+  book: string;
+  chapter: number;
+  startVerse: number;
+  endVerse: number;
+  sectionIndex: number;
+  sectionLabel?: string;
+};
+
+<span class="k">export type</span> PieceAttachment =
+  | "unreached"
+  | "learning"
+  | "attached"
+  | "solid";
+
+<span class="k">export type</span> PassagePiece = PassagePieceBase &amp; {
+  attachment: PieceAttachment;
+  learnStage: number;
+  stageReps: number;
+  dueAt?: number;
+};
+
+<span class="k">export function</span> buildPassagePieces(
+  chapters: readonly {
+    book: string;
+    chapter: number;
+    verses: readonly EsvVerse[];
+  }[],
+): PassagePieceBase[];
+<span class="c">// For each chapter: groupChapterForHearting(book, chapter, verses, [])
+// then assign index in walk order.
+// New sectionIndex when chapter changes OR the piece's first verse has
+// heading or subheading. sectionLabel = heading || subheading || `Chapter ${n}`.</span>
+
+<span class="c">// src/lib/passage-frontier.ts</span>
+<span class="k">export const</span> PASSAGE_MAX_ADDS_PER_DAY = 5;
+<span class="k">export const</span> PASSAGE_REHEARSAL_MAX_PIECES = 3;
+<span class="k">export const</span> PASSAGE_REHEARSAL_MAX_WORDS = 120;
+<span class="k">export const</span> PASSAGE_PASS_ACCURACY = LEARN_PROGRESS_ACCURACY; <span class="c">// 85</span>
+<span class="c">// Full ladder: reuse requiredRepsFor(stage, wordCount) for reps.
+// Soft-lock after Guided (1) or Challenge (2) via isLearningSessionEndingStage.
+// Pass = accuracy &gt;= PASSAGE_PASS_ACCURACY (exact not required to advance).</span>
+
+<span class="k">export function</span> localDayIndex(now: number, tzOffsetMinutes: number): number;
+
+<span class="k">export function</span> remainingIntroduces(args: {
+  addsOnDay: number;
+  addDayKey: number | undefined;
+  todayKey: number;
+}): number;
+
+<span class="k">export function</span> frontierIndex(pieces: readonly PassagePiece[]): number;
+<span class="c">// Lowest index with attachment !== "solid"; or pieces.length if all solid.</span>
+
+<span class="k">export function</span> ropePieceIndexes(
+  pieces: readonly PassagePiece[],
+): number[];
+<span class="c">// Indexes where attachment is attached | solid, ascending.</span>
+
+<span class="k">export function</span> sectionStartIndex(
+  pieces: readonly PassagePieceBase[],
+  pieceIndex: number,
+): number;
+
+<span class="k">export function</span> rehearsalStartIndex(
+  pieces: readonly PassagePiece[],
+  pieceWordCounts?: readonly number[],
+): number;
+<span class="c">// Rope only. If no attached/solid pieces, return 0 (caller skips rope).
+// end = last rope index + 1; target = last rope index.
+// start = max(sectionStartIndex(pieces, target), end - PASSAGE_REHEARSAL_MAX_PIECES)
+// then trim oldest while wordSum &gt; PASSAGE_REHEARSAL_MAX_WORDS.
+// Explicit section/passage start bypasses the piece/word caps.</span>
+
+<span class="k">export function</span> compositeHintForWindow(
+  pieces: readonly PassagePiece[],
+  start: number,
+  end: number,
+  texts: readonly string[],
+): string;
+<span class="c">// Concatenate hintForProgress / maskVerseText per piece by learnStage.
+// solid → density 0 (blank). attached uses piece.learnStage. Skip learning
+// / unreached (should not appear in window).</span>
+
+<span class="k">export type</span> HeartedMemorySpan = VerseSpan &amp; {
+  status: MemoryStatus;
+  learnStage?: number;
+  stageReps?: number;
+};
+
+<span class="k">export function</span> inferPieceLearningState(
+  pieces: readonly PassagePieceBase[],
+  hearts: readonly HeartedMemorySpan[],
+): Array&lt;Pick&lt;PassagePiece, "attachment" | "learnStage" | "stageReps"&gt;&gt;;
+<span class="c">// For each piece in order: if fully covered by review/mastered hearts → solid.
+// Else if fully covered by learning hearts → learning or attached from the
+// covering hearts' stages (Guided cleared / stage&gt;=2 → attached).
+// Else unreached. Do not skip gaps when inferring a contiguous built prefix
+// for migration UX — isolated later solids are allowed as solid but frontier
+// remains the first non-solid.</span>
+
+<span class="k">export function</span> looksLikeAutoHeartedPassage(
+  pieces: readonly PassagePieceBase[],
+  hearts: readonly VerseSpan[],
+  scope: VerseScope,
+): boolean;
+
+<span class="k">export function</span> matchingAutoHeartSpans(
+  pieces: readonly PassagePieceBase[],
+  hearts: readonly VerseSpan[],
+): VerseSpan[];
+
+<span class="c">// src/lib/passage-session.ts — pure phase machine</span>
+<span class="k">export type</span> PassageSessionPhase =
+  | "rope"              <span class="c">// mixed-support recitation of rehearsal window</span>
+  | "stall-repair"
+  | "frontier"          <span class="c">// single-piece drill at piece.learnStage</span>
+  | "offer-introduce"   <span class="c">// introduce next unreached (budget permitting)</span>
+  | "section-complete"
+  | "passage-complete"
+  | "budget-exhausted"
+  | "frontier-locked";  <span class="c">// frontier soft-locked; rope-only rest of day</span>
+
+<span class="k">export function</span> initialPassageSessionPhase(args: {
+  pieces: readonly PassagePiece[];
+  remainingIntroduces: number;
+  now: number;
+}): PassageSessionPhase;
+<span class="c">// all solid → passage-complete
+// any attached|solid → start at rope (warm-up), else if frontier due → frontier
+// if frontier soft-locked and rope empty and no introduce → frontier-locked
+// if only unreached and remainingIntroduces&gt;0 → frontier after introduce</span>
+
+<span class="k">export function</span> reducePassageSession(
+  state: PassageSessionState,
+  event: PassageSessionEvent,
+): PassageSessionState;
+<span class="c">// attemptPasses = accuracy &gt;= PASSAGE_PASS_ACCURACY
+// Rope pass → if frontier due (not locked) → frontier; else offer-introduce /
+//   frontier-locked / budget-exhausted
+// Rope fail → stall-repair; after repair pass → continue (frontier or offer)
+// Frontier band progress: reuse scheduleNext learning rules / requiredRepsFor
+//   with PASSAGE_PASS_ACCURACY instead of exact where the verse ladder needed
+//   exact for From Memory — passage uses ≥85% to bank and to graduate a piece
+// Clearing Guided on a learning piece → attachment = attached (mutation)
+// Clearing From Memory on attached → attachment = solid; if last in section
+//   → section-complete offer; if all solid → passage-complete
+// Soft-lock: set piece.dueAt via dueAtInCalendarDays when
+//   isLearningSessionEndingStage; session may go frontier-locked or
+//   offer-introduce (introduce does not require frontier unlocked)
+// Introduce: next unreached → learning at Read 0; increments addsOnDay
+// Stall-repair pass → resume interrupted phase</span>
+
+<span class="c">// src/lib/passage-stall.ts — unchanged idea; window is rope pieces only</span>
+<span class="k">export function</span> stallPieceIndex(
+  tokens: readonly DiffToken[],
+  pieceWordCounts: readonly number[],
+): number;
+
+<span class="k">export function</span> repairStartIndex(
+  windowStart: number,
+  stallIndex: number,
+): number;
+</code></pre>
+
+        <h3>Convex API (names and contracts)</h3>
+        <pre><code><span class="c">// convex/passageMemory.ts (new)</span>
+
+<span class="c">// Explicit opt-in. Idempotent if row exists. Else insert pieces (all unreached
+// unless inferPieceLearningState from hearts), maybe unheart auto-hearts,
+// clear unifiedReviewEnabled, set migratedAt. Does NOT run on pack open alone.</span>
+start: mutation({
+  args: {
+    packId: v.id("packs"),
+    pieces: v.array(pieceBaseValidator),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: passageViewValidator,
+});
+
+<span class="c">// Removes passageMemory (+ optional passageReviews cleanup). Pack returns to
+// heart-collection UX. Hearts untouched.</span>
+stop: mutation({
+  args: { packId: v.id("packs") },
+  returns: v.null(),
+});
+
+getForPack: query({
+  args: {
+    packId: v.id("packs"),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: v.union(passageViewValidator, v.null()),
+});
+<span class="c">// View includes remainingIntroduces, frontierIndex, computed rope window meta.</span>
+
+introduceNext: mutation({
+  args: {
+    packId: v.id("packs"),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: passageViewValidator,
+});
+<span class="c">// Next unreached → learning Read. Throws if budget exhausted or none left.</span>
+
+recordAttempt: mutation({
+  args: {
+    packId: v.id("packs"),
+    kind: v.union(
+      v.literal("rope"),
+      v.literal("repair"),
+      v.literal("review"),
+      v.literal("frontier"),
+    ),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+    durationMs: v.optional(v.number()),
+    pieceIndex: v.optional(v.number()),
+  },
+  returns: passageViewValidator,
+});
+<span class="c">// frontier: apply learning schedule to that piece; may attach, solid, soft-lock.
+// rope/repair: log only (+ lastSessionAt); attachment changes happen on frontier.
+// review: scheduleNext on passage row when status reviewing|mastered; ≥85% success.</span>
+
+dismissMigrationBanner: mutation({
+  args: { packId: v.id("packs") },
+  returns: v.null(),
+});
+</code></pre>
+
+        <h3>Due-queue integration</h3>
+        <p>
+          Extend <code>dueQueuePackItem</code> (keep <code>kind: "pack"</code>)
+          with optional <code>passageStatus</code> and
+          <code>members</code> sourced from
+          <code>passageMemory.pieces</code> when a row exists. Building passages
+          are <b>not</b> review-due; they increment
+          <code>memoryStats.learningDue</code> by 1 when a learning session is
+          available today (any non-solid piece with <code>dueAt</code> missing
+          or ≤ now, or an unreached piece with remaining introduces — see
+          Architecture comment in code). Soft-locked frontier with no introduces
+          left still allows rope practice from the pack but should not inflate
+          <code>learningDue</code>. Reviewing/mastered passages use
+          <code>isDueForReview</code> on the passage row and count as 1 in
+          <code>due</code>.
+        </p>
+        <p>
+          After start, that pack must not contribute members to
+          <code>unifiedReviewPhaseVerseRefIds</code> (flag is cleared). Leftover
+          hearts stay in the verse due scan.
+        </p>
+        <p>
+          Global Learning: add building passage cards the same way Review merges
+          pack cards — prefer a small
+          <code>passageMemory.dueForLearning</code> (or extend
+          <code>verseMemory.learningQueue</code>) rather than stuffing into
+          <code>listAll</code>.
+        </p>
+
+        <h3>Unheart helper</h3>
+        <p>
+          Extract the remove-branch of <code>savedVerses.toggle</code> into
+          <code>unheartByVerseRefId(ctx, userId, verseRefId, now)</code> in
+          <code>convex/lib/savedVerses.ts</code> (or
+          <code>convex/lib/verseMemory.ts</code> next to
+          <code>deletePackMembershipsForVerse</code>). Both toggle and
+          <code>start</code> call it. Stats, <code>isHearted</code>, membership
+          cleanup, and “keep review history” stay identical.
+        </p>
+
+        <h3>Data flow</h3>
+        <p class="muted">
+          User creates a scope pack (collection by default). On an eligible pack
+          they click <b>Learn as a passage</b> (or builder shortcut). Client
+          fetches chapters, <code>buildPassagePieces</code>, calls
+          <code>passageMemory.start</code>. Session runs
+          <code>reducePassageSession</code>: optional rope warm-up with
+          per-piece composite hints, frontier drill with full fade ladder and
+          per-piece soft-lock, introduce next unreached when budget allows.
+          Clearing Guided attaches the piece to the rope; clearing From Memory
+          makes it solid. When all solid, Review is one blank composite;
+          <code>recordAttempt({ kind: "review" })</code> schedules the passage
+          row (≥85%). Stop removes the passage row. Old auto-hearted packs only
+          migrate when the user starts passage mode.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="conventions">
+        <div class="eyebrow">Rules for the agent</div>
+        <h2>Conventions every PR must follow</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Workflow</h4>
+            <ul class="clean small">
+              <li>One PR at a time, in order. Read files before editing.</li>
+              <li>
+                After code changes run
+                <code>pnpm run agent:check</code> (format → lint → typecheck).
+              </li>
+              <li>
+                Run <code>pnpm test</code> for any PR that adds/edits a
+                <code>*.test.ts</code> or <code>*.test.tsx</code>.
+              </li>
+              <li>
+                Regenerate Convex types with
+                <code>pnpm run codegen</code> after schema/function changes.
+              </li>
+              <li>
+                Never commit or push unless the orchestrator asks. Leave the
+                working tree dirty for the checkpoint commit.
+              </li>
+              <li>
+                Update <code>CHANGELOG.md</code> only in PR 8 (one feature
+                entry). Do not bump the package version.
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Convex and product rules</h4>
+            <ul class="clean small">
+              <li>
+                Every public query/mutation has <code>args</code> <b>and</b>
+                <code>returns</code> validators.
+              </li>
+              <li>
+                Auth via <code>getCurrentUserId</code> /
+                <code>getCurrentUserIdOrNull</code>; verify pack ownership with
+                <code>loadOwnedPack</code>.
+              </li>
+              <li>
+                Never call <code>Date.now()</code> inside a query — pass
+                <code>now</code> in. Mutations may use
+                <code>Date.now()</code> for <code>createdAt</code>.
+              </li>
+              <li>
+                Query with <code>.withIndex(...)</code>, never
+                <code>.filter(...)</code> for user-scoped scans.
+                <code>await</code> every promise.
+              </li>
+              <li>
+                No <code>any</code>; use generated <code>Doc&lt;&gt;</code> /
+                <code>Id&lt;&gt;</code> types.
+              </li>
+              <li>
+                Do not create hearts when starting passage mode. Do not hide
+                leftover hearts from the due queue after start. Do not
+                auto-start passage mode on pack open.
+              </li>
+              <li>
+                Do not add speech/mic UI. Do not regroup frozen pieces. Keep the
+                full Read→Guided→Challenge→From Memory ladder with per-piece
+                soft-locks — no same-day compressed encode.
+              </li>
+              <li>
+                Custom packs and ineligible scopes must keep today’s
+                heart-member behavior. Eligible packs stay collections until the
+                user starts passage mode.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="prs">
+        <div class="eyebrow">The build</div>
+        <h2>8 pull requests</h2>
+        <div class="card toc">
+          <a href="#pr1"
+            ><b>PR 1</b> — Passage domain primitives
+            <span class="chip ghost">foundation</span></a
+          >
+          <a href="#pr2"
+            ><b>PR 2</b> — Schema and validators
+            <span class="chip ghost">foundation</span></a
+          >
+          <a href="#pr3"
+            ><b>PR 3</b> — Start, stop, introduce, and grade API
+            <span class="chip ghost">server</span></a
+          >
+          <a href="#pr4"
+            ><b>PR 4</b> — Passage session UI
+            <span class="chip ghost">session</span></a
+          >
+          <a href="#pr5"
+            ><b>PR 5</b> — Pack view: opt-in map and stop
+            <span class="chip ghost">pack UX</span></a
+          >
+          <a href="#pr6"
+            ><b>PR 6</b> — Builder: collection by default, optional start
+            <span class="chip ghost">create flow</span></a
+          >
+          <a href="#pr7"
+            ><b>PR 7</b> — Global queues and counts
+            <span class="chip ghost">home / review</span></a
+          >
+          <a href="#pr8"
+            ><b>PR 8</b> — Copy, banners, changelog
+            <span class="chip ghost">polish</span></a
+          >
+        </div>
+      </section>
+
+      <div class="pr" id="pr1">
+        <div class="pr-head">
+          <div class="num">1</div>
+          <div>
+            <div class="pr-sub">ships silently · foundation</div>
+            <h3 class="pr-title">Passage domain primitives</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> PR 2–8.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Land the pure TypeScript model for pieces, attachment states,
+            introduce budget, scaffolded rehearsal (3 pieces / 120 words),
+            composite hints, 85% pass threshold, stall mapping, migration
+            inference, and the session phase machine. No schema, no UI. Existing
+            Memory behavior is unchanged.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/passage-eligibility.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>packAllowsPassageMode</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-eligibility.test.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-pieces.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>buildPassagePieces</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-pieces.test.ts</span>
+              <span class="tag-new">(new)</span> — John 3 grouping fixture
+              style; empty-heart grouping; heading/chapter section splits.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-frontier.ts</span>
+              <span class="tag-new">(new)</span> — introduce budget, rope
+              indexes, rehearsal window, <code>inferPieceLearningState</code>,
+              <code>compositeHintForWindow</code>, auto-heart helpers.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-frontier.test.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-stall.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-stall.test.ts</span>
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-session.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>reducePassageSession</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-session.test.ts</span>
+              <span class="tag-new">(new)</span> — introduce first piece; Guided
+              clear → attach; soft-lock then rope still allowed; rope fail →
+              repair → continue; From Memory clear → solid; introduce budget 5;
+              section-complete when last piece in section becomes solid.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Implement each module to the Architecture signatures. Import
+              <code>groupChapterForHearting</code>,
+              <code>scopeChaptersAreContiguous</code>,
+              <code>scopeCoverageComplete</code>,
+              <code>AUTO_HEART_MAX_CHAPTERS</code>, <code>DAY_MS</code>,
+              <code>isReviewPhase</code>, <code>LEARN_PROGRESS_ACCURACY</code>,
+              <code>requiredRepsFor</code>,
+              <code>isLearningSessionEndingStage</code>,
+              <code>hintForProgress</code>, <code>diffWords</code>.
+            </li>
+            <li>
+              Always pass <code>[]</code> as existing hearts inside
+              <code>buildPassagePieces</code>.
+            </li>
+            <li>
+              Reducer is side-effect free. UI calls
+              <code>introduceNext</code> / <code>recordAttempt</code> when the
+              reducer signals those transitions; attachment flips are applied by
+              the mutation that records the frontier attempt.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes; no existing test breaks.
+            </li>
+            <li>
+              Tests cover: empty-heart grouping; section splits;
+              <code>inferPieceLearningState</code> maps review hearts to solid
+              and does not skip a learning gap for frontier; auto-heart
+              heuristic; introduce budget resets on new
+              <code>localDayIndex</code>; rehearsal caps 3 / 120 on rope only;
+              attach only after Guided clear; composite hint uses per-piece
+              stages; reducer refuses a sixth introduce.
+            </li>
+            <li>Behavioral / visual: none (no UI).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr2">
+        <div class="pr-head">
+          <div class="num">2</div>
+          <div>
+            <div class="pr-sub">ships silently · foundation</div>
+            <h3 class="pr-title">Schema and validators</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 1. <b>Unblocks:</b> PR 3.</p>
+          <h4>Goal</h4>
+          <p>
+            Add <code>passageMemory</code> and <code>passageReviews</code> with
+            indexes and shared Convex validators. Export
+            <code>getForPack</code> returning null for every existing pack. No
+            writes, no UI, no due-queue changes.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/schema.ts</span> — tables per
+              Architecture (per-piece attachment / learnStage / stageReps /
+              dueAt).
+            </li>
+            <li>
+              <span class="fileref">convex/lib/passageValues.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>pieceBaseValidator</code>, full piece validator,
+              <code>passageViewValidator</code>, quality union.
+            </li>
+            <li>
+              <span class="fileref">convex/passageMemory.ts</span>
+              <span class="tag-new">(new)</span> — <code>getForPack</code> only.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/passageMemory.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>loadPassageForPack</code>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>Add tables exactly as in Architecture.</li>
+            <li>
+              View computes <code>remainingIntroduces</code>,
+              <code>frontierIndex</code> from pieces + <code>now</code>/<code
+                >tzOffsetMinutes</code
+              >
+              — not stored.
+            </li>
+            <li>Run <code>pnpm run codegen</code>.</li>
+            <li>Do not change <code>packs.get</code> yet.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code> and
+              <code>pnpm run agent:check</code> pass.
+            </li>
+            <li>
+              <code>getForPack</code> returns null for missing pack, unowned
+              pack, and pack with no passage row.
+            </li>
+            <li>Behavioral / visual: no visible change.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr3">
+        <div class="pr-head">
+          <div class="num">3</div>
+          <div>
+            <div class="pr-sub">server · still unlinked from UI</div>
+            <h3 class="pr-title">Start, stop, introduce, and grade API</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 2. <b>Unblocks:</b> PR 4–8.</p>
+          <h4>Goal</h4>
+          <p>
+            Implement <code>start</code>, <code>stop</code>,
+            <code>introduceNext</code>, <code>recordAttempt</code>, and
+            <code>dismissMigrationBanner</code>. Extract shared unheart. No UI
+            callers yet.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/passageMemory.ts</span> — mutations
+              in Architecture.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/passageMemory.ts</span> —
+              insert/patch/view helpers.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/savedVerses.ts</span> or
+              <span class="fileref">convex/lib/verseMemory.ts</span> —
+              <code>unheartByVerseRefId</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/savedVerses.ts</span> — toggle
+              remove-branch uses the helper.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-start.ts</span>
+              <span class="tag-new">(new)</span> — pure
+              <code
+                >planStart({ pieces, hearts, scope, unifiedEnabled,
+                memberSchedules, now })</code
+              >
+              → attachment inference, unheart spans, initial status/schedule.
+              Tests in
+              <span class="fileref">src/lib/passage-start.test.ts</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              <code>start</code>: reject unless owned eligible scope pack;
+              idempotent if row exists; on create run <code>planStart</code>,
+              unheart matches, clear <code>unifiedReviewEnabled</code>.
+            </li>
+            <li>
+              <code>stop</code>: delete passage row (and its reviews if cheap);
+              pack UX reverts; hearts untouched.
+            </li>
+            <li>
+              <code>introduceNext</code>: enforce
+              <code>remainingIntroduces</code>; set next unreached → learning
+              Read.
+            </li>
+            <li>
+              <code>recordAttempt</code> frontier: advance piece with learning
+              rules + ≥85% pass; attach on Guided clear; solid on From Memory
+              clear; soft-lock via <code>dueAtInCalendarDays</code> when
+              <code>isLearningSessionEndingStage</code>; if all solid →
+              reviewing + schedule.
+            </li>
+            <li>
+              Rope/repair attempts log <code>passageReviews</code> only. Review
+              kind schedules the passage row (≥85% success path).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              <code>pnpm test</code> pass.
+            </li>
+            <li>
+              <code>planStart</code> tests: auto-heart bijection unhearts; John
+              3:16 kept beside 16–17 piece; solid inference from review hearts;
+              second start is idempotent at the mutation layer.
+            </li>
+            <li>Toggle unheart uses the extracted helper.</li>
+            <li>Behavioral / visual: no UI wired yet.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr4">
+        <div class="pr-head">
+          <div class="num">4</div>
+          <div>
+            <div class="pr-sub">session · can split further</div>
+            <h3 class="pr-title">Passage session UI</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 3. <b>Unblocks:</b> PR 5, 7.</p>
+          <h4>Goal</h4>
+          <p>
+            Typed passage session for the scaffolded rope: mixed-support rope
+            recitation, stall repair, frontier band drill (full ladder),
+            introduce next piece. Pack learn/review routes use it when
+            <code>getForPack</code> is non-null. Without a passage row, keep
+            today’s PracticeBoard (PR 5 adds opt-in).
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/passage/passage-session.tsx</span
+              >
+              <span class="tag-new">(new)</span> — phase UI + mutations.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/passage/passage-session.test.tsx</span
+              >
+              <span class="tag-new">(new)</span> — RTL: rope before frontier
+              when attached pieces exist; introduce calls
+              <code>introduceNext</code>; stall shows previous-piece cue;
+              composite hint uses per-piece stages.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/passage/passage-recall-card.tsx</span
+              >
+              <span class="tag-new">(new)</span> — textarea card reusing
+              <code>diffWords</code>, <code>classifyVerseAttempt</code>,
+              <code>VerseAttemptResult</code>,
+              <code>PreviewFillExactAnswerButton</code>. Rope mode shows
+              <code>compositeHintForWindow</code> above the field.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-pack-practice-page.tsx</span
+              >
+              — passage row + learning → <code>PassageSession</code>. Reviewing
+              → blank whole-passage card +
+              <code>recordAttempt({ kind: "review" })</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-pack-review-page.tsx</span
+              >
+              — same reviewing branch.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-pack-review-page.test.tsx</span
+              >
+              — passage row present → no unified composite from hearts.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Rope window via <code>rehearsalStartIndex</code> over attached +
+              solid only; feed spans to <code>useEsvCompositePassage</code>;
+              prompt = <code>compositeHintForWindow</code>.
+            </li>
+            <li>
+              Frontier card: single piece at its <code>learnStage</code> (0–3,
+              including Challenge). Pass at ≥85%. Soft-lock ends the frontier
+              for the day; rope practice may continue.
+            </li>
+            <li>
+              Stall repair on rope fails; after ≥85% continue into frontier or
+              offer-introduce — never day-lock introduces.
+            </li>
+            <li>
+              “From the start of this section” / “From the beginning” override
+              rope start locally (no word cap).
+            </li>
+            <li>
+              Offer introduce when budget remains and next piece is unreached.
+              Section-complete is optional when a section’s last piece solids.
+            </li>
+            <li>Do not shuffle. Do not use PracticeBoard’s verse rail.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code>
+              pass.
+            </li>
+            <li>
+              RTL tests assert phase labels and mutation names (mock Convex).
+            </li>
+            <li>
+              Custom packs and packs without a passage row still use
+              PracticeBoard.
+            </li>
+            <li>
+              Behavioral / visual (manual): after PR 5 opt-in, introduce piece
+              1, clear Guided across days with soft-lock, see it appear on the
+              rope with Challenge hints before solid.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr5">
+        <div class="pr-head">
+          <div class="num">5</div>
+          <div>
+            <div class="pr-sub">pack UX · first user-visible change</div>
+            <h3 class="pr-title">Pack view: opt-in map and stop</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 4. <b>Unblocks:</b> PR 6–8.</p>
+          <h4>Goal</h4>
+          <p>
+            Eligible scope packs stay heart collections until the user clicks
+            <b>Learn as a passage</b>. That calls <code>start</code> (migration
+            banner if auto-hearts unhearted). Active packs show a passage map
+            (unreached / learning / attached / solid), Continue / Review,
+            <b>Stop passage learning</b>, and related hearts. Do
+            <b>not</b> auto-start on open.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/hooks/use-start-passage.ts</span>
+              <span class="tag-new">(new)</span> — fetch chapters, build pieces,
+              call <code>start</code> on explicit user action (and optional
+              search flag from builder).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+              — CTA when eligible + no row; map + Continue/Stop/Review when row
+              exists; related hearts; migration banner.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.test.tsx</span
+              >
+              — eligible pack without row shows Learn as a passage (not
+              auto-heart); with row shows map + Stop; custom unchanged.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/passage-map.tsx</span
+              >
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/passage-migration-banner.tsx</span
+              >
+              <span class="tag-new">(new)</span>
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-pack-page.tsx</span
+              >
+              — honor optional <code>startPassage</code> search to invoke start
+              once after create shortcut.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Never call <code>start</code> merely because the pack page loaded.
+            </li>
+            <li>
+              Hide PackLearnPanel auto-heart / UnifiedReviewPanel when a passage
+              row exists; show Stop (confirm if reviewing/mastered).
+            </li>
+            <li>
+              Related hearts via <code>packs.resolveMembers</code>; verse
+              actions only.
+            </li>
+            <li>Ineligible / custom: zero changes.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code>
+              pass. Update auto-heart expectations for eligible packs.
+            </li>
+            <li>Start path does not call <code>heartMany</code>.</li>
+            <li>
+              Behavioral / visual: open eligible pack → collection + Learn as a
+              passage CTA; after start → map; Stop returns to collection CTA.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr6">
+        <div class="pr-head">
+          <div class="num">6</div>
+          <div>
+            <div class="pr-sub">create flow</div>
+            <h3 class="pr-title">
+              Builder: collection by default, optional start
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 5. <b>Unblocks:</b> PR 8.</p>
+          <h4>Goal</h4>
+          <p>
+            Creating an eligible scope pack defaults to a heart collection (no
+            <code>heartHint</code> auto-heart). Optional control: “Create and
+            start passage learning” navigates with <code>startPassage</code> so
+            the pack page runs <code>start</code>
+            once. Copy must not imply every scope pack is a passage.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-builder.tsx</span
+              >
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-builder.test.tsx</span
+              >
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-pack-search.ts</span> —
+              replace <code>heartHint</code> for eligible scopes with optional
+              <code>startPassage</code>; keep <code>heartHint</code> parsing for
+              old links if needed.
+            </li>
+            <li>
+              <span class="fileref">src/lib/heart-scope-copy.ts</span> —
+              eligible packs must not use <code>HEART_SCOPE_ACTION_LABEL</code>;
+              ineligible incomplete may keep auto-heart copy.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Default Create pack → <code>/memory/$packId</code> with no start
+              flag.
+            </li>
+            <li>
+              Optional secondary action sets <code>startPassage: true</code>.
+            </li>
+            <li>Over-cap / multi-book: heart-collection behavior unchanged.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code>
+              pass.
+            </li>
+            <li>
+              Default create test expects navigation without auto-start;
+              optional shortcut test expects <code>startPassage</code>.
+            </li>
+            <li>
+              Behavioral / visual: New John 3 pack opens as collection with
+              Learn as a passage available — not auto-heart dialog.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr7">
+        <div class="pr-head">
+          <div class="num">7</div>
+          <div>
+            <div class="pr-sub">home / review</div>
+            <h3 class="pr-title">Global queues and counts</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 5. <b>Unblocks:</b> PR 8.</p>
+          <h4>Goal</h4>
+          <p>
+            Memory home counts and global Learn / Review include passage cards
+            only for packs that already have a passage row. listMine shows rope
+            progress (e.g. solid/attached counts). Do <b>not</b> auto-start
+            passage mode from global Review — unified packs stay on unified
+            until the user opts in on the pack.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/packs.ts</span> —
+              <code>listMine</code>: optional <code>passageStatus</code>,
+              <code>solidCount</code>, <code>attachedCount</code>,
+              <code>pieceCount</code>; dueCount 0|1 for passage packs.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> —
+              <code>dueQueue</code>, <code>dueCount</code>,
+              <code>memoryStats</code> per Architecture learningDue rules.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/packs.ts</span> —
+              <code>loadPassageMemoryByUser</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/to-practice-verse.ts</span
+              >
+              — reviewing passage uses frozen pieces as composite members.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-learn-page.tsx</span
+              >
+              — include building passage cards.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-list.tsx</span
+              >
+              — subtitle e.g. “Passage · 4 solid · 1 on rope · 11 pieces”.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Load user <code>passageMemory</code> via <code>by_userId</code>.
+            </li>
+            <li>
+              Soft-locked frontier + no introduces: rope practice from pack OK;
+              do not inflate learningDue — document in code.
+            </li>
+            <li>Leave leftover hearts in verse dueQueue.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Behavioral / visual: reviewing passage = one Review card; heart in
+              chapter can still be its own due verse; eligible pack without
+              passage row does not appear as a passage learn card.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pr" id="pr8">
+        <div class="pr-head">
+          <div class="num">8</div>
+          <div>
+            <div class="pr-sub">polish</div>
+            <h3 class="pr-title">Copy, banners, changelog</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 6, PR 7. <b>Unblocks:</b> nothing.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Finish copy: Learn as a passage / Stop, introduce-another vs done,
+            frontier-locked (“Come back tomorrow for this piece — you can still
+            practice the rope”), section-complete offer, empty states,
+            CHANGELOG. Do not delete unified-review code.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/passage/passage-session.tsx</span
+              >
+            </li>
+            <li>
+              <span class="fileref">src/components/memory/memory-home.tsx</span>
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-list.tsx</span
+              >
+            </li>
+            <li>
+              <span class="fileref">src/lib/heart-scope-copy.ts</span> — if
+              leftover auto-heart copy still appears on eligible packs.
+            </li>
+            <li>
+              <span class="fileref">CHANGELOG.md</span> — Features: passage mode
+              on scope packs; scaffolded rope; migration on opt-in.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Sweep Memorize/Learn whole passage / Recite as one on
+              passage-active eligible packs; leave on collection/ineligible
+              branches only.
+            </li>
+            <li>
+              Nudge introduce when <code>addsOnDay === 0</code> and budget
+              remains after a rope-only session — do not block exit.
+            </li>
+            <li>No speaking-mode UI.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code>
+              pass.
+            </li>
+            <li>CHANGELOG Features bullet; no version bump.</li>
+            <li>
+              Behavioral / visual: Psalm 16 or Jude — opt in, multi-day Guided
+              attach, rope with mixed hints, introduce budget, Stop works,
+              starting an old auto-hearted pack shows migration banner.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <section id="risks">
+        <div class="eyebrow">Eyes open</div>
+        <h2>Risks &amp; how the plan answers them</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Risk</th>
+                <th>Mitigation (baked into the PR sequence)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Scope packs forced into passage mode</td>
+                <td>
+                  Explicit Learn as a passage + Stop (PR 5–6). Create defaults
+                  to collection. No auto-start on open.
+                </td>
+              </tr>
+              <tr>
+                <td>Same-day encode loses spaced learning</td>
+                <td>
+                  Full Read→Guided→Challenge→From Memory with per-piece
+                  soft-locks; attach only after Guided (PR 1 + 3 + 4).
+                </td>
+              </tr>
+              <tr>
+                <td>Flood of due verse cards after unified off</td>
+                <td>
+                  Unheart only on opt-in start for auto-heart-shaped spans;
+                  banner explains (PR 3 + 5). Leftover hearts intentional.
+                </td>
+              </tr>
+              <tr>
+                <td>Long typed recitations are painful</td>
+                <td>
+                  Rope warm-up ≤3 pieces / ≤120 words; mixed hints reduce blank
+                  load; 85% pass; long practice is opt-in.
+                </td>
+              </tr>
+              <tr>
+                <td>ESV fetch required to start</td>
+                <td>
+                  Client <code>getChaptersBatch</code> + session cache on
+                  explicit start only.
+                </td>
+              </tr>
+              <tr>
+                <td>Dual systems while rolling out</td>
+                <td>
+                  Collections and unified unchanged until opt-in. Do not delete
+                  unified code (PR 8).
+                </td>
+              </tr>
+              <tr>
+                <td>Grouping reshuffles if hearts passed in</td>
+                <td>
+                  <code>buildPassagePieces</code> always empty hearts; freeze on
+                  start.
+                </td>
+              </tr>
+              <tr>
+                <td>PR 4 session board could sprawl</td>
+                <td>
+                  May split recall card / session shell / routes; stay one PR if
+                  file list holds.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        Berean · Passage Memory implementation plan · grounded in the current
+        codebase.
+      </footer>
+    </div>
+  </body>
+</html>
