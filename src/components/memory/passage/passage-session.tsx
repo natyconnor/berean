@@ -17,6 +17,7 @@ import {
 import {
   chromeStage,
   computeStallCue,
+  type StallCueContent,
   CONNECT_COPY,
   CONNECT_RECITE_LABEL,
   CONNECT_TITLE,
@@ -134,7 +135,7 @@ export function PassageSession({
   );
   const [ropeOverride, setRopeOverride] =
     useState<RopeStartOverride>("rehearsal");
-  const [stallCue, setStallCue] = useState<string | null>(null);
+  const [stallCue, setStallCue] = useState<StallCueContent | null>(null);
   const [holdResult, setHoldResult] = useState(false);
   const [heldRecall, setHeldRecall] = useState<BuiltRecall | null>(null);
   const [recitingSection, setRecitingSection] = useState(false);
@@ -549,7 +550,8 @@ export function PassageSession({
             error={recall.error}
             retry={recall.retry}
             hint={recall.hint}
-            stallCue={stallCue}
+            stallCue={stallCue?.text}
+            stallCueLabel={stallCue?.label}
             learnStage={recall.learnStage}
             stageReps={recall.stageReps}
             status={recall.status}

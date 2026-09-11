@@ -1161,8 +1161,8 @@ function StartPassagePanel({
             {LEARN_AS_PASSAGE_LABEL}
           </h2>
           <p className="text-xs leading-5 text-muted-foreground">
-            Memorize {packName} as one growing recitation — not a queue of
-            hearts. You can still heart individual verses; they stay
+            Memorize {packName} as one growing recitation — not a list of
+            individual verses. You can still heart individual verses; they stay
             independent.
           </p>
         </div>

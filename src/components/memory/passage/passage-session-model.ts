@@ -13,6 +13,7 @@ import {
   localDayIndex,
   isPassagePieceLocked,
 } from "@/lib/passage-frontier";
+import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
   initialPassageSessionPhase,
@@ -99,9 +100,20 @@ export function frontierHint(
   };
 }
 
+export type StallCueContent = {
+  text: string;
+  label: "Pick up after" | "Starting hint";
+};
+
+/**
+ * Bridge / recovery cue after a failed multi-verse recitation.
+ * When the main panel already shows Guided/Challenge letter hints, only keep
+ * the clear-text bridge from the previous verse — do not duplicate first letters.
+ */
 export function stallRepairCue(
   previousText: string | undefined,
   stalledText: string,
+  options?: { includeStalledLetters?: boolean },
 ): string {
   const previousEnd = previousText
     ? previousText
@@ -110,12 +122,30 @@ export function stallRepairCue(
         .slice(-STALL_CUE_PREVIOUS_WORDS)
         .join(" ")
     : "";
+  if (options?.includeStalledLetters === false) {
+    return previousEnd;
+  }
   const stalledLetters = maskVerseText(stalledText, "first-letters")
     .map((token) => token.text)
     .join("");
   return [previousEnd, stalledLetters]
     .filter((part) => part.length > 0)
     .join(" ");
+}
+
+/** True when the repair window already shows Guided/Challenge-style hints. */
+export function repairWindowShowsStageHints(
+  pieces: readonly PassagePiece[],
+  indexes: readonly number[],
+): boolean {
+  return indexes.some((index) => {
+    const piece = pieces[index];
+    return (
+      piece != null &&
+      piece.attachment === "attached" &&
+      piece.learnStage < MAX_LEARN_STAGE
+    );
+  });
 }
 
 export function ropeWindowPieceIndexes(
@@ -208,7 +238,7 @@ export function repairPromptIndexes(state: PassageSessionState): number[] {
 export function computeStallCue(
   state: PassageSessionState,
   texts: readonly string[],
-): string | null {
+): StallCueContent | null {
   if (state.phase !== "stall-repair") return null;
   const mapping = state.rehearsalRopeIndexes ?? [];
   const stallLocal = state.stallIndex ?? 0;
@@ -218,8 +248,16 @@ export function computeStallCue(
     stalledIndex !== undefined ? (texts[stalledIndex] ?? "") : "";
   const previousText =
     previousIndex !== undefined ? texts[previousIndex] : undefined;
-  const cue = stallRepairCue(previousText, stalledText);
-  return cue.length > 0 ? cue : null;
+  const indexes = repairPromptIndexes(state);
+  const showsStageHints = repairWindowShowsStageHints(state.pieces, indexes);
+  const cue = stallRepairCue(previousText, stalledText, {
+    includeStalledLetters: !showsStageHints,
+  });
+  if (cue.length === 0) return null;
+  return {
+    text: cue,
+    label: showsStageHints ? "Pick up after" : "Starting hint",
+  };
 }
 
 export function sessionFromView(

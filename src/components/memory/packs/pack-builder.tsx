@@ -361,65 +361,67 @@ export function PackBuilder() {
               {error}
             </p>
           ) : null}
+        </div>
+      </ScrollArea>
 
-          <div className="flex flex-wrap items-center gap-2 border-t pt-5">
-            {step !== "type" ? (
-              <Button type="button" variant="outline" onClick={goBack}>
-                Back
-              </Button>
-            ) : null}
-            {step === "type" ? (
-              <Button type="button" onClick={goNext} className="gap-1.5">
-                Continue
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Button>
-            ) : null}
-            {step === "content" ? (
+      <footer className="shrink-0 border-t bg-background px-5 py-4">
+        <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2">
+          {step !== "type" ? (
+            <Button type="button" variant="outline" onClick={goBack}>
+              Back
+            </Button>
+          ) : null}
+          {step === "type" ? (
+            <Button type="button" onClick={goNext} className="gap-1.5">
+              Continue
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </Button>
+          ) : null}
+          {step === "content" ? (
+            <Button
+              type="button"
+              onClick={goNext}
+              disabled={!canContinueFromContent}
+              className="gap-1.5"
+            >
+              Continue
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </Button>
+          ) : null}
+          {step === "name" ? (
+            <>
               <Button
                 type="button"
-                onClick={goNext}
-                disabled={!canContinueFromContent}
+                onClick={() => void handleCreate()}
+                disabled={!canCreate}
                 className="gap-1.5"
               >
-                Continue
-                <ArrowRight className="h-4 w-4" aria-hidden />
+                <PackagePlus className="h-4 w-4" aria-hidden />
+                {isCreating ? "Creating…" : "Create pack"}
               </Button>
-            ) : null}
-            {step === "name" ? (
-              <>
+              {startPassageLabel ? (
                 <Button
                   type="button"
-                  onClick={() => void handleCreate()}
+                  variant="outline"
+                  onClick={() => void handleCreate({ startPassage: true })}
                   disabled={!canCreate}
                   className="gap-1.5"
                 >
-                  <PackagePlus className="h-4 w-4" aria-hidden />
-                  {isCreating ? "Creating\u2026" : "Create pack"}
+                  <BookOpen className="h-4 w-4" aria-hidden />
+                  {startPassageLabel}
                 </Button>
-                {startPassageLabel ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleCreate({ startPassage: true })}
-                    disabled={!canCreate}
-                    className="gap-1.5"
-                  >
-                    <BookOpen className="h-4 w-4" aria-hidden />
-                    {startPassageLabel}
-                  </Button>
-                ) : null}
-              </>
-            ) : null}
-            {step === "content" && !canContinueFromContent ? (
-              <p className="basis-full text-xs text-muted-foreground">
-                {kind === "scope"
-                  ? "Select chapters to continue"
-                  : "Select at least one verse to continue"}
-              </p>
-            ) : null}
-          </div>
+              ) : null}
+            </>
+          ) : null}
+          {step === "content" && !canContinueFromContent ? (
+            <p className="basis-full text-xs text-muted-foreground">
+              {kind === "scope"
+                ? "Select chapters to continue"
+                : "Select at least one verse to continue"}
+            </p>
+          ) : null}
         </div>
-      </ScrollArea>
+      </footer>
     </div>
   );
 }

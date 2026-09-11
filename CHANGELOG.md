@@ -10,6 +10,9 @@
 
 ### Bug Fixes
 
+* Learn-as-a-passage copy says "not a list of individual verses"
+* Pack builder keeps Continue visible with a sticky footer and a scrollable chapter grid
+* Passage practice after a miss no longer stacks a duplicate letter Starting hint on Guided/Challenge
 * Passage learning starts at the first verse, prompts the next verse after Guided, and keeps the Mode Dock from covering bottom actions
 * Soft-locked verses prompt a rolling pair connect after every new part from the second on
 * Soft-lock copy says the verse is down for the day
