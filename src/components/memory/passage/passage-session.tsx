@@ -17,6 +17,9 @@ import {
 import {
   chromeStage,
   computeStallCue,
+  CONNECT_COPY,
+  CONNECT_RECITE_LABEL,
+  CONNECT_TITLE,
   DONE_FOR_NOW_LABEL,
   FRONTIER_LOCKED_COPY,
   frontierHint,
@@ -131,6 +134,7 @@ export function PassageSession({
   const [holdResult, setHoldResult] = useState(false);
   const [heldRecall, setHeldRecall] = useState<BuiltRecall | null>(null);
   const [recitingSection, setRecitingSection] = useState(false);
+  const [recitingConnect, setRecitingConnect] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
 
   const pieceRefs = useMemo(
@@ -164,6 +168,7 @@ export function PassageSession({
         packName,
         state,
         recitingSection,
+        recitingConnect,
         pieceTexts,
         compositeLoading: composite.loading,
         compositeError: composite.error,
@@ -310,6 +315,7 @@ export function PassageSession({
     setHoldResult(false);
     setHeldRecall(null);
     setRecitingSection(false);
+    setRecitingConnect(false);
     return true;
   }
 
@@ -321,6 +327,9 @@ export function PassageSession({
     }
     if (state.phase !== "section-complete") {
       setRecitingSection(false);
+    }
+    if (state.phase !== "connect") {
+      setRecitingConnect(false);
     }
   }
 
@@ -334,6 +343,7 @@ export function PassageSession({
     setHeldRecall(null);
     setStallCue(null);
     setRecitingSection(false);
+    setRecitingConnect(false);
   }
 
   const remaining = remainingAddsIn(state);
@@ -439,6 +449,13 @@ export function PassageSession({
       !recitingSection ? (
         <SectionCompletePanel
           onRecite={() => setRecitingSection(true)}
+          onSkip={handleSkipSection}
+        />
+      ) : null}
+
+      {effectivePhase === "connect" && !holdResult && !recitingConnect ? (
+        <ConnectPanel
+          onRecite={() => setRecitingConnect(true)}
           onSkip={handleSkipSection}
         />
       ) : null}
@@ -580,6 +597,25 @@ function SectionCompletePanel({
   );
 }
 
+function ConnectPanel({
+  onRecite,
+  onSkip,
+}: {
+  onRecite: () => void;
+  onSkip: () => void;
+}): JSX.Element {
+  return (
+    <CheckpointCard title={CONNECT_TITLE} description={CONNECT_COPY}>
+      <Button type="button" onClick={onRecite}>
+        {CONNECT_RECITE_LABEL}
+      </Button>
+      <Button type="button" variant="outline" onClick={onSkip}>
+        Continue
+      </Button>
+    </CheckpointCard>
+  );
+}
+
 function CheckpointCard({
   title,
   description,
@@ -687,6 +723,7 @@ function buildingRecall(args: {
   packName: string;
   state: PassageSessionState;
   recitingSection: boolean;
+  recitingConnect: boolean;
   pieceTexts: readonly string[];
   compositeLoading: boolean;
   compositeError: string | null;
@@ -697,6 +734,7 @@ function buildingRecall(args: {
     packName,
     state,
     recitingSection,
+    recitingConnect,
     pieceTexts,
     compositeLoading,
     compositeError,
@@ -727,6 +765,26 @@ function buildingRecall(args: {
       retry,
       "This section",
       "Recite this section from memory",
+    );
+  }
+
+  if (phase === "connect") {
+    if (!recitingConnect) return null;
+    const indexes =
+      state.rehearsalRopeIndexes && state.rehearsalRopeIndexes.length > 0
+        ? [...state.rehearsalRopeIndexes]
+        : ropeIndexes.slice(-2);
+    if (indexes.length === 0) return null;
+    return ropeRecall(
+      packName,
+      state.pieces,
+      indexes,
+      pieceTexts,
+      compositeLoading,
+      compositeError,
+      retry,
+      "Together",
+      "Type both verses together",
     );
   }
 

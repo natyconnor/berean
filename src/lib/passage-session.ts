@@ -1,5 +1,6 @@
 import type { DiffToken } from "./diff-words";
 import {
+  connectPairIndexes,
   dueFrontierIndex,
   frontierIndex,
   isPassagePieceLocked,
@@ -19,6 +20,7 @@ export type PassageSessionPhase =
   | "frontier"
   | "offer-introduce"
   | "section-complete"
+  | "connect"
   | "passage-complete"
   | "budget-exhausted"
   | "frontier-locked";
@@ -142,6 +144,27 @@ function ropeWindow(state: PassageSessionState): {
   if (rope.length === 0) {
     return { start: 0, end: 0, ropeIndexes: [] };
   }
+
+  const useStoredPair =
+    state.rehearsalRopeIndexes &&
+    state.rehearsalRopeIndexes.length > 0 &&
+    (state.phase === "connect" ||
+      (state.phase === "stall-repair" && state.interruptedPhase === "connect"));
+  if (useStoredPair && state.rehearsalRopeIndexes) {
+    const ropeIndexes = state.rehearsalRopeIndexes.filter((index) => {
+      const piece = state.pieces[index];
+      return (
+        piece &&
+        (piece.attachment === "attached" || piece.attachment === "solid")
+      );
+    });
+    if (ropeIndexes.length > 0) {
+      const start = ropeIndexes[0] ?? 0;
+      const end = (ropeIndexes[ropeIndexes.length - 1] ?? 0) + 1;
+      return { start, end, ropeIndexes };
+    }
+  }
+
   const last = rope[rope.length - 1] ?? 0;
   const start = rehearsalStartIndex(state.pieces, state.pieceWordCounts);
   const ropeIndexes: number[] = [];
@@ -226,7 +249,13 @@ export function reconcilePassagePhase(
   remainingIntroduces: number,
   now: number,
 ): PassageSessionPhase {
-  if (phase === "stall-repair" || phase === "section-complete") return phase;
+  if (
+    phase === "stall-repair" ||
+    phase === "section-complete" ||
+    phase === "connect"
+  ) {
+    return phase;
+  }
   if (phase === "frontier" && dueFrontierIndex(pieces, now) === null) {
     return sessionPhaseForPieces({ pieces, remainingIntroduces, now });
   }
@@ -349,6 +378,25 @@ function applyFrontierAttempt(
     };
   }
 
+  // After Guided soft-locks a piece onto the rope, prompt a pair connect every
+  // two parts — including on day 1 — before offering the next verse.
+  if (piece.attachment !== "attached" && nextPiece.attachment === "attached") {
+    const pair = connectPairIndexes(pieces);
+    if (pair) {
+      return {
+        ...state,
+        now,
+        pieces,
+        phase: "connect",
+        pendingMutation,
+        stallIndex: undefined,
+        interruptedPhase: undefined,
+        rehearsalStart: pair[0],
+        rehearsalRopeIndexes: pair,
+      };
+    }
+  }
+
   const remaining = remainingIn(state, now);
   return {
     ...state,
@@ -383,9 +431,10 @@ function applyRopeAttempt(
   };
 
   if (accuracy >= PASSAGE_PASS_ACCURACY) {
+    const resume = state.interruptedPhase;
     const nextPhase =
-      kind === "repair" && state.interruptedPhase
-        ? state.interruptedPhase
+      kind === "repair" && resume && resume !== "connect"
+        ? resume
         : phaseAfterWarmup(state.pieces, remainingIn(state, now), now);
     return {
       ...state,
@@ -416,7 +465,9 @@ function applyRopeAttempt(
     stallIndex: localStall,
     rehearsalStart: window.start,
     rehearsalRopeIndexes: mappingIndexes,
-    interruptedPhase: state.interruptedPhase ?? continuePhase,
+    interruptedPhase:
+      state.interruptedPhase ??
+      (state.phase === "connect" ? "connect" : continuePhase),
   };
 }
 
@@ -461,7 +512,7 @@ export function reducePassageSession(
     return applyFrontierAttempt(state, accuracy, now);
   }
 
-  if (state.phase === "section-complete") {
+  if (state.phase === "section-complete" || state.phase === "connect") {
     if (accuracy >= PASSAGE_PASS_ACCURACY) {
       return {
         ...clearSignals(state, now),

@@ -8,6 +8,7 @@ import {
 } from "./memory-scheduler";
 import {
   compositeHintForWindow,
+  connectPairIndexes,
   dueFrontierIndex,
   frontierIndex,
   inferPieceLearningState,
@@ -120,6 +121,28 @@ describe("frontierIndex / ropePieceIndexes / sectionStartIndex", () => {
     ];
     expect(sectionStartIndex(pieces, 1)).toBe(0);
     expect(sectionStartIndex(pieces, 3)).toBe(2);
+  });
+
+  it("offers a connect pair on every second rope piece", () => {
+    expect(connectPairIndexes([piece(0, "attached")])).toBeNull();
+    expect(
+      connectPairIndexes([piece(0, "attached"), piece(1, "attached")]),
+    ).toEqual([0, 1]);
+    expect(
+      connectPairIndexes([
+        piece(0, "attached"),
+        piece(1, "attached"),
+        piece(2, "attached"),
+      ]),
+    ).toBeNull();
+    expect(
+      connectPairIndexes([
+        piece(0, "solid"),
+        piece(1, "attached"),
+        piece(2, "solid"),
+        piece(3, "attached"),
+      ]),
+    ).toEqual([2, 3]);
   });
 });
 

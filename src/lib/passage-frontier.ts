@@ -28,6 +28,8 @@ import type { VerseScope } from "./verse-scope-match";
 export const PASSAGE_MAX_ADDS_PER_DAY = 5;
 export const PASSAGE_REHEARSAL_MAX_PIECES = 3;
 export const PASSAGE_REHEARSAL_MAX_WORDS = 120;
+/** Offer a pair-connect after every N attached/solid pieces. */
+export const PASSAGE_CONNECT_EVERY_N = 2;
 export const PASSAGE_PASS_ACCURACY = LEARN_PROGRESS_ACCURACY;
 
 export type HeartedMemorySpan = VerseSpan & {
@@ -97,6 +99,23 @@ export function ropePieceIndexes(pieces: readonly PassagePiece[]): number[] {
     if (piece && isRopeAttachment(piece.attachment)) indexes.push(index);
   }
   return indexes;
+}
+
+/**
+ * Last {@link PASSAGE_CONNECT_EVERY_N} rope pieces when the rope length is a
+ * positive multiple of that size; otherwise null (no connect yet).
+ */
+export function connectPairIndexes(
+  pieces: readonly PassagePiece[],
+): number[] | null {
+  const rope = ropePieceIndexes(pieces);
+  if (
+    rope.length < PASSAGE_CONNECT_EVERY_N ||
+    rope.length % PASSAGE_CONNECT_EVERY_N !== 0
+  ) {
+    return null;
+  }
+  return rope.slice(-PASSAGE_CONNECT_EVERY_N);
 }
 
 export function sectionStartIndex(

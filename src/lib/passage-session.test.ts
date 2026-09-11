@@ -154,6 +154,48 @@ describe("reducePassageSession", () => {
     expect(ignored.pieces[0]?.learnStage).toBe(locked?.learnStage);
   });
 
+  it("offers a pair connect after every second attached piece on day 1", () => {
+    let current = session([
+      piece(0, "unreached"),
+      piece(1, "unreached"),
+      piece(2, "unreached"),
+      piece(3, "unreached"),
+    ]);
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[0]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("offer-introduce");
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[1]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("connect");
+    expect(current.rehearsalRopeIndexes).toEqual([0, 1]);
+
+    current = reducePassageSession(current, { type: "continue" });
+    expect(current.phase).toBe("offer-introduce");
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[2]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("offer-introduce");
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[3]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("connect");
+    expect(current.rehearsalRopeIndexes).toEqual([2, 3]);
+  });
+
   it("repairs a rope fail then continues", () => {
     const start = session(
       [

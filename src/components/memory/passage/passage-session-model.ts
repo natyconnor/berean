@@ -31,6 +31,7 @@ export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
     frontier: "Learn",
     "offer-introduce": "Learn",
     "section-complete": "Learn",
+    connect: "Practice",
     "passage-complete": "Review",
     "budget-exhausted": "Learn",
     "frontier-locked": "Learn",
@@ -38,10 +39,10 @@ export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
 
 /** Soft-locked current verse; no more work on it today. */
 export const FRONTIER_LOCKED_COPY =
-  "This verse is set for today. Come back tomorrow to keep going with it.";
+  "You've got this verse down for the day. Come back tomorrow to keep going with it.";
 
 export const NEXT_VERSE_PROMPT_COPY =
-  "That's enough for this verse today. Start the next one?";
+  "You've got this verse down for the day. Start the next one?";
 
 export const START_VERSE_PROMPT_COPY = "Ready to begin this verse?";
 
@@ -51,6 +52,13 @@ export const SECTION_COMPLETE_COPY =
   "You've finished this section. Recite it together, or keep going.";
 
 export const SECTION_RECITE_LABEL = "Recite this section";
+
+export const CONNECT_COPY =
+  "Recite these two together to lock them in, or keep going.";
+
+export const CONNECT_RECITE_LABEL = "Recite together";
+
+export const CONNECT_TITLE = "Connect these verses";
 
 const STALL_CUE_PREVIOUS_WORDS = 6;
 
@@ -286,3 +294,5 @@ export function sectionIndexes(pieces: readonly PassagePiece[]): number[] {
     .filter((piece) => piece.sectionIndex === lastSolid.sectionIndex)
     .map((piece) => piece.index);
 }
+
+export { connectPairIndexes } from "@/lib/passage-frontier";

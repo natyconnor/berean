@@ -10,6 +10,9 @@ import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 import {
+  CONNECT_COPY,
+  CONNECT_RECITE_LABEL,
+  CONNECT_TITLE,
   DONE_FOR_NOW_LABEL,
   FRONTIER_LOCKED_COPY,
   NEXT_VERSE_PROMPT_COPY,
@@ -310,10 +313,13 @@ describe("PassageSession", () => {
 
   it("uses plain language for the remaining session copy", () => {
     expect(DONE_FOR_NOW_LABEL).toBe("That's enough for today");
-    expect(FRONTIER_LOCKED_COPY).toMatch(/set for today/);
-    expect(FRONTIER_LOCKED_COPY).not.toMatch(/rope/i);
-    expect(NEXT_VERSE_PROMPT_COPY).toMatch(/Start the next one/);
+    expect(FRONTIER_LOCKED_COPY).toMatch(/down for the day/);
+    expect(FRONTIER_LOCKED_COPY).not.toMatch(/rope|set for today/i);
+    expect(NEXT_VERSE_PROMPT_COPY).toMatch(/down for the day/);
     expect(NEXT_VERSE_PROMPT_COPY).not.toMatch(/rope|frontier|introduce/i);
+    expect(CONNECT_TITLE).toBe("Connect these verses");
+    expect(CONNECT_COPY).toMatch(/together/);
+    expect(CONNECT_RECITE_LABEL).toBe("Recite together");
     expect(SECTION_COMPLETE_COPY).toMatch(/finished this section/);
     expect(SECTION_RECITE_LABEL).toBe("Recite this section");
   });
