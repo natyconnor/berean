@@ -13,6 +13,8 @@
 * Pack scope chapter pickers start empty (whole book by default) and no longer clip selected chapter chips
 * Scoped pack create again allows whole-book and multi-book scopes; passage memorize stays eligibility-gated
 * Pack wizard keeps actions under the step content, right-aligned, with a capped chapter grid and clearer create tooltips
+* Learn-as-a-passage copy says "not a list of individual verses"
+* Passage practice after a miss no longer stacks a duplicate letter Starting hint on Guided/Challenge
 * Passage learning starts at the first verse, prompts the next verse after Guided, and keeps the Mode Dock from covering bottom actions
 * Soft-locked verses prompt a rolling pair connect after every new part from the second on
 * Soft-lock copy says the verse is down for the day
