@@ -455,6 +455,12 @@ export function PassageSession({
 
       {effectivePhase === "connect" && !holdResult && !recitingConnect ? (
         <ConnectPanel
+          verseTitles={(state.rehearsalRopeIndexes ?? [])
+            .map((index) => {
+              const piece = state.pieces[index];
+              return piece ? pieceCardTitle(piece) : null;
+            })
+            .filter((title): title is string => Boolean(title))}
           onRecite={() => setRecitingConnect(true)}
           onSkip={handleSkipSection}
         />
@@ -598,19 +604,25 @@ function SectionCompletePanel({
 }
 
 function ConnectPanel({
+  verseTitles,
   onRecite,
   onSkip,
 }: {
+  verseTitles: readonly string[];
   onRecite: () => void;
   onSkip: () => void;
 }): JSX.Element {
+  const pairLabel =
+    verseTitles.length >= 2
+      ? `${verseTitles[0]} · ${verseTitles[1]}`
+      : CONNECT_TITLE;
   return (
-    <CheckpointCard title={CONNECT_TITLE} description={CONNECT_COPY}>
+    <CheckpointCard title={pairLabel} description={CONNECT_COPY}>
       <Button type="button" onClick={onRecite}>
         {CONNECT_RECITE_LABEL}
       </Button>
       <Button type="button" variant="outline" onClick={onSkip}>
-        Continue
+        Skip for now
       </Button>
     </CheckpointCard>
   );

@@ -123,7 +123,7 @@ describe("frontierIndex / ropePieceIndexes / sectionStartIndex", () => {
     expect(sectionStartIndex(pieces, 3)).toBe(2);
   });
 
-  it("offers a connect pair on every second rope piece", () => {
+  it("offers a rolling connect pair once two or more rope pieces exist", () => {
     expect(connectPairIndexes([piece(0, "attached")])).toBeNull();
     expect(
       connectPairIndexes([piece(0, "attached"), piece(1, "attached")]),
@@ -134,7 +134,7 @@ describe("frontierIndex / ropePieceIndexes / sectionStartIndex", () => {
         piece(1, "attached"),
         piece(2, "attached"),
       ]),
-    ).toBeNull();
+    ).toEqual([1, 2]);
     expect(
       connectPairIndexes([
         piece(0, "solid"),

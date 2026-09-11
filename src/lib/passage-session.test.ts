@@ -154,7 +154,7 @@ describe("reducePassageSession", () => {
     expect(ignored.pieces[0]?.learnStage).toBe(locked?.learnStage);
   });
 
-  it("offers a pair connect after every second attached piece on day 1", () => {
+  it("offers a rolling pair connect after every attached piece from the second on", () => {
     let current = session([
       piece(0, "unreached"),
       piece(1, "unreached"),
@@ -185,8 +185,10 @@ describe("reducePassageSession", () => {
       current,
       (state) => state.pieces[2]?.attachment === "attached",
     );
-    expect(current.phase).toBe("offer-introduce");
+    expect(current.phase).toBe("connect");
+    expect(current.rehearsalRopeIndexes).toEqual([1, 2]);
 
+    current = reducePassageSession(current, { type: "continue" });
     current = reducePassageSession(current, { type: "introduce" });
     current = passFrontierUntil(
       current,

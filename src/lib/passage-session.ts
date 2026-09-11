@@ -378,8 +378,8 @@ function applyFrontierAttempt(
     };
   }
 
-  // After Guided soft-locks a piece onto the rope, prompt a pair connect every
-  // two parts — including on day 1 — before offering the next verse.
+  // After Guided soft-locks a piece onto the rope, connect it to the previous
+  // one whenever at least two pieces are attached — including on day 1.
   if (piece.attachment !== "attached" && nextPiece.attachment === "attached") {
     const pair = connectPairIndexes(pieces);
     if (pair) {

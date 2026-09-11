@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, PackagePlus } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
@@ -355,44 +355,23 @@ export function PackBuilder() {
               </div>
             </section>
           ) : null}
-        </div>
-      </ScrollArea>
 
-      <footer className="shrink-0 border-t bg-muted/30 px-5 py-3">
-        {error && (
-          <p
-            className="mx-auto mb-2 max-w-2xl text-sm text-destructive"
-            role="alert"
-          >
-            {error}
-          </p>
-        )}
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            {step !== "type" ? (
-              <>
-                <p className="truncate text-sm font-medium">{effectiveName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {contentSummary}
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {kind === "scope"
-                  ? "Next: choose the passage scope"
-                  : "Next: pick the verses"}
-              </p>
-            )}
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2 border-t pt-5">
             {step !== "type" ? (
               <Button type="button" variant="outline" onClick={goBack}>
                 Back
               </Button>
             ) : null}
             {step === "type" ? (
-              <Button type="button" onClick={goNext}>
+              <Button type="button" onClick={goNext} className="gap-1.5">
                 Continue
+                <ArrowRight className="h-4 w-4" aria-hidden />
               </Button>
             ) : null}
             {step === "content" ? (
@@ -400,32 +379,47 @@ export function PackBuilder() {
                 type="button"
                 onClick={goNext}
                 disabled={!canContinueFromContent}
+                className="gap-1.5"
               >
                 Continue
+                <ArrowRight className="h-4 w-4" aria-hidden />
               </Button>
             ) : null}
             {step === "name" ? (
               <>
+                <Button
+                  type="button"
+                  onClick={() => void handleCreate()}
+                  disabled={!canCreate}
+                  className="gap-1.5"
+                >
+                  <PackagePlus className="h-4 w-4" aria-hidden />
+                  {isCreating ? "Creating\u2026" : "Create pack"}
+                </Button>
                 {startPassageLabel ? (
                   <Button
+                    type="button"
                     variant="outline"
                     onClick={() => void handleCreate({ startPassage: true })}
                     disabled={!canCreate}
+                    className="gap-1.5"
                   >
+                    <BookOpen className="h-4 w-4" aria-hidden />
                     {startPassageLabel}
                   </Button>
                 ) : null}
-                <Button
-                  onClick={() => void handleCreate()}
-                  disabled={!canCreate}
-                >
-                  {isCreating ? "Creating\u2026" : "Create pack"}
-                </Button>
               </>
+            ) : null}
+            {step === "content" && !canContinueFromContent ? (
+              <p className="basis-full text-xs text-muted-foreground">
+                {kind === "scope"
+                  ? "Select chapters to continue"
+                  : "Select at least one verse to continue"}
+              </p>
             ) : null}
           </div>
         </div>
-      </footer>
+      </ScrollArea>
     </div>
   );
 }
