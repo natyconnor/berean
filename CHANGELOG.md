@@ -10,6 +10,7 @@
 
 ### Bug Fixes
 
+* Pack wizard keeps actions under the step content, right-aligned, with a capped chapter grid and clearer create tooltips
 * Passage learning starts at the first verse, prompts the next verse after Guided, and keeps the Mode Dock from covering bottom actions
 * Soft-locked verses prompt a rolling pair connect after every new part from the second on
 * Soft-lock copy says the verse is down for the day
