@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CREATE_AND_MEMORIZE_WHOLE_TOOLTIP,
   CREATE_AND_START_PASSAGE_LABEL,
+  CREATE_PACK_TOOLTIP,
   HEART_SCOPE_ACTION_LABEL,
   HEART_SCOPE_TOOLTIP,
   LEARN_AS_PASSAGE_LABEL,
@@ -36,8 +38,12 @@ describe("heartScopeActionLabel", () => {
       HEART_SCOPE_ACTION_LABEL,
     );
     expect(packBuilderStartPassageLabel(false)).toBeNull();
-    expect(CREATE_AND_START_PASSAGE_LABEL).toBe("Create and start learning");
+    expect(CREATE_AND_START_PASSAGE_LABEL).toBe(
+      "Create and memorize as a whole",
+    );
     expect(LEARN_AS_PASSAGE_LABEL).toBe("Learn as a passage");
+    expect(CREATE_PACK_TOOLTIP).toMatch(/auto-adds hearted verses/);
+    expect(CREATE_AND_MEMORIZE_WHOLE_TOOLTIP).toMatch(/singular passage/);
     expect(STOP_PASSAGE_LEARNING_LABEL).toBe("Stop passage learning");
     expect(LEARN_AS_PASSAGE_LABEL).not.toBe(HEART_SCOPE_ACTION_LABEL);
     expect(STOP_PASSAGE_LEARNING_LABEL).not.toBe(HEART_SCOPE_ACTION_LABEL);

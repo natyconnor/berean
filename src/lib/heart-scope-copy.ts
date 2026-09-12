@@ -14,7 +14,15 @@ export const LEARN_AS_PASSAGE_LABEL = "Learn as a passage";
 export const STOP_PASSAGE_LEARNING_LABEL = "Stop passage learning";
 
 /** Builder shortcut for eligible scopes. Still creates a normal collection. */
-export const CREATE_AND_START_PASSAGE_LABEL = "Create and start learning";
+export const CREATE_AND_START_PASSAGE_LABEL = "Create and memorize as a whole";
+
+/** Explains the normal Create pack action on the builder name step. */
+export const CREATE_PACK_TOOLTIP =
+  "Creates a normal scoped pack that auto-adds hearted verses within the scope.";
+
+/** Explains the eligible-scope passage shortcut on the builder name step. */
+export const CREATE_AND_MEMORIZE_WHOLE_TOOLTIP =
+  "Memorizes this pack as one singular passage.";
 
 /** Pack-view CTA once a passage row exists but no verse has been started. */
 export const START_LEARNING_LABEL = "Start Learning";

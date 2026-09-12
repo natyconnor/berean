@@ -8,11 +8,20 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { ScopeForm } from "@/components/study/scope-form";
 import { useScopeForm } from "@/components/study/use-scope-form";
 
-import { packBuilderStartPassageLabel } from "@/lib/heart-scope-copy";
+import {
+  CREATE_AND_MEMORIZE_WHOLE_TOOLTIP,
+  CREATE_PACK_TOOLTIP,
+  packBuilderStartPassageLabel,
+} from "@/lib/heart-scope-copy";
 import { memoryPackSearchAfterCreate } from "@/lib/memory-pack-search";
 import { packAllowsPassageMode } from "@/lib/passage-eligibility";
 import { cn } from "@/lib/utils";
@@ -368,48 +377,66 @@ export function PackBuilder() {
                 Back
               </Button>
             ) : null}
-            {step === "type" ? (
-              <Button type="button" onClick={goNext} className="gap-1.5">
-                Continue
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Button>
-            ) : null}
-            {step === "content" ? (
-              <Button
-                type="button"
-                onClick={goNext}
-                disabled={!canContinueFromContent}
-                className="gap-1.5"
-              >
-                Continue
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Button>
-            ) : null}
-            {step === "name" ? (
-              <>
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              {step === "type" ? (
+                <Button type="button" onClick={goNext} className="gap-1.5">
+                  Continue
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </Button>
+              ) : null}
+              {step === "content" ? (
                 <Button
                   type="button"
-                  onClick={() => void handleCreate()}
-                  disabled={!canCreate}
+                  onClick={goNext}
+                  disabled={!canContinueFromContent}
                   className="gap-1.5"
                 >
-                  <PackagePlus className="h-4 w-4" aria-hidden />
-                  {isCreating ? "Creating\u2026" : "Create pack"}
+                  Continue
+                  <ArrowRight className="h-4 w-4" aria-hidden />
                 </Button>
-                {startPassageLabel ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleCreate({ startPassage: true })}
-                    disabled={!canCreate}
-                    className="gap-1.5"
-                  >
-                    <BookOpen className="h-4 w-4" aria-hidden />
-                    {startPassageLabel}
-                  </Button>
-                ) : null}
-              </>
-            ) : null}
+              ) : null}
+              {step === "name" ? (
+                <>
+                  {startPassageLabel ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            void handleCreate({ startPassage: true })
+                          }
+                          disabled={!canCreate}
+                          className="gap-1.5"
+                        >
+                          <BookOpen className="h-4 w-4" aria-hidden />
+                          {startPassageLabel}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        {CREATE_AND_MEMORIZE_WHOLE_TOOLTIP}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        onClick={() => void handleCreate()}
+                        disabled={!canCreate}
+                        className="gap-1.5"
+                      >
+                        <PackagePlus className="h-4 w-4" aria-hidden />
+                        {isCreating ? "Creating\u2026" : "Create pack"}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {CREATE_PACK_TOOLTIP}
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              ) : null}
+            </div>
             {step === "content" && !canContinueFromContent ? (
               <p className="basis-full text-xs text-muted-foreground">
                 {kind === "scope"

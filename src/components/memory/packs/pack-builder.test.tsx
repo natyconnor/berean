@@ -173,7 +173,7 @@ describe("PackBuilder", () => {
     await advanceToNameStep();
 
     expect(
-      screen.getByRole("button", { name: "Create and start learning" }),
+      screen.getByRole("button", { name: "Create and memorize as a whole" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: HEART_SCOPE_ACTION_LABEL }),
@@ -206,7 +206,7 @@ describe("PackBuilder", () => {
     await advanceToNameStep();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Create and start learning" }),
+      screen.getByRole("button", { name: "Create and memorize as a whole" }),
     );
 
     await waitFor(() => {
@@ -231,7 +231,7 @@ describe("PackBuilder", () => {
 
     expect(
       screen.queryByRole("button", {
-        name: "Create and start learning",
+        name: "Create and memorize as a whole",
       }),
     ).not.toBeInTheDocument();
     expect(
