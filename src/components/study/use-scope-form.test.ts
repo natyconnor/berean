@@ -24,7 +24,7 @@ describe("useScopeForm", () => {
     expect(result.current.selectedBooks).toEqual([]);
   });
 
-  it("defaults multi-chapter books to a full range in pack-builder mode", () => {
+  it("treats a listed book with no chapter range as a complete whole-book scope", () => {
     const { result } = renderHook(() =>
       useScopeForm({ requireChapterSelection: true }),
     );
@@ -32,10 +32,7 @@ describe("useScopeForm", () => {
     act(() => {
       result.current.onToggleBook("Genesis");
     });
-    expect(result.current.chapterRanges.get("Genesis")).toEqual({
-      start: 1,
-      end: 50,
-    });
+    expect(result.current.chapterRanges.has("Genesis")).toBe(false);
     expect(result.current.isComplete).toBe(true);
 
     act(() => {
@@ -44,7 +41,7 @@ describe("useScopeForm", () => {
     expect(result.current.isComplete).toBe(true);
   });
 
-  it("defaults each toggled book to a full range for multi-book scopes", () => {
+  it("allows multi-book scopes without explicit chapter ranges", () => {
     const { result } = renderHook(() =>
       useScopeForm({ requireChapterSelection: true }),
     );
@@ -54,14 +51,7 @@ describe("useScopeForm", () => {
       result.current.onToggleBook("Exodus");
     });
 
-    expect(result.current.chapterRanges.get("Genesis")).toEqual({
-      start: 1,
-      end: 50,
-    });
-    expect(result.current.chapterRanges.get("Exodus")).toEqual({
-      start: 1,
-      end: 40,
-    });
+    expect(result.current.chapterRanges.size).toBe(0);
     expect(result.current.isComplete).toBe(true);
   });
 
@@ -100,14 +90,11 @@ describe("useScopeForm", () => {
     act(() => {
       result.current.onToggleBook("Genesis");
     });
-    expect(result.current.chapterRanges.get("Genesis")).toEqual({
-      start: 1,
-      end: 50,
-    });
+    expect(result.current.chapterRanges.has("Genesis")).toBe(false);
     expect(result.current.isComplete).toBe(true);
   });
 
-  it("fills explicit full ranges when a pack-builder preset is applied", () => {
+  it("applies pack-builder presets as whole books with no chapter ranges", () => {
     const { result } = renderHook(() =>
       useScopeForm({ requireChapterSelection: true }),
     );
@@ -116,14 +103,8 @@ describe("useScopeForm", () => {
       result.current.onSelectPreset(["Genesis", "Exodus"]);
     });
 
-    expect(result.current.chapterRanges.get("Genesis")).toEqual({
-      start: 1,
-      end: 50,
-    });
-    expect(result.current.chapterRanges.get("Exodus")).toEqual({
-      start: 1,
-      end: 40,
-    });
+    expect(result.current.selectedBooks).toEqual(["Genesis", "Exodus"]);
+    expect(result.current.chapterRanges.size).toBe(0);
     expect(result.current.isComplete).toBe(true);
   });
 });

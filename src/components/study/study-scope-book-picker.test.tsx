@@ -41,12 +41,18 @@ describe("StudyScopeBookPicker", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("defaults to all chapters selected in pack-builder mode", async () => {
+  it("starts with the whole book (no chapters highlighted) in pack-builder mode", async () => {
     render(<PickerHarness emptyChapterSelection />);
 
     await userEvent.click(screen.getByRole("button", { name: /Genesis/ }));
 
-    expect(screen.getByText(/All 50 chapters/)).toBeInTheDocument();
+    expect(screen.getByText(/Whole book/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Select all" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "1" }));
+    expect(screen.getByText(/Chapter 1/)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Select all" }),
     ).not.toBeInTheDocument();
@@ -54,17 +60,8 @@ describe("StudyScopeBookPicker", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Clear selection" }),
     );
-    expect(screen.getByText(/No chapters selected/)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Select all" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Whole book/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "1" }));
-    expect(screen.getByText(/Chapter 1/)).toBeInTheDocument();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Clear selection" }),
-    );
     await userEvent.click(screen.getByRole("button", { name: "Select all" }));
     expect(screen.getByText(/All 50 chapters/)).toBeInTheDocument();
   });
@@ -82,6 +79,6 @@ describe("StudyScopeBookPicker", () => {
     await userEvent.click(listRow);
     await userEvent.click(screen.getByRole("button", { name: /Genesis/ }));
 
-    expect(screen.getByText(/All 50 chapters/)).toBeInTheDocument();
+    expect(screen.getByText(/Whole book/)).toBeInTheDocument();
   });
 });

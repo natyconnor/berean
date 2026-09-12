@@ -127,7 +127,7 @@ export function PackBuilder() {
   const contentSummary =
     kind === "scope"
       ? !isComplete
-        ? "Select chapters to continue"
+        ? "Select books to continue"
         : scopePreview
           ? `${scopePreview.verseCount} verse${
               scopePreview.verseCount !== 1 ? "s" : ""
@@ -440,7 +440,7 @@ export function PackBuilder() {
             {step === "content" && !canContinueFromContent ? (
               <p className="basis-full text-xs text-muted-foreground">
                 {kind === "scope"
-                  ? "Select chapters to continue"
+                  ? "Select books to continue"
                   : "Select at least one verse to continue"}
               </p>
             ) : null}

@@ -302,14 +302,14 @@ function ChapterGrid({
 
     if (previewRange && ch >= previewRange.start && ch <= previewRange.end) {
       if (ch === anchor) {
-        return "bg-primary text-primary-foreground ring-2 ring-primary/50";
+        return "bg-primary text-primary-foreground ring-2 ring-inset ring-primary/50";
       }
       return "bg-primary/20 text-primary";
     }
 
     if (range && ch >= range.start && ch <= range.end) {
       if (ch === anchor) {
-        return "bg-primary text-primary-foreground ring-2 ring-primary/50";
+        return "bg-primary text-primary-foreground ring-2 ring-inset ring-primary/50";
       }
       return "bg-primary text-primary-foreground";
     }
@@ -318,14 +318,14 @@ function ChapterGrid({
   }
 
   const rangeLabel = isNoneSelected
-    ? "No chapters selected"
+    ? "Whole book"
     : isAllSelected
       ? `All ${bookInfo.chapters} chapters`
       : range !== null && isSingleChapter
         ? `Chapter ${range.start}`
         : range
           ? `Chapters ${range.start}\u2013${range.end}`
-          : "No chapters selected";
+          : "Whole book";
 
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-2">
@@ -353,7 +353,7 @@ function ChapterGrid({
       </div>
       <p className="text-xs text-muted-foreground">
         {isNoneSelected
-          ? "Click a chapter to start, or Select all to include every chapter"
+          ? "Leave empty for the whole book, or click a chapter to narrow"
           : isAllSelected
             ? "Click a chapter to narrow the scope, or two to pick a range"
             : isSingleChapter
@@ -361,7 +361,7 @@ function ChapterGrid({
               : "Click inside the range to narrow, or outside to expand it"}
       </p>
       <div
-        className="max-h-[min(12rem,32vh)] overflow-y-auto overscroll-contain"
+        className="max-h-[min(12rem,32vh)] overflow-y-auto overscroll-contain p-0.5"
         role="region"
         aria-label={`${bookInfo.name} chapters`}
       >
