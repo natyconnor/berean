@@ -49,9 +49,10 @@ export interface UseScopeFormResult extends ScopeFormControls {
 
 export interface UseScopeFormOptions {
   /**
-   * Pack builder: picking a book does not imply all of its chapters. The
-   * user has to choose a range before the scope is ready to preview or create.
-   * Study leaves this off so a listed book still means the whole book.
+   * Pack builder: store an explicit chapter range for every multi-chapter
+   * book. Toggling a book on defaults to the full book (same as Study's
+   * "whole book" meaning); the user can narrow chapters afterward. Study
+   * leaves this off so a listed book with no range still means every chapter.
    */
   requireChapterSelection?: boolean;
 }
@@ -128,21 +129,48 @@ export function useScopeForm(
       setSelectedBooks((prev) =>
         removing ? prev.filter((b) => b !== bookName) : [...prev, bookName],
       );
-      if (!removing) return;
+      if (removing) {
+        setChapterRanges((ranges) => {
+          if (!ranges.has(bookName)) return ranges;
+          const next = new Map(ranges);
+          next.delete(bookName);
+          return next;
+        });
+        return;
+      }
+      // Pack builder: default a newly listed book to its full chapter span so
+      // whole-book and multi-book scopes are creatable without an extra
+      // "Select all" click. Passage mode stays gated separately by eligibility.
+      if (!requireChapterSelection || !bookNeedsChapterRange(bookName)) return;
+      const range = fullChapterRange(bookName);
+      if (!range) return;
       setChapterRanges((ranges) => {
-        if (!ranges.has(bookName)) return ranges;
+        if (ranges.has(bookName)) return ranges;
         const next = new Map(ranges);
-        next.delete(bookName);
+        next.set(bookName, range);
         return next;
       });
     },
-    [selectedBooks],
+    [requireChapterSelection, selectedBooks],
   );
 
-  const onSetBooks = useCallback((books: string[]) => {
-    setSelectedBooks(books);
-    setChapterRanges(new Map());
-  }, []);
+  const onSetBooks = useCallback(
+    (books: string[]) => {
+      setSelectedBooks(books);
+      if (!requireChapterSelection) {
+        setChapterRanges(new Map());
+        return;
+      }
+      const next = new Map<string, ChapterRange>();
+      for (const book of books) {
+        if (!bookNeedsChapterRange(book)) continue;
+        const range = fullChapterRange(book);
+        if (range) next.set(book, range);
+      }
+      setChapterRanges(next);
+    },
+    [requireChapterSelection],
+  );
 
   const onSetChapterRange = useCallback(
     (book: string, range: ChapterRange | null) => {
