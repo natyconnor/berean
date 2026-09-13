@@ -21,8 +21,13 @@ import {
   passageMemoryByPackId,
   type PackMember,
 } from "./lib/packs";
+import {
+  deletePassageAndReviews,
+  findPassageByPackId,
+} from "./lib/passageMemory";
 import { passageStatusValidator } from "./lib/passageValues";
 import {
+  isPassageDueForLearning,
   isPassageDueForReview,
   passageRopeCounts,
 } from "../src/lib/passage-due";
@@ -185,7 +190,11 @@ export const create = mutation({
 });
 
 export const listMine = query({
-  args: { paginationOpts: paginationOptsValidator, now: v.number() },
+  args: {
+    paginationOpts: paginationOptsValidator,
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
   returns: v.object({
     page: v.array(packListItem),
     isDone: v.boolean(),
@@ -275,7 +284,11 @@ export const listMine = query({
           name: pack.name,
           kind: pack.kind,
           verseCount,
-          dueCount: isPassageDueForReview(passage, args.now) ? 1 : 0,
+          dueCount:
+            isPassageDueForReview(passage, args.now) ||
+            isPassageDueForLearning(passage, args.now, args.tzOffsetMinutes)
+              ? 1
+              : 0,
           lastOpenedAt: pack.lastOpenedAt,
           unifiedReviewEnabled: pack.unifiedReviewEnabled,
           passageStatus: passage.status,
@@ -343,8 +356,13 @@ export const remove = mutation({
     const pack = await loadOwnedPack(ctx, args.id, userId);
     if (!pack) throw new Error("Pack not found");
 
-    // Delete the pack and its membership rows only. Hearts (`savedVerses`) and
+    // Delete membership + passage overlay. Hearts (`savedVerses`) and
     // spaced-repetition progress (`verseMemory`) are intentionally preserved.
+    const passage = await findPassageByPackId(ctx, args.id);
+    if (passage && passage.userId === userId) {
+      await deletePassageAndReviews(ctx, passage);
+    }
+
     const members = await ctx.db
       .query("packVerses")
       .withIndex("by_packId", (q) => q.eq("packId", args.id))

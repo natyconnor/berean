@@ -455,3 +455,43 @@ describe("reducePassageSession", () => {
     ).toBe("offer-introduce");
   });
 });
+
+describe("reconcilePassagePhase stale checkpoints", () => {
+  it("drops a stale connect when no connect pair remains", () => {
+    const pieces = [
+      {
+        index: 0,
+        book: "Psalms",
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 1,
+        sectionIndex: 0,
+        attachment: "learning" as const,
+        learnStage: 0,
+        stageReps: 0,
+      },
+    ];
+    expect(reconcilePassagePhase("connect", pieces, 1, Date.now())).not.toBe(
+      "connect",
+    );
+  });
+
+  it("drops section-complete when the rope is too short", () => {
+    const pieces = [
+      {
+        index: 0,
+        book: "Psalms",
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 1,
+        sectionIndex: 0,
+        attachment: "solid" as const,
+        learnStage: 4,
+        stageReps: 0,
+      },
+    ];
+    expect(
+      reconcilePassagePhase("section-complete", pieces, 0, Date.now()),
+    ).not.toBe("section-complete");
+  });
+});

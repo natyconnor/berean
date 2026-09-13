@@ -28,9 +28,10 @@ export function AddToPack({
   now: number;
 }) {
   const [open, setOpen] = useState(false);
+  const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const { results, status, loadMore } = usePaginatedQuery(
     api.packs.listMine,
-    { now },
+    { now, tzOffsetMinutes },
     { initialNumItems: 25 },
   );
   const addVerse = useMutation(api.packs.addVerse);

@@ -856,6 +856,12 @@ export const reviewForecast = query({
       if (dueAt !== null && dueAt < windowEnd) dueAts.push(dueAt);
     }
 
+    const passageRows = await loadPassageMemoryByUser(ctx, userId);
+    for (const row of passageRows) {
+      if (row.status !== "reviewing" && row.status !== "mastered") continue;
+      if (row.dueAt < windowEnd) dueAts.push(row.dueAt);
+    }
+
     const counts = bucketForecastCounts(dueAts, args.now, days, timeZone);
     return dayStarts.map((dayStart, i) => ({ dayStart, count: counts[i] }));
   },

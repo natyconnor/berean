@@ -32,12 +32,11 @@ import { isPassageDueForLearning } from "../src/lib/passage-due";
 import {
   isPassagePieceLocked,
   localDayIndex,
-  PASSAGE_PASS_ACCURACY,
   progressPassagePiece,
   remainingIntroduces,
 } from "../src/lib/passage-frontier";
 import {
-  assertFrozenPieceBases,
+  assertPiecesMatchScope,
   freshReviewingSchedule,
   planStart,
 } from "../src/lib/passage-start";
@@ -83,7 +82,10 @@ export const start = mutation({
     const pack = await requireOwnedPack(ctx, args.packId, userId);
 
     const existing = await findPassageByPackId(ctx, pack._id);
-    if (existing && existing.userId === userId) {
+    if (existing) {
+      if (existing.userId !== userId) {
+        throw new Error("Passage mode is not available for this pack");
+      }
       return toPassageView(existing, args.now, args.tzOffsetMinutes);
     }
 
@@ -98,7 +100,7 @@ export const start = mutation({
       );
     }
 
-    assertFrozenPieceBases(args.pieces);
+    assertPiecesMatchScope(args.pieces, pack.scope);
 
     const members = await loadPackMembers(ctx, userId, pack);
     const plan = planStart({
@@ -108,7 +110,17 @@ export const start = mutation({
       unifiedEnabled: pack.unifiedReviewEnabled === true,
       memberSchedules: members.map(memberToSchedule),
       now: args.now,
+      tzOffsetMinutes: args.tzOffsetMinutes,
     });
+
+    // Re-check before side effects / insert to collapse concurrent starts.
+    const raced = await findPassageByPackId(ctx, pack._id);
+    if (raced) {
+      if (raced.userId !== userId) {
+        throw new Error("Passage mode is not available for this pack");
+      }
+      return toPassageView(raced, args.now, args.tzOffsetMinutes);
+    }
 
     for (const span of plan.unheartSpans) {
       const verseRefId = await findVerseRefId(ctx, userId, span);
@@ -157,6 +169,9 @@ export const introduceNext = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     const row = await requirePassageForPack(ctx, args.packId, userId);
+    if (row.status !== "building") {
+      throw new Error("No unreached pieces left");
+    }
 
     const todayKey = localDayIndex(args.now, args.tzOffsetMinutes);
     const remaining = remainingIntroduces({
@@ -288,10 +303,7 @@ export const recordAttempt = mutation({
           : {}),
       });
     } else if (args.kind === "review") {
-      if (
-        (row.status === "reviewing" || row.status === "mastered") &&
-        args.accuracy >= PASSAGE_PASS_ACCURACY
-      ) {
+      if (row.status === "reviewing" || row.status === "mastered") {
         const scheduled = applyUnifiedGrade(toPassageSchedule(row), {
           quality: args.quality,
           accuracy: args.accuracy,

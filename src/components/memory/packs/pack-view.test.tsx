@@ -473,7 +473,7 @@ describe("PackView", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Memorize whole passage hearts every verse in this scope/,
+        /Use .Memorize whole passage. to heart every verse in this scope/,
       ),
     ).toBeInTheDocument();
     empty.unmount();

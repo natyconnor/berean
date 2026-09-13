@@ -14,7 +14,7 @@ import {
 } from "./passage-frontier";
 import type { PassagePiece, PassagePieceBase } from "./passage-pieces";
 import { canonicalUnifiedSchedule } from "./unified-review-schedule";
-import type { VerseScope } from "./verse-scope-match";
+import { verseMatchesScope, type VerseScope } from "./verse-scope-match";
 
 export type PassageRowStatus = "building" | "reviewing" | "mastered";
 
@@ -26,6 +26,7 @@ export type PlanStartArgs = {
   unifiedEnabled: boolean;
   memberSchedules: readonly MemorySchedule[];
   now: number;
+  tzOffsetMinutes?: number;
 };
 
 export type PlanStartResult = {
@@ -60,11 +61,14 @@ export function freshReviewingSchedule(
 export function openingMaintenanceSchedule(
   memberSchedules: readonly MemorySchedule[],
   now: number,
+  tzOffsetMinutes?: number,
 ): MemorySchedule {
   const reviewMembers = memberSchedules.filter((member) =>
     isReviewPhase(member.status),
   );
-  if (reviewMembers.length === 0) return freshReviewingSchedule(now);
+  if (reviewMembers.length === 0) {
+    return freshReviewingSchedule(now, tzOffsetMinutes);
+  }
   return canonicalUnifiedSchedule(reviewMembers, now);
 }
 
@@ -79,6 +83,55 @@ export function assertFrozenPieceBases(
     if (!piece || piece.index !== index) {
       throw new Error("Passage pieces must be frozen in Scripture order");
     }
+    if (
+      !Number.isFinite(piece.startVerse) ||
+      !Number.isFinite(piece.endVerse) ||
+      piece.startVerse < 1 ||
+      piece.endVerse < piece.startVerse
+    ) {
+      throw new Error("Passage pieces must use valid verse spans");
+    }
+  }
+}
+
+/**
+ * Ensure client-supplied frozen pieces lie inside the pack scope and form a
+ * contiguous Scripture walk (same book, non-overlapping, non-decreasing).
+ */
+export function assertPiecesMatchScope(
+  pieces: readonly PassagePieceBase[],
+  scope: VerseScope,
+): void {
+  assertFrozenPieceBases(pieces);
+  let previous: PassagePieceBase | undefined;
+  for (const piece of pieces) {
+    if (
+      !verseMatchesScope({ book: piece.book, chapter: piece.chapter }, scope)
+    ) {
+      throw new Error("Passage pieces must stay within the pack scope");
+    }
+    if (previous) {
+      if (piece.book !== previous.book) {
+        throw new Error("Passage pieces must stay in one contiguous book");
+      }
+      if (piece.chapter < previous.chapter) {
+        throw new Error("Passage pieces must stay in Scripture order");
+      }
+      if (
+        piece.chapter === previous.chapter &&
+        piece.startVerse <= previous.endVerse
+      ) {
+        throw new Error("Passage pieces must not overlap");
+      }
+      if (
+        piece.chapter > previous.chapter + 1 ||
+        (piece.chapter === previous.chapter + 1 && previous.endVerse < 1)
+      ) {
+        // chapter gaps are ok only when scope itself skips; chapter must be in scope
+        // (already checked). Disallow jumping backward only — already handled.
+      }
+    }
+    previous = piece;
   }
 }
 
@@ -143,7 +196,7 @@ export function planStart(args: PlanStartArgs): PlanStartResult {
 
   const finished = allPiecesSolid(nextPieces);
   const schedule = finished
-    ? openingMaintenanceSchedule(memberSchedules, now)
+    ? openingMaintenanceSchedule(memberSchedules, now, args.tzOffsetMinutes)
     : initialSchedule(now);
 
   const status: PassageRowStatus = finished

@@ -121,10 +121,13 @@ export async function findPassageByPackId(
   ctx: QueryCtx | MutationCtx,
   packId: Id<"packs">,
 ): Promise<Doc<"passageMemory"> | null> {
-  return await ctx.db
+  // Prefer .take over .unique — concurrent start can briefly create duplicates
+  // before Convex indexes enforce a single row per pack.
+  const rows = await ctx.db
     .query("passageMemory")
     .withIndex("by_packId", (q) => q.eq("packId", packId))
-    .unique();
+    .take(8);
+  return rows[0] ?? null;
 }
 
 export async function requireOwnedPack(

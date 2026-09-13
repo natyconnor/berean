@@ -252,12 +252,18 @@ export function reconcilePassagePhase(
   remainingIntroduces: number,
   now: number,
 ): PassageSessionPhase {
-  if (
-    phase === "stall-repair" ||
-    phase === "section-complete" ||
-    phase === "connect"
-  ) {
+  if (phase === "stall-repair") {
     return phase;
+  }
+  if (phase === "connect") {
+    // Drop a stale connect if server pieces no longer expose a connect pair.
+    if (connectPairIndexes(pieces) !== null) return phase;
+    return sessionPhaseForPieces({ pieces, remainingIntroduces, now });
+  }
+  if (phase === "section-complete") {
+    // Keep only while a rope section remains to recite; otherwise recompute.
+    if (ropePieceIndexes(pieces).length >= 2) return phase;
+    return sessionPhaseForPieces({ pieces, remainingIntroduces, now });
   }
   if (phase === "frontier" && dueFrontierIndex(pieces, now) === null) {
     return sessionPhaseForPieces({ pieces, remainingIntroduces, now });

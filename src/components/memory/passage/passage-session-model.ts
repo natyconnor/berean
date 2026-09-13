@@ -41,6 +41,9 @@ export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
 export const FRONTIER_LOCKED_COPY =
   "You've got this verse down for the day. Come back tomorrow to keep going with it.";
 
+export const BUDGET_EXHAUSTED_COPY =
+  "You've started as many new verses as you can today. Practice what you know, or come back tomorrow to add more.";
+
 export const NEXT_VERSE_PROMPT_COPY =
   "You've got this verse down for the day. Start the next one?";
 
