@@ -499,7 +499,7 @@ function PackViewMain({
     try {
       await startPassageLearning();
     } catch {
-      setActionError("Couldn't start passage learning. Please try again.");
+      // useStartPassage already sets a detailed startPassageError.
     }
   }, [allowsPassage, startPassageLearning]);
 
@@ -797,7 +797,7 @@ function PackViewMain({
           role="alert"
           className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-sm text-destructive"
         >
-          {actionError ?? startPassageError}
+          {startPassageError ?? actionError}
         </div>
       ) : null}
 
@@ -912,7 +912,7 @@ function PackViewMain({
                   {isCustom
                     ? "No verses yet. Add a verse from your hearted list or by browsing."
                     : canHeartRemaining
-                      ? "No verses yet. Memorize whole passage hearts every verse in this scope as short memory passages — or heart them in the reader and they'll appear automatically."
+                      ? "No verses yet. Use “Memorize whole passage” to heart every verse in this scope as short memory passages — or heart them in the reader and they'll appear automatically."
                       : passageActive
                         ? "No related hearts. Hearting a verse in this scope still adds it here as its own card — passage pieces stay independent."
                         : "No verses yet. Heart verses within this scope — from here or in the reader — and they'll appear automatically. You can also learn the range as a passage without hearting."}

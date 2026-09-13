@@ -21,6 +21,7 @@ import {
   CONNECT_RECITE_LABEL,
   CONNECT_TITLE,
   DONE_FOR_NOW_LABEL,
+  BUDGET_EXHAUSTED_COPY,
   FRONTIER_LOCKED_COPY,
   frontierHint,
   NEXT_VERSE_PROMPT_COPY,
@@ -111,6 +112,8 @@ interface PassageSessionProps {
   view: PassageView;
   packName: string;
   onExit: () => void;
+  /** Done-for-now / continue; defaults to onExit. Back always uses onExit. */
+  onFinish?: () => void;
   exitTooltip?: string;
 }
 
@@ -119,19 +122,22 @@ export function PassageSession({
   view,
   packName,
   onExit,
+  onFinish,
   exitTooltip = "Go back to the pack",
 }: PassageSessionProps): JSX.Element {
+  const finish = onFinish ?? onExit;
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
   const introduceNext = useMutation(api.passageMemory.introduceNext);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
 
-  const isMaintenance =
-    view.status === "reviewing" || view.status === "mastered";
+  const [status, setStatus] = useState(view.status);
+  const isMaintenance = status === "reviewing" || status === "mastered";
 
   const [state, setState] = useState<PassageSessionState>(() =>
     sessionFromView(view, now, tzOffsetMinutes),
   );
+  const [introduceBusy, setIntroduceBusy] = useState(false);
   const [ropeOverride, setRopeOverride] =
     useState<RopeStartOverride>("rehearsal");
   const [stallCue, setStallCue] = useState<string | null>(null);
@@ -203,6 +209,7 @@ export function PassageSession({
           now: attemptedAt,
           tzOffsetMinutes: tz,
         });
+        setStatus(nextView.status);
         setState({
           ...next,
           pieces: nextView.pieces,
@@ -234,6 +241,7 @@ export function PassageSession({
         addDayKey: nextView.addDayKey,
         todayKey: localDayIndex(attemptedAt, tz),
       });
+      setStatus(nextView.status);
       setState({
         ...next,
         pieces: nextView.pieces,
@@ -308,19 +316,25 @@ export function PassageSession({
   }
 
   async function handleIntroduce(): Promise<boolean> {
-    const next = reducePassageSession(withWordCounts(state), {
-      type: "introduce",
-      now: Date.now(),
-    });
-    const saved = await persist(next, undefined);
-    if (!saved) return false;
-    setRopeOverride("rehearsal");
-    setStallCue(null);
-    setHoldResult(false);
-    setHeldRecall(null);
-    setRecitingSection(false);
-    setRecitingConnect(false);
-    return true;
+    if (introduceBusy) return false;
+    setIntroduceBusy(true);
+    try {
+      const next = reducePassageSession(withWordCounts(state), {
+        type: "introduce",
+        now: Date.now(),
+      });
+      const saved = await persist(next, undefined);
+      if (!saved) return false;
+      setRopeOverride("rehearsal");
+      setStallCue(null);
+      setHoldResult(false);
+      setHeldRecall(null);
+      setRecitingSection(false);
+      setRecitingConnect(false);
+      return true;
+    } finally {
+      setIntroduceBusy(false);
+    }
   }
 
   function handleContinueAfterResult() {
@@ -437,7 +451,9 @@ export function PassageSession({
             onStart={() => {
               void handleIntroduce();
             }}
-            onDone={onExit}
+            onDone={finish}
+
+            busy={introduceBusy}
           />
         ) : (
           <div className="flex justify-center py-16">
@@ -456,7 +472,9 @@ export function PassageSession({
           onStart={() => {
             void handleIntroduce();
           }}
-          onDone={onExit}
+          onDone={finish}
+
+          busy={introduceBusy}
         />
       ) : null}
 
@@ -484,6 +502,11 @@ export function PassageSession({
 
       {showDoneToday ? (
         <DoneTodayPanel
+          description={
+            effectivePhase === "budget-exhausted"
+              ? BUDGET_EXHAUSTED_COPY
+              : FRONTIER_LOCKED_COPY
+          }
           finishedTitle={finishedPiece ? pieceCardTitle(finishedPiece) : null}
           canPractice={ropePieceIndexes(state.pieces).length >= 2}
           onPractice={() => {
@@ -493,7 +516,7 @@ export function PassageSession({
               pendingMutation: undefined,
             }));
           }}
-          onDone={onExit}
+          onDone={finish}
         />
       ) : null}
 
@@ -569,11 +592,13 @@ function NextVersePanel({
   nextTitle,
   onStart,
   onDone,
+  busy = false,
 }: {
   finishedTitle: string | null;
   nextTitle: string;
   onStart: () => void;
   onDone: () => void;
+  busy?: boolean;
 }): JSX.Element {
   return (
     <CheckpointCard
@@ -583,10 +608,10 @@ function NextVersePanel({
       }
       success={Boolean(finishedTitle)}
     >
-      <Button type="button" onClick={onStart}>
-        {`Start ${nextTitle}`}
+      <Button type="button" onClick={onStart} disabled={busy}>
+        {busy ? "Starting…" : `Start ${nextTitle}`}
       </Button>
-      <Button type="button" variant="outline" onClick={onDone}>
+      <Button type="button" variant="outline" onClick={onDone} disabled={busy}>
         {DONE_FOR_NOW_LABEL}
       </Button>
     </CheckpointCard>
@@ -595,11 +620,13 @@ function NextVersePanel({
 
 function DoneTodayPanel({
   finishedTitle,
+  description,
   canPractice,
   onPractice,
   onDone,
 }: {
   finishedTitle: string | null;
+  description: string;
   canPractice: boolean;
   onPractice: () => void;
   onDone: () => void;
@@ -607,7 +634,7 @@ function DoneTodayPanel({
   return (
     <CheckpointCard
       title={finishedTitle ?? "That's enough for today"}
-      description={FRONTIER_LOCKED_COPY}
+      description={description}
       success
     >
       {canPractice ? (

@@ -41,12 +41,12 @@ describe("StudyScopeBookPicker", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts with no chapters selected in pack-builder mode", async () => {
+  it("starts with the whole book (no chapters highlighted) in pack-builder mode", async () => {
     render(<PickerHarness emptyChapterSelection />);
 
     await userEvent.click(screen.getByRole("button", { name: /Genesis/ }));
 
-    expect(screen.getByText(/No chapters selected/)).toBeInTheDocument();
+    expect(screen.getByText(/Whole book/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Select all" }),
     ).toBeInTheDocument();
@@ -60,7 +60,7 @@ describe("StudyScopeBookPicker", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Clear selection" }),
     );
-    expect(screen.getByText(/No chapters selected/)).toBeInTheDocument();
+    expect(screen.getByText(/Whole book/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Select all" }));
     expect(screen.getByText(/All 50 chapters/)).toBeInTheDocument();
@@ -79,6 +79,6 @@ describe("StudyScopeBookPicker", () => {
     await userEvent.click(listRow);
     await userEvent.click(screen.getByRole("button", { name: /Genesis/ }));
 
-    expect(screen.getByText(/No chapters selected/)).toBeInTheDocument();
+    expect(screen.getByText(/Whole book/)).toBeInTheDocument();
   });
 });

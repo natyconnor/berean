@@ -59,6 +59,20 @@ export async function deleteAllDataForUser(
   }
 
   for (const row of await ctx.db
+    .query("passageReviews")
+    .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
+    .query("passageMemory")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
     .query("verseRefs")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .collect()) {

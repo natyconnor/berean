@@ -7,7 +7,11 @@ import {
 } from "./memory-scheduler";
 import type { HeartedMemorySpan } from "./passage-frontier";
 import type { PassagePieceBase } from "./passage-pieces";
-import { assertFrozenPieceBases, planStart } from "./passage-start";
+import {
+  assertFrozenPieceBases,
+  assertPiecesMatchScope,
+  planStart,
+} from "./passage-start";
 import type { VerseScope } from "./verse-scope-match";
 
 const NOW = 1_700_000_000_000;
@@ -81,6 +85,35 @@ describe("assertFrozenPieceBases", () => {
     expect(() => assertFrozenPieceBases([psalmPiece(1, 1, 2)])).toThrow(
       "Passage pieces must be frozen in Scripture order",
     );
+  });
+});
+
+describe("assertPiecesMatchScope", () => {
+  it("rejects pieces outside the pack scope", () => {
+    expect(() =>
+      assertPiecesMatchScope(
+        [
+          {
+            index: 0,
+            book: "John",
+            chapter: 3,
+            startVerse: 1,
+            endVerse: 2,
+            sectionIndex: 0,
+          },
+        ],
+        PSALM_1,
+      ),
+    ).toThrow(/within the pack scope/);
+  });
+
+  it("rejects overlapping verse spans", () => {
+    expect(() =>
+      assertPiecesMatchScope(
+        [psalmPiece(0, 1, 3), psalmPiece(1, 3, 4)],
+        PSALM_1,
+      ),
+    ).toThrow(/must not overlap/);
   });
 });
 

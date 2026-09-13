@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
 
-import { getBookInfo } from "@/lib/bible-books";
 import type { TagMatchMode } from "@/lib/tag-utils";
 
 import type { ChapterRange } from "./study-scope-book-picker";
@@ -41,29 +40,19 @@ export interface UseScopeFormResult extends ScopeFormControls {
   /** Human summary used as a default name / footer label. */
   summaryText: string;
   /**
-   * False while no book is listed, or a listed multi-chapter book still has
-   * no range. Study always reports true (omitting a range means every chapter).
+   * Pack builder: false while no book is listed. Missing chapter ranges still
+   * mean the whole book. Study always reports true.
    */
   isComplete: boolean;
 }
 
 export interface UseScopeFormOptions {
   /**
-   * Pack builder: picking a book does not imply all of its chapters. The
-   * user has to choose a range before the scope is ready to preview or create.
-   * Study leaves this off so a listed book still means the whole book.
+   * Pack builder mode: at least one book must be listed before create/continue.
+   * A listed multi-chapter book with no range still means the whole book
+   * (same matching rules as Study). Study leaves this off.
    */
   requireChapterSelection?: boolean;
-}
-
-function bookNeedsChapterRange(bookName: string): boolean {
-  return (getBookInfo(bookName)?.chapters ?? 0) > 1;
-}
-
-function fullChapterRange(bookName: string): ChapterRange | null {
-  const chapters = getBookInfo(bookName)?.chapters;
-  if (!chapters) return null;
-  return { start: 1, end: chapters };
 }
 
 /**
@@ -113,14 +102,10 @@ export function useScopeForm(
 
   const isComplete = useMemo(() => {
     if (!requireChapterSelection) return true;
-    // `[].every(...)` is vacuously true; a blank builder is not ready to create.
-    return (
-      selectedBooks.length > 0 &&
-      selectedBooks.every(
-        (book) => !bookNeedsChapterRange(book) || chapterRanges.has(book),
-      )
-    );
-  }, [requireChapterSelection, selectedBooks, chapterRanges]);
+    // Blank builder is incomplete. Missing chapter ranges still mean the whole
+    // book, so listing books is enough to continue/create.
+    return selectedBooks.length > 0;
+  }, [requireChapterSelection, selectedBooks]);
 
   const onToggleBook = useCallback(
     (bookName: string) => {
@@ -159,23 +144,11 @@ export function useScopeForm(
     [],
   );
 
-  const onSelectPreset = useCallback(
-    (books: string[]) => {
-      setSelectedBooks(books);
-      if (!requireChapterSelection) {
-        setChapterRanges(new Map());
-        return;
-      }
-      const next = new Map<string, ChapterRange>();
-      for (const book of books) {
-        if (!bookNeedsChapterRange(book)) continue;
-        const range = fullChapterRange(book);
-        if (range) next.set(book, range);
-      }
-      setChapterRanges(next);
-    },
-    [requireChapterSelection],
-  );
+  const onSelectPreset = useCallback((books: string[]) => {
+    setSelectedBooks(books);
+    // Empty ranges mean each listed book in full — same as a fresh book toggle.
+    setChapterRanges(new Map());
+  }, []);
 
   const onToggleTag = useCallback((tag: string) => {
     setSelectedTags((prev) =>

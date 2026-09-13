@@ -75,6 +75,7 @@ function GlobalLearnSession({
         packId={current.packId}
         packName={current.packName}
         onDone={() => setPassageIndex((index) => index + 1)}
+        onExitHome={onExitHome}
       />
     );
   }
@@ -134,10 +135,12 @@ function BuildingPassageLearnCard({
   packId,
   packName,
   onDone,
+  onExitHome,
 }: {
   packId: Id<"packs">;
   packName: string;
   onDone: () => void;
+  onExitHome: () => void;
 }): JSX.Element {
   const now = useLiveNow();
   const view = useQuery(api.passageMemory.getForPack, {
@@ -178,8 +181,9 @@ function BuildingPassageLearnCard({
       packId={packId}
       view={view}
       packName={packName}
-      onExit={onDone}
-      exitTooltip="Continue learning"
+      onExit={onExitHome}
+      onFinish={onDone}
+      exitTooltip="Back to Memory"
     />
   );
 }

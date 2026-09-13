@@ -18,9 +18,10 @@ const LOAD_MORE_PAGE_SIZE = 10;
  * hearted/reviewed.
  */
 export function PackList({ now }: { now: number }) {
+  const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const { results, status, loadMore } = usePaginatedQuery(
     api.packs.listMine,
-    { now },
+    { now, tzOffsetMinutes },
     { initialNumItems: INITIAL_PAGE_SIZE },
   );
 

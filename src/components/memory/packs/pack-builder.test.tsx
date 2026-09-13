@@ -256,7 +256,7 @@ describe("PackBuilder", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
-    expect(screen.getByText("Select chapters to continue")).toBeInTheDocument();
+    expect(screen.getByText("Select books to continue")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Create pack" }),
     ).not.toBeInTheDocument();
