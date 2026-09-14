@@ -81,7 +81,10 @@ export function ModeDock() {
   // Shared session clock (same snapshot as the Memory dashboard). Completing a
   // review or learn still updates the count (same args, reactive data).
   const now = useLiveNow();
-  const dueCountResult = useQuery(api.verseMemory.dueCount, { now });
+  const dueCountResult = useQuery(api.verseMemory.dueCount, {
+    now,
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+  });
   // Keep the last loaded count so a reconnect or loading gap after a long-lived
   // tab doesn't blank the badge (which looks like the number "disappeared").
   const [dueCount, setDueCount] = useState<number | undefined>(undefined);

@@ -62,7 +62,7 @@ export function StudyScopeBookPicker({
   const showChapterGrid = singleBook && singleBook.chapters > 1;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {selectedBooks.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selectedBooks.map((bookName) => {
@@ -137,31 +137,52 @@ export function StudyScopeBookPicker({
         className="h-8"
       />
 
-      <ScrollArea className="h-56">
-        <div className="space-y-0.5 pr-3">
-          {(["OT", "NT"] as const).map((testament) => {
-            const books = filteredBooks.filter(
-              (b) => b.testament === testament,
-            );
-            if (books.length === 0) return null;
-            return (
-              <div key={testament}>
-                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
-                  {testament === "OT" ? "Old Testament" : "New Testament"}
-                </div>
-                {books.map((book) => (
-                  <BookRow
-                    key={book.name}
-                    book={book}
-                    selected={selectedSet.has(book.name)}
-                    onToggle={() => onToggleBook(book.name)}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
+      <div
+        className={
+          showChapterGrid
+            ? "max-h-28 overflow-y-auto overscroll-contain"
+            : undefined
+        }
+      >
+        {showChapterGrid ? (
+          <div className="space-y-0.5 pr-1">
+            {filteredBooks.map((book) => (
+              <BookRow
+                key={book.name}
+                book={book}
+                selected={selectedSet.has(book.name)}
+                onToggle={() => onToggleBook(book.name)}
+              />
+            ))}
+          </div>
+        ) : (
+          <ScrollArea className="h-56">
+            <div className="space-y-0.5 pr-3">
+              {(["OT", "NT"] as const).map((testament) => {
+                const books = filteredBooks.filter(
+                  (b) => b.testament === testament,
+                );
+                if (books.length === 0) return null;
+                return (
+                  <div key={testament}>
+                    <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
+                      {testament === "OT" ? "Old Testament" : "New Testament"}
+                    </div>
+                    {books.map((book) => (
+                      <BookRow
+                        key={book.name}
+                        book={book}
+                        selected={selectedSet.has(book.name)}
+                        onToggle={() => onToggleBook(book.name)}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        )}
+      </div>
 
       {showChapterGrid && (
         <ChapterGrid
@@ -281,14 +302,14 @@ function ChapterGrid({
 
     if (previewRange && ch >= previewRange.start && ch <= previewRange.end) {
       if (ch === anchor) {
-        return "bg-primary text-primary-foreground ring-2 ring-primary/50";
+        return "bg-primary text-primary-foreground ring-2 ring-inset ring-primary/50";
       }
       return "bg-primary/20 text-primary";
     }
 
     if (range && ch >= range.start && ch <= range.end) {
       if (ch === anchor) {
-        return "bg-primary text-primary-foreground ring-2 ring-primary/50";
+        return "bg-primary text-primary-foreground ring-2 ring-inset ring-primary/50";
       }
       return "bg-primary text-primary-foreground";
     }
@@ -297,14 +318,14 @@ function ChapterGrid({
   }
 
   const rangeLabel = isNoneSelected
-    ? "No chapters selected"
+    ? "Whole book"
     : isAllSelected
       ? `All ${bookInfo.chapters} chapters`
       : range !== null && isSingleChapter
         ? `Chapter ${range.start}`
         : range
           ? `Chapters ${range.start}\u2013${range.end}`
-          : "No chapters selected";
+          : "Whole book";
 
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-2">
@@ -332,7 +353,7 @@ function ChapterGrid({
       </div>
       <p className="text-xs text-muted-foreground">
         {isNoneSelected
-          ? "Click a chapter to start, or Select all to include every chapter"
+          ? "Leave empty for the whole book, or click a chapter to narrow"
           : isAllSelected
             ? "Click a chapter to narrow the scope, or two to pick a range"
             : isSingleChapter
@@ -340,25 +361,31 @@ function ChapterGrid({
               : "Click inside the range to narrow, or outside to expand it"}
       </p>
       <div
-        className="grid grid-cols-8 gap-1"
-        onMouseLeave={() => setHoveredChapter(null)}
+        className="max-h-[min(12rem,32vh)] overflow-y-auto overscroll-contain p-0.5"
+        role="region"
+        aria-label={`${bookInfo.name} chapters`}
       >
-        {Array.from({ length: bookInfo.chapters }, (_, i) => i + 1).map(
-          (ch) => (
-            <button
-              key={ch}
-              type="button"
-              className={cn(
-                "h-8 w-full rounded-sm text-xs font-medium transition-colors cursor-pointer",
-                getCellStyle(ch),
-              )}
-              onClick={() => handleChapterClick(ch)}
-              onMouseEnter={() => setHoveredChapter(ch)}
-            >
-              {ch}
-            </button>
-          ),
-        )}
+        <div
+          className="grid grid-cols-8 gap-1"
+          onMouseLeave={() => setHoveredChapter(null)}
+        >
+          {Array.from({ length: bookInfo.chapters }, (_, i) => i + 1).map(
+            (ch) => (
+              <button
+                key={ch}
+                type="button"
+                className={cn(
+                  "h-8 w-full rounded-sm text-xs font-medium transition-colors cursor-pointer",
+                  getCellStyle(ch),
+                )}
+                onClick={() => handleChapterClick(ch)}
+                onMouseEnter={() => setHoveredChapter(ch)}
+              >
+                {ch}
+              </button>
+            ),
+          )}
+        </div>
       </div>
     </div>
   );

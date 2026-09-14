@@ -4,15 +4,47 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { HEART_SCOPE_ACTION_LABEL } from "@/lib/heart-scope-copy";
+import {
+  memoryPackSearchAfterCreate,
+  validateMemoryPackSearch,
+} from "@/lib/memory-pack-search";
 
 import { PackBuilder } from "./pack-builder";
 
-const { queryResults, mutationMocks, navigateMock, scopeFormIsComplete } =
+const john3Scope = {
+  books: ["John"],
+  chapterRanges: [{ book: "John", startChapter: 3, endChapter: 3 }],
+  tags: [] as string[],
+  tagMatchMode: "any" as const,
+};
+
+const multiBookScope = {
+  books: ["John", "Acts"],
+  chapterRanges: [
+    { book: "John", startChapter: 1, endChapter: 1 },
+    { book: "Acts", startChapter: 1, endChapter: 1 },
+  ],
+  tags: [] as string[],
+  tagMatchMode: "any" as const,
+};
+
+const { queryResults, mutationMocks, navigateMock, scopeFormState } =
   vi.hoisted(() => ({
     queryResults: new Map<string, unknown>(),
     mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
     navigateMock: vi.fn(),
-    scopeFormIsComplete: { current: true },
+    scopeFormState: {
+      isComplete: true,
+      scope: {
+        books: ["John"],
+        chapterRanges: [{ book: "John", startChapter: 3, endChapter: 3 }],
+        tags: [] as string[],
+        tagMatchMode: "any" as const,
+      },
+      summaryText: "John 3",
+      selectedBooks: ["John"] as string[],
+    },
   }));
 
 function mutationMock(name: string) {
@@ -21,6 +53,13 @@ function mutationMock(name: string) {
   const created = vi.fn();
   mutationMocks.set(name, created);
   return created;
+}
+
+function resetEligibleJohn3() {
+  scopeFormState.isComplete = true;
+  scopeFormState.scope = john3Scope;
+  scopeFormState.summaryText = "John 3";
+  scopeFormState.selectedBooks = ["John"];
 }
 
 vi.mock("convex/react", () => ({
@@ -50,21 +89,19 @@ vi.mock("../../../../convex/_generated/api", () => ({
   },
 }));
 
-const psalm1Scope = {
-  books: ["Psalms"],
-  chapterRanges: [{ book: "Psalms", startChapter: 1, endChapter: 1 }],
-  tags: [] as string[],
-  tagMatchMode: "any" as const,
-};
-
 vi.mock("@/components/study/scope-form", () => ({
   ScopeForm: () => <div>scope form</div>,
 }));
 
 vi.mock("@/components/study/use-scope-form", () => ({
   useScopeForm: () => ({
-    selectedBooks: ["Psalms"],
-    chapterRanges: new Map([["Psalms", { start: 1, end: 1 }]]),
+    selectedBooks: scopeFormState.selectedBooks,
+    chapterRanges: new Map(
+      scopeFormState.scope.chapterRanges.map((range) => [
+        range.book,
+        { start: range.startChapter, end: range.endChapter },
+      ]),
+    ),
     selectedTags: [] as string[],
     tagMatchMode: "any" as const,
     onToggleBook: vi.fn(),
@@ -74,12 +111,26 @@ vi.mock("@/components/study/use-scope-form", () => ({
     onToggleTag: vi.fn(),
     onClearTags: vi.fn(),
     onSetTagMatchMode: vi.fn(),
-    scope: psalm1Scope,
-    scopeForPreview: psalm1Scope,
-    summaryText: "Psalm 1",
-    isComplete: scopeFormIsComplete.current,
+    scope: scopeFormState.scope,
+    scopeForPreview: scopeFormState.scope,
+    summaryText: scopeFormState.summaryText,
+    isComplete: scopeFormState.isComplete,
   }),
 }));
+
+function renderBuilder() {
+  return render(
+    <TooltipProvider delayDuration={0}>
+      <PackBuilder />
+    </TooltipProvider>,
+  );
+}
+
+async function advanceToNameStep() {
+  await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+  expect(screen.getByLabelText("Pack name")).toBeInTheDocument();
+}
 
 describe("PackBuilder", () => {
   beforeEach(() => {
@@ -87,19 +138,46 @@ describe("PackBuilder", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     queryResults.set("packs.previewScopeCount", {
-      verseCount: 6,
+      verseCount: 36,
       dueCount: 0,
     });
     mutationMock("packs.create").mockResolvedValue("pack_new");
-    scopeFormIsComplete.current = true;
+    resetEligibleJohn3();
   });
 
-  it("creates a scope pack and points at Memorize whole passage on the pack page", async () => {
-    render(
-      <TooltipProvider delayDuration={0}>
-        <PackBuilder />
-      </TooltipProvider>,
-    );
+  it("walks type → scope → name before create actions", async () => {
+    renderBuilder();
+
+    expect(
+      screen.getByText("What kind of pack are you making?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create pack" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("scope form")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create pack" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByLabelText("Pack name")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create pack" }),
+    ).toBeInTheDocument();
+  });
+
+  it("creates an eligible scope pack as a collection without auto-start", async () => {
+    renderBuilder();
+    await advanceToNameStep();
+
+    expect(
+      screen.getByRole("button", { name: "Create and memorize as a whole" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: HEART_SCOPE_ACTION_LABEL }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Create pack" }));
 
@@ -112,20 +190,123 @@ describe("PackBuilder", () => {
       expect(navigateMock).toHaveBeenCalledWith({
         to: "/memory/$packId",
         params: { packId: "pack_new" },
-        search: { heartHint: true },
+        search: {},
+      });
+    });
+    expect(navigateMock.mock.calls[0]?.[0]).not.toMatchObject({
+      search: { startPassage: true },
+    });
+    expect(navigateMock.mock.calls[0]?.[0]).not.toMatchObject({
+      search: { heartHint: true },
+    });
+  });
+
+  it("offers a shortcut that lands with startPassage", async () => {
+    renderBuilder();
+    await advanceToNameStep();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create and memorize as a whole" }),
+    );
+
+    await waitFor(() => {
+      expect(mutationMock("packs.create")).toHaveBeenCalledTimes(1);
+    });
+    expect(mutationMocks.get("savedVerses.heartMany")).toBeUndefined();
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/memory/$packId",
+        params: { packId: "pack_new" },
+        search: { startPassage: true },
       });
     });
   });
 
-  it("does not create until every selected book has a chapter range", () => {
-    scopeFormIsComplete.current = false;
-    render(
-      <TooltipProvider delayDuration={0}>
-        <PackBuilder />
-      </TooltipProvider>,
-    );
+  it("keeps heartHint auto-heart for an ineligible multi-book scope", async () => {
+    scopeFormState.scope = multiBookScope;
+    scopeFormState.summaryText = "John 1, Acts 1";
+    scopeFormState.selectedBooks = ["John", "Acts"];
+    renderBuilder();
+    await advanceToNameStep();
 
-    expect(screen.getByRole("button", { name: "Create pack" })).toBeDisabled();
-    expect(screen.getByText("Select chapters to continue")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Create and memorize as a whole",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: HEART_SCOPE_ACTION_LABEL }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Create pack" }));
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/memory/$packId",
+        params: { packId: "pack_new" },
+        search: { heartHint: true },
+      });
+    });
+    expect(mutationMocks.get("savedVerses.heartMany")).toBeUndefined();
+  });
+
+  it("does not continue from scope until every selected book has a chapter range", async () => {
+    scopeFormState.isComplete = false;
+    renderBuilder();
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    expect(screen.getByText("Select books to continue")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create pack" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("memoryPackSearchAfterCreate", () => {
+  it("omits flags for a default eligible create", () => {
+    expect(
+      memoryPackSearchAfterCreate({ kind: "scope", allowsPassage: true }),
+    ).toEqual({});
+  });
+
+  it("sets startPassage for the eligible shortcut", () => {
+    expect(
+      memoryPackSearchAfterCreate({
+        kind: "scope",
+        allowsPassage: true,
+        startPassage: true,
+      }),
+    ).toEqual({ startPassage: true });
+  });
+
+  it("keeps heartHint for ineligible scopes and ignores startPassage", () => {
+    expect(
+      memoryPackSearchAfterCreate({
+        kind: "scope",
+        allowsPassage: false,
+        startPassage: true,
+      }),
+    ).toEqual({ heartHint: true });
+  });
+
+  it("sends no flags for custom packs", () => {
+    expect(
+      memoryPackSearchAfterCreate({ kind: "custom", allowsPassage: false }),
+    ).toEqual({});
+  });
+});
+
+describe("validateMemoryPackSearch", () => {
+  it("still parses heartHint for old links", () => {
+    expect(validateMemoryPackSearch({ heartHint: "1" })).toEqual({
+      heartHint: true,
+    });
+  });
+
+  it("parses startPassage", () => {
+    expect(validateMemoryPackSearch({ startPassage: true })).toEqual({
+      startPassage: true,
+    });
   });
 });

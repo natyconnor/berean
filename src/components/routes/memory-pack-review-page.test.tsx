@@ -8,6 +8,7 @@ import { getSessionNow } from "@/hooks/use-live-now";
 import type { EsvChapterData } from "../../../shared/esv-api";
 
 import { MemoryPackReviewPage } from "./memory-pack-review-page";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 const { queryResults, actionMocks, mutationMocks, navigateMock } = vi.hoisted(
   () => ({
@@ -74,6 +75,11 @@ vi.mock("../../../convex/_generated/api", () => ({
     },
     savedVerses: { listAll: "savedVerses.listAll" },
     verseMemory: { recordAttempt: "verseMemory.recordAttempt" },
+    passageMemory: {
+      getForPack: "passageMemory.getForPack",
+      introduceNext: "passageMemory.introduceNext",
+      recordAttempt: "passageMemory.recordAttempt",
+    },
   },
 }));
 
@@ -119,9 +125,11 @@ function member(
 function renderReview({
   unified,
   members = [member(1, 3), member(4, 6)],
+  passage = null,
 }: {
   unified: boolean;
   members?: ReturnType<typeof member>[];
+  passage?: unknown;
 }) {
   queryResults.set("packs.get", {
     _id: "pack_1",
@@ -133,6 +141,7 @@ function renderReview({
   });
   queryResults.set("packs.resolveMembers", members);
   queryResults.set("savedVerses.listAll", []);
+  queryResults.set("passageMemory.getForPack", passage);
 
   return render(
     <TooltipProvider delayDuration={0}>
@@ -218,5 +227,70 @@ describe("MemoryPackReviewPage", () => {
       to: "/memory/$packId/learn",
       params: { packId: "pack_1" },
     });
+  });
+
+  it("recites a reviewing passage instead of a unified composite from hearts", async () => {
+    const now = getSessionNow();
+    const pieces = [
+      {
+        index: 0,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 3,
+        sectionIndex: 0,
+        attachment: "solid" as const,
+        learnStage: 3,
+        stageReps: 0,
+      },
+      {
+        index: 1,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 4,
+        endVerse: 6,
+        sectionIndex: 0,
+        attachment: "solid" as const,
+        learnStage: 3,
+        stageReps: 0,
+      },
+    ];
+    renderReview({
+      unified: true,
+      passage: {
+        _id: "passage_1" as Id<"passageMemory">,
+        packId: "pack_1" as Id<"packs">,
+        status: "reviewing",
+        pieces,
+        addsOnDay: 0,
+        ease: 2.3,
+        intervalDays: 1,
+        dueAt: now - 1000,
+        consecutiveCorrect: 1,
+        lapses: 0,
+        stageReps: 0,
+        createdAt: now,
+        updatedAt: now,
+        remainingIntroduces: 5,
+        frontierIndex: 2,
+        rehearsalStartIndex: 0,
+        ropePieceIndexes: [0, 1],
+      },
+    });
+
+    expect(
+      await screen.findByRole("status", { name: "Session phase: Review" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/one recitation/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Verse 1 of/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Psalm 23:1-3 \(/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Psalm 23 \(/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Your recited passage"),
+    ).toBeInTheDocument();
   });
 });

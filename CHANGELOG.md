@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+
+### Features
+
+* Passage mode on eligible scope packs with a scaffolded rope and opt-in migration
+* Pack creation walks type → scope or verses → name before create
+
+### Bug Fixes
+
+* Passage recall action row no longer shows a white bar under Continue / Check answer
+* Pack scope chapter pickers start empty (whole book by default) and no longer clip selected chapter chips
+* Scoped pack create again allows whole-book and multi-book scopes; passage memorize stays eligibility-gated
+* Pack wizard keeps actions under the step content, right-aligned, with a capped chapter grid and clearer create tooltips
+* Learn-as-a-passage copy says "not a list of individual verses"
+* Passage practice after a miss no longer stacks a duplicate letter Starting hint on Guided/Challenge
+* Passage learning starts at the first verse, prompts the next verse after Guided, and keeps the Mode Dock from covering bottom actions
+* Soft-locked verses prompt a rolling pair connect after every new part from the second on
+* Soft-lock copy says the verse is down for the day
+* Pack wizard actions sit under the step content with clearer create icons
+* Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
+
 ## [1.13.6](https://github.com/natyconnor/berean/compare/v1.13.5...v1.13.6) (2026-09-09)
 
 

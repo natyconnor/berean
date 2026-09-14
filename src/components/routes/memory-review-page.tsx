@@ -98,7 +98,9 @@ export function MemoryReviewPage() {
   );
   const globalStats = useQuery(
     api.verseMemory.memoryStats,
-    hasScope ? "skip" : { now },
+    hasScope
+      ? "skip"
+      : { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() },
   );
 
   // Freeze the scoped due row once it first resolves so Check → reschedule

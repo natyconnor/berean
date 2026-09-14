@@ -3,6 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { ArrowLeft, Loader2, SearchX } from "lucide-react";
 
+import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
@@ -40,6 +41,11 @@ export function MemoryPackSessionPage({
   const members = useQuery(api.packs.resolveMembers, {
     id: typedPackId,
     now,
+  });
+  const passage = useQuery(api.passageMemory.getForPack, {
+    packId: typedPackId,
+    now,
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
   });
 
   const unifiedEnabled = pack?.unifiedReviewEnabled === true;
@@ -105,7 +111,7 @@ export function MemoryPackSessionPage({
   }, [members, kind, now, unifiedEnabled, pack?.name, typedPackId]);
   const isLearning = kind === "learning";
 
-  if (pack === undefined || members === undefined) {
+  if (pack === undefined || passage === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -136,6 +142,31 @@ export function MemoryPackSessionPage({
             Back to Memory
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  if (passage) {
+    return (
+      <PassageSession
+        packId={typedPackId}
+        view={passage}
+        packName={pack.name}
+        onExit={() =>
+          void navigate({
+            to: "/memory/$packId",
+            params: { packId: typedPackId },
+          })
+        }
+        exitTooltip="Go back to the pack"
+      />
+    );
+  }
+
+  if (members === undefined) {
+    return (
+      <div className="flex h-full items-center justify-center bg-background">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }

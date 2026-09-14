@@ -239,7 +239,7 @@ export function StudySessionView({ sessionId }: StudySessionViewProps) {
       </header>
 
       <ScrollArea className="flex-1 min-h-0">
-        <div className="max-w-6xl mx-auto px-5 py-6">
+        <div className="max-w-6xl mx-auto px-5 pt-6 pb-24">
           {view === "teach" ? (
             <div className="mx-auto w-full max-w-5xl space-y-4">
               <Button

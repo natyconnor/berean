@@ -7,6 +7,7 @@ import { findOrCreateVerseRefId } from "./lib/verseRefs";
 import { adjustUserMemoryStats, seedVerseMemory } from "./lib/verseMemory";
 import { isDueForLearning, isDueForReview } from "../src/lib/memory-scheduler";
 import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
+import { buildPreviewPassageSeed } from "../src/lib/preview-passage-seed";
 
 async function isAnonymousUser(
   ctx: MutationCtx,
@@ -40,6 +41,22 @@ async function assertPreviewMemorySeedAllowed(
 }
 
 async function clearUserMemory(ctx: MutationCtx, userId: Id<"users">) {
+  const passageReviews = await ctx.db
+    .query("passageReviews")
+    .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
+    .collect();
+  for (const review of passageReviews) {
+    await ctx.db.delete(review._id);
+  }
+
+  const passages = await ctx.db
+    .query("passageMemory")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const passage of passages) {
+    await ctx.db.delete(passage._id);
+  }
+
   const packs = await ctx.db
     .query("packs")
     .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
@@ -110,16 +127,30 @@ const seedSummaryValidator = v.object({
       verseCount: v.number(),
     }),
   ),
+  passagePacks: v.array(
+    v.object({
+      name: v.string(),
+      description: v.string(),
+      howToTry: v.string(),
+      role: v.string(),
+    }),
+  ),
 });
 
 export const seedPreviewMemory = mutation({
-  args: { now: v.number() },
+  args: {
+    now: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+  },
   returns: seedSummaryValidator,
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     await assertPreviewMemorySeedAllowed(ctx, userId);
 
+    const tzOffsetMinutes =
+      args.tzOffsetMinutes ?? new Date(args.now).getTimezoneOffset();
     const plan = buildPreviewMemorySeed(args.now);
+    const passagePlan = buildPreviewPassageSeed(args.now, tzOffsetMinutes);
     await clearUserMemory(ctx, userId);
 
     const memoryIdByVerseId = new Map<string, Id<"verseMemory">>();
@@ -210,6 +241,35 @@ export const seedPreviewMemory = mutation({
       }
     }
 
+    for (const pack of passagePlan.packs) {
+      const packId = await ctx.db.insert("packs", {
+        userId,
+        name: pack.name,
+        kind: "scope",
+        scope: pack.scope,
+        createdAt: args.now,
+        lastOpenedAt: args.now,
+      });
+      if (!pack.passage) continue;
+      await ctx.db.insert("passageMemory", {
+        userId,
+        packId,
+        status: pack.passage.status,
+        pieces: pack.passage.pieces,
+        addDayKey: pack.passage.addDayKey,
+        addsOnDay: pack.passage.addsOnDay,
+        ease: pack.passage.schedule.ease,
+        intervalDays: pack.passage.schedule.intervalDays,
+        dueAt: pack.passage.schedule.dueAt,
+        consecutiveCorrect: pack.passage.schedule.consecutiveCorrect,
+        lapses: pack.passage.schedule.lapses,
+        stageReps: pack.passage.schedule.stageReps,
+        earlyReviewApplied: pack.passage.schedule.earlyReviewApplied,
+        createdAt: args.now,
+        updatedAt: args.now,
+      });
+    }
+
     const dueReviewCount = plan.verses.filter((verse) =>
       isDueForReview(verse.schedule, args.now),
     ).length;
@@ -222,7 +282,7 @@ export const seedPreviewMemory = mutation({
 
     return {
       verseCount: plan.verses.length,
-      packCount: plan.packs.length,
+      packCount: plan.packs.length + passagePlan.packs.length,
       reviewLogCount: plan.reviews.length,
       dueReviewCount,
       learningDueCount,
@@ -239,6 +299,12 @@ export const seedPreviewMemory = mutation({
         name: pack.name,
         description: pack.description,
         verseCount: pack.verseIds.length,
+      })),
+      passagePacks: passagePlan.packs.map((pack) => ({
+        name: pack.name,
+        description: pack.description,
+        howToTry: pack.howToTry,
+        role: pack.role,
       })),
     };
   },

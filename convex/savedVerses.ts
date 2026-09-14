@@ -3,13 +3,12 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
-import { heartSpanIfAbsent, loadUserHeartSpans } from "./lib/savedVerses";
 import {
-  adjustUserMemoryStats,
-  deletePackMembershipsForVerse,
-  findSavedVerse,
-  findVerseMemory,
-} from "./lib/verseMemory";
+  heartSpanIfAbsent,
+  loadUserHeartSpans,
+  unheartByVerseRefId,
+} from "./lib/savedVerses";
+import { findSavedVerse, findVerseMemory } from "./lib/verseMemory";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import {
   exactSpanMatch,
@@ -189,24 +188,7 @@ export const toggle = mutation({
     const existing = await findSavedVerse(ctx, userId, verseRefId);
 
     if (existing) {
-      // Un-hearting removes the bookmark and drops the verse from Memory:
-      // pack membership is deleted, isHearted is cleared, but spaced-repetition
-      // progress and review history on verseMemory survive for a later re-heart.
-      await ctx.db.delete(existing._id);
-      const memory = await findVerseMemory(ctx, userId, verseRefId);
-      if (memory) {
-        if (memory.isHearted === true) {
-          await adjustUserMemoryStats(
-            ctx,
-            userId,
-            Date.now(),
-            memory.status,
-            null,
-          );
-        }
-        await ctx.db.patch(memory._id, { isHearted: false });
-      }
-      await deletePackMembershipsForVerse(ctx, userId, verseRefId);
+      await unheartByVerseRefId(ctx, userId, verseRefId, Date.now());
       return "removed" as const;
     }
 

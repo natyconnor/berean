@@ -12,6 +12,11 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    /* App `@/` aliases so Convex can typecheck `src/lib` helpers it imports. */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../src/*"]
+    },
 
     /* These compiler options are required by Convex */
     "target": "ESNext",

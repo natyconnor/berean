@@ -6,6 +6,7 @@ import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { MemoryListRow } from "@/components/memory/memory-surface";
+import { packListSubtitle } from "@/components/memory/packs/pack-list-subtitle";
 
 const INITIAL_PAGE_SIZE = 10;
 const LOAD_MORE_PAGE_SIZE = 10;
@@ -17,9 +18,10 @@ const LOAD_MORE_PAGE_SIZE = 10;
  * hearted/reviewed.
  */
 export function PackList({ now }: { now: number }) {
+  const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const { results, status, loadMore } = usePaginatedQuery(
     api.packs.listMine,
-    { now },
+    { now, tzOffsetMinutes },
     { initialNumItems: INITIAL_PAGE_SIZE },
   );
 
@@ -61,8 +63,9 @@ export function PackList({ now }: { now: number }) {
             aria-hidden
           />
           <p className="text-sm text-muted-foreground">
-            No packs yet. Group verses by scope (a book, chapter, or tag) or
-            hand-pick a custom set.
+            No packs yet. Group verses by scope (a book, chapter, or tag) —
+            eligible scopes can be learned as a passage — or hand-pick a custom
+            set.
           </p>
           <Button asChild size="sm" className="mt-4 gap-1.5">
             <Link to="/memory/new">
@@ -90,14 +93,7 @@ export function PackList({ now }: { now: number }) {
                         {pack.name}
                       </span>
                       <span className="block text-xs text-muted-foreground">
-                        {pack.kind === "scope" ? "Scope" : "Custom"} ·{" "}
-                        {pack.verseCount} verse
-                        {pack.verseCount !== 1 ? "s" : ""}
-                        {pack.dueCount === 0
-                          ? ""
-                          : pack.unifiedReviewEnabled
-                            ? " · one recitation due"
-                            : ` · ${pack.dueCount} due`}
+                        {packListSubtitle(pack)}
                       </span>
                     </span>
                   </Link>

@@ -69,4 +69,29 @@ describe("dueQueueEntryToPracticeVerse", () => {
     expect(verse.dueAt).toBe(50);
     expect(verse.reference.startVerse).toBe(1);
   });
+
+  it("maps a reviewing passage using frozen pieces as composite members", () => {
+    const verse = dueQueueEntryToPracticeVerse({
+      kind: "pack",
+      packId: PACK_ID,
+      packName: "John 3",
+      dueAt: 50,
+      status: "reviewing",
+      learnStage: 3,
+      passageStatus: "reviewing",
+      members: [
+        { book: "John", chapter: 3, startVerse: 1, endVerse: 3 },
+        { book: "John", chapter: 3, startVerse: 4, endVerse: 8 },
+      ],
+    });
+    expect(verse.composite).toEqual({
+      packId: PACK_ID,
+      packName: "John 3",
+      passageStatus: "reviewing",
+      members: [
+        { book: "John", chapter: 3, startVerse: 1, endVerse: 3 },
+        { book: "John", chapter: 3, startVerse: 4, endVerse: 8 },
+      ],
+    });
+  });
 });

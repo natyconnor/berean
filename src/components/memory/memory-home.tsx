@@ -28,7 +28,10 @@ export function MemoryHome() {
   const now = useLiveNow();
   const navigate = useNavigate();
 
-  const stats = useQuery(api.verseMemory.memoryStats, { now });
+  const stats = useQuery(api.verseMemory.memoryStats, {
+    now,
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+  });
   const canPractice = (stats?.reviewing ?? 0) + (stats?.mastered ?? 0) > 0;
 
   return (
@@ -38,7 +41,7 @@ export function MemoryHome() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Memory</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Review what you’re learning, or start a verse
+              Review verses and passages, or start something new
             </p>
           </div>
           <Button
@@ -56,7 +59,7 @@ export function MemoryHome() {
         </div>
       </header>
       <ScrollArea className="flex-1 min-h-0">
-        <div className="mx-auto max-w-6xl space-y-8 px-5 py-6">
+        <div className="mx-auto max-w-6xl space-y-8 px-5 pt-6 pb-24">
           <PreviewMemorySeedCard
             now={now}
             heartedTotal={stats?.total}

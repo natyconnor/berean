@@ -528,8 +528,8 @@ export function PassageChapterView({
   const topGridClass = cn("grid", passageGridClass);
   const passageContentGutterClass = isReadMode ? "pl-16 pr-6" : "pl-16 pr-5";
   const containerClass = isReadMode
-    ? cn("max-w-[1400px] mx-auto pb-16", passageContentGutterClass)
-    : cn("max-w-[1320px] mx-auto pb-16", passageContentGutterClass);
+    ? cn("max-w-[1400px] mx-auto pb-24", passageContentGutterClass)
+    : cn("max-w-[1320px] mx-auto pb-24", passageContentGutterClass);
   const focusStartVerse = focusRange?.startVerse;
   const focusEndVerse = focusRange?.endVerse;
   const focusRequestKey = hasFocusRange

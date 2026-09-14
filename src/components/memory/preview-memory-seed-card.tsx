@@ -27,6 +27,12 @@ type SeedSummary = {
     description: string;
     verseCount: number;
   }>;
+  passagePacks: Array<{
+    name: string;
+    description: string;
+    howToTry: string;
+    role: string;
+  }>;
 };
 
 export function PreviewMemorySeedCard({
@@ -55,7 +61,10 @@ export function PreviewMemorySeedCard({
     setBusy(true);
     setError(null);
     try {
-      const result = await seedPreviewMemory({ now });
+      const result = await seedPreviewMemory({
+        now,
+        tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+      });
       setSummary(result);
     } catch (caught) {
       const message =
@@ -90,9 +99,10 @@ export function PreviewMemorySeedCard({
             Sample memory data
           </h2>
           <p className="text-sm text-muted-foreground">
-            Loads hearted verses at every stage — new, each learning band, due
-            review (several queued), later review, and mastered — plus three
-            packs. Replaces this account&apos;s hearted verses.
+            Loads hearted verses at every stage, custom packs, and five
+            distinct-scope passage packs (Psalm 1 start, Jude building, 3 John
+            budget used, Psalm 23 maintenance, multi-book collection-only).
+            Replaces this account&apos;s hearted verses and packs.
           </p>
         </div>
         <Button
@@ -102,7 +112,7 @@ export function PreviewMemorySeedCard({
           disabled={busy}
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          {summary ? "Reload sample verses" : "Load sample verses"}
+          {summary ? "Reload sample data" : "Load sample data"}
         </Button>
       </div>
 
@@ -113,27 +123,49 @@ export function PreviewMemorySeedCard({
       )}
 
       {summary && (
-        <div className="mt-4 space-y-3 text-sm">
+        <div className="mt-4 space-y-4 text-sm">
           <p className="text-muted-foreground">
             {summary.dueReviewCount} due for Review · {summary.learningDueCount}{" "}
             to learn today · {summary.verseCount} hearted · {summary.packCount}{" "}
             packs
           </p>
-          <ul className="divide-y rounded-lg border bg-background/70 text-left">
-            {summary.verses.map((verse) => (
-              <li key={verse.id} className="px-3 py-2">
-                <p className="font-medium">
-                  {formatVerseRef(verse)}{" "}
-                  <span className="font-normal text-muted-foreground">
-                    · {verse.label}
-                  </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {verse.howToTry}
-                </p>
-              </li>
-            ))}
-          </ul>
+          {summary.passagePacks.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Passage packs
+              </p>
+              <ul className="divide-y rounded-lg border bg-background/70 text-left">
+                {summary.passagePacks.map((pack) => (
+                  <li key={pack.name} className="px-3 py-2">
+                    <p className="font-medium">{pack.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {pack.howToTry}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Hearted verses
+            </p>
+            <ul className="divide-y rounded-lg border bg-background/70 text-left">
+              {summary.verses.map((verse) => (
+                <li key={verse.id} className="px-3 py-2">
+                  <p className="font-medium">
+                    {formatVerseRef(verse)}{" "}
+                    <span className="font-normal text-muted-foreground">
+                      · {verse.label}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {verse.howToTry}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
     </MemoryDashboardCard>

@@ -1,9 +1,42 @@
 /**
- * Shared labels for hearting a scope pack: the pack-view CTA, its tooltip,
- * the pointer shown after create, and the heart dialog.
+ * Shared labels for hearting an *ineligible* incomplete scope pack: the
+ * pack-view CTA, its tooltip, the pointer shown after create, and the heart
+ * dialog. Eligible packs must not use {@link HEART_SCOPE_ACTION_LABEL} — they
+ * stay collections until the user starts passage mode.
  */
 
 export const HEART_SCOPE_ACTION_LABEL = "Memorize whole passage";
+
+/** Eligible pack-view CTA. Never reuse {@link HEART_SCOPE_ACTION_LABEL} here. */
+export const LEARN_AS_PASSAGE_LABEL = "Learn as a passage";
+
+/** Removes the passage row; pack returns to a heart collection. */
+export const STOP_PASSAGE_LEARNING_LABEL = "Stop passage learning";
+
+/** Builder shortcut for eligible scopes. Still creates a normal collection. */
+export const CREATE_AND_START_PASSAGE_LABEL = "Create and memorize as a whole";
+
+/** Explains the normal Create pack action on the builder name step. */
+export const CREATE_PACK_TOOLTIP =
+  "Creates a normal scoped pack that auto-adds hearted verses within the scope.";
+
+/** Explains the eligible-scope passage shortcut on the builder name step. */
+export const CREATE_AND_MEMORIZE_WHOLE_TOOLTIP =
+  "Memorizes this pack as one singular passage.";
+
+/** Pack-view CTA once a passage row exists but no verse has been started. */
+export const START_LEARNING_LABEL = "Start Learning";
+
+/** Pack-view CTA once at least one verse is in progress. */
+export const CONTINUE_PASSAGE_LABEL = "Continue";
+
+export function passageLearnButtonLabel(
+  pieces: readonly { attachment: string }[],
+): string {
+  return pieces.some((piece) => piece.attachment !== "unreached")
+    ? CONTINUE_PASSAGE_LABEL
+    : START_LEARNING_LABEL;
+}
 
 /** Invitation copy; no trailing period so tooltip and create-pointer stay identical. */
 export const HEART_SCOPE_TOOLTIP =
@@ -13,8 +46,19 @@ export function heartScopeHasExisting(coveredVerseCount: number): boolean {
   return coveredVerseCount > 0;
 }
 
+/** Auto-heart CTA. Callers must not use this for passage-eligible packs. */
 export function heartScopeActionLabel(): string {
   return HEART_SCOPE_ACTION_LABEL;
+}
+
+/**
+ * Optional builder control. Eligible packs get the start-passage shortcut;
+ * ineligible incomplete packs keep today's Create-only + auto-heart path.
+ */
+export function packBuilderStartPassageLabel(
+  passageEligible: boolean,
+): string | null {
+  return passageEligible ? CREATE_AND_START_PASSAGE_LABEL : null;
 }
 
 export function heartScopeDialogTitle(): string {

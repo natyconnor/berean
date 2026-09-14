@@ -56,6 +56,7 @@ function AppShellSurface({ children }: { children: ReactNode }) {
     >
       <TabBar />
       <FeedbackFab />
+      {/* Mode Dock is position:fixed and floats over content; pages add their own scroll padding. */}
       <div className="flex-1 overflow-hidden">{children}</div>
       <ModeDock />
       <MemoryLaunchAnnouncementDialog />
