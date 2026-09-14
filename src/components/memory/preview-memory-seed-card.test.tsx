@@ -42,28 +42,38 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
+const sampleSummary = {
+  verseCount: 15,
+  packCount: 8,
+  reviewLogCount: 20,
+  dueReviewCount: 4,
+  learningDueCount: 4,
+  verses: [
+    {
+      id: "john-11-35",
+      label: "Reviewing · due today",
+      howToTry: "Open Review — first card in the due queue.",
+      book: "John",
+      chapter: 11,
+      startVerse: 35,
+      endVerse: 35,
+    },
+  ],
+  packs: [],
+  passagePacks: [
+    {
+      name: "Sample · Psalm 1 (start passage)",
+      description: "Eligible scope pack with no passage row yet.",
+      howToTry: "Open this pack → Learn as a passage.",
+      role: "readyToStart",
+    },
+  ],
+};
+
 describe("PreviewMemorySeedCard", () => {
   beforeEach(() => {
     seedPreviewMemoryMock.mockReset();
-    seedPreviewMemoryMock.mockResolvedValue({
-      verseCount: 15,
-      packCount: 3,
-      reviewLogCount: 20,
-      dueReviewCount: 4,
-      learningDueCount: 4,
-      verses: [
-        {
-          id: "john-11-35",
-          label: "Reviewing · due today",
-          howToTry: "Open Review — first card in the due queue.",
-          book: "John",
-          chapter: 11,
-          startVerse: 35,
-          endVerse: 35,
-        },
-      ],
-      packs: [],
-    });
+    seedPreviewMemoryMock.mockResolvedValue(sampleSummary);
   });
 
   it("hides the tools outside preview and local dev", () => {
@@ -76,7 +86,7 @@ describe("PreviewMemorySeedCard", () => {
       />,
     );
     expect(
-      screen.queryByRole("button", { name: /load sample verses/i }),
+      screen.queryByRole("button", { name: /load sample data/i }),
     ).not.toBeInTheDocument();
     expect(seedPreviewMemoryMock).not.toHaveBeenCalled();
   });
@@ -92,19 +102,36 @@ describe("PreviewMemorySeedCard", () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole("button", { name: /load sample verses/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /load sample data/i }));
 
-    expect(seedPreviewMemoryMock).toHaveBeenCalledWith({ now: 42 });
+    expect(seedPreviewMemoryMock).toHaveBeenCalledTimes(1);
+    const buttonArgs = seedPreviewMemoryMock.mock.calls[0]?.[0] as {
+      now: number;
+      tzOffsetMinutes: number;
+    };
+    expect(buttonArgs).toEqual({
+      now: 42,
+      tzOffsetMinutes: new Date(42).getTimezoneOffset(),
+    });
     expect(await screen.findByText(/john 11:35/i)).toBeInTheDocument();
     expect(screen.getByText(/4 due for review/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/sample · psalm 1 \(start passage\)/i),
+    ).toBeInTheDocument();
   });
 
   it("auto-seeds an empty preview account once", async () => {
     render(<PreviewMemorySeedCard now={7} heartedTotal={0} enabled autoSeed />);
 
-    expect(seedPreviewMemoryMock).toHaveBeenCalledWith({ now: 7 });
+    expect(seedPreviewMemoryMock).toHaveBeenCalledTimes(1);
+    const autoArgs = seedPreviewMemoryMock.mock.calls[0]?.[0] as {
+      now: number;
+      tzOffsetMinutes: number;
+    };
+    expect(autoArgs).toEqual({
+      now: 7,
+      tzOffsetMinutes: new Date(7).getTimezoneOffset(),
+    });
     expect(await screen.findByText(/john 11:35/i)).toBeInTheDocument();
   });
 
