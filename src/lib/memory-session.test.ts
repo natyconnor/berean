@@ -161,6 +161,12 @@ describe("hasSessionWorkLeft", () => {
     ).toBe(false);
   });
 
+  it("keeps a Review verse when an 80% retry left it due", () => {
+    expect(
+      hasSessionWorkLeft("review", { status: "reviewing", dueAt: NOW }, NOW),
+    ).toBe(true);
+  });
+
   it("keeps a Learning verse until it soft-locks", () => {
     expect(
       hasSessionWorkLeft(

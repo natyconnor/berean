@@ -21,6 +21,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.13.6](https://github.com/natyconnor/berean/compare/v1.13.5...v1.13.6) (2026-09-09)
+
+
+### Bug Fixes
+
+* Retry review at 80% and lapse one ladder step ([#194](https://github.com/natyconnor/berean/issues/194)) ([fc9269d](https://github.com/natyconnor/berean/commit/fc9269da4a923b98d9e02cb56f0fe78f527f15c2))
+
 ## [1.13.5](https://github.com/natyconnor/berean/compare/v1.13.4...v1.13.5) (2026-09-06)
 
 

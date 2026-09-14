@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { diffWords } from "@/lib/diff-words";
 import {
   classifyVerseAttempt,
+  countAttemptErrors,
   hasAttemptErrors,
   verseAttemptAccuracy,
 } from "./study-attempt-quality";
@@ -113,5 +114,27 @@ describe("verseAttemptAccuracy", () => {
   it("rounds the credited token percentage", () => {
     const tokens = diffWords("Jesus cried loudly", "Jesus wept");
     expect(verseAttemptAccuracy(tokens)).toBe(33);
+  });
+});
+
+describe("countAttemptErrors", () => {
+  it("tallies a one-word mix-up", () => {
+    expect(countAttemptErrors(diffWords("Jesus cried", "Jesus wept"))).toEqual({
+      matches: 1,
+      typos: 0,
+      mismatches: 1,
+      missing: 0,
+      extra: 0,
+    });
+  });
+
+  it("tallies a missing word separately from a mix-up", () => {
+    expect(countAttemptErrors(diffWords("Jesus", "Jesus wept"))).toEqual({
+      matches: 1,
+      typos: 0,
+      mismatches: 0,
+      missing: 1,
+      extra: 0,
+    });
   });
 });
