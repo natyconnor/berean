@@ -22,6 +22,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.14.0](https://github.com/natyconnor/berean/compare/v1.13.6...v1.14.0) (2026-09-14)
+
+
+### Features
+
+* Passage memory: full stack (single PR) ([#206](https://github.com/natyconnor/berean/issues/206)) ([8f27b00](https://github.com/natyconnor/berean/commit/8f27b00641e6ea2d2f6d79d91316dec9ffe2ad82))
+
 ## [1.13.6](https://github.com/natyconnor/berean/compare/v1.13.5...v1.13.6) (2026-09-09)
 
 
