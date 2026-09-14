@@ -29,7 +29,7 @@ describe("PassageRecallCard footer", () => {
         stageReps={0}
         status="learning"
         readContinue
-        onSubmit={async () => true}
+        onSubmit={() => Promise.resolve(true)}
       />,
     );
 
