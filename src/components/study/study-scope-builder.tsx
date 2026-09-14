@@ -68,7 +68,7 @@ export function StudyScopeBuilder() {
       </header>
 
       <ScrollArea className="flex-1 min-h-0">
-        <div className="max-w-2xl mx-auto px-5 py-6 space-y-8">
+        <div className="max-w-2xl mx-auto px-5 pt-6 pb-24 space-y-8">
           <ScopeForm
             selectedBooks={selectedBooks}
             chapterRanges={chapterRanges}

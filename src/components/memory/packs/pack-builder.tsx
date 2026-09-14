@@ -268,7 +268,7 @@ export function PackBuilder() {
       </header>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-2xl space-y-8 px-5 py-6">
+        <div className="mx-auto max-w-2xl space-y-8 px-5 pt-6 pb-24">
           {step === "type" ? (
             <section className="space-y-4">
               <div className="space-y-1">

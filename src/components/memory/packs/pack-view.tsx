@@ -802,7 +802,7 @@ function PackViewMain({
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-2xl space-y-6 px-5 py-6">
+        <div className="mx-auto max-w-2xl space-y-6 px-5 pt-6 pb-24">
           {showMigrationBanner && passage ? (
             <PassageMigrationBanner
               unheartedCount={passage.unheartedCount ?? 0}

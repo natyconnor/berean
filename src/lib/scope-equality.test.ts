@@ -97,4 +97,32 @@ describe("scopesEqual", () => {
       }),
     ).toBe(false);
   });
+
+  it("treats whole-book and full chapter-range scopes as equal", () => {
+    expect(
+      scopesEqual(
+        { books: ["Jude"], tags: [], tagMatchMode: "any" },
+        {
+          books: ["Jude"],
+          chapterRanges: [{ book: "Jude", startChapter: 1, endChapter: 1 }],
+          tags: [],
+          tagMatchMode: "any",
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it("does not collapse a partial psalm range into the whole book", () => {
+    expect(
+      scopesEqual(
+        { books: ["Psalms"], tags: [], tagMatchMode: "any" },
+        {
+          books: ["Psalms"],
+          chapterRanges: [{ book: "Psalms", startChapter: 23, endChapter: 23 }],
+          tags: [],
+          tagMatchMode: "any",
+        },
+      ),
+    ).toBe(false);
+  });
 });

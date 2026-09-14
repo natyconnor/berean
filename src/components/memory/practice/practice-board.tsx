@@ -1428,7 +1428,7 @@ function PracticeShell({
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-6xl px-5 py-6">{children}</div>
+        <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">{children}</div>
       </ScrollArea>
     </div>
   );

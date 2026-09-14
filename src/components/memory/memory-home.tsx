@@ -59,7 +59,7 @@ export function MemoryHome() {
         </div>
       </header>
       <ScrollArea className="flex-1 min-h-0">
-        <div className="mx-auto max-w-6xl space-y-8 px-5 py-6">
+        <div className="mx-auto max-w-6xl space-y-8 px-5 pt-6 pb-24">
           <PreviewMemorySeedCard
             now={now}
             heartedTotal={stats?.total}

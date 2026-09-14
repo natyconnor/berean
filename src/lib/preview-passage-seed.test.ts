@@ -4,6 +4,7 @@ import { packAllowsPassageMode } from "./passage-eligibility";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
 import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
 import { buildPreviewPassageSeed } from "./preview-passage-seed";
+import { scopesEqual } from "./scope-equality";
 
 const NOW = 1_700_000_000_000;
 const TZ = 300;
@@ -61,6 +62,7 @@ describe("buildPreviewPassageSeed", () => {
     expect(
       budget?.passage?.pieces.some((piece) => piece.attachment === "unreached"),
     ).toBe(true);
+    expect(budget?.name).toMatch(/3 John/);
   });
 
   it("seeds a maintenance pack that is review-due now", () => {
@@ -77,6 +79,29 @@ describe("buildPreviewPassageSeed", () => {
         { status: passage.status, dueAt: passage.schedule.dueAt },
         NOW,
       ),
+    ).toBe(true);
+  });
+
+  it("uses a distinct scope for every sample pack", () => {
+    for (let i = 0; i < plan.packs.length; i++) {
+      for (let j = i + 1; j < plan.packs.length; j++) {
+        expect(scopesEqual(plan.packs[i].scope, plan.packs[j].scope)).toBe(
+          false,
+        );
+      }
+    }
+    expect(
+      plan.packs.filter((pack) => /\bJude\b/.test(pack.name)),
+    ).toHaveLength(1);
+  });
+
+  it("builds Jude pieces from auto-heart grouping (short chunks)", () => {
+    const jude = plan.packs.find((pack) => pack.role === "buildingDue");
+    expect(jude?.passage).toBeDefined();
+    const pieces = jude!.passage!.pieces;
+    expect(pieces.length).toBeGreaterThan(10);
+    expect(
+      pieces.every((piece) => piece.endVerse - piece.startVerse + 1 <= 4),
     ).toBe(true);
   });
 });

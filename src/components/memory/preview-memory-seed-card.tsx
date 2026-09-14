@@ -99,10 +99,10 @@ export function PreviewMemorySeedCard({
             Sample memory data
           </h2>
           <p className="text-sm text-muted-foreground">
-            Loads hearted verses at every stage, custom packs, and five passage
-            packs (start, building, budget used, maintenance due, multi-book
-            collection-only). Replaces this account&apos;s hearted verses and
-            packs.
+            Loads hearted verses at every stage, custom packs, and five
+            distinct-scope passage packs (Psalm 1 start, Jude building, 3 John
+            budget used, Psalm 23 maintenance, multi-book collection-only).
+            Replaces this account&apos;s hearted verses and packs.
           </p>
         </div>
         <Button

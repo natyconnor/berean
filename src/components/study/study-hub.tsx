@@ -81,7 +81,7 @@ export function StudyHub() {
         </div>
       </header>
       <ScrollArea className="flex-1 min-h-0">
-        <div className="max-w-2xl mx-auto px-5 py-6 space-y-8">
+        <div className="max-w-2xl mx-auto px-5 pt-6 pb-24 space-y-8">
           <section className="space-y-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Sessions
