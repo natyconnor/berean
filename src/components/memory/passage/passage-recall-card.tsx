@@ -317,7 +317,7 @@ export function PassageRecallCard({
           )}
         </CardContent>
 
-        <CardFooter className="sticky bottom-0 z-10 flex justify-end border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <CardFooter className="flex justify-end border-t">
           <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
             {!checked && !isReadPrime ? (
               <PreviewFillExactAnswerButton
