@@ -5,18 +5,13 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { logInteraction } from "@/lib/dev-log";
 import type { NoteBody } from "@/lib/note-inline-content";
+import type { VerseRef } from "@/lib/verse-ref-utils";
 import {
+  buildChapterScopedNotes,
   buildPassageNotesByAnchor,
   buildSingleVerseNotes,
   buildVerseToPassageAnchor,
 } from "@/components/notes/model/note-model";
-
-interface SaveNoteRef {
-  book: string;
-  chapter: number;
-  startVerse: number;
-  endVerse: number;
-}
 
 export function useChapterNotesData(book: string, chapter: number) {
   const chapterNotesResult = useQuery(api.noteVerseLinks.getNotesForChapter, {
@@ -31,6 +26,10 @@ export function useChapterNotesData(book: string, chapter: number) {
 
   const chapterNotes = chapterNotesResult;
 
+  const chapterScopedNotes = useMemo(
+    () => buildChapterScopedNotes(chapterNotes),
+    [chapterNotes],
+  );
   const singleVerseNotes = useMemo(
     () => buildSingleVerseNotes(chapterNotes),
     [chapterNotes],
@@ -45,7 +44,7 @@ export function useChapterNotesData(book: string, chapter: number) {
   );
 
   const saveNewNote = async (
-    verseRef: SaveNoteRef,
+    verseRef: VerseRef,
     body: NoteBody,
     tags: string[],
   ) => {
@@ -54,11 +53,18 @@ export function useChapterNotesData(book: string, chapter: number) {
       chapter: verseRef.chapter,
       startVerse: verseRef.startVerse,
       endVerse: verseRef.endVerse,
+      scope: verseRef.scope,
       tagCount: tags.length,
     });
     try {
       const noteId = await createNote({ body, tags });
-      const verseRefId = await findOrCreateRef(verseRef);
+      const verseRefId = await findOrCreateRef({
+        book: verseRef.book,
+        chapter: verseRef.chapter,
+        startVerse: verseRef.startVerse,
+        endVerse: verseRef.endVerse,
+        ...(verseRef.scope === "chapter" ? { scope: "chapter" as const } : {}),
+      });
       await linkNote({ noteId, verseRefId });
       logInteraction("notes", "created", {
         noteId,
@@ -66,6 +72,7 @@ export function useChapterNotesData(book: string, chapter: number) {
         chapter: verseRef.chapter,
         startVerse: verseRef.startVerse,
         endVerse: verseRef.endVerse,
+        scope: verseRef.scope,
         tagCount: tags.length,
       });
     } catch (error) {
@@ -74,6 +81,7 @@ export function useChapterNotesData(book: string, chapter: number) {
         chapter: verseRef.chapter,
         startVerse: verseRef.startVerse,
         endVerse: verseRef.endVerse,
+        scope: verseRef.scope,
         message: error instanceof Error ? error.message : "unknown-error",
         tagCount: tags.length,
       });
@@ -121,6 +129,7 @@ export function useChapterNotesData(book: string, chapter: number) {
   };
 
   return {
+    chapterScopedNotes,
     singleVerseNotes,
     passageNotesByAnchor,
     verseToPassageAnchor,

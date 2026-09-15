@@ -106,6 +106,36 @@ export const NOTE_DELETE_REDUCED_EXIT = {
   transition: { duration: 0.1 },
 };
 
+/** Chapter notes floating panel open/close. */
+export const CHAPTER_OVERLAY_TRANSITION: Transition = {
+  duration: 0.24,
+  ease: [0.22, 1, 0.36, 1],
+};
+
+export const CHAPTER_OVERLAY_VARIANTS: Variants = {
+  hidden: { opacity: 0, y: -10, scale: 0.98 },
+  visible: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -6, scale: 0.985 },
+};
+
+/** Header CTA ↔ chapter row handoff. */
+export const CHAPTER_CHROME_TRANSITION: Transition = {
+  duration: 0.22,
+  ease: [0.22, 1, 0.36, 1],
+};
+
+export const CHAPTER_CHROME_VARIANTS: Variants = {
+  hidden: { opacity: 0, y: -6, height: 0 },
+  visible: { opacity: 1, y: 0, height: "auto" },
+  exit: { opacity: 0, y: -4, height: 0 },
+};
+
+export const CHAPTER_HEADER_CTA_VARIANTS: Variants = {
+  hidden: { opacity: 0, scale: 0.96, x: 6 },
+  visible: { opacity: 1, scale: 1, x: 0 },
+  exit: { opacity: 0, scale: 0.96, x: 6 },
+};
+
 /**
  * Height-collapse backup exit (use if slide feels wrong in QA):
  *   exit={{ height: 0, opacity: 0, overflow: "hidden", transition: NOTE_DELETE_EXIT_TRANSITION }}

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ChapterNotesLabRouteImport } from './routes/chapter-notes-lab'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as TermsRouteImport } from './routes/terms'
@@ -33,6 +34,11 @@ import { Route as MemoryPackIdReviewRouteImport } from './routes/memory_.$packId
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChapterNotesLabRoute = ChapterNotesLabRouteImport.update({
+  id: '/chapter-notes-lab',
+  path: '/chapter-notes-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -133,6 +139,7 @@ const MemoryPackIdReviewRoute = MemoryPackIdReviewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/chapter-notes-lab': typeof ChapterNotesLabRoute
   '/privacy': typeof PrivacyRoute
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/chapter-notes-lab': typeof ChapterNotesLabRoute
   '/privacy': typeof PrivacyRoute
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
@@ -178,6 +186,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/chapter-notes-lab': typeof ChapterNotesLabRoute
   '/privacy': typeof PrivacyRoute
   '/search': typeof SearchRoute
   '/terms': typeof TermsRoute
@@ -202,6 +211,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/chapter-notes-lab'
     | '/privacy'
     | '/search'
     | '/terms'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/chapter-notes-lab'
     | '/privacy'
     | '/search'
     | '/terms'
@@ -246,6 +257,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/chapter-notes-lab'
     | '/privacy'
     | '/search'
     | '/terms'
@@ -269,6 +281,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ChapterNotesLabRoute: typeof ChapterNotesLabRoute
   PrivacyRoute: typeof PrivacyRoute
   SearchRoute: typeof SearchRoute
   TermsRoute: typeof TermsRoute
@@ -297,6 +310,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chapter-notes-lab': {
+      id: '/chapter-notes-lab'
+      path: '/chapter-notes-lab'
+      fullPath: '/chapter-notes-lab'
+      preLoaderRoute: typeof ChapterNotesLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -437,6 +457,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ChapterNotesLabRoute: ChapterNotesLabRoute,
   PrivacyRoute: PrivacyRoute,
   SearchRoute: SearchRoute,
   TermsRoute: TermsRoute,
