@@ -109,8 +109,8 @@ export function useChapterNotesPanel({
     [editingId, onDelete],
   );
 
-  /** Row + opens existing notes, or starts a draft when empty. */
-  const handleRowAdd = useCallback(() => {
+  /** Header chrome: open existing notes, or start a draft when empty. */
+  const handleHeaderToggle = useCallback(() => {
     if (overlayOpen) {
       closePanel();
       return;
@@ -137,7 +137,7 @@ export function useChapterNotesPanel({
     cancelEdit,
     saveEdit,
     deleteNote,
-    handleRowAdd,
+    handleHeaderToggle,
   };
 }
 

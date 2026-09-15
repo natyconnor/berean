@@ -25,7 +25,7 @@ function makeNote(
 }
 
 describe("useChapterNotesPanel", () => {
-  it("opens existing notes from the row control and collapses when toggled", () => {
+  it("opens existing notes from the header chrome and collapses when toggled", () => {
     const onSaveNew = vi.fn();
     const onSaveEdit = vi.fn();
     const onDelete = vi.fn();
@@ -45,18 +45,18 @@ describe("useChapterNotesPanel", () => {
     expect(result.current.overlayOpen).toBe(false);
 
     act(() => {
-      result.current.handleRowAdd();
+      result.current.handleHeaderToggle();
     });
     expect(result.current.overlayOpen).toBe(true);
     expect(result.current.drafting).toBe(false);
 
     act(() => {
-      result.current.handleRowAdd();
+      result.current.handleHeaderToggle();
     });
     expect(result.current.overlayOpen).toBe(false);
   });
 
-  it("starts a draft from the row when there are no chapter notes", () => {
+  it("starts a draft from the header when there are no chapter notes", () => {
     const { result } = renderHook(() =>
       useChapterNotesPanel({
         book: "John",
@@ -69,7 +69,7 @@ describe("useChapterNotesPanel", () => {
     );
 
     act(() => {
-      result.current.handleRowAdd();
+      result.current.handleHeaderToggle();
     });
 
     expect(result.current.overlayOpen).toBe(true);

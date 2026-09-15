@@ -661,9 +661,9 @@ export function PassageChapterView({
         setNoteVisibility={setNoteVisibility}
         onToggleFocusMode={handleFocusModeToggle}
         onToggleSectionHeaders={handleSectionHeadersToggle}
-        showAddChapterNote={chapterScopedNotes.length === 0}
-        addChapterNoteDisabled={chapterNotesPanel.overlayOpen}
-        onAddChapterNote={chapterNotesPanel.startDraft}
+        chapterScopedNoteCount={chapterScopedNotes.length}
+        chapterNotesDisabled={chapterNotesPanel.overlayOpen}
+        onChapterNotesClick={chapterNotesPanel.handleHeaderToggle}
       />
 
       <PassageViewBody

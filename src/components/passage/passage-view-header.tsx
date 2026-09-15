@@ -39,11 +39,11 @@ interface PassageViewHeaderProps {
   setNoteVisibility: (next: NoteVisibility) => void;
   onToggleFocusMode: () => void;
   onToggleSectionHeaders: () => void;
-  /** Show empty-state "Add chapter note" in the chapter header. */
-  showAddChapterNote?: boolean;
-  /** Keep the CTA visible but inert while a draft overlay is open. */
-  addChapterNoteDisabled?: boolean;
-  onAddChapterNote?: () => void;
+  /** Whole-chapter notes for the sticky header chrome. */
+  chapterScopedNoteCount?: number;
+  /** Keep the chrome inert while the floating chapter panel is open. */
+  chapterNotesDisabled?: boolean;
+  onChapterNotesClick?: () => void;
 }
 
 export function PassageViewHeader({
@@ -64,9 +64,9 @@ export function PassageViewHeader({
   setNoteVisibility,
   onToggleFocusMode,
   onToggleSectionHeaders,
-  showAddChapterNote = false,
-  addChapterNoteDisabled = false,
-  onAddChapterNote,
+  chapterScopedNoteCount = 0,
+  chapterNotesDisabled = false,
+  onChapterNotesClick,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
@@ -104,9 +104,9 @@ export function PassageViewHeader({
             chapter={chapter}
             showSectionHeaders={showSectionHeaders}
             onToggleSectionHeaders={onToggleSectionHeaders}
-            showAddChapterNote={showAddChapterNote}
-            addChapterNoteDisabled={addChapterNoteDisabled}
-            onAddChapterNote={onAddChapterNote}
+            chapterScopedNoteCount={chapterScopedNoteCount}
+            chapterNotesDisabled={chapterNotesDisabled}
+            onChapterNotesClick={onChapterNotesClick}
           />
         </div>
         <div className="pb-3 pt-1">

@@ -7,10 +7,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ScrollText,
+} from "lucide-react";
 import { displayBookName } from "@/lib/bible-books";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
+import { formatBookChapter } from "@/lib/verse-ref-utils";
 import { useTabs } from "@/lib/use-tabs";
 import { cn } from "@/lib/utils";
 import {
@@ -57,11 +63,11 @@ interface ChapterHeaderProps {
   chapter: number;
   showSectionHeaders: boolean;
   onToggleSectionHeaders: () => void;
-  /** Empty-state CTA: add a whole-chapter note (right-aligned with Headers). */
-  showAddChapterNote?: boolean;
-  /** Keep the CTA visible but inert while a draft overlay is open. */
-  addChapterNoteDisabled?: boolean;
-  onAddChapterNote?: () => void;
+  /** Whole-chapter notes for the sticky header chrome. */
+  chapterScopedNoteCount?: number;
+  /** Keep the chrome inert while the floating chapter panel is open. */
+  chapterNotesDisabled?: boolean;
+  onChapterNotesClick?: () => void;
 }
 
 export function ChapterHeader({
@@ -69,9 +75,9 @@ export function ChapterHeader({
   chapter,
   showSectionHeaders,
   onToggleSectionHeaders,
-  showAddChapterNote = false,
-  addChapterNoteDisabled = false,
-  onAddChapterNote,
+  chapterScopedNoteCount = 0,
+  chapterNotesDisabled = false,
+  onChapterNotesClick,
 }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
@@ -80,6 +86,12 @@ export function ChapterHeader({
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [navigatorBook, setNavigatorBook] = useState<string | null>(null);
+
+  const chapterLabel = formatBookChapter(book, chapter);
+  const hasChapterNotes = chapterScopedNoteCount > 0;
+  const chapterNotesSubtitle = hasChapterNotes
+    ? `Notes for all of ${chapterLabel} · ${chapterScopedNoteCount}`
+    : "Add a chapter note";
 
   function goPrev() {
     if (!previous) return;
@@ -205,34 +217,54 @@ export function ChapterHeader({
               : "Show editorial section headings"}
           </TooltipContent>
         </Tooltip>
-        <AnimatePresence initial={false}>
-          {showAddChapterNote && onAddChapterNote ? (
-            <motion.button
-              key="add-chapter-note"
-              type="button"
-              onClick={onAddChapterNote}
-              disabled={addChapterNoteDisabled}
-              data-note-trigger
-              variants={CHAPTER_HEADER_CTA_VARIANTS}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              transition={CHAPTER_CHROME_TRANSITION}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-                chapterNoteSurfaceClass,
-                chapterNoteLineClass,
-                chapterNoteInkClass,
-                addChapterNoteDisabled
-                  ? "cursor-not-allowed opacity-50"
-                  : "hover:brightness-[0.98] dark:hover:brightness-110",
-              )}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add chapter note
-            </motion.button>
-          ) : null}
-        </AnimatePresence>
+        {onChapterNotesClick ? (
+          <button
+            type="button"
+            onClick={onChapterNotesClick}
+            disabled={chapterNotesDisabled}
+            data-note-trigger
+            aria-label={
+              hasChapterNotes
+                ? `Open chapter notes for ${chapterLabel}`
+                : `Add a chapter note for ${chapterLabel}`
+            }
+            className={cn(
+              "inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-md border border-dashed px-2.5 py-1.5 text-left transition-colors",
+              chapterNoteSurfaceClass,
+              chapterNoteLineClass,
+              chapterNotesDisabled
+                ? "cursor-not-allowed opacity-50"
+                : "hover:brightness-[0.98] dark:hover:brightness-110",
+            )}
+          >
+            <ScrollText
+              className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)}
+            />
+            <span className="min-w-0">
+              <span
+                className={cn(
+                  "block text-[10px] font-semibold uppercase tracking-wide",
+                  chapterNoteInkClass,
+                )}
+              >
+                Chapter
+              </span>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={chapterNotesSubtitle}
+                  variants={CHAPTER_HEADER_CTA_VARIANTS}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={CHAPTER_CHROME_TRANSITION}
+                  className="block truncate text-sm text-muted-foreground"
+                >
+                  {chapterNotesSubtitle}
+                </motion.span>
+              </AnimatePresence>
+            </span>
+          </button>
+        ) : null}
       </div>
     </div>
   );

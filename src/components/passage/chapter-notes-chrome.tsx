@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronUp, Plus, ScrollText } from "lucide-react";
+import { ChevronUp, Plus, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { NoteEditor } from "@/components/notes/note-editor";
 import {
@@ -11,8 +11,6 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { cn } from "@/lib/utils";
 import type { ChapterNotesPanelState } from "./hooks/use-chapter-notes-panel";
 import {
-  CHAPTER_CHROME_TRANSITION,
-  CHAPTER_CHROME_VARIANTS,
   CHAPTER_OVERLAY_TRANSITION,
   CHAPTER_OVERLAY_VARIANTS,
   NOTE_CONTENT_VARIANTS,
@@ -28,16 +26,14 @@ import {
 interface ChapterNotesChromeProps {
   panel: ChapterNotesPanelState;
   viewMode: "compose" | "read";
-  /** When true, render only the text-column chapter row. */
-  mode: "row" | "collapsed-slot" | "overlay";
   /** Compose/read grid columns so the sticky overlay lines up with notes. */
   notesGridClass?: string;
 }
 
+/** Sticky floating chapter-notes panel over the notes column. */
 export function ChapterNotesChrome({
   panel,
   viewMode,
-  mode,
   notesGridClass = "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5",
 }: ChapterNotesChromeProps) {
   const {
@@ -46,7 +42,6 @@ export function ChapterNotesChrome({
     overlayOpen,
     drafting,
     editingId,
-    openPanel,
     closePanel,
     startDraft,
     cancelDraft,
@@ -55,145 +50,12 @@ export function ChapterNotesChrome({
     cancelEdit,
     saveEdit,
     deleteNote,
-    handleRowAdd,
     setDirty,
   } = panel;
 
   const label = formatVerseRef(chapterRef);
   const isReadMode = viewMode === "read";
 
-  if (mode === "row") {
-    return (
-      <AnimatePresence initial={false}>
-        {notes.length > 0 ? (
-          <motion.div
-            key="chapter-notes-row"
-            variants={CHAPTER_CHROME_VARIANTS}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            transition={CHAPTER_CHROME_TRANSITION}
-            className="overflow-hidden"
-          >
-            <div
-              className={cn(
-                "mb-1 flex items-center gap-2 rounded-md border border-dashed px-2 py-2",
-                chapterNoteLineClass,
-                chapterNoteSurfaceClass,
-              )}
-              data-note-surface
-            >
-              <ScrollText
-                className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)}
-              />
-              <div className="min-w-0 flex-1">
-                <p
-                  className={cn(
-                    "text-[10px] font-semibold uppercase tracking-wide",
-                    chapterNoteInkClass,
-                  )}
-                >
-                  Chapter
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Notes for all of {label}
-                  {notes.length > 0 ? ` · ${notes.length}` : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleRowAdd}
-                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-background/80"
-                aria-label={
-                  overlayOpen ? "Collapse chapter notes" : "Open chapter notes"
-                }
-                data-note-trigger
-              >
-                {overlayOpen ? (
-                  <ChevronUp className={cn("h-4 w-4", chapterNoteInkClass)} />
-                ) : (
-                  <ChevronDown className={cn("h-4 w-4", chapterNoteInkClass)} />
-                )}
-              </button>
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    );
-  }
-
-  if (mode === "collapsed-slot") {
-    return (
-      <AnimatePresence initial={false}>
-        {notes.length > 0 ? (
-          <motion.div
-            key="chapter-notes-pill"
-            variants={CHAPTER_CHROME_VARIANTS}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            transition={CHAPTER_CHROME_TRANSITION}
-            className={cn("mb-1.5 overflow-hidden", overlayOpen && "invisible")}
-            aria-hidden={overlayOpen}
-          >
-            <button
-              type="button"
-              onClick={openPanel}
-              data-note-trigger
-              className={cn(
-                "group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                chapterNoteSurfaceClass,
-                chapterNoteLineClass,
-                "hover:brightness-[0.99] dark:hover:brightness-110",
-              )}
-            >
-              <ScrollText
-                className={cn(
-                  "mt-0.5 h-3.5 w-3.5 shrink-0",
-                  chapterNoteInkClass,
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="mb-0.5 flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "text-[10px] font-semibold uppercase tracking-wide",
-                      chapterNoteInkClass,
-                    )}
-                  >
-                    {label}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] px-1.5 py-0",
-                      chapterNoteLineClass,
-                    )}
-                  >
-                    {notes.length}
-                  </Badge>
-                </div>
-                <p className="line-clamp-2 text-[13px] text-foreground/90">
-                  {notes[0].content}
-                </p>
-                {notes.length > 1 ? (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    +{notes.length - 1} more · click to open
-                  </p>
-                ) : (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Click to open
-                  </p>
-                )}
-              </div>
-            </button>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    );
-  }
-
-  // mode === "overlay"
   return (
     <AnimatePresence>
       {overlayOpen ? (

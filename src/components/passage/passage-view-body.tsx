@@ -353,26 +353,6 @@ export function PassageViewBody({
           onMouseLeave={handleMouseUp}
         >
           <div>
-            {/* Chapter row + reserved pill animate in once notes exist */}
-            <div
-              className={cn(
-                topGridClass,
-                "items-start",
-                chapterNotesPanel.notes.length > 0 && "pt-1",
-              )}
-            >
-              <ChapterNotesChrome
-                panel={chapterNotesPanel}
-                viewMode={effectiveViewMode}
-                mode="row"
-              />
-              <ChapterNotesChrome
-                panel={chapterNotesPanel}
-                viewMode={effectiveViewMode}
-                mode="collapsed-slot"
-              />
-            </div>
-
             <AnimatePresence initial={false} mode="popLayout">
               {filteredVerses.map((item) => {
                 if (item.kind === "passageGroup") {
@@ -609,7 +589,6 @@ export function PassageViewBody({
           <ChapterNotesChrome
             panel={chapterNotesPanel}
             viewMode={effectiveViewMode}
-            mode="overlay"
             notesGridClass={passageGridClass}
           />
         </motion.div>
