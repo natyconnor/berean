@@ -31,13 +31,14 @@ export const CHAPTER_NOTES_OPTIONS: ChapterNotesOption[] = [
     title: "Chapter as a row",
     shortLabel: "B · Row",
     summary:
-      "Treat the chapter like verse 0: a noteable row above v1 with the same + affordance. The bubble sits in the notes column beside that row.",
+      "Chapter row for entry (like verse 0). Expanded notes overlay the notes column — sticky while you scroll the Bible text — so verse notes are covered and the passage never gets pushed down.",
     entryPoint: "Same + pattern as verses, on a Chapter row",
-    placement: "Inline with a dedicated chapter row above v1",
+    placement:
+      "Collapsed pill beside the chapter row; expanded overlay covers the notes column",
     tradeoffs: [
-      "Lowest conceptual leap — notes always attach to a row",
-      "Scrolls away with the top of the chapter",
-      "Easy to miss if you are already mid-chapter",
+      "Read the whole chapter alongside the chapter note",
+      "Verse notes stay underneath until you collapse",
+      "Chapter row itself can scroll out of view mid-chapter",
     ],
   },
   {

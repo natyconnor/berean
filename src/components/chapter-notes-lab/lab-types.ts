@@ -33,6 +33,34 @@ export const LAB_VERSES: { number: number; text: string }[] = [
     number: 5,
     text: "Jesus answered, “Truly, truly, I say to you, unless one is born of water and the Spirit, he cannot enter the kingdom of God.”",
   },
+  {
+    number: 6,
+    text: "That which is born of the flesh is flesh, and that which is born of the Spirit is spirit.",
+  },
+  {
+    number: 7,
+    text: "Do not marvel that I said to you, ‘You must be born again.’",
+  },
+  {
+    number: 8,
+    text: "The wind blows where it wishes, and you hear its sound, but you do not know where it comes from or where it goes. So it is with everyone who is born of the Spirit.”",
+  },
+  {
+    number: 9,
+    text: "Nicodemus said to him, “How can these things be?”",
+  },
+  {
+    number: 10,
+    text: "Jesus answered him, “Are you the teacher of Israel and yet you do not understand these things?",
+  },
+  {
+    number: 11,
+    text: "Truly, truly, I say to you, we speak of what we know, and bear witness to what we have seen, but you do not receive our testimony.",
+  },
+  {
+    number: 12,
+    text: "If I have told you earthly things and you do not believe, how can you believe if I tell you heavenly things?”",
+  },
 ];
 
 export const LAB_VERSE_NOTE: LabVerseNote = {

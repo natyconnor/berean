@@ -122,21 +122,38 @@ export function OptionHeaderRail() {
 }
 
 export function OptionChapterRow() {
-  const state = useChapterNotesState([SEED_CHAPTER_NOTE]);
+  const state = useChapterNotesState([SEED_CHAPTER_NOTE], {
+    initialExpanded: false,
+  });
+  const overlayOpen = state.expanded || state.drafting;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="shrink-0 border-b bg-background px-4">
         <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5">
           <LabChapterHeader />
-          <NotesColumnLabel />
+          <NotesColumnLabel
+            action={
+              overlayOpen ? (
+                <span className={cn("text-[11px]", chapterNoteInkClass)}>
+                  Chapter note covering verse notes
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">
+                  Expand the chapter pill to read alongside the text
+                </span>
+              )
+            }
+          />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-4 pb-10 pt-2">
-        <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start py-1.5">
+
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 overflow-hidden px-4">
+        {/* Bible column — scrolls freely; never pushed by chapter notes */}
+        <div className="min-h-0 overflow-y-auto pb-10 pt-2">
           <div
             className={cn(
-              "group flex items-center gap-2 rounded-md border border-dashed px-2 py-2",
+              "mb-1.5 flex items-center gap-2 rounded-md border border-dashed px-2 py-2",
               chapterNoteLineClass,
               chapterNoteSurfaceClass,
             )}
@@ -159,40 +176,120 @@ export function OptionChapterRow() {
             </div>
             <button
               type="button"
-              onClick={state.startDraft}
+              onClick={() => {
+                if (overlayOpen) state.toggleExpanded();
+                else if (state.notes.length > 0) state.setExpanded(true);
+                else state.startDraft();
+              }}
               className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-background/80"
-              aria-label="Add chapter note"
+              aria-label={
+                overlayOpen ? "Collapse chapter notes" : "Open chapter notes"
+              }
             >
               <Plus className={cn("h-4 w-4", chapterNoteInkClass)} />
             </button>
           </div>
-          <ChapterNotesList
-            notes={state.notes}
-            expanded={state.expanded}
-            drafting={state.drafting}
-            editingId={state.editingId}
-            onToggleExpanded={state.toggleExpanded}
-            onStartDraft={state.startDraft}
-            onCancelDraft={state.cancelDraft}
-            onSaveDraft={state.saveDraft}
-            onStartEdit={state.startEdit}
-            onCancelEdit={state.cancelEdit}
-            onSaveEdit={state.saveEdit}
-            onDelete={state.deleteNote}
-          />
+
+          {LAB_VERSES.map((verse) => (
+            <div
+              key={verse.number}
+              className="group flex gap-2 rounded-md px-1 py-1.5 hover:bg-muted/40"
+            >
+              <span className="w-6 shrink-0 pt-0.5 text-right text-xs tabular-nums text-muted-foreground">
+                {verse.number}
+              </span>
+              <p className="flex-1 font-serif text-[15px] leading-relaxed">
+                {verse.text}
+              </p>
+              <button
+                type="button"
+                className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted"
+                aria-label={`Add note for ${verse.number}`}
+              >
+                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+          ))}
         </div>
-        {LAB_VERSES.map((verse) => (
-          <MockVerseRow
-            key={verse.number}
-            number={verse.number}
-            text={verse.text}
-            trailing={
-              verse.number === LAB_VERSE_NOTE.verse ? (
-                <MockVerseNoteCard content={LAB_VERSE_NOTE.content} />
-              ) : undefined
-            }
-          />
-        ))}
+
+        {/* Notes column — verse notes underneath; chapter overlay on top when open */}
+        <div className="relative min-h-0 overflow-hidden pb-10 pt-2">
+          <div
+            className={cn(
+              "h-full space-y-3 overflow-y-auto transition-[filter,opacity]",
+              overlayOpen && "pointer-events-none opacity-40 blur-[1px]",
+            )}
+            aria-hidden={overlayOpen}
+          >
+            {/* Collapsed chapter pill sits at the top of the notes stream */}
+            {!overlayOpen && (
+              <ChapterNotesList
+                notes={state.notes}
+                expanded={false}
+                drafting={false}
+                editingId={null}
+                onToggleExpanded={() => state.setExpanded(true)}
+                onStartDraft={state.startDraft}
+                onCancelDraft={state.cancelDraft}
+                onSaveDraft={state.saveDraft}
+                onStartEdit={state.startEdit}
+                onCancelEdit={state.cancelEdit}
+                onSaveEdit={state.saveEdit}
+                onDelete={state.deleteNote}
+              />
+            )}
+            {!overlayOpen && state.notes.length === 0 && !state.drafting && (
+              <button
+                type="button"
+                onClick={state.startDraft}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-left text-sm",
+                  chapterNoteLineClass,
+                  chapterNoteInkClass,
+                )}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add a chapter note
+              </button>
+            )}
+            <MockVerseNoteCard content={LAB_VERSE_NOTE.content} />
+            <MockVerseNoteCard content="Night visit — Nicodemus comes carefully. The chapter keeps returning to what can and cannot be seen." />
+            <MockVerseNoteCard content="Wind / Spirit wordplay lands harder when you hold vv. 1–12 together." />
+          </div>
+
+          {overlayOpen && (
+            <div
+              className={cn(
+                "absolute inset-x-0 top-2 bottom-2 z-20 flex flex-col overflow-hidden rounded-xl border shadow-sm",
+                chapterNoteLineClass,
+                chapterNoteSurfaceSoftClass,
+              )}
+            >
+              <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+                <ChapterNotesList
+                  notes={state.notes}
+                  expanded
+                  drafting={state.drafting}
+                  editingId={state.editingId}
+                  onToggleExpanded={state.toggleExpanded}
+                  onStartDraft={state.startDraft}
+                  onCancelDraft={state.cancelDraft}
+                  onSaveDraft={state.saveDraft}
+                  onStartEdit={state.startEdit}
+                  onCancelEdit={state.cancelEdit}
+                  onSaveEdit={state.saveEdit}
+                  onDelete={state.deleteNote}
+                  compactHeader
+                  className="border-0 bg-transparent p-0 dark:bg-transparent"
+                />
+              </div>
+              <p className="shrink-0 border-t px-3 py-2 text-[11px] text-muted-foreground">
+                Scroll the Bible text freely — this chapter note stays put over
+                the notes column.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

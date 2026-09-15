@@ -18,7 +18,7 @@ const OPTION_VIEWS: Record<ChapterNotesOptionId, () => JSX.Element> = {
 
 export function ChapterNotesLabPage() {
   const [selectedId, setSelectedId] =
-    useState<ChapterNotesOptionId>("header-rail");
+    useState<ChapterNotesOptionId>("chapter-row");
   const selected =
     CHAPTER_NOTES_OPTIONS.find((option) => option.id === selectedId) ??
     CHAPTER_NOTES_OPTIONS[0];

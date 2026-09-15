@@ -2,9 +2,14 @@ import { useState } from "react";
 import type { LabChapterNote } from "./lab-types";
 import { createLabNoteId } from "./lab-types";
 
-export function useChapterNotesState(seed: LabChapterNote[]) {
+export function useChapterNotesState(
+  seed: LabChapterNote[],
+  options?: { initialExpanded?: boolean },
+) {
   const [notes, setNotes] = useState<LabChapterNote[]>(seed);
-  const [expanded, setExpanded] = useState(seed.length > 0);
+  const [expanded, setExpanded] = useState(
+    options?.initialExpanded ?? seed.length > 0,
+  );
   const [drafting, setDrafting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
