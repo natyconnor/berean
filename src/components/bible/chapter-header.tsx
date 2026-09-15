@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -17,6 +18,10 @@ import {
   chapterNoteLineClass,
   chapterNoteSurfaceClass,
 } from "@/components/passage/chapter-note-styles";
+import {
+  CHAPTER_CHROME_TRANSITION,
+  CHAPTER_HEADER_CTA_VARIANTS,
+} from "@/components/passage/note-animation-config";
 import { PassageNavigator } from "./passage-navigator";
 
 /**
@@ -54,6 +59,8 @@ interface ChapterHeaderProps {
   onToggleSectionHeaders: () => void;
   /** Empty-state CTA: add a whole-chapter note (right-aligned with Headers). */
   showAddChapterNote?: boolean;
+  /** Keep the CTA visible but inert while a draft overlay is open. */
+  addChapterNoteDisabled?: boolean;
   onAddChapterNote?: () => void;
 }
 
@@ -63,6 +70,7 @@ export function ChapterHeader({
   showSectionHeaders,
   onToggleSectionHeaders,
   showAddChapterNote = false,
+  addChapterNoteDisabled = false,
   onAddChapterNote,
 }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs();
@@ -197,23 +205,34 @@ export function ChapterHeader({
               : "Show editorial section headings"}
           </TooltipContent>
         </Tooltip>
-        {showAddChapterNote && onAddChapterNote ? (
-          <button
-            type="button"
-            onClick={onAddChapterNote}
-            data-note-trigger
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-              chapterNoteSurfaceClass,
-              chapterNoteLineClass,
-              chapterNoteInkClass,
-              "hover:brightness-[0.98] dark:hover:brightness-110",
-            )}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add chapter note
-          </button>
-        ) : null}
+        <AnimatePresence initial={false}>
+          {showAddChapterNote && onAddChapterNote ? (
+            <motion.button
+              key="add-chapter-note"
+              type="button"
+              onClick={onAddChapterNote}
+              disabled={addChapterNoteDisabled}
+              data-note-trigger
+              variants={CHAPTER_HEADER_CTA_VARIANTS}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              transition={CHAPTER_CHROME_TRANSITION}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                chapterNoteSurfaceClass,
+                chapterNoteLineClass,
+                chapterNoteInkClass,
+                addChapterNoteDisabled
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:brightness-[0.98] dark:hover:brightness-110",
+              )}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add chapter note
+            </motion.button>
+          ) : null}
+        </AnimatePresence>
       </div>
     </div>
   );

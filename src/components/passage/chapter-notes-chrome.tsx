@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronUp, Plus, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { NoteEditor } from "@/components/notes/note-editor";
@@ -10,6 +11,12 @@ import {
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { cn } from "@/lib/utils";
 import type { ChapterNotesPanelState } from "./hooks/use-chapter-notes-panel";
+import {
+  CHAPTER_CHROME_TRANSITION,
+  CHAPTER_CHROME_VARIANTS,
+  CHAPTER_OVERLAY_TRANSITION,
+  CHAPTER_OVERLAY_VARIANTS,
+} from "./note-animation-config";
 import {
   chapterNoteElevatedClass,
   chapterNoteInkClass,
@@ -52,254 +59,300 @@ export function ChapterNotesChrome({
   } = panel;
 
   const label = formatVerseRef(chapterRef);
+  const isReadMode = viewMode === "read";
 
   if (mode === "row") {
-    if (notes.length === 0) return null;
     return (
-      <div
-        className={cn(
-          "mb-1 flex items-center gap-2 rounded-md border border-dashed px-2 py-2",
-          chapterNoteLineClass,
-          chapterNoteSurfaceClass,
-        )}
-        data-note-surface
-      >
-        <ScrollText className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)} />
-        <div className="min-w-0 flex-1">
-          <p
-            className={cn(
-              "text-[10px] font-semibold uppercase tracking-wide",
-              chapterNoteInkClass,
-            )}
+      <AnimatePresence initial={false}>
+        {notes.length > 0 ? (
+          <motion.div
+            key="chapter-notes-row"
+            variants={CHAPTER_CHROME_VARIANTS}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={CHAPTER_CHROME_TRANSITION}
+            className="overflow-hidden"
           >
-            Chapter
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Notes for all of {label}
-            {notes.length > 0 ? ` · ${notes.length}` : ""}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleRowAdd}
-          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-background/80"
-          aria-label={
-            overlayOpen ? "Collapse chapter notes" : "Open chapter notes"
-          }
-          data-note-trigger
-        >
-          {overlayOpen ? (
-            <ChevronUp className={cn("h-4 w-4", chapterNoteInkClass)} />
-          ) : (
-            <ChevronDown className={cn("h-4 w-4", chapterNoteInkClass)} />
-          )}
-        </button>
-      </div>
+            <div
+              className={cn(
+                "mb-1 flex items-center gap-2 rounded-md border border-dashed px-2 py-2",
+                chapterNoteLineClass,
+                chapterNoteSurfaceClass,
+              )}
+              data-note-surface
+            >
+              <ScrollText
+                className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)}
+              />
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cn(
+                    "text-[10px] font-semibold uppercase tracking-wide",
+                    chapterNoteInkClass,
+                  )}
+                >
+                  Chapter
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Notes for all of {label}
+                  {notes.length > 0 ? ` · ${notes.length}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRowAdd}
+                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-background/80"
+                aria-label={
+                  overlayOpen ? "Collapse chapter notes" : "Open chapter notes"
+                }
+                data-note-trigger
+              >
+                {overlayOpen ? (
+                  <ChevronUp className={cn("h-4 w-4", chapterNoteInkClass)} />
+                ) : (
+                  <ChevronDown className={cn("h-4 w-4", chapterNoteInkClass)} />
+                )}
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     );
   }
 
   if (mode === "collapsed-slot") {
-    // Only reserve a notes-column slot once chapter notes exist.
-    if (notes.length === 0) return null;
     return (
-      <div
-        className={cn("mb-1.5", overlayOpen && "invisible")}
-        aria-hidden={overlayOpen}
-      >
-        <button
-          type="button"
-          onClick={openPanel}
-          data-note-trigger
-          className={cn(
-            "group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-            chapterNoteSurfaceClass,
-            chapterNoteLineClass,
-            "hover:brightness-[0.99] dark:hover:brightness-110",
-          )}
-        >
-          <ScrollText
-            className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", chapterNoteInkClass)}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="mb-0.5 flex items-center gap-2">
-              <span
+      <AnimatePresence initial={false}>
+        {notes.length > 0 ? (
+          <motion.div
+            key="chapter-notes-pill"
+            variants={CHAPTER_CHROME_VARIANTS}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={CHAPTER_CHROME_TRANSITION}
+            className={cn("mb-1.5 overflow-hidden", overlayOpen && "invisible")}
+            aria-hidden={overlayOpen}
+          >
+            <button
+              type="button"
+              onClick={openPanel}
+              data-note-trigger
+              className={cn(
+                "group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                chapterNoteSurfaceClass,
+                chapterNoteLineClass,
+                "hover:brightness-[0.99] dark:hover:brightness-110",
+              )}
+            >
+              <ScrollText
                 className={cn(
-                  "text-[10px] font-semibold uppercase tracking-wide",
+                  "mt-0.5 h-3.5 w-3.5 shrink-0",
                   chapterNoteInkClass,
                 )}
-              >
-                {label}
-              </span>
-              <Badge
-                variant="outline"
-                className={cn("text-[10px] px-1.5 py-0", chapterNoteLineClass)}
-              >
-                {notes.length}
-              </Badge>
-            </div>
-            <p className="line-clamp-2 text-[13px] text-foreground/90">
-              {notes[0].content}
-            </p>
-            {notes.length > 1 ? (
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                +{notes.length - 1} more · click to open
-              </p>
-            ) : (
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Click to open
-              </p>
-            )}
-          </div>
-        </button>
-      </div>
+              />
+              <div className="min-w-0 flex-1">
+                <div className="mb-0.5 flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "text-[10px] font-semibold uppercase tracking-wide",
+                      chapterNoteInkClass,
+                    )}
+                  >
+                    {label}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] px-1.5 py-0",
+                      chapterNoteLineClass,
+                    )}
+                  >
+                    {notes.length}
+                  </Badge>
+                </div>
+                <p className="line-clamp-2 text-[13px] text-foreground/90">
+                  {notes[0].content}
+                </p>
+                {notes.length > 1 ? (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    +{notes.length - 1} more · click to open
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Click to open
+                  </p>
+                )}
+              </div>
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     );
   }
 
   // mode === "overlay"
-  if (!overlayOpen) return null;
-
-  const isReadMode = viewMode === "read";
-
   return (
-    <div className="pointer-events-none absolute inset-0 z-30">
-      <div className={cn("sticky top-2 grid", notesGridClass)}>
-        <div className="max-md:hidden" aria-hidden />
-        <div
-          data-note-surface
-          className={cn(
-            "pointer-events-auto flex min-h-[min(52vh,440px)] max-h-[min(85vh,720px)] flex-col overflow-hidden rounded-xl border",
-            chapterNoteLineClass,
-            chapterNoteElevatedClass,
-            "cl-depth-4 shadow-none",
-          )}
+    <AnimatePresence>
+      {overlayOpen ? (
+        <motion.div
+          key="chapter-notes-overlay"
+          className="pointer-events-none absolute inset-0 z-30"
+          variants={CHAPTER_OVERLAY_VARIANTS}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          transition={CHAPTER_OVERLAY_TRANSITION}
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <ScrollText
-                className={cn("h-3.5 w-3.5 shrink-0", chapterNoteInkClass)}
-              />
-              <span
-                className={cn(
-                  "truncate text-[10px] font-semibold uppercase tracking-wide",
-                  chapterNoteInkClass,
-                )}
-              >
-                {label} · Chapter
-              </span>
-              {notes.length > 0 ? (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[10px] px-1.5 py-0",
-                    chapterNoteLineClass,
-                  )}
-                >
-                  {notes.length}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {!drafting && notes.length > 0 && (
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"
-                  onClick={startDraft}
-                >
-                  <Plus className="h-3 w-3" />
-                  New note
-                </button>
+          <div className={cn("sticky top-2 grid", notesGridClass)}>
+            <div className="max-md:hidden" aria-hidden />
+            <div
+              data-note-surface
+              className={cn(
+                "pointer-events-auto flex min-h-[min(52vh,440px)] max-h-[min(85vh,720px)] flex-col overflow-hidden rounded-xl border",
+                chapterNoteLineClass,
+                chapterNoteElevatedClass,
+                "cl-depth-4 shadow-none",
               )}
-              <button
-                type="button"
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                onClick={closePanel}
-              >
-                <ChevronUp className="h-3 w-3" />
-                Collapse
-              </button>
+            >
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <ScrollText
+                    className={cn("h-3.5 w-3.5 shrink-0", chapterNoteInkClass)}
+                  />
+                  <span
+                    className={cn(
+                      "truncate text-[10px] font-semibold uppercase tracking-wide",
+                      chapterNoteInkClass,
+                    )}
+                  >
+                    {label} · Chapter
+                  </span>
+                  {notes.length > 0 ? (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0",
+                        chapterNoteLineClass,
+                      )}
+                    >
+                      {notes.length}
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {!drafting && notes.length > 0 && (
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"
+                      onClick={startDraft}
+                    >
+                      <Plus className="h-3 w-3" />
+                      New note
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={closePanel}
+                  >
+                    <ChevronUp className="h-3 w-3" />
+                    Collapse
+                  </button>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2.5">
+                {drafting && (
+                  <div data-note-surface>
+                    <NoteEditor
+                      verseRef={chapterRef}
+                      variant="chapter"
+                      currentChapter={{
+                        book: chapterRef.book,
+                        chapter: chapterRef.chapter,
+                      }}
+                      onSave={saveDraft}
+                      onCancel={cancelDraft}
+                      onDirtyChange={setDirty}
+                    />
+                  </div>
+                )}
+
+                {notes.map((note) =>
+                  editingId === note.noteId ? (
+                    <div key={note.noteId} data-note-surface>
+                      <NoteEditor
+                        verseRef={note.verseRef}
+                        variant="chapter"
+                        initialContent={note.content}
+                        initialBody={note.body}
+                        initialTags={note.tags}
+                        currentChapter={{
+                          book: chapterRef.book,
+                          chapter: chapterRef.chapter,
+                        }}
+                        onSave={(body, tags) =>
+                          saveEdit(note.noteId, body, tags)
+                        }
+                        onCancel={cancelEdit}
+                        onDirtyChange={setDirty}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      key={note.noteId}
+                      data-note-surface
+                      className={cn(
+                        "group rounded-md border px-3 py-2.5",
+                        chapterNoteSurfaceClass,
+                        chapterNoteLineClass,
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <NoteContent
+                          content={note.content}
+                          body={note.body}
+                          density={isReadMode ? "reading" : "default"}
+                          currentChapter={{
+                            book: chapterRef.book,
+                            chapter: chapterRef.chapter,
+                          }}
+                          className="min-w-0 flex-1"
+                        />
+                        {isReadMode ? (
+                          <HoverEditButton
+                            onEdit={() => startEdit(note.noteId)}
+                          />
+                        ) : (
+                          <NoteCardActions
+                            onEdit={() => startEdit(note.noteId)}
+                            onDelete={() => {
+                              void deleteNote(note.noteId);
+                            }}
+                          />
+                        )}
+                      </div>
+                      <NoteTagList
+                        tags={note.tags}
+                        className="mt-1.5"
+                        size="xs"
+                      />
+                    </div>
+                  ),
+                )}
+
+                {!drafting && notes.length === 0 && (
+                  <p className="px-1 py-2 text-sm text-muted-foreground">
+                    Capture something that spans the whole chapter.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2.5">
-            {drafting && (
-              <div data-note-surface>
-                <NoteEditor
-                  verseRef={chapterRef}
-                  variant="chapter"
-                  currentChapter={{
-                    book: chapterRef.book,
-                    chapter: chapterRef.chapter,
-                  }}
-                  onSave={saveDraft}
-                  onCancel={cancelDraft}
-                  onDirtyChange={setDirty}
-                />
-              </div>
-            )}
-
-            {notes.map((note) =>
-              editingId === note.noteId ? (
-                <div key={note.noteId} data-note-surface>
-                  <NoteEditor
-                    verseRef={note.verseRef}
-                    variant="chapter"
-                    initialContent={note.content}
-                    initialBody={note.body}
-                    initialTags={note.tags}
-                    currentChapter={{
-                      book: chapterRef.book,
-                      chapter: chapterRef.chapter,
-                    }}
-                    onSave={(body, tags) => saveEdit(note.noteId, body, tags)}
-                    onCancel={cancelEdit}
-                    onDirtyChange={setDirty}
-                  />
-                </div>
-              ) : (
-                <div
-                  key={note.noteId}
-                  data-note-surface
-                  className={cn(
-                    "group relative rounded-md border px-3 py-2",
-                    chapterNoteSurfaceClass,
-                    chapterNoteLineClass,
-                  )}
-                >
-                  <NoteContent
-                    content={note.content}
-                    body={note.body}
-                    density={isReadMode ? "reading" : "default"}
-                    currentChapter={{
-                      book: chapterRef.book,
-                      chapter: chapterRef.chapter,
-                    }}
-                    className="pr-8"
-                  />
-                  <NoteTagList tags={note.tags} className="mt-1.5" size="xs" />
-                  <div className="absolute right-1.5 top-1.5">
-                    {isReadMode ? (
-                      <HoverEditButton onEdit={() => startEdit(note.noteId)} />
-                    ) : (
-                      <NoteCardActions
-                        onEdit={() => startEdit(note.noteId)}
-                        onDelete={() => {
-                          void deleteNote(note.noteId);
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-              ),
-            )}
-
-            {!drafting && notes.length === 0 && (
-              <p className="px-1 py-2 text-sm text-muted-foreground">
-                Capture something that spans the whole chapter.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }

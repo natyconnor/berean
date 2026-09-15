@@ -41,6 +41,8 @@ interface PassageViewHeaderProps {
   onToggleSectionHeaders: () => void;
   /** Show empty-state "Add chapter note" in the chapter header. */
   showAddChapterNote?: boolean;
+  /** Keep the CTA visible but inert while a draft overlay is open. */
+  addChapterNoteDisabled?: boolean;
   onAddChapterNote?: () => void;
 }
 
@@ -63,6 +65,7 @@ export function PassageViewHeader({
   onToggleFocusMode,
   onToggleSectionHeaders,
   showAddChapterNote = false,
+  addChapterNoteDisabled = false,
   onAddChapterNote,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
@@ -102,6 +105,7 @@ export function PassageViewHeader({
             showSectionHeaders={showSectionHeaders}
             onToggleSectionHeaders={onToggleSectionHeaders}
             showAddChapterNote={showAddChapterNote}
+            addChapterNoteDisabled={addChapterNoteDisabled}
             onAddChapterNote={onAddChapterNote}
           />
         </div>
