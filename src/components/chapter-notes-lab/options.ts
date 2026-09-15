@@ -31,13 +31,13 @@ export const CHAPTER_NOTES_OPTIONS: ChapterNotesOption[] = [
     title: "Chapter as a row",
     shortLabel: "B · Row",
     summary:
-      "Chapter row for entry (like verse 0). Expanded notes overlay the notes column — sticky while you scroll the Bible text — so verse notes are covered and the passage never gets pushed down.",
+      "Chapter row for entry (like verse 0). Expanded notes float above the notes column with solid depth — verse notes stay lined up with their verses underneath, and the passage never gets pushed down.",
     entryPoint: "Same + pattern as verses, on a Chapter row",
     placement:
-      "Collapsed pill beside the chapter row; expanded overlay covers the notes column",
+      "Collapsed pill beside the chapter row; expanded card floats over the notes column",
     tradeoffs: [
       "Read the whole chapter alongside the chapter note",
-      "Verse notes stay underneath until you collapse",
+      "Verse notes stay put under the floating card until you collapse",
       "Chapter row itself can scroll out of view mid-chapter",
     ],
   },

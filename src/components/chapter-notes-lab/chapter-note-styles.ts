@@ -1,8 +1,11 @@
 /** Soft teal ink — distinct from verse cards and passage amber/plum. */
 export const chapterNoteSurfaceClass =
   "bg-[oklch(0.96_0.02_200)] dark:bg-[oklch(0.28_0.035_200)]";
+/** Opaque elevated surface — no transparency; depth comes from cl-depth shadows. */
 export const chapterNoteSurfaceSoftClass =
-  "bg-[oklch(0.97_0.015_200)/80] dark:bg-[oklch(0.24_0.025_200)]";
+  "bg-[oklch(0.97_0.015_200)] dark:bg-[oklch(0.24_0.025_200)]";
+export const chapterNoteElevatedClass =
+  "bg-[oklch(0.985_0.012_200)] dark:bg-[oklch(0.30_0.035_200)]";
 export const chapterNoteInkClass =
   "text-[oklch(0.42_0.07_200)] dark:text-[oklch(0.78_0.07_200)]";
 export const chapterNoteLineClass =
