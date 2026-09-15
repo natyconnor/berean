@@ -1,4 +1,4 @@
-import { ChevronUp, Plus, ScrollText } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { NoteEditor } from "@/components/notes/note-editor";
 import {
@@ -93,6 +93,8 @@ export function ChapterNotesChrome({
         >
           {overlayOpen ? (
             <ChevronUp className={cn("h-4 w-4", chapterNoteInkClass)} />
+          ) : notes.length > 0 ? (
+            <ChevronDown className={cn("h-4 w-4", chapterNoteInkClass)} />
           ) : (
             <Plus className={cn("h-4 w-4", chapterNoteInkClass)} />
           )}

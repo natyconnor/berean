@@ -29,20 +29,11 @@ export function useChapterNotesPanel({
   onSaveEdit,
   onDelete,
 }: UseChapterNotesPanelOptions) {
+  // PassageChapterView remounts per book/chapter, so no cross-chapter reset needed.
   const [open, setOpen] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [editingId, setEditingId] = useState<Id<"notes"> | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [panelChapter, setPanelChapter] = useState({ book, chapter });
-
-  // Reset panel when navigating chapters (adjust state during render).
-  if (panelChapter.book !== book || panelChapter.chapter !== chapter) {
-    setPanelChapter({ book, chapter });
-    setOpen(false);
-    setDrafting(false);
-    setEditingId(null);
-    setDirty(false);
-  }
 
   const chapterRef = chapterScopeVerseRef(book, chapter);
   const overlayOpen = open || drafting;
@@ -72,12 +63,22 @@ export function useChapterNotesPanel({
 
   const saveDraft = useCallback(
     async (body: NoteBody, tags: string[]) => {
-      await onSaveNew(chapterRef, body, tags);
+      await onSaveNew(
+        {
+          book,
+          chapter,
+          startVerse: 1,
+          endVerse: 1,
+          scope: "chapter",
+        },
+        body,
+        tags,
+      );
       setDrafting(false);
       setDirty(false);
       setOpen(true);
     },
-    [chapterRef, onSaveNew],
+    [book, chapter, onSaveNew],
   );
 
   const startEdit = useCallback((noteId: Id<"notes">) => {

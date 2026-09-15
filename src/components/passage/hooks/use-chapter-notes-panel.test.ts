@@ -108,29 +108,4 @@ describe("useChapterNotesPanel", () => {
     });
     expect(result.current.overlayOpen).toBe(true);
   });
-
-  it("resets when the chapter changes", () => {
-    const { result, rerender } = renderHook(
-      ({ book, chapter }) =>
-        useChapterNotesPanel({
-          book,
-          chapter,
-          notes: [makeNote({ noteId: "n1" as Id<"notes">, content: "A" })],
-          onSaveNew: vi.fn(),
-          onSaveEdit: vi.fn(),
-          onDelete: vi.fn(),
-        }),
-      { initialProps: { book: "John", chapter: 3 } },
-    );
-
-    act(() => {
-      result.current.openPanel();
-      result.current.startDraft();
-    });
-    expect(result.current.overlayOpen).toBe(true);
-
-    rerender({ book: "John", chapter: 4 });
-    expect(result.current.overlayOpen).toBe(false);
-    expect(result.current.drafting).toBe(false);
-  });
 });
