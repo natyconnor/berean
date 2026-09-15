@@ -3,7 +3,6 @@ import { ChevronDown, ChevronUp, Plus, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { NoteEditor } from "@/components/notes/note-editor";
 import {
-  HoverEditButton,
   NoteCardActions,
   NoteContent,
   NoteTagList,
@@ -16,6 +15,8 @@ import {
   CHAPTER_CHROME_VARIANTS,
   CHAPTER_OVERLAY_TRANSITION,
   CHAPTER_OVERLAY_VARIANTS,
+  NOTE_CONTENT_VARIANTS,
+  NOTE_ENTER_TRANSITION,
 } from "./note-animation-config";
 import {
   chapterNoteElevatedClass,
@@ -264,84 +265,108 @@ export function ChapterNotesChrome({
               </div>
 
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2.5">
-                {drafting && (
-                  <div data-note-surface>
-                    <NoteEditor
-                      verseRef={chapterRef}
-                      variant="chapter"
-                      currentChapter={{
-                        book: chapterRef.book,
-                        chapter: chapterRef.chapter,
-                      }}
-                      onSave={saveDraft}
-                      onCancel={cancelDraft}
-                      onDirtyChange={setDirty}
-                    />
-                  </div>
-                )}
-
-                {notes.map((note) =>
-                  editingId === note.noteId ? (
-                    <div key={note.noteId} data-note-surface>
+                <AnimatePresence initial={false} mode="popLayout">
+                  {drafting && (
+                    <motion.div
+                      key="chapter-draft"
+                      data-note-surface
+                      variants={NOTE_CONTENT_VARIANTS}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      transition={NOTE_ENTER_TRANSITION}
+                      layout
+                    >
                       <NoteEditor
-                        verseRef={note.verseRef}
+                        verseRef={chapterRef}
                         variant="chapter"
-                        initialContent={note.content}
-                        initialBody={note.body}
-                        initialTags={note.tags}
                         currentChapter={{
                           book: chapterRef.book,
                           chapter: chapterRef.chapter,
                         }}
-                        onSave={(body, tags) =>
-                          saveEdit(note.noteId, body, tags)
-                        }
-                        onCancel={cancelEdit}
+                        onSave={saveDraft}
+                        onCancel={cancelDraft}
                         onDirtyChange={setDirty}
                       />
-                    </div>
-                  ) : (
-                    <div
-                      key={note.noteId}
-                      data-note-surface
-                      className={cn(
-                        "group rounded-md border px-3 py-2.5",
-                        chapterNoteSurfaceClass,
-                        chapterNoteLineClass,
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <NoteContent
-                          content={note.content}
-                          body={note.body}
-                          density={isReadMode ? "reading" : "default"}
+                    </motion.div>
+                  )}
+
+                  {notes.map((note) =>
+                    editingId === note.noteId ? (
+                      <motion.div
+                        key={note.noteId}
+                        data-note-surface
+                        variants={NOTE_CONTENT_VARIANTS}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={NOTE_ENTER_TRANSITION}
+                        layout
+                      >
+                        <NoteEditor
+                          verseRef={note.verseRef}
+                          variant="chapter"
+                          initialContent={note.content}
+                          initialBody={note.body}
+                          initialTags={note.tags}
                           currentChapter={{
                             book: chapterRef.book,
                             chapter: chapterRef.chapter,
                           }}
-                          className="min-w-0 flex-1"
+                          onSave={(body, tags) =>
+                            saveEdit(note.noteId, body, tags)
+                          }
+                          onCancel={cancelEdit}
+                          onDirtyChange={setDirty}
                         />
-                        {isReadMode ? (
-                          <HoverEditButton
-                            onEdit={() => startEdit(note.noteId)}
-                          />
-                        ) : (
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key={note.noteId}
+                        data-note-surface
+                        variants={NOTE_CONTENT_VARIANTS}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={NOTE_ENTER_TRANSITION}
+                        layout
+                        className={cn(
+                          // Tall enough for the stacked 32×32 edit/delete
+                          // column so short one-line notes never clip trash.
+                          "group min-h-[4.75rem] rounded-md border px-3 py-2.5",
+                          chapterNoteSurfaceClass,
+                          chapterNoteLineClass,
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <NoteContent
+                              content={note.content}
+                              body={note.body}
+                              density={isReadMode ? "reading" : "default"}
+                              currentChapter={{
+                                book: chapterRef.book,
+                                chapter: chapterRef.chapter,
+                              }}
+                            />
+                            <NoteTagList
+                              tags={note.tags}
+                              className="mt-1.5"
+                              size="xs"
+                            />
+                          </div>
                           <NoteCardActions
                             onEdit={() => startEdit(note.noteId)}
                             onDelete={() => {
                               void deleteNote(note.noteId);
                             }}
+                            reveal={isReadMode ? "hover" : "always"}
                           />
-                        )}
-                      </div>
-                      <NoteTagList
-                        tags={note.tags}
-                        className="mt-1.5"
-                        size="xs"
-                      />
-                    </div>
-                  ),
-                )}
+                        </div>
+                      </motion.div>
+                    ),
+                  )}
+                </AnimatePresence>
 
                 {!drafting && notes.length === 0 && (
                   <p className="px-1 py-2 text-sm text-muted-foreground">
