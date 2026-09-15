@@ -90,7 +90,7 @@ export function ChapterNotesChrome({
                       chapterNoteInkClass,
                     )}
                   >
-                    {label} · Chapter
+                    {label}
                   </span>
                   {notes.length > 0 ? (
                     <Badge
