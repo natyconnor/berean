@@ -662,7 +662,7 @@ export function PassageChapterView({
         onToggleFocusMode={handleFocusModeToggle}
         onToggleSectionHeaders={handleSectionHeadersToggle}
         chapterScopedNoteCount={chapterScopedNotes.length}
-        chapterNotesDisabled={chapterNotesPanel.overlayOpen}
+        chapterNotesOpen={chapterNotesPanel.overlayOpen}
         onChapterNotesClick={chapterNotesPanel.handleHeaderToggle}
       />
 

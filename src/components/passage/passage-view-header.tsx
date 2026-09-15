@@ -41,8 +41,8 @@ interface PassageViewHeaderProps {
   onToggleSectionHeaders: () => void;
   /** Whole-chapter notes for the sticky header chrome. */
   chapterScopedNoteCount?: number;
-  /** Keep the chrome inert while the floating chapter panel is open. */
-  chapterNotesDisabled?: boolean;
+  /** Floating chapter panel is open (header button toggles closed). */
+  chapterNotesOpen?: boolean;
   onChapterNotesClick?: () => void;
 }
 
@@ -65,7 +65,7 @@ export function PassageViewHeader({
   onToggleFocusMode,
   onToggleSectionHeaders,
   chapterScopedNoteCount = 0,
-  chapterNotesDisabled = false,
+  chapterNotesOpen = false,
   onChapterNotesClick,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
@@ -105,7 +105,7 @@ export function PassageViewHeader({
             showSectionHeaders={showSectionHeaders}
             onToggleSectionHeaders={onToggleSectionHeaders}
             chapterScopedNoteCount={chapterScopedNoteCount}
-            chapterNotesDisabled={chapterNotesDisabled}
+            chapterNotesOpen={chapterNotesOpen}
             onChapterNotesClick={onChapterNotesClick}
           />
         </div>

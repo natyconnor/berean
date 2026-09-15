@@ -64,8 +64,8 @@ interface ChapterHeaderProps {
   onToggleSectionHeaders: () => void;
   /** Whole-chapter notes for the sticky header chrome. */
   chapterScopedNoteCount?: number;
-  /** Keep the chrome inert while the floating chapter panel is open. */
-  chapterNotesDisabled?: boolean;
+  /** Floating chapter panel is open (button toggles closed). */
+  chapterNotesOpen?: boolean;
   onChapterNotesClick?: () => void;
 }
 
@@ -75,7 +75,7 @@ export function ChapterHeader({
   showSectionHeaders,
   onToggleSectionHeaders,
   chapterScopedNoteCount = 0,
-  chapterNotesDisabled = false,
+  chapterNotesOpen = false,
   onChapterNotesClick,
 }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs();
@@ -221,19 +221,21 @@ export function ChapterHeader({
         <button
           type="button"
           onClick={onChapterNotesClick}
-          disabled={chapterNotesDisabled}
           data-note-trigger
+          aria-expanded={chapterNotesOpen}
           aria-label={
-            hasChapterNotes
-              ? `Open chapter notes for ${chapterLabel}`
-              : `Add a chapter note for ${chapterLabel}`
+            chapterNotesOpen
+              ? `Close chapter notes for ${chapterLabel}`
+              : hasChapterNotes
+                ? `Open chapter notes for ${chapterLabel}`
+                : `Add a chapter note for ${chapterLabel}`
           }
           className={cn(
             // Match the chapter reference well: carved inset, no dashed outline.
             "ml-auto inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left cl-well transition-colors",
             chapterNoteSurfaceClass,
-            chapterNotesDisabled
-              ? "cursor-not-allowed opacity-50"
+            chapterNotesOpen
+              ? "brightness-[0.97] ring-1 ring-[oklch(0.72_0.06_200)/40] dark:brightness-110"
               : "hover:brightness-[0.98] dark:hover:brightness-110",
           )}
         >
