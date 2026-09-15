@@ -207,6 +207,54 @@ export function usePassageNotesInteraction(
     uiState.selectedVerses.size,
   ]);
 
+  // Click away closes chapter overlay (same spirit as verse notes: keep dirty).
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (!chapterOverlayOpen) return;
+
+      const path = event.composedPath();
+      const insideNoteChrome = path.some(
+        (node) =>
+          node instanceof Element &&
+          (node.matches("[data-note-surface]") ||
+            node.matches("[data-note-trigger]")),
+      );
+      if (insideNoteChrome) return;
+
+      const insideExempt = path.some(
+        (node) =>
+          node instanceof Element &&
+          node.matches("[data-passage-dismiss-exempt]"),
+      );
+      if (insideExempt) return;
+
+      const textSelection = window.getSelection();
+      if (textSelection && !textSelection.isCollapsed) return;
+
+      if (chapterNotesDirty) return;
+
+      if (chapterDrafting) {
+        cancelChapterDraft();
+        return;
+      }
+      if (chapterEditingId) {
+        cancelChapterEdit();
+      }
+      closeChapterPanel();
+    }
+
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, [
+    cancelChapterDraft,
+    cancelChapterEdit,
+    chapterDrafting,
+    chapterEditingId,
+    chapterNotesDirty,
+    chapterOverlayOpen,
+    closeChapterPanel,
+  ]);
+
   return {
     ...uiState,
     hasDirtyEditors: uiState.hasDirtyEditors || chapterNotesDirty,

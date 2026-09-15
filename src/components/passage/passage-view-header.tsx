@@ -39,6 +39,9 @@ interface PassageViewHeaderProps {
   setNoteVisibility: (next: NoteVisibility) => void;
   onToggleFocusMode: () => void;
   onToggleSectionHeaders: () => void;
+  /** Show empty-state "Add chapter note" in the chapter header. */
+  showAddChapterNote?: boolean;
+  onAddChapterNote?: () => void;
 }
 
 export function PassageViewHeader({
@@ -59,6 +62,8 @@ export function PassageViewHeader({
   setNoteVisibility,
   onToggleFocusMode,
   onToggleSectionHeaders,
+  showAddChapterNote = false,
+  onAddChapterNote,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
@@ -96,6 +101,8 @@ export function PassageViewHeader({
             chapter={chapter}
             showSectionHeaders={showSectionHeaders}
             onToggleSectionHeaders={onToggleSectionHeaders}
+            showAddChapterNote={showAddChapterNote}
+            onAddChapterNote={onAddChapterNote}
           />
         </div>
         <div className="pb-3 pt-1">

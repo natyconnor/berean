@@ -131,6 +131,7 @@ export function PassageChapterView({
     containerRef,
     expandedPassageRanges,
     chapterScopedNotes,
+    chapterNotesPanel,
     singleVerseNotes,
     passageNotesByAnchor,
     openVerseKeys,
@@ -660,6 +661,10 @@ export function PassageChapterView({
         setNoteVisibility={setNoteVisibility}
         onToggleFocusMode={handleFocusModeToggle}
         onToggleSectionHeaders={handleSectionHeadersToggle}
+        showAddChapterNote={
+          chapterScopedNotes.length === 0 && !chapterNotesPanel.overlayOpen
+        }
+        onAddChapterNote={chapterNotesPanel.startDraft}
       />
 
       <PassageViewBody

@@ -45,7 +45,7 @@ interface NoteEditorProps {
   initialContent?: string;
   initialBody?: NoteBody;
   initialTags?: string[];
-  variant?: "default" | "passage";
+  variant?: "default" | "passage" | "chapter";
   currentChapter?: CurrentChapter;
   onSave: (body: NoteBody, tags: string[]) => void | Promise<void>;
   onCancel: () => void;
@@ -169,6 +169,7 @@ export function NoteEditor({
   );
 
   const isPassage = variant === "passage";
+  const isChapter = variant === "chapter";
   const canSave = noteBodyHasSubstantiveContent(body);
 
   return (
@@ -178,14 +179,25 @@ export function NoteEditor({
         "rounded-lg p-2.5 shadow-none",
         isPassage
           ? "bg-amber-50/90 dark:bg-[var(--cl-passage-surface)] cl-depth-3-passage cl-transition cl-editor-lift-passage cl-focus-bloom"
-          : "bg-card cl-depth-3 cl-transition cl-editor-lift cl-focus-bloom",
+          : isChapter
+            ? "border border-[oklch(0.72_0.06_200)] bg-[oklch(0.96_0.02_200)] dark:border-[oklch(0.55_0.07_200)/50] dark:bg-[oklch(0.28_0.035_200)] cl-depth-3 cl-transition cl-editor-lift cl-focus-bloom"
+            : "bg-card cl-depth-3 cl-transition cl-editor-lift cl-focus-bloom",
       )}
       onKeyDown={handleKeyDown}
       onFocusCapture={onFocusWithin}
     >
       <div className="flex items-center justify-between">
-        <Badge variant="secondary" className="text-xs">
-          {isPassage ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
+        <Badge
+          variant="secondary"
+          className={cn(
+            "text-xs",
+            isChapter &&
+              "border-[oklch(0.72_0.06_200)] bg-[oklch(0.985_0.012_200)] text-[oklch(0.42_0.07_200)] dark:border-[oklch(0.55_0.07_200)/50] dark:bg-[oklch(0.30_0.035_200)] dark:text-[oklch(0.78_0.07_200)]",
+          )}
+        >
+          {isPassage || isChapter ? (
+            <BookOpen className="h-3 w-3 shrink-0" />
+          ) : null}
           {formatVerseRef(verseRef)}
         </Badge>
         <TooltipButton
@@ -212,7 +224,7 @@ export function NoteEditor({
           currentChapter ?? { book: verseRef.book, chapter: verseRef.chapter }
         }
         onChange={handleEditorChange}
-        className="min-h-[96px]"
+        className={isChapter ? "min-h-[160px]" : "min-h-[96px]"}
         editorChrome="candlelight"
         tourId={tour.bodyTourId}
         tutorialPreviewText={tour.tutorialPreviewText}
@@ -238,6 +250,8 @@ export function NoteEditor({
             "text-xs",
             isPassage &&
               "border-amber-300 dark:border-[var(--cl-passage-line)]",
+            isChapter &&
+              "border-[oklch(0.72_0.06_200)] dark:border-[oklch(0.55_0.07_200)/50]",
           )}
           inputClassName={cn(
             "border-0 border-b rounded-none bg-transparent px-0 h-7",
@@ -246,6 +260,8 @@ export function NoteEditor({
             "placeholder:text-muted-foreground/50",
             isPassage &&
               "border-amber-300/60 focus:border-amber-400/70 dark:border-[var(--cl-passage-line)] dark:focus:border-[var(--cl-passage-ink-dim)]",
+            isChapter &&
+              "border-[oklch(0.72_0.06_200)/60] focus:border-[oklch(0.55_0.07_200)] dark:border-[oklch(0.55_0.07_200)/50]",
           )}
           tourId={tour.tagsTourId}
           tutorialPreviewTags={tour.tutorialPreviewTags}

@@ -6,12 +6,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { displayBookName } from "@/lib/bible-books";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { useTabs } from "@/lib/use-tabs";
 import { cn } from "@/lib/utils";
+import {
+  chapterNoteInkClass,
+  chapterNoteLineClass,
+  chapterNoteSurfaceClass,
+} from "@/components/passage/chapter-note-styles";
 import { PassageNavigator } from "./passage-navigator";
 
 /**
@@ -47,6 +52,9 @@ interface ChapterHeaderProps {
   chapter: number;
   showSectionHeaders: boolean;
   onToggleSectionHeaders: () => void;
+  /** Empty-state CTA: add a whole-chapter note (right-aligned with Headers). */
+  showAddChapterNote?: boolean;
+  onAddChapterNote?: () => void;
 }
 
 export function ChapterHeader({
@@ -54,6 +62,8 @@ export function ChapterHeader({
   chapter,
   showSectionHeaders,
   onToggleSectionHeaders,
+  showAddChapterNote = false,
+  onAddChapterNote,
 }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
@@ -145,7 +155,7 @@ export function ChapterHeader({
           <ChevronRight className="h-4 w-4" />
         </TooltipButton>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
         <Tooltip>
           <TooltipTrigger asChild>
             <div
@@ -187,6 +197,23 @@ export function ChapterHeader({
               : "Show editorial section headings"}
           </TooltipContent>
         </Tooltip>
+        {showAddChapterNote && onAddChapterNote ? (
+          <button
+            type="button"
+            onClick={onAddChapterNote}
+            data-note-trigger
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+              chapterNoteSurfaceClass,
+              chapterNoteLineClass,
+              chapterNoteInkClass,
+              "hover:brightness-[0.98] dark:hover:brightness-110",
+            )}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add chapter note
+          </button>
+        ) : null}
       </div>
     </div>
   );

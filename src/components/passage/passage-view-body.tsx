@@ -353,19 +353,21 @@ export function PassageViewBody({
           onMouseLeave={handleMouseUp}
         >
           <div>
-            {/* Option B: chapter row (text) + reserved collapsed pill (notes) */}
-            <div className={cn(topGridClass, "items-start pt-1")}>
-              <ChapterNotesChrome
-                panel={chapterNotesPanel}
-                viewMode={effectiveViewMode}
-                mode="row"
-              />
-              <ChapterNotesChrome
-                panel={chapterNotesPanel}
-                viewMode={effectiveViewMode}
-                mode="collapsed-slot"
-              />
-            </div>
+            {/* Chapter row + reserved pill only once chapter notes exist */}
+            {chapterNotesPanel.notes.length > 0 ? (
+              <div className={cn(topGridClass, "items-start pt-1")}>
+                <ChapterNotesChrome
+                  panel={chapterNotesPanel}
+                  viewMode={effectiveViewMode}
+                  mode="row"
+                />
+                <ChapterNotesChrome
+                  panel={chapterNotesPanel}
+                  viewMode={effectiveViewMode}
+                  mode="collapsed-slot"
+                />
+              </div>
+            ) : null}
 
             <AnimatePresence initial={false} mode="popLayout">
               {filteredVerses.map((item) => {

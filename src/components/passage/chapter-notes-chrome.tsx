@@ -54,6 +54,7 @@ export function ChapterNotesChrome({
   const label = formatVerseRef(chapterRef);
 
   if (mode === "row") {
+    if (notes.length === 0) return null;
     return (
       <div
         className={cn(
@@ -61,7 +62,7 @@ export function ChapterNotesChrome({
           chapterNoteLineClass,
           chapterNoteSurfaceClass,
         )}
-        data-passage-dismiss-exempt
+        data-note-surface
       >
         <ScrollText className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)} />
         <div className="min-w-0 flex-1">
@@ -83,20 +84,14 @@ export function ChapterNotesChrome({
           onClick={handleRowAdd}
           className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-background/80"
           aria-label={
-            overlayOpen
-              ? "Collapse chapter notes"
-              : notes.length > 0
-                ? "Open chapter notes"
-                : "Add chapter note"
+            overlayOpen ? "Collapse chapter notes" : "Open chapter notes"
           }
           data-note-trigger
         >
           {overlayOpen ? (
             <ChevronUp className={cn("h-4 w-4", chapterNoteInkClass)} />
-          ) : notes.length > 0 ? (
-            <ChevronDown className={cn("h-4 w-4", chapterNoteInkClass)} />
           ) : (
-            <Plus className={cn("h-4 w-4", chapterNoteInkClass)} />
+            <ChevronDown className={cn("h-4 w-4", chapterNoteInkClass)} />
           )}
         </button>
       </div>
@@ -104,76 +99,58 @@ export function ChapterNotesChrome({
   }
 
   if (mode === "collapsed-slot") {
-    // Always reserve height so expanding never shifts verse notes.
+    // Only reserve a notes-column slot once chapter notes exist.
+    if (notes.length === 0) return null;
     return (
       <div
         className={cn("mb-1.5", overlayOpen && "invisible")}
         aria-hidden={overlayOpen}
       >
-        {notes.length > 0 ? (
-          <button
-            type="button"
-            onClick={openPanel}
-            data-note-trigger
-            className={cn(
-              "group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-              chapterNoteSurfaceClass,
-              chapterNoteLineClass,
-              "hover:brightness-[0.99] dark:hover:brightness-110",
-            )}
-          >
-            <ScrollText
-              className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", chapterNoteInkClass)}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="mb-0.5 flex items-center gap-2">
-                <span
-                  className={cn(
-                    "text-[10px] font-semibold uppercase tracking-wide",
-                    chapterNoteInkClass,
-                  )}
-                >
-                  {label}
-                </span>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[10px] px-1.5 py-0",
-                    chapterNoteLineClass,
-                  )}
-                >
-                  {notes.length}
-                </Badge>
-              </div>
-              <p className="line-clamp-2 text-[13px] text-foreground/90">
-                {notes[0].content}
-              </p>
-              {notes.length > 1 ? (
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  +{notes.length - 1} more · click to open
-                </p>
-              ) : (
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Click to open
-                </p>
-              )}
+        <button
+          type="button"
+          onClick={openPanel}
+          data-note-trigger
+          className={cn(
+            "group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+            chapterNoteSurfaceClass,
+            chapterNoteLineClass,
+            "hover:brightness-[0.99] dark:hover:brightness-110",
+          )}
+        >
+          <ScrollText
+            className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", chapterNoteInkClass)}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="mb-0.5 flex items-center gap-2">
+              <span
+                className={cn(
+                  "text-[10px] font-semibold uppercase tracking-wide",
+                  chapterNoteInkClass,
+                )}
+              >
+                {label}
+              </span>
+              <Badge
+                variant="outline"
+                className={cn("text-[10px] px-1.5 py-0", chapterNoteLineClass)}
+              >
+                {notes.length}
+              </Badge>
             </div>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={startDraft}
-            data-note-trigger
-            className={cn(
-              "flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-left text-sm",
-              chapterNoteLineClass,
-              chapterNoteInkClass,
+            <p className="line-clamp-2 text-[13px] text-foreground/90">
+              {notes[0].content}
+            </p>
+            {notes.length > 1 ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                +{notes.length - 1} more · click to open
+              </p>
+            ) : (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Click to open
+              </p>
             )}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add a chapter note
-          </button>
-        )}
+          </div>
+        </button>
       </div>
     );
   }
@@ -190,7 +167,7 @@ export function ChapterNotesChrome({
         <div
           data-note-surface
           className={cn(
-            "pointer-events-auto flex max-h-[min(70vh,560px)] flex-col overflow-hidden rounded-xl border",
+            "pointer-events-auto flex min-h-[min(52vh,440px)] max-h-[min(85vh,720px)] flex-col overflow-hidden rounded-xl border",
             chapterNoteLineClass,
             chapterNoteElevatedClass,
             "cl-depth-4 shadow-none",
@@ -222,7 +199,7 @@ export function ChapterNotesChrome({
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {!drafting && (
+              {!drafting && notes.length > 0 && (
                 <button
                   type="button"
                   className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80"
@@ -248,6 +225,7 @@ export function ChapterNotesChrome({
               <div data-note-surface>
                 <NoteEditor
                   verseRef={chapterRef}
+                  variant="chapter"
                   currentChapter={{
                     book: chapterRef.book,
                     chapter: chapterRef.chapter,
@@ -264,6 +242,7 @@ export function ChapterNotesChrome({
                 <div key={note.noteId} data-note-surface>
                   <NoteEditor
                     verseRef={note.verseRef}
+                    variant="chapter"
                     initialContent={note.content}
                     initialBody={note.body}
                     initialTags={note.tags}
