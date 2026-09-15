@@ -9,6 +9,7 @@ import { CopyrightNotice } from "@/components/bible/copyright-notice";
 import { VerseRowWithNotes } from "./view/verse-row-with-notes";
 import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
 import { SectionHeading } from "./section-heading";
+import { ChapterNotesChrome } from "./chapter-notes-chrome";
 import {
   NOTE_ENTER_TRANSITION,
   CROSSFADE_TRANSITION,
@@ -74,6 +75,8 @@ interface PassageViewBodyProps {
   passageKey: string;
   containerClass: string;
   topGridClass: string;
+  /** Compose/read column template shared with verse rows and chapter overlay. */
+  passageGridClass: string;
   viewportRef: RefObject<HTMLDivElement | null>;
   filteredVerses: VerseItem[];
   showSectionHeaders: boolean;
@@ -105,6 +108,7 @@ export function PassageViewBody({
   passageKey,
   containerClass,
   topGridClass,
+  passageGridClass,
   viewportRef,
   filteredVerses,
   showSectionHeaders,
@@ -160,6 +164,7 @@ export function PassageViewBody({
     notifyEditorDirty,
     handleEditorFocus,
     startCreatingPassageNote,
+    chapterNotesPanel,
   } = passageNotesInteraction;
 
   useDragAutoScroll({
@@ -343,11 +348,25 @@ export function PassageViewBody({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
           ref={containerRef}
-          className={containerClass}
+          className={cn(containerClass, "relative")}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
           <div>
+            {/* Option B: chapter row (text) + reserved collapsed pill (notes) */}
+            <div className={cn(topGridClass, "items-start pt-1")}>
+              <ChapterNotesChrome
+                panel={chapterNotesPanel}
+                viewMode={effectiveViewMode}
+                mode="row"
+              />
+              <ChapterNotesChrome
+                panel={chapterNotesPanel}
+                viewMode={effectiveViewMode}
+                mode="collapsed-slot"
+              />
+            </div>
+
             <AnimatePresence initial={false} mode="popLayout">
               {filteredVerses.map((item) => {
                 if (item.kind === "passageGroup") {
@@ -579,6 +598,14 @@ export function PassageViewBody({
               <div />
             </div>
           </div>
+
+          {/* Sticky solid overlay over the notes column; verse notes stay put */}
+          <ChapterNotesChrome
+            panel={chapterNotesPanel}
+            viewMode={effectiveViewMode}
+            mode="overlay"
+            notesGridClass={passageGridClass}
+          />
         </motion.div>
       </ScrollArea>
       <div className="cl-vignette" aria-hidden />

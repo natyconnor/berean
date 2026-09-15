@@ -138,6 +138,79 @@ describe("useChapterNotesData", () => {
     ]);
     expect(result.current.verseToPassageAnchor.get(2)).toBe(2);
     expect(result.current.verseToPassageAnchor.get(3)).toBe(2);
+    expect(result.current.chapterScopedNotes).toEqual([]);
+  });
+
+  it("separates chapter-scoped notes from verse 1 notes", () => {
+    useQueryMock.mockReturnValue([
+      {
+        verseRef: {
+          book: "John",
+          chapter: 3,
+          startVerse: 1,
+          endVerse: 1,
+          scope: "chapter",
+        },
+        notes: [
+          {
+            _id: "chapter-note",
+            content: "Whole chapter",
+            tags: ["overview"],
+            createdAt: 30,
+            updatedAt: 30,
+          },
+        ],
+      },
+      {
+        verseRef: {
+          book: "John",
+          chapter: 3,
+          startVerse: 1,
+          endVerse: 1,
+        },
+        notes: [
+          {
+            _id: "verse-1-note",
+            content: "Verse one only",
+            tags: [],
+            createdAt: 40,
+            updatedAt: 40,
+          },
+        ],
+      },
+    ]);
+
+    const { result } = renderHook(() => useChapterNotesData("John", 3));
+
+    expect(result.current.chapterScopedNotes).toEqual([
+      {
+        noteId: "chapter-note",
+        content: "Whole chapter",
+        tags: ["overview"],
+        verseRef: {
+          book: "John",
+          chapter: 3,
+          startVerse: 1,
+          endVerse: 1,
+          scope: "chapter",
+        },
+        createdAt: 30,
+      },
+    ]);
+    expect(result.current.singleVerseNotes.get(1)).toEqual([
+      {
+        noteId: "verse-1-note",
+        content: "Verse one only",
+        tags: [],
+        verseRef: {
+          book: "John",
+          chapter: 3,
+          startVerse: 1,
+          endVerse: 1,
+        },
+        createdAt: 40,
+      },
+    ]);
   });
 
   it("creates and links a new note in order", async () => {
@@ -187,6 +260,38 @@ describe("useChapterNotesData", () => {
       verseRefId: "ref-1",
     });
     expect(callOrder).toEqual(["create", "findRef", "link"]);
+  });
+
+  it("passes scope when creating a chapter-scoped note", async () => {
+    useQueryMock.mockReturnValue([]);
+    createNoteMock.mockResolvedValue("note-chapter");
+    findOrCreateRefMock.mockResolvedValue("ref-chapter");
+    linkNoteMock.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useChapterNotesData("John", 3));
+    const body = { segments: [] } as unknown as NoteBody;
+
+    await act(async () => {
+      await result.current.saveNewNote(
+        {
+          book: "John",
+          chapter: 3,
+          startVerse: 1,
+          endVerse: 1,
+          scope: "chapter",
+        },
+        body,
+        ["overview"],
+      );
+    });
+
+    expect(findOrCreateRefMock).toHaveBeenCalledWith({
+      book: "John",
+      chapter: 3,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
   });
 
   it("forwards edit and delete operations to their mutations", async () => {

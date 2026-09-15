@@ -130,6 +130,7 @@ export function PassageChapterView({
   const {
     containerRef,
     expandedPassageRanges,
+    chapterScopedNotes,
     singleVerseNotes,
     passageNotesByAnchor,
     openVerseKeys,
@@ -371,13 +372,16 @@ export function PassageChapterView({
         map.set(note.noteId, note);
       }
     }
+    for (const note of chapterScopedNotes) {
+      map.set(note.noteId, note);
+    }
     return map;
-  }, [displaySingleVerseNotes, passageNotesByAnchor]);
+  }, [chapterScopedNotes, displaySingleVerseNotes, passageNotesByAnchor]);
 
   const hasAnyNotes = noteById.size > 0;
 
   const chapterNoteStats = useMemo(() => {
-    let chapterNotesCount = 0;
+    let chapterNotesCount = chapterScopedNotes.length;
     let maxNotesPerVerse = 0;
     for (const notes of singleVerseNotes.values()) {
       chapterNotesCount += notes.length;
@@ -389,7 +393,7 @@ export function PassageChapterView({
       chapterNotesCount += notes.length;
     }
     return { chapterNotesCount, maxNotesPerVerse };
-  }, [passageNotesByAnchor, singleVerseNotes]);
+  }, [chapterScopedNotes.length, passageNotesByAnchor, singleVerseNotes]);
 
   const filteredVerses = useMemo((): VerseItem[] => {
     if (!data) return [];
@@ -665,6 +669,7 @@ export function PassageChapterView({
         passageKey={passageKey}
         containerClass={containerClass}
         topGridClass={topGridClass}
+        passageGridClass={passageGridClass}
         viewportRef={viewportRef}
         filteredVerses={filteredVerses}
         showSectionHeaders={showSectionHeaders}
