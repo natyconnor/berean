@@ -186,20 +186,18 @@ export function NoteEditor({
       onKeyDown={handleKeyDown}
       onFocusCapture={onFocusWithin}
     >
-      <div className="flex items-center justify-between">
-        <Badge
-          variant="secondary"
-          className={cn(
-            "text-xs",
-            isChapter &&
-              "border-[oklch(0.72_0.06_200)] bg-[oklch(0.985_0.012_200)] text-[oklch(0.42_0.07_200)] dark:border-[oklch(0.55_0.07_200)/50] dark:bg-[oklch(0.30_0.035_200)] dark:text-[oklch(0.78_0.07_200)]",
-          )}
-        >
-          {isPassage || isChapter ? (
-            <BookOpen className="h-3 w-3 shrink-0" />
-          ) : null}
-          {formatVerseRef(verseRef)}
-        </Badge>
+      <div
+        className={cn(
+          "flex items-center",
+          isChapter ? "justify-end" : "justify-between",
+        )}
+      >
+        {!isChapter ? (
+          <Badge variant="secondary" className="text-xs">
+            {isPassage ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
+            {formatVerseRef(verseRef)}
+          </Badge>
+        ) : null}
         <TooltipButton
           variant="ghost"
           size="icon"
