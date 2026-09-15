@@ -98,7 +98,7 @@ export function PassageViewHeader({
       data-passage-dismiss-exempt
     >
       <div className={cn("grid", passageGridClass, headerInnerClass)}>
-        <div className="flex items-center">
+        <div className="flex w-full min-w-0 items-center">
           <ChapterHeader
             book={book}
             chapter={chapter}

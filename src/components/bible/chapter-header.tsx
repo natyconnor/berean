@@ -120,7 +120,7 @@ export function ChapterHeader({
   }
 
   return (
-    <div className="flex items-center gap-3 py-4 px-2">
+    <div className="flex w-full min-w-0 items-center gap-3 py-4 px-2">
       <div className="flex min-w-0 shrink-0 items-center gap-2">
         <TooltipButton
           variant="ghost"
