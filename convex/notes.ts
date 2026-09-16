@@ -303,6 +303,9 @@ export const searchWorkspace = query({
                   chapter: ref.chapter,
                   startVerse: ref.startVerse,
                   endVerse: ref.endVerse,
+                  ...(ref.scope === "chapter"
+                    ? { scope: "chapter" as const }
+                    : {}),
                 },
               ]
             : [];

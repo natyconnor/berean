@@ -39,6 +39,11 @@ interface PassageViewHeaderProps {
   setNoteVisibility: (next: NoteVisibility) => void;
   onToggleFocusMode: () => void;
   onToggleSectionHeaders: () => void;
+  /** Whole-chapter notes for the sticky header chrome. */
+  chapterScopedNoteCount?: number;
+  /** Floating chapter panel is open (header button toggles closed). */
+  chapterNotesOpen?: boolean;
+  onChapterNotesClick?: () => void;
 }
 
 export function PassageViewHeader({
@@ -59,6 +64,9 @@ export function PassageViewHeader({
   setNoteVisibility,
   onToggleFocusMode,
   onToggleSectionHeaders,
+  chapterScopedNoteCount = 0,
+  chapterNotesOpen = false,
+  onChapterNotesClick,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
@@ -90,12 +98,15 @@ export function PassageViewHeader({
       data-passage-dismiss-exempt
     >
       <div className={cn("grid", passageGridClass, headerInnerClass)}>
-        <div className="flex items-center">
+        <div className="flex w-full min-w-0 items-center">
           <ChapterHeader
             book={book}
             chapter={chapter}
             showSectionHeaders={showSectionHeaders}
             onToggleSectionHeaders={onToggleSectionHeaders}
+            chapterScopedNoteCount={chapterScopedNoteCount}
+            chapterNotesOpen={chapterNotesOpen}
+            onChapterNotesClick={onChapterNotesClick}
           />
         </div>
         <div className="pb-3 pt-1">

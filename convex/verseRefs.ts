@@ -9,6 +9,7 @@ export const findOrCreate = mutation({
     chapter: v.number(),
     startVerse: v.number(),
     endVerse: v.number(),
+    scope: v.optional(v.literal("chapter")),
   },
   returns: v.id("verseRefs"),
   handler: async (ctx, args) => {
@@ -28,6 +29,7 @@ export const getByBookChapter = query({
       chapter: v.number(),
       startVerse: v.number(),
       endVerse: v.number(),
+      scope: v.optional(v.literal("chapter")),
     }),
   ),
   handler: async (ctx, args) => {

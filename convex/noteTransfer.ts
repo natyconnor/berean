@@ -55,6 +55,9 @@ export const listExportableNotes = query({
           chapter: verseRef.chapter,
           startVerse: verseRef.startVerse,
           endVerse: verseRef.endVerse,
+          ...(verseRef.scope === "chapter"
+            ? { scope: "chapter" as const }
+            : {}),
         },
       });
     }
@@ -65,6 +68,9 @@ export const listExportableNotes = query({
       if (a.verseRef.chapter !== b.verseRef.chapter) {
         return a.verseRef.chapter - b.verseRef.chapter;
       }
+      const aChapter = a.verseRef.scope === "chapter" ? 0 : 1;
+      const bChapter = b.verseRef.scope === "chapter" ? 0 : 1;
+      if (aChapter !== bChapter) return aChapter - bChapter;
       if (a.verseRef.startVerse !== b.verseRef.startVerse) {
         return a.verseRef.startVerse - b.verseRef.startVerse;
       }

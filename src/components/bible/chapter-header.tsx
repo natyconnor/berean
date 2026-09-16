@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -6,12 +7,26 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ScrollText,
+} from "lucide-react";
 import { displayBookName } from "@/lib/bible-books";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
+import { formatBookChapter } from "@/lib/verse-ref-utils";
 import { useTabs } from "@/lib/use-tabs";
 import { cn } from "@/lib/utils";
+import {
+  chapterNoteInkClass,
+  chapterNoteSurfaceClass,
+} from "@/components/passage/chapter-note-styles";
+import {
+  CHAPTER_CHROME_TRANSITION,
+  CHAPTER_HEADER_CTA_VARIANTS,
+} from "@/components/passage/note-animation-config";
 import { PassageNavigator } from "./passage-navigator";
 
 /**
@@ -47,6 +62,11 @@ interface ChapterHeaderProps {
   chapter: number;
   showSectionHeaders: boolean;
   onToggleSectionHeaders: () => void;
+  /** Whole-chapter notes for the sticky header chrome. */
+  chapterScopedNoteCount?: number;
+  /** Floating chapter panel is open (button toggles closed). */
+  chapterNotesOpen?: boolean;
+  onChapterNotesClick?: () => void;
 }
 
 export function ChapterHeader({
@@ -54,6 +74,9 @@ export function ChapterHeader({
   chapter,
   showSectionHeaders,
   onToggleSectionHeaders,
+  chapterScopedNoteCount = 0,
+  chapterNotesOpen = false,
+  onChapterNotesClick,
 }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
@@ -62,6 +85,12 @@ export function ChapterHeader({
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [navigatorBook, setNavigatorBook] = useState<string | null>(null);
+
+  const chapterLabel = formatBookChapter(book, chapter);
+  const hasChapterNotes = chapterScopedNoteCount > 0;
+  const chapterNotesSubtitle = hasChapterNotes
+    ? `Notes for all of ${chapterLabel} · ${chapterScopedNoteCount}`
+    : "Add a chapter note";
 
   function goPrev() {
     if (!previous) return;
@@ -91,8 +120,8 @@ export function ChapterHeader({
   }
 
   return (
-    <div className="flex items-center justify-between py-4 px-2 gap-4">
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
+    <div className="flex w-full min-w-0 items-center gap-3 py-4 px-2">
+      <div className="flex min-w-0 shrink-0 items-center gap-2">
         <TooltipButton
           variant="ghost"
           size="icon"
@@ -145,49 +174,99 @@ export function ChapterHeader({
           <ChevronRight className="h-4 w-4" />
         </TooltipButton>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={cn(
+              "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,color] duration-200",
+              showSectionHeaders
+                ? "border-border bg-muted/40 text-foreground"
+                : "border-border bg-background",
+            )}
+          >
+            <label
+              htmlFor="passage-section-headers"
               className={cn(
-                "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,color] duration-200",
+                "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
                 showSectionHeaders
-                  ? "border-border bg-muted/40 text-foreground"
-                  : "border-border bg-background",
+                  ? "text-foreground"
+                  : "text-muted-foreground",
               )}
             >
-              <label
-                htmlFor="passage-section-headers"
-                className={cn(
-                  "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
-                  showSectionHeaders
-                    ? "text-foreground"
-                    : "text-muted-foreground",
-                )}
+              Headers
+              <kbd className="rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                H
+              </kbd>
+            </label>
+            <Switch
+              id="passage-section-headers"
+              checked={showSectionHeaders}
+              onCheckedChange={(checked) => {
+                if (checked !== showSectionHeaders) {
+                  onToggleSectionHeaders();
+                }
+              }}
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          {showSectionHeaders
+            ? "Hide editorial section headings"
+            : "Show editorial section headings"}
+        </TooltipContent>
+      </Tooltip>
+
+      {onChapterNotesClick ? (
+        <button
+          type="button"
+          onClick={onChapterNotesClick}
+          data-note-trigger
+          aria-expanded={chapterNotesOpen}
+          aria-label={
+            chapterNotesOpen
+              ? `Close chapter notes for ${chapterLabel}`
+              : hasChapterNotes
+                ? `Open chapter notes for ${chapterLabel}`
+                : `Add a chapter note for ${chapterLabel}`
+          }
+          className={cn(
+            // Match the chapter reference well: carved inset, no dashed outline.
+            "ml-auto inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left cl-well transition-colors",
+            chapterNoteSurfaceClass,
+            chapterNotesOpen
+              ? "brightness-[0.97] ring-1 ring-[oklch(0.72_0.06_200)/40] dark:brightness-110"
+              : "hover:brightness-[0.98] dark:hover:brightness-110",
+          )}
+        >
+          <ScrollText className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)} />
+          <span className="min-w-0">
+            <span
+              className={cn(
+                "block text-[10px] font-semibold uppercase tracking-wide",
+                chapterNoteInkClass,
+              )}
+            >
+              Chapter
+            </span>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={chapterNotesSubtitle}
+                variants={CHAPTER_HEADER_CTA_VARIANTS}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                transition={CHAPTER_CHROME_TRANSITION}
+                className="block truncate text-sm text-muted-foreground"
               >
-                Headers
-                <kbd className="rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
-                  H
-                </kbd>
-              </label>
-              <Switch
-                id="passage-section-headers"
-                checked={showSectionHeaders}
-                onCheckedChange={(checked) => {
-                  if (checked !== showSectionHeaders) {
-                    onToggleSectionHeaders();
-                  }
-                }}
-              />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            {showSectionHeaders
-              ? "Hide editorial section headings"
-              : "Show editorial section headings"}
-          </TooltipContent>
-        </Tooltip>
-      </div>
+                {chapterNotesSubtitle}
+              </motion.span>
+            </AnimatePresence>
+          </span>
+        </button>
+      ) : (
+        <div className="ml-auto" aria-hidden />
+      )}
     </div>
   );
 }

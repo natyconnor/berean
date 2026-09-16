@@ -75,6 +75,8 @@ export default defineSchema({
     chapter: v.number(),
     startVerse: v.number(),
     endVerse: v.number(),
+    /** Present when the ref targets an entire chapter (anchor verses are 1–1). */
+    scope: v.optional(v.literal("chapter")),
   })
     .index("by_userId", ["userId"])
     .index("by_book_chapter", ["book", "chapter"])
@@ -91,6 +93,14 @@ export default defineSchema({
       "chapter",
       "startVerse",
       "endVerse",
+    ])
+    .index("by_userId_book_chapter_verses_scope", [
+      "userId",
+      "book",
+      "chapter",
+      "startVerse",
+      "endVerse",
+      "scope",
     ]),
 
   noteVerseLinks: defineTable({

@@ -4,7 +4,7 @@ import type {
   NoteSummary,
 } from "../../../../convex/lib/publicValues";
 import type { NoteBody } from "@/lib/note-inline-content";
-import type { VerseRef } from "@/lib/verse-ref-utils";
+import { isChapterScopeRef, type VerseRef } from "@/lib/verse-ref-utils";
 
 export interface NoteWithRef {
   noteId: Id<"notes">;
@@ -29,9 +29,31 @@ function toNoteWithRef(
       chapter: ref.chapter,
       startVerse: ref.startVerse,
       endVerse: ref.endVerse,
+      ...(ref.scope === "chapter" ? { scope: "chapter" as const } : {}),
     },
     createdAt: note.createdAt,
   };
+}
+
+function isChapterEntry(entry: ChapterNoteEntry): boolean {
+  return isChapterScopeRef(entry.verseRef);
+}
+
+/** Notes attached to the whole chapter (scope: "chapter"). */
+export function buildChapterScopedNotes(
+  chapterNotes: ChapterNoteEntry[] | undefined,
+): NoteWithRef[] {
+  if (!chapterNotes) return [];
+  const notes: NoteWithRef[] = [];
+  for (const entry of chapterNotes) {
+    if (!isChapterEntry(entry)) continue;
+    for (const note of entry.notes) {
+      if (!notes.some((n) => n.noteId === note._id)) {
+        notes.push(toNoteWithRef(note, entry.verseRef));
+      }
+    }
+  }
+  return notes.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function buildNotesByVerseRange(
@@ -41,6 +63,7 @@ export function buildNotesByVerseRange(
   if (!chapterNotes) return map;
 
   for (const entry of chapterNotes) {
+    if (isChapterEntry(entry)) continue;
     const ref = entry.verseRef;
     const key = `${ref.startVerse}-${ref.endVerse}`;
     const existing = map.get(key) ?? [];
@@ -61,6 +84,7 @@ export function buildSingleVerseNotes(
   if (!chapterNotes) return map;
 
   for (const entry of chapterNotes) {
+    if (isChapterEntry(entry)) continue;
     const ref = entry.verseRef;
     if (ref.startVerse !== ref.endVerse) continue;
     const existing = map.get(ref.startVerse) ?? [];
@@ -81,6 +105,7 @@ export function buildPassageNotesByAnchor(
   if (!chapterNotes) return map;
 
   for (const entry of chapterNotes) {
+    if (isChapterEntry(entry)) continue;
     const ref = entry.verseRef;
     if (ref.startVerse === ref.endVerse) continue;
     const existing = map.get(ref.startVerse) ?? [];
@@ -101,6 +126,7 @@ export function buildVerseToPassageAnchor(
   if (!chapterNotes) return map;
 
   for (const entry of chapterNotes) {
+    if (isChapterEntry(entry)) continue;
     const ref = entry.verseRef;
     if (ref.startVerse === ref.endVerse) continue;
     for (let v = ref.startVerse; v <= ref.endVerse; v++) {
@@ -108,4 +134,14 @@ export function buildVerseToPassageAnchor(
     }
   }
   return map;
+}
+
+export function chapterScopeVerseRef(book: string, chapter: number): VerseRef {
+  return {
+    book,
+    chapter,
+    startVerse: 1,
+    endVerse: 1,
+    scope: "chapter",
+  };
 }

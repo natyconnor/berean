@@ -7,6 +7,7 @@ export const verseRefSummaryValue = v.object({
   chapter: v.number(),
   startVerse: v.number(),
   endVerse: v.number(),
+  scope: v.optional(v.literal("chapter")),
 });
 
 export type VerseRefSummary = Infer<typeof verseRefSummaryValue>;
@@ -17,6 +18,7 @@ export const verseRefLinkValue = v.object({
   chapter: v.number(),
   startVerse: v.number(),
   endVerse: v.number(),
+  scope: v.optional(v.literal("chapter")),
 });
 
 export type VerseRefLink = Infer<typeof verseRefLinkValue>;
