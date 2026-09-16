@@ -22,6 +22,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.15.0](https://github.com/natyconnor/berean/compare/v1.14.0...v1.15.0) (2026-09-16)
+
+
+### Features
+
+* chapter level notes ([3dc3151](https://github.com/natyconnor/berean/commit/3dc31517ab68f6f51b1e0d269c519d3e880c6c2c))
+
 ## [1.14.0](https://github.com/natyconnor/berean/compare/v1.13.6...v1.14.0) (2026-09-14)
 
 
