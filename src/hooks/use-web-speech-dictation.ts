@@ -214,8 +214,7 @@ export function useWebSpeechDictation({
       // to reconnect. Stopping here races the restart and kills the session.
       if (
         event.error === "not-allowed" ||
-        event.error === "service-not-allowed" ||
-        event.error === "audio-capture"
+        event.error === "service-not-allowed"
       ) {
         stop();
       }
