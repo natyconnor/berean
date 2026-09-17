@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  SPEECH_RESTART_GAP_MS,
   SPEECH_SILENCE_TIMEOUT_MS,
   type BrowserSpeechRecognition,
   type BrowserSpeechRecognitionErrorEvent,
@@ -198,6 +199,12 @@ describe("useWebSpeechDictation", () => {
     act(() => {
       first.onend?.();
     });
+    expect(first.startCount).toBe(1);
+    expect(result.current.listening).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_RESTART_GAP_MS);
+    });
     expect(first.startCount).toBe(2);
     expect(result.current.listening).toBe(true);
 
@@ -205,6 +212,108 @@ describe("useWebSpeechDictation", () => {
       first.emit([{ transcript: "is my shepherd", isFinal: true }]);
     });
     expect(onTranscript).toHaveBeenLastCalledWith("The Lord is my shepherd");
+  });
+
+  it("does not restart SpeechRecognition synchronously from onend", () => {
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {} }),
+    );
+    act(() => {
+      result.current.start();
+    });
+    const recognition = lastRecognition();
+    act(() => {
+      recognition.onend?.();
+    });
+    expect(recognition.startCount).toBe(1);
+    expect(result.current.listening).toBe(true);
+  });
+
+  it("stops after two immediate onend cycles instead of looping the mic", () => {
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {} }),
+    );
+    act(() => {
+      result.current.start();
+    });
+    const recognition = lastRecognition();
+    act(() => {
+      recognition.onend?.();
+    });
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_RESTART_GAP_MS);
+    });
+    expect(recognition.startCount).toBe(2);
+    expect(result.current.listening).toBe(true);
+
+    act(() => {
+      recognition.onend?.();
+    });
+    expect(result.current.listening).toBe(false);
+    expect(recognition.startCount).toBe(2);
+
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_RESTART_GAP_MS);
+    });
+    expect(recognition.startCount).toBe(2);
+    expect(result.current.listening).toBe(false);
+  });
+
+  it("does not reset the 5s silence clock when Chrome reconnects", () => {
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {} }),
+    );
+    act(() => {
+      result.current.start();
+    });
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_SILENCE_TIMEOUT_MS - SPEECH_RESTART_GAP_MS);
+    });
+    act(() => {
+      lastRecognition().onend?.();
+    });
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_RESTART_GAP_MS);
+    });
+    expect(result.current.listening).toBe(false);
+  });
+
+  it("keeps listening through a no-speech error until the silence timer", () => {
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {} }),
+    );
+    act(() => {
+      result.current.start();
+    });
+    act(() => {
+      lastRecognition().onerror?.({ error: "no-speech" });
+    });
+    expect(result.current.listening).toBe(true);
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_SILENCE_TIMEOUT_MS);
+    });
+    expect(result.current.listening).toBe(false);
+  });
+
+  it("uses single-shot recognition when only the webkit constructor exists", () => {
+    const speechWindow = window as Window & {
+      SpeechRecognition?: unknown;
+      webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+    };
+    delete speechWindow.SpeechRecognition;
+    speechWindow.webkitSpeechRecognition = class extends MockSpeechRecognition {
+      constructor() {
+        super();
+        instances.push(this);
+      }
+    };
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {} }),
+    );
+    act(() => {
+      result.current.start();
+    });
+    expect(lastRecognition().continuous).toBe(false);
   });
 
   it("stops on Space while listening without starting a new session", () => {

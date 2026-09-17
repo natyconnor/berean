@@ -7,6 +7,7 @@ import {
   isDevSpeechMockEnabled,
   isSpaceToggleKey,
   isSpeechRecognitionSupported,
+  preferContinuousSpeechRecognition,
 } from "./web-speech";
 
 describe("web-speech helpers", () => {
@@ -55,9 +56,20 @@ describe("web-speech helpers", () => {
 
     expect(isSpeechRecognitionSupported()).toBe(true);
     expect(getSpeechRecognitionCtor()).toBe(Fake);
+    expect(preferContinuousSpeechRecognition()).toBe(false);
 
     speechWindow.SpeechRecognition = original;
     speechWindow.webkitSpeechRecognition = originalWebkit;
+  });
+
+  it("uses continuous mode when the unprefixed constructor exists", () => {
+    const speechWindow = window as Window & {
+      SpeechRecognition?: unknown;
+    };
+    const original = speechWindow.SpeechRecognition;
+    speechWindow.SpeechRecognition = class Fake {};
+    expect(preferContinuousSpeechRecognition()).toBe(true);
+    speechWindow.SpeechRecognition = original;
   });
 
   it("reads mockSpeech from the hash when search params were stripped", () => {

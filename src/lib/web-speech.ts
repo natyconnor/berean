@@ -8,6 +8,15 @@
 
 export const SPEECH_SILENCE_TIMEOUT_MS = 5_000;
 
+/**
+ * Minimum delay before calling `start()` again after `onend`.
+ * A synchronous onend → start() loop is what makes the Mac menu-bar mic flicker.
+ */
+export const SPEECH_RESTART_GAP_MS = 250;
+
+/** Sessions that die faster than this, with no speech, are treated as engine refusal. */
+export const SPEECH_QUICK_END_MS = 200;
+
 /** DEV-only: click "Insert spoken sample" while listening to stream a transcript. */
 export const DEV_MOCK_SPEECH_EMIT_EVENT = "berean:mock-speech-emit";
 
@@ -198,6 +207,18 @@ export function getSpeechRecognitionCtor(): BrowserSpeechRecognitionCtor | null 
 
 export function isSpeechRecognitionSupported(): boolean {
   return getSpeechRecognitionCtor() !== null;
+}
+
+/**
+ * Safari exposes only `webkitSpeechRecognition` and does not keep a
+ * `continuous: true` session alive. Restarting that immediately in `onend`
+ * start/stops the mic in a tight loop and never delivers a transcript.
+ * Chrome/Edge expose the unprefixed constructor and can use continuous mode.
+ */
+export function preferContinuousSpeechRecognition(): boolean {
+  if (typeof window === "undefined") return false;
+  const speechWindow = window as SpeechWindow;
+  return typeof speechWindow.SpeechRecognition === "function";
 }
 
 /** Join a newly recognized phrase onto text already in the recall box. */
