@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
@@ -588,6 +588,224 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     ]);
     expect(
       screen.queryByRole("button", { name: "Shuffle" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+class MockSpeechRecognition {
+  continuous = false;
+  interimResults = false;
+  lang = "";
+  grammars: unknown = undefined;
+  onresult:
+    ((event: { results: unknown; resultIndex: number }) => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+  onend: (() => void) | null = null;
+  onspeechstart: (() => void) | null = null;
+  start(): void {}
+  stop(): void {
+    this.onend?.();
+  }
+  abort(): void {
+    this.onend?.();
+  }
+  emit(items: Array<{ transcript: string; isFinal: boolean }>): void {
+    const results = items.map((item) => {
+      const alternative = { transcript: item.transcript, confidence: 1 };
+      return Object.assign([alternative], {
+        isFinal: item.isFinal,
+        item: () => alternative,
+      });
+    });
+    this.onresult?.({
+      resultIndex: 0,
+      results: Object.assign(results, {
+        item: (index: number) => results[index],
+      }),
+    });
+  }
+}
+
+const speechInstances: MockSpeechRecognition[] = [];
+
+function installSpeechMock() {
+  const speechWindow = window as Window & {
+    SpeechRecognition?: new () => MockSpeechRecognition;
+  };
+  speechWindow.SpeechRecognition = class extends MockSpeechRecognition {
+    constructor() {
+      super();
+      speechInstances.push(this);
+    }
+  };
+}
+
+function lastSpeech(): MockSpeechRecognition {
+  const recognition = speechInstances.at(-1);
+  if (!recognition) throw new Error("expected SpeechRecognition");
+  return recognition;
+}
+
+describe("PracticeBoard Web Speech dictation", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    window.localStorage.removeItem("berean:hideSpeech");
+    window.localStorage.removeItem("berean:mockSpeech");
+    speechInstances.length = 0;
+    queryResults.set("savedVerses.listAll", [
+      {
+        verseRefId: VERSE_REF_ID,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      },
+    ]);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 1,
+      stageReps: 1,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + 1000,
+      consecutiveCorrect: 1,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+  });
+
+  afterEach(() => {
+    const speechWindow = window as Window & {
+      SpeechRecognition?: unknown;
+      webkitSpeechRecognition?: unknown;
+    };
+    delete speechWindow.SpeechRecognition;
+    delete speechWindow.webkitSpeechRecognition;
+  });
+
+  function renderGuided() {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[guidedVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  it("hides the mic when the Web Speech API is missing", async () => {
+    renderGuided();
+    await screen.findByLabelText("Your recalled verse");
+    expect(
+      screen.queryByRole("button", { name: "Dictate verse" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("places a prominent mic under the recall box and streams words into it", async () => {
+    installSpeechMock();
+    const user = userEvent.setup();
+    renderGuided();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    const mic = await screen.findByRole("button", { name: "Dictate verse" });
+    expect(
+      mic.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+
+    await user.click(mic);
+    expect(
+      screen.getByRole("button", { name: "Stop dictation" }),
+    ).toBeVisible();
+    expect(
+      document.querySelector('[data-slot="dictation-waveform"]'),
+    ).not.toBeNull();
+
+    act(() => {
+      lastSpeech().emit([{ transcript: PASSAGE_ONE, isFinal: false }]);
+    });
+    expect(answer).toHaveValue(PASSAGE_ONE);
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Stop dictation" }));
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    await waitFor(() => {
+      expect(check).toBeEnabled();
+    });
+    await user.click(check);
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(await screen.findByText("100% recalled.")).toBeVisible();
+  });
+
+  it("DEV insert sample fills the recall box without auto-Check", async () => {
+    window.localStorage.setItem("berean:mockSpeech", "1");
+    const user = userEvent.setup();
+    renderGuided();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await user.click(
+      await screen.findByRole("button", { name: "Dictate verse" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Insert spoken sample" }),
+    );
+    expect(answer).toHaveValue("The Lord is my shepherd; I shall not want");
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Check answer/ })).toBeEnabled();
+  });
+
+  it("toggles the mic with Space when the box is empty, and inserts a space once it has text", async () => {
+    installSpeechMock();
+    const user = userEvent.setup();
+    renderGuided();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await user.click(answer);
+    await user.keyboard(" ");
+    expect(answer).toHaveValue("");
+    expect(
+      screen.getByRole("button", { name: "Stop dictation" }),
+    ).toBeVisible();
+    expect(speechInstances).toHaveLength(1);
+
+    await user.keyboard(" ");
+    expect(screen.getByRole("button", { name: "Dictate verse" })).toBeVisible();
+
+    await user.type(answer, "hello");
+    await user.keyboard(" ");
+    expect(answer).toHaveValue("hello ");
+    expect(speechInstances).toHaveLength(1);
+  });
+
+  it("does not show the mic on Read prime cards", async () => {
+    installSpeechMock();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[learningVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Read it through, then continue")).toBeVisible();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Dictate verse" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Your recalled verse"),
     ).not.toBeInTheDocument();
   });
 });

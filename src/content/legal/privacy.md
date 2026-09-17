@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** March 25, 2026
+**Effective date:** September 16, 2026
 
 **Operator:** Nathan Connor (“we,” “us,” or “our”) operates **Berean** at [https://berean.nathanconnor.dev](https://berean.nathanconnor.dev) (the “Service”).
 
@@ -67,6 +67,8 @@ We rely on processors that help us run the Service:
 | **Crossway / ESV** | Scripture text via the ESV API                     |
 
 Each provider processes data under its own terms and privacy policy.
+
+Optional verse dictation (the microphone on recall cards) in Chrome, Edge, or Safari sends that audio to the browser vendor — typically Google or Apple — to turn speech into text. We do not receive the recording.
 
 ## Retention
 
