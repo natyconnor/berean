@@ -14,8 +14,8 @@ export const SPEECH_SILENCE_TIMEOUT_MS = 5_000;
  */
 export const SPEECH_RESTART_GAP_MS = 250;
 
-/** Sessions that die faster than this, with no speech, are treated as engine refusal. */
-export const SPEECH_QUICK_END_MS = 200;
+/** Chrome 135+ `SpeechRecognition.start(audioTrack)`. */
+export const SPEECH_AUDIO_TRACK_MIN_CHROME = 135;
 
 /** DEV-only: click "Insert spoken sample" while listening to stream a transcript. */
 export const DEV_MOCK_SPEECH_EMIT_EVENT = "berean:mock-speech-emit";
@@ -223,13 +223,55 @@ export function preferContinuousSpeechRecognition(): boolean {
 }
 
 /**
+ * Unprefixed `SpeechRecognition` is not enough: extra `start()` arguments are
+ * ignored before Chrome 135, so opening getUserMedia would steal the mic.
+ * iOS Chrome/Edge still use WebKit and must not take this path.
+ */
+export function chromiumMajorForSpeechTrack(): number | null {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent;
+  if (/CriOS|FxiOS|EdgiOS/i.test(ua)) return null;
+  const match = ua.match(/(?:Chrome|Chromium|Edg)\/(\d+)/);
+  if (!match?.[1]) return null;
+  const major = Number(match[1]);
+  return Number.isFinite(major) ? major : null;
+}
+
+/**
  * Chrome/Edge 135+ accept `start(audioTrack)` so one getUserMedia stream can
  * feed both the waveform analyser and SpeechRecognition. Safari's webkit-only
  * constructor ignores extra `start()` arguments and will open a second capture
  * (and starve recognition) if JS already holds the mic.
  */
 export function speechRecognitionAcceptsAudioTrack(): boolean {
-  return preferContinuousSpeechRecognition();
+  if (!preferContinuousSpeechRecognition()) return false;
+  const major = chromiumMajorForSpeechTrack();
+  return major !== null && major >= SPEECH_AUDIO_TRACK_MIN_CHROME;
+}
+
+/** First live audio track on a capture, if any. */
+export function liveAudioTrack(
+  stream: MediaStream | null | undefined,
+): MediaStreamTrack | undefined {
+  if (!stream) return undefined;
+  return stream.getAudioTracks().find((track) => track.readyState === "live");
+}
+
+/**
+ * Independent MediaStream for Web Audio. SpeechRecognition.start(audioTrack)
+ * and createMediaStreamSource must not share a MediaStreamTrack: Chrome ends
+ * the recognizer immediately, which produced a deaf session and a ~300ms cutoff.
+ */
+export function cloneMediaStreamForAnalysis(
+  stream: MediaStream,
+): MediaStream | null {
+  if (typeof stream.clone !== "function") return null;
+  try {
+    const cloned = stream.clone();
+    return cloned && cloned !== stream ? cloned : null;
+  } catch {
+    return null;
+  }
 }
 
 export function stopMediaStream(stream: MediaStream | null | undefined): void {

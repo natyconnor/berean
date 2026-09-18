@@ -111,10 +111,15 @@ describe("openLiveMicAnalyser", () => {
     expect(context.close).toHaveBeenCalledTimes(1);
   });
 
-  it("connects an analyser without stopping the shared stream tracks", () => {
+  it("connects an analyser to a clone without stopping the shared stream tracks", () => {
     const stopTrack = vi.fn();
+    const stopClone = vi.fn();
+    const cloned = {
+      getTracks: () => [{ stop: stopClone }],
+    } as unknown as MediaStream;
     const stream = {
       getTracks: () => [{ stop: stopTrack }],
+      clone: () => cloned,
     } as unknown as MediaStream;
     const source = { connect: vi.fn(), disconnect: vi.fn() };
     const analyser = { fftSize: 0, smoothingTimeConstant: 0 };
@@ -134,10 +139,12 @@ describe("openLiveMicAnalyser", () => {
 
     const session = connectMicAnalyser(stream);
     expect(session).not.toBeNull();
-    expect(context.createMediaStreamSource).toHaveBeenCalledWith(stream);
+    expect(context.createMediaStreamSource).toHaveBeenCalledWith(cloned);
+    expect(context.createMediaStreamSource).not.toHaveBeenCalledWith(stream);
     session?.stop();
     session?.stop();
     expect(stopTrack).not.toHaveBeenCalled();
+    expect(stopClone).toHaveBeenCalledTimes(1);
     expect(source.disconnect).toHaveBeenCalledTimes(1);
     expect(context.close).toHaveBeenCalledTimes(1);
   });

@@ -25,6 +25,12 @@ function installMicMocks(): MicHarness {
     getAudioTracks: () => [
       { stop: stopTrack, kind: "audio", readyState: "live" },
     ],
+    clone: () => ({
+      getTracks: () => [{ stop: vi.fn(), kind: "audio", readyState: "live" }],
+      getAudioTracks: () => [
+        { stop: vi.fn(), kind: "audio", readyState: "live" },
+      ],
+    }),
   } as unknown as MediaStream;
   const timeDomain = new Uint8Array(1024).fill(128);
   const analyser = {

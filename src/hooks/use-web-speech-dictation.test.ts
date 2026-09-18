@@ -80,6 +80,7 @@ function lastRecognition(): MockSpeechRecognition {
 
 describe("useWebSpeechDictation", () => {
   const originalMediaDevices = navigator.mediaDevices;
+  const originalUserAgent = navigator.userAgent;
 
   beforeEach(() => {
     instances.length = 0;
@@ -101,6 +102,10 @@ describe("useWebSpeechDictation", () => {
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: originalMediaDevices,
+    });
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () => originalUserAgent,
     });
   });
 
@@ -237,7 +242,7 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.listening).toBe(true);
   });
 
-  it("stops after two immediate onend cycles instead of looping the mic", () => {
+  it("keeps listening through immediate onend cycles until the 5s silence timeout", () => {
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {} }),
     );
@@ -257,14 +262,49 @@ describe("useWebSpeechDictation", () => {
     act(() => {
       recognition.onend?.();
     });
-    expect(result.current.listening).toBe(false);
-    expect(recognition.startCount).toBe(2);
-
     act(() => {
       vi.advanceTimersByTime(SPEECH_RESTART_GAP_MS);
     });
-    expect(recognition.startCount).toBe(2);
+    expect(recognition.startCount).toBe(3);
+    expect(result.current.listening).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(
+        SPEECH_SILENCE_TIMEOUT_MS - SPEECH_RESTART_GAP_MS * 2,
+      );
+    });
     expect(result.current.listening).toBe(false);
+  });
+
+  it("streams words after two immediate onend cycles", () => {
+    const onTranscript = vi.fn();
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript }),
+    );
+    act(() => {
+      result.current.start();
+    });
+    const recognition = lastRecognition();
+    act(() => {
+      recognition.onend?.();
+    });
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_RESTART_GAP_MS);
+    });
+    act(() => {
+      recognition.onend?.();
+    });
+    act(() => {
+      vi.advanceTimersByTime(SPEECH_RESTART_GAP_MS);
+    });
+    expect(result.current.listening).toBe(true);
+    act(() => {
+      recognition.emit([
+        { transcript: "The Lord is my shepherd", isFinal: false },
+      ]);
+    });
+    expect(onTranscript).toHaveBeenLastCalledWith("The Lord is my shepherd");
+    expect(result.current.listening).toBe(true);
   });
 
   it("does not reset the 5s silence clock when Chrome reconnects", () => {
@@ -319,6 +359,11 @@ describe("useWebSpeechDictation", () => {
       configurable: true,
       value: { getUserMedia },
     });
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () =>
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    });
 
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {} }),
@@ -369,6 +414,29 @@ describe("useWebSpeechDictation", () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(lastRecognition().continuous).toBe(false);
     expect(lastRecognition().lastAudioTrack).toBeUndefined();
+    expect(result.current.micStream).toBeNull();
+  });
+
+  it("does not open getUserMedia on Chrome versions before start(audioTrack)", () => {
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () =>
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    });
+    const getUserMedia = vi.fn();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {} }),
+    );
+    act(() => {
+      result.current.start();
+    });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(lastRecognition().lastAudioTrack).toBeUndefined();
+    expect(lastRecognition().startCount).toBe(1);
     expect(result.current.micStream).toBeNull();
   });
 

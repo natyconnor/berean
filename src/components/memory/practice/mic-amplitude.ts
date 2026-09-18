@@ -1,4 +1,8 @@
-import { openDictationMicStream, stopMediaStream } from "@/lib/web-speech";
+import {
+  cloneMediaStreamForAnalysis,
+  openDictationMicStream,
+  stopMediaStream,
+} from "@/lib/web-speech";
 
 export const WAVE_BAR_COUNT = 24;
 export const WAVE_MIN_HEIGHT_PX = 6;
@@ -23,8 +27,10 @@ function audioContextConstructor(): (new () => AudioContext) | undefined {
 }
 
 /**
- * Analyser for a stream we do not own. `stop()` disconnects the graph and
- * closes the AudioContext; it does not end the MediaStream tracks.
+ * Analyser for a capture we do not own. Clones the stream so Web Audio does
+ * not attach a sink to the same MediaStreamTrack SpeechRecognition is using.
+ * `stop()` disconnects the graph, closes the AudioContext, and ends clone
+ * tracks only — never the original capture.
  */
 export function connectMicAnalyser(
   stream: MediaStream,
@@ -33,9 +39,11 @@ export function connectMicAnalyser(
   if (!Context) return null;
 
   let context: AudioContext | null = null;
+  const visualStream = cloneMediaStreamForAnalysis(stream) ?? stream;
+  const ownsClone = visualStream !== stream;
   try {
     context = new Context();
-    const source = context.createMediaStreamSource(stream);
+    const source = context.createMediaStreamSource(visualStream);
     const analyser = context.createAnalyser();
     analyser.fftSize = WAVE_FFT_SIZE;
     analyser.smoothingTimeConstant = 0.4;
@@ -51,12 +59,14 @@ export function connectMicAnalyser(
         if (stopped) return;
         stopped = true;
         source.disconnect();
+        if (ownsClone) stopMediaStream(visualStream);
         if (context && context.state !== "closed") {
           void context.close();
         }
       },
     };
   } catch {
+    if (ownsClone) stopMediaStream(visualStream);
     if (context && context.state !== "closed") {
       void context.close();
     }

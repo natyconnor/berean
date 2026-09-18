@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   appendSpokenText,
+  cloneMediaStreamForAnalysis,
   emitDevMockSpeech,
   getSpeechRecognitionCtor,
   isDevSpeechMockEnabled,
   isSpaceToggleKey,
   isSpeechRecognitionSupported,
+  liveAudioTrack,
   preferContinuousSpeechRecognition,
   speechRecognitionAcceptsAudioTrack,
 } from "./web-speech";
@@ -71,8 +73,71 @@ describe("web-speech helpers", () => {
     const original = speechWindow.SpeechRecognition;
     speechWindow.SpeechRecognition = class Fake {};
     expect(preferContinuousSpeechRecognition()).toBe(true);
-    expect(speechRecognitionAcceptsAudioTrack()).toBe(true);
     speechWindow.SpeechRecognition = original;
+  });
+
+  it("shares a MediaStreamTrack only on Chrome 135+", () => {
+    const speechWindow = window as Window & {
+      SpeechRecognition?: unknown;
+    };
+    const original = speechWindow.SpeechRecognition;
+    const originalUa = navigator.userAgent;
+    speechWindow.SpeechRecognition = class Fake {};
+
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () =>
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    });
+    expect(speechRecognitionAcceptsAudioTrack()).toBe(true);
+
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () =>
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    });
+    expect(speechRecognitionAcceptsAudioTrack()).toBe(false);
+
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () =>
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.7339.122 Mobile/15E148 Safari/604.1",
+    });
+    expect(speechRecognitionAcceptsAudioTrack()).toBe(false);
+
+    speechWindow.SpeechRecognition = original;
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      get: () => originalUa,
+    });
+  });
+
+  it("clones a stream for analysis and finds a live audio track", () => {
+    const stopOriginal = vi.fn();
+    const stopClone = vi.fn();
+    const originalTrack = {
+      kind: "audio",
+      readyState: "live",
+      stop: stopOriginal,
+    } as unknown as MediaStreamTrack;
+    const cloneTrack = {
+      kind: "audio",
+      readyState: "live",
+      stop: stopClone,
+    } as unknown as MediaStreamTrack;
+    const cloned = {
+      getAudioTracks: () => [cloneTrack],
+      getTracks: () => [cloneTrack],
+    } as unknown as MediaStream;
+    const stream = {
+      getAudioTracks: () => [originalTrack],
+      getTracks: () => [originalTrack],
+      clone: () => cloned,
+    } as unknown as MediaStream;
+
+    expect(liveAudioTrack(stream)).toBe(originalTrack);
+    expect(cloneMediaStreamForAnalysis(stream)).toBe(cloned);
+    expect(cloneMediaStreamForAnalysis({} as MediaStream)).toBeNull();
   });
 
   it("reads mockSpeech from the hash when search params were stripped", () => {

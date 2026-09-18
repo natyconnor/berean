@@ -32,9 +32,10 @@ function animateProcedural(
 
 /**
  * Equalizer-style bars while listening. Prefers the shared dictation
- * MediaStream (same capture as SpeechRecognition). Does not call getUserMedia.
- * Without a stream (Safari), falls back to a procedural animation so the mic
- * stays free for webkitSpeechRecognition.
+ * MediaStream. The analyser clones that stream so Web Audio does not share a
+ * track with SpeechRecognition.start(audioTrack). Does not call getUserMedia.
+ * Without a stream (Safari / pre-135 Chrome), falls back to a procedural
+ * animation so the mic stays free for the recognizer.
  */
 export function DictationWaveform({
   active,
