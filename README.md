@@ -17,6 +17,7 @@ Berean is a scripture notes app focused on verse by verse note taking, emphasizi
 - Convex (database, serverless functions, auth): requires a Convex deployment and the frontend `VITE_CONVEX_URL`
 - Convex Auth + Google OAuth: requires a Google OAuth Client ID and Client Secret configured in the Convex environment
 - ESV API (scripture text): requires `ESV_API_KEY` in the Convex environment
+- Groq Whisper (optional verse dictation): requires `GROQ_API_KEY` in the Convex environment (never Vite / `VITE_*`)
 - Vercel (optional deploy): uses `npx convex deploy` during build via `vercel.json`
 
 **Local Setup**
@@ -36,6 +37,7 @@ Berean is a scripture notes app focused on verse by verse note taking, emphasizi
    ```
 1. Configure Convex environment variables (Dashboard or CLI).
    Set `ESV_API_KEY` (from api.esv.org), `CONVEX_SITE_URL` (your app base URL; use `http://localhost:5173` in dev), and your Google OAuth Client ID/Secret (for Convex Auth).
+   For optional recall dictation (microphone on practice cards), also set `GROQ_API_KEY` from [console.groq.com](https://console.groq.com) on the **same Convex deployment** the preview uses (`npx convex env set GROQ_API_KEY …` or the Convex dashboard). Do not add it to Vercel/Vite env — the client never sees the key. Without it, the mic still appears but transcription fails until the key is set.
 1. Run the app.
    ```bash
    pnpm dev

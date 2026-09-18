@@ -28,7 +28,7 @@ function audioContextConstructor(): (new () => AudioContext) | undefined {
 
 /**
  * Analyser for a capture we do not own. Clones the stream so Web Audio does
- * not attach a sink to the same MediaStreamTrack SpeechRecognition is using.
+ * not attach a sink to the same MediaStreamTrack MediaRecorder is using.
  * `stop()` disconnects the graph, closes the AudioContext, and ends clone
  * tracks only — never the original capture.
  */

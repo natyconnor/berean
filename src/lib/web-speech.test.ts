@@ -4,20 +4,21 @@ import {
   appendSpokenText,
   cloneMediaStreamForAnalysis,
   emitDevMockSpeech,
-  getSpeechRecognitionCtor,
   isDevSpeechMockEnabled,
+  isDictationSupported,
   isSpaceToggleKey,
-  isSpeechRecognitionSupported,
   liveAudioTrack,
-  preferContinuousSpeechRecognition,
-  speechRecognitionAcceptsAudioTrack,
+  pickRecorderMimeType,
+  rmsFromTimeDomain,
+  setDevTranscriptSink,
 } from "./web-speech";
 
-describe("web-speech helpers", () => {
+describe("dictation helpers", () => {
   afterEach(() => {
     window.localStorage.removeItem("berean:hideSpeech");
     window.localStorage.removeItem("berean:mockSpeech");
     window.history.replaceState({}, "", "/");
+    vi.unstubAllGlobals();
   });
 
   it("treats Space by key or code as the mic toggle", () => {
@@ -46,70 +47,41 @@ describe("web-speech helpers", () => {
     expect(appendSpokenText("The Lord", "   ")).toBe("The Lord");
   });
 
-  it("detects the vendor-prefixed constructor when the standard one is missing", () => {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: unknown;
-      webkitSpeechRecognition?: unknown;
-    };
-    const original = speechWindow.SpeechRecognition;
-    const originalWebkit = speechWindow.webkitSpeechRecognition;
-    class Fake {}
-    delete speechWindow.SpeechRecognition;
-    speechWindow.webkitSpeechRecognition = Fake;
-
-    expect(isSpeechRecognitionSupported()).toBe(true);
-    expect(getSpeechRecognitionCtor()).toBe(Fake);
-    expect(preferContinuousSpeechRecognition()).toBe(false);
-    expect(speechRecognitionAcceptsAudioTrack()).toBe(false);
-
-    speechWindow.SpeechRecognition = original;
-    speechWindow.webkitSpeechRecognition = originalWebkit;
+  it("hides support when getUserMedia or MediaRecorder is missing", () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: undefined,
+    });
+    vi.stubGlobal("MediaRecorder", undefined);
+    expect(isDictationSupported()).toBe(false);
   });
 
-  it("uses continuous mode when the unprefixed constructor exists", () => {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: unknown;
-    };
-    const original = speechWindow.SpeechRecognition;
-    speechWindow.SpeechRecognition = class Fake {};
-    expect(preferContinuousSpeechRecognition()).toBe(true);
-    speechWindow.SpeechRecognition = original;
+  it("shows support when getUserMedia and MediaRecorder exist", () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn() },
+    });
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        static isTypeSupported() {
+          return true;
+        }
+      },
+    );
+    expect(isDictationSupported()).toBe(true);
   });
 
-  it("shares a MediaStreamTrack only on Chrome 135+", () => {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: unknown;
-    };
-    const original = speechWindow.SpeechRecognition;
-    const originalUa = navigator.userAgent;
-    speechWindow.SpeechRecognition = class Fake {};
-
-    Object.defineProperty(navigator, "userAgent", {
-      configurable: true,
-      get: () =>
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-    });
-    expect(speechRecognitionAcceptsAudioTrack()).toBe(true);
-
-    Object.defineProperty(navigator, "userAgent", {
-      configurable: true,
-      get: () =>
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
-    });
-    expect(speechRecognitionAcceptsAudioTrack()).toBe(false);
-
-    Object.defineProperty(navigator, "userAgent", {
-      configurable: true,
-      get: () =>
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.7339.122 Mobile/15E148 Safari/604.1",
-    });
-    expect(speechRecognitionAcceptsAudioTrack()).toBe(false);
-
-    speechWindow.SpeechRecognition = original;
-    Object.defineProperty(navigator, "userAgent", {
-      configurable: true,
-      get: () => originalUa,
-    });
+  it("picks a supported MediaRecorder mime type", () => {
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        static isTypeSupported(type: string) {
+          return type === "audio/webm";
+        }
+      },
+    );
+    expect(pickRecorderMimeType()).toBe("audio/webm");
   });
 
   it("clones a stream for analysis and finds a live audio track", () => {
@@ -140,46 +112,40 @@ describe("web-speech helpers", () => {
     expect(cloneMediaStreamForAnalysis({} as MediaStream)).toBeNull();
   });
 
+  it("treats 128 PCM as silence and loud samples as speech", () => {
+    expect(rmsFromTimeDomain(new Uint8Array(32).fill(128))).toBe(0);
+    expect(rmsFromTimeDomain(new Uint8Array(32).fill(0))).toBeGreaterThan(0.5);
+  });
+
   it("reads mockSpeech from the hash when search params were stripped", () => {
     window.history.replaceState({}, "", "/memory/learn#mockSpeech");
     expect(isDevSpeechMockEnabled()).toBe(true);
-    expect(isSpeechRecognitionSupported()).toBe(true);
+    expect(isDictationSupported()).toBe(true);
 
-    const Ctor = getSpeechRecognitionCtor();
-    expect(Ctor).not.toBeNull();
-    const recognition = new Ctor!();
-    const onresult = vi.fn();
-    recognition.onresult = onresult;
-    recognition.start();
+    const sink = vi.fn();
+    setDevTranscriptSink(sink);
     expect(emitDevMockSpeech()).toBe(true);
-    expect(onresult).toHaveBeenCalled();
+    expect(sink).toHaveBeenCalledWith(
+      "The Lord is my shepherd; I shall not want",
+    );
+    setDevTranscriptSink(null);
   });
 
-  it("hides support when neither constructor exists", () => {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: unknown;
-      webkitSpeechRecognition?: unknown;
-    };
-    const original = speechWindow.SpeechRecognition;
-    const originalWebkit = speechWindow.webkitSpeechRecognition;
-    delete speechWindow.SpeechRecognition;
-    delete speechWindow.webkitSpeechRecognition;
-
-    expect(isSpeechRecognitionSupported()).toBe(false);
-    expect(getSpeechRecognitionCtor()).toBeNull();
-
-    speechWindow.SpeechRecognition = original;
-    speechWindow.webkitSpeechRecognition = originalWebkit;
-  });
-
-  it("hides the API when hideSpeech is in the hash", () => {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: unknown;
-      webkitSpeechRecognition?: unknown;
-    };
-    speechWindow.SpeechRecognition = class Fake {};
+  it("hides the mic when hideSpeech is in the hash", () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn() },
+    });
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        static isTypeSupported() {
+          return true;
+        }
+      },
+    );
     window.history.replaceState({}, "", "/memory/learn#hideSpeech");
-    expect(isSpeechRecognitionSupported()).toBe(false);
+    expect(isDictationSupported()).toBe(false);
     expect(isDevSpeechMockEnabled()).toBe(false);
   });
 });

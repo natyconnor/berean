@@ -40,6 +40,7 @@ import type * as seed from "../seed.js";
 import type * as seedPreviewMemory from "../seedPreviewMemory.js";
 import type * as studySessions from "../studySessions.js";
 import type * as tags from "../tags.js";
+import type * as transcribe from "../transcribe.js";
 import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 import type * as verseLinks from "../verseLinks.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   seedPreviewMemory: typeof seedPreviewMemory;
   studySessions: typeof studySessions;
   tags: typeof tags;
+  transcribe: typeof transcribe;
   userSettings: typeof userSettings;
   users: typeof users;
   verseLinks: typeof verseLinks;

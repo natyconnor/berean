@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useAction } from "convex/react";
 
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
 import { RecallDictationMic } from "@/components/memory/practice/recall-dictation-mic";
@@ -45,6 +46,8 @@ import {
   emitDevMockSpeech,
   isSpaceToggleKey,
 } from "@/lib/web-speech";
+
+import { api } from "../../../../convex/_generated/api";
 
 export type PassageRecallMode = "rope" | "repair" | "frontier" | "review";
 
@@ -114,6 +117,7 @@ export function PassageRecallCard({
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
   const dictationBaseRef = useRef("");
+  const transcribeAudio = useAction(api.transcribe.transcribeAudio);
   const {
     supported: dictationSupported,
     listening: dictationListening,
@@ -121,6 +125,7 @@ export function PassageRecallCard({
     start: startDictation,
     stop: stopDictation,
   } = useWebSpeechDictation({
+    transcribeAudio,
     onTranscript: (spoken) => {
       setTypedAnswer(appendSpokenText(dictationBaseRef.current, spoken));
     },

@@ -65,10 +65,11 @@ We rely on processors that help us run the Service:
 | **Vercel**         | Hosting and deployment of the web app              |
 | **Google**         | OAuth sign-in                                      |
 | **Crossway / ESV** | Scripture text via the ESV API                     |
+| **Groq**           | Optional verse dictation (Whisper speech-to-text)  |
+
+Optional verse dictation (the microphone on recall cards) records in your browser and sends short audio clips through our Convex backend to **Groq** Whisper to turn speech into text. Typing still works without a microphone. You can edit the transcript before Check. We do not use the expected verse as a transcription hint.
 
 Each provider processes data under its own terms and privacy policy.
-
-Optional verse dictation (the microphone on recall cards) in Chrome, Edge, or Safari sends that audio to the browser vendor — typically Google or Apple — to turn speech into text. We do not receive the recording.
 
 ## Retention
 

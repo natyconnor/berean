@@ -3,7 +3,21 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { emitDevMockSpeech } from "@/lib/web-speech";
+
 import { PassageRecallCard } from "./passage-recall-card";
+
+const { transcribeAudioMock } = vi.hoisted(() => ({
+  transcribeAudioMock: vi.fn(),
+}));
+
+vi.mock("convex/react", () => ({
+  useAction: () => transcribeAudioMock,
+}));
+
+vi.mock("../../../../convex/_generated/api", () => ({
+  api: { transcribe: { transcribeAudio: "transcribe.transcribeAudio" } },
+}));
 
 vi.mock("framer-motion", async () => {
   const actual =
@@ -16,58 +30,40 @@ vi.mock("framer-motion", async () => {
 
 const PASSAGE = "The Lord is my shepherd; I shall not want.";
 
-class MockSpeechRecognition {
-  continuous = false;
-  interimResults = false;
-  lang = "";
-  grammars: unknown = undefined;
-  onresult:
-    ((event: { results: unknown; resultIndex: number }) => void) | null = null;
-  onerror: ((event: { error: string }) => void) | null = null;
-  onend: (() => void) | null = null;
-  onspeechstart: (() => void) | null = null;
-  start(): void {}
-  stop(): void {
-    this.onend?.();
-  }
-  abort(): void {
-    this.onend?.();
-  }
-  emit(items: Array<{ transcript: string; isFinal: boolean }>): void {
-    const results = items.map((item) => {
-      const alternative = { transcript: item.transcript, confidence: 1 };
-      return Object.assign([alternative], {
-        isFinal: item.isFinal,
-        item: () => alternative,
-      });
-    });
-    this.onresult?.({
-      resultIndex: 0,
-      results: Object.assign(results, {
-        item: (index: number) => results[index],
-      }),
-    });
-  }
-}
-
-const speechInstances: MockSpeechRecognition[] = [];
-
-function installSpeechMock() {
-  const speechWindow = window as Window & {
-    SpeechRecognition?: new () => MockSpeechRecognition;
-  };
-  speechWindow.SpeechRecognition = class extends MockSpeechRecognition {
-    constructor() {
-      super();
-      speechInstances.push(this);
-    }
-  };
-}
-
-function lastSpeech(): MockSpeechRecognition {
-  const recognition = speechInstances.at(-1);
-  if (!recognition) throw new Error("expected SpeechRecognition");
-  return recognition;
+function installDictationSupport() {
+  const stopTrack = vi.fn();
+  const stream = {
+    getAudioTracks: () => [
+      { kind: "audio", readyState: "live", stop: stopTrack },
+    ],
+    getTracks: () => [{ kind: "audio", readyState: "live", stop: stopTrack }],
+    clone() {
+      return this;
+    },
+  } as unknown as MediaStream;
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+  });
+  vi.stubGlobal(
+    "MediaRecorder",
+    class {
+      static isTypeSupported() {
+        return true;
+      }
+      mimeType = "audio/webm";
+      state = "inactive";
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
+      onstop: (() => void) | null = null;
+      start() {
+        this.state = "recording";
+      }
+      stop() {
+        this.state = "inactive";
+        this.onstop?.();
+      }
+    },
+  );
 }
 
 function renderPassageRecall(
@@ -128,23 +124,25 @@ describe("PassageRecallCard footer", () => {
   });
 });
 
-describe("PassageRecallCard Web Speech dictation", () => {
+describe("PassageRecallCard Groq Whisper dictation", () => {
+  const originalMediaDevices = navigator.mediaDevices;
+
   beforeEach(() => {
-    speechInstances.length = 0;
     window.localStorage.removeItem("berean:hideSpeech");
     window.localStorage.removeItem("berean:mockSpeech");
+    transcribeAudioMock.mockReset();
+    transcribeAudioMock.mockResolvedValue({ text: "" });
   });
 
   afterEach(() => {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: unknown;
-      webkitSpeechRecognition?: unknown;
-    };
-    delete speechWindow.SpeechRecognition;
-    delete speechWindow.webkitSpeechRecognition;
+    vi.unstubAllGlobals();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: originalMediaDevices,
+    });
   });
 
-  it("hides the mic when the Web Speech API is missing", () => {
+  it("hides the mic when getUserMedia or MediaRecorder is missing", () => {
     renderPassageRecall();
     expect(screen.getByLabelText("Your recited passage")).toBeInTheDocument();
     expect(
@@ -153,7 +151,7 @@ describe("PassageRecallCard Web Speech dictation", () => {
   });
 
   it("places a prominent mic under the passage box and streams words into it", async () => {
-    installSpeechMock();
+    installDictationSupport();
     const user = userEvent.setup();
     const { onSubmit } = renderPassageRecall();
     const answer = screen.getByLabelText("Your recited passage");
@@ -171,7 +169,7 @@ describe("PassageRecallCard Web Speech dictation", () => {
     ).not.toBeNull();
 
     act(() => {
-      lastSpeech().emit([{ transcript: PASSAGE, isFinal: false }]);
+      emitDevMockSpeech(PASSAGE);
     });
     expect(answer).toHaveValue(PASSAGE);
     expect(onSubmit).not.toHaveBeenCalled();
@@ -203,7 +201,7 @@ describe("PassageRecallCard Web Speech dictation", () => {
   });
 
   it("toggles the mic with Space when the box is empty, and inserts a space once it has text", async () => {
-    installSpeechMock();
+    installDictationSupport();
     const user = userEvent.setup();
     renderPassageRecall();
     const answer = screen.getByLabelText("Your recited passage");
@@ -213,7 +211,6 @@ describe("PassageRecallCard Web Speech dictation", () => {
     expect(
       screen.getByRole("button", { name: "Stop dictation" }),
     ).toBeVisible();
-    expect(speechInstances).toHaveLength(1);
 
     await user.keyboard(" ");
     expect(screen.getByRole("button", { name: "Dictate verse" })).toBeVisible();
@@ -221,11 +218,11 @@ describe("PassageRecallCard Web Speech dictation", () => {
     await user.type(answer, "hello");
     await user.keyboard(" ");
     expect(answer).toHaveValue("hello ");
-    expect(speechInstances).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Dictate verse" })).toBeVisible();
   });
 
   it("does not show the mic on Read prime cards", () => {
-    installSpeechMock();
+    installDictationSupport();
     renderPassageRecall({
       mode: "frontier",
       phaseLabel: "Read",
@@ -250,7 +247,7 @@ describe("PassageRecallCard Web Speech dictation", () => {
   });
 
   it("shows the same mic on rope recitation", () => {
-    installSpeechMock();
+    installDictationSupport();
     renderPassageRecall({
       mode: "rope",
       phaseLabel: "Connect",

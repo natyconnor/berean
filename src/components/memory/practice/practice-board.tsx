@@ -11,7 +11,7 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -839,6 +839,7 @@ function PracticeCard({
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   const dictationBaseRef = useRef("");
+  const transcribeAudio = useAction(api.transcribe.transcribeAudio);
   const {
     supported: dictationSupported,
     listening: dictationListening,
@@ -846,6 +847,7 @@ function PracticeCard({
     start: startDictation,
     stop: stopDictation,
   } = useWebSpeechDictation({
+    transcribeAudio,
     onTranscript: (spoken) => {
       setTypedAnswer(appendSpokenText(dictationBaseRef.current, spoken));
     },

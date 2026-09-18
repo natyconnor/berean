@@ -1,64 +1,54 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  getSpeechRecognitionCtor,
-  isSpeechRecognitionSupported,
-  liveAudioTrack,
+  appendSpokenText,
+  blobToBase64,
+  DICTATION_CHUNK_MS,
+  isDevSpeechMockEnabled,
+  isDictationSupported,
   openDictationMicStream,
-  preferContinuousSpeechRecognition,
+  pickRecorderMimeType,
+  rmsFromTimeDomain,
   setDevTranscriptSink,
-  speechRecognitionAcceptsAudioTrack,
-  SPEECH_RESTART_GAP_MS,
+  SPEECH_RMS_THRESHOLD,
   SPEECH_SILENCE_TIMEOUT_MS,
   stopMediaStream,
-  type BrowserSpeechRecognition,
   isSpaceToggleKey,
 } from "@/lib/web-speech";
 
+export type TranscribeAudioFn = (args: {
+  audioBase64: string;
+  mimeType: string;
+}) => Promise<{ text: string }>;
+
 export interface UseWebSpeechDictationOptions {
-  /** Latest spoken text for this listening session (finals + current interim). */
+  /** Latest spoken text for this listening session (chunks concatenated). */
   onTranscript: (spoken: string) => void;
+  /** Convex Groq Whisper action. Unused in DEV mockSpeech mode. */
+  transcribeAudio: TranscribeAudioFn;
 }
 
 export interface WebSpeechDictation {
   supported: boolean;
   listening: boolean;
-  /** Shared getUserMedia stream when recognition can consume an audio track. */
+  /** Shared getUserMedia stream the waveform consumes. */
   micStream: MediaStream | null;
   start: () => void;
   stop: () => void;
   toggle: () => void;
 }
 
-function transcriptFromResults(results: SpeechRecognitionResultList): {
-  committed: string;
-  display: string;
-} {
-  let committed = "";
-  let interim = "";
-  for (let i = 0; i < results.length; i += 1) {
-    const result = results[i];
-    if (!result) continue;
-    const piece = result[0]?.transcript ?? "";
-    if (result.isFinal) {
-      const trimmed = piece.trim();
-      if (!trimmed) continue;
-      committed = committed ? `${committed} ${trimmed}` : trimmed;
-    } else {
-      interim += piece;
-    }
-  }
-  const interimTrimmed = interim.trim();
-  const display = interimTrimmed
-    ? committed
-      ? `${committed} ${interimTrimmed}`
-      : interimTrimmed
-    : committed;
-  return { committed, display };
+function audioContextConstructor(): (new () => AudioContext) | undefined {
+  if (typeof window === "undefined") return undefined;
+  if (window.AudioContext) return window.AudioContext;
+  const webkit = (
+    window as Window & { webkitAudioContext?: new () => AudioContext }
+  ).webkitAudioContext;
+  return webkit;
 }
 
 /**
- * Optional live dictation via the browser Web Speech API.
+ * Optional live dictation via MediaRecorder + Groq Whisper.
  *
  * Typing stays the source of truth: this only streams words into a callback.
  * It never grades, never receives the expected verse, and turns itself off
@@ -66,8 +56,9 @@ function transcriptFromResults(results: SpeechRecognitionResultList): {
  */
 export function useWebSpeechDictation({
   onTranscript,
+  transcribeAudio,
 }: UseWebSpeechDictationOptions): WebSpeechDictation {
-  const [supported, setSupported] = useState(isSpeechRecognitionSupported);
+  const [supported, setSupported] = useState(isDictationSupported);
   const [listening, setListening] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
@@ -76,20 +67,36 @@ export function useWebSpeechDictation({
     onTranscriptRef.current = onTranscript;
   }, [onTranscript]);
 
+  const transcribeRef = useRef(transcribeAudio);
+  useEffect(() => {
+    transcribeRef.current = transcribeAudio;
+  }, [transcribeAudio]);
+
   const wantRef = useRef(false);
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const sessionRef = useRef(0);
   const committedRef = useRef("");
-  const prefixRef = useRef("");
   const silenceTimerRef = useRef<number | null>(null);
-  const restartTimerRef = useRef<number | null>(null);
-  const lastStartAtRef = useRef(0);
+  const chunkTimerRef = useRef<number | null>(null);
+  const amplitudeTimerRef = useRef<number | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
-  const audioTrackRef = useRef<MediaStreamTrack | undefined>(undefined);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const speechInChunkRef = useRef(false);
+  const pendingRef = useRef(new Map<number, string>());
+  const nextSeqRef = useRef(0);
+  const appliedSeqRef = useRef(0);
+  const beginRecorderRef = useRef<
+    (session: number, stream: MediaStream) => void
+  >(() => {});
+  const amplitudeRef = useRef<{
+    context: AudioContext;
+    source: MediaStreamAudioSourceNode;
+    analyser: AnalyserNode;
+    buffer: Uint8Array<ArrayBuffer>;
+  } | null>(null);
 
   const releaseMicStream = useCallback(() => {
     stopMediaStream(micStreamRef.current);
     micStreamRef.current = null;
-    audioTrackRef.current = undefined;
     setMicStream(null);
   }, []);
 
@@ -100,35 +107,97 @@ export function useWebSpeechDictation({
     }
   }, []);
 
-  const clearRestartTimer = useCallback(() => {
-    if (restartTimerRef.current !== null) {
-      window.clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
+  const clearChunkTimer = useCallback(() => {
+    if (chunkTimerRef.current !== null) {
+      window.clearTimeout(chunkTimerRef.current);
+      chunkTimerRef.current = null;
     }
   }, []);
+
+  const stopAmplitudeMonitor = useCallback(() => {
+    if (amplitudeTimerRef.current !== null) {
+      window.clearInterval(amplitudeTimerRef.current);
+      amplitudeTimerRef.current = null;
+    }
+    const session = amplitudeRef.current;
+    amplitudeRef.current = null;
+    if (!session) return;
+    try {
+      session.source.disconnect();
+    } catch {
+      // already disconnected
+    }
+    if (session.context.state !== "closed") {
+      void session.context.close();
+    }
+  }, []);
+
+  const flushPending = useCallback((session: number) => {
+    if (sessionRef.current !== session) return;
+    const pending = pendingRef.current;
+    while (pending.has(appliedSeqRef.current)) {
+      const text = pending.get(appliedSeqRef.current) ?? "";
+      pending.delete(appliedSeqRef.current);
+      appliedSeqRef.current += 1;
+      if (!text) continue;
+      committedRef.current = appendSpokenText(committedRef.current, text);
+      onTranscriptRef.current(committedRef.current);
+    }
+  }, []);
+
+  const sendChunk = useCallback(
+    async (session: number, blob: Blob) => {
+      if (sessionRef.current !== session) return;
+      if (isDevSpeechMockEnabled()) return;
+      if (blob.size < 64) return;
+      const seq = nextSeqRef.current;
+      nextSeqRef.current += 1;
+      try {
+        const audioBase64 = await blobToBase64(blob);
+        if (sessionRef.current !== session) return;
+        const result = await transcribeRef.current({
+          audioBase64,
+          mimeType: blob.type || "audio/webm",
+        });
+        if (sessionRef.current !== session) return;
+        pendingRef.current.set(seq, (result.text ?? "").trim());
+      } catch {
+        if (sessionRef.current !== session) return;
+        pendingRef.current.set(seq, "");
+      }
+      flushPending(session);
+    },
+    [flushPending],
+  );
 
   const stop = useCallback(() => {
     wantRef.current = false;
     setDevTranscriptSink(null);
     clearSilenceTimer();
-    clearRestartTimer();
+    clearChunkTimer();
+    stopAmplitudeMonitor();
     setListening(false);
-    const recognition = recognitionRef.current;
-    if (recognition) {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    if (recorder && recorder.state !== "inactive") {
       try {
-        recognition.stop();
+        recorder.stop();
       } catch {
-        recognitionRef.current = null;
+        releaseMicStream();
       }
+    } else {
+      releaseMicStream();
     }
-    // Release capture after stop() so start(audioTrack) is not starved by
-    // ended tracks during the engine's own teardown.
-    releaseMicStream();
-  }, [clearRestartTimer, clearSilenceTimer, releaseMicStream]);
+  }, [
+    clearChunkTimer,
+    clearSilenceTimer,
+    releaseMicStream,
+    stopAmplitudeMonitor,
+  ]);
 
   useEffect(() => {
     function syncSupport() {
-      const next = isSpeechRecognitionSupported();
+      const next = isDictationSupported();
       setSupported(next);
       if (!next) stop();
     }
@@ -143,173 +212,146 @@ export function useWebSpeechDictation({
     }, SPEECH_SILENCE_TIMEOUT_MS);
   }, [clearSilenceTimer, stop]);
 
-  const launchRecognition = useCallback(
-    (recognition: BrowserSpeechRecognition, audioTrack?: MediaStreamTrack) => {
-      lastStartAtRef.current = Date.now();
-      const shared = liveAudioTrack(micStreamRef.current) ?? audioTrack;
+  const beginRecorder = useCallback(
+    (session: number, stream: MediaStream) => {
+      if (!wantRef.current || sessionRef.current !== session) return;
+      if (typeof MediaRecorder !== "function") {
+        if (isDevSpeechMockEnabled()) return;
+        stop();
+        return;
+      }
+
+      const mimeType = pickRecorderMimeType();
+      let recorder: MediaRecorder;
       try {
-        if (shared && shared.readyState === "live") {
-          audioTrackRef.current = shared;
-          recognition.start(shared);
-          return;
-        }
-        // Holding getUserMedia while calling start() without a track opens a
-        // second capture on Mac Chrome and leaves this recognizer deaf.
-        if (micStreamRef.current) {
+        recorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream);
+      } catch {
+        stop();
+        return;
+      }
+
+      const parts: Blob[] = [];
+      speechInChunkRef.current = false;
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) parts.push(event.data);
+      };
+      recorder.onerror = () => {
+        if (sessionRef.current !== session) return;
+        stop();
+      };
+      recorder.onstop = () => {
+        if (recorderRef.current === recorder) recorderRef.current = null;
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(parts, { type });
+        const hadSpeech = speechInChunkRef.current;
+        const stillThisSession = sessionRef.current === session;
+        const keepGoing = wantRef.current && stillThisSession;
+        if (keepGoing && micStreamRef.current) {
+          beginRecorderRef.current(session, micStreamRef.current);
+        } else if (!wantRef.current) {
           releaseMicStream();
         }
-        audioTrackRef.current = undefined;
-        recognition.start();
+        if (stillThisSession && hadSpeech && blob.size >= 64) {
+          void sendChunk(session, blob);
+        }
+      };
+
+      recorderRef.current = recorder;
+      try {
+        recorder.start();
       } catch {
-        releaseMicStream();
+        recorderRef.current = null;
+        stop();
+        return;
+      }
+
+      clearChunkTimer();
+      chunkTimerRef.current = window.setTimeout(() => {
+        chunkTimerRef.current = null;
+        if (recorderRef.current !== recorder) return;
+        if (recorder.state === "inactive") return;
         try {
-          recognition.start();
+          recorder.stop();
         } catch {
           stop();
         }
-      }
+      }, DICTATION_CHUNK_MS);
     },
-    [releaseMicStream, stop],
+    [clearChunkTimer, releaseMicStream, sendChunk, stop],
   );
 
-  const scheduleRestart = useCallback(
-    (recognition: BrowserSpeechRecognition) => {
-      clearRestartTimer();
-      const wait = Math.max(
-        0,
-        SPEECH_RESTART_GAP_MS - (Date.now() - lastStartAtRef.current),
-      );
-      restartTimerRef.current = window.setTimeout(() => {
-        restartTimerRef.current = null;
-        if (!wantRef.current) return;
-        if (recognitionRef.current !== recognition) return;
-        launchRecognition(recognition, audioTrackRef.current);
-      }, wait);
+  useEffect(() => {
+    beginRecorderRef.current = beginRecorder;
+  }, [beginRecorder]);
+
+  const startAmplitudeMonitor = useCallback(
+    (stream: MediaStream) => {
+      stopAmplitudeMonitor();
+      const Context = audioContextConstructor();
+      if (!Context) return;
+      try {
+        const context = new Context();
+        const source = context.createMediaStreamSource(stream);
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.4;
+        source.connect(analyser);
+        if (context.state === "suspended") void context.resume();
+        const buffer = new Uint8Array(new ArrayBuffer(analyser.fftSize));
+        amplitudeRef.current = { context, source, analyser, buffer };
+        amplitudeTimerRef.current = window.setInterval(() => {
+          const session = amplitudeRef.current;
+          if (!session || !wantRef.current) return;
+          session.analyser.getByteTimeDomainData(session.buffer);
+          if (rmsFromTimeDomain(session.buffer) < SPEECH_RMS_THRESHOLD) return;
+          speechInChunkRef.current = true;
+          armSilenceTimer();
+        }, 200);
+      } catch {
+        stopAmplitudeMonitor();
+      }
     },
-    [clearRestartTimer, launchRecognition],
+    [armSilenceTimer, stopAmplitudeMonitor],
   );
 
   const start = useCallback(() => {
     if (wantRef.current) return;
-    const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) return;
+    if (!isDictationSupported()) return;
 
-    const previous = recognitionRef.current;
-    if (previous) {
-      recognitionRef.current = null;
-      try {
-        previous.abort();
-      } catch {
-        // ignore a recognizer that is already closed
-      }
-    }
-
-    const recognition = new Ctor();
-    recognition.continuous = preferContinuousSpeechRecognition();
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    // Do not set grammars, phrases, or any other hint — never the verse text.
-
+    sessionRef.current += 1;
+    const session = sessionRef.current;
     committedRef.current = "";
-    prefixRef.current = "";
-    recognitionRef.current = recognition;
+    pendingRef.current = new Map();
+    nextSeqRef.current = 0;
+    appliedSeqRef.current = 0;
+    speechInChunkRef.current = false;
     wantRef.current = true;
-    setDevTranscriptSink((spoken) => {
-      onTranscriptRef.current(spoken);
-    });
-
-    recognition.onresult = (event) => {
-      if (recognitionRef.current !== recognition || !wantRef.current) return;
-      armSilenceTimer();
-      const next = transcriptFromResults(event.results);
-      committedRef.current = next.committed;
-      const prefix = prefixRef.current;
-      const display = prefix
-        ? next.display
-          ? `${prefix} ${next.display}`
-          : prefix
-        : next.display;
-      onTranscriptRef.current(display);
-    };
-
-    recognition.onspeechstart = () => {
-      if (recognitionRef.current !== recognition) return;
-      if (wantRef.current) armSilenceTimer();
-    };
-
-    recognition.onerror = (event) => {
-      if (recognitionRef.current !== recognition) return;
-      // no-speech / aborted are normal engine teardown; onend decides whether
-      // to reconnect. Stopping here races the restart and kills the session.
-      if (
-        event.error === "not-allowed" ||
-        event.error === "service-not-allowed"
-      ) {
-        stop();
-      }
-    };
-
-    recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-      if (!wantRef.current) {
-        recognitionRef.current = null;
-        setListening(false);
-        return;
-      }
-      // Chrome drops the session after a pause; keep listening until silence.
-      const sessionSoFar = [prefixRef.current, committedRef.current]
-        .filter((part) => part.length > 0)
-        .join(" ");
-      prefixRef.current = sessionSoFar;
-      committedRef.current = "";
-      // Chrome often ends as soon as it starts, especially with start(audioTrack).
-      // Do not treat that as a fatal cutoff — the 5s silence timer is the only
-      // auto-stop. The restart gap prevents a synchronous onend → start loop.
-      scheduleRestart(recognition);
-    };
-
-    const begin = (audioTrack?: MediaStreamTrack) => {
-      if (!wantRef.current || recognitionRef.current !== recognition) {
-        if (audioTrack) stopMediaStream(micStreamRef.current);
-        return;
-      }
-      audioTrackRef.current = audioTrack;
-      launchRecognition(recognition, audioTrack);
-      if (!wantRef.current) {
-        clearSilenceTimer();
-        releaseMicStream();
-      }
-    };
-
-    const shareMic =
-      speechRecognitionAcceptsAudioTrack() &&
-      typeof navigator.mediaDevices?.getUserMedia === "function";
-
     setListening(true);
     armSilenceTimer();
-
-    if (!shareMic) {
-      begin();
-      return;
-    }
+    setDevTranscriptSink((spoken) => {
+      if (sessionRef.current !== session || !wantRef.current) return;
+      committedRef.current = appendSpokenText(committedRef.current, spoken);
+      onTranscriptRef.current(committedRef.current);
+    });
 
     void openDictationMicStream().then((stream) => {
-      if (!wantRef.current || recognitionRef.current !== recognition) {
+      if (!wantRef.current || sessionRef.current !== session) {
         stopMediaStream(stream);
+        return;
+      }
+      if (!stream) {
+        if (isDevSpeechMockEnabled()) return;
+        stop();
         return;
       }
       micStreamRef.current = stream;
       setMicStream(stream);
-      begin(stream?.getAudioTracks()[0]);
+      startAmplitudeMonitor(stream);
+      beginRecorder(session, stream);
     });
-  }, [
-    armSilenceTimer,
-    clearSilenceTimer,
-    launchRecognition,
-    releaseMicStream,
-    scheduleRestart,
-    stop,
-  ]);
+  }, [armSilenceTimer, beginRecorder, startAmplitudeMonitor, stop]);
 
   const toggle = useCallback(() => {
     if (wantRef.current) {
@@ -333,21 +375,22 @@ export function useWebSpeechDictation({
   useEffect(() => {
     return () => {
       wantRef.current = false;
+      sessionRef.current += 1;
       setDevTranscriptSink(null);
       clearSilenceTimer();
-      clearRestartTimer();
-      stopMediaStream(micStreamRef.current);
-      micStreamRef.current = null;
-      audioTrackRef.current = undefined;
-      const recognition = recognitionRef.current;
-      recognitionRef.current = null;
+      clearChunkTimer();
+      stopAmplitudeMonitor();
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
       try {
-        recognition?.abort();
+        if (recorder && recorder.state !== "inactive") recorder.stop();
       } catch {
         // ignore
       }
+      stopMediaStream(micStreamRef.current);
+      micStreamRef.current = null;
     };
-  }, [clearRestartTimer, clearSilenceTimer]);
+  }, [clearChunkTimer, clearSilenceTimer, stopAmplitudeMonitor]);
 
   return { supported, listening, micStream, start, stop, toggle };
 }

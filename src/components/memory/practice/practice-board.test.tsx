@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
+import { emitDevMockSpeech } from "@/lib/web-speech";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 
@@ -15,12 +16,14 @@ const {
   navigateMock,
   fetchChaptersBatchMock,
   getPassageMock,
+  transcribeAudioMock,
 } = vi.hoisted(() => ({
   queryResults: new Map<string, unknown>(),
   mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
   navigateMock: vi.fn(),
   fetchChaptersBatchMock: vi.fn(),
   getPassageMock: vi.fn(),
+  transcribeAudioMock: vi.fn(),
 }));
 
 function mutationMock(name: string) {
@@ -33,8 +36,11 @@ function mutationMock(name: string) {
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
-  useAction: (name: string) =>
-    name === "esv.getChaptersBatch" ? fetchChaptersBatchMock : getPassageMock,
+  useAction: (name: string) => {
+    if (name === "esv.getChaptersBatch") return fetchChaptersBatchMock;
+    if (name === "transcribe.transcribeAudio") return transcribeAudioMock;
+    return getPassageMock;
+  },
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -55,6 +61,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     passageMemory: { recordAttempt: "passageMemory.recordAttempt" },
     savedVerses: { listAll: "savedVerses.listAll" },
     verseMemory: { recordAttempt: "verseMemory.recordAttempt" },
+    transcribe: { transcribeAudio: "transcribe.transcribeAudio" },
   },
 }));
 
@@ -592,61 +599,45 @@ describe("PracticeBoard in-order Scripture sequence", () => {
   });
 });
 
-class MockSpeechRecognition {
-  continuous = false;
-  interimResults = false;
-  lang = "";
-  grammars: unknown = undefined;
-  onresult:
-    ((event: { results: unknown; resultIndex: number }) => void) | null = null;
-  onerror: ((event: { error: string }) => void) | null = null;
-  onend: (() => void) | null = null;
-  onspeechstart: (() => void) | null = null;
-  start(): void {}
-  stop(): void {
-    this.onend?.();
-  }
-  abort(): void {
-    this.onend?.();
-  }
-  emit(items: Array<{ transcript: string; isFinal: boolean }>): void {
-    const results = items.map((item) => {
-      const alternative = { transcript: item.transcript, confidence: 1 };
-      return Object.assign([alternative], {
-        isFinal: item.isFinal,
-        item: () => alternative,
-      });
-    });
-    this.onresult?.({
-      resultIndex: 0,
-      results: Object.assign(results, {
-        item: (index: number) => results[index],
-      }),
-    });
-  }
+function installDictationSupport() {
+  const stopTrack = vi.fn();
+  const stream = {
+    getAudioTracks: () => [
+      { kind: "audio", readyState: "live", stop: stopTrack },
+    ],
+    getTracks: () => [{ kind: "audio", readyState: "live", stop: stopTrack }],
+    clone() {
+      return this;
+    },
+  } as unknown as MediaStream;
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+  });
+  vi.stubGlobal(
+    "MediaRecorder",
+    class {
+      static isTypeSupported() {
+        return true;
+      }
+      mimeType = "audio/webm";
+      state = "inactive";
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
+      onstop: (() => void) | null = null;
+      start() {
+        this.state = "recording";
+      }
+      stop() {
+        this.state = "inactive";
+        this.onstop?.();
+      }
+    },
+  );
 }
 
-const speechInstances: MockSpeechRecognition[] = [];
+describe("PracticeBoard Groq Whisper dictation", () => {
+  const originalMediaDevices = navigator.mediaDevices;
 
-function installSpeechMock() {
-  const speechWindow = window as Window & {
-    SpeechRecognition?: new () => MockSpeechRecognition;
-  };
-  speechWindow.SpeechRecognition = class extends MockSpeechRecognition {
-    constructor() {
-      super();
-      speechInstances.push(this);
-    }
-  };
-}
-
-function lastSpeech(): MockSpeechRecognition {
-  const recognition = speechInstances.at(-1);
-  if (!recognition) throw new Error("expected SpeechRecognition");
-  return recognition;
-}
-
-describe("PracticeBoard Web Speech dictation", () => {
   beforeEach(() => {
     queryResults.clear();
     mutationMocks.clear();
@@ -654,7 +645,6 @@ describe("PracticeBoard Web Speech dictation", () => {
     sessionStorage.clear();
     window.localStorage.removeItem("berean:hideSpeech");
     window.localStorage.removeItem("berean:mockSpeech");
-    speechInstances.length = 0;
     queryResults.set("savedVerses.listAll", [
       {
         verseRefId: VERSE_REF_ID,
@@ -666,6 +656,8 @@ describe("PracticeBoard Web Speech dictation", () => {
     ]);
     fetchChaptersBatchMock.mockReset();
     getPassageMock.mockReset();
+    transcribeAudioMock.mockReset();
+    transcribeAudioMock.mockResolvedValue({ text: "" });
     getPassageMock.mockResolvedValue(psalm23);
     mutationMock("verseMemory.recordAttempt").mockResolvedValue({
       status: "learning",
@@ -681,12 +673,11 @@ describe("PracticeBoard Web Speech dictation", () => {
   });
 
   afterEach(() => {
-    const speechWindow = window as Window & {
-      SpeechRecognition?: unknown;
-      webkitSpeechRecognition?: unknown;
-    };
-    delete speechWindow.SpeechRecognition;
-    delete speechWindow.webkitSpeechRecognition;
+    vi.unstubAllGlobals();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: originalMediaDevices,
+    });
   });
 
   function renderGuided() {
@@ -702,7 +693,7 @@ describe("PracticeBoard Web Speech dictation", () => {
     );
   }
 
-  it("hides the mic when the Web Speech API is missing", async () => {
+  it("hides the mic when getUserMedia or MediaRecorder is missing", async () => {
     renderGuided();
     await screen.findByLabelText("Your recalled verse");
     expect(
@@ -711,7 +702,7 @@ describe("PracticeBoard Web Speech dictation", () => {
   });
 
   it("places a prominent mic under the recall box and streams words into it", async () => {
-    installSpeechMock();
+    installDictationSupport();
     const user = userEvent.setup();
     renderGuided();
     const answer = await screen.findByLabelText("Your recalled verse");
@@ -729,7 +720,7 @@ describe("PracticeBoard Web Speech dictation", () => {
     ).not.toBeNull();
 
     act(() => {
-      lastSpeech().emit([{ transcript: PASSAGE_ONE, isFinal: false }]);
+      emitDevMockSpeech(PASSAGE_ONE);
     });
     expect(answer).toHaveValue(PASSAGE_ONE);
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
@@ -765,7 +756,7 @@ describe("PracticeBoard Web Speech dictation", () => {
   });
 
   it("toggles the mic with Space when the box is empty, and inserts a space once it has text", async () => {
-    installSpeechMock();
+    installDictationSupport();
     const user = userEvent.setup();
     renderGuided();
     const answer = await screen.findByLabelText("Your recalled verse");
@@ -775,7 +766,6 @@ describe("PracticeBoard Web Speech dictation", () => {
     expect(
       screen.getByRole("button", { name: "Stop dictation" }),
     ).toBeVisible();
-    expect(speechInstances).toHaveLength(1);
 
     await user.keyboard(" ");
     expect(screen.getByRole("button", { name: "Dictate verse" })).toBeVisible();
@@ -783,11 +773,11 @@ describe("PracticeBoard Web Speech dictation", () => {
     await user.type(answer, "hello");
     await user.keyboard(" ");
     expect(answer).toHaveValue("hello ");
-    expect(speechInstances).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Dictate verse" })).toBeVisible();
   });
 
   it("does not show the mic on Read prime cards", async () => {
-    installSpeechMock();
+    installDictationSupport();
     render(
       <TooltipProvider delayDuration={0}>
         <PracticeBoard

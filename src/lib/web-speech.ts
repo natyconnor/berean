@@ -1,24 +1,28 @@
 /**
- * Browser Web Speech API helpers for optional recall dictation.
+ * Optional recall dictation helpers.
  *
- * Intentionally tiny: feature-detect, join spoken phrases onto existing text,
- * and share the silence timeout. The recognizer is never given the expected
- * verse as a grammar, prompt, or hint.
+ * Recording is getUserMedia + MediaRecorder. Transcription is Groq Whisper
+ * via a Convex action. The recorder is never given the expected verse as a
+ * prompt or hint.
  */
 
 export const SPEECH_SILENCE_TIMEOUT_MS = 5_000;
 
-/**
- * Minimum delay before calling `start()` again after `onend`.
- * A synchronous onend → start() loop is what makes the Mac menu-bar mic flicker.
- */
-export const SPEECH_RESTART_GAP_MS = 250;
+/** Complete MediaRecorder files are rotated this often so words appear while speaking. */
+export const DICTATION_CHUNK_MS = 2_500;
 
-/** Chrome 135+ `SpeechRecognition.start(audioTrack)`. */
-export const SPEECH_AUDIO_TRACK_MIN_CHROME = 135;
+/** Time-domain RMS above this counts as speech for the 5s silence timer. */
+export const SPEECH_RMS_THRESHOLD = 0.02;
 
 /** DEV-only: click "Insert spoken sample" while listening to stream a transcript. */
 export const DEV_MOCK_SPEECH_EMIT_EVENT = "berean:mock-speech-emit";
+
+const RECORDER_MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/mp4",
+] as const;
 
 export function isSpaceToggleKey(event: {
   repeat: boolean;
@@ -32,84 +36,6 @@ export function isSpaceToggleKey(event: {
     return false;
   }
   return event.key === " " || event.key === "Space" || event.code === "Space";
-}
-
-export interface BrowserSpeechRecognitionEvent {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
-}
-
-export interface BrowserSpeechRecognitionErrorEvent {
-  error: string;
-}
-
-/**
- * The subset of the Web Speech recognizer we actually use. TypeScript's DOM
- * lib ships result types but not the recognizer itself.
- */
-export interface BrowserSpeechRecognition {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
-  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  onspeechstart: (() => void) | null;
-  /** Chrome 135+: pass a live audio track so recognition shares getUserMedia. */
-  start(audioTrack?: MediaStreamTrack): void;
-  stop(): void;
-  abort(): void;
-}
-
-export type BrowserSpeechRecognitionCtor = new () => BrowserSpeechRecognition;
-
-type SpeechWindow = Window & {
-  SpeechRecognition?: BrowserSpeechRecognitionCtor;
-  webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
-};
-
-let lastDevMock: DevMockSpeechRecognition | null = null;
-let devTranscriptSink: ((text: string) => void) | null = null;
-let devMockKeysBound = false;
-
-const DEV_MOCK_SAMPLE = "The Lord is my shepherd; I shall not want";
-
-function rememberDevMock(recognition: DevMockSpeechRecognition): void {
-  lastDevMock = recognition;
-}
-
-class DevMockSpeechRecognition implements BrowserSpeechRecognition {
-  continuous = false;
-  interimResults = false;
-  lang = "";
-  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null = null;
-  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null = null;
-  onend: (() => void) | null = null;
-  onspeechstart: (() => void) | null = null;
-
-  start(): void {
-    rememberDevMock(this);
-  }
-
-  stop(): void {
-    this.onend?.();
-  }
-
-  abort(): void {
-    this.onend?.();
-  }
-
-  emit(text: string): void {
-    const alternative = { transcript: text, confidence: 1 };
-    const result = Object.assign([alternative], {
-      isFinal: false,
-      item: () => alternative,
-    });
-    const results = Object.assign([result], {
-      item: () => result,
-    }) as unknown as SpeechRecognitionResultList;
-    this.onresult?.({ resultIndex: 0, results });
-  }
 }
 
 function paramsHaveFlag(source: string, flag: string): boolean {
@@ -156,6 +82,11 @@ export function isDevSpeechMockEnabled(): boolean {
   return readDevSpeechFlags().mock;
 }
 
+let devTranscriptSink: ((text: string) => void) | null = null;
+let devMockKeysBound = false;
+
+const DEV_MOCK_SAMPLE = "The Lord is my shepherd; I shall not want";
+
 function bindDevMockEmitters(): void {
   if (devMockKeysBound || typeof window === "undefined") return;
   devMockKeysBound = true;
@@ -168,12 +99,8 @@ function bindDevMockEmitters(): void {
   });
 }
 
-/** DEV-only: stream a sample transcript into the active mock recognizer. */
+/** DEV-only: stream a sample transcript into the active dictation session. */
 export function emitDevMockSpeech(text: string = DEV_MOCK_SAMPLE): boolean {
-  if (lastDevMock) {
-    lastDevMock.emit(text);
-    return true;
-  }
   if (devTranscriptSink) {
     devTranscriptSink(text);
     return true;
@@ -188,65 +115,42 @@ export function setDevTranscriptSink(
   devTranscriptSink = sink;
 }
 
-export function getSpeechRecognitionCtor(): BrowserSpeechRecognitionCtor | null {
-  if (typeof window === "undefined") return null;
-  if (import.meta.env.DEV) {
-    const { hide, mock } = readDevSpeechFlags();
-    if (hide) return null;
-    if (mock) {
-      bindDevMockEmitters();
-      return DevMockSpeechRecognition;
-    }
-  }
-  const speechWindow = window as SpeechWindow;
+export function isGetUserMediaSupported(): boolean {
   return (
-    speechWindow.SpeechRecognition ??
-    speechWindow.webkitSpeechRecognition ??
-    null
+    typeof navigator !== "undefined" &&
+    typeof navigator.mediaDevices?.getUserMedia === "function"
   );
 }
 
-export function isSpeechRecognitionSupported(): boolean {
-  return getSpeechRecognitionCtor() !== null;
+export function isMediaRecorderSupported(): boolean {
+  return typeof MediaRecorder === "function";
 }
 
 /**
- * Safari exposes only `webkitSpeechRecognition` and does not keep a
- * `continuous: true` session alive. Restarting that immediately in `onend`
- * start/stops the mic in a tight loop and never delivers a transcript.
- * Chrome/Edge expose the unprefixed constructor and can use continuous mode.
+ * Hide the mic only when the browser cannot record, or when DEV hideSpeech
+ * is set. Firefox is supported (MediaRecorder + Groq).
  */
-export function preferContinuousSpeechRecognition(): boolean {
+export function isDictationSupported(): boolean {
   if (typeof window === "undefined") return false;
-  const speechWindow = window as SpeechWindow;
-  return typeof speechWindow.SpeechRecognition === "function";
+  if (import.meta.env.DEV) {
+    const { hide, mock } = readDevSpeechFlags();
+    if (hide) return false;
+    if (mock) {
+      bindDevMockEmitters();
+      return true;
+    }
+  }
+  return isGetUserMediaSupported() && isMediaRecorderSupported();
 }
 
-/**
- * Unprefixed `SpeechRecognition` is not enough: extra `start()` arguments are
- * ignored before Chrome 135, so opening getUserMedia would steal the mic.
- * iOS Chrome/Edge still use WebKit and must not take this path.
- */
-export function chromiumMajorForSpeechTrack(): number | null {
-  if (typeof navigator === "undefined") return null;
-  const ua = navigator.userAgent;
-  if (/CriOS|FxiOS|EdgiOS/i.test(ua)) return null;
-  const match = ua.match(/(?:Chrome|Chromium|Edg)\/(\d+)/);
-  if (!match?.[1]) return null;
-  const major = Number(match[1]);
-  return Number.isFinite(major) ? major : null;
-}
-
-/**
- * Chrome/Edge 135+ accept `start(audioTrack)` so one getUserMedia stream can
- * feed both the waveform analyser and SpeechRecognition. Safari's webkit-only
- * constructor ignores extra `start()` arguments and will open a second capture
- * (and starve recognition) if JS already holds the mic.
- */
-export function speechRecognitionAcceptsAudioTrack(): boolean {
-  if (!preferContinuousSpeechRecognition()) return false;
-  const major = chromiumMajorForSpeechTrack();
-  return major !== null && major >= SPEECH_AUDIO_TRACK_MIN_CHROME;
+export function pickRecorderMimeType(): string {
+  if (typeof MediaRecorder === "undefined") return "";
+  if (typeof MediaRecorder.isTypeSupported !== "function") return "";
+  return (
+    RECORDER_MIME_CANDIDATES.find((type) =>
+      MediaRecorder.isTypeSupported(type),
+    ) ?? ""
+  );
 }
 
 /** First live audio track on a capture, if any. */
@@ -258,9 +162,8 @@ export function liveAudioTrack(
 }
 
 /**
- * Independent MediaStream for Web Audio. SpeechRecognition.start(audioTrack)
- * and createMediaStreamSource must not share a MediaStreamTrack: Chrome ends
- * the recognizer immediately, which produced a deaf session and a ~300ms cutoff.
+ * Independent MediaStream for Web Audio so the analyser does not attach a
+ * sink to the same MediaStreamTrack MediaRecorder is using.
  */
 export function cloneMediaStreamForAnalysis(
   stream: MediaStream,
@@ -283,11 +186,12 @@ export function stopMediaStream(stream: MediaStream | null | undefined): void {
 
 /** One getUserMedia capture for a dictation session. Caller must stop tracks. */
 export async function openDictationMicStream(): Promise<MediaStream | null> {
-  if (typeof navigator === "undefined") return null;
-  const mediaDevices = navigator.mediaDevices;
-  if (!mediaDevices?.getUserMedia) return null;
+  if (!isGetUserMediaSupported()) return null;
   try {
-    return await mediaDevices.getUserMedia({ audio: true, video: false });
+    return await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: false,
+    });
   } catch {
     return null;
   }
@@ -300,4 +204,26 @@ export function appendSpokenText(base: string, spoken: string): string {
   const left = base.trimEnd();
   if (!left) return next;
   return `${left} ${next}`;
+}
+
+/** RMS of analyser time-domain PCM (0–255, 128 = silence). */
+export function rmsFromTimeDomain(samples: ArrayLike<number>): number {
+  if (samples.length === 0) return 0;
+  let sumSq = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const centered = ((samples[i] ?? 128) - 128) / 128;
+    sumSq += centered * centered;
+  }
+  return Math.sqrt(sumSq / samples.length);
+}
+
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }

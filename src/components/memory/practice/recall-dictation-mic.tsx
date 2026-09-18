@@ -8,7 +8,7 @@ import { DictationWaveform } from "./dictation-waveform";
 
 /**
  * Prominent dictation control under the recall textarea. Hidden by the parent
- * when the Web Speech API is missing.
+ * when getUserMedia or MediaRecorder is missing.
  */
 export function RecallDictationMic({
   listening,
