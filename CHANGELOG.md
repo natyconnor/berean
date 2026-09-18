@@ -10,6 +10,7 @@
 
 ### Bug Fixes
 
+* Passage "Pick up after" cue uses the phrase before the retry verse, not the ending of the verse you are about to type
 * Passage recall action row no longer shows a white bar under Continue / Check answer
 * Pack scope chapter pickers start empty (whole book by default) and no longer clip selected chapter chips
 * Scoped pack create again allows whole-book and multi-book scopes; passage memorize stays eligibility-gated
