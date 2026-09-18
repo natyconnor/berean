@@ -7,8 +7,8 @@ import {
   requiredRepsFor,
 } from "./memory-scheduler";
 import {
-  compositeHintForWindow,
   clearedRopeBand,
+  compositeHintForWindow,
   connectPairForPiece,
   connectPairIndexes,
   dueFrontierIndex,
