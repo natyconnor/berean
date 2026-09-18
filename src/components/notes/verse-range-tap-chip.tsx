@@ -69,17 +69,23 @@ export function VerseRangeTapChip({
         CHIP_HEIGHT_CLASS,
         "overflow-visible px-2 py-0 text-xs leading-none",
       )}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
     >
       <span
         ref={rootRef}
         className={cn(
-          "inline-flex items-center gap-0.5",
+          "inline-flex items-center gap-0",
           CHIP_HEIGHT_CLASS,
-          "whitespace-nowrap",
+          "whitespace-nowrap touch-manipulation",
         )}
         data-verse-range-chip
+        onPointerDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
-        {isPassage ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
+        {isPassage ? <BookOpen className="mr-1 h-3 w-3 shrink-0" /> : null}
         <span className="leading-none">{bookChapter}</span>
         {isRange ? (
           <>
@@ -97,7 +103,7 @@ export function VerseRangeTapChip({
               }
               onNudge={handleNudge}
             />
-            <span className="leading-none text-muted-foreground">-</span>
+            <span className="leading-none">-</span>
             <VerseNumberControl
               verse={verseRef.endVerse}
               end="end"
@@ -282,9 +288,10 @@ function NumberButton({
     <button
       type="button"
       className={cn(
-        "inline-flex min-w-4 items-center justify-center rounded-sm px-0.5 tabular-nums leading-none",
+        "inline-flex min-w-3 items-center justify-center rounded-sm tabular-nums leading-none",
         CHIP_HEIGHT_CLASS,
         "text-xs font-medium",
+        pressed ? "px-0.5" : "px-0",
         !disabled && "cursor-pointer",
         !pressed && !disabled && "hover:bg-foreground/10",
         pressed && "bg-transparent",
