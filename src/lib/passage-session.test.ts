@@ -199,6 +199,74 @@ describe("reducePassageSession", () => {
     expect(current.rehearsalRopeIndexes).toEqual([2, 3]);
   });
 
+  it("offers a neighbor connect after Challenge and From Memory, not only Guided attach", () => {
+    const afterChallenge = pass(
+      session(
+        [
+          piece(0, "attached", {
+            learnStage: 2,
+            stageReps: requiredRepsFor(2, 10) - 1,
+          }),
+          piece(1, "attached", { learnStage: 2 }),
+        ],
+        { phase: "frontier" },
+      ),
+    );
+    expect(afterChallenge.pieces[0]?.learnStage).toBe(3);
+    expect(afterChallenge.phase).toBe("connect");
+    expect(afterChallenge.rehearsalRopeIndexes).toEqual([0, 1]);
+
+    const afterMemory = pass(
+      session(
+        [
+          piece(0, "attached", {
+            learnStage: 3,
+            stageReps: requiredRepsFor(3, 10) - 1,
+          }),
+          piece(1, "attached", { learnStage: 3 }),
+        ],
+        { phase: "frontier" },
+      ),
+    );
+    expect(afterMemory.pieces[0]?.attachment).toBe("solid");
+    expect(afterMemory.phase).toBe("connect");
+    expect(afterMemory.rehearsalRopeIndexes).toEqual([0, 1]);
+  });
+
+  it("does not connect after Read even when a neighbor is already on the rope", () => {
+    const next = pass(
+      session(
+        [
+          piece(0, "attached", { learnStage: 2, dueAt: NOW + DAY_MS }),
+          piece(1, "learning", { learnStage: 0, stageReps: 0 }),
+        ],
+        { phase: "frontier" },
+      ),
+    );
+    expect(next.pieces[1]?.learnStage).toBe(1);
+    expect(next.pieces[1]?.attachment).toBe("learning");
+    expect(next.phase).toBe("frontier");
+  });
+
+  it("connects the practiced verse to its previous neighbor, not the newest pair", () => {
+    const next = pass(
+      session(
+        [
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "attached", {
+            learnStage: 3,
+            stageReps: requiredRepsFor(3, 10) - 1,
+          }),
+          piece(2, "attached", { learnStage: 2, dueAt: NOW + DAY_MS }),
+        ],
+        { phase: "frontier" },
+      ),
+    );
+    expect(next.pieces[1]?.attachment).toBe("solid");
+    expect(next.phase).toBe("connect");
+    expect(next.rehearsalRopeIndexes).toEqual([0, 1]);
+  });
+
   it("repairs a rope fail then continues", () => {
     const start = session(
       [

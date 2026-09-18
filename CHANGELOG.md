@@ -18,6 +18,7 @@
 * Passage practice after a miss no longer stacks a duplicate letter Starting hint on Guided/Challenge
 * Passage learning starts at the first verse, prompts the next verse after Guided, and keeps the Mode Dock from covering bottom actions
 * Soft-locked verses prompt a rolling pair connect after every new part from the second on
+* Passage learning connects neighboring verses after Challenge and From Memory, not only after Guided attach
 * Soft-lock copy says the verse is down for the day
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day

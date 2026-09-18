@@ -1,5 +1,7 @@
 import type { DiffToken } from "./diff-words";
 import {
+  clearedRopeBand,
+  connectPairForPiece,
   connectPairIndexes,
   dueFrontierIndex,
   frontierIndex,
@@ -387,10 +389,11 @@ function applyFrontierAttempt(
     };
   }
 
-  // After Guided soft-locks a piece onto the rope, connect it to the previous
-  // one whenever at least two pieces are attached — including on day 1.
-  if (piece.attachment !== "attached" && nextPiece.attachment === "attached") {
-    const pair = connectPairIndexes(pieces);
+  // After Guided attach, Challenge, or From Memory, connect this piece to its
+  // neighbor whenever at least two rope pieces exist — not only when a new
+  // verse first attaches.
+  if (clearedRopeBand(piece, nextPiece)) {
+    const pair = connectPairForPiece(pieces, dueIndex);
     if (pair) {
       return {
         ...state,

@@ -321,7 +321,7 @@ describe("PassageSession", () => {
     expect(NEXT_VERSE_PROMPT_COPY).toMatch(/down for the day/);
     expect(NEXT_VERSE_PROMPT_COPY).not.toMatch(/rope|frontier|introduce/i);
     expect(CONNECT_TITLE).toBe("Connect these verses");
-    expect(CONNECT_COPY).toMatch(/Link the verse you just learned/);
+    expect(CONNECT_COPY).toMatch(/Link this verse to its neighbor/);
     expect(CONNECT_RECITE_LABEL).toBe("Recite together");
     expect(WARMUP_PROMPT_COPY).toMatch(/Warm up/i);
     expect(WARMUP_PROMPT_COPY).not.toMatch(/rope/i);
