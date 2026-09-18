@@ -1,4 +1,5 @@
 import {
+  type ChangeEvent,
   type JSX,
   type KeyboardEvent,
   useEffect,
@@ -8,8 +9,10 @@ import {
 } from "react";
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useAction } from "convex/react";
 
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
+import { RecallDictationMic } from "@/components/memory/practice/recall-dictation-mic";
 import {
   PRACTICE_STAGES,
   practiceChromeFor,
@@ -32,11 +35,19 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useEnterToClick } from "@/hooks/use-enter-to-click";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { useWebSpeechDictation } from "@/hooks/use-web-speech-dictation";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { requiredRepsFor, type MemoryStatus } from "@/lib/memory-scheduler";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
 import { cn } from "@/lib/utils";
 import { countVerseWords, type HintToken } from "@/lib/verse-hint";
+import {
+  appendSpokenText,
+  emitDevMockSpeech,
+  isSpaceToggleKey,
+} from "@/lib/web-speech";
+
+import { api } from "../../../../convex/_generated/api";
 
 export type PassageRecallMode = "rope" | "repair" | "frontier" | "review";
 
@@ -105,6 +116,20 @@ export function PassageRecallCard({
   const [startedAt] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
+  const dictationBaseRef = useRef("");
+  const transcribeAudio = useAction(api.transcribe.transcribeAudio);
+  const {
+    supported: dictationSupported,
+    listening: dictationListening,
+    micStream: dictationMicStream,
+    start: startDictation,
+    stop: stopDictation,
+  } = useWebSpeechDictation({
+    transcribeAudio,
+    onTranscript: (spoken) => {
+      setTypedAnswer(appendSpokenText(dictationBaseRef.current, spoken));
+    },
+  });
   const { submit, pending: submitPending } = useSubmitLock();
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
@@ -131,7 +156,17 @@ export function PassageRecallCard({
   const passed = checkedAccuracy >= PASSAGE_PASS_ACCURACY;
   const offerTryAgain = checked && !passed && mode === "frontier";
 
+  function toggleDictation() {
+    if (dictationListening) {
+      stopDictation();
+      return;
+    }
+    dictationBaseRef.current = typedAnswer;
+    startDictation();
+  }
+
   function checkAnswer() {
+    if (dictationListening) stopDictation();
     if (!canCheckAnswer || checked) return;
     submit(async () => {
       const tokens = diffWords(typedAnswer, versePlainText);
@@ -177,7 +212,23 @@ export function PassageRecallCard({
     actionRef.current?.focus();
   }, [checked, isReadPrime]);
 
+  useEffect(() => {
+    if (checked || isReadPrime) stopDictation();
+  }, [checked, isReadPrime, stopDictation]);
+
+  function handleAnswerChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    if (dictationListening) stopDictation();
+    setTypedAnswer(event.target.value);
+  }
+
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (isSpaceToggleKey(event) && dictationSupported) {
+      if (dictationListening || typedAnswer.length === 0) {
+        event.preventDefault();
+        toggleDictation();
+      }
+      return;
+    }
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     checkAnswer();
@@ -280,24 +331,47 @@ export function PassageRecallCard({
               </div>
 
               {!isReadPrime && (
-                <Textarea
-                  ref={answerInputRef}
-                  value={typedAnswer}
-                  onChange={(event) => setTypedAnswer(event.target.value)}
-                  onKeyDown={handleAnswerKeyDown}
-                  placeholder={
-                    compositeField
-                      ? "Type the passage from memory"
-                      : "Type what you remember"
-                  }
-                  className={cn(
-                    "bg-background/80",
-                    compositeField
-                      ? "min-h-[180px] max-h-[36vh] resize-y"
-                      : "min-h-[170px] resize-none",
-                  )}
-                  aria-label={fieldLabel}
-                />
+                <div className="space-y-3">
+                  <Textarea
+                    ref={answerInputRef}
+                    value={typedAnswer}
+                    onChange={handleAnswerChange}
+                    onKeyDown={handleAnswerKeyDown}
+                    placeholder={
+                      compositeField
+                        ? "Type the passage from memory"
+                        : "Type what you remember"
+                    }
+                    className={cn(
+                      "bg-background/80",
+                      compositeField
+                        ? "min-h-[180px] max-h-[36vh] resize-y"
+                        : "min-h-[170px] resize-none",
+                    )}
+                    aria-label={fieldLabel}
+                  />
+                  {dictationSupported ? (
+                    <RecallDictationMic
+                      listening={dictationListening}
+                      micStream={dictationMicStream}
+                      onToggle={toggleDictation}
+                      disabled={loading || Boolean(error)}
+                      onInsertSample={
+                        import.meta.env.DEV
+                          ? () => {
+                              emitDevMockSpeech();
+                              setTypedAnswer(
+                                appendSpokenText(
+                                  dictationBaseRef.current,
+                                  "The Lord is my shepherd; I shall not want",
+                                ),
+                              );
+                            }
+                          : undefined
+                      }
+                    />
+                  ) : null}
+                </div>
               )}
             </>
           )}

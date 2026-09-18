@@ -1,4 +1,5 @@
 import {
+  type ChangeEvent,
   type JSX,
   type KeyboardEvent,
   type ReactNode,
@@ -10,7 +11,7 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ import { useEnterToClick } from "@/hooks/use-enter-to-click";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { useWebSpeechDictation } from "@/hooks/use-web-speech-dictation";
 import { devLog } from "@/lib/dev-log";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
@@ -60,6 +62,11 @@ import {
 } from "@/lib/memory-session-order";
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
+import {
+  appendSpokenText,
+  emitDevMockSpeech,
+  isSpaceToggleKey,
+} from "@/lib/web-speech";
 import {
   type HintToken,
   countVerseWords,
@@ -92,6 +99,7 @@ import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
 import { ReviewSummary, type ReviewSessionAttempt } from "../review-summary";
 import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
+import { RecallDictationMic } from "./recall-dictation-mic";
 import { SessionComplete } from "./session-complete";
 
 export type { MemorySessionLabel } from "@/lib/memory-session";
@@ -830,6 +838,20 @@ function PracticeCard({
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
+  const dictationBaseRef = useRef("");
+  const transcribeAudio = useAction(api.transcribe.transcribeAudio);
+  const {
+    supported: dictationSupported,
+    listening: dictationListening,
+    micStream: dictationMicStream,
+    start: startDictation,
+    stop: stopDictation,
+  } = useWebSpeechDictation({
+    transcribeAudio,
+    onTranscript: (spoken) => {
+      setTypedAnswer(appendSpokenText(dictationBaseRef.current, spoken));
+    },
+  });
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
   // click) into a single recorded attempt, and `submitPending` shows a spinner
@@ -916,7 +938,17 @@ function PracticeCard({
     !advancesOnContinue &&
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
 
+  function toggleDictation() {
+    if (dictationListening) {
+      stopDictation();
+      return;
+    }
+    dictationBaseRef.current = typedAnswer;
+    startDictation();
+  }
+
   function checkAnswer() {
+    if (dictationListening) stopDictation();
     if (!canCheckAnswer || checked) return;
     // Practice counts fully: every checked attempt records and reschedules. The
     // lock keeps a double-tap from recording twice before the result view
@@ -984,7 +1016,23 @@ function PracticeCard({
     reviewActionRef.current?.focus();
   }, [checked, isReadPrime, showLocked]);
 
+  useEffect(() => {
+    if (checked || showLocked || isReadPrime) stopDictation();
+  }, [checked, isReadPrime, showLocked, stopDictation]);
+
+  function handleAnswerChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    if (dictationListening) stopDictation();
+    setTypedAnswer(event.target.value);
+  }
+
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (isSpaceToggleKey(event) && dictationSupported) {
+      if (dictationListening || typedAnswer.length === 0) {
+        event.preventDefault();
+        toggleDictation();
+      }
+      return;
+    }
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     checkAnswer();
@@ -1098,28 +1146,51 @@ function PracticeCard({
                   </div>
 
                   {!isReadPrime && (
-                    <Textarea
-                      ref={answerInputRef}
-                      value={typedAnswer}
-                      onChange={(event) => setTypedAnswer(event.target.value)}
-                      onKeyDown={handleAnswerKeyDown}
-                      placeholder={
-                        composite
-                          ? "Type the passage from memory"
-                          : "Type what you remember"
-                      }
-                      className={cn(
-                        "bg-background/80",
-                        composite
-                          ? "min-h-[300px] max-h-[60vh] resize-y"
-                          : "min-h-[170px] resize-none",
-                      )}
-                      aria-label={
-                        composite
-                          ? "Your recited passage"
-                          : "Your recalled verse"
-                      }
-                    />
+                    <div className="space-y-3">
+                      <Textarea
+                        ref={answerInputRef}
+                        value={typedAnswer}
+                        onChange={handleAnswerChange}
+                        onKeyDown={handleAnswerKeyDown}
+                        placeholder={
+                          composite
+                            ? "Type the passage from memory"
+                            : "Type what you remember"
+                        }
+                        className={cn(
+                          "bg-background/80",
+                          composite
+                            ? "min-h-[300px] max-h-[60vh] resize-y"
+                            : "min-h-[170px] resize-none",
+                        )}
+                        aria-label={
+                          composite
+                            ? "Your recited passage"
+                            : "Your recalled verse"
+                        }
+                      />
+                      {dictationSupported ? (
+                        <RecallDictationMic
+                          listening={dictationListening}
+                          micStream={dictationMicStream}
+                          onToggle={toggleDictation}
+                          disabled={loading || Boolean(error) || locked}
+                          onInsertSample={
+                            import.meta.env.DEV
+                              ? () => {
+                                  emitDevMockSpeech();
+                                  setTypedAnswer(
+                                    appendSpokenText(
+                                      dictationBaseRef.current,
+                                      "The Lord is my shepherd; I shall not want",
+                                    ),
+                                  );
+                                }
+                              : undefined
+                          }
+                        />
+                      ) : null}
+                    </div>
                   )}
                 </>
               )}

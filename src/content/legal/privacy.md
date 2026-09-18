@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** March 25, 2026
+**Effective date:** September 16, 2026
 
 **Operator:** Nathan Connor (“we,” “us,” or “our”) operates **Berean** at [https://berean.nathanconnor.dev](https://berean.nathanconnor.dev) (the “Service”).
 
@@ -65,6 +65,9 @@ We rely on processors that help us run the Service:
 | **Vercel**         | Hosting and deployment of the web app              |
 | **Google**         | OAuth sign-in                                      |
 | **Crossway / ESV** | Scripture text via the ESV API                     |
+| **Groq**           | Optional verse dictation (Whisper speech-to-text)  |
+
+Optional verse dictation (the microphone on recall cards) records in your browser and sends short audio clips through our Convex backend to **Groq** Whisper to turn speech into text. Typing still works without a microphone. You can edit the transcript before Check. We do not use the expected verse as a transcription hint.
 
 Each provider processes data under its own terms and privacy policy.
 

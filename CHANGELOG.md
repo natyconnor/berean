@@ -5,6 +5,7 @@
 
 ### Features
 
+* Optional Groq Whisper dictation on verse and passage recall (MediaRecorder + Convex; `GROQ_API_KEY` server-side)
 * Passage mode on eligible scope packs with a scaffolded rope and opt-in migration
 * Pack creation walks type → scope or verses → name before create
 

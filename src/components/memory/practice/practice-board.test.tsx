@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
+import { emitDevMockSpeech } from "@/lib/web-speech";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 
@@ -15,12 +16,14 @@ const {
   navigateMock,
   fetchChaptersBatchMock,
   getPassageMock,
+  transcribeAudioMock,
 } = vi.hoisted(() => ({
   queryResults: new Map<string, unknown>(),
   mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
   navigateMock: vi.fn(),
   fetchChaptersBatchMock: vi.fn(),
   getPassageMock: vi.fn(),
+  transcribeAudioMock: vi.fn(),
 }));
 
 function mutationMock(name: string) {
@@ -33,8 +36,11 @@ function mutationMock(name: string) {
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
-  useAction: (name: string) =>
-    name === "esv.getChaptersBatch" ? fetchChaptersBatchMock : getPassageMock,
+  useAction: (name: string) => {
+    if (name === "esv.getChaptersBatch") return fetchChaptersBatchMock;
+    if (name === "transcribe.transcribeAudio") return transcribeAudioMock;
+    return getPassageMock;
+  },
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -55,6 +61,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     passageMemory: { recordAttempt: "passageMemory.recordAttempt" },
     savedVerses: { listAll: "savedVerses.listAll" },
     verseMemory: { recordAttempt: "verseMemory.recordAttempt" },
+    transcribe: { transcribeAudio: "transcribe.transcribeAudio" },
   },
 }));
 
@@ -588,6 +595,207 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     ]);
     expect(
       screen.queryByRole("button", { name: "Shuffle" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+function installDictationSupport() {
+  const stopTrack = vi.fn();
+  const stream = {
+    getAudioTracks: () => [
+      { kind: "audio", readyState: "live", stop: stopTrack },
+    ],
+    getTracks: () => [{ kind: "audio", readyState: "live", stop: stopTrack }],
+    clone() {
+      return this;
+    },
+  } as unknown as MediaStream;
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+  });
+  vi.stubGlobal(
+    "MediaRecorder",
+    class {
+      static isTypeSupported() {
+        return true;
+      }
+      mimeType = "audio/webm";
+      state = "inactive";
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
+      onstop: (() => void) | null = null;
+      start() {
+        this.state = "recording";
+      }
+      stop() {
+        this.state = "inactive";
+        this.onstop?.();
+      }
+    },
+  );
+}
+
+describe("PracticeBoard Groq Whisper dictation", () => {
+  const originalMediaDevices = navigator.mediaDevices;
+
+  beforeEach(() => {
+    queryResults.clear();
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    window.localStorage.removeItem("berean:hideSpeech");
+    window.localStorage.removeItem("berean:mockSpeech");
+    queryResults.set("savedVerses.listAll", [
+      {
+        verseRefId: VERSE_REF_ID,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      },
+    ]);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    transcribeAudioMock.mockReset();
+    transcribeAudioMock.mockResolvedValue({ text: "" });
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 1,
+      stageReps: 1,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + 1000,
+      consecutiveCorrect: 1,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: originalMediaDevices,
+    });
+  });
+
+  function renderGuided() {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[guidedVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  it("hides the mic when getUserMedia or MediaRecorder is missing", async () => {
+    renderGuided();
+    await screen.findByLabelText("Your recalled verse");
+    expect(
+      screen.queryByRole("button", { name: "Dictate verse" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("places a prominent mic under the recall box and streams words into it", async () => {
+    installDictationSupport();
+    const user = userEvent.setup();
+    renderGuided();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    const mic = await screen.findByRole("button", { name: "Dictate verse" });
+    expect(
+      mic.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+
+    await user.click(mic);
+    expect(
+      screen.getByRole("button", { name: "Stop dictation" }),
+    ).toBeVisible();
+    expect(
+      document.querySelector('[data-slot="dictation-waveform"]'),
+    ).not.toBeNull();
+
+    act(() => {
+      emitDevMockSpeech(PASSAGE_ONE);
+    });
+    expect(answer).toHaveValue(PASSAGE_ONE);
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Stop dictation" }));
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    await waitFor(() => {
+      expect(check).toBeEnabled();
+    });
+    await user.click(check);
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(await screen.findByText("100% recalled.")).toBeVisible();
+  });
+
+  it("DEV insert sample fills the recall box without auto-Check", async () => {
+    window.localStorage.setItem("berean:mockSpeech", "1");
+    const user = userEvent.setup();
+    renderGuided();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await user.click(
+      await screen.findByRole("button", { name: "Dictate verse" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Insert spoken sample" }),
+    );
+    expect(answer).toHaveValue("The Lord is my shepherd; I shall not want");
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Check answer/ })).toBeEnabled();
+  });
+
+  it("toggles the mic with Space when the box is empty, and inserts a space once it has text", async () => {
+    installDictationSupport();
+    const user = userEvent.setup();
+    renderGuided();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await user.click(answer);
+    await user.keyboard(" ");
+    expect(answer).toHaveValue("");
+    expect(
+      screen.getByRole("button", { name: "Stop dictation" }),
+    ).toBeVisible();
+
+    await user.keyboard(" ");
+    expect(screen.getByRole("button", { name: "Dictate verse" })).toBeVisible();
+
+    await user.type(answer, "hello");
+    await user.keyboard(" ");
+    expect(answer).toHaveValue("hello ");
+    expect(screen.getByRole("button", { name: "Dictate verse" })).toBeVisible();
+  });
+
+  it("does not show the mic on Read prime cards", async () => {
+    installDictationSupport();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[learningVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Read it through, then continue")).toBeVisible();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Dictate verse" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Your recalled verse"),
     ).not.toBeInTheDocument();
   });
 });

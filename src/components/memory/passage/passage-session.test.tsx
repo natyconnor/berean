@@ -54,6 +54,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
     },
+    transcribe: { transcribeAudio: "transcribe.transcribeAudio" },
   },
 }));
 
