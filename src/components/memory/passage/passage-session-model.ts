@@ -109,9 +109,35 @@ export type StallCueContent = {
 };
 
 /**
+ * Last learned verse before the repair window. Walks backward so a gapped
+ * pack still cues from a verse the learner already knows, not an unreached
+ * hole — and never from the verse they are about to type.
+ */
+function learnedTextBeforeRepair(
+  pieces: readonly PassagePiece[],
+  texts: readonly string[],
+  repairStart: number,
+): string | undefined {
+  for (let index = repairStart - 1; index >= 0; index -= 1) {
+    const piece = pieces[index];
+    if (
+      piece == null ||
+      (piece.attachment !== "attached" && piece.attachment !== "solid")
+    ) {
+      continue;
+    }
+    const text = texts[index];
+    if (text != null && text.trim().length > 0) return text;
+  }
+  return undefined;
+}
+
+/**
  * Bridge / recovery cue after a failed multi-verse recitation.
+ * `previousText` is the verse *before* the repair window (the phrase the
+ * learner should pick up after), never the first verse they need to type.
  * When the main panel already shows Guided/Challenge letter hints, only keep
- * the clear-text bridge from the previous verse — do not duplicate first letters.
+ * that clear-text bridge — do not duplicate first letters.
  */
 export function stallRepairCue(
   previousText: string | undefined,
@@ -243,15 +269,22 @@ export function computeStallCue(
   texts: readonly string[],
 ): StallCueContent | null {
   if (state.phase !== "stall-repair") return null;
-  const mapping = state.rehearsalRopeIndexes ?? [];
+  const mapping =
+    state.rehearsalRopeIndexes && state.rehearsalRopeIndexes.length > 0
+      ? state.rehearsalRopeIndexes
+      : ropePieceIndexes(state.pieces);
   const stallLocal = state.stallIndex ?? 0;
   const stalledIndex = mapping[stallLocal];
-  const previousIndex = stallLocal > 0 ? mapping[stallLocal - 1] : undefined;
   const stalledText =
     stalledIndex !== undefined ? (texts[stalledIndex] ?? "") : "";
-  const previousText =
-    previousIndex !== undefined ? texts[previousIndex] : undefined;
   const indexes = repairPromptIndexes(state);
+  const repairStart = indexes[0];
+  // Repair retries from one verse *before* the stall, so the bridge must come
+  // from the verse before that window — not the ending of the starting verse.
+  const previousText =
+    repairStart === undefined
+      ? undefined
+      : learnedTextBeforeRepair(state.pieces, texts, repairStart);
   const showsStageHints = repairWindowShowsStageHints(state.pieces, indexes);
   const cue = stallRepairCue(previousText, stalledText, {
     includeStalledLetters: !showsStageHints,
