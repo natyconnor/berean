@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { NewDraft } from "../hooks/use-passage-notes-ui-state";
 import type {
   HighlightRange,
   VerseHeadingAtOffset,
@@ -131,7 +132,7 @@ export interface VerseRowWithNotesProps {
 
   openVerseKeys: Set<number>;
   openPassageKeys: Set<number>;
-  draftsForThisAnchor: VerseRef[];
+  draftsForThisAnchor: NewDraft[];
   editingNoteIds: Set<Id<"notes">>;
   isFocusTarget?: boolean;
 
@@ -168,6 +169,11 @@ export interface VerseRowWithNotesProps {
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
   onEditorFocus: (key: string) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  onRetargetNewDraft: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: { body: NoteBody; tags: string[] },
+  ) => void;
   onNoteDeleteCleanup: (
     noteId: Id<"notes">,
     verseNumber: number,
@@ -236,6 +242,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onEditorDirtyChange,
   onEditorFocus,
   onStartCreatingPassageNote,
+  onRetargetNewDraft,
   onNoteDeleteCleanup,
   focusDistance = null,
   highlights,
@@ -302,7 +309,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     if (isVerseOpen) onCloseVerseNotes(verseNumber);
     if (isPassageOpen) onClosePassageNotes(verseNumber);
     for (const draft of draftsForThisAnchor) {
-      onCancelEditor(`new:${draft.startVerse}:${draft.endVerse}`);
+      onCancelEditor(draft.editorKey);
     }
   }, [
     isVerseOpen,
@@ -515,7 +522,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
 
           <AnimatePresence initial={false}>
             {draftsForThisAnchor.map((draft) => {
-              const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
+              const draftEditorKey = draft.editorKey;
               return (
                 <motion.div
                   key={draftEditorKey}
@@ -527,18 +534,25 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                   transition={NOTE_ENTER_TRANSITION}
                 >
                   <NoteEditor
-                    verseRef={draft}
+                    verseRef={draft.verseRef}
+                    initialBody={draft.snapshot?.body}
+                    initialTags={draft.snapshot?.tags}
                     variant={
-                      draft.startVerse !== draft.endVerse
+                      draft.verseRef.startVerse !== draft.verseRef.endVerse
                         ? "passage"
                         : "default"
                     }
-                    onSave={(body, tags) => onSaveNew(draft, body, tags)}
+                    onSave={(body, tags) =>
+                      onSaveNew(draft.verseRef, body, tags)
+                    }
                     onCancel={() => onCancelEditor(draftEditorKey)}
                     onDirtyChange={(isDirty) =>
                       onEditorDirtyChange(draftEditorKey, isDirty)
                     }
                     onFocusWithin={() => onEditorFocus(draftEditorKey)}
+                    onRetargetVerse={(nextRef, snapshot) =>
+                      onRetargetNewDraft(draftEditorKey, nextRef, snapshot)
+                    }
                   />
                 </motion.div>
               );

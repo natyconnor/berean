@@ -16,6 +16,7 @@ import {
   type NoteBody,
 } from "@/lib/note-inline-content";
 import { InlineVerseEditor } from "@/components/notes/editor/inline-verse-editor";
+import { VerseRangeTapChip } from "@/components/notes/verse-range-tap-chip";
 import { useNoteEditorTour } from "@/components/tutorial/use-note-editor-tour";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { InlineFeatureCallout } from "@/components/tutorial/inline-feature-callout";
@@ -51,6 +52,11 @@ interface NoteEditorProps {
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onFocusWithin?: () => void;
+  /** New drafts only: retarget the in-progress note without remounting identity. */
+  onRetargetVerse?: (
+    nextRef: VerseRef,
+    snapshot: { body: NoteBody; tags: string[] },
+  ) => void;
 }
 
 export function NoteEditor({
@@ -64,6 +70,7 @@ export function NoteEditor({
   onCancel,
   onDirtyChange,
   onFocusWithin,
+  onRetargetVerse,
 }: NoteEditorProps) {
   const [initialEditorBody] = useState<NoteBody>(() =>
     normalizeNoteBody(initialBody, initialContent),
@@ -115,7 +122,8 @@ export function NoteEditor({
     setSaveError(null);
   }, []);
 
-  const isNewNote = !initialContent && !initialBody;
+  const isNewNote =
+    Boolean(onRetargetVerse) || (!initialContent && !initialBody);
 
   useEffect(() => {
     if (!onDirtyChange) return;
@@ -193,10 +201,19 @@ export function NoteEditor({
         )}
       >
         {!isChapter ? (
-          <Badge variant="secondary" className="text-xs">
-            {isPassage ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
-            {formatVerseRef(verseRef)}
-          </Badge>
+          onRetargetVerse ? (
+            <VerseRangeTapChip
+              verseRef={verseRef}
+              isPassage={isPassage}
+              disabled={isSaving}
+              onNudge={(nextRef) => onRetargetVerse(nextRef, { body, tags })}
+            />
+          ) : (
+            <Badge variant="secondary" className="text-xs">
+              {isPassage ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
+              {formatVerseRef(verseRef)}
+            </Badge>
+          )
         ) : null}
         <TooltipButton
           variant="ghost"

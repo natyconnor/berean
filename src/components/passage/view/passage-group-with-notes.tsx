@@ -25,6 +25,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
+import type { NewDraft } from "../hooks/use-passage-notes-ui-state";
 import type {
   HighlightRange,
   VerseHeadingAtOffset,
@@ -52,7 +53,7 @@ interface PassageGroupWithNotesProps {
   onRecolorHighlight?: (highlightId: string, color: string) => void;
   isPassageOpen: boolean;
   editingNoteIds: Set<Id<"notes">>;
-  draftsForAnchor: VerseRef[];
+  draftsForAnchor: NewDraft[];
   focusDistance?: number | null;
   onOpenPassageNotes: (verseNumber: number) => void;
   onClosePassageNotes: (verseNumber: number) => void;
@@ -78,6 +79,11 @@ interface PassageGroupWithNotesProps {
   onEditorDirtyChange: (key: string, isDirty: boolean) => void;
   onEditorFocus: (key: string) => void;
   onStartCreatingPassageNote: (verseRef: VerseRef) => void;
+  onRetargetNewDraft: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: { body: NoteBody; tags: string[] },
+  ) => void;
   onNoteDeleteCleanup: (
     noteId: Id<"notes">,
     verseNumber: number,
@@ -139,6 +145,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onEditorDirtyChange,
   onEditorFocus,
   onStartCreatingPassageNote,
+  onRetargetNewDraft,
   onNoteDeleteCleanup,
   onPassageBubbleMouseEnter,
   onPassageBubbleMouseLeave,
@@ -329,7 +336,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
 
               <AnimatePresence initial={false}>
                 {draftsForAnchor.map((draft) => {
-                  const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
+                  const draftEditorKey = draft.editorKey;
                   return (
                     <motion.div
                       key={draftEditorKey}
@@ -341,18 +348,25 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                       transition={NOTE_ENTER_TRANSITION}
                     >
                       <NoteEditor
-                        verseRef={draft}
+                        verseRef={draft.verseRef}
+                        initialBody={draft.snapshot?.body}
+                        initialTags={draft.snapshot?.tags}
                         variant={
-                          draft.startVerse !== draft.endVerse
+                          draft.verseRef.startVerse !== draft.verseRef.endVerse
                             ? "passage"
                             : "default"
                         }
-                        onSave={(body, tags) => onSaveNew(draft, body, tags)}
+                        onSave={(body, tags) =>
+                          onSaveNew(draft.verseRef, body, tags)
+                        }
                         onCancel={() => onCancelEditor(draftEditorKey)}
                         onDirtyChange={(isDirty) =>
                           onEditorDirtyChange(draftEditorKey, isDirty)
                         }
                         onFocusWithin={() => onEditorFocus(draftEditorKey)}
+                        onRetargetVerse={(nextRef, snapshot) =>
+                          onRetargetNewDraft(draftEditorKey, nextRef, snapshot)
+                        }
                       />
                     </motion.div>
                   );

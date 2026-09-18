@@ -13,6 +13,7 @@ import {
   type EditorSlot,
   type ExpandedPassageRange,
   type FocusTarget,
+  type NewDraft,
 } from "./use-passage-notes-ui-state";
 
 const CHAPTER_NOTES_DIRTY_KEY = "chapter-notes";
@@ -31,7 +32,7 @@ export interface PassageNotesInteraction {
   openEditors: Map<string, EditorSlot>;
   currentFocusTarget: FocusTarget | null;
   editingNoteIds: Set<Id<"notes">>;
-  newDraftsByAnchor: Map<number, VerseRef[]>;
+  newDraftsByAnchor: Map<number, NewDraft[]>;
   isPassageSelection: boolean;
 
   chapterScopedNotes: NoteWithRef[];
@@ -82,6 +83,11 @@ export interface PassageNotesInteraction {
     isPassage: boolean,
   ) => void;
   startCreatingPassageNote: (verseRef: VerseRef) => void;
+  retargetNewDraft: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: { body: NoteBody; tags: string[] },
+  ) => void;
   handleEditorFocus: (key: string) => void;
   normalizeForFocusMode: () => void;
   showDiscardConfirmation: boolean;
