@@ -314,6 +314,67 @@ describe("PassageSession", () => {
     expect(args.wordCount).toBeGreaterThan(0);
   });
 
+  it("advances the journey bar on a qualifying check before Continue", async () => {
+    const started = piece(0, "learning", { learnStage: 1, stageReps: 0 });
+    const progressed = piece(0, "learning", { learnStage: 1, stageReps: 1 });
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView([progressed]),
+    );
+
+    renderSession(passageView([started]));
+
+    const journeyBefore = await screen.findByLabelText(/Learning journey:/);
+    const pctBefore = Number(
+      (journeyBefore.getAttribute("aria-label") ?? "").match(/(\d+)%/)?.[1],
+    );
+    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText(/recalled\./)).toBeVisible();
+    await waitFor(() => {
+      const journeyAfter = screen.getByLabelText(/Learning journey:/);
+      const pctAfter = Number(
+        (journeyAfter.getAttribute("aria-label") ?? "").match(/(\d+)%/)?.[1],
+      );
+      expect(pctAfter).toBeGreaterThan(pctBefore);
+    });
+    expect(
+      screen.getByRole("button", { name: /Continue|Try again/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("fills the journey bar to 100% on the final qualifying check", async () => {
+    const almostDone = piece(0, "learning", {
+      learnStage: 3,
+      stageReps: 1,
+    });
+    const graduated = piece(0, "solid", {
+      learnStage: 3,
+      stageReps: 0,
+    });
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView([graduated], { status: "reviewing" }),
+    );
+
+    renderSession(passageView([almostDone]));
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText(/recalled\./)).toBeVisible();
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText(/Learning journey:.*100%/),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("uses plain language for the remaining session copy", () => {
     expect(DONE_FOR_NOW_LABEL).toBe("That's enough for today");
     expect(FRONTIER_LOCKED_COPY).toMatch(/down for the day/);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { practiceChromeFor } from "./practice-stages";
+import { currentStageStep, practiceChromeFor } from "./practice-stages";
 
 describe("practiceChromeFor", () => {
   it("maps practice stages onto lifecycle status colors", () => {
@@ -12,5 +12,14 @@ describe("practiceChromeFor", () => {
 
   it("uses mastered colors once the verse reaches mastered status", () => {
     expect(practiceChromeFor(3, "mastered").dot).toContain("emerald");
+  });
+});
+
+describe("currentStageStep", () => {
+  it("shows the current step, not completed count", () => {
+    expect(currentStageStep(0, 5)).toBe(1);
+    expect(currentStageStep(1, 5)).toBe(2);
+    expect(currentStageStep(4, 5)).toBe(5);
+    expect(currentStageStep(5, 5)).toBe(5);
   });
 });

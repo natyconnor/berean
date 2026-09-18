@@ -122,3 +122,13 @@ export function practiceChromeFor(
   );
   return PRACTICE_STAGES[clampedStage]?.color ?? PRACTICE_STAGES[0].color;
 }
+
+/**
+ * 1-based step the learner is on within the current band's required reps.
+ * `stageReps` is banked/completed count (0 before the first attempt), so the
+ * displayed step is `stageReps + 1`, clamped to the band's requirement.
+ */
+export function currentStageStep(stageReps: number, required: number): number {
+  const requirement = Math.max(1, required);
+  return Math.min(Math.max(0, stageReps) + 1, requirement);
+}

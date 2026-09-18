@@ -357,6 +357,9 @@ describe("PracticeBoard learning Read prime", () => {
     expect(
       screen.queryByText("Read it through, then continue"),
     ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+    });
   });
 });
 
@@ -364,6 +367,99 @@ const guidedVerse: PracticeVerse = {
   ...learningVerse,
   learnStage: 1,
 };
+
+describe("PracticeBoard learning step label", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listAll", [
+      {
+        verseRefId: VERSE_REF_ID,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      },
+    ]);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+  });
+
+  it("shows the current step (1 of N), not completed count", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[guidedVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByText(/Guided · 1 of \d+ today/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Guided · 0 of/)).not.toBeInTheDocument();
+  });
+
+  it("advances the journey bar when a check settles, before Continue", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 1,
+      stageReps: 1,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + 1000,
+      consecutiveCorrect: 1,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[guidedVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    await screen.findByText(/Guided · 1 of \d+ today/);
+    const pctBefore = Math.max(
+      ...screen
+        .getAllByLabelText(/Learning journey:/)
+        .map((el) =>
+          Number((el.getAttribute("aria-label") ?? "").match(/(\d+)%/)?.[1]),
+        ),
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    await waitFor(() => {
+      const pctAfter = Math.max(
+        ...screen
+          .getAllByLabelText(/Learning journey:/)
+          .map((el) =>
+            Number((el.getAttribute("aria-label") ?? "").match(/(\d+)%/)?.[1]),
+          ),
+      );
+      expect(pctAfter).toBeGreaterThan(pctBefore);
+    });
+    expect(
+      screen.getByRole("button", { name: /Continue/ }),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("PracticeBoard recall submit loading", () => {
   beforeEach(() => {

@@ -11,6 +11,7 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
 import {
+  currentStageStep,
   PRACTICE_STAGES,
   practiceChromeFor,
 } from "@/components/memory/practice/practice-stages";
@@ -177,6 +178,13 @@ export function PassageRecallCard({
     actionRef.current?.focus();
   }, [checked, isReadPrime]);
 
+  // After Read advances into a typing band, focus the answer box. Continue is
+  // unmounted on that transition, so without this focus is left on body.
+  useEffect(() => {
+    if (checked || isReadPrime) return;
+    answerInputRef.current?.focus();
+  }, [checked, isReadPrime]);
+
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
@@ -186,7 +194,7 @@ export function PassageRecallCard({
   const requiredToday = requiredRepsFor(learnStage, wordCount);
   const sessionGoalLabel =
     showJourneyBar && status !== "reviewing" && status !== "mastered"
-      ? `${stageInfo.label} · ${Math.min(stageReps, requiredToday)} of ${requiredToday} today`
+      ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
       : null;
 
   const fieldLabel =

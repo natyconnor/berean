@@ -88,7 +88,11 @@ import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
 import { LearningJourneyBar } from "./learning-journey-bar";
-import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
+import {
+  currentStageStep,
+  PRACTICE_STAGES,
+  practiceChromeFor,
+} from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
 import { ReviewSummary, type ReviewSessionAttempt } from "../review-summary";
 import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
@@ -870,7 +874,7 @@ function PracticeCard({
   const sessionGoalLabel =
     status === "reviewing" || status === "mastered"
       ? null
-      : `${stageInfo.label} · ${Math.min(stageReps, requiredToday)} of ${requiredToday} today`;
+      : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
 
   // A session-ending clear locks the verse the instant its attempt is adopted.
   // Hold the graded result until the learner continues so the feedback they
@@ -982,6 +986,14 @@ function PracticeCard({
   useEffect(() => {
     if (showLocked || (!checked && !isReadPrime)) return;
     reviewActionRef.current?.focus();
+  }, [checked, isReadPrime, showLocked]);
+
+  // After Read advances into a typing band (or when landing mid-ladder), put
+  // the caret in the answer box. Continue is unmounted, so without this the
+  // document is left unfocused until the learner clicks.
+  useEffect(() => {
+    if (showLocked || checked || isReadPrime) return;
+    answerInputRef.current?.focus();
   }, [checked, isReadPrime, showLocked]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
