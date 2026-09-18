@@ -55,7 +55,8 @@ export interface BrowserSpeechRecognition {
   onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
   onspeechstart: (() => void) | null;
-  start(): void;
+  /** Chrome 135+: pass a live audio track so recognition shares getUserMedia. */
+  start(audioTrack?: MediaStreamTrack): void;
   stop(): void;
   abort(): void;
 }
@@ -219,6 +220,35 @@ export function preferContinuousSpeechRecognition(): boolean {
   if (typeof window === "undefined") return false;
   const speechWindow = window as SpeechWindow;
   return typeof speechWindow.SpeechRecognition === "function";
+}
+
+/**
+ * Chrome/Edge 135+ accept `start(audioTrack)` so one getUserMedia stream can
+ * feed both the waveform analyser and SpeechRecognition. Safari's webkit-only
+ * constructor ignores extra `start()` arguments and will open a second capture
+ * (and starve recognition) if JS already holds the mic.
+ */
+export function speechRecognitionAcceptsAudioTrack(): boolean {
+  return preferContinuousSpeechRecognition();
+}
+
+export function stopMediaStream(stream: MediaStream | null | undefined): void {
+  if (!stream) return;
+  for (const track of stream.getTracks()) {
+    track.stop();
+  }
+}
+
+/** One getUserMedia capture for a dictation session. Caller must stop tracks. */
+export async function openDictationMicStream(): Promise<MediaStream | null> {
+  if (typeof navigator === "undefined") return null;
+  const mediaDevices = navigator.mediaDevices;
+  if (!mediaDevices?.getUserMedia) return null;
+  try {
+    return await mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch {
+    return null;
+  }
 }
 
 /** Join a newly recognized phrase onto text already in the recall box. */

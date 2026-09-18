@@ -1,3 +1,5 @@
+import { openDictationMicStream, stopMediaStream } from "@/lib/web-speech";
+
 export const WAVE_BAR_COUNT = 24;
 export const WAVE_MIN_HEIGHT_PX = 6;
 export const WAVE_MAX_HEIGHT_PX = 44;
@@ -21,22 +23,14 @@ function audioContextConstructor(): (new () => AudioContext) | undefined {
 }
 
 /**
- * Open one microphone stream and AnalyserNode for a listening session.
- * Caller must `stop()` when listening ends; do not open/close per frame.
+ * Analyser for a stream we do not own. `stop()` disconnects the graph and
+ * closes the AudioContext; it does not end the MediaStream tracks.
  */
-export async function openLiveMicAnalyser(): Promise<LiveMicAnalyser | null> {
-  const mediaDevices = navigator.mediaDevices;
-  if (!mediaDevices?.getUserMedia) return null;
-
+export function connectMicAnalyser(
+  stream: MediaStream,
+): LiveMicAnalyser | null {
   const Context = audioContextConstructor();
   if (!Context) return null;
-
-  let stream: MediaStream;
-  try {
-    stream = await mediaDevices.getUserMedia({ audio: true, video: false });
-  } catch {
-    return null;
-  }
 
   let context: AudioContext | null = null;
   try {
@@ -47,7 +41,7 @@ export async function openLiveMicAnalyser(): Promise<LiveMicAnalyser | null> {
     analyser.smoothingTimeConstant = 0.4;
     source.connect(analyser);
     if (context.state === "suspended") {
-      await context.resume();
+      void context.resume();
     }
 
     let stopped = false;
@@ -57,23 +51,41 @@ export async function openLiveMicAnalyser(): Promise<LiveMicAnalyser | null> {
         if (stopped) return;
         stopped = true;
         source.disconnect();
-        for (const track of stream.getTracks()) {
-          track.stop();
-        }
         if (context && context.state !== "closed") {
           void context.close();
         }
       },
     };
   } catch {
-    for (const track of stream.getTracks()) {
-      track.stop();
-    }
     if (context && context.state !== "closed") {
       void context.close();
     }
     return null;
   }
+}
+
+/**
+ * Open one microphone stream and AnalyserNode for a listening session.
+ * Caller must `stop()` when listening ends; do not open/close per frame.
+ */
+export async function openLiveMicAnalyser(): Promise<LiveMicAnalyser | null> {
+  const stream = await openDictationMicStream();
+  if (!stream) return null;
+  const visual = connectMicAnalyser(stream);
+  if (!visual) {
+    stopMediaStream(stream);
+    return null;
+  }
+  let stopped = false;
+  return {
+    analyser: visual.analyser,
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      visual.stop();
+      stopMediaStream(stream);
+    },
+  };
 }
 
 /**

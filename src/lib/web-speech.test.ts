@@ -8,6 +8,7 @@ import {
   isSpaceToggleKey,
   isSpeechRecognitionSupported,
   preferContinuousSpeechRecognition,
+  speechRecognitionAcceptsAudioTrack,
 } from "./web-speech";
 
 describe("web-speech helpers", () => {
@@ -57,6 +58,7 @@ describe("web-speech helpers", () => {
     expect(isSpeechRecognitionSupported()).toBe(true);
     expect(getSpeechRecognitionCtor()).toBe(Fake);
     expect(preferContinuousSpeechRecognition()).toBe(false);
+    expect(speechRecognitionAcceptsAudioTrack()).toBe(false);
 
     speechWindow.SpeechRecognition = original;
     speechWindow.webkitSpeechRecognition = originalWebkit;
@@ -69,6 +71,7 @@ describe("web-speech helpers", () => {
     const original = speechWindow.SpeechRecognition;
     speechWindow.SpeechRecognition = class Fake {};
     expect(preferContinuousSpeechRecognition()).toBe(true);
+    expect(speechRecognitionAcceptsAudioTrack()).toBe(true);
     speechWindow.SpeechRecognition = original;
   });
 

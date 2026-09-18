@@ -15,15 +15,18 @@ export function RecallDictationMic({
   onToggle,
   disabled = false,
   onInsertSample,
+  micStream = null,
 }: {
   listening: boolean;
   onToggle: () => void;
   disabled?: boolean;
   onInsertSample?: () => void;
+  /** Shared capture from the dictation hook; waveform must not open its own. */
+  micStream?: MediaStream | null;
 }) {
   return (
     <div className="flex flex-col items-stretch gap-2">
-      {listening ? <DictationWaveform active /> : null}
+      {listening ? <DictationWaveform active stream={micStream} /> : null}
       <Button
         type="button"
         variant={listening ? "default" : "outline"}

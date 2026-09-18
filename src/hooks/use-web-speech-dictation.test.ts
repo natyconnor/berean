@@ -21,9 +21,11 @@ class MockSpeechRecognition implements BrowserSpeechRecognition {
   onend: (() => void) | null = null;
   onspeechstart: (() => void) | null = null;
   startCount = 0;
+  lastAudioTrack: MediaStreamTrack | undefined;
 
-  start(): void {
+  start(audioTrack?: MediaStreamTrack): void {
     this.startCount += 1;
+    this.lastAudioTrack = audioTrack;
   }
 
   stop(): void {
@@ -77,6 +79,8 @@ function lastRecognition(): MockSpeechRecognition {
 }
 
 describe("useWebSpeechDictation", () => {
+  const originalMediaDevices = navigator.mediaDevices;
+
   beforeEach(() => {
     instances.length = 0;
     window.localStorage.removeItem("berean:hideSpeech");
@@ -94,6 +98,10 @@ describe("useWebSpeechDictation", () => {
     };
     delete speechWindow.SpeechRecognition;
     delete speechWindow.webkitSpeechRecognition;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: originalMediaDevices,
+    });
   });
 
   it("reports unsupported when the API is missing", () => {
@@ -295,7 +303,47 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.listening).toBe(false);
   });
 
-  it("uses single-shot recognition when only the webkit constructor exists", () => {
+  it("starts Chrome recognition on the shared getUserMedia track", async () => {
+    const stopTrack = vi.fn();
+    const track = {
+      kind: "audio",
+      readyState: "live",
+      stop: stopTrack,
+    } as unknown as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    } as unknown as MediaStream;
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {} }),
+    );
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true, video: false });
+    expect(result.current.listening).toBe(true);
+    expect(result.current.micStream).toBe(stream);
+    expect(lastRecognition().lastAudioTrack).toBe(track);
+    expect(lastRecognition().startCount).toBe(1);
+
+    act(() => {
+      result.current.stop();
+    });
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+    expect(result.current.micStream).toBeNull();
+    expect(result.current.listening).toBe(false);
+  });
+
+  it("does not open getUserMedia when only webkitSpeechRecognition exists", () => {
     const speechWindow = window as Window & {
       SpeechRecognition?: unknown;
       webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
@@ -307,13 +355,21 @@ describe("useWebSpeechDictation", () => {
         instances.push(this);
       }
     };
+    const getUserMedia = vi.fn();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {} }),
     );
     act(() => {
       result.current.start();
     });
+    expect(getUserMedia).not.toHaveBeenCalled();
     expect(lastRecognition().continuous).toBe(false);
+    expect(lastRecognition().lastAudioTrack).toBeUndefined();
+    expect(result.current.micStream).toBeNull();
   });
 
   it("stops on Space while listening without starting a new session", () => {

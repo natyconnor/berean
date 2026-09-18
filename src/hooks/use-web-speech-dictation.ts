@@ -3,11 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getSpeechRecognitionCtor,
   isSpeechRecognitionSupported,
+  openDictationMicStream,
   preferContinuousSpeechRecognition,
   setDevTranscriptSink,
+  speechRecognitionAcceptsAudioTrack,
   SPEECH_QUICK_END_MS,
   SPEECH_RESTART_GAP_MS,
   SPEECH_SILENCE_TIMEOUT_MS,
+  stopMediaStream,
   type BrowserSpeechRecognition,
   isSpaceToggleKey,
 } from "@/lib/web-speech";
@@ -20,6 +23,8 @@ export interface UseWebSpeechDictationOptions {
 export interface WebSpeechDictation {
   supported: boolean;
   listening: boolean;
+  /** Shared getUserMedia stream when recognition can consume an audio track. */
+  micStream: MediaStream | null;
   start: () => void;
   stop: () => void;
   toggle: () => void;
@@ -64,6 +69,7 @@ export function useWebSpeechDictation({
 }: UseWebSpeechDictationOptions): WebSpeechDictation {
   const [supported, setSupported] = useState(isSpeechRecognitionSupported);
   const [listening, setListening] = useState(false);
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
   const onTranscriptRef = useRef(onTranscript);
   useEffect(() => {
@@ -79,6 +85,15 @@ export function useWebSpeechDictation({
   const lastStartAtRef = useRef(0);
   const heardSpeechRef = useRef(false);
   const quickEndsRef = useRef(0);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const audioTrackRef = useRef<MediaStreamTrack | undefined>(undefined);
+
+  const releaseMicStream = useCallback(() => {
+    stopMediaStream(micStreamRef.current);
+    micStreamRef.current = null;
+    audioTrackRef.current = undefined;
+    setMicStream(null);
+  }, []);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current !== null) {
@@ -99,6 +114,7 @@ export function useWebSpeechDictation({
     setDevTranscriptSink(null);
     clearSilenceTimer();
     clearRestartTimer();
+    releaseMicStream();
     setListening(false);
     const recognition = recognitionRef.current;
     if (!recognition) return;
@@ -107,7 +123,7 @@ export function useWebSpeechDictation({
     } catch {
       recognitionRef.current = null;
     }
-  }, [clearRestartTimer, clearSilenceTimer]);
+  }, [clearRestartTimer, clearSilenceTimer, releaseMicStream]);
 
   useEffect(() => {
     function syncSupport() {
@@ -127,16 +143,25 @@ export function useWebSpeechDictation({
   }, [clearSilenceTimer, stop]);
 
   const launchRecognition = useCallback(
-    (recognition: BrowserSpeechRecognition) => {
+    (recognition: BrowserSpeechRecognition, audioTrack?: MediaStreamTrack) => {
       lastStartAtRef.current = Date.now();
       heardSpeechRef.current = false;
       try {
+        if (audioTrack && audioTrack.readyState === "live") {
+          recognition.start(audioTrack);
+          return;
+        }
         recognition.start();
       } catch {
-        stop();
+        releaseMicStream();
+        try {
+          recognition.start();
+        } catch {
+          stop();
+        }
       }
     },
-    [stop],
+    [releaseMicStream, stop],
   );
 
   const scheduleRestart = useCallback(
@@ -150,7 +175,7 @@ export function useWebSpeechDictation({
         restartTimerRef.current = null;
         if (!wantRef.current) return;
         if (recognitionRef.current !== recognition) return;
-        launchRecognition(recognition);
+        launchRecognition(recognition, audioTrackRef.current);
       }, wait);
     },
     [clearRestartTimer, launchRecognition],
@@ -246,18 +271,45 @@ export function useWebSpeechDictation({
       scheduleRestart(recognition);
     };
 
-    launchRecognition(recognition);
-    if (!wantRef.current) {
-      clearSilenceTimer();
-      return;
-    }
+    const begin = (audioTrack?: MediaStreamTrack) => {
+      if (!wantRef.current || recognitionRef.current !== recognition) {
+        if (audioTrack) stopMediaStream(micStreamRef.current);
+        return;
+      }
+      audioTrackRef.current = audioTrack;
+      launchRecognition(recognition, audioTrack);
+      if (!wantRef.current) {
+        clearSilenceTimer();
+        releaseMicStream();
+      }
+    };
+
+    const shareMic =
+      speechRecognitionAcceptsAudioTrack() &&
+      typeof navigator.mediaDevices?.getUserMedia === "function";
 
     setListening(true);
     armSilenceTimer();
+
+    if (!shareMic) {
+      begin();
+      return;
+    }
+
+    void openDictationMicStream().then((stream) => {
+      if (!wantRef.current || recognitionRef.current !== recognition) {
+        stopMediaStream(stream);
+        return;
+      }
+      micStreamRef.current = stream;
+      setMicStream(stream);
+      begin(stream?.getAudioTracks()[0]);
+    });
   }, [
     armSilenceTimer,
     clearSilenceTimer,
     launchRecognition,
+    releaseMicStream,
     scheduleRestart,
     stop,
   ]);
@@ -287,6 +339,9 @@ export function useWebSpeechDictation({
       setDevTranscriptSink(null);
       clearSilenceTimer();
       clearRestartTimer();
+      stopMediaStream(micStreamRef.current);
+      micStreamRef.current = null;
+      audioTrackRef.current = undefined;
       const recognition = recognitionRef.current;
       recognitionRef.current = null;
       try {
@@ -297,5 +352,5 @@ export function useWebSpeechDictation({
     };
   }, [clearRestartTimer, clearSilenceTimer]);
 
-  return { supported, listening, start, stop, toggle };
+  return { supported, listening, micStream, start, stop, toggle };
 }

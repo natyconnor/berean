@@ -842,6 +842,7 @@ function PracticeCard({
   const {
     supported: dictationSupported,
     listening: dictationListening,
+    micStream: dictationMicStream,
     start: startDictation,
     stop: stopDictation,
   } = useWebSpeechDictation({
@@ -1169,6 +1170,7 @@ function PracticeCard({
                       {dictationSupported ? (
                         <RecallDictationMic
                           listening={dictationListening}
+                          micStream={dictationMicStream}
                           onToggle={toggleDictation}
                           disabled={loading || Boolean(error) || locked}
                           onInsertSample={

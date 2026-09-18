@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   barHeightsFromTimeDomain,
+  connectMicAnalyser,
   openLiveMicAnalyser,
   WAVE_MIN_HEIGHT_PX,
 } from "./mic-amplitude";
@@ -106,6 +107,37 @@ describe("openLiveMicAnalyser", () => {
     session?.stop();
     session?.stop();
     expect(stopTrack).toHaveBeenCalledTimes(1);
+    expect(source.disconnect).toHaveBeenCalledTimes(1);
+    expect(context.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("connects an analyser without stopping the shared stream tracks", () => {
+    const stopTrack = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop: stopTrack }],
+    } as unknown as MediaStream;
+    const source = { connect: vi.fn(), disconnect: vi.fn() };
+    const analyser = { fftSize: 0, smoothingTimeConstant: 0 };
+    const context = {
+      state: "running",
+      createMediaStreamSource: vi.fn(() => source),
+      createAnalyser: vi.fn(() => analyser),
+      resume: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.stubGlobal(
+      "AudioContext",
+      vi.fn(function AudioContext() {
+        return context;
+      }),
+    );
+
+    const session = connectMicAnalyser(stream);
+    expect(session).not.toBeNull();
+    expect(context.createMediaStreamSource).toHaveBeenCalledWith(stream);
+    session?.stop();
+    session?.stop();
+    expect(stopTrack).not.toHaveBeenCalled();
     expect(source.disconnect).toHaveBeenCalledTimes(1);
     expect(context.close).toHaveBeenCalledTimes(1);
   });

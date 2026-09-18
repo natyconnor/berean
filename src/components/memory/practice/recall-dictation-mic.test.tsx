@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,12 +14,18 @@ type MicHarness = {
   frames: FrameRequestCallback[];
   getUserMedia: ReturnType<typeof vi.fn>;
   stopTrack: ReturnType<typeof vi.fn>;
+  stream: MediaStream;
   timeDomain: Uint8Array;
 };
 
 function installMicMocks(): MicHarness {
   const stopTrack = vi.fn();
-  const stream = { getTracks: () => [{ stop: stopTrack }] };
+  const stream = {
+    getTracks: () => [{ stop: stopTrack, kind: "audio", readyState: "live" }],
+    getAudioTracks: () => [
+      { stop: stopTrack, kind: "audio", readyState: "live" },
+    ],
+  } as unknown as MediaStream;
   const timeDomain = new Uint8Array(1024).fill(128);
   const analyser = {
     fftSize: 1024,
@@ -59,7 +65,7 @@ function installMicMocks(): MicHarness {
   });
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
 
-  return { analyser, frames, getUserMedia, stopTrack, timeDomain };
+  return { analyser, frames, getUserMedia, stopTrack, stream, timeDomain };
 }
 
 function barHeights(): number[] {
@@ -98,30 +104,31 @@ describe("RecallDictationMic live waveform", () => {
     expect(getUserMedia).not.toHaveBeenCalled();
   });
 
-  it("shows a prominent stop button and follows analyser amplitude on one stream", async () => {
-    const onToggle = vi.fn();
-    const { frames, getUserMedia, stopTrack, timeDomain } = installMicMocks();
+  it("does not call getUserMedia; the hook owns the shared stream", () => {
+    const { getUserMedia } = installMicMocks();
+    render(<RecallDictationMic listening onToggle={() => {}} />);
+    expect(
+      screen.getByRole("button", { name: "Stop dictation" }),
+    ).toHaveTextContent("Stop listening");
+    expect(
+      document.querySelector('[data-slot="dictation-waveform"]'),
+    ).not.toBeNull();
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("follows analyser amplitude from the shared stream without stopping tracks", () => {
+    const { frames, getUserMedia, stopTrack, stream, timeDomain } =
+      installMicMocks();
     const { rerender } = render(
-      <RecallDictationMic listening onToggle={onToggle} />,
+      <RecallDictationMic listening micStream={stream} onToggle={() => {}} />,
     );
 
     const stop = screen.getByRole("button", { name: "Stop dictation" });
     expect(stop).toHaveTextContent("Stop listening");
     expect(stop).toHaveClass("bg-red-600");
-    expect(
-      document.querySelector('[data-slot="dictation-waveform"]'),
-    ).not.toBeNull();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-mic="live"]')).not.toBeNull();
     expect(barHeights()).toHaveLength(WAVE_BAR_COUNT);
-
-    await waitFor(() => {
-      expect(getUserMedia).toHaveBeenCalledTimes(1);
-    });
-    await waitFor(() => {
-      expect(document.querySelector('[data-mic="live"]')).not.toBeNull();
-    });
-
-    rerender(<RecallDictationMic listening onToggle={onToggle} />);
-    expect(getUserMedia).toHaveBeenCalledTimes(1);
 
     timeDomain.fill(0);
     act(() => {
@@ -135,32 +142,26 @@ describe("RecallDictationMic live waveform", () => {
     });
     expect(barHeights().every((h) => h === WAVE_MIN_HEIGHT_PX)).toBe(true);
 
-    rerender(<RecallDictationMic listening={false} onToggle={onToggle} />);
-    await waitFor(() => {
-      expect(stopTrack).toHaveBeenCalledTimes(1);
-    });
+    rerender(
+      <RecallDictationMic
+        listening={false}
+        micStream={null}
+        onToggle={() => {}}
+      />,
+    );
+    expect(stopTrack).not.toHaveBeenCalled();
     expect(
       document.querySelector('[data-slot="dictation-waveform"]'),
     ).toBeNull();
   });
 
-  it("still shows listening chrome if getUserMedia fails", async () => {
+  it("still shows listening chrome without a stream", () => {
     installMicMocks();
-    const getUserMedia = vi.fn().mockRejectedValue(new Error("denied"));
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: { getUserMedia },
-    });
-
     render(<RecallDictationMic listening onToggle={() => {}} />);
     expect(
       screen.getByRole("button", { name: "Stop dictation" }),
     ).toBeVisible();
-    await waitFor(() => {
-      expect(getUserMedia).toHaveBeenCalled();
-    });
     expect(document.querySelector('[data-mic="live"]')).toBeNull();
-    expect(barHeights().every((h) => h === WAVE_MIN_HEIGHT_PX)).toBe(true);
   });
 
   it("toggles via the stop button", async () => {
