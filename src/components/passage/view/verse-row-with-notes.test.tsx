@@ -56,6 +56,7 @@ function defaultProps() {
     onEditorDirtyChange: vi.fn(),
     onEditorFocus: vi.fn(),
     onStartCreatingPassageNote: vi.fn(),
+    onRetargetNewDraft: vi.fn(),
     onNoteDeleteCleanup: vi.fn(),
     highlights: HIGHLIGHTS,
     onCreateHighlight: vi.fn(),

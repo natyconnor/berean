@@ -164,6 +164,7 @@ export function PassageViewBody({
     notifyEditorDirty,
     handleEditorFocus,
     startCreatingPassageNote,
+    retargetNewDraft,
     chapterNotesPanel,
   } = passageNotesInteraction;
 
@@ -425,6 +426,7 @@ export function PassageViewBody({
                         onEditorDirtyChange={notifyEditorDirty}
                         onEditorFocus={handleEditorFocus}
                         onStartCreatingPassageNote={startCreatingPassageNote}
+                        onRetargetNewDraft={retargetNewDraft}
                         onNoteDeleteCleanup={handleNoteDeleteCleanup}
                         onPassageBubbleMouseEnter={
                           handlePassageBubbleMouseEnter
@@ -541,6 +543,7 @@ export function PassageViewBody({
                       onEditorDirtyChange={notifyEditorDirty}
                       onEditorFocus={handleEditorFocus}
                       onStartCreatingPassageNote={startCreatingPassageNote}
+                      onRetargetNewDraft={retargetNewDraft}
                       onNoteDeleteCleanup={handleNoteDeleteCleanup}
                       highlights={highlightsByVerse.get(item.verseNumber)}
                       onCreateHighlight={onCreateHighlight}

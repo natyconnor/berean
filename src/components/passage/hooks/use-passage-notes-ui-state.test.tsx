@@ -986,3 +986,114 @@ describe("usePassageNotesUiState focus mode save behavior", () => {
     expect(result.current.openVerseKeys).toEqual(new Set([1]));
   });
 });
+
+describe("usePassageNotesUiState retargetNewDraft", () => {
+  it("keeps the editor key and dirty flag while moving either end", () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(defaultOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+
+    const editorKey = "new:16:16";
+    expect(result.current.openEditors.has(editorKey)).toBe(true);
+
+    act(() => {
+      result.current.notifyEditorDirty(editorKey, true);
+    });
+
+    const snapshot = { body: EMPTY_NOTE_BODY, tags: ["keep"] };
+
+    act(() => {
+      result.current.retargetNewDraft(
+        editorKey,
+        {
+          book: "Genesis",
+          chapter: 1,
+          startVerse: 16,
+          endVerse: 17,
+        },
+        snapshot,
+      );
+    });
+
+    expect(result.current.openEditors.has(editorKey)).toBe(true);
+    expect(result.current.openEditors.get(editorKey)).toMatchObject({
+      kind: "new",
+      verseRef: { startVerse: 16, endVerse: 17 },
+      snapshot,
+    });
+    expect(result.current.newDraftsByAnchor.get(16)?.[0]?.editorKey).toBe(
+      editorKey,
+    );
+    expect(result.current.passageDraftVerses.has(16)).toBe(true);
+    expect(result.current.passageDraftVerses.has(17)).toBe(true);
+
+    act(() => {
+      result.current.retargetNewDraft(
+        editorKey,
+        {
+          book: "Genesis",
+          chapter: 1,
+          startVerse: 15,
+          endVerse: 17,
+        },
+        snapshot,
+      );
+    });
+
+    expect(result.current.openEditors.has(editorKey)).toBe(true);
+    expect(result.current.newDraftsByAnchor.has(16)).toBe(false);
+    expect(result.current.newDraftsByAnchor.get(15)?.[0]?.verseRef).toEqual({
+      book: "Genesis",
+      chapter: 1,
+      startVerse: 15,
+      endVerse: 17,
+    });
+    expect(result.current.hasDirtyEditors).toBe(true);
+    expect(result.current.selectedVerses.has(15)).toBe(true);
+    expect(result.current.selectedVerses.has(16)).toBe(true);
+    expect(result.current.selectedVerses.has(17)).toBe(true);
+  });
+
+  it("closes the original editor key after save on a retargeted range", async () => {
+    const { result } = renderHook(() =>
+      usePassageNotesUiState(defaultOptions()),
+    );
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+
+    act(() => {
+      result.current.retargetNewDraft(
+        "new:16:16",
+        {
+          book: "Genesis",
+          chapter: 1,
+          startVerse: 16,
+          endVerse: 17,
+        },
+        { body: EMPTY_NOTE_BODY, tags: [] },
+      );
+    });
+
+    await act(async () => {
+      await result.current.handleSaveNew(
+        {
+          book: "Genesis",
+          chapter: 1,
+          startVerse: 16,
+          endVerse: 17,
+        },
+        EMPTY_NOTE_BODY,
+        [],
+      );
+    });
+
+    expect(result.current.openEditors.size).toBe(0);
+    expect(result.current.openEditors.has("new:16:16")).toBe(false);
+  });
+});
