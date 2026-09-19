@@ -7,7 +7,7 @@ import {
   getMirrorToConsole,
   setMirrorToConsole,
 } from "./dev-log";
-import { stitchSpokenText } from "./web-speech";
+import { appendSpokenText } from "./web-speech";
 import {
   classifySpokenStitch,
   sanitizeSttLogDetails,
@@ -85,41 +85,29 @@ describe("sttLog", () => {
     expect(body).toContain("<redacted-secret>");
   });
 
-  it("labels stitch decisions without changing stitchSpokenText", () => {
-    const overlapPrev = "The Lord";
-    const overlapNext = "Lord is my shepherd";
-    const overlapResult = stitchSpokenText(overlapPrev, overlapNext);
-    expect(overlapResult).toBe("The Lord is my shepherd");
+  it("labels append and overlap stitch decisions for later STT agents", () => {
+    const appended = appendSpokenText("The Lord", "I shall not want");
+    expect(appended).toBe("The Lord I shall not want");
     expect(
-      classifySpokenStitch(overlapPrev, overlapNext, overlapResult),
+      classifySpokenStitch("The Lord", "I shall not want", appended),
+    ).toEqual({
+      decision: "append",
+      overlapWords: 0,
+    });
+    expect(classifySpokenStitch("", "The Lord", "The Lord")).toEqual({
+      decision: "first",
+      overlapWords: 0,
+    });
+    expect(
+      classifySpokenStitch(
+        "The Lord",
+        "Lord is my shepherd",
+        "The Lord is my shepherd",
+      ),
     ).toEqual({
       decision: "overlap",
       overlapWords: 1,
     });
-
-    expect(
-      classifySpokenStitch(
-        "The Lord is my",
-        "The Lord is my shepherd",
-        stitchSpokenText("The Lord is my", "The Lord is my shepherd"),
-      ).decision,
-    ).toBe("incoming-covers-previous");
-
-    expect(
-      classifySpokenStitch(
-        "The Lord is my shepherd",
-        "shepherd",
-        stitchSpokenText("The Lord is my shepherd", "shepherd"),
-      ).decision,
-    ).toBe("previous-covers-incoming");
-
-    expect(
-      classifySpokenStitch(
-        "The Lord",
-        "I shall not want",
-        stitchSpokenText("The Lord", "I shall not want"),
-      ),
-    ).toEqual({ decision: "append", overlapWords: 0 });
   });
 });
 

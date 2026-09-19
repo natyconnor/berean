@@ -248,3 +248,11 @@ export const sttLog = {
     emitSttLog("error", event, details);
   },
 };
+
+/** Alias used by dictation code. Same gated `stt` channel as `sttLog.info`. */
+export function logStt(
+  action: string,
+  details?: Record<string, unknown>,
+): void {
+  sttLog.info(action, details);
+}

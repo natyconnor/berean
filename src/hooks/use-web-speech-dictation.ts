@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MIN_TRANSCRIBE_AUDIO_BYTES } from "@/lib/dictation-audio";
-import { logStt } from "@/lib/dev-log";
+import { classifySpokenStitch, logStt } from "@/lib/stt-log";
 import {
   appendSpokenText,
   blobToBase64,
@@ -27,10 +27,18 @@ import {
   type UtteranceVad,
 } from "@/lib/web-speech";
 
+export type TranscribeAudioResult = {
+  text: string;
+  requestId?: string;
+  model?: string;
+  httpStatus?: number;
+  latencyMs?: number;
+};
+
 export type TranscribeAudioFn = (args: {
   audioBase64: string;
   mimeType: string;
-}) => Promise<{ text: string }>;
+}) => Promise<TranscribeAudioResult>;
 
 export interface UseWebSpeechDictationOptions {
   /** Latest spoken text for this listening session (appended utterances). */
@@ -167,53 +175,92 @@ export function useWebSpeechDictation({
     if (sessionRef.current !== session) return;
     const pending = pendingRef.current;
     while (pending.has(appliedSeqRef.current)) {
-      const text = pending.get(appliedSeqRef.current) ?? "";
-      pending.delete(appliedSeqRef.current);
+      const seq = appliedSeqRef.current;
+      const text = pending.get(seq) ?? "";
+      pending.delete(seq);
       appliedSeqRef.current += 1;
       if (!text) continue;
-      committedRef.current = appendSpokenText(committedRef.current, text);
-      onTranscriptRef.current(committedRef.current);
-      logStt("transcript-apply", {
-        seq: appliedSeqRef.current - 1,
-        chars: text.length,
-        sessionChars: committedRef.current.length,
+      const previous = committedRef.current;
+      const result = appendSpokenText(previous, text);
+      logStt("stitch", {
+        session,
+        seq,
+        previous,
+        incoming: text,
+        result,
+        ...classifySpokenStitch(previous, text, result),
       });
+      committedRef.current = result;
+      onTranscriptRef.current(committedRef.current);
     }
   }, []);
 
   const sendUtterance = useCallback(
-    async (session: number, blob: Blob, reason: StopReason) => {
+    async (
+      session: number,
+      blob: Blob,
+      reason: StopReason,
+      durationMs: number,
+    ) => {
       if (sessionRef.current !== session) return;
       if (isDevSpeechMockEnabled()) return;
-      if (blob.size < MIN_TRANSCRIBE_AUDIO_BYTES) return;
+      const mime = blob.type || "audio/webm";
+      if (blob.size < MIN_TRANSCRIBE_AUDIO_BYTES) {
+        logStt("clip-skip", {
+          session,
+          reason: "too-small",
+          bytes: blob.size,
+          mime,
+          durationMs,
+        });
+        return;
+      }
       const seq = nextSeqRef.current;
       nextSeqRef.current += 1;
-      logStt("transcribe-send", {
+      logStt("clip-send", {
+        session,
         seq,
         bytes: blob.size,
-        mimeType: blob.type || "audio/webm",
+        mime,
+        durationMs,
         reason,
       });
+      const started = Date.now();
       try {
         const audioBase64 = await blobToBase64(blob);
         if (sessionRef.current !== session) return;
         const result = await transcribeRef.current({
           audioBase64,
-          mimeType: blob.type || "audio/webm",
+          mimeType: mime,
         });
         if (sessionRef.current !== session) return;
-        const text = spokenFromWhisper(result.text ?? "");
-        pendingRef.current.set(seq, text);
-        if (text) {
-          logStt("transcribe-ok", { seq, chars: text.length });
-        } else {
-          logStt("transcribe-empty", { seq });
-        }
+        const transcriptIn = result.text ?? "";
+        const transcriptOut = spokenFromWhisper(transcriptIn);
+        pendingRef.current.set(seq, transcriptOut);
+        logStt("transcribe-result", {
+          session,
+          seq,
+          bytes: blob.size,
+          mime,
+          durationMs,
+          clientLatencyMs: Date.now() - started,
+          requestId: result.requestId,
+          model: result.model,
+          httpStatus: result.httpStatus,
+          groqLatencyMs: result.latencyMs,
+          transcriptIn,
+          transcriptOut,
+        });
       } catch (error) {
         if (sessionRef.current !== session) return;
         pendingRef.current.set(seq, "");
         logStt("transcribe-error", {
+          session,
           seq,
+          bytes: blob.size,
+          mime,
+          durationMs,
+          clientLatencyMs: Date.now() - started,
           message: error instanceof Error ? error.message : "transcribe failed",
         });
       }
@@ -340,19 +387,35 @@ export function useWebSpeechDictation({
         const type = recorder.mimeType || mimeType || "audio/webm";
         const blob = new Blob(parts, { type });
         const elapsed = Date.now() - active.startedAt;
+        const loudEnough = shouldSendUtterance(
+          active.peakRms,
+          active.noiseFloor,
+        );
         const send =
           sessionRef.current === session &&
           blob.size >= MIN_TRANSCRIBE_AUDIO_BYTES &&
           elapsed >= MIN_UTTERANCE_MS &&
-          shouldSendUtterance(active.peakRms, active.noiseFloor);
+          loudEnough;
+        const skipReason = send
+          ? undefined
+          : sessionRef.current !== session
+            ? "stale-session"
+            : blob.size < MIN_TRANSCRIBE_AUDIO_BYTES
+              ? "too-small"
+              : elapsed < MIN_UTTERANCE_MS
+                ? "too-short"
+                : "silence";
         logStt("utterance-stop", {
           bytes: blob.size,
-          ms: elapsed,
+          mime: type,
+          durationMs: elapsed,
           send,
+          skipReason,
           peakRms: Number(active.peakRms.toFixed(4)),
+          stopReason: active.stopReason,
         });
         if (send) {
-          void sendUtterance(session, blob, active.stopReason);
+          void sendUtterance(session, blob, active.stopReason, elapsed);
         } else {
           vadRef.current = raiseNoiseFloorFromRejectedClip(vadRef.current);
         }
@@ -472,13 +535,25 @@ export function useWebSpeechDictation({
     wantRef.current = true;
     setListening(true);
     armSilenceTimer();
-    logStt("listen-start", { session });
+    logStt("listen-start", {
+      session,
+      mimeType: pickRecorderMimeType() || "(browser-default)",
+      mock: isDevSpeechMockEnabled(),
+    });
     setDevTranscriptSink((spoken) => {
       if (sessionRef.current !== session || !wantRef.current) return;
-      committedRef.current = appendSpokenText(
-        committedRef.current,
-        spokenFromWhisper(spoken),
-      );
+      const previous = committedRef.current;
+      const incoming = spokenFromWhisper(spoken);
+      const result = appendSpokenText(previous, incoming);
+      logStt("stitch", {
+        session,
+        source: "mock",
+        previous,
+        incoming,
+        result,
+        ...classifySpokenStitch(previous, incoming, result),
+      });
+      committedRef.current = result;
       onTranscriptRef.current(committedRef.current);
     });
 

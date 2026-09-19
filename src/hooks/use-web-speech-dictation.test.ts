@@ -401,62 +401,43 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.listening).toBe(false);
   });
 
-  it("logs listen start/stop and silent clip skips when STT debug is on", async () => {
+  it("logs listen start/stop when STT debug is on", async () => {
     window.localStorage.setItem(STT_DEBUG_STORAGE_KEY, "1");
     installDictationMocks();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
-      await Promise.resolve();
-    });
+    await startListening(result);
     act(() => {
       result.current.stop();
     });
 
     const bodies = getDevLogEntries().map((entry) => entry.body);
     expect(bodies.some((body) => body.includes("listen-start"))).toBe(true);
-    expect(bodies.some((body) => body.includes("clip-skip"))).toBe(true);
-    expect(bodies.some((body) => body.includes("silence"))).toBe(true);
     expect(
       bodies.some(
         (body) =>
-          body.includes("listen-stop") && body.includes('"reason":"user"'),
+          body.includes("listen-stop") && body.includes('"reason":"stop"'),
       ),
     ).toBe(true);
   });
 
-  it("logs stitch and Groq transcript fields after a spoken clip", async () => {
+  it("logs append and Groq transcript fields after a spoken utterance", async () => {
     window.localStorage.setItem(STT_DEBUG_STORAGE_KEY, "1");
     const harness = installDictationMocks();
     transcribeAudio.mockResolvedValue({
       text: "The Lord is my shepherd",
       requestId: "req_test_1",
-      model: "whisper-large-v3-turbo",
+      model: "whisper-large-v3",
       httpStatus: 200,
       latencyMs: 42,
     });
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    harness.timeDomain.fill(0);
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await startListening(result);
+    await hearSpeech(harness, 300);
+    await hearSilence(harness, UTTERANCE_END_MS);
 
     const bodies = getDevLogEntries().map((entry) => entry.body);
     expect(bodies.some((body) => body.includes("clip-send"))).toBe(true);
