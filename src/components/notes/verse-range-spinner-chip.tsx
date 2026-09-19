@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { BookOpen, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TooltipButton } from "@/components/ui/tooltip-button";
@@ -198,6 +198,13 @@ function SpinnerChevron({
   const Icon = direction === "up" ? ChevronUp : ChevronDown;
   const isDisabled = disabled || !enabled;
 
+  const step = (event: SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!revealed || isDisabled) return;
+    onClick();
+  };
+
   return (
     <TooltipButton
       type="button"
@@ -208,20 +215,21 @@ function SpinnerChevron({
       aria-hidden={!revealed}
       tabIndex={revealed ? 0 : -1}
       disabled={isDisabled}
+      data-testid={`verse-spinner-${direction}`}
       className={cn(
-        "absolute left-1/2 z-10 size-4 -translate-x-1/2 rounded-sm p-0 transition-opacity duration-150",
-        direction === "up" ? "bottom-full" : "top-full",
+        "absolute left-1/2 z-20 size-5 -translate-x-1/2 rounded-sm p-0",
+        "bg-background/90 text-foreground shadow-sm transition-opacity duration-150",
+        "hover:bg-accent hover:text-accent-foreground",
+        direction === "up" ? "bottom-full mb-px" : "top-full mt-px",
         revealed ? "opacity-100" : "pointer-events-none opacity-0",
       )}
-      onPointerDown={(event) => event.stopPropagation()}
+      onPointerDown={step}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (isDisabled) return;
-        onClick();
       }}
     >
-      <Icon className="size-3" strokeWidth={2.25} />
+      <Icon className="size-3.5" strokeWidth={2.5} />
     </TooltipButton>
   );
 }
