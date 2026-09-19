@@ -342,6 +342,8 @@ describe("PassageSession", () => {
       );
       expect(pctAfter).toBeGreaterThan(pctBefore);
     });
+    // Step label stays on the graded step; only the journey bar moves early.
+    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Continue|Try again/ }),
     ).toBeInTheDocument();

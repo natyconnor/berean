@@ -830,6 +830,9 @@ function PracticeCard({
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
   const [checked, setChecked] = useState(false);
+  // Snapshot of "Guided · N of M today" at Check so the step label stays on the
+  // step just finished while the journey bar adopts banked progress early.
+  const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -871,10 +874,11 @@ function PracticeCard({
   }, [versePlainText, learnStage, stageReps]);
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
-  const sessionGoalLabel =
+  const liveGoalLabel =
     status === "reviewing" || status === "mastered"
       ? null
       : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
+  const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
   // A session-ending clear locks the verse the instant its attempt is adopted.
   // Hold the graded result until the learner continues so the feedback they
@@ -945,6 +949,13 @@ function PracticeCard({
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
             })
           : null;
+      // Freeze the step label on the step being graded; journey props may adopt
+      // as soon as `onRecord` settles, but the label waits for Continue.
+      if (status !== "reviewing" && status !== "mastered") {
+        setHeldGoalLabel(
+          `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`,
+        );
+      }
       setChecked(true);
       setOutcomeNow(now);
       setNextSchedule(preview);
@@ -974,6 +985,7 @@ function PracticeCard({
 
   function continueAttempt() {
     setChecked(false);
+    setHeldGoalLabel(null);
     setTypedAnswer("");
     onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());

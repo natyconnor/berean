@@ -455,8 +455,15 @@ describe("PracticeBoard learning step label", () => {
       );
       expect(pctAfter).toBeGreaterThan(pctBefore);
     });
+    // Step label stays on the step just graded until Continue.
+    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Continue/ }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(
+      await screen.findByText(/Guided · 2 of \d+ today/),
     ).toBeInTheDocument();
   });
 });

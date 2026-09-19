@@ -124,9 +124,12 @@ export function practiceChromeFor(
 }
 
 /**
- * 1-based step the learner is on within the current band's required reps.
- * `stageReps` is banked/completed count (0 before the first attempt), so the
- * displayed step is `stageReps + 1`, clamped to the band's requirement.
+ * 1-based step the learner is currently working on within the band.
+ * `stageReps` is banked/completed count (0 before the first attempt).
+ *
+ * Call this for the live typing state. While a checked result is on screen,
+ * callers should keep showing the step captured at Check — the journey bar
+ * tracks completed work and may advance earlier than this label.
  */
 export function currentStageStep(stageReps: number, required: number): number {
   const requirement = Math.max(1, required);

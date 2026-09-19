@@ -103,6 +103,9 @@ export function PassageRecallCard({
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
+  // Snapshot of "Guided · N of M today" at Check so the step label stays on the
+  // step just finished while the journey bar adopts banked progress early.
+  const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
@@ -114,6 +117,12 @@ export function PassageRecallCard({
   const isReadPrime = readContinue;
   const compositeField =
     mode === "rope" || mode === "review" || mode === "repair";
+  const requiredToday = requiredRepsFor(learnStage, wordCount);
+  const liveGoalLabel =
+    showJourneyBar && status !== "reviewing" && status !== "mastered"
+      ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
+      : null;
+  const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
   const canCheckAnswer =
     !isReadPrime &&
@@ -134,6 +143,9 @@ export function PassageRecallCard({
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
+    // Capture before `onSubmit` so a parent that adopts journey progress early
+    // cannot advance the step label while the result is still on screen.
+    const goalAtCheck = liveGoalLabel;
     submit(async () => {
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
@@ -146,6 +158,7 @@ export function PassageRecallCard({
         via: "typed",
       });
       if (saved === false) return;
+      setHeldGoalLabel(goalAtCheck);
       setChecked(true);
     });
   }
@@ -166,6 +179,7 @@ export function PassageRecallCard({
 
   function continueAttempt() {
     setChecked(false);
+    setHeldGoalLabel(null);
     setTypedAnswer("");
     onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
@@ -190,12 +204,6 @@ export function PassageRecallCard({
     event.preventDefault();
     checkAnswer();
   }
-
-  const requiredToday = requiredRepsFor(learnStage, wordCount);
-  const sessionGoalLabel =
-    showJourneyBar && status !== "reviewing" && status !== "mastered"
-      ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
-      : null;
 
   const fieldLabel =
     mode === "frontier" ? "Your recalled verse" : "Your recited passage";
