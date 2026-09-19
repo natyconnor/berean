@@ -25,6 +25,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.15.2](https://github.com/natyconnor/berean/compare/v1.15.1...v1.15.2) (2026-09-19)
+
+
+### Bug Fixes
+
+* Connect neighboring verses and pack sections to 5–8 verses ([#214](https://github.com/natyconnor/berean/issues/214)) ([de6a175](https://github.com/natyconnor/berean/commit/de6a17560a8e56ac09fcf638e1a3b577b0414b2b))
+
 ## [1.15.1](https://github.com/natyconnor/berean/compare/v1.15.0...v1.15.1) (2026-09-18)
 
 
