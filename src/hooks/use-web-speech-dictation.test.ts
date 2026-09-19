@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   DICTATION_CHUNK_MS,
+  DICTATION_FIRST_CHUNK_MS,
   SPEECH_SILENCE_TIMEOUT_MS,
 } from "@/lib/web-speech";
 
@@ -36,11 +37,16 @@ class MockMediaRecorder {
     this.state = "recording";
   }
 
-  stop(): void {
-    this.state = "inactive";
+  requestData(): void {
+    if (this.state !== "recording") return;
     this.ondataavailable?.({
       data: new Blob([new Uint8Array(128).fill(1)], { type: this.mimeType }),
     } as BlobEvent);
+  }
+
+  stop(): void {
+    this.requestData();
+    this.state = "inactive";
     this.onstop?.();
   }
 }
@@ -177,7 +183,7 @@ describe("useWebSpeechDictation", () => {
       vi.advanceTimersByTime(200);
     });
     await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
+      vi.advanceTimersByTime(DICTATION_FIRST_CHUNK_MS);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -190,11 +196,11 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.listening).toBe(true);
   });
 
-  it("appends later chunks in order", async () => {
+  it("later snapshots replace with the growing transcript", async () => {
     const harness = installDictationMocks();
     transcribeAudio
       .mockResolvedValueOnce({ text: "The Lord" })
-      .mockResolvedValueOnce({ text: "is my shepherd" });
+      .mockResolvedValueOnce({ text: "The Lord is my shepherd" });
     const onTranscript = vi.fn();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript, transcribeAudio }),
@@ -209,7 +215,7 @@ describe("useWebSpeechDictation", () => {
       vi.advanceTimersByTime(200);
     });
     await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
+      vi.advanceTimersByTime(DICTATION_FIRST_CHUNK_MS);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -225,6 +231,12 @@ describe("useWebSpeechDictation", () => {
       await Promise.resolve();
     });
     expect(onTranscript).toHaveBeenLastCalledWith("The Lord is my shepherd");
+    expect(harness.instances[0]?.startCount).toBe(1);
+    const firstLen =
+      transcribeAudio.mock.calls[0]?.[0]?.audioBase64.length ?? 0;
+    const secondLen =
+      transcribeAudio.mock.calls[1]?.[0]?.audioBase64.length ?? 0;
+    expect(secondLen).toBeGreaterThan(firstLen);
   });
 
   it("turns the mic off after 5 seconds with no speech", async () => {
@@ -276,7 +288,7 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.listening).toBe(false);
   });
 
-  it("does not send silent chunks", async () => {
+  it("does not send silent snapshots", async () => {
     installDictationMocks();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
@@ -286,11 +298,114 @@ describe("useWebSpeechDictation", () => {
       await Promise.resolve();
     });
     await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
+      vi.advanceTimersByTime(DICTATION_FIRST_CHUNK_MS);
       await Promise.resolve();
     });
     expect(transcribeAudio).not.toHaveBeenCalled();
     expect(result.current.listening).toBe(true);
+  });
+
+  it("does not send a near-silent tail after speech already flushed", async () => {
+    const harness = installDictationMocks();
+    transcribeAudio.mockResolvedValue({ text: "The Lord is my shepherd" });
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
+    );
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    harness.timeDomain.fill(0);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(DICTATION_FIRST_CHUNK_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(transcribeAudio).toHaveBeenCalledTimes(1);
+    harness.timeDomain.fill(128);
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const afterQuietOnset = transcribeAudio.mock.calls.length;
+    await act(async () => {
+      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
+      await Promise.resolve();
+    });
+    expect(transcribeAudio).toHaveBeenCalledTimes(afterQuietOnset);
+  });
+
+  it("flushes once when speech goes quiet, then skips silent tails", async () => {
+    const harness = installDictationMocks();
+    transcribeAudio
+      .mockResolvedValueOnce({ text: "The Lord" })
+      .mockResolvedValueOnce({ text: "The Lord is my shepherd" });
+    const onTranscript = vi.fn();
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript, transcribeAudio }),
+    );
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    harness.timeDomain.fill(0);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(DICTATION_FIRST_CHUNK_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(transcribeAudio).toHaveBeenCalledTimes(1);
+
+    harness.timeDomain.fill(0);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    harness.timeDomain.fill(128);
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(transcribeAudio).toHaveBeenCalledTimes(2);
+    expect(onTranscript).toHaveBeenLastCalledWith("The Lord is my shepherd");
+
+    await act(async () => {
+      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
+      await Promise.resolve();
+    });
+    expect(transcribeAudio).toHaveBeenCalledTimes(2);
+  });
+
+  it("strips stock Whisper tail hallucinations from a Groq result", async () => {
+    const harness = installDictationMocks();
+    transcribeAudio.mockResolvedValue({
+      text: "The Lord is my shepherd thanks for watching",
+    });
+    const onTranscript = vi.fn();
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript, transcribeAudio }),
+    );
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    harness.timeDomain.fill(0);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(DICTATION_FIRST_CHUNK_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onTranscript).toHaveBeenLastCalledWith("The Lord is my shepherd");
   });
 
   it("flushes the last spoken chunk on Stop", async () => {

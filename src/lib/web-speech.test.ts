@@ -11,6 +11,7 @@ import {
   pickRecorderMimeType,
   rmsFromTimeDomain,
   setDevTranscriptSink,
+  stripWhisperTailJunk,
 } from "./web-speech";
 
 describe("dictation helpers", () => {
@@ -45,6 +46,19 @@ describe("dictation helpers", () => {
       "The Lord is my shepherd",
     );
     expect(appendSpokenText("The Lord", "   ")).toBe("The Lord");
+  });
+
+  it("strips stock Whisper tail hallucinations but keeps verse wording", () => {
+    expect(
+      stripWhisperTailJunk("The Lord is my shepherd thanks for watching."),
+    ).toBe("The Lord is my shepherd");
+    expect(
+      stripWhisperTailJunk("The Lord is my shepherd. Please subscribe!"),
+    ).toBe("The Lord is my shepherd.");
+    expect(stripWhisperTailJunk("Thanks for watching.")).toBe("");
+    expect(stripWhisperTailJunk("Father, I thank you")).toBe(
+      "Father, I thank you",
+    );
   });
 
   it("hides support when getUserMedia or MediaRecorder is missing", () => {

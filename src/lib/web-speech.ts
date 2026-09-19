@@ -8,8 +8,11 @@
 
 export const SPEECH_SILENCE_TIMEOUT_MS = 5_000;
 
-/** Complete MediaRecorder files are rotated this often so words appear while speaking. */
-export const DICTATION_CHUNK_MS = 2_500;
+/** First rolling snapshot so words appear near the start of speech. */
+export const DICTATION_FIRST_CHUNK_MS = 1_000;
+
+/** Later snapshots of the same growing recording (not disjoint clips). */
+export const DICTATION_CHUNK_MS = 1_200;
 
 /** Time-domain RMS above this counts as speech for the 5s silence timer. */
 export const SPEECH_RMS_THRESHOLD = 0.02;
@@ -204,6 +207,32 @@ export function appendSpokenText(base: string, spoken: string): string {
   const left = base.trimEnd();
   if (!left) return next;
   return `${left} ${next}`;
+}
+
+const WHISPER_TAIL_JUNK =
+  /\s+(?:thank you for watching|thanks for watching|thanks for listening|please subscribe|subscribe)(?:[.!?])?$/i;
+
+/**
+ * Drop common Whisper end-hallucinations. Only YouTube/podcast stock phrases
+ * as a suffix — never the expected verse, and not a bare "thank you"
+ * (that can be scripture).
+ */
+export function stripWhisperTailJunk(text: string): string {
+  let next = text.trim();
+  if (!next) return "";
+  for (let i = 0; i < 3; i += 1) {
+    const stripped = next.replace(WHISPER_TAIL_JUNK, "").trim();
+    if (stripped === next) break;
+    next = stripped;
+  }
+  if (
+    /^(?:thank you for watching|thanks for watching|thanks for listening|please subscribe|subscribe)(?:[.!?])?$/i.test(
+      next,
+    )
+  ) {
+    return "";
+  }
+  return next;
 }
 
 /** RMS of analyser time-domain PCM (0–255, 128 = silence). */

@@ -24,8 +24,9 @@ function audioFilenameForMime(mimeType: string): string {
 }
 
 /**
- * Optional recall dictation: browser records short clips, this action sends
- * them to Groq Whisper. Requires `GROQ_API_KEY` in the Convex environment
+ * Optional recall dictation: browser sends growing snapshots of one
+ * recording, this action posts them to Groq Whisper. Requires `GROQ_API_KEY`
+ * in the Convex environment
  * (dashboard or `npx convex env set GROQ_API_KEY …`). Never put that key in
  * Vite / `VITE_*` client env.
  *
