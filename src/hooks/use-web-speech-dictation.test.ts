@@ -44,7 +44,7 @@ class MockMediaRecorder {
     this.requestDataCount += 1;
     if (this.state !== "recording") return;
     this.ondataavailable?.({
-      data: new Blob([new Uint8Array(128).fill(1)], { type: this.mimeType }),
+      data: new Blob([new Uint8Array(512).fill(1)], { type: this.mimeType }),
     } as BlobEvent);
   }
 

@@ -4,39 +4,35 @@ import { v } from "convex/values";
 
 import { action } from "./_generated/server";
 import { requireActionIdentity } from "./lib/auth";
+import {
+  audioFilenameForMime,
+  baseAudioMimeType,
+  groqFailureMessage,
+  skipReasonForAudioBase64,
+  skipReasonForAudioBytes,
+} from "../src/lib/dictation-audio";
 
-/** Groq Speech-to-Text. Set in the Convex dashboard / CLI — never Vite. */
-export const GROQ_WHISPER_MODEL = "whisper-large-v3-turbo";
+/**
+ * Error-sensitive verse recitation (100% From Memory). Groq's large-v3 is
+ * 10.3% WER vs turbo's 12%, and is the short-form accuracy pick. 189× vs
+ * 216× realtime is tens of ms on a verse clip; Convex + upload dominate.
+ * Never send `prompt` — never the expected verse.
+ */
+export const GROQ_WHISPER_MODEL = "whisper-large-v3";
 const GROQ_TRANSCRIBE_URL =
   "https://api.groq.com/openai/v1/audio/transcriptions";
-const MAX_AUDIO_BASE64_CHARS = 4_000_000;
 
-const GROQ_ERROR_BODY_LIMIT = 500;
-
-/** Include Groq's response body so a 400 is diagnosable in Convex logs. */
-export function groqFailureMessage(
-  status: number,
-  statusText: string,
-  body: string,
-): string {
-  const clipped = body
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, GROQ_ERROR_BODY_LIMIT);
-  const statusBit = `Groq transcription failed: ${status} ${statusText}`;
-  return clipped ? `${statusBit}: ${clipped}` : statusBit;
-}
-
-function audioFilenameForMime(mimeType: string): string {
-  const mime = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
-  if (mime.includes("ogg")) return "audio.ogg";
-  if (mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac")) {
-    return "audio.m4a";
+function logTranscribe(
+  level: "info" | "error",
+  event: string,
+  details: Record<string, string | number | boolean>,
+): void {
+  const payload = { channel: "stt", event, ...details };
+  if (level === "error") {
+    console.error("[stt]", payload);
+    return;
   }
-  if (mime.includes("mpeg") || mime.includes("mp3")) return "audio.mp3";
-  if (mime.includes("wav")) return "audio.wav";
-  if (mime.includes("flac")) return "audio.flac";
-  return "audio.webm";
+  console.info("[stt]", payload);
 }
 
 /**
@@ -63,21 +59,35 @@ export const transcribeAudio = action({
         "GROQ_API_KEY not configured in Convex environment variables",
       );
     }
-    if (!args.audioBase64 || args.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
+
+    const base64Skip = skipReasonForAudioBase64(args.audioBase64);
+    if (base64Skip) {
+      logTranscribe("info", "skip", {
+        reason: base64Skip,
+        base64Chars: args.audioBase64.length,
+      });
       return { text: "" };
     }
 
     const audio = Buffer.from(args.audioBase64, "base64");
-    if (audio.length < 64) return { text: "" };
-
-    const mimeType = args.mimeType.trim() || "audio/webm";
-    const filename = audioFilenameForMime(mimeType);
-    const form = new FormData();
     const bytes = new Uint8Array(
       audio.buffer,
       audio.byteOffset,
       audio.byteLength,
     );
+    const bytesSkip = skipReasonForAudioBytes(bytes);
+    if (bytesSkip) {
+      logTranscribe("info", "skip", {
+        reason: bytesSkip,
+        bytes: bytes.byteLength,
+        mimeType: args.mimeType,
+      });
+      return { text: "" };
+    }
+
+    const mimeType = baseAudioMimeType(args.mimeType);
+    const filename = audioFilenameForMime(mimeType);
+    const form = new FormData();
     form.append("file", new Blob([bytes], { type: mimeType }), filename);
     form.append("model", GROQ_WHISPER_MODEL);
     form.append("language", "en");
@@ -92,13 +102,29 @@ export const transcribeAudio = action({
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      throw new Error(
-        groqFailureMessage(response.status, response.statusText, detail),
+      const message = groqFailureMessage(
+        response.status,
+        response.statusText,
+        detail,
       );
+      logTranscribe("error", "groq-failed", {
+        status: response.status,
+        bytes: bytes.byteLength,
+        mimeType,
+        model: GROQ_WHISPER_MODEL,
+        detail: message,
+      });
+      throw new Error(message);
     }
 
     const body = (await response.json()) as { text?: unknown };
     const text = typeof body.text === "string" ? body.text.trim() : "";
+    logTranscribe("info", "transcribed", {
+      bytes: bytes.byteLength,
+      mimeType,
+      model: GROQ_WHISPER_MODEL,
+      textChars: text.length,
+    });
     return { text };
   },
 });

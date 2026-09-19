@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { MIN_TRANSCRIBE_AUDIO_BYTES } from "@/lib/dictation-audio";
 import {
   blobToBase64,
   DICTATION_CHUNK_MS,
@@ -159,7 +160,7 @@ export function useWebSpeechDictation({
     async (session: number, blob: Blob) => {
       if (sessionRef.current !== session) return;
       if (isDevSpeechMockEnabled()) return;
-      if (blob.size < 64) return;
+      if (blob.size < MIN_TRANSCRIBE_AUDIO_BYTES) return;
       const seq = nextSeqRef.current;
       nextSeqRef.current += 1;
       try {
