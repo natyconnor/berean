@@ -8,11 +8,11 @@
 
 export const SPEECH_SILENCE_TIMEOUT_MS = 5_000;
 
-/** First rolling snapshot so words appear near the start of speech. */
-export const DICTATION_FIRST_CHUNK_MS = 1_000;
-
-/** Later snapshots of the same growing recording (not disjoint clips). */
+/** Complete MediaRecorder file length. Groq 400s on timeslice / requestData fragments. */
 export const DICTATION_CHUNK_MS = 1_200;
+
+/** Second recorder starts this far in so clip boundaries overlap. */
+export const DICTATION_OVERLAP_MS = 400;
 
 /** Time-domain RMS above this counts as speech for the 5s silence timer. */
 export const SPEECH_RMS_THRESHOLD = 0.02;
@@ -206,6 +206,33 @@ export function appendSpokenText(base: string, spoken: string): string {
   if (!next) return base;
   const left = base.trimEnd();
   if (!left) return next;
+  return `${left} ${next}`;
+}
+
+/**
+ * Join overlapping clip transcripts. Complete recorders restart, so
+ * consecutive Whisper results share the overlap window's words.
+ */
+export function stitchSpokenText(base: string, spoken: string): string {
+  const next = spoken.trim();
+  if (!next) return base;
+  const left = base.trimEnd();
+  if (!left) return next;
+  const leftLower = left.toLowerCase();
+  const nextLower = next.toLowerCase();
+  if (nextLower.startsWith(leftLower)) return next;
+  if (leftLower.endsWith(nextLower)) return left;
+  const leftWords = left.split(/\s+/);
+  const nextWords = next.split(/\s+/);
+  const max = Math.min(leftWords.length, nextWords.length);
+  for (let n = max; n >= 1; n -= 1) {
+    if (
+      leftWords.slice(-n).join(" ").toLowerCase() ===
+      nextWords.slice(0, n).join(" ").toLowerCase()
+    ) {
+      return [...leftWords, ...nextWords.slice(n)].join(" ");
+    }
+  }
   return `${left} ${next}`;
 }
 

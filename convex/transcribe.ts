@@ -11,6 +11,22 @@ const GROQ_TRANSCRIBE_URL =
   "https://api.groq.com/openai/v1/audio/transcriptions";
 const MAX_AUDIO_BASE64_CHARS = 4_000_000;
 
+const GROQ_ERROR_BODY_LIMIT = 500;
+
+/** Include Groq's response body so a 400 is diagnosable in Convex logs. */
+export function groqFailureMessage(
+  status: number,
+  statusText: string,
+  body: string,
+): string {
+  const clipped = body
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, GROQ_ERROR_BODY_LIMIT);
+  const statusBit = `Groq transcription failed: ${status} ${statusText}`;
+  return clipped ? `${statusBit}: ${clipped}` : statusBit;
+}
+
 function audioFilenameForMime(mimeType: string): string {
   const mime = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
   if (mime.includes("ogg")) return "audio.ogg";
@@ -24,9 +40,9 @@ function audioFilenameForMime(mimeType: string): string {
 }
 
 /**
- * Optional recall dictation: browser sends growing snapshots of one
- * recording, this action posts them to Groq Whisper. Requires `GROQ_API_KEY`
- * in the Convex environment
+ * Optional recall dictation: browser sends complete MediaRecorder files
+ * (start → stop, never timeslice fragments), this action posts them to
+ * Groq Whisper. Requires `GROQ_API_KEY` in the Convex environment
  * (dashboard or `npx convex env set GROQ_API_KEY …`). Never put that key in
  * Vite / `VITE_*` client env.
  *
@@ -75,11 +91,9 @@ export const transcribeAudio = action({
     });
 
     if (!response.ok) {
-      void response.text().catch(() => {
-        /* drain */
-      });
+      const detail = await response.text().catch(() => "");
       throw new Error(
-        `Groq transcription failed: ${response.status} ${response.statusText}`,
+        groqFailureMessage(response.status, response.statusText, detail),
       );
     }
 

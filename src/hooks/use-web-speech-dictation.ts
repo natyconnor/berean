@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   blobToBase64,
   DICTATION_CHUNK_MS,
-  DICTATION_FIRST_CHUNK_MS,
+  DICTATION_OVERLAP_MS,
   isDevSpeechMockEnabled,
   isDictationSupported,
   openDictationMicStream,
@@ -12,6 +12,7 @@ import {
   setDevTranscriptSink,
   SPEECH_RMS_THRESHOLD,
   SPEECH_SILENCE_TIMEOUT_MS,
+  stitchSpokenText,
   stopMediaStream,
   stripWhisperTailJunk,
   isSpaceToggleKey,
@@ -23,7 +24,7 @@ export type TranscribeAudioFn = (args: {
 }) => Promise<{ text: string }>;
 
 export interface UseWebSpeechDictationOptions {
-  /** Latest spoken text for this listening session. */
+  /** Latest spoken text for this listening session (stitched clips). */
   onTranscript: (spoken: string) => void;
   /** Convex Groq Whisper action. Unused in DEV mockSpeech mode. */
   transcribeAudio: TranscribeAudioFn;
@@ -39,6 +40,12 @@ export interface WebSpeechDictation {
   toggle: () => void;
 }
 
+type RecorderLane = {
+  recorder: MediaRecorder;
+  hadSpeech: boolean;
+  stopTimer: number | null;
+};
+
 function audioContextConstructor(): (new () => AudioContext) | undefined {
   if (typeof window === "undefined") return undefined;
   if (window.AudioContext) return window.AudioContext;
@@ -48,21 +55,15 @@ function audioContextConstructor(): (new () => AudioContext) | undefined {
   return webkit;
 }
 
-function recorderCanRequestData(
-  recorder: MediaRecorder,
-): recorder is MediaRecorder & { requestData: () => void } {
-  return typeof recorder.requestData === "function";
-}
-
 /**
  * Optional live dictation via MediaRecorder + Groq Whisper.
  *
- * One recording for the whole listen. Periodic snapshots send the audio
- * from t=0 so far (a valid growing file) so words are not chopped at
- * clip boundaries. Typing stays the source of truth: this only streams
- * words into a callback. It never grades, never receives the expected
- * verse, and turns itself off after {@link SPEECH_SILENCE_TIMEOUT_MS}
- * with no speech.
+ * Groq only accepts complete files, so each clip is `start()` → `stop()`
+ * (never `requestData` / timeslice fragments). Two overlapping recorders
+ * cover the word at a clip boundary. Typing stays the source of truth:
+ * this only streams words into a callback. It never grades, never receives
+ * the expected verse, and turns itself off after
+ * {@link SPEECH_SILENCE_TIMEOUT_MS} with no speech.
  */
 export function useWebSpeechDictation({
   onTranscript,
@@ -86,16 +87,16 @@ export function useWebSpeechDictation({
   const sessionRef = useRef(0);
   const committedRef = useRef("");
   const silenceTimerRef = useRef<number | null>(null);
-  const chunkTimerRef = useRef<number | null>(null);
+  const overlapTimerRef = useRef<number | null>(null);
   const amplitudeTimerRef = useRef<number | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const partsRef = useRef<Blob[]>([]);
-  const speechSinceSendRef = useRef(false);
-  const silentTicksRef = useRef(0);
+  const lanesRef = useRef<RecorderLane[]>([]);
+  const pendingRef = useRef(new Map<number, string>());
   const nextSeqRef = useRef(0);
-  const lastAppliedSeqRef = useRef(-1);
-  const armSnapshotRef = useRef<(delay: number) => void>(() => {});
+  const appliedSeqRef = useRef(0);
+  const beginLaneRef = useRef<(session: number, stream: MediaStream) => void>(
+    () => {},
+  );
   const amplitudeRef = useRef<{
     context: AudioContext;
     source: MediaStreamAudioSourceNode;
@@ -116,10 +117,10 @@ export function useWebSpeechDictation({
     }
   }, []);
 
-  const clearChunkTimer = useCallback(() => {
-    if (chunkTimerRef.current !== null) {
-      window.clearTimeout(chunkTimerRef.current);
-      chunkTimerRef.current = null;
+  const clearOverlapTimer = useCallback(() => {
+    if (overlapTimerRef.current !== null) {
+      window.clearTimeout(overlapTimerRef.current);
+      overlapTimerRef.current = null;
     }
   }, []);
 
@@ -141,70 +142,79 @@ export function useWebSpeechDictation({
     }
   }, []);
 
-  const sendSnapshot = useCallback(async (session: number, blob: Blob) => {
+  const flushPending = useCallback((session: number) => {
     if (sessionRef.current !== session) return;
-    if (isDevSpeechMockEnabled()) return;
-    if (blob.size < 64) return;
-    const seq = nextSeqRef.current;
-    nextSeqRef.current += 1;
-    try {
-      const audioBase64 = await blobToBase64(blob);
-      if (sessionRef.current !== session) return;
-      const result = await transcribeRef.current({
-        audioBase64,
-        mimeType: blob.type || "audio/webm",
-      });
-      if (sessionRef.current !== session) return;
-      if (seq <= lastAppliedSeqRef.current) return;
-      const text = stripWhisperTailJunk(result.text ?? "");
-      if (!text) return;
-      lastAppliedSeqRef.current = seq;
-      committedRef.current = text;
-      onTranscriptRef.current(text);
-    } catch {
-      // The next growing snapshot still includes this audio.
+    const pending = pendingRef.current;
+    while (pending.has(appliedSeqRef.current)) {
+      const text = pending.get(appliedSeqRef.current) ?? "";
+      pending.delete(appliedSeqRef.current);
+      appliedSeqRef.current += 1;
+      if (!text) continue;
+      committedRef.current = stitchSpokenText(committedRef.current, text);
+      onTranscriptRef.current(committedRef.current);
     }
   }, []);
 
-  const ingestRecorderData = useCallback(
-    (session: number, blobPart: Blob, mimeType: string) => {
+  const sendChunk = useCallback(
+    async (session: number, blob: Blob) => {
       if (sessionRef.current !== session) return;
-      if (blobPart.size > 0) partsRef.current.push(blobPart);
-      const hadNewSpeech = speechSinceSendRef.current;
-      if (!hadNewSpeech) return;
-      const blob = new Blob(partsRef.current, {
-        type: mimeType || "audio/webm",
-      });
+      if (isDevSpeechMockEnabled()) return;
       if (blob.size < 64) return;
-      speechSinceSendRef.current = false;
-      void sendSnapshot(session, blob);
+      const seq = nextSeqRef.current;
+      nextSeqRef.current += 1;
+      try {
+        const audioBase64 = await blobToBase64(blob);
+        if (sessionRef.current !== session) return;
+        const result = await transcribeRef.current({
+          audioBase64,
+          mimeType: blob.type || "audio/webm",
+        });
+        if (sessionRef.current !== session) return;
+        pendingRef.current.set(seq, stripWhisperTailJunk(result.text ?? ""));
+      } catch {
+        if (sessionRef.current !== session) return;
+        pendingRef.current.set(seq, "");
+      }
+      flushPending(session);
     },
-    [sendSnapshot],
+    [flushPending],
   );
+
+  const stopLanes = useCallback(() => {
+    const lanes = [...lanesRef.current];
+    for (const lane of lanes) {
+      if (lane.stopTimer !== null) {
+        window.clearTimeout(lane.stopTimer);
+        lane.stopTimer = null;
+      }
+      if (lane.recorder.state !== "inactive") {
+        try {
+          lane.recorder.stop();
+        } catch {
+          // onstop still runs for a successful stop()
+        }
+      }
+    }
+  }, []);
 
   const stop = useCallback(() => {
     wantRef.current = false;
     setDevTranscriptSink(null);
     clearSilenceTimer();
-    clearChunkTimer();
+    clearOverlapTimer();
     stopAmplitudeMonitor();
     setListening(false);
-    const recorder = recorderRef.current;
-    recorderRef.current = null;
-    if (recorder && recorder.state !== "inactive") {
-      try {
-        recorder.stop();
-      } catch {
-        releaseMicStream();
-      }
-    } else {
+    if (lanesRef.current.length === 0) {
       releaseMicStream();
+      return;
     }
+    stopLanes();
   }, [
-    clearChunkTimer,
+    clearOverlapTimer,
     clearSilenceTimer,
     releaseMicStream,
     stopAmplitudeMonitor,
+    stopLanes,
   ]);
 
   useEffect(() => {
@@ -224,36 +234,7 @@ export function useWebSpeechDictation({
     }, SPEECH_SILENCE_TIMEOUT_MS);
   }, [clearSilenceTimer, stop]);
 
-  const flushRecorderSnapshot = useCallback(() => {
-    const recorder = recorderRef.current;
-    if (!recorder || recorder.state !== "recording") return;
-    if (!speechSinceSendRef.current) return;
-    if (recorderCanRequestData(recorder)) recorder.requestData();
-  }, []);
-
-  const snapshotRecorder = useCallback(() => {
-    // Skip near-silent tails; silence-onset flush / Stop still send last words.
-    if (silentTicksRef.current >= 2) return;
-    flushRecorderSnapshot();
-  }, [flushRecorderSnapshot]);
-
-  const armSnapshot = useCallback(
-    (delay: number) => {
-      clearChunkTimer();
-      chunkTimerRef.current = window.setTimeout(() => {
-        chunkTimerRef.current = null;
-        snapshotRecorder();
-        if (wantRef.current) armSnapshotRef.current(DICTATION_CHUNK_MS);
-      }, delay);
-    },
-    [clearChunkTimer, snapshotRecorder],
-  );
-
-  useEffect(() => {
-    armSnapshotRef.current = armSnapshot;
-  }, [armSnapshot]);
-
-  const startRecorder = useCallback(
+  const beginLane = useCallback(
     (session: number, stream: MediaStream) => {
       if (!wantRef.current || sessionRef.current !== session) return;
       if (typeof MediaRecorder !== "function") {
@@ -269,44 +250,72 @@ export function useWebSpeechDictation({
           ? new MediaRecorder(stream, { mimeType })
           : new MediaRecorder(stream);
       } catch {
-        stop();
+        if (lanesRef.current.length === 0) stop();
         return;
       }
 
-      partsRef.current = [];
-      speechSinceSendRef.current = false;
+      const parts: Blob[] = [];
+      const lane: RecorderLane = {
+        recorder,
+        hadSpeech: false,
+        stopTimer: null,
+      };
       recorder.ondataavailable = (event) => {
-        if (sessionRef.current !== session) return;
-        ingestRecorderData(
-          session,
-          event.data,
-          recorder.mimeType || mimeType || "audio/webm",
-        );
+        if (event.data && event.data.size > 0) parts.push(event.data);
       };
       recorder.onerror = () => {
         if (sessionRef.current !== session) return;
         stop();
       };
       recorder.onstop = () => {
-        if (recorderRef.current === recorder) recorderRef.current = null;
-        if (!wantRef.current) releaseMicStream();
+        lanesRef.current = lanesRef.current.filter((item) => item !== lane);
+        if (lane.stopTimer !== null) {
+          window.clearTimeout(lane.stopTimer);
+          lane.stopTimer = null;
+        }
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(parts, { type });
+        const keepGoing = wantRef.current && sessionRef.current === session;
+        if (keepGoing && micStreamRef.current) {
+          beginLaneRef.current(session, micStreamRef.current);
+        } else if (!wantRef.current && lanesRef.current.length === 0) {
+          releaseMicStream();
+        }
+        if (
+          sessionRef.current === session &&
+          lane.hadSpeech &&
+          blob.size >= 64
+        ) {
+          void sendChunk(session, blob);
+        }
       };
 
-      recorderRef.current = recorder;
-      const canRequest = recorderCanRequestData(recorder);
+      lanesRef.current.push(lane);
       try {
-        if (canRequest) recorder.start();
-        else recorder.start(DICTATION_FIRST_CHUNK_MS);
+        // No timeslice: Groq 400s on incomplete webm/ogg/mp4 fragments.
+        recorder.start();
       } catch {
-        recorderRef.current = null;
-        stop();
+        lanesRef.current = lanesRef.current.filter((item) => item !== lane);
+        if (lanesRef.current.length === 0) stop();
         return;
       }
 
-      if (canRequest) armSnapshot(DICTATION_FIRST_CHUNK_MS);
+      lane.stopTimer = window.setTimeout(() => {
+        lane.stopTimer = null;
+        if (lane.recorder.state === "inactive") return;
+        try {
+          lane.recorder.stop();
+        } catch {
+          stop();
+        }
+      }, DICTATION_CHUNK_MS);
     },
-    [armSnapshot, ingestRecorderData, releaseMicStream, stop],
+    [releaseMicStream, sendChunk, stop],
   );
+
+  useEffect(() => {
+    beginLaneRef.current = beginLane;
+  }, [beginLane]);
 
   const startAmplitudeMonitor = useCallback(
     (stream: MediaStream) => {
@@ -327,22 +336,15 @@ export function useWebSpeechDictation({
           const session = amplitudeRef.current;
           if (!session || !wantRef.current) return;
           session.analyser.getByteTimeDomainData(session.buffer);
-          if (rmsFromTimeDomain(session.buffer) < SPEECH_RMS_THRESHOLD) {
-            silentTicksRef.current += 1;
-            // Flush once as speech ends (~400ms quiet) so the last words go
-            // to Groq without a long silent tail on Stop / 5s timeout.
-            if (silentTicksRef.current === 2) flushRecorderSnapshot();
-            return;
-          }
-          silentTicksRef.current = 0;
-          speechSinceSendRef.current = true;
+          if (rmsFromTimeDomain(session.buffer) < SPEECH_RMS_THRESHOLD) return;
+          for (const lane of lanesRef.current) lane.hadSpeech = true;
           armSilenceTimer();
         }, 200);
       } catch {
         stopAmplitudeMonitor();
       }
     },
-    [armSilenceTimer, flushRecorderSnapshot, stopAmplitudeMonitor],
+    [armSilenceTimer, stopAmplitudeMonitor],
   );
 
   const start = useCallback(() => {
@@ -352,17 +354,19 @@ export function useWebSpeechDictation({
     sessionRef.current += 1;
     const session = sessionRef.current;
     committedRef.current = "";
-    partsRef.current = [];
+    pendingRef.current = new Map();
     nextSeqRef.current = 0;
-    lastAppliedSeqRef.current = -1;
-    speechSinceSendRef.current = false;
-    silentTicksRef.current = 0;
+    appliedSeqRef.current = 0;
+    lanesRef.current = [];
     wantRef.current = true;
     setListening(true);
     armSilenceTimer();
     setDevTranscriptSink((spoken) => {
       if (sessionRef.current !== session || !wantRef.current) return;
-      committedRef.current = stripWhisperTailJunk(spoken);
+      committedRef.current = stitchSpokenText(
+        committedRef.current,
+        stripWhisperTailJunk(spoken),
+      );
       onTranscriptRef.current(committedRef.current);
     });
 
@@ -379,9 +383,15 @@ export function useWebSpeechDictation({
       micStreamRef.current = stream;
       setMicStream(stream);
       startAmplitudeMonitor(stream);
-      startRecorder(session, stream);
+      beginLane(session, stream);
+      overlapTimerRef.current = window.setTimeout(() => {
+        overlapTimerRef.current = null;
+        if (!wantRef.current || sessionRef.current !== session) return;
+        if (!micStreamRef.current) return;
+        beginLane(session, micStreamRef.current);
+      }, DICTATION_OVERLAP_MS);
     });
-  }, [armSilenceTimer, startAmplitudeMonitor, startRecorder, stop]);
+  }, [armSilenceTimer, beginLane, startAmplitudeMonitor, stop]);
 
   const toggle = useCallback(() => {
     if (wantRef.current) {
@@ -408,19 +418,22 @@ export function useWebSpeechDictation({
       sessionRef.current += 1;
       setDevTranscriptSink(null);
       clearSilenceTimer();
-      clearChunkTimer();
+      clearOverlapTimer();
       stopAmplitudeMonitor();
-      const recorder = recorderRef.current;
-      recorderRef.current = null;
-      try {
-        if (recorder && recorder.state !== "inactive") recorder.stop();
-      } catch {
-        // ignore
+      const lanes = [...lanesRef.current];
+      lanesRef.current = [];
+      for (const lane of lanes) {
+        if (lane.stopTimer !== null) window.clearTimeout(lane.stopTimer);
+        try {
+          if (lane.recorder.state !== "inactive") lane.recorder.stop();
+        } catch {
+          // ignore
+        }
       }
       stopMediaStream(micStreamRef.current);
       micStreamRef.current = null;
     };
-  }, [clearChunkTimer, clearSilenceTimer, stopAmplitudeMonitor]);
+  }, [clearOverlapTimer, clearSilenceTimer, stopAmplitudeMonitor]);
 
   return { supported, listening, micStream, start, stop, toggle };
 }

@@ -11,6 +11,7 @@ import {
   pickRecorderMimeType,
   rmsFromTimeDomain,
   setDevTranscriptSink,
+  stitchSpokenText,
   stripWhisperTailJunk,
 } from "./web-speech";
 
@@ -46,6 +47,22 @@ describe("dictation helpers", () => {
       "The Lord is my shepherd",
     );
     expect(appendSpokenText("The Lord", "   ")).toBe("The Lord");
+  });
+
+  it("stitches overlapping clip transcripts on shared words", () => {
+    expect(stitchSpokenText("", "The Lord")).toBe("The Lord");
+    expect(stitchSpokenText("The Lord", "Lord is my shepherd")).toBe(
+      "The Lord is my shepherd",
+    );
+    expect(stitchSpokenText("The Lord is my", "The Lord is my shepherd")).toBe(
+      "The Lord is my shepherd",
+    );
+    expect(stitchSpokenText("The Lord is my shepherd", "shepherd")).toBe(
+      "The Lord is my shepherd",
+    );
+    expect(stitchSpokenText("The Lord", "I shall not want")).toBe(
+      "The Lord I shall not want",
+    );
   });
 
   it("strips stock Whisper tail hallucinations but keeps verse wording", () => {
