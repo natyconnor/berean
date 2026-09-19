@@ -308,8 +308,11 @@ export function PassageSession({
     });
     const saved = await persist(next, result.quality, result.durationMs);
     if (!saved) return false;
-    if (result.via === "typed") {
-      setHeldRecall(liveRecall);
+    if (result.via === "typed" && liveRecall) {
+      // Freeze hint/prompt chrome on the pre-check snapshot, but adopt the
+      // post-attempt journey fields so the progress bar and step label move
+      // as soon as the check qualifies — including the final 100% fill.
+      setHeldRecall(heldRecallWithJourneyProgress(liveRecall, next));
       setHoldResult(true);
     }
     setStallCue(computeStallCue(next, pieceTexts));
@@ -732,6 +735,27 @@ function CheckpointCard({
       </Card>
     </div>
   );
+}
+
+/**
+ * Keep the result-view hint/prompt frozen on `base`, but overlay journey
+ * fields from the progressed piece so the learning bar advances on check.
+ */
+function heldRecallWithJourneyProgress(
+  base: BuiltRecall,
+  next: PassageSessionState,
+): BuiltRecall {
+  const pending = next.pendingMutation;
+  if (!pending || pending.name !== "recordAttempt") return base;
+  if (typeof pending.pieceIndex !== "number") return base;
+  const progressed = next.pieces[pending.pieceIndex];
+  if (!progressed) return base;
+  return {
+    ...base,
+    learnStage: progressed.learnStage,
+    stageReps: progressed.stageReps,
+    status: pieceStatus(progressed),
+  };
 }
 
 function reviewRecall(

@@ -27,8 +27,8 @@ interface LearningJourneyBarProps {
 
 /**
  * Compact learning-journey progress bar: a band label and a thin filled track
- * that advances one equal step per successful Continue across all four bands
- * (Read → Guided → Challenge → From Memory). Fill fraction is
+ * that advances one equal step per successful checked attempt across all four
+ * bands (Read → Guided → Challenge → From Memory). Fill fraction is
  * {@link learningJourneyFraction}, keeping it in sync with the mastery heart
  * ring.
  *

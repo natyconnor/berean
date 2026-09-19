@@ -122,3 +122,16 @@ export function practiceChromeFor(
   );
   return PRACTICE_STAGES[clampedStage]?.color ?? PRACTICE_STAGES[0].color;
 }
+
+/**
+ * 1-based step the learner is currently working on within the band.
+ * `stageReps` is banked/completed count (0 before the first attempt).
+ *
+ * Call this for the live typing state. While a checked result is on screen,
+ * callers should keep showing the step captured at Check — the journey bar
+ * tracks completed work and may advance earlier than this label.
+ */
+export function currentStageStep(stageReps: number, required: number): number {
+  const requirement = Math.max(1, required);
+  return Math.min(Math.max(0, stageReps) + 1, requirement);
+}

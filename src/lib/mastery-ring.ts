@@ -15,9 +15,9 @@ const LEARNING_RING_CEILING = 0.5;
 /**
  * How far along the four-band learning journey a verse is, as a fraction in
  * `[0, 1]`. Progress is counted in exact reps across every band, so each
- * successful Continue fills the same amount of the bar (1 / total required
- * reps for this verse length). Cleared earlier bands count as fully banked;
- * the current band contributes its banked `stageReps`.
+ * successful qualifying check fills the same amount of the bar (1 / total
+ * required reps for this verse length). Cleared earlier bands count as fully
+ * banked; the current band contributes its banked `stageReps`.
  *
  * When `wordCount` is provided, Guided and Challenge required-rep counts are
  * length-adjusted via {@link requiredRepsFor}, so the bar matches the card and

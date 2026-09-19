@@ -88,7 +88,11 @@ import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
 import { LearningJourneyBar } from "./learning-journey-bar";
-import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
+import {
+  currentStageStep,
+  PRACTICE_STAGES,
+  practiceChromeFor,
+} from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
 import { ReviewSummary, type ReviewSessionAttempt } from "../review-summary";
 import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
@@ -826,6 +830,9 @@ function PracticeCard({
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
   const [checked, setChecked] = useState(false);
+  // Snapshot of "Guided · N of M today" at Check so the step label stays on the
+  // step just finished while the journey bar adopts banked progress early.
+  const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -867,10 +874,11 @@ function PracticeCard({
   }, [versePlainText, learnStage, stageReps]);
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
-  const sessionGoalLabel =
+  const liveGoalLabel =
     status === "reviewing" || status === "mastered"
       ? null
-      : `${stageInfo.label} · ${Math.min(stageReps, requiredToday)} of ${requiredToday} today`;
+      : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
+  const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
   // A session-ending clear locks the verse the instant its attempt is adopted.
   // Hold the graded result until the learner continues so the feedback they
@@ -941,6 +949,13 @@ function PracticeCard({
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
             })
           : null;
+      // Freeze the step label on the step being graded; journey props may adopt
+      // as soon as `onRecord` settles, but the label waits for Continue.
+      if (status !== "reviewing" && status !== "mastered") {
+        setHeldGoalLabel(
+          `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`,
+        );
+      }
       setChecked(true);
       setOutcomeNow(now);
       setNextSchedule(preview);
@@ -970,6 +985,7 @@ function PracticeCard({
 
   function continueAttempt() {
     setChecked(false);
+    setHeldGoalLabel(null);
     setTypedAnswer("");
     onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
@@ -982,6 +998,14 @@ function PracticeCard({
   useEffect(() => {
     if (showLocked || (!checked && !isReadPrime)) return;
     reviewActionRef.current?.focus();
+  }, [checked, isReadPrime, showLocked]);
+
+  // After Read advances into a typing band (or when landing mid-ladder), put
+  // the caret in the answer box. Continue is unmounted, so without this the
+  // document is left unfocused until the learner clicks.
+  useEffect(() => {
+    if (showLocked || checked || isReadPrime) return;
+    answerInputRef.current?.focus();
   }, [checked, isReadPrime, showLocked]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
