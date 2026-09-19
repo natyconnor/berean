@@ -25,6 +25,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.15.3](https://github.com/natyconnor/berean/compare/v1.15.2...v1.15.3) (2026-09-19)
+
+
+### Bug Fixes
+
+* **memory:** advance journey UI on check and focus after Read ([#216](https://github.com/natyconnor/berean/issues/216)) ([b13cab3](https://github.com/natyconnor/berean/commit/b13cab38792f4683648f105575d18d35c710f6ae))
+
 ## [1.15.2](https://github.com/natyconnor/berean/compare/v1.15.1...v1.15.2) (2026-09-19)
 
 
