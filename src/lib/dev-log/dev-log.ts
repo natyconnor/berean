@@ -62,3 +62,16 @@ export function logInteraction(
   }
   devLog.info(`interaction:${category}`, action);
 }
+
+/** Dictation / Groq STT events for the in-app devLog overlay. Never log audio. */
+export function logStt(
+  action: string,
+  details?: Record<string, unknown>,
+): void {
+  const normalized = normalizeDetails(details);
+  if (normalized) {
+    devLog.info("stt", action, normalized);
+    return;
+  }
+  devLog.info("stt", action);
+}

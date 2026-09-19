@@ -1,5 +1,5 @@
 export type { DevLogEntry, DevLogLevel } from "./types";
-export { devLog, logInteraction } from "./dev-log";
+export { devLog, logInteraction, logStt } from "./dev-log";
 export {
   clearDevLog,
   getDevLogEntries,

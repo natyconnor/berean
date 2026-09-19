@@ -11,7 +11,7 @@
 
 ### Bug Fixes
 
-* Groq dictation sends overlapping complete recordings so words show up sooner without invalid webm snapshots
+* Groq dictation endpoints one complete clip per pause instead of stitching overlapping 1.2s windows
 * Groq Whisper uses `whisper-large-v3` (`language=en`, `temperature=0`, no verse prompt) and skips empty/incomplete clips instead of 400ing
 * Passage recall action row no longer shows a white bar under Continue / Check answer
 * Pack scope chapter pickers start empty (whole book by default) and no longer clip selected chapter chips

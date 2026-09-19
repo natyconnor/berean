@@ -2,9 +2,9 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  DICTATION_CHUNK_MS,
-  DICTATION_OVERLAP_MS,
   SPEECH_SILENCE_TIMEOUT_MS,
+  UTTERANCE_END_MS,
+  VAD_POLL_MS,
 } from "@/lib/web-speech";
 
 import {
@@ -104,6 +104,36 @@ function installDictationMocks(): RecorderHarness {
   return { instances, getUserMedia, stopTrack, stream, timeDomain };
 }
 
+async function startListening(result: {
+  current: ReturnType<typeof useWebSpeechDictation>;
+}): Promise<void> {
+  await act(async () => {
+    result.current.start();
+    await Promise.resolve();
+  });
+}
+
+async function hearSpeech(harness: RecorderHarness, ms: number): Promise<void> {
+  harness.timeDomain.fill(0);
+  await act(async () => {
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+  });
+}
+
+async function hearSilence(
+  harness: RecorderHarness,
+  ms: number,
+): Promise<void> {
+  harness.timeDomain.fill(128);
+  await act(async () => {
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("useWebSpeechDictation", () => {
   const originalMediaDevices = navigator.mediaDevices;
   let transcribeAudio: ReturnType<typeof vi.fn<TranscribeAudioFn>>;
@@ -115,7 +145,13 @@ describe("useWebSpeechDictation", () => {
       .fn<TranscribeAudioFn>()
       .mockResolvedValue({ text: "" });
     vi.useFakeTimers({
-      toFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval"],
+      toFake: [
+        "setTimeout",
+        "setInterval",
+        "clearTimeout",
+        "clearInterval",
+        "Date",
+      ],
     });
   });
 
@@ -141,16 +177,13 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.supported).toBe(false);
   });
 
-  it("opens one getUserMedia stream for the waveform and MediaRecorder", async () => {
+  it("opens one getUserMedia stream for the waveform and waits for speech", async () => {
     const harness = installDictationMocks();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
 
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
+    await startListening(result);
 
     expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
     expect(harness.getUserMedia).toHaveBeenCalledWith({
@@ -159,9 +192,7 @@ describe("useWebSpeechDictation", () => {
     });
     expect(result.current.listening).toBe(true);
     expect(result.current.micStream).toBe(harness.stream);
-    expect(harness.instances).toHaveLength(1);
-    expect(harness.instances[0]?.startCount).toBe(1);
-    expect(harness.instances[0]?.timesliceMs).toBeUndefined();
+    expect(harness.instances).toHaveLength(0);
 
     act(() => {
       result.current.stop();
@@ -171,26 +202,21 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.listening).toBe(false);
   });
 
-  it("starts a second overlapping recorder so clip boundaries are covered", async () => {
+  it("does not start a second overlapping recorder", async () => {
     const harness = installDictationMocks();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
+    await startListening(result);
+    await hearSpeech(harness, 250);
     expect(harness.instances).toHaveLength(1);
-    act(() => {
-      vi.advanceTimersByTime(DICTATION_OVERLAP_MS);
-    });
-    expect(harness.instances).toHaveLength(2);
-    expect(
-      harness.instances.every((rec) => rec.timesliceMs === undefined),
-    ).toBe(true);
+    await hearSpeech(harness, 400);
+    expect(harness.instances).toHaveLength(1);
+    expect(harness.instances[0]?.timesliceMs).toBeUndefined();
+    expect(harness.instances[0]?.state).toBe("recording");
   });
 
-  it("sends a complete stop() file to Groq and streams words without grading", async () => {
+  it("sends one complete stop() file after a pause and streams words without grading", async () => {
     const harness = installDictationMocks();
     transcribeAudio.mockResolvedValue({ text: "The Lord is my shepherd" });
     const onTranscript = vi.fn();
@@ -198,19 +224,10 @@ describe("useWebSpeechDictation", () => {
       useWebSpeechDictation({ onTranscript, transcribeAudio }),
     );
 
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    harness.timeDomain.fill(0);
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await startListening(result);
+    await hearSpeech(harness, 300);
+    expect(harness.instances).toHaveLength(1);
+    await hearSilence(harness, UTTERANCE_END_MS);
 
     expect(transcribeAudio).toHaveBeenCalledTimes(1);
     const args = transcribeAudio.mock.calls[0]?.[0];
@@ -221,31 +238,34 @@ describe("useWebSpeechDictation", () => {
     expect(harness.instances[0]?.state).toBe("inactive");
   });
 
-  it("stitches overlapping clip transcripts in order", async () => {
+  it("appends the next utterance without rewriting the first", async () => {
     const harness = installDictationMocks();
     transcribeAudio
-      .mockResolvedValueOnce({ text: "The Lord" })
-      .mockResolvedValueOnce({ text: "Lord is my shepherd" });
+      .mockResolvedValueOnce({ text: "Blessed is the man" })
+      .mockResolvedValueOnce({
+        text: "Blessed is the man. Yes, it is the man.",
+      });
     const onTranscript = vi.fn();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript, transcribeAudio }),
     );
 
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    harness.timeDomain.fill(0);
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS + DICTATION_OVERLAP_MS);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(onTranscript).toHaveBeenLastCalledWith("The Lord is my shepherd");
-    expect(transcribeAudio.mock.calls.length).toBeGreaterThanOrEqual(2);
+    await startListening(result);
+    await hearSpeech(harness, 300);
+    await hearSilence(harness, UTTERANCE_END_MS);
+    expect(onTranscript).toHaveBeenLastCalledWith("Blessed is the man");
+
+    await hearSpeech(harness, 300);
+    await hearSilence(harness, UTTERANCE_END_MS);
+    expect(onTranscript).toHaveBeenLastCalledWith(
+      "Blessed is the man Blessed is the man. Yes, it is the man.",
+    );
+    expect(transcribeAudio).toHaveBeenCalledTimes(2);
+    expect(harness.instances).toHaveLength(2);
+    const previous = onTranscript.mock.calls.map((call) => call[0] as string);
+    for (let i = 1; i < previous.length; i += 1) {
+      expect(previous[i]?.startsWith(previous[i - 1] ?? "")).toBe(true);
+    }
   });
 
   it("turns the mic off after 5 seconds with no speech", async () => {
@@ -253,10 +273,7 @@ describe("useWebSpeechDictation", () => {
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
+    await startListening(result);
     expect(result.current.listening).toBe(true);
 
     act(() => {
@@ -275,17 +292,11 @@ describe("useWebSpeechDictation", () => {
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
+    await startListening(result);
     act(() => {
       vi.advanceTimersByTime(4_000);
     });
-    harness.timeDomain.fill(0);
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
+    await hearSpeech(harness, 200);
     harness.timeDomain.fill(128);
     act(() => {
       vi.advanceTimersByTime(4_000);
@@ -297,19 +308,14 @@ describe("useWebSpeechDictation", () => {
     expect(result.current.listening).toBe(false);
   });
 
-  it("does not send silent clips", async () => {
-    installDictationMocks();
+  it("does not send silent clips or start a recorder without speech", async () => {
+    const harness = installDictationMocks();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
-      await Promise.resolve();
-    });
+    await startListening(result);
+    await hearSilence(harness, 1_200);
+    expect(harness.instances).toHaveLength(0);
     expect(transcribeAudio).not.toHaveBeenCalled();
     expect(result.current.listening).toBe(true);
   });
@@ -320,32 +326,13 @@ describe("useWebSpeechDictation", () => {
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    harness.timeDomain.fill(0);
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS + DICTATION_OVERLAP_MS);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    const afterSpeech = transcribeAudio.mock.calls.length;
-    expect(afterSpeech).toBeGreaterThanOrEqual(1);
-    harness.timeDomain.fill(128);
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS * 2);
-      await Promise.resolve();
-    });
-    const afterOverlapFlush = transcribeAudio.mock.calls.length;
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS * 2);
-      await Promise.resolve();
-    });
-    expect(transcribeAudio).toHaveBeenCalledTimes(afterOverlapFlush);
+    await startListening(result);
+    await hearSpeech(harness, 300);
+    await hearSilence(harness, UTTERANCE_END_MS);
+    expect(transcribeAudio).toHaveBeenCalledTimes(1);
+    await hearSilence(harness, VAD_POLL_MS * 20);
+    expect(transcribeAudio).toHaveBeenCalledTimes(1);
+    expect(result.current.listening).toBe(true);
   });
 
   it("strips stock Whisper tail hallucinations from a Groq result", async () => {
@@ -357,37 +344,35 @@ describe("useWebSpeechDictation", () => {
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    harness.timeDomain.fill(0);
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await startListening(result);
+    await hearSpeech(harness, 300);
+    await hearSilence(harness, UTTERANCE_END_MS);
     expect(onTranscript).toHaveBeenLastCalledWith("The Lord is my shepherd");
   });
 
-  it("flushes the last spoken chunk on Stop", async () => {
+  it("drops filler-only Whisper clips instead of writing them into the box", async () => {
+    const harness = installDictationMocks();
+    transcribeAudio.mockResolvedValue({ text: "Mm-hmm." });
+    const onTranscript = vi.fn();
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript, transcribeAudio }),
+    );
+    await startListening(result);
+    await hearSpeech(harness, 300);
+    await hearSilence(harness, UTTERANCE_END_MS);
+    expect(transcribeAudio).toHaveBeenCalled();
+    expect(onTranscript).not.toHaveBeenCalled();
+  });
+
+  it("flushes the last spoken utterance on Stop", async () => {
     const harness = installDictationMocks();
     transcribeAudio.mockResolvedValue({ text: "I shall not want" });
     const onTranscript = vi.fn();
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
-    harness.timeDomain.fill(0);
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
+    await startListening(result);
+    await hearSpeech(harness, 400);
     await act(async () => {
       result.current.stop();
       await Promise.resolve();
@@ -403,10 +388,7 @@ describe("useWebSpeechDictation", () => {
     const { result } = renderHook(() =>
       useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
     );
-    await act(async () => {
-      result.current.start();
-      await Promise.resolve();
-    });
+    await startListening(result);
     act(() => {
       window.dispatchEvent(
         new KeyboardEvent("keydown", { key: " ", bubbles: true }),

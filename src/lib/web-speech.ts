@@ -8,14 +8,35 @@
 
 export const SPEECH_SILENCE_TIMEOUT_MS = 5_000;
 
-/** Complete MediaRecorder file length. Groq 400s on timeslice / requestData fragments. */
-export const DICTATION_CHUNK_MS = 1_200;
+/** Analyser poll for utterance VAD. Faster than UI; still cheap. */
+export const VAD_POLL_MS = 50;
 
-/** Second recorder starts this far in so clip boundaries overlap. */
-export const DICTATION_OVERLAP_MS = 400;
+/**
+ * Quiet hangover after speech before we `stop()` the recorder and send.
+ * Groq is not streaming ASR — this is the honest “words after a pause” beat.
+ */
+export const UTTERANCE_END_MS = 700;
 
-/** Time-domain RMS above this counts as speech for the 5s silence timer. */
+/** Consecutive speech energy required before opening a recorder (anti-click). */
+export const SPEECH_START_MS = 80;
+
+/** Drop accidental Stop taps / aborted noise clips. */
+export const MIN_UTTERANCE_MS = 220;
+
+/** Safety valve if VAD never hears a pause (steady noise, stuck energy). */
+export const MAX_UTTERANCE_MS = 30_000;
+
+/** Absolute RMS floor. Adaptive noise sits on top of this. */
 export const SPEECH_RMS_THRESHOLD = 0.02;
+
+/** Peak must clear the start threshold by this much or the clip is noise. */
+export const SPEECH_PEAK_MARGIN = 0.025;
+
+export const NOISE_FLOOR_INIT = 0.012;
+export const NOISE_FLOOR_MIN = 0.003;
+export const NOISE_FLOOR_MAX = 0.08;
+const NOISE_FLOOR_DOWN = 0.18;
+const NOISE_FLOOR_UP = 0.04;
 
 /** DEV-only: click "Insert spoken sample" while listening to stream a transcript. */
 export const DEV_MOCK_SPEECH_EMIT_EVENT = "berean:mock-speech-emit";
@@ -209,31 +230,172 @@ export function appendSpokenText(base: string, spoken: string): string {
   return `${left} ${next}`;
 }
 
+export type UtteranceVad = {
+  noiseFloor: number;
+  speechRunMs: number;
+  silenceRunMs: number;
+  inUtterance: boolean;
+  peakRms: number;
+};
+
+export type UtteranceVadEvent = "none" | "start" | "end";
+
+export function createUtteranceVad(): UtteranceVad {
+  return {
+    noiseFloor: NOISE_FLOOR_INIT,
+    speechRunMs: 0,
+    silenceRunMs: 0,
+    inUtterance: false,
+    peakRms: 0,
+  };
+}
+
+export function speechThresholds(noiseFloor: number): {
+  start: number;
+  continue: number;
+} {
+  const start = Math.max(
+    SPEECH_RMS_THRESHOLD,
+    noiseFloor * 2.2,
+    noiseFloor + 0.018,
+  );
+  const continueAt = Math.min(
+    start * 0.75,
+    Math.max(
+      SPEECH_RMS_THRESHOLD * 0.35,
+      noiseFloor * 1.35,
+      noiseFloor + 0.006,
+    ),
+  );
+  return { start, continue: continueAt };
+}
+
+function clampNoiseFloor(value: number): number {
+  return Math.min(NOISE_FLOOR_MAX, Math.max(NOISE_FLOOR_MIN, value));
+}
+
+function adaptNoiseFloor(floor: number, rms: number): number {
+  const alpha = rms < floor ? NOISE_FLOOR_DOWN : NOISE_FLOOR_UP;
+  return clampNoiseFloor(floor * (1 - alpha) + rms * alpha);
+}
+
 /**
- * Join overlapping clip transcripts. Complete recorders restart, so
- * consecutive Whisper results share the overlap window's words.
+ * Frame-level utterance VAD. Speech opens a clip; a natural pause closes it.
+ * One complete MediaRecorder `start()` → `stop()` per event pair — never
+ * overlapping windows.
  */
-export function stitchSpokenText(base: string, spoken: string): string {
-  const next = spoken.trim();
-  if (!next) return base;
-  const left = base.trimEnd();
-  if (!left) return next;
-  const leftLower = left.toLowerCase();
-  const nextLower = next.toLowerCase();
-  if (nextLower.startsWith(leftLower)) return next;
-  if (leftLower.endsWith(nextLower)) return left;
-  const leftWords = left.split(/\s+/);
-  const nextWords = next.split(/\s+/);
-  const max = Math.min(leftWords.length, nextWords.length);
-  for (let n = max; n >= 1; n -= 1) {
-    if (
-      leftWords.slice(-n).join(" ").toLowerCase() ===
-      nextWords.slice(0, n).join(" ").toLowerCase()
-    ) {
-      return [...leftWords, ...nextWords.slice(n)].join(" ");
-    }
+export function stepUtteranceVad(
+  vad: UtteranceVad,
+  rms: number,
+  dtMs: number,
+): { vad: UtteranceVad; event: UtteranceVadEvent } {
+  const { start, continue: cont } = speechThresholds(vad.noiseFloor);
+  let noiseFloor = vad.noiseFloor;
+  if (!vad.inUtterance) {
+    noiseFloor = adaptNoiseFloor(noiseFloor, rms);
   }
-  return `${left} ${next}`;
+
+  if (!vad.inUtterance) {
+    if (rms >= start) {
+      const speechRunMs = vad.speechRunMs + dtMs;
+      if (speechRunMs >= SPEECH_START_MS) {
+        return {
+          vad: {
+            noiseFloor,
+            speechRunMs: 0,
+            silenceRunMs: 0,
+            inUtterance: true,
+            peakRms: rms,
+          },
+          event: "start",
+        };
+      }
+      return {
+        vad: {
+          noiseFloor,
+          speechRunMs,
+          silenceRunMs: 0,
+          inUtterance: false,
+          peakRms: 0,
+        },
+        event: "none",
+      };
+    }
+    return {
+      vad: {
+        noiseFloor,
+        speechRunMs: 0,
+        silenceRunMs: 0,
+        inUtterance: false,
+        peakRms: 0,
+      },
+      event: "none",
+    };
+  }
+
+  const peakRms = Math.max(vad.peakRms, rms);
+  if (rms >= cont) {
+    return {
+      vad: {
+        noiseFloor,
+        speechRunMs: 0,
+        silenceRunMs: 0,
+        inUtterance: true,
+        peakRms,
+      },
+      event: "none",
+    };
+  }
+  const silenceRunMs = vad.silenceRunMs + dtMs;
+  if (silenceRunMs >= UTTERANCE_END_MS) {
+    return {
+      vad: {
+        noiseFloor,
+        speechRunMs: 0,
+        silenceRunMs: 0,
+        inUtterance: false,
+        peakRms,
+      },
+      event: "end",
+    };
+  }
+  return {
+    vad: {
+      noiseFloor,
+      speechRunMs: 0,
+      silenceRunMs,
+      inUtterance: true,
+      peakRms,
+    },
+    event: "none",
+  };
+}
+
+export function forceEndUtteranceVad(vad: UtteranceVad): UtteranceVad {
+  return {
+    ...vad,
+    inUtterance: false,
+    speechRunMs: 0,
+    silenceRunMs: 0,
+  };
+}
+
+/** True when the clip peaked like voice, not a flat noise floor. */
+export function shouldSendUtterance(
+  peakRms: number,
+  noiseFloor: number,
+): boolean {
+  const { start } = speechThresholds(noiseFloor);
+  return peakRms >= start + SPEECH_PEAK_MARGIN;
+}
+
+export function raiseNoiseFloorFromRejectedClip(
+  vad: UtteranceVad,
+): UtteranceVad {
+  return {
+    ...createUtteranceVad(),
+    noiseFloor: clampNoiseFloor(Math.max(vad.noiseFloor, vad.peakRms * 0.9)),
+  };
 }
 
 const WHISPER_TAIL_JUNK =
@@ -260,6 +422,23 @@ export function stripWhisperTailJunk(text: string): string {
     return "";
   }
   return next;
+}
+
+const WHISPER_FILLER_UTTERANCE =
+  /^(?:(?:uh+|um+|er+|ah+|oh+|ooh+|mm+(?:-hmm)?|mhm|hmm+|huh|okay|ok|yeah|yep|yup|yes)(?:\.{2,}|\.|!|\?|,|'s)?(?:\s+|$))+$/i;
+
+/** Whole-clip Whisper throat-clearing. Never strips mixed sentences. */
+export function isWhisperFillerUtterance(text: string): boolean {
+  const next = text.trim();
+  if (!next) return true;
+  return WHISPER_FILLER_UTTERANCE.test(next);
+}
+
+/** Clean a Groq transcript before it hits the recall box. */
+export function spokenFromWhisper(text: string): string {
+  const stripped = stripWhisperTailJunk(text);
+  if (!stripped || isWhisperFillerUtterance(stripped)) return "";
+  return stripped;
 }
 
 /** RMS of analyser time-domain PCM (0–255, 128 = silence). */

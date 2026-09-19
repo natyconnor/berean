@@ -3,16 +3,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appendSpokenText,
   cloneMediaStreamForAnalysis,
+  createUtteranceVad,
   emitDevMockSpeech,
   isDevSpeechMockEnabled,
   isDictationSupported,
   isSpaceToggleKey,
+  isWhisperFillerUtterance,
   liveAudioTrack,
   pickRecorderMimeType,
   rmsFromTimeDomain,
   setDevTranscriptSink,
-  stitchSpokenText,
+  shouldSendUtterance,
+  SPEECH_START_MS,
+  spokenFromWhisper,
+  stepUtteranceVad,
   stripWhisperTailJunk,
+  UTTERANCE_END_MS,
 } from "./web-speech";
 
 describe("dictation helpers", () => {
@@ -49,20 +55,62 @@ describe("dictation helpers", () => {
     expect(appendSpokenText("The Lord", "   ")).toBe("The Lord");
   });
 
-  it("stitches overlapping clip transcripts on shared words", () => {
-    expect(stitchSpokenText("", "The Lord")).toBe("The Lord");
-    expect(stitchSpokenText("The Lord", "Lord is my shepherd")).toBe(
-      "The Lord is my shepherd",
+  it("opens a clip after speech and closes it after a natural pause", () => {
+    let vad = createUtteranceVad();
+    let started = false;
+    for (let i = 0; i < 4; i += 1) {
+      const stepped = stepUtteranceVad(vad, 0.12, 50);
+      vad = stepped.vad;
+      if (stepped.event === "start") started = true;
+    }
+    expect(started).toBe(true);
+    expect(vad.inUtterance).toBe(true);
+
+    const dip = stepUtteranceVad(vad, 0.004, 200);
+    expect(dip.event).toBe("none");
+    expect(dip.vad.inUtterance).toBe(true);
+
+    const ended = stepUtteranceVad(dip.vad, 0.004, UTTERANCE_END_MS);
+    expect(ended.event).toBe("end");
+    expect(ended.vad.inUtterance).toBe(false);
+    expect(shouldSendUtterance(ended.vad.peakRms, ended.vad.noiseFloor)).toBe(
+      true,
     );
-    expect(stitchSpokenText("The Lord is my", "The Lord is my shepherd")).toBe(
-      "The Lord is my shepherd",
+  });
+
+  it("does not treat a brief dip as the end of an utterance", () => {
+    let vad = createUtteranceVad();
+    let started = false;
+    for (let i = 0; i < 4; i += 1) {
+      const stepped = stepUtteranceVad(vad, 0.14, 50);
+      vad = stepped.vad;
+      if (stepped.event === "start") started = true;
+    }
+    expect(started).toBe(true);
+    const dip = stepUtteranceVad(vad, 0.004, 200);
+    expect(dip.event).toBe("none");
+    const resume = stepUtteranceVad(dip.vad, 0.14, 50);
+    expect(resume.event).toBe("none");
+    expect(resume.vad.inUtterance).toBe(true);
+    expect(resume.vad.silenceRunMs).toBe(0);
+  });
+
+  it("does not send a flat noise-floor clip as speech", () => {
+    const vad = createUtteranceVad();
+    expect(shouldSendUtterance(0.04, vad.noiseFloor)).toBe(false);
+    expect(shouldSendUtterance(0.12, vad.noiseFloor)).toBe(true);
+  });
+
+  it("requires a short run of speech before starting", () => {
+    const first = stepUtteranceVad(
+      createUtteranceVad(),
+      0.12,
+      SPEECH_START_MS - 30,
     );
-    expect(stitchSpokenText("The Lord is my shepherd", "shepherd")).toBe(
-      "The Lord is my shepherd",
-    );
-    expect(stitchSpokenText("The Lord", "I shall not want")).toBe(
-      "The Lord I shall not want",
-    );
+    expect(first.event).toBe("none");
+    expect(first.vad.inUtterance).toBe(false);
+    const second = stepUtteranceVad(first.vad, 0.12, 50);
+    expect(second.event).toBe("start");
   });
 
   it("strips stock Whisper tail hallucinations but keeps verse wording", () => {
@@ -76,6 +124,18 @@ describe("dictation helpers", () => {
     expect(stripWhisperTailJunk("Father, I thank you")).toBe(
       "Father, I thank you",
     );
+  });
+
+  it("drops filler-only Whisper clips but keeps real commentary and verses", () => {
+    expect(isWhisperFillerUtterance("Mm-hmm.")).toBe(true);
+    expect(isWhisperFillerUtterance("Okay")).toBe(true);
+    expect(isWhisperFillerUtterance("Yes.")).toBe(true);
+    expect(spokenFromWhisper("  mm-hmm.  ")).toBe("");
+    expect(spokenFromWhisper("Oooo that's really bad")).toBe(
+      "Oooo that's really bad",
+    );
+    expect(spokenFromWhisper("Blessed is the man")).toBe("Blessed is the man");
+    expect(spokenFromWhisper("Yes, it is the man")).toBe("Yes, it is the man");
   });
 
   it("hides support when getUserMedia or MediaRecorder is missing", () => {

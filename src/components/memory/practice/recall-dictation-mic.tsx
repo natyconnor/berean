@@ -53,7 +53,7 @@ export function RecallDictationMic({
           className="text-center text-xs text-muted-foreground"
           aria-live="polite"
         >
-          Listening… words appear in the box. Edit, then Check.
+          Listening… words appear after you pause. Edit, then Check.
         </p>
       ) : null}
       {listening && isDevSpeechMockEnabled() && onInsertSample ? (
