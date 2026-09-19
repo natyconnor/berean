@@ -47,7 +47,7 @@ describe("buildPassagePieces", () => {
     expect(grouped.every((g) => g.kind === "proposed")).toBe(true);
   });
 
-  it("starts a new section on an ESV heading and labels it", () => {
+  it("packs learning sections by verse count, not ESV headings", () => {
     const verses: EsvVerse[] = [
       verse(1, "Now there was a man"),
       verse(2, "of the Pharisees."),
@@ -64,15 +64,11 @@ describe("buildPassagePieces", () => {
 
     const pieces = buildPassagePieces([{ book: "John", chapter: 3, verses }]);
     expect(pieces[0]?.sectionIndex).toBe(0);
-    expect(pieces[0]?.sectionLabel).toBe("Chapter 3");
-    expect(pieces.slice(1, 3).every((p) => p.sectionIndex === 0)).toBe(true);
-    expect(pieces.slice(1, 3).every((p) => p.sectionLabel === undefined)).toBe(
-      true,
+    expect(pieces[0]?.sectionLabel).toBe("John 3");
+    expect(pieces.every((p) => p.sectionIndex === 0)).toBe(true);
+    expect(pieces.some((p) => p.sectionLabel === "He Must Increase")).toBe(
+      false,
     );
-
-    const headingPiece = pieces.find((p) => p.startVerse === 6);
-    expect(headingPiece?.sectionIndex).toBe(1);
-    expect(headingPiece?.sectionLabel).toBe("He Must Increase");
   });
 
   it("starts a new section when the chapter changes", () => {
@@ -90,9 +86,9 @@ describe("buildPassagePieces", () => {
 
     expect(pieces).toHaveLength(2);
     expect(pieces[0]?.sectionIndex).toBe(0);
-    expect(pieces[0]?.sectionLabel).toBe("Chapter 3");
+    expect(pieces[0]?.sectionLabel).toBe("John 3");
     expect(pieces[1]?.sectionIndex).toBe(1);
-    expect(pieces[1]?.sectionLabel).toBe("Chapter 4");
+    expect(pieces[1]?.sectionLabel).toBe("John 4");
     expect(pieces[1]?.chapter).toBe(4);
   });
 
@@ -112,7 +108,7 @@ describe("buildPassagePieces", () => {
     expect(aroundSixteen[0]?.endVerse).toBe(16);
   });
 
-  it("starts a new section on a subheading", () => {
+  it("does not start a learning section on a subheading", () => {
     const verses: EsvVerse[] = [
       verse(1, "She speaks without ending"),
       verse(2, "He answers after the speaker label.", { subheading: "He" }),
@@ -120,8 +116,8 @@ describe("buildPassagePieces", () => {
     const pieces = buildPassagePieces([
       { book: "Song of Solomon", chapter: 1, verses },
     ]);
-    expect(pieces[0]?.sectionLabel).toBe("Chapter 1");
-    expect(pieces[1]?.sectionIndex).toBe(1);
-    expect(pieces[1]?.sectionLabel).toBe("He");
+    expect(pieces[0]?.sectionLabel).toBe("Song of Solomon 1");
+    expect(pieces.every((p) => p.sectionIndex === 0)).toBe(true);
+    expect(pieces.some((p) => p.sectionLabel === "He")).toBe(false);
   });
 });

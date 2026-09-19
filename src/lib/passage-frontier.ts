@@ -28,7 +28,7 @@ import type { VerseScope } from "./verse-scope-match";
 export const PASSAGE_MAX_ADDS_PER_DAY = 5;
 export const PASSAGE_REHEARSAL_MAX_PIECES = 3;
 export const PASSAGE_REHEARSAL_MAX_WORDS = 120;
-/** How many recent rope pieces to connect after each soft-lock. */
+/** How many rope pieces to recitation-connect after a verse clears a rope band. */
 export const PASSAGE_CONNECT_PAIR_SIZE = 2;
 export const PASSAGE_PASS_ACCURACY = LEARN_PROGRESS_ACCURACY;
 
@@ -102,16 +102,49 @@ export function ropePieceIndexes(pieces: readonly PassagePiece[]): number[] {
 }
 
 /**
- * After each soft-lock once the rope has at least
- * {@link PASSAGE_CONNECT_PAIR_SIZE} pieces, return the newest pair to connect.
- * This is the rolling link step: verse 2→1-2, verse 3→2-3, verse 4→3-4.
+ * Neighbor pair to recitation-connect after `pieceIndex` advances on the rope.
+ * Prefer the previous rope piece (verse 3 → 2-3). If this is the first rope
+ * piece, link forward so verse 1 still connects at Challenge / From Memory.
+ */
+export function connectPairForPiece(
+  pieces: readonly PassagePiece[],
+  pieceIndex: number,
+): number[] | null {
+  const rope = ropePieceIndexes(pieces);
+  if (rope.length < PASSAGE_CONNECT_PAIR_SIZE) return null;
+  const position = rope.indexOf(pieceIndex);
+  if (position === -1) return null;
+  if (position > 0) {
+    const previous = rope[position - 1];
+    return previous === undefined ? null : [previous, pieceIndex];
+  }
+  const next = rope[position + 1];
+  return next === undefined ? null : [pieceIndex, next];
+}
+
+/**
+ * Newest rope pair: verse 2→1-2, verse 3→2-3, verse 4→3-4. Used when no
+ * specific piece is in hand (stale-connect checks, default rehearsal slice).
  */
 export function connectPairIndexes(
   pieces: readonly PassagePiece[],
 ): number[] | null {
   const rope = ropePieceIndexes(pieces);
-  if (rope.length < PASSAGE_CONNECT_PAIR_SIZE) return null;
-  return rope.slice(-PASSAGE_CONNECT_PAIR_SIZE);
+  const last = rope[rope.length - 1];
+  if (last === undefined) return null;
+  return connectPairForPiece(pieces, last);
+}
+
+/** True when a frontier grade moved this piece onto or along the practice rope. */
+export function clearedRopeBand(
+  before: PassagePiece,
+  after: PassagePiece,
+): boolean {
+  if (!isRopeAttachment(after.attachment)) return false;
+  return (
+    before.attachment !== after.attachment ||
+    before.learnStage !== after.learnStage
+  );
 }
 
 export function sectionStartIndex(

@@ -58,7 +58,7 @@ export const SECTION_COMPLETE_COPY =
 export const SECTION_RECITE_LABEL = "Recite this section";
 
 export const CONNECT_COPY =
-  "Link the verse you just learned to the one before it.";
+  "Link this verse to its neighbor so they stay together.";
 
 export const CONNECT_RECITE_LABEL = "Recite together";
 

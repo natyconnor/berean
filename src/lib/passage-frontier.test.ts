@@ -7,7 +7,9 @@ import {
   requiredRepsFor,
 } from "./memory-scheduler";
 import {
+  clearedRopeBand,
   compositeHintForWindow,
+  connectPairForPiece,
   connectPairIndexes,
   dueFrontierIndex,
   frontierIndex,
@@ -96,7 +98,7 @@ describe("passage introduce budget", () => {
   });
 });
 
-describe("frontierIndex / ropePieceIndexes / sectionStartIndex", () => {
+describe("frontierIndex / ropePieceIndexes / connect pairs", () => {
   it("points frontier at the first non-solid and lists the rope in order", () => {
     const pieces = [
       piece(0, "solid"),
@@ -143,6 +145,43 @@ describe("frontierIndex / ropePieceIndexes / sectionStartIndex", () => {
         piece(3, "attached"),
       ]),
     ).toEqual([2, 3]);
+  });
+
+  it("pairs a practiced piece with its previous neighbor, or the next if first", () => {
+    const rope = [
+      piece(0, "solid"),
+      piece(1, "attached"),
+      piece(2, "attached"),
+    ];
+    expect(connectPairForPiece(rope, 0)).toEqual([0, 1]);
+    expect(connectPairForPiece(rope, 1)).toEqual([0, 1]);
+    expect(connectPairForPiece(rope, 2)).toEqual([1, 2]);
+    expect(connectPairForPiece([piece(0, "attached")], 0)).toBeNull();
+    expect(
+      connectPairForPiece(
+        [piece(0, "attached"), piece(1, "learning"), piece(2, "attached")],
+        2,
+      ),
+    ).toEqual([0, 2]);
+  });
+
+  it("treats Guided attach, Challenge, and From Memory as rope-band clears", () => {
+    const learningRead = piece(0, "learning", { learnStage: 0 });
+    const learningGuided = piece(0, "learning", { learnStage: 1 });
+    const attachedChallenge = piece(0, "attached", { learnStage: 2 });
+    const attachedMemory = piece(0, "attached", { learnStage: 3 });
+    const solid = piece(0, "solid", { learnStage: 3 });
+
+    expect(clearedRopeBand(learningRead, learningGuided)).toBe(false);
+    expect(clearedRopeBand(learningGuided, attachedChallenge)).toBe(true);
+    expect(clearedRopeBand(attachedChallenge, attachedMemory)).toBe(true);
+    expect(clearedRopeBand(attachedMemory, solid)).toBe(true);
+    expect(
+      clearedRopeBand(
+        attachedChallenge,
+        piece(0, "attached", { learnStage: 2, stageReps: 1 }),
+      ),
+    ).toBe(false);
   });
 });
 
