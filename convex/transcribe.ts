@@ -2,15 +2,17 @@
 
 import { v } from "convex/values";
 
-import { action } from "./_generated/server";
-import { requireActionIdentity } from "./lib/auth";
 import {
   audioFilenameForMime,
   baseAudioMimeType,
+  GROQ_ERROR_BODY_LIMIT,
   groqFailureMessage,
   skipReasonForAudioBase64,
   skipReasonForAudioBytes,
 } from "../src/lib/dictation-audio";
+import { sttLog } from "../src/lib/stt-log";
+import { action, type ActionCtx } from "./_generated/server";
+import { requireActionIdentity } from "./lib/auth";
 
 /**
  * Error-sensitive verse recitation (100% From Memory). Groq's large-v3 is
@@ -22,17 +24,39 @@ export const GROQ_WHISPER_MODEL = "whisper-large-v3";
 const GROQ_TRANSCRIBE_URL =
   "https://api.groq.com/openai/v1/audio/transcriptions";
 
-function logTranscribe(
-  level: "info" | "error",
-  event: string,
-  details: Record<string, string | number | boolean>,
-): void {
-  const payload = { channel: "stt", event, ...details };
-  if (level === "error") {
-    console.error("[stt]", payload);
-    return;
+function clipGroqLogBody(body: string): string {
+  return body.replace(/\s+/g, " ").trim().slice(0, GROQ_ERROR_BODY_LIMIT);
+}
+
+async function readConvexRequestId(ctx: ActionCtx): Promise<string | undefined> {
+  try {
+    const meta = await ctx.meta.getRequestMetadata();
+    return meta.requestId;
+  } catch {
+    return undefined;
   }
-  console.info("[stt]", payload);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function resultExtras(args: {
+  requestId?: string;
+  httpStatus?: number;
+  latencyMs: number;
+}): {
+  requestId?: string;
+  model: string;
+  httpStatus?: number;
+  latencyMs: number;
+} {
+  return {
+    ...(args.requestId ? { requestId: args.requestId } : {}),
+    model: GROQ_WHISPER_MODEL,
+    ...(args.httpStatus != null ? { httpStatus: args.httpStatus } : {}),
+    latencyMs: args.latencyMs,
+  };
 }
 
 /**
@@ -43,18 +67,45 @@ function logTranscribe(
  * Vite / `VITE_*` client env.
  *
  * `prompt` is omitted on purpose — never the expected verse.
+ *
+ * STT debug: Convex dashboard logs are always tagged `[stt]` via `sttLog`
+ * (never the API key). The client overlay reads returned `requestId` /
+ * `httpStatus` / model / latency when `berean:debugStt` is on.
  */
 export const transcribeAudio = action({
   args: {
     audioBase64: v.string(),
     mimeType: v.string(),
   },
-  returns: v.object({ text: v.string() }),
+  returns: v.object({
+    text: v.string(),
+    requestId: v.optional(v.string()),
+    model: v.optional(v.string()),
+    httpStatus: v.optional(v.number()),
+    latencyMs: v.optional(v.number()),
+  }),
   handler: async (ctx, args) => {
+    const started = Date.now();
+    const requestId = await readConvexRequestId(ctx);
+    const mimeType = baseAudioMimeType(args.mimeType);
+
+    sttLog.info("transcribe-start", {
+      requestId,
+      model: GROQ_WHISPER_MODEL,
+      mimeType,
+      audioBase64Chars: args.audioBase64.length,
+    });
+
     await requireActionIdentity(ctx);
 
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
+      sttLog.error("transcribe-error", {
+        requestId,
+        model: GROQ_WHISPER_MODEL,
+        reason: "missing-groq-api-key",
+        latencyMs: Date.now() - started,
+      });
       throw new Error(
         "GROQ_API_KEY not configured in Convex environment variables",
       );
@@ -62,11 +113,17 @@ export const transcribeAudio = action({
 
     const base64Skip = skipReasonForAudioBase64(args.audioBase64);
     if (base64Skip) {
-      logTranscribe("info", "skip", {
+      sttLog.info("transcribe-skip", {
+        requestId,
+        model: GROQ_WHISPER_MODEL,
         reason: base64Skip,
-        base64Chars: args.audioBase64.length,
+        audioBase64Chars: args.audioBase64.length,
+        latencyMs: Date.now() - started,
       });
-      return { text: "" };
+      return {
+        text: "",
+        ...resultExtras({ requestId, latencyMs: Date.now() - started }),
+      };
     }
 
     const audio = Buffer.from(args.audioBase64, "base64");
@@ -77,15 +134,20 @@ export const transcribeAudio = action({
     );
     const bytesSkip = skipReasonForAudioBytes(bytes);
     if (bytesSkip) {
-      logTranscribe("info", "skip", {
+      sttLog.info("transcribe-skip", {
+        requestId,
+        model: GROQ_WHISPER_MODEL,
         reason: bytesSkip,
-        bytes: bytes.byteLength,
-        mimeType: args.mimeType,
+        audioBytes: bytes.byteLength,
+        mimeType,
+        latencyMs: Date.now() - started,
       });
-      return { text: "" };
+      return {
+        text: "",
+        ...resultExtras({ requestId, latencyMs: Date.now() - started }),
+      };
     }
 
-    const mimeType = baseAudioMimeType(args.mimeType);
     const filename = audioFilenameForMime(mimeType);
     const form = new FormData();
     form.append("file", new Blob([bytes], { type: mimeType }), filename);
@@ -94,37 +156,83 @@ export const transcribeAudio = action({
     form.append("response_format", "json");
     form.append("temperature", "0");
 
-    const response = await fetch(GROQ_TRANSCRIBE_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form,
-    });
+    const groqStarted = Date.now();
+    let response: Response;
+    try {
+      response = await fetch(GROQ_TRANSCRIBE_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+    } catch (error) {
+      sttLog.error("transcribe-error", {
+        requestId,
+        model: GROQ_WHISPER_MODEL,
+        reason: "fetch-failed",
+        mimeType,
+        audioBytes: bytes.byteLength,
+        groqLatencyMs: Date.now() - groqStarted,
+        latencyMs: Date.now() - started,
+        message: errorMessage(error),
+      });
+      throw error;
+    }
+
+    const groqLatencyMs = Date.now() - groqStarted;
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      const message = groqFailureMessage(
+      const groqBody = clipGroqLogBody(detail);
+      sttLog.error("transcribe-http", {
+        requestId,
+        model: GROQ_WHISPER_MODEL,
+        httpStatus: response.status,
+        statusText: response.statusText,
+        groqBody,
+        mimeType,
+        audioBytes: bytes.byteLength,
+        groqLatencyMs,
+        latencyMs: Date.now() - started,
+      });
+      const failure = groqFailureMessage(
         response.status,
         response.statusText,
         detail,
       );
-      logTranscribe("error", "groq-failed", {
-        status: response.status,
-        bytes: bytes.byteLength,
-        mimeType,
-        model: GROQ_WHISPER_MODEL,
-        detail: message,
-      });
-      throw new Error(message);
+      throw new Error(
+        requestId ? `${failure} (requestId=${requestId})` : failure,
+      );
     }
 
     const body = (await response.json()) as { text?: unknown };
     const text = typeof body.text === "string" ? body.text.trim() : "";
-    logTranscribe("info", "transcribed", {
-      bytes: bytes.byteLength,
-      mimeType,
+    let groqBody: string | undefined;
+    try {
+      groqBody = clipGroqLogBody(JSON.stringify(body));
+    } catch {
+      groqBody = undefined;
+    }
+
+    sttLog.info("transcribe-result", {
+      requestId,
       model: GROQ_WHISPER_MODEL,
-      textChars: text.length,
+      httpStatus: response.status,
+      mimeType,
+      audioBytes: bytes.byteLength,
+      groqLatencyMs,
+      latencyMs: Date.now() - started,
+      transcriptIn: text,
+      transcriptOut: text,
+      groqBody,
     });
-    return { text };
+
+    return {
+      text,
+      ...resultExtras({
+        requestId,
+        httpStatus: response.status,
+        latencyMs: Date.now() - started,
+      }),
+    };
   },
 });

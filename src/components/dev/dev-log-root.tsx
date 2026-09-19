@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   clearDevLog,
+  DEV_LOG_OVERLAY_OPEN_KEY,
   formatDevLogEntryLine,
   getDevLogEntries,
   getMirrorToConsole,
@@ -20,11 +21,9 @@ import {
 } from "@/lib/dev-log";
 import { cn } from "@/lib/utils";
 
-const OVERLAY_OPEN_KEY = "berean:devLogOverlayOpen";
-
 function readOverlayOpen(): boolean {
   try {
-    return sessionStorage.getItem(OVERLAY_OPEN_KEY) === "1";
+    return sessionStorage.getItem(DEV_LOG_OVERLAY_OPEN_KEY) === "1";
   } catch {
     return false;
   }
@@ -33,9 +32,9 @@ function readOverlayOpen(): boolean {
 function writeOverlayOpen(open: boolean): void {
   try {
     if (open) {
-      sessionStorage.setItem(OVERLAY_OPEN_KEY, "1");
+      sessionStorage.setItem(DEV_LOG_OVERLAY_OPEN_KEY, "1");
     } else {
-      sessionStorage.removeItem(OVERLAY_OPEN_KEY);
+      sessionStorage.removeItem(DEV_LOG_OVERLAY_OPEN_KEY);
     }
   } catch {
     /* ignore */

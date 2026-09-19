@@ -8,9 +8,13 @@ import { ConvexQueryCacheProvider } from "convex-helpers/react/cache";
 import { routeTree } from "./routeTree.gen";
 import { DevLogRoot } from "@/components/dev/dev-log-root";
 import { initDevSelectionLogger } from "./lib/dev-selection-logger";
+import { isPreviewTestToolsEnabled } from "./lib/preview-test-tools";
+import { sttDebugEnabled } from "./lib/stt-log";
 import "./index.css";
 
 initDevSelectionLogger();
+const sttDebug = sttDebugEnabled();
+const showDevLogOverlay = isPreviewTestToolsEnabled() || sttDebug;
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -29,7 +33,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ConvexAuthProvider client={convex}>
       <ConvexQueryCacheProvider>
-        {import.meta.env.DEV ? <DevLogRoot /> : null}
+        {showDevLogOverlay ? <DevLogRoot /> : null}
         <RouterProvider router={router} />
       </ConvexQueryCacheProvider>
     </ConvexAuthProvider>

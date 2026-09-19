@@ -2,6 +2,7 @@ import type { DevLogEntry, DevLogLevel } from "./types";
 
 export const DEV_LOG_MAX_ENTRIES = 800;
 export const DEV_LOG_MAX_AGE_MS = 90_000;
+export const DEV_LOG_OVERLAY_OPEN_KEY = "berean:devLogOverlayOpen";
 
 const MIRROR_SESSION_KEY = "berean:devLogMirrorConsole";
 
@@ -74,6 +75,16 @@ export function setMirrorToConsole(value: boolean): void {
     /* ignore quota / private mode */
   }
   notify();
+}
+
+/** Open the in-app overlay on next mount (session-scoped). */
+export function requestOpenDevLogOverlay(): void {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    sessionStorage.setItem(DEV_LOG_OVERLAY_OPEN_KEY, "1");
+  } catch {
+    /* ignore quota / private mode */
+  }
 }
 
 export function pushDevLogEntry(partial: {

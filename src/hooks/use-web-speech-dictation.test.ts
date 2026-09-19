@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { clearDevLog, getDevLogEntries } from "@/lib/dev-log";
+import { STT_DEBUG_STORAGE_KEY } from "@/lib/stt-log";
 import {
   SPEECH_SILENCE_TIMEOUT_MS,
   UTTERANCE_END_MS,
@@ -141,6 +143,8 @@ describe("useWebSpeechDictation", () => {
   beforeEach(() => {
     window.localStorage.removeItem("berean:hideSpeech");
     window.localStorage.removeItem("berean:mockSpeech");
+    window.localStorage.removeItem(STT_DEBUG_STORAGE_KEY);
+    clearDevLog();
     transcribeAudio = vi
       .fn<TranscribeAudioFn>()
       .mockResolvedValue({ text: "" });
@@ -395,5 +399,74 @@ describe("useWebSpeechDictation", () => {
       );
     });
     expect(result.current.listening).toBe(false);
+  });
+
+  it("logs listen start/stop and silent clip skips when STT debug is on", async () => {
+    window.localStorage.setItem(STT_DEBUG_STORAGE_KEY, "1");
+    installDictationMocks();
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
+    );
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
+      await Promise.resolve();
+    });
+    act(() => {
+      result.current.stop();
+    });
+
+    const bodies = getDevLogEntries().map((entry) => entry.body);
+    expect(bodies.some((body) => body.includes("listen-start"))).toBe(true);
+    expect(bodies.some((body) => body.includes("clip-skip"))).toBe(true);
+    expect(bodies.some((body) => body.includes("silence"))).toBe(true);
+    expect(
+      bodies.some(
+        (body) =>
+          body.includes("listen-stop") && body.includes('"reason":"user"'),
+      ),
+    ).toBe(true);
+  });
+
+  it("logs stitch and Groq transcript fields after a spoken clip", async () => {
+    window.localStorage.setItem(STT_DEBUG_STORAGE_KEY, "1");
+    const harness = installDictationMocks();
+    transcribeAudio.mockResolvedValue({
+      text: "The Lord is my shepherd",
+      requestId: "req_test_1",
+      model: "whisper-large-v3-turbo",
+      httpStatus: 200,
+      latencyMs: 42,
+    });
+    const { result } = renderHook(() =>
+      useWebSpeechDictation({ onTranscript: () => {}, transcribeAudio }),
+    );
+    await act(async () => {
+      result.current.start();
+      await Promise.resolve();
+    });
+    harness.timeDomain.fill(0);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(DICTATION_CHUNK_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const bodies = getDevLogEntries().map((entry) => entry.body);
+    expect(bodies.some((body) => body.includes("clip-send"))).toBe(true);
+    expect(bodies.some((body) => body.includes("transcribe-result"))).toBe(
+      true,
+    );
+    expect(bodies.some((body) => body.includes("req_test_1"))).toBe(true);
+    expect(
+      bodies.some((body) => body.includes("The Lord is my shepherd")),
+    ).toBe(true);
+    expect(bodies.some((body) => body.includes("stitch"))).toBe(true);
   });
 });
