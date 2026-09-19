@@ -197,11 +197,15 @@ function SpinnerChevron({
 }) {
   const Icon = direction === "up" ? ChevronUp : ChevronDown;
   const isDisabled = disabled || !enabled;
+  const lastStepAt = useRef(0);
 
   const step = (event: SyntheticEvent) => {
     event.preventDefault();
     event.stopPropagation();
     if (!revealed || isDisabled) return;
+    const now = performance.now();
+    if (now - lastStepAt.current < 250) return;
+    lastStepAt.current = now;
     onClick();
   };
 
@@ -224,10 +228,7 @@ function SpinnerChevron({
         revealed ? "opacity-100" : "pointer-events-none opacity-0",
       )}
       onPointerDown={step}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
+      onClick={step}
     >
       <Icon className="size-3.5" strokeWidth={2.5} />
     </TooltipButton>
