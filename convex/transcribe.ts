@@ -28,7 +28,9 @@ function clipGroqLogBody(body: string): string {
   return body.replace(/\s+/g, " ").trim().slice(0, GROQ_ERROR_BODY_LIMIT);
 }
 
-async function readConvexRequestId(ctx: ActionCtx): Promise<string | undefined> {
+async function readConvexRequestId(
+  ctx: ActionCtx,
+): Promise<string | undefined> {
   try {
     const meta = await ctx.meta.getRequestMetadata();
     return meta.requestId;
