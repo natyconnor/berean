@@ -170,7 +170,9 @@ export function planStart(args: PlanStartArgs): PlanStartResult {
   const { pieces, hearts, scope, memberSchedules, now } = args;
 
   // `new` hearts were seeded on heart and never practiced — do not treat
-  // them as learning-phase coverage when freezing pieces.
+  // them as learning-phase coverage when freezing pieces. Enrolled
+  // `learning` hearts still at Read with no reps are also unreached
+  // ({@link inferPieceLearningState}).
   const progressHearts = hearts.filter((heart) => heart.status !== "new");
   const inferred = inferPieceLearningState(pieces, progressHearts);
   const nextPieces = pieces.map((piece, index) => {
