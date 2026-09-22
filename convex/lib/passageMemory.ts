@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
+  coerceUnstartedLearningPieces,
   frontierIndex,
   localDayIndex,
   rehearsalStartIndex,
@@ -280,6 +281,13 @@ export async function insertPassageReview(
   });
 }
 
+/** Heal freeze-time "learning" pieces that were never introduced or read. */
+export function withNormalizedPieces(
+  row: Doc<"passageMemory">,
+): Doc<"passageMemory"> {
+  return { ...row, pieces: coerceUnstartedLearningPieces(row.pieces) };
+}
+
 /**
  * Client view of a passage row. Introduce budget, frontier, and the default
  * rope window are computed from pieces + `now` / `tzOffsetMinutes`.
@@ -290,7 +298,7 @@ export function toPassageView(
   now: number,
   tzOffsetMinutes: number,
 ): PassageView {
-  const pieces = row.pieces;
+  const pieces = coerceUnstartedLearningPieces(row.pieces);
   return {
     _id: row._id,
     packId: row.packId,

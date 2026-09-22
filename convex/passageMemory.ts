@@ -15,6 +15,7 @@ import {
   toBuildingPassagePackItem,
   toPassageSchedule,
   toPassageView,
+  withNormalizedPieces,
 } from "./lib/passageMemory";
 import {
   dueQueuePackItemValidator,
@@ -183,15 +184,16 @@ export const introduceNext = mutation({
       throw new Error("Daily introduce budget is exhausted");
     }
 
-    const nextIndex = row.pieces.findIndex(
+    const currentPieces = withNormalizedPieces(row).pieces;
+    const nextIndex = currentPieces.findIndex(
       (piece) => piece.attachment === "unreached",
     );
-    const target = row.pieces[nextIndex];
+    const target = currentPieces[nextIndex];
     if (nextIndex < 0 || !target) {
       throw new Error("No unreached pieces left");
     }
 
-    const pieces = row.pieces.map((piece, index) =>
+    const pieces = currentPieces.map((piece, index) =>
       index === nextIndex
         ? {
             ...piece,
@@ -234,7 +236,9 @@ export const recordAttempt = mutation({
   returns: passageViewValidator,
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
-    const row = await requirePassageForPack(ctx, args.packId, userId);
+    const row = withNormalizedPieces(
+      await requirePassageForPack(ctx, args.packId, userId),
+    );
 
     await insertPassageReview(ctx, {
       userId,
@@ -316,6 +320,7 @@ export const recordAttempt = mutation({
             ? scheduled.status
             : row.status;
         next = await patchPassageMemory(ctx, row._id, {
+          pieces: row.pieces,
           status: nextStatus,
           ease: scheduled.ease,
           intervalDays: scheduled.intervalDays,
@@ -329,12 +334,14 @@ export const recordAttempt = mutation({
         });
       } else {
         next = await patchPassageMemory(ctx, row._id, {
+          pieces: row.pieces,
           lastSessionAt: args.now,
           updatedAt: args.now,
         });
       }
     } else {
       next = await patchPassageMemory(ctx, row._id, {
+        pieces: row.pieces,
         lastSessionAt: args.now,
         updatedAt: args.now,
       });
@@ -375,7 +382,8 @@ export const dueForLearning = query({
     const items: Array<
       NonNullable<ReturnType<typeof toBuildingPassagePackItem>>
     > = [];
-    for (const row of rows) {
+    for (const raw of rows) {
+      const row = withNormalizedPieces(raw);
       if (!isPassageDueForLearning(row, args.now, args.tzOffsetMinutes)) {
         continue;
       }

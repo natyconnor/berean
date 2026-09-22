@@ -148,6 +148,30 @@ describe("planStart", () => {
     );
   });
 
+  it("freezes enrolled-but-unread auto-hearts as unreached", () => {
+    const hearts = PSALM_PIECES.map((piece) =>
+      psalmHeart(piece.startVerse, piece.endVerse, {
+        status: "learning",
+        learnStage: 0,
+        stageReps: 0,
+      }),
+    );
+
+    const plan = planStart({
+      pieces: PSALM_PIECES,
+      hearts,
+      scope: PSALM_1,
+      unifiedEnabled: false,
+      memberSchedules: [],
+      now: NOW,
+    });
+
+    expect(plan.unheartedCount).toBe(3);
+    expect(plan.pieces.every((piece) => piece.attachment === "unreached")).toBe(
+      true,
+    );
+  });
+
   it("keeps John 3:16 beside a 16–17 canonical piece", () => {
     const pieces: PassagePieceBase[] = [
       {

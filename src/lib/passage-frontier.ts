@@ -251,10 +251,43 @@ export function compositeHintForWindow(
 }
 
 /**
+ * Enrolled or inferred as learning, but never practiced: no due stamp, still
+ * on Read with zero reps. `introduceNext` always writes `dueAt`, so a missing
+ * due is the freeze-time inference leftover — not a started verse.
+ */
+export function isUnstartedInferredLearning(
+  piece: Pick<
+    PassagePiece,
+    "attachment" | "learnStage" | "stageReps" | "dueAt"
+  >,
+): boolean {
+  return (
+    piece.attachment === "learning" &&
+    piece.learnStage === 0 &&
+    piece.stageReps === 0 &&
+    piece.dueAt === undefined
+  );
+}
+
+/** Map inferred-never-started pieces back to unreached for display and session. */
+export function coerceUnstartedLearningPieces<T extends PassagePiece>(
+  pieces: readonly T[],
+): T[] {
+  return pieces.map((piece) =>
+    isUnstartedInferredLearning(piece)
+      ? { ...piece, attachment: "unreached" as const }
+      : piece,
+  );
+}
+
+/**
  * Infer attachment / stages from covering hearts at migration.
  * Review/mastered coverage → solid. Learning-phase coverage maps Guided-cleared
  * (stage ≥ 2) to attached. Isolated later solids are allowed; the frontier is
  * still the first non-solid.
+ *
+ * Hearts that are `learning` at Read with no reps (pack enroll, never opened)
+ * stay unreached so the map and introduce budget match an unread verse.
  */
 export function inferPieceLearningState(
   pieces: readonly PassagePieceBase[],
@@ -294,6 +327,10 @@ export function inferPieceLearningState(
         stageReps = reps;
         foundReps = true;
       }
+    }
+
+    if (learnStage === 0 && stageReps === 0) {
+      return { attachment: "unreached" as const, learnStage: 0, stageReps: 0 };
     }
 
     return {

@@ -11,6 +11,7 @@ import {
   compositeHintForWindow,
   connectPairForPiece,
   connectPairIndexes,
+  coerceUnstartedLearningPieces,
   dueFrontierIndex,
   frontierIndex,
   inferPieceLearningState,
@@ -283,6 +284,54 @@ describe("inferPieceLearningState", () => {
       learnStage: 2,
       stageReps: 1,
     });
+  });
+
+  it("leaves enrolled Read hearts that never practiced as unreached", () => {
+    const pieces = [base(0)];
+    const enrolled: HeartedMemorySpan[] = [
+      {
+        book: "Psalms",
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 2,
+        status: "learning",
+        learnStage: 0,
+        stageReps: 0,
+      },
+    ];
+    expect(inferPieceLearningState(pieces, enrolled)[0]).toEqual({
+      attachment: "unreached",
+      learnStage: 0,
+      stageReps: 0,
+    });
+  });
+});
+
+describe("coerceUnstartedLearningPieces", () => {
+  it("rewrites inferred learning with no dueAt back to unreached", () => {
+    const inferred = piece(0, "learning", { learnStage: 0, stageReps: 0 });
+    expect(inferred.dueAt).toBeUndefined();
+    expect(coerceUnstartedLearningPieces([inferred])[0]?.attachment).toBe(
+      "unreached",
+    );
+  });
+
+  it("keeps an introduced Read piece that has dueAt", () => {
+    const introduced = piece(0, "learning", {
+      learnStage: 0,
+      stageReps: 0,
+      dueAt: 1_700_000_000_000,
+    });
+    expect(coerceUnstartedLearningPieces([introduced])[0]?.attachment).toBe(
+      "learning",
+    );
+  });
+
+  it("keeps Guided learning even without dueAt", () => {
+    const guided = piece(0, "learning", { learnStage: 1, stageReps: 0 });
+    expect(coerceUnstartedLearningPieces([guided])[0]?.attachment).toBe(
+      "learning",
+    );
   });
 });
 
