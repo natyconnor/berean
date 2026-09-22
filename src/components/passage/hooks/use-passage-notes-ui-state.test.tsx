@@ -1,7 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  collectPassageNotesStartingInRange,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 import { EMPTY_NOTE_BODY } from "@/lib/note-inline-content";
 import {
   usePassageNotesUiState,
@@ -1187,5 +1190,104 @@ describe("usePassageNotesUiState retargetNewDraft", () => {
       result.current.cancelEditor("new:16:16");
     });
     expect(result.current.openEditors.size).toBe(0);
+  });
+});
+
+describe("usePassageNotesUiState draft overlap with saved passages", () => {
+  const saved715: NoteWithRef = {
+    noteId: "john-7-15" as Id<"notes">,
+    content: "Saved 7–15",
+    tags: [],
+    verseRef: johnRef(7, 15),
+    createdAt: 1,
+  };
+  const saved1215: NoteWithRef = {
+    noteId: "john-12-15" as Id<"notes">,
+    content: "Saved 12–15",
+    tags: [],
+    verseRef: johnRef(12, 15),
+    createdAt: 1,
+  };
+
+  function renderJohnWithPassages(
+    passageNotesByAnchor: Map<number, NoteWithRef[]>,
+  ) {
+    return renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+        passageNotesByAnchor,
+      }),
+    );
+  }
+
+  it("collapses an expanded saved passage when a draft grows into it", () => {
+    const { result } = renderJohnWithPassages(new Map([[7, [saved715]]]));
+
+    act(() => {
+      result.current.openPassageNotes(7);
+    });
+    expect(result.current.openPassageKeys).toEqual(new Set([7]));
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 7, startVerse: 7, endVerse: 15 },
+    ]);
+
+    act(() => {
+      result.current.handleAddNote(4);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:4:4", johnRef(4, 11), {
+        body: "draft",
+        tags: [],
+      });
+    });
+
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 4, startVerse: 4, endVerse: 11 },
+    ]);
+    expect(result.current.newDraftsByAnchor.get(4)?.[0]?.verseRef).toEqual(
+      johnRef(4, 11),
+    );
+  });
+
+  it("keeps a closed saved note collapsed and on the draft group when its start is covered", () => {
+    const byAnchor = new Map([[12, [saved1215]]]);
+    const { result } = renderJohnWithPassages(byAnchor);
+
+    act(() => {
+      result.current.handleAddNote(4);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:4:4", johnRef(4, 12), {
+        body: "draft",
+        tags: [],
+      });
+    });
+
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 4, startVerse: 4, endVerse: 12 },
+    ]);
+    expect(collectPassageNotesStartingInRange(byAnchor, 4, 12)).toEqual([
+      saved1215,
+    ]);
+  });
+
+  it("collapses an intersecting open passage for a fresh multi-verse draft", () => {
+    const { result } = renderJohnWithPassages(new Map([[7, [saved715]]]));
+
+    act(() => {
+      result.current.openPassageNotes(7);
+    });
+    act(() => {
+      result.current.startCreatingPassageNote(johnRef(4, 11));
+    });
+
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 4, startVerse: 4, endVerse: 11 },
+    ]);
   });
 });

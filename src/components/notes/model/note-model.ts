@@ -119,6 +119,76 @@ export function buildPassageNotesByAnchor(
   return map;
 }
 
+/** Inclusive verse-range overlap. */
+export function verseRangesOverlap(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number,
+): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+function passageSpanForAnchor(
+  anchorVerse: number,
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+): { startVerse: number; endVerse: number } {
+  const notes = passageNotesByAnchor.get(anchorVerse) ?? [];
+  if (notes.length === 0) {
+    return { startVerse: anchorVerse, endVerse: anchorVerse };
+  }
+  let startVerse = Infinity;
+  let endVerse = -Infinity;
+  for (const note of notes) {
+    startVerse = Math.min(startVerse, note.verseRef.startVerse);
+    endVerse = Math.max(endVerse, note.verseRef.endVerse);
+  }
+  return { startVerse, endVerse };
+}
+
+/** Open saved-passage anchors whose span overlaps `[startVerse, endVerse]`. */
+export function openPassageAnchorsIntersectingRange(
+  openAnchors: Iterable<number>,
+  startVerse: number,
+  endVerse: number,
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+): number[] {
+  const anchors: number[] = [];
+  for (const anchor of openAnchors) {
+    const span = passageSpanForAnchor(anchor, passageNotesByAnchor);
+    if (
+      verseRangesOverlap(startVerse, endVerse, span.startVerse, span.endVerse)
+    ) {
+      anchors.push(anchor);
+    }
+  }
+  return anchors;
+}
+
+/**
+ * Passage notes whose start verse sits inside a grouped range. Used so a
+ * draft (or drag-select) group still shows closed notes whose start was
+ * absorbed, instead of dropping them with the swallowed verse row.
+ */
+export function collectPassageNotesStartingInRange(
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+  startVerse: number,
+  endVerse: number,
+): NoteWithRef[] {
+  const notes: NoteWithRef[] = [];
+  const seen = new Set<Id<"notes">>();
+  for (let verse = startVerse; verse <= endVerse; verse += 1) {
+    const atVerse = passageNotesByAnchor.get(verse);
+    if (!atVerse) continue;
+    for (const note of atVerse) {
+      if (seen.has(note.noteId)) continue;
+      seen.add(note.noteId);
+      notes.push(note);
+    }
+  }
+  return notes;
+}
+
 export function buildVerseToPassageAnchor(
   chapterNotes: ChapterNoteEntry[] | undefined,
 ): Map<number, number> {

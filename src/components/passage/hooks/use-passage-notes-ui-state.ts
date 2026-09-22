@@ -12,7 +12,10 @@ import { logInteraction } from "@/lib/dev-log";
 import { getChapterVerseCount } from "@/lib/bible-verse-counts";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  openPassageAnchorsIntersectingRange,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 
 type PassageViewMode = "compose" | "read";
 
@@ -605,6 +608,41 @@ export function usePassageNotesUiState({
     [passageNotesByAnchor],
   );
 
+  const closePassageNotes = useCallback(
+    (verseNumber: number) => {
+      if (viewMode === "read") {
+        readPassageAutoOpenSuppressedRef.current.add(verseNumber);
+      }
+      setOpenPassageKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(verseNumber);
+        return next;
+      });
+      const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+      setViewSelectedVerses((prev) => {
+        const next = new Set(prev);
+        for (const v of passageVerses) next.delete(v);
+        return next;
+      });
+    },
+    [getSelectedVersesForPassageAnchor, viewMode],
+  );
+
+  const closePassagesIntersectingRange = useCallback(
+    (startVerse: number, endVerse: number) => {
+      const anchors = openPassageAnchorsIntersectingRange(
+        openPassageKeys,
+        startVerse,
+        endVerse,
+        passageNotesByAnchor,
+      );
+      for (const anchor of anchors) {
+        closePassageNotes(anchor);
+      }
+    },
+    [closePassageNotes, openPassageKeys, passageNotesByAnchor],
+  );
+
   const addNewDraft = useCallback(
     (ref: VerseRef) => {
       if (allocateNewEditorKey(ref, openEditorsRef.current) === null) return;
@@ -664,8 +702,11 @@ export function usePassageNotesUiState({
         });
         return next;
       });
+      if (nextRef.startVerse !== nextRef.endVerse) {
+        closePassagesIntersectingRange(nextRef.startVerse, nextRef.endVerse);
+      }
     },
-    [markTargetActive],
+    [closePassagesIntersectingRange, markTargetActive],
   );
 
   const removeEditor = useCallback((key: string) => {
@@ -779,6 +820,10 @@ export function usePassageNotesUiState({
           endVerse: selection.endVerse,
         });
         setIsPassageSelection(true);
+        closePassagesIntersectingRange(
+          selection.startVerse,
+          selection.endVerse,
+        );
       };
 
       gateReadModeEditor(executeSelection);
@@ -788,6 +833,7 @@ export function usePassageNotesUiState({
       book,
       chapter,
       clearActiveEditorFocus,
+      closePassagesIntersectingRange,
       gateReadModeEditor,
       isFocusMode,
       markTargetActive,
@@ -1212,26 +1258,6 @@ export function usePassageNotesUiState({
     ],
   );
 
-  const closePassageNotes = useCallback(
-    (verseNumber: number) => {
-      if (viewMode === "read") {
-        readPassageAutoOpenSuppressedRef.current.add(verseNumber);
-      }
-      setOpenPassageKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(verseNumber);
-        return next;
-      });
-      const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
-      setViewSelectedVerses((prev) => {
-        const next = new Set(prev);
-        for (const v of passageVerses) next.delete(v);
-        return next;
-      });
-    },
-    [getSelectedVersesForPassageAnchor, viewMode],
-  );
-
   const handleNoteDeleteCleanup = useCallback(
     (noteId: Id<"notes">, verseNumber: number, isPassage: boolean) => {
       removeEditor(editEditorKey(noteId));
@@ -1312,9 +1338,21 @@ export function usePassageNotesUiState({
         markTargetActive(targetFromVerseRef(verseRef));
         addNewDraft(verseRef);
         setIsPassageSelection(true);
+        if (verseRef.startVerse !== verseRef.endVerse) {
+          closePassagesIntersectingRange(
+            verseRef.startVerse,
+            verseRef.endVerse,
+          );
+        }
       });
     },
-    [addNewDraft, clearActiveEditorFocus, gateReadModeEditor, markTargetActive],
+    [
+      addNewDraft,
+      clearActiveEditorFocus,
+      closePassagesIntersectingRange,
+      gateReadModeEditor,
+      markTargetActive,
+    ],
   );
 
   const confirmDiscard = useCallback(() => {

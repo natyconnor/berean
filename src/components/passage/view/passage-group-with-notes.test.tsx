@@ -131,4 +131,67 @@ describe("PassageGroupWithNotes retarget scope", () => {
     );
     expect(screen.queryByTestId("note-editor")).toBeNull();
   });
+
+  it("shows a collapsed saved note docked on a draft group without expanding it", () => {
+    render(
+      <TooltipProvider>
+        <PassageGroupWithNotes
+          verses={[
+            { verseNumber: 4, text: "In him was life" },
+            { verseNumber: 12, text: "But to all who did receive him" },
+          ]}
+          passageNotes={[
+            {
+              noteId: "john-12-15" as never,
+              content: "Children of God",
+              tags: [],
+              verseRef: {
+                book: "John",
+                chapter: 1,
+                startVerse: 12,
+                endVerse: 15,
+              },
+              createdAt: 1,
+            },
+          ]}
+          singleNotesByVerse={new Map()}
+          viewMode="compose"
+          currentChapter={{ book: "John", chapter: 1 }}
+          highlightsByVerse={new Map()}
+          isPassageOpen={false}
+          editingNoteIds={new Set()}
+          draftsForAnchor={[
+            {
+              editorKey: "new:4:4",
+              verseRef: {
+                book: "John",
+                chapter: 1,
+                startVerse: 4,
+                endVerse: 12,
+              },
+            },
+          ]}
+          onOpenPassageNotes={vi.fn()}
+          onClosePassageNotes={vi.fn()}
+          onOpenVerseNotes={vi.fn()}
+          onEditNote={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onSaveEdit={vi.fn().mockResolvedValue(undefined)}
+          onSaveNew={vi.fn().mockResolvedValue(undefined)}
+          onCancelEditor={vi.fn()}
+          onEditorDirtyChange={vi.fn()}
+          onEditorFocus={vi.fn()}
+          onStartCreatingPassageNote={vi.fn()}
+          onNoteDeleteCleanup={vi.fn()}
+          onPassageBubbleMouseEnter={vi.fn()}
+          onPassageBubbleMouseLeave={vi.fn()}
+          onCollapse={vi.fn()}
+          groupPassageHeart={null}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText("John 1:12-15")).toBeInTheDocument();
+    expect(screen.queryByText("New note")).not.toBeInTheDocument();
+  });
 });
