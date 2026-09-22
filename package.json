@@ -21,12 +21,12 @@
   "dependencies": {
     "@auth/core": "0.41.3",
     "@convex-dev/auth": "0.0.95",
-    "@tanstack/react-router": "1.170.35",
-    "@tanstack/router-plugin": "1.168.37",
+    "@tanstack/react-router": "1.170.38",
+    "@tanstack/router-plugin": "1.168.40",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
-    "convex": "1.45.0",
+    "convex": "1.46.0",
     "convex-helpers": "0.1.124",
     "fflate": "0.8.3",
     "framer-motion": "12.43.0",
@@ -38,7 +38,7 @@
     "react-dom": "19.3.0",
     "react-markdown": "10.1.0",
     "react-resizable-panels": "4.12.4",
-    "tailwind-merge": "3.6.0",
+    "tailwind-merge": "3.7.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
