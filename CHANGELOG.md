@@ -25,6 +25,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.15.4](https://github.com/natyconnor/berean/compare/v1.15.3...v1.15.4) (2026-09-22)
+
+
+### Bug Fixes
+
+* treat enrolled-but-unread passage verses as not started ([#221](https://github.com/natyconnor/berean/issues/221)) ([6c49255](https://github.com/natyconnor/berean/commit/6c4925586c95ad0f7f6ff1ebc71d36d6f86d5686))
+
 ## [1.15.3](https://github.com/natyconnor/berean/compare/v1.15.2...v1.15.3) (2026-09-19)
 
 
