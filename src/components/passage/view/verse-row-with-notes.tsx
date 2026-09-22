@@ -1,5 +1,10 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  LayoutGroup,
+  useReducedMotion,
+} from "framer-motion";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { VerseTextPane } from "./verse-text-pane";
 import { VerseNotes } from "../verse-notes";
@@ -8,15 +13,21 @@ import { NoteEditor } from "@/components/notes/note-editor";
 import { cn } from "@/lib/utils";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
+import type {
+  NewDraftAtAnchor,
+  NewDraftSnapshot,
+} from "../hooks/use-passage-notes-ui-state";
+import {
+  draftComposerLayoutId,
+  draftComposerMotionProps,
+  draftDockLayoutGroupId,
+} from "../draft-retarget-presence";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type {
   HighlightRange,
   VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
-import {
-  LAYOUT_CORRECTION_TRANSITION,
-  NOTE_ENTER_TRANSITION,
-} from "../note-animation-config";
+import { LAYOUT_CORRECTION_TRANSITION } from "../note-animation-config";
 import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -131,7 +142,13 @@ export interface VerseRowWithNotesProps {
 
   openVerseKeys: Set<number>;
   openPassageKeys: Set<number>;
-  draftsForThisAnchor: VerseRef[];
+  draftsForThisAnchor: NewDraftAtAnchor[];
+  onRetargetNewDraft?: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
+  retargetingEditorKey?: string | null;
   editingNoteIds: Set<Id<"notes">>;
   isFocusTarget?: boolean;
 
@@ -251,7 +268,10 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onSavedPassageHoverEnter,
   onSavedPassageHoverLeave,
   onToggleSavedPassage,
+  onRetargetNewDraft,
+  retargetingEditorKey = null,
 }: VerseRowWithNotesProps) {
+  const reduceMotion = useReducedMotion() === true;
   const [isExitingSingleNote, setIsExitingSingleNote] = useState(false);
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
 
@@ -302,7 +322,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     if (isVerseOpen) onCloseVerseNotes(verseNumber);
     if (isPassageOpen) onClosePassageNotes(verseNumber);
     for (const draft of draftsForThisAnchor) {
-      onCancelEditor(`new:${draft.startVerse}:${draft.endVerse}`);
+      onCancelEditor(draft.editorKey);
     }
   }, [
     isVerseOpen,
@@ -515,32 +535,57 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
 
           <AnimatePresence initial={false}>
             {draftsForThisAnchor.map((draft) => {
-              const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
+              const composerMotion = draftComposerMotionProps(
+                retargetingEditorKey === draft.editorKey,
+                reduceMotion,
+              );
+              const composerLayoutId = draftComposerLayoutId(draft.editorKey);
               return (
-                <motion.div
-                  key={draftEditorKey}
-                  layout
-                  data-note-surface
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={NOTE_ENTER_TRANSITION}
+                <LayoutGroup
+                  key={draft.editorKey}
+                  id={draftDockLayoutGroupId(draft.editorKey)}
+                  inherit={false}
                 >
-                  <NoteEditor
-                    verseRef={draft}
-                    variant={
-                      draft.startVerse !== draft.endVerse
-                        ? "passage"
-                        : "default"
-                    }
-                    onSave={(body, tags) => onSaveNew(draft, body, tags)}
-                    onCancel={() => onCancelEditor(draftEditorKey)}
-                    onDirtyChange={(isDirty) =>
-                      onEditorDirtyChange(draftEditorKey, isDirty)
-                    }
-                    onFocusWithin={() => onEditorFocus(draftEditorKey)}
-                  />
-                </motion.div>
+                  <motion.div
+                    layout
+                    layoutId={composerLayoutId}
+                    data-draft-layout-id={composerLayoutId}
+                    data-note-surface
+                    initial={composerMotion.initial}
+                    animate={composerMotion.animate}
+                    exit={composerMotion.exit}
+                    transition={composerMotion.transition}
+                  >
+                    <NoteEditor
+                      verseRef={draft.verseRef}
+                      initialContent={draft.snapshot?.body}
+                      initialTags={draft.snapshot?.tags}
+                      variant={
+                        draft.verseRef.startVerse !== draft.verseRef.endVerse
+                          ? "passage"
+                          : "default"
+                      }
+                      onSave={(body, tags) =>
+                        onSaveNew(draft.verseRef, body, tags)
+                      }
+                      onCancel={() => onCancelEditor(draft.editorKey)}
+                      onDirtyChange={(isDirty) =>
+                        onEditorDirtyChange(draft.editorKey, isDirty)
+                      }
+                      onFocusWithin={() => onEditorFocus(draft.editorKey)}
+                      onRetargetVerse={
+                        onRetargetNewDraft
+                          ? (nextRef, snapshot) =>
+                              onRetargetNewDraft(
+                                draft.editorKey,
+                                nextRef,
+                                snapshot,
+                              )
+                          : undefined
+                      }
+                    />
+                  </motion.div>
+                </LayoutGroup>
               );
             })}
           </AnimatePresence>

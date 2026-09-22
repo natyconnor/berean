@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type RefObject } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { HighlightRange } from "@/lib/highlight-utils";
 import type { EsvVerseHeading } from "../../../shared/esv-api";
@@ -11,9 +11,15 @@ import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
 import { SectionHeading } from "./section-heading";
 import { ChapterNotesChrome } from "./chapter-notes-chrome";
 import {
-  NOTE_ENTER_TRANSITION,
-  CROSSFADE_TRANSITION,
-} from "./note-animation-config";
+  draftGroupPresenceKey,
+  draftSpanLayoutId,
+  groupListPresenceMotion,
+  groupOwnsRetargetingDraft,
+  listItemTransition,
+  singleVersePresenceKind,
+  singleVersePresenceMotion,
+  type OpenDraftSpan,
+} from "./draft-retarget-presence";
 import type { PassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
 import {
   FOCUS_MODE_SPOTLIGHT_VERSE_END,
@@ -141,6 +147,8 @@ export function PassageViewBody({
     openPassageKeys,
     currentFocusTarget,
     newDraftsByAnchor,
+    retargetingEditorKey,
+    retargetNewDraft,
     editingNoteIds,
     handleAddNote,
     handleVerseMouseDown,
@@ -313,6 +321,21 @@ export function PassageViewBody({
     filteredVerses,
   ]);
 
+  const reduceMotion = useReducedMotion() === true;
+  const smoothDraftPresence = newDraftsByAnchor.size > 0;
+  const openDraftSpans = useMemo((): OpenDraftSpan[] => {
+    const spans: OpenDraftSpan[] = [];
+    for (const drafts of newDraftsByAnchor.values()) {
+      for (const draft of drafts) {
+        spans.push({
+          startVerse: draft.verseRef.startVerse,
+          endVerse: draft.verseRef.endVerse,
+        });
+      }
+    }
+    return spans;
+  }, [newDraftsByAnchor]);
+
   const { darkMode } = useTheme();
 
   const focusGlowStyle = useMemo(() => {
@@ -353,7 +376,10 @@ export function PassageViewBody({
           onMouseLeave={handleMouseUp}
         >
           <div>
-            <AnimatePresence initial={false} mode="popLayout">
+            <AnimatePresence
+              initial={false}
+              mode={smoothDraftPresence ? "sync" : "popLayout"}
+            >
               {filteredVerses.map((item) => {
                 if (item.kind === "passageGroup") {
                   const gLo = item.verses[0]?.verseNumber ?? 0;
@@ -367,13 +393,43 @@ export function PassageViewBody({
                           masteryFraction: spanMasteryFraction(gLo, gHi),
                         }
                       : null;
+                  const draftsForAnchor =
+                    newDraftsByAnchor.get(item.anchorVerse) ?? [];
+                  const ownsRetarget = groupOwnsRetargetingDraft(
+                    draftsForAnchor,
+                    retargetingEditorKey,
+                  );
+                  const groupMotion = groupListPresenceMotion(
+                    ownsRetarget,
+                    reduceMotion,
+                  );
+                  const spanLayoutId = draftsForAnchor[0]
+                    ? draftSpanLayoutId(draftsForAnchor[0].editorKey)
+                    : undefined;
                   return (
                     <motion.div
-                      key={`passage-group-${item.anchorVerse}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={CROSSFADE_TRANSITION}
+                      key={draftGroupPresenceKey(
+                        item.anchorVerse,
+                        draftsForAnchor,
+                      )}
+                      data-presence-kind={
+                        ownsRetarget ? "draft-group" : "passage-group"
+                      }
+                      data-span-layout-id={spanLayoutId}
+                      layout={
+                        smoothDraftPresence || groupMotion.layout
+                          ? true
+                          : undefined
+                      }
+                      layoutId={spanLayoutId}
+                      initial={groupMotion.initial}
+                      animate={groupMotion.animate}
+                      exit={groupMotion.exit}
+                      transition={listItemTransition(
+                        groupMotion.transition,
+                        smoothDraftPresence,
+                        reduceMotion,
+                      )}
                     >
                       {item.heading ? (
                         <AnimatePresence initial={false}>
@@ -406,9 +462,9 @@ export function PassageViewBody({
                         onRecolorHighlight={onRecolorHighlight}
                         isPassageOpen={openPassageKeys.has(item.anchorVerse)}
                         editingNoteIds={editingNoteIds}
-                        draftsForAnchor={
-                          newDraftsByAnchor.get(item.anchorVerse) ?? []
-                        }
+                        draftsForAnchor={draftsForAnchor}
+                        onRetargetNewDraft={retargetNewDraft}
+                        retargetingEditorKey={retargetingEditorKey}
                         focusDistance={
                           focusDistanceByKey.get(
                             `passage-group-${item.anchorVerse}`,
@@ -448,29 +504,42 @@ export function PassageViewBody({
                   hoveredSingleBubble === item.verseNumber;
                 const isReentering = reenteringFromGroup.has(item.verseNumber);
 
+                const draftsForVerse =
+                  newDraftsByAnchor.get(item.verseNumber) ?? [];
+                const presenceKind = singleVersePresenceKind({
+                  hostsOpenDraft: draftsForVerse.length > 0,
+                  reenteringFromGroup: isReentering,
+                  verseNumber: item.verseNumber,
+                  openDrafts: openDraftSpans,
+                  smoothDraftPresence,
+                });
+                const verseMotion = singleVersePresenceMotion(
+                  presenceKind,
+                  reduceMotion,
+                );
+                const spanLayoutId = draftsForVerse[0]
+                  ? draftSpanLayoutId(draftsForVerse[0].editorKey)
+                  : undefined;
+
                 return (
                   <motion.div
                     key={item.verseNumber}
-                    initial={
-                      isReentering
-                        ? { opacity: 0 }
-                        : { height: 0, opacity: 0, overflow: "hidden" }
+                    data-presence-kind={presenceKind}
+                    data-span-layout-id={spanLayoutId}
+                    layout={
+                      smoothDraftPresence || verseMotion.layout
+                        ? true
+                        : undefined
                     }
-                    animate={
-                      isReentering
-                        ? { opacity: 1 }
-                        : {
-                            height: "auto",
-                            opacity: 1,
-                            transitionEnd: { overflow: "visible" },
-                          }
-                    }
-                    exit={{ opacity: 0 }}
-                    transition={
-                      isReentering
-                        ? CROSSFADE_TRANSITION
-                        : NOTE_ENTER_TRANSITION
-                    }
+                    layoutId={spanLayoutId}
+                    initial={verseMotion.initial}
+                    animate={verseMotion.animate}
+                    exit={verseMotion.exit}
+                    transition={listItemTransition(
+                      verseMotion.transition,
+                      smoothDraftPresence,
+                      reduceMotion,
+                    )}
                   >
                     {item.heading ? (
                       <AnimatePresence initial={false}>
@@ -508,9 +577,9 @@ export function PassageViewBody({
                       isNoteBubbleHovered={isNoteBubbleHovered}
                       openVerseKeys={openVerseKeys}
                       openPassageKeys={openPassageKeys}
-                      draftsForThisAnchor={
-                        newDraftsByAnchor.get(item.verseNumber) ?? []
-                      }
+                      draftsForThisAnchor={draftsForVerse}
+                      onRetargetNewDraft={retargetNewDraft}
+                      retargetingEditorKey={retargetingEditorKey}
                       editingNoteIds={editingNoteIds}
                       isFocusTarget={
                         hasFocusRange

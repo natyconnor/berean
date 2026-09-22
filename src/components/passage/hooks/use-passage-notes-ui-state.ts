@@ -39,9 +39,22 @@ interface UsePassageNotesUiStateOptions {
   onDeleteNote: (noteId: Id<"notes">) => Promise<void>;
 }
 
+export type NewDraftSnapshot = { body: string; tags: string[] };
+
 export type EditorSlot =
-  | { kind: "new"; verseRef: VerseRef }
+  | {
+      kind: "new";
+      editorKey: string;
+      verseRef: VerseRef;
+      snapshot?: NewDraftSnapshot;
+    }
   | { kind: "edit"; noteId: Id<"notes">; verseRef: VerseRef };
+
+export interface NewDraftAtAnchor {
+  editorKey: string;
+  verseRef: VerseRef;
+  snapshot?: NewDraftSnapshot;
+}
 
 export interface ExpandedPassageRange {
   anchorVerse: number;
@@ -72,7 +85,8 @@ export interface PassageNotesUiState {
   openEditors: Map<string, EditorSlot>;
   currentFocusTarget: FocusTarget | null;
   editingNoteIds: Set<Id<"notes">>;
-  newDraftsByAnchor: Map<number, VerseRef[]>;
+  newDraftsByAnchor: Map<number, NewDraftAtAnchor[]>;
+  retargetingEditorKey: string | null;
   isPassageSelection: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
   isDragging: boolean;
@@ -91,6 +105,11 @@ export interface PassageNotesUiState {
     body: NoteBody,
     tags: string[],
   ) => Promise<void>;
+  retargetNewDraft: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
   handleSaveEdit: (
     noteId: Id<"notes">,
     body: NoteBody,
@@ -124,13 +143,43 @@ export interface PassageNotesUiState {
 }
 
 export function editorKey(slot: EditorSlot): string {
-  return slot.kind === "new"
-    ? `new:${slot.verseRef.startVerse}:${slot.verseRef.endVerse}`
-    : `edit:${slot.noteId}`;
+  return slot.kind === "new" ? slot.editorKey : `edit:${slot.noteId}`;
 }
 
-function newEditorKey(ref: VerseRef): string {
-  return `new:${ref.startVerse}:${ref.endVerse}`;
+function verseRefsMatch(a: VerseRef, b: VerseRef): boolean {
+  return (
+    a.book === b.book &&
+    a.chapter === b.chapter &&
+    a.startVerse === b.startVerse &&
+    a.endVerse === b.endVerse
+  );
+}
+
+/** No-op (null) when a new slot already points at this span. */
+function allocateNewEditorKey(
+  ref: VerseRef,
+  editors: Map<string, EditorSlot>,
+): string | null {
+  for (const slot of editors.values()) {
+    if (slot.kind === "new" && verseRefsMatch(slot.verseRef, ref)) return null;
+  }
+  const base = `new:${ref.startVerse}:${ref.endVerse}`;
+  if (!editors.has(base)) return base;
+  let suffix = 2;
+  while (editors.has(`${base}:${suffix}`)) suffix += 1;
+  return `${base}:${suffix}`;
+}
+
+function findNewDraftKey(
+  editors: Map<string, EditorSlot>,
+  verseRef: VerseRef,
+): string | null {
+  for (const [key, slot] of editors) {
+    if (slot.kind === "new" && verseRefsMatch(slot.verseRef, verseRef)) {
+      return key;
+    }
+  }
+  return null;
 }
 
 function editEditorKey(noteId: Id<"notes">): string {
@@ -291,6 +340,9 @@ export function usePassageNotesUiState({
   const [openEditors, setOpenEditors] = useState<Map<string, EditorSlot>>(
     new Map(),
   );
+  const [retargetingEditorKey, setRetargetingEditorKey] = useState<
+    string | null
+  >(null);
   const [editorHasChanges, setEditorHasChanges] = useState<Set<string>>(
     new Set(),
   );
@@ -337,15 +389,20 @@ export function usePassageNotesUiState({
   }, [openEditors]);
 
   const newDraftsByAnchor = useMemo(() => {
-    const m = new Map<number, VerseRef[]>();
+    const m = new Map<number, NewDraftAtAnchor[]>();
     for (const slot of openEditors.values()) {
       if (slot.kind !== "new") continue;
       const anchor = slot.verseRef.startVerse;
+      const entry: NewDraftAtAnchor = {
+        editorKey: slot.editorKey,
+        verseRef: slot.verseRef,
+        snapshot: slot.snapshot,
+      };
       const arr = m.get(anchor);
       if (arr) {
-        arr.push(slot.verseRef);
+        arr.push(entry);
       } else {
-        m.set(anchor, [slot.verseRef]);
+        m.set(anchor, [entry]);
       }
     }
     return m;
@@ -517,7 +574,11 @@ export function usePassageNotesUiState({
       if (dirtyKeys.size === 0) {
         setOpenEditors(new Map());
         setEditorHasChanges(new Set());
+        setRetargetingEditorKey(null);
       } else {
+        setRetargetingEditorKey((current) =>
+          current !== null && dirtyKeys.has(current) ? current : null,
+        );
         setOpenEditors((prev) => {
           const next = new Map<string, EditorSlot>();
           for (const [key, slot] of prev) {
@@ -546,17 +607,61 @@ export function usePassageNotesUiState({
 
   const addNewDraft = useCallback(
     (ref: VerseRef) => {
-      const key = newEditorKey(ref);
-      if (openEditorsRef.current.has(key)) return;
+      if (allocateNewEditorKey(ref, openEditorsRef.current) === null) return;
       markTargetActive(targetFromVerseRef(ref));
       logInteraction("notes", "editor-opened", {
         mode: "create",
         ...getVerseRefLogDetails(ref),
       });
       setOpenEditors((prev) => {
-        if (prev.has(key)) return prev;
+        const key = allocateNewEditorKey(ref, prev);
+        if (!key) return prev;
         const next = new Map(prev);
-        next.set(key, { kind: "new", verseRef: ref });
+        next.set(key, { kind: "new", editorKey: key, verseRef: ref });
+        return next;
+      });
+    },
+    [markTargetActive],
+  );
+
+  const retargetNewDraft = useCallback(
+    (key: string, nextRef: VerseRef, snapshot: NewDraftSnapshot) => {
+      const slot = openEditorsRef.current.get(key);
+      if (!slot || slot.kind !== "new") return;
+      if (verseRefsMatch(slot.verseRef, nextRef)) return;
+
+      markTargetActive(targetFromVerseRef(nextRef));
+      setIsPassageSelection(nextRef.startVerse !== nextRef.endVerse);
+      setViewSelectedVerses((prev) => {
+        const next = new Set(prev);
+        for (
+          let verse = slot.verseRef.startVerse;
+          verse <= slot.verseRef.endVerse;
+          verse += 1
+        ) {
+          next.delete(verse);
+        }
+        for (
+          let verse = nextRef.startVerse;
+          verse <= nextRef.endVerse;
+          verse += 1
+        ) {
+          next.add(verse);
+        }
+        return next;
+      });
+      setRetargetingEditorKey(key);
+      setOpenEditors((prev) => {
+        const current = prev.get(key);
+        if (!current || current.kind !== "new") return prev;
+        if (verseRefsMatch(current.verseRef, nextRef)) return prev;
+        const next = new Map(prev);
+        next.set(key, {
+          kind: "new",
+          editorKey: current.editorKey,
+          verseRef: nextRef,
+          snapshot,
+        });
         return next;
       });
     },
@@ -567,6 +672,7 @@ export function usePassageNotesUiState({
     if (activeEditorKeyRef.current === key) {
       activeEditorKeyRef.current = null;
     }
+    setRetargetingEditorKey((current) => (current === key ? null : current));
     setOpenEditors((prev) => {
       if (!prev.has(key)) return prev;
       const next = new Map(prev);
@@ -605,6 +711,7 @@ export function usePassageNotesUiState({
       }
       setOpenEditors(new Map());
       setEditorHasChanges(new Set());
+      setRetargetingEditorKey(null);
       action();
       return true;
     },
@@ -741,6 +848,7 @@ export function usePassageNotesUiState({
     setOpenPassageKeys(new Set());
     setOpenEditors(new Map());
     setEditorHasChanges(new Set());
+    setRetargetingEditorKey(null);
     setViewSelectedVerses(new Set());
     setIsPassageSelection(false);
     clearSelection();
@@ -854,7 +962,8 @@ export function usePassageNotesUiState({
   const handleSaveNew = useCallback(
     async (verseRef: VerseRef, body: NoteBody, tags: string[]) => {
       await onSaveNewNote(verseRef, body, tags);
-      removeEditor(newEditorKey(verseRef));
+      const slotKey = findNewDraftKey(openEditorsRef.current, verseRef);
+      if (slotKey) removeEditor(slotKey);
       if (verseRef.startVerse !== verseRef.endVerse) {
         if (isFocusMode) {
           setOpenPassageKeys(new Set([verseRef.startVerse]));
@@ -958,6 +1067,7 @@ export function usePassageNotesUiState({
     }
     setOpenEditors(new Map());
     setEditorHasChanges(new Set());
+    setRetargetingEditorKey(null);
     setViewSelectedVerses(new Set());
     setIsPassageSelection(false);
     clearSelection();
@@ -1224,6 +1334,7 @@ export function usePassageNotesUiState({
     } else if (pendingEditorAction !== null) {
       setOpenEditors(new Map());
       setEditorHasChanges(new Set());
+      setRetargetingEditorKey(null);
       pendingEditorAction();
     } else {
       handleClickAway();
@@ -1394,6 +1505,7 @@ export function usePassageNotesUiState({
     currentFocusTarget,
     editingNoteIds,
     newDraftsByAnchor,
+    retargetingEditorKey,
     isPassageSelection,
     containerRef,
     isDragging,
@@ -1408,6 +1520,7 @@ export function usePassageNotesUiState({
     handlePassageBubbleMouseLeave,
     handleAddNote,
     handleSaveNew,
+    retargetNewDraft,
     handleSaveEdit,
     handleDelete,
     handleNoteDeleteCleanup,
@@ -1432,6 +1545,7 @@ const INTERACTIVE_SURFACE_SELECTORS = [
   "[data-note-trigger]",
   "[data-note-surface]",
   "[data-verse-number]",
+  "[data-verse-nudge]",
   "[data-highlight-popover]",
   "[data-highlight-toolbar]",
 ] as const;

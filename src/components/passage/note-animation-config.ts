@@ -43,6 +43,20 @@ export const MANUSCRIPT_NOTE_ENTER_TRANSITION: Transition = {
 export const NOTE_LAYOUT_TRANSITION: Transition = LAYOUT_CORRECTION_TRANSITION;
 
 /**
+ * Layout tween used only when an open draft's verse span changes.
+ * Shorter than note-enter and with no merge delay, so a nudge does not pop.
+ */
+export const RETARGET_LAYOUT_TRANSITION: Transition = {
+  duration: 0.16,
+  ease: [0.22, 1, 0.36, 1],
+};
+
+export function retargetLayoutTransition(reduceMotion: boolean): Transition {
+  if (reduceMotion) return { duration: 0 };
+  return RETARGET_LAYOUT_TRANSITION;
+}
+
+/**
  * Used for the merged passage block enter animation. Slightly delayed so
  * individual verse rows can exit first before the block slides in.
  */

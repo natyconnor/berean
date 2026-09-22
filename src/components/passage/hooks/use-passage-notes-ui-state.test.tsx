@@ -207,6 +207,27 @@ describe("usePassageNotesUiState outside-click dismissal", () => {
     expect(result.current.openVerseKeys.size).toBe(0);
     expect(result.current.openEditors.has(editorKey)).toBe(true);
   });
+
+  it("does NOT close a dirty draft when clicking an overlay nudge", () => {
+    const nudge = document.createElement("button");
+    nudge.setAttribute("data-verse-nudge", "end:grow");
+    document.body.appendChild(nudge);
+
+    const { result } = renderUiState();
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    const key = Array.from(result.current.openEditors.keys())[0];
+    act(() => {
+      result.current.notifyEditorDirty(key, true);
+    });
+
+    clickElement(nudge);
+
+    expect(result.current.openEditors.has(key)).toBe(true);
+    expect(result.current.hasDirtyEditors).toBe(true);
+    nudge.remove();
+  });
 });
 
 describe("usePassageNotesUiState view mode switch", () => {
@@ -984,5 +1005,187 @@ describe("usePassageNotesUiState focus mode save behavior", () => {
     expect(result.current.openEditors.size).toBe(0);
     expect(result.current.openEditors.has("new:2:2")).toBe(false);
     expect(result.current.openVerseKeys).toEqual(new Set([1]));
+  });
+});
+
+function johnRef(startVerse: number, endVerse: number) {
+  return { book: "John", chapter: 1, startVerse, endVerse };
+}
+
+describe("usePassageNotesUiState retargetNewDraft", () => {
+  function renderJohn() {
+    return renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+      }),
+    );
+  }
+
+  it("keeps the create-time key, dirty bit, and snapshot across 16 → 16–17 → 15–17", () => {
+    const { result } = renderJohn();
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    expect(result.current.openEditors.has("new:16:16")).toBe(true);
+
+    act(() => {
+      result.current.notifyEditorDirty("new:16:16", true);
+    });
+
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "Draft stays",
+        tags: ["hope"],
+      });
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(15, 17), {
+        body: "Draft stays",
+        tags: ["hope"],
+      });
+    });
+
+    const slot = result.current.openEditors.get("new:16:16");
+    expect(slot?.kind).toBe("new");
+    if (slot?.kind !== "new") return;
+    expect(slot.editorKey).toBe("new:16:16");
+    expect(slot.verseRef).toEqual(johnRef(15, 17));
+    expect(slot.snapshot).toEqual({ body: "Draft stays", tags: ["hope"] });
+    expect(result.current.hasDirtyEditors).toBe(true);
+    expect(result.current.retargetingEditorKey).toBe("new:16:16");
+    expect(result.current.newDraftsByAnchor.get(15)?.[0]).toMatchObject({
+      editorKey: "new:16:16",
+      snapshot: { body: "Draft stays", tags: ["hope"] },
+    });
+    expect(result.current.newDraftsByAnchor.has(16)).toBe(false);
+    expect(result.current.selectedVerses).toEqual(new Set([15, 16, 17]));
+    expect(result.current.isPassageSelection).toBe(true);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 15, startVerse: 15, endVerse: 17 },
+    ]);
+  });
+
+  it("no-ops when the span is unchanged or the key is an edit slot", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 16), {
+        body: "ignored",
+        tags: [],
+      });
+    });
+    const slot = result.current.openEditors.get("new:16:16");
+    expect(slot?.kind).toBe("new");
+    if (slot?.kind === "new") expect(slot.snapshot).toBeUndefined();
+    expect(result.current.retargetingEditorKey).toBeNull();
+
+    act(() => {
+      result.current.startEditingNote(
+        "note-16" as Id<"notes">,
+        johnRef(16, 16),
+        16,
+        false,
+      );
+    });
+    const editSlot = result.current.openEditors.get("edit:note-16");
+    act(() => {
+      result.current.retargetNewDraft("edit:note-16", johnRef(15, 16), {
+        body: "nope",
+        tags: [],
+      });
+    });
+    expect(result.current.openEditors.get("edit:note-16")).toEqual(editSlot);
+  });
+
+  it("treats the current span as occupancy and allocates a new key for the freed verse", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "kept",
+        tags: [],
+      });
+    });
+    act(() => {
+      result.current.startCreatingPassageNote(johnRef(16, 17));
+    });
+    expect(result.current.openEditors.size).toBe(1);
+
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(17, 17), {
+        body: "kept",
+        tags: [],
+      });
+    });
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+
+    expect(result.current.openEditors.size).toBe(2);
+    const moved = result.current.openEditors.get("new:16:16");
+    expect(moved?.kind).toBe("new");
+    if (moved?.kind === "new") expect(moved.verseRef).toEqual(johnRef(17, 17));
+    const reopened = result.current.openEditors.get("new:16:16:2");
+    expect(reopened?.kind).toBe("new");
+    if (reopened?.kind === "new") {
+      expect(reopened.verseRef).toEqual(johnRef(16, 16));
+    }
+  });
+
+  it("saves and cancels a retargeted draft by its original key at the new span", async () => {
+    const onSaveNewNote = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+        onSaveNewNote,
+      }),
+    );
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "kept",
+        tags: ["a"],
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleSaveNew(johnRef(16, 17), EMPTY_NOTE_BODY, [
+        "a",
+      ]);
+    });
+
+    expect(onSaveNewNote).toHaveBeenCalledWith(
+      johnRef(16, 17),
+      EMPTY_NOTE_BODY,
+      ["a"],
+    );
+    expect(result.current.openEditors.size).toBe(0);
+    expect(result.current.retargetingEditorKey).toBeNull();
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(15, 16), {
+        body: "kept",
+        tags: [],
+      });
+    });
+    act(() => {
+      result.current.cancelEditor("new:16:16");
+    });
+    expect(result.current.openEditors.size).toBe(0);
   });
 });
