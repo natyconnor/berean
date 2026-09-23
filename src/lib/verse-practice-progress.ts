@@ -72,7 +72,7 @@ export function predictLearning(
   status: MemoryStatus = "learning",
   now?: number,
 ): VersePracticeProgress {
-  if (isLearningProgressAttempt(quality, accuracy, stage)) {
+  if (isLearningProgressAttempt(quality, accuracy, stage, reps, wordCount)) {
     const nextReps = reps + 1;
     if (nextReps >= requiredRepsFor(stage, wordCount)) {
       if (stage >= MAX_LEARN_STAGE) {

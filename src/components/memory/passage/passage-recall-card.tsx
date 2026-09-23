@@ -73,6 +73,8 @@ interface PassageRecallCardProps {
   stageReps: number;
   status: MemoryStatus;
   showJourneyBar?: boolean;
+  /** Review interval; drives progress toward mastered when reviewing. */
+  intervalDays?: number;
   /** Read (full text) banks without typing. Frontier only. */
   readContinue?: boolean;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
@@ -96,6 +98,7 @@ export function PassageRecallCard({
   stageReps,
   status,
   showJourneyBar = false,
+  intervalDays,
   readContinue = false,
   onSubmit,
   onContinueAfterResult,
@@ -250,6 +253,7 @@ export function PassageRecallCard({
               stageReps={stageReps}
               wordCount={wordCount}
               status={status}
+              intervalDays={intervalDays}
             />
           ) : null}
         </CardHeader>

@@ -14,6 +14,7 @@ import {
   useRecordVerseAttempt,
   type VerseAttemptMode,
 } from "./use-record-verse-attempt";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export type { VersePracticeProgress } from "@/lib/verse-practice-progress";
 
@@ -26,6 +27,7 @@ interface RecordAttemptArgs {
 
 interface UseVersePracticeAttemptReturn {
   heartedVersesReady: boolean;
+  resolveVerseRefId: (reference: CardReference) => Id<"verseRefs"> | null;
   normalizeProgress: (
     raw: MemorySchedule | VersePracticeProgress,
   ) => VersePracticeProgress;
@@ -36,7 +38,7 @@ interface UseVersePracticeAttemptReturn {
   recordWithSeqAdopt: (
     verseKey: string,
     args: RecordAttemptArgs,
-    onAdopt: (next: VersePracticeProgress) => void,
+    onAdopt: (next: MemorySchedule) => void,
   ) => Promise<MemorySchedule | null>;
   /**
    * Record and adopt immediately (or predictLearning on null). Used by Study
@@ -65,7 +67,8 @@ interface UseVersePracticeAttemptReturn {
 export function useVersePracticeAttempt(
   mode: VerseAttemptMode,
 ): UseVersePracticeAttemptReturn {
-  const { record, heartedVersesReady } = useRecordVerseAttempt();
+  const { record, heartedVersesReady, resolveVerseRefId } =
+    useRecordVerseAttempt();
   const attemptSeqByVerseId = useRef<Map<string, number>>(new Map());
   const appliedSeqByVerseId = useRef<Map<string, number>>(new Map());
   const pendingProgressRef = useRef<VersePracticeProgress | null>(null);
@@ -80,7 +83,7 @@ export function useVersePracticeAttempt(
     async (
       verseKey: string,
       args: RecordAttemptArgs,
-      onAdopt: (next: VersePracticeProgress) => void,
+      onAdopt: (next: MemorySchedule) => void,
     ): Promise<MemorySchedule | null> => {
       const seq = (attemptSeqByVerseId.current.get(verseKey) ?? 0) + 1;
       attemptSeqByVerseId.current.set(verseKey, seq);
@@ -95,7 +98,7 @@ export function useVersePracticeAttempt(
       const applied = appliedSeqByVerseId.current.get(verseKey) ?? 0;
       if (seq <= applied) return schedule;
       appliedSeqByVerseId.current.set(verseKey, seq);
-      onAdopt(normalizeVerseProgress(schedule));
+      onAdopt(schedule);
       return schedule;
     },
     [mode, record],
@@ -162,6 +165,7 @@ export function useVersePracticeAttempt(
 
   return {
     heartedVersesReady,
+    resolveVerseRefId,
     normalizeProgress,
     recordWithSeqAdopt,
     recordWithImmediateAdopt,

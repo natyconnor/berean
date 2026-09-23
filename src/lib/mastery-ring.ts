@@ -10,7 +10,7 @@ import {
  * ceiling; the reviewing band takes over from 0.5 upward, so a graduating verse
  * flows continuously from learning into reviewing.
  */
-const LEARNING_RING_CEILING = 0.5;
+export const LEARNING_RING_CEILING = 0.5;
 
 /**
  * How far along the four-band learning journey a verse is, as a fraction in
@@ -55,6 +55,33 @@ export function learningJourneyFraction(
 
   if (totalRequired === 0) return 0;
   return Math.max(0, Math.min(1, completed / totalRequired));
+}
+
+/**
+ * Fill fraction for the session progress bar: learning occupies
+ * `[0, {@link LEARNING_RING_CEILING})`, reviewing grows from that floor to 1
+ * as `intervalDays` approaches {@link MASTERED_INTERVAL_DAYS}, and mastered
+ * is full. Unlike {@link learningJourneyFraction}, reviewing is not stuck at
+ * 100% after graduation.
+ *
+ * Pure: no React, no `Date.now()`.
+ */
+export function memoryProgressFraction(
+  status: MemoryStatus | undefined,
+  learnStage: number,
+  stageReps: number,
+  intervalDays = 0,
+  wordCount?: number,
+): number {
+  if (status === "mastered") return 1;
+  if (status === "reviewing") {
+    const t = Math.max(0, Math.min(1, intervalDays / MASTERED_INTERVAL_DAYS));
+    return LEARNING_RING_CEILING + t * (1 - LEARNING_RING_CEILING);
+  }
+  return (
+    learningJourneyFraction(learnStage, stageReps, wordCount, status) *
+    LEARNING_RING_CEILING
+  );
 }
 
 /**

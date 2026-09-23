@@ -16,10 +16,11 @@
  *    {@link REVIEW_DAILY_REPS} reviews, then every other day for
  *    {@link REVIEW_EVERY_OTHER_REPS} reviews; only then does the interval
  *    multiply by ease. A close recall at {@link REVIEW_RETRY_ACCURACY} leaves
- *    the verse due so the learner can try again for the stretch. Between
- *    {@link REVIEW_LAPSE_ACCURACY} and that retry bar, the current gap is
- *    kept. Below the lapse bar, the verse drops one ladder step (daily →
- *    Challenge, every-other-day → daily, growing → every-other-day).
+ *    the verse due so the learner can try again for the stretch, or keep the
+ *    current gap if they decline. Between {@link REVIEW_LAPSE_ACCURACY} and
+ *    that retry bar, the current gap is kept. Below the lapse bar, the verse
+ *    drops one ladder step (daily → Challenge, every-other-day → daily,
+ *    growing → every-other-day).
  *    Due dates land at local midnight N calendar days later (with a 6-hour
  *    floor so a late-night 1-day review does not reopen at 12:01am).
  *
@@ -217,7 +218,8 @@ export const REVIEW_EVERY_OTHER_INTERVAL_DAYS = 2;
 /**
  * Near-perfect Read / Guided / Challenge attempts still bank a rep. This lets
  * one missed word or a small typo count on a longer passage without allowing a
- * merely passing recall to clear a support band. From Memory requires
+ * merely passing recall to clear a support band. The first From Memory recall
+ * uses the same bar; only the graduating (last) From Memory rep requires
  * `quality === "exact"` (grade-time classification already allows a couple of
  * typos).
  */
@@ -358,19 +360,35 @@ export function isReviewPhase(status: MemoryStatus): boolean {
 }
 
 /**
+ * True on the graduating From Memory recall: the last exact needed to leave
+ * the learning ladder. Earlier From Memory reps (and every other band) still
+ * bank at {@link LEARN_PROGRESS_ACCURACY}.
+ */
+export function isFromMemoryGraduationAttempt(
+  learnStage: number,
+  stageReps: number,
+  wordCount?: number,
+): boolean {
+  if (learnStage < MAX_LEARN_STAGE) return false;
+  return stageReps + 1 >= requiredRepsFor(learnStage, wordCount);
+}
+
+/**
  * Whether a learning attempt is strong enough to bank progress.
  *
- * Read / Guided / Challenge accept an exact recall or a close one at
- * {@link LEARN_PROGRESS_ACCURACY}. From Memory is the last confirmation, so
- * only `exact` counts — a couple of minor typos still qualify because they
- * are classified as exact at grade time.
+ * Read / Guided / Challenge / the first From Memory recall accept an exact
+ * grade or a close one at {@link LEARN_PROGRESS_ACCURACY}. Only the last
+ * From Memory recitation requires `quality === "exact"` — a couple of minor
+ * typos still qualify because they are classified as exact at grade time.
  */
 export function isLearningProgressAttempt(
   quality: ReviewInput["quality"],
   accuracy: number,
   learnStage: number,
+  stageReps = 0,
+  wordCount?: number,
 ): boolean {
-  if (learnStage >= MAX_LEARN_STAGE) {
+  if (isFromMemoryGraduationAttempt(learnStage, stageReps, wordCount)) {
     return quality === "exact";
   }
   return (
@@ -462,7 +480,15 @@ export function isLearningLocked(
 }
 
 function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
-  if (isLearningProgressAttempt(r.quality, r.accuracy, s.learnStage)) {
+  if (
+    isLearningProgressAttempt(
+      r.quality,
+      r.accuracy,
+      s.learnStage,
+      s.stageReps,
+      r.wordCount,
+    )
+  ) {
     const reps = s.stageReps + 1;
     if (reps >= requiredRepsFor(s.learnStage, r.wordCount)) {
       // Cleared this band on its required reps.
@@ -724,6 +750,27 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
 
   // hold (60–79%): keep the current gap. A messy recall should not earn more
   // time before the next review.
+  return holdReviewingInterval(s, r.now, r.tzOffsetMinutes);
+}
+
+/**
+ * Keep the current review interval and spend the verse.
+ *
+ * Used for a 60–79% hold and when the learner declines an 80%+ retry offer
+ * ("keep this wait"). Does not insert a new recitation grade — callers that
+ * already logged the close attempt should only patch the schedule.
+ *
+ * A second early hold after {@link MemorySchedule.earlyReviewApplied} leaves
+ * the schedule unchanged, matching a second early exact.
+ */
+export function holdReviewingInterval(
+  s: MemorySchedule,
+  now: number,
+  tzOffsetMinutes?: number,
+): MemorySchedule {
+  if (!isReviewPhase(s.status)) return s;
+  const isEarly = now < s.dueAt;
+  if (isEarly && s.earlyReviewApplied) return s;
   const intervalDays = Math.max(REVIEW_DAILY_INTERVAL_DAYS, s.intervalDays);
   return {
     status: s.status,
@@ -731,7 +778,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     stageReps: s.stageReps,
     ease: s.ease,
     intervalDays,
-    dueAt: computeDueAt(r, intervalDays),
+    dueAt: dueAtInCalendarDays(now, intervalDays, tzOffsetMinutes),
     consecutiveCorrect: s.consecutiveCorrect,
     lapses: s.lapses,
     earlyReviewApplied: isEarly,

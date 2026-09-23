@@ -349,7 +349,7 @@ describe("PassageSession", () => {
     ).toBeInTheDocument();
   });
 
-  it("fills the journey bar to 100% on the final qualifying check", async () => {
+  it("hands the journey bar to reviewing progress on the final qualifying check", async () => {
     const almostDone = piece(0, "learning", {
       learnStage: 3,
       stageReps: 1,
@@ -372,7 +372,7 @@ describe("PassageSession", () => {
     expect(await screen.findByText(/recalled\./)).toBeVisible();
     await waitFor(() => {
       expect(
-        screen.getByLabelText(/Learning journey:.*100%/),
+        screen.getByLabelText(/Progress to mastered: Reviewing/),
       ).toBeInTheDocument();
     });
   });

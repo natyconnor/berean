@@ -1,10 +1,11 @@
 import {
+  isFromMemoryGraduationAttempt,
   isLearningPhase,
   MAX_LEARN_STAGE,
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
 
-/** Close-but-not-exact From Memory copy: 100% is required to bank a rep. */
+/** Close-but-not-exact copy on the graduating From Memory recall. */
 export const FROM_MEMORY_CLOSE_MESSAGE =
   "Good job, but let's get 100% to lock this verse in.";
 
@@ -21,9 +22,25 @@ export function isFromMemoryLearning(
   return learnStage >= MAX_LEARN_STAGE && isLearningPhase(status);
 }
 
-/** Prompt for the current From Memory recall (always two exacts to graduate). */
+/** Prompt for the current From Memory recall (two reps to graduate). */
 export function fromMemoryPromptLine(stageReps: number): string {
   return stageReps >= 1
     ? FROM_MEMORY_SECOND_ROUND_PROMPT
     : FROM_MEMORY_FIRST_ROUND_PROMPT;
+}
+
+/**
+ * True on the last From Memory recitation, the only learning step that still
+ * requires a perfect recall to bank progress.
+ */
+export function requiresExactToAdvance(
+  learnStage: number,
+  status: MemoryStatus,
+  stageReps: number,
+  wordCount?: number,
+): boolean {
+  return (
+    isFromMemoryLearning(learnStage, status) &&
+    isFromMemoryGraduationAttempt(learnStage, stageReps, wordCount)
+  );
 }

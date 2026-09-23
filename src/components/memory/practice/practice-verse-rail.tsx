@@ -38,8 +38,10 @@ interface PracticeVerseRailProps {
   currentLearnStage: number;
   /** The active verse's live reps banked on the current band. */
   currentStageReps: number;
-  /** Lifecycle status — fills the journey bar once graduated. */
+  /** Lifecycle status — reviewing grows the bar toward mastered. */
   currentStatus: MemoryStatus;
+  /** Review interval; drives progress toward mastered on the journey bar. */
+  currentIntervalDays?: number;
   /**
    * Word count of the active verse's text. When provided, the rep label uses
    * the length-adjusted required-rep count via {@link requiredRepsFor} so it
@@ -73,6 +75,7 @@ export function PracticeVerseRail({
   currentLearnStage,
   currentStageReps,
   currentStatus,
+  currentIntervalDays,
   currentWordCount,
   currentLocked = false,
   allowReorder = true,
@@ -165,6 +168,7 @@ export function PracticeVerseRail({
               stageReps={currentStageReps}
               wordCount={currentWordCount}
               status={currentStatus}
+              intervalDays={currentIntervalDays}
             />
             {currentLocked ? (
               <p className="mt-1.5 text-[11px] text-muted-foreground">

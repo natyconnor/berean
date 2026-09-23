@@ -44,7 +44,7 @@ describe("VerseMemoryFeedback", () => {
     );
   });
 
-  it("explains that From Memory needs 100% before the verse can advance", () => {
+  it("explains that the last From Memory recall needs 100% to graduate", () => {
     render(
       <VerseMemoryFeedback
         quality="close"

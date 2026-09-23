@@ -43,6 +43,7 @@ import { PRACTICE_STAGES } from "../memory/practice/practice-stages";
 import {
   fromMemoryPromptLine,
   isFromMemoryLearning,
+  requiresExactToAdvance,
 } from "./from-memory-messages";
 import {
   classifyVerseAttempt,
@@ -195,7 +196,13 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
   const madeLearningProgress =
     checkedQuality !== null &&
-    isLearningProgressAttempt(checkedQuality, checkedAccuracy, stageIndex);
+    isLearningProgressAttempt(
+      checkedQuality,
+      checkedAccuracy,
+      stageIndex,
+      repsIndex,
+      wordCount,
+    );
 
   // Read Continue and the result-view Continue / Try again share one control
   // (only one is mounted at a time) so Enter can advance both steps.
@@ -389,7 +396,12 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               typedAnswer={typedAnswer}
               versePlainText={versePlainText}
               diffTokens={checkedDiffTokens}
-              requireExactToAdvance={fromMemoryLearn}
+              requireExactToAdvance={requiresExactToAdvance(
+                stageIndex,
+                status,
+                repsIndex,
+                wordCount,
+              )}
             />
             <p className="text-center text-sm text-muted-foreground">
               {`${checkedAccuracy}% recalled.`}

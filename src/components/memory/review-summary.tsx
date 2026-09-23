@@ -3,19 +3,16 @@ import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
-import type { CardReference } from "@/components/study/study-card-model";
 import { Button } from "@/components/ui/button";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
+import {
+  groupReviewSessionAttempts,
+  recalledCopy,
+  type ReviewSessionAttempt,
+} from "@/lib/review-session-attempts";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
-export interface ReviewSessionAttempt {
-  reference: CardReference;
-  accuracy: number;
-  /** Overrides the reference label (a pack recited as one passage). */
-  label?: string;
-  /** Whether to offer the per-verse Practice shortcut. Defaults to true. */
-  offerPractice?: boolean;
-}
+export type { ReviewSessionAttempt };
 
 interface ReviewSummaryProps {
   /** Graded verses from this review run, in session order. */
@@ -83,7 +80,7 @@ export function ReviewSummary({
 
         {hasAttempts && (
           <ul className="divide-y rounded-lg border text-left">
-            {attempts.map((attempt) => {
+            {groupReviewSessionAttempts(attempts).map((attempt) => {
               const label = attempt.label ?? formatVerseRef(attempt.reference);
               return (
                 <li
@@ -93,7 +90,7 @@ export function ReviewSummary({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{label}</p>
                     <p className="text-xs tabular-nums text-muted-foreground">
-                      {attempt.accuracy}% recalled
+                      {recalledCopy(attempt.accuracies)}
                     </p>
                   </div>
                   {attempt.offerPractice === false ? null : (

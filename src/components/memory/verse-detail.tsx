@@ -331,14 +331,26 @@ export function VerseDetail({
           })}
         </ol>
         {detail.status === "reviewing" || detail.status === "mastered" ? (
-          <p className="text-xs text-muted-foreground">
-            Graduated to review — recalled from memory.
-          </p>
+          <>
+            <LearningJourneyBar
+              learnStage={detail.learnStage}
+              stageReps={detail.stageReps}
+              status={detail.status}
+              intervalDays={detail.intervalDays}
+            />
+            <p className="text-xs text-muted-foreground">
+              {detail.status === "mastered"
+                ? "Mastered — recalled from memory."
+                : "Graduated to review — recalled from memory. The bar grows toward mastered as the wait between reviews lengthens."}
+            </p>
+          </>
         ) : (
           <>
             <LearningJourneyBar
               learnStage={detail.learnStage}
               stageReps={detail.stageReps}
+              status={detail.status}
+              intervalDays={detail.intervalDays}
             />
             {learningLocked ? (
               <p className="text-xs text-muted-foreground">
