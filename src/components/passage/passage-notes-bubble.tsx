@@ -13,10 +13,12 @@ import {
   formatVerseRef,
   unionVerseRefs,
   verseRefsHaveMixedRanges,
+  type VerseRef,
 } from "@/lib/verse-ref-utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { NoteBody } from "@/lib/note-inline-content";
+import type { SavedEditOverride } from "./hooks/use-passage-notes-ui-state";
 import {
   HoverEditButton,
   NoteCardActions,
@@ -57,6 +59,12 @@ interface PassageNotesBubbleProps {
   onCancelEdit?: (noteId: Id<"notes">) => void;
   onEditorDirtyChange?: (noteId: Id<"notes">, isDirty: boolean) => void;
   onEditorFocus?: (noteId: Id<"notes">) => void;
+  onRetargetVerse?: (
+    noteId: Id<"notes">,
+    nextRef: VerseRef,
+    snapshot: { body: string; tags: string[] },
+  ) => void;
+  savedEditOverrides?: Map<Id<"notes">, SavedEditOverride>;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (noteId: Id<"notes">) => void;
@@ -81,6 +89,8 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
   onCancelEdit,
   onEditorDirtyChange,
   onEditorFocus,
+  onRetargetVerse,
+  savedEditOverrides,
   onOpen,
   onClose,
   onEdit,
@@ -237,12 +247,30 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                 {supportsInlineEditing && editingNoteIds?.has(note.noteId) ? (
                   <div data-note-surface>
                     <NoteEditor
-                      verseRef={note.verseRef}
-                      initialContent={note.content}
-                      initialBody={note.body}
-                      initialTags={note.tags}
+                      verseRef={
+                        savedEditOverrides?.get(note.noteId)?.verseRef ??
+                        note.verseRef
+                      }
+                      initialContent={
+                        savedEditOverrides?.get(note.noteId)?.snapshot?.body ??
+                        note.content
+                      }
+                      initialBody={
+                        savedEditOverrides?.get(note.noteId)?.snapshot
+                          ? undefined
+                          : note.body
+                      }
+                      initialTags={
+                        savedEditOverrides?.get(note.noteId)?.snapshot?.tags ??
+                        note.tags
+                      }
                       variant="passage"
                       currentChapter={currentChapter}
+                      dirtyAsNewDraft={false}
+                      rangeDirty={
+                        savedEditOverrides?.get(note.noteId)?.rangeDirty ??
+                        false
+                      }
                       onSave={(body, tags) =>
                         onSaveEdit(note.noteId, body, tags)
                       }
@@ -256,6 +284,12 @@ export const PassageNotesBubble = memo(function PassageNotesBubble({
                       onFocusWithin={
                         onEditorFocus
                           ? () => onEditorFocus(note.noteId)
+                          : undefined
+                      }
+                      onRetargetVerse={
+                        onRetargetVerse
+                          ? (nextRef, snapshot) =>
+                              onRetargetVerse(note.noteId, nextRef, snapshot)
                           : undefined
                       }
                     />

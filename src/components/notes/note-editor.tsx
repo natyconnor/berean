@@ -58,13 +58,18 @@ interface NoteEditorProps {
   onDirtyChange?: (isDirty: boolean) => void;
   onFocusWithin?: () => void;
   /**
-   * Present only for a new selection draft. Gates the overlay chip and keeps
-   * dirty tracking on the live body after a snapshot remount.
+   * When set, the verse badge becomes the range overlay. New drafts and
+   * saved-note edits on the passage both pass this. Dirty tracking for
+   * snapshot remounts is `dirtyAsNewDraft`; saved edits use `rangeDirty`.
    */
   onRetargetVerse?: (
     nextRef: VerseRef,
     snapshot: { body: string; tags: string[] },
   ) => void;
+  /** Force create-draft dirty tracking (has content) even after a snapshot remount. */
+  dirtyAsNewDraft?: boolean;
+  /** Verse-range change on a saved note that the body/tags diff cannot see. */
+  rangeDirty?: boolean;
 }
 
 export function NoteEditor({
@@ -79,6 +84,8 @@ export function NoteEditor({
   onDirtyChange,
   onFocusWithin,
   onRetargetVerse,
+  dirtyAsNewDraft,
+  rangeDirty = false,
 }: NoteEditorProps) {
   const [initialEditorBody] = useState<NoteBody>(() =>
     normalizeNoteBody(initialBody, initialContent),
@@ -131,7 +138,8 @@ export function NoteEditor({
   }, []);
 
   const isNewNote =
-    onRetargetVerse !== undefined || (!initialContent && !initialBody);
+    dirtyAsNewDraft ??
+    (onRetargetVerse !== undefined || (!initialContent && !initialBody));
 
   useEffect(() => {
     if (!onDirtyChange) return;
@@ -143,7 +151,7 @@ export function NoteEditor({
       const tagsChanged =
         tags.length !== normalizedInitialTags.length ||
         tags.some((t, i) => t !== normalizedInitialTags[i]);
-      onDirtyChange(bodyChanged || tagsChanged);
+      onDirtyChange(bodyChanged || tagsChanged || rangeDirty);
     }
   }, [
     body,
@@ -152,6 +160,7 @@ export function NoteEditor({
     isNewNote,
     initialEditorBody,
     normalizedInitialTags,
+    rangeDirty,
   ]);
 
   const handleSave = useCallback(async () => {

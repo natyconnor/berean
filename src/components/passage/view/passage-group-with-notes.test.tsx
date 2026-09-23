@@ -209,4 +209,59 @@ describe("PassageGroupWithNotes retarget scope", () => {
     expect(screen.getByText("John 1:12-15")).toBeInTheDocument();
     expect(screen.queryByText("New note")).not.toBeInTheDocument();
   });
+
+  it("wires overlay retarget for a saved passage note being edited", () => {
+    render(
+      <TooltipProvider>
+        <PassageGroupWithNotes
+          verses={[
+            { verseNumber: 15, text: "John bore witness" },
+            { verseNumber: 16, text: "And from his fullness" },
+            { verseNumber: 17, text: "For the law" },
+          ]}
+          passageNotes={[
+            {
+              noteId: "note-15-17" as never,
+              content: "Grace and truth",
+              tags: [],
+              verseRef,
+              createdAt: 1,
+            },
+          ]}
+          singleNotesByVerse={new Map()}
+          viewMode="compose"
+          currentChapter={{ book: "John", chapter: 1 }}
+          highlightsByVerse={new Map()}
+          isPassageOpen
+          editingNoteIds={new Set(["note-15-17" as never])}
+          draftsForAnchor={[]}
+          onRetargetEditNote={vi.fn()}
+          savedEditOverrides={
+            new Map([["note-15-17" as never, { verseRef, rangeDirty: false }]])
+          }
+          onOpenPassageNotes={vi.fn()}
+          onClosePassageNotes={vi.fn()}
+          onOpenVerseNotes={vi.fn()}
+          onEditNote={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onSaveEdit={vi.fn().mockResolvedValue(undefined)}
+          onSaveNew={vi.fn().mockResolvedValue(undefined)}
+          onCancelEditor={vi.fn()}
+          onEditorDirtyChange={vi.fn()}
+          onEditorFocus={vi.fn()}
+          onStartCreatingPassageNote={vi.fn()}
+          onNoteDeleteCleanup={vi.fn()}
+          onPassageBubbleMouseEnter={vi.fn()}
+          onPassageBubbleMouseLeave={vi.fn()}
+          onCollapse={vi.fn()}
+          groupPassageHeart={null}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByTestId("note-editor")).toHaveAttribute(
+      "data-has-retarget",
+      "yes",
+    );
+  });
 });

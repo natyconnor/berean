@@ -221,4 +221,35 @@ describe("NoteEditor retarget gate", () => {
       tags: [],
     });
   });
+
+  it("shows the overlay on a saved edit without treating it as a new draft", async () => {
+    const user = userEvent.setup();
+    const onRetargetVerse = vi.fn();
+    const onDirtyChange = vi.fn();
+    render(
+      <TooltipProvider>
+        <NoteEditor
+          verseRef={john(16)}
+          initialContent="Saved body"
+          initialTags={["hope"]}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          onDirtyChange={onDirtyChange}
+          onRetargetVerse={onRetargetVerse}
+          dirtyAsNewDraft={false}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(document.querySelector("[data-verse-range-chip]")).not.toBeNull();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    await user.hover(screen.getByRole("group"));
+    await user.click(nudge("end", "grow"));
+
+    expect(onRetargetVerse).toHaveBeenCalledWith(john(16, 17), {
+      body: "Saved body",
+      tags: ["hope"],
+    });
+  });
 });

@@ -30,8 +30,10 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import type {
+  EditComposerAtAnchor,
   NewDraftAtAnchor,
   NewDraftSnapshot,
+  SavedEditOverride,
 } from "../hooks/use-passage-notes-ui-state";
 import {
   draftComposerLayoutId,
@@ -68,13 +70,20 @@ interface PassageGroupWithNotesProps {
   isPassageOpen: boolean;
   editingNoteIds: Set<Id<"notes">>;
   draftsForAnchor: NewDraftAtAnchor[];
+  editComposersForAnchor?: EditComposerAtAnchor[];
   onRetargetNewDraft?: (
     editorKey: string,
     nextRef: VerseRef,
     snapshot: NewDraftSnapshot,
   ) => void;
+  onRetargetEditNote?: (
+    noteId: Id<"notes">,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
   retargetingEditorKey?: string | null;
   inPlaceRetargetActive?: boolean;
+  savedEditOverrides?: Map<Id<"notes">, SavedEditOverride>;
   focusDistance?: number | null;
   onOpenPassageNotes: (verseNumber: number) => void;
   onClosePassageNotes: (verseNumber: number) => void;
@@ -149,6 +158,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   isPassageOpen,
   editingNoteIds,
   draftsForAnchor,
+  editComposersForAnchor = [],
   focusDistance = null,
   onOpenPassageNotes,
   onClosePassageNotes,
@@ -168,20 +178,31 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   groupPassageHeart,
   hoveredSavedPassage = null,
   onRetargetNewDraft,
+  onRetargetEditNote,
   retargetingEditorKey = null,
   inPlaceRetargetActive = false,
+  savedEditOverrides,
 }: PassageGroupWithNotesProps) {
   const reduceMotion = useReducedMotion() === true;
   const ownsRetarget = groupUsesRetargetMotion(
-    draftsForAnchor,
+    [...draftsForAnchor, ...editComposersForAnchor],
     retargetingEditorKey,
     inPlaceRetargetActive,
   );
-  const dockedEditorKey = draftsForAnchor[0]?.editorKey;
+  const dockedEditorKey =
+    draftsForAnchor[0]?.editorKey ?? editComposersForAnchor[0]?.editorKey;
+  const dockedEditComposers = editComposersForAnchor.filter(
+    (composer) => !passageNotes.some((note) => note.noteId === composer.noteId),
+  );
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
   const anchorVerse = verses[0]?.verseNumber ?? 0;
 
-  const handleCollapseGroup = useCallback(() => onCollapse(), [onCollapse]);
+  const handleCollapseGroup = useCallback(() => {
+    for (const composer of dockedEditComposers) {
+      onCancelEditor(composer.editorKey);
+    }
+    onCollapse();
+  }, [dockedEditComposers, onCancelEditor, onCollapse]);
 
   const handleVerseNotePillClick = useCallback(
     (verseNumber: number) => {
@@ -339,6 +360,8 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                     viewMode={viewMode}
                     currentChapter={currentChapter}
                     editingNoteIds={editingNoteIds}
+                    savedEditOverrides={savedEditOverrides}
+                    onRetargetVerse={onRetargetEditNote}
                     onSaveEdit={onSaveEdit}
                     onCancelEdit={(noteId) => onCancelEditor(`edit:${noteId}`)}
                     onEditorDirtyChange={(noteId, isDirty) =>
@@ -421,6 +444,68 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                               ? (nextRef, snapshot) =>
                                   onRetargetNewDraft(
                                     draft.editorKey,
+                                    nextRef,
+                                    snapshot,
+                                  )
+                              : undefined
+                          }
+                        />
+                      </motion.div>
+                    </LayoutGroup>
+                  );
+                })}
+                {dockedEditComposers.map((composer) => {
+                  const composerMotion = draftComposerMotionProps(
+                    retargetingEditorKey === composer.editorKey,
+                    reduceMotion,
+                  );
+                  const composerLayoutId = draftComposerLayoutId(
+                    composer.editorKey,
+                  );
+                  return (
+                    <LayoutGroup
+                      key={composer.editorKey}
+                      id={draftDockLayoutGroupId(composer.editorKey)}
+                      inherit={false}
+                    >
+                      <motion.div
+                        layout
+                        layoutId={composerLayoutId}
+                        data-draft-layout-id={composerLayoutId}
+                        data-note-surface
+                        initial={composerMotion.initial}
+                        animate={composerMotion.animate}
+                        exit={composerMotion.exit}
+                        transition={composerMotion.transition}
+                      >
+                        <NoteEditor
+                          verseRef={composer.verseRef}
+                          initialContent={composer.snapshot?.body}
+                          initialTags={composer.snapshot?.tags}
+                          variant={
+                            composer.verseRef.startVerse !==
+                            composer.verseRef.endVerse
+                              ? "passage"
+                              : "default"
+                          }
+                          dirtyAsNewDraft={false}
+                          rangeDirty
+                          currentChapter={currentChapter}
+                          onSave={(body, tags) =>
+                            onSaveEdit(composer.noteId, body, tags)
+                          }
+                          onCancel={() => onCancelEditor(composer.editorKey)}
+                          onDirtyChange={(isDirty) =>
+                            onEditorDirtyChange(composer.editorKey, isDirty)
+                          }
+                          onFocusWithin={() =>
+                            onEditorFocus(composer.editorKey)
+                          }
+                          onRetargetVerse={
+                            onRetargetEditNote
+                              ? (nextRef, snapshot) =>
+                                  onRetargetEditNote(
+                                    composer.noteId,
                                     nextRef,
                                     snapshot,
                                   )

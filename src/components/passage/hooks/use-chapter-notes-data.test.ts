@@ -315,4 +315,30 @@ describe("useChapterNotesData", () => {
     });
     expect(removeNoteMock).toHaveBeenCalledWith({ id: noteId });
   });
+
+  it("forwards a retargeted verseRef on save edit", async () => {
+    useQueryMock.mockReturnValue([]);
+    updateNoteMock.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useChapterNotesData("John", 1));
+    const body = { segments: [] } as unknown as NoteBody;
+    const noteId = "note-16" as Id<"notes">;
+    const verseRef = {
+      book: "John",
+      chapter: 1,
+      startVerse: 16,
+      endVerse: 17,
+    };
+
+    await act(async () => {
+      await result.current.saveEditedNote(noteId, body, ["updated"], verseRef);
+    });
+
+    expect(updateNoteMock).toHaveBeenCalledWith({
+      id: noteId,
+      body,
+      tags: ["updated"],
+      verseRef,
+    });
+  });
 });

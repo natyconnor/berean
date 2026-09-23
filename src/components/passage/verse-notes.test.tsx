@@ -100,7 +100,7 @@ describe("VerseNotes", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a static badge while editing a saved note", () => {
+  it("keeps a static badge while editing a saved note without overlay wiring", () => {
     render(
       <TooltipProvider>
         <VerseNotes
@@ -121,5 +121,50 @@ describe("VerseNotes", () => {
     expect(screen.getByText("John 1:1")).toBeInTheDocument();
     expect(document.querySelector("[data-verse-range-chip]")).toBeNull();
     expect(document.querySelector("[data-verse-nudge]")).toBeNull();
+  });
+
+  it("shows the range overlay while editing a saved note", async () => {
+    const user = userEvent.setup();
+    const onRetargetVerse = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <VerseNotes
+          notes={[baseNote]}
+          isOpen
+          editingNoteIds={new Set([baseNote.noteId])}
+          onSaveEdit={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onRetargetVerse={onRetargetVerse}
+          savedEditOverrides={
+            new Map([
+              [
+                baseNote.noteId,
+                { verseRef: baseNote.verseRef, rangeDirty: false },
+              ],
+            ])
+          }
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onAddNote={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    const chip = document.querySelector("[data-verse-range-chip]");
+    expect(chip).not.toBeNull();
+    await user.hover(chip!);
+    const grow = document.querySelector(
+      '[data-verse-nudge="end:grow"]',
+    ) as HTMLButtonElement;
+    await user.click(grow);
+
+    expect(onRetargetVerse).toHaveBeenCalledWith(
+      baseNote.noteId,
+      { ...baseNote.verseRef, endVerse: 2 },
+      expect.objectContaining({ body: "A short sample note" }),
+    );
   });
 });

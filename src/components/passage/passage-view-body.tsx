@@ -158,9 +158,12 @@ export function PassageViewBody({
     openPassageKeys,
     currentFocusTarget,
     newDraftsByAnchor,
+    editComposersByAnchor,
+    savedEditOverrides,
     retargetingEditorKey,
     inPlaceRetargetActive,
     retargetNewDraft,
+    retargetEditNote,
     editingNoteIds,
     handleAddNote,
     handleVerseMouseDown,
@@ -345,8 +348,16 @@ export function PassageViewBody({
         });
       }
     }
+    for (const composers of editComposersByAnchor.values()) {
+      for (const composer of composers) {
+        spans.push({
+          startVerse: composer.verseRef.startVerse,
+          endVerse: composer.verseRef.endVerse,
+        });
+      }
+    }
     return spans;
-  }, [newDraftsByAnchor]);
+  }, [editComposersByAnchor, newDraftsByAnchor]);
 
   const { darkMode } = useTheme();
 
@@ -451,8 +462,10 @@ export function PassageViewBody({
                       : null;
                   const draftsForAnchor =
                     newDraftsByAnchor.get(item.anchorVerse) ?? [];
+                  const editComposersForAnchor =
+                    editComposersByAnchor.get(item.anchorVerse) ?? [];
                   const ownsRetarget = groupUsesRetargetMotion(
-                    draftsForAnchor,
+                    [...draftsForAnchor, ...editComposersForAnchor],
                     retargetingEditorKey,
                     inPlaceRetargetActive,
                   );
@@ -461,12 +474,16 @@ export function PassageViewBody({
                     reduceMotion,
                   );
                   const spanLayoutId =
-                    ownsRetarget && draftsForAnchor[0]
-                      ? draftSpanLayoutId(draftsForAnchor[0].editorKey)
+                    ownsRetarget &&
+                    (draftsForAnchor[0] || editComposersForAnchor[0])
+                      ? draftSpanLayoutId(
+                          (draftsForAnchor[0] ?? editComposersForAnchor[0])
+                            .editorKey,
+                        )
                       : undefined;
                   const groupPresenceKey = draftGroupPresenceKey(
                     item.anchorVerse,
-                    draftsForAnchor,
+                    [...draftsForAnchor, ...editComposersForAnchor],
                   );
                   return (
                     <motion.div
@@ -526,9 +543,12 @@ export function PassageViewBody({
                         isPassageOpen={openPassageKeys.has(item.anchorVerse)}
                         editingNoteIds={editingNoteIds}
                         draftsForAnchor={draftsForAnchor}
+                        editComposersForAnchor={editComposersForAnchor}
                         onRetargetNewDraft={retargetNewDraft}
+                        onRetargetEditNote={retargetEditNote}
                         retargetingEditorKey={retargetingEditorKey}
                         inPlaceRetargetActive={inPlaceRetargetActive}
+                        savedEditOverrides={savedEditOverrides}
                         focusDistance={
                           focusDistanceByKey.get(
                             `passage-group-${item.anchorVerse}`,
@@ -570,8 +590,12 @@ export function PassageViewBody({
 
                 const draftsForVerse =
                   newDraftsByAnchor.get(item.verseNumber) ?? [];
+                const editComposersForVerse =
+                  editComposersByAnchor.get(item.verseNumber) ?? [];
                 const presenceKind = singleVersePresenceKind({
-                  hostsOpenDraft: draftsForVerse.length > 0,
+                  hostsOpenDraft:
+                    draftsForVerse.length > 0 ||
+                    editComposersForVerse.length > 0,
                   reenteringFromGroup: isReentering,
                   verseNumber: item.verseNumber,
                   openDrafts: openDraftSpans,
@@ -582,8 +606,12 @@ export function PassageViewBody({
                   reduceMotion,
                 );
                 const spanLayoutId =
-                  presenceKind === "draft-host" && draftsForVerse[0]
-                    ? draftSpanLayoutId(draftsForVerse[0].editorKey)
+                  presenceKind === "draft-host" &&
+                  (draftsForVerse[0] || editComposersForVerse[0])
+                    ? draftSpanLayoutId(
+                        (draftsForVerse[0] ?? editComposersForVerse[0])
+                          .editorKey,
+                      )
                     : undefined;
 
                 return (
@@ -644,8 +672,11 @@ export function PassageViewBody({
                       openVerseKeys={openVerseKeys}
                       openPassageKeys={openPassageKeys}
                       draftsForThisAnchor={draftsForVerse}
+                      editComposersForThisAnchor={editComposersForVerse}
                       onRetargetNewDraft={retargetNewDraft}
+                      onRetargetEditNote={retargetEditNote}
                       retargetingEditorKey={retargetingEditorKey}
+                      savedEditOverrides={savedEditOverrides}
                       editingNoteIds={editingNoteIds}
                       isFocusTarget={
                         hasFocusRange

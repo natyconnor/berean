@@ -1215,6 +1215,99 @@ describe("usePassageNotesUiState retargetNewDraft", () => {
   });
 });
 
+describe("usePassageNotesUiState retargetEditNote", () => {
+  const savedNoteId = "note-16" as Id<"notes">;
+
+  function renderJohn() {
+    return renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+      }),
+    );
+  }
+
+  it("updates a saved note's live verseRef and arms grouping", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.startEditingNote(savedNoteId, johnRef(16, 16), 16, false);
+    });
+
+    act(() => {
+      result.current.retargetEditNote(savedNoteId, johnRef(16, 17), {
+        body: "Saved body",
+        tags: ["hope"],
+      });
+    });
+
+    const slot = result.current.openEditors.get("edit:note-16");
+    expect(slot?.kind).toBe("edit");
+    if (slot?.kind !== "edit") return;
+    expect(slot.verseRef).toEqual(johnRef(16, 17));
+    expect(slot.originalVerseRef).toEqual(johnRef(16, 16));
+    expect(slot.snapshot).toEqual({ body: "Saved body", tags: ["hope"] });
+    expect(result.current.savedEditOverrides.get(savedNoteId)?.rangeDirty).toBe(
+      true,
+    );
+    expect(result.current.inPlaceRetargetActive).toBe(false);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 16, startVerse: 16, endVerse: 17 },
+    ]);
+    expect(result.current.editComposersByAnchor.get(16)?.[0]?.noteId).toBe(
+      savedNoteId,
+    );
+  });
+
+  it("passes the retargeted verseRef on save and skips it when unchanged", async () => {
+    const onSaveEditNote = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+        onSaveEditNote,
+      }),
+    );
+
+    act(() => {
+      result.current.startEditingNote(savedNoteId, johnRef(16, 16), 16, false);
+    });
+    await act(async () => {
+      await result.current.handleSaveEdit(savedNoteId, EMPTY_NOTE_BODY, [
+        "hope",
+      ]);
+    });
+    expect(onSaveEditNote).toHaveBeenCalledWith(
+      savedNoteId,
+      EMPTY_NOTE_BODY,
+      ["hope"],
+      undefined,
+    );
+
+    act(() => {
+      result.current.startEditingNote(savedNoteId, johnRef(16, 16), 16, false);
+    });
+    act(() => {
+      result.current.retargetEditNote(savedNoteId, johnRef(15, 16), {
+        body: "Saved body",
+        tags: ["hope"],
+      });
+    });
+    await act(async () => {
+      await result.current.handleSaveEdit(savedNoteId, EMPTY_NOTE_BODY, [
+        "hope",
+      ]);
+    });
+    expect(onSaveEditNote).toHaveBeenLastCalledWith(
+      savedNoteId,
+      EMPTY_NOTE_BODY,
+      ["hope"],
+      johnRef(15, 16),
+    );
+  });
+});
+
 describe("usePassageNotesUiState draft overlap with saved passages", () => {
   const saved715: NoteWithRef = {
     noteId: "john-7-15" as Id<"notes">,

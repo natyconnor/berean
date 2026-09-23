@@ -334,4 +334,35 @@ describe("VerseRowWithNotes – draft retarget", () => {
       "no",
     );
   });
+
+  it("passes onRetargetVerse for a saved single-verse note being edited", () => {
+    const noteId = "note-1" as Id<"notes">;
+    const verseRef = {
+      book: "John",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    };
+    renderVerseRow({
+      ...defaultProps(),
+      openVerseKeys: new Set([1]),
+      editingNoteIds: new Set([noteId]),
+      onRetargetEditNote: vi.fn(),
+      savedEditOverrides: new Map([[noteId, { verseRef, rangeDirty: false }]]),
+      singleNotes: [
+        {
+          noteId,
+          content: "Saved",
+          tags: [],
+          verseRef,
+          createdAt: 1,
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("note-editor")).toHaveAttribute(
+      "data-has-retarget",
+      "yes",
+    );
+  });
 });

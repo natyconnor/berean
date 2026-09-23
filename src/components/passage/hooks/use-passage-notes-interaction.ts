@@ -15,6 +15,8 @@ import {
   type FocusTarget,
   type NewDraftAtAnchor,
   type NewDraftSnapshot,
+  type EditComposerAtAnchor,
+  type SavedEditOverride,
 } from "./use-passage-notes-ui-state";
 
 const CHAPTER_NOTES_DIRTY_KEY = "chapter-notes";
@@ -34,6 +36,8 @@ export interface PassageNotesInteraction {
   currentFocusTarget: FocusTarget | null;
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, NewDraftAtAnchor[]>;
+  editComposersByAnchor: Map<number, EditComposerAtAnchor[]>;
+  savedEditOverrides: Map<Id<"notes">, SavedEditOverride>;
   retargetingEditorKey: string | null;
   inPlaceRetargetActive: boolean;
   isPassageSelection: boolean;
@@ -64,6 +68,11 @@ export interface PassageNotesInteraction {
   ) => Promise<void>;
   retargetNewDraft: (
     editorKey: string,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
+  retargetEditNote: (
+    noteId: Id<"notes">,
     nextRef: VerseRef,
     snapshot: NewDraftSnapshot,
   ) => void;
