@@ -27,6 +27,7 @@ const verseRef: VerseRef = {
 function renderGroup(
   retargetingEditorKey: string | null,
   withCallback: boolean,
+  inPlaceRetargetActive = true,
 ) {
   return render(
     <TooltipProvider>
@@ -51,6 +52,7 @@ function renderGroup(
           },
         ]}
         retargetingEditorKey={retargetingEditorKey}
+        inPlaceRetargetActive={inPlaceRetargetActive}
         onRetargetNewDraft={withCallback ? vi.fn() : undefined}
         onOpenPassageNotes={vi.fn()}
         onClosePassageNotes={vi.fn()}
@@ -84,6 +86,19 @@ describe("PassageGroupWithNotes retarget scope", () => {
     expect(container.querySelector("[data-draft-layout-id]")).toHaveAttribute(
       "data-draft-layout-id",
       "draft-new:16:16",
+    );
+    expect(screen.getByTestId("note-editor")).toHaveAttribute(
+      "data-has-retarget",
+      "yes",
+    );
+  });
+
+  it("does not use retarget skip-enter on first grouping", () => {
+    const { container } = renderGroup("new:16:16", true, false);
+
+    expect(container.querySelector("[data-retarget-owner]")).toHaveAttribute(
+      "data-retarget-owner",
+      "false",
     );
     expect(screen.getByTestId("note-editor")).toHaveAttribute(
       "data-has-retarget",

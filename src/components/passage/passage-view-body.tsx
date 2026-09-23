@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type RefObject,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type { HighlightRange } from "@/lib/highlight-utils";
@@ -14,10 +20,11 @@ import {
   draftGroupPresenceKey,
   draftSpanLayoutId,
   groupListPresenceMotion,
-  groupOwnsRetargetingDraft,
+  groupUsesRetargetMotion,
   listItemTransition,
   singleVersePresenceKind,
   singleVersePresenceMotion,
+  verseListPresenceMode,
   type OpenDraftSpan,
 } from "./draft-retarget-presence";
 import type { PassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
@@ -32,6 +39,10 @@ import { masteryRingFraction } from "@/lib/mastery-ring";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import type { PassageHeartControl } from "./verse-row";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
+import {
+  logPassagePresence,
+  passagePresenceDebugEnabled,
+} from "@/lib/dev-passage-presence-logger";
 
 type SavedSpan = {
   startVerse: number;
@@ -148,6 +159,7 @@ export function PassageViewBody({
     currentFocusTarget,
     newDraftsByAnchor,
     retargetingEditorKey,
+    inPlaceRetargetActive,
     retargetNewDraft,
     editingNoteIds,
     handleAddNote,
@@ -322,7 +334,7 @@ export function PassageViewBody({
   ]);
 
   const reduceMotion = useReducedMotion() === true;
-  const smoothDraftPresence = newDraftsByAnchor.size > 0;
+  const listPresenceMode = verseListPresenceMode(inPlaceRetargetActive);
   const openDraftSpans = useMemo((): OpenDraftSpan[] => {
     const spans: OpenDraftSpan[] = [];
     for (const drafts of newDraftsByAnchor.values()) {
@@ -354,6 +366,53 @@ export function PassageViewBody({
     };
   }, [darkMode, focusGlowAmount, isFocusMode]);
 
+  useEffect(() => {
+    if (!passagePresenceDebugEnabled()) return;
+    const groupKeys: string[] = [];
+    const verseKinds: Array<{ verse: number; kind: string }> = [];
+    for (const item of filteredVerses) {
+      if (item.kind === "passageGroup") {
+        const drafts = newDraftsByAnchor.get(item.anchorVerse) ?? [];
+        groupKeys.push(draftGroupPresenceKey(item.anchorVerse, drafts));
+      } else {
+        verseKinds.push({
+          verse: item.verseNumber,
+          kind: singleVersePresenceKind({
+            hostsOpenDraft:
+              (newDraftsByAnchor.get(item.verseNumber) ?? []).length > 0,
+            reenteringFromGroup: reenteringFromGroup.has(item.verseNumber),
+            verseNumber: item.verseNumber,
+            openDrafts: openDraftSpans,
+            inPlaceRetarget: inPlaceRetargetActive,
+          }),
+        });
+      }
+    }
+    const phase = inPlaceRetargetActive
+      ? "retarget"
+      : newDraftsByAnchor.size > 0
+        ? "first-open"
+        : reenteringFromGroup.size > 0
+          ? "close"
+          : "idle";
+    logPassagePresence({
+      phase,
+      listPresenceMode,
+      inPlaceRetargetActive,
+      retargetingEditorKey,
+      groupKeys,
+      verseKinds,
+    });
+  }, [
+    filteredVerses,
+    inPlaceRetargetActive,
+    listPresenceMode,
+    newDraftsByAnchor,
+    openDraftSpans,
+    reenteringFromGroup,
+    retargetingEditorKey,
+  ]);
+
   return (
     <div className="relative flex-1 min-h-0 overflow-hidden">
       <div
@@ -376,10 +435,7 @@ export function PassageViewBody({
           onMouseLeave={handleMouseUp}
         >
           <div>
-            <AnimatePresence
-              initial={false}
-              mode={smoothDraftPresence ? "sync" : "popLayout"}
-            >
+            <AnimatePresence initial={false} mode={listPresenceMode}>
               {filteredVerses.map((item) => {
                 if (item.kind === "passageGroup") {
                   const gLo = item.verses[0]?.verseNumber ?? 0;
@@ -395,29 +451,36 @@ export function PassageViewBody({
                       : null;
                   const draftsForAnchor =
                     newDraftsByAnchor.get(item.anchorVerse) ?? [];
-                  const ownsRetarget = groupOwnsRetargetingDraft(
+                  const ownsRetarget = groupUsesRetargetMotion(
                     draftsForAnchor,
                     retargetingEditorKey,
+                    inPlaceRetargetActive,
                   );
                   const groupMotion = groupListPresenceMotion(
                     ownsRetarget,
                     reduceMotion,
                   );
-                  const spanLayoutId = draftsForAnchor[0]
-                    ? draftSpanLayoutId(draftsForAnchor[0].editorKey)
-                    : undefined;
+                  const spanLayoutId =
+                    ownsRetarget && draftsForAnchor[0]
+                      ? draftSpanLayoutId(draftsForAnchor[0].editorKey)
+                      : undefined;
+                  const groupPresenceKey = draftGroupPresenceKey(
+                    item.anchorVerse,
+                    draftsForAnchor,
+                  );
                   return (
                     <motion.div
-                      key={draftGroupPresenceKey(
-                        item.anchorVerse,
-                        draftsForAnchor,
-                      )}
+                      key={groupPresenceKey}
                       data-presence-kind={
                         ownsRetarget ? "draft-group" : "passage-group"
                       }
+                      data-list-presence-mode={listPresenceMode}
+                      data-presence-phase={
+                        inPlaceRetargetActive ? "retarget" : "enter-exit"
+                      }
                       data-span-layout-id={spanLayoutId}
                       layout={
-                        smoothDraftPresence || groupMotion.layout
+                        inPlaceRetargetActive || groupMotion.layout
                           ? true
                           : undefined
                       }
@@ -427,7 +490,7 @@ export function PassageViewBody({
                       exit={groupMotion.exit}
                       transition={listItemTransition(
                         groupMotion.transition,
-                        smoothDraftPresence,
+                        inPlaceRetargetActive,
                         reduceMotion,
                       )}
                     >
@@ -465,6 +528,7 @@ export function PassageViewBody({
                         draftsForAnchor={draftsForAnchor}
                         onRetargetNewDraft={retargetNewDraft}
                         retargetingEditorKey={retargetingEditorKey}
+                        inPlaceRetargetActive={inPlaceRetargetActive}
                         focusDistance={
                           focusDistanceByKey.get(
                             `passage-group-${item.anchorVerse}`,
@@ -511,23 +575,25 @@ export function PassageViewBody({
                   reenteringFromGroup: isReentering,
                   verseNumber: item.verseNumber,
                   openDrafts: openDraftSpans,
-                  smoothDraftPresence,
+                  inPlaceRetarget: inPlaceRetargetActive,
                 });
                 const verseMotion = singleVersePresenceMotion(
                   presenceKind,
                   reduceMotion,
                 );
-                const spanLayoutId = draftsForVerse[0]
-                  ? draftSpanLayoutId(draftsForVerse[0].editorKey)
-                  : undefined;
+                const spanLayoutId =
+                  presenceKind === "draft-host" && draftsForVerse[0]
+                    ? draftSpanLayoutId(draftsForVerse[0].editorKey)
+                    : undefined;
 
                 return (
                   <motion.div
                     key={item.verseNumber}
                     data-presence-kind={presenceKind}
+                    data-list-presence-mode={listPresenceMode}
                     data-span-layout-id={spanLayoutId}
                     layout={
-                      smoothDraftPresence || verseMotion.layout
+                      inPlaceRetargetActive || verseMotion.layout
                         ? true
                         : undefined
                     }
@@ -537,7 +603,7 @@ export function PassageViewBody({
                     exit={verseMotion.exit}
                     transition={listItemTransition(
                       verseMotion.transition,
-                      smoothDraftPresence,
+                      inPlaceRetargetActive,
                       reduceMotion,
                     )}
                   >

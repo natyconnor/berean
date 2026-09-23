@@ -33,12 +33,44 @@ export function draftGroupPresenceKey(
   return `passage-group-${anchorVerse}`;
 }
 
+export function isMultiVerseSpan(span: OpenDraftSpan): boolean {
+  return span.startVerse !== span.endVerse;
+}
+
+/**
+ * Neighbor collapse + sync presence is only for an already-open passage group
+ * changing range in place. First 1→2 grouping, drag-select grouping, shrink to
+ * a single verse, and dismiss use main's popLayout enter/exit.
+ */
+export function isInPlaceGroupRetarget(
+  previous: OpenDraftSpan,
+  next: OpenDraftSpan,
+): boolean {
+  return isMultiVerseSpan(previous) && isMultiVerseSpan(next);
+}
+
+export function verseListPresenceMode(
+  inPlaceRetarget: boolean,
+): "sync" | "popLayout" {
+  return inPlaceRetarget ? "sync" : "popLayout";
+}
+
 export function groupOwnsRetargetingDraft(
   drafts: ReadonlyArray<{ editorKey: string }>,
   retargetingEditorKey: string | null,
 ): boolean {
   if (retargetingEditorKey === null) return false;
   return drafts.some((draft) => draft.editorKey === retargetingEditorKey);
+}
+
+export function groupUsesRetargetMotion(
+  drafts: ReadonlyArray<{ editorKey: string }>,
+  retargetingEditorKey: string | null,
+  inPlaceRetarget: boolean,
+): boolean {
+  return (
+    inPlaceRetarget && groupOwnsRetargetingDraft(drafts, retargetingEditorKey)
+  );
 }
 
 /** Verses immediately outside an open draft, the ones a nudge absorbs or releases. */
@@ -61,12 +93,12 @@ export function singleVersePresenceKind(input: {
   reenteringFromGroup: boolean;
   verseNumber: number;
   openDrafts: ReadonlyArray<OpenDraftSpan>;
-  smoothDraftPresence: boolean;
+  inPlaceRetarget: boolean;
 }): SingleVersePresenceKind {
-  if (input.hostsOpenDraft) return "draft-host";
+  if (input.hostsOpenDraft && input.inPlaceRetarget) return "draft-host";
   if (input.reenteringFromGroup) return "reenter";
   if (
-    input.smoothDraftPresence &&
+    input.inPlaceRetarget &&
     verseInOpenDraftNeighborhood(input.verseNumber, input.openDrafts)
   ) {
     return "retarget-neighbor";
@@ -182,10 +214,10 @@ export function draftComposerMotionProps(
 
 export function listItemTransition(
   presenceTransition: Transition,
-  smoothDraftPresence: boolean,
+  inPlaceRetarget: boolean,
   reduceMotion: boolean,
 ): Transition {
-  if (!smoothDraftPresence || typeof presenceTransition !== "object") {
+  if (!inPlaceRetarget || typeof presenceTransition !== "object") {
     return presenceTransition;
   }
   return {

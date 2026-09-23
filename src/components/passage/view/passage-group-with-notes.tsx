@@ -37,7 +37,7 @@ import {
   draftComposerLayoutId,
   draftComposerMotionProps,
   draftDockLayoutGroupId,
-  groupOwnsRetargetingDraft,
+  groupUsesRetargetMotion,
 } from "../draft-retarget-presence";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type {
@@ -74,6 +74,7 @@ interface PassageGroupWithNotesProps {
     snapshot: NewDraftSnapshot,
   ) => void;
   retargetingEditorKey?: string | null;
+  inPlaceRetargetActive?: boolean;
   focusDistance?: number | null;
   onOpenPassageNotes: (verseNumber: number) => void;
   onClosePassageNotes: (verseNumber: number) => void;
@@ -168,11 +169,13 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   hoveredSavedPassage = null,
   onRetargetNewDraft,
   retargetingEditorKey = null,
+  inPlaceRetargetActive = false,
 }: PassageGroupWithNotesProps) {
   const reduceMotion = useReducedMotion() === true;
-  const ownsRetarget = groupOwnsRetargetingDraft(
+  const ownsRetarget = groupUsesRetargetMotion(
     draftsForAnchor,
     retargetingEditorKey,
+    inPlaceRetargetActive,
   );
   const dockedEditorKey = draftsForAnchor[0]?.editorKey;
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);

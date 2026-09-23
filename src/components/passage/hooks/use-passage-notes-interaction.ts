@@ -35,6 +35,7 @@ export interface PassageNotesInteraction {
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, NewDraftAtAnchor[]>;
   retargetingEditorKey: string | null;
+  inPlaceRetargetActive: boolean;
   isPassageSelection: boolean;
 
   chapterScopedNotes: NoteWithRef[];

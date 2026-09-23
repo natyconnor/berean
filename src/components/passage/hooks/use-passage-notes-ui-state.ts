@@ -16,6 +16,7 @@ import {
   openPassageAnchorsIntersectingRange,
   type NoteWithRef,
 } from "@/components/notes/model/note-model";
+import { isInPlaceGroupRetarget } from "@/components/passage/draft-retarget-presence";
 
 type PassageViewMode = "compose" | "read";
 
@@ -90,6 +91,7 @@ export interface PassageNotesUiState {
   editingNoteIds: Set<Id<"notes">>;
   newDraftsByAnchor: Map<number, NewDraftAtAnchor[]>;
   retargetingEditorKey: string | null;
+  inPlaceRetargetActive: boolean;
   isPassageSelection: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
   isDragging: boolean;
@@ -346,6 +348,7 @@ export function usePassageNotesUiState({
   const [retargetingEditorKey, setRetargetingEditorKey] = useState<
     string | null
   >(null);
+  const [inPlaceRetargetActive, setInPlaceRetargetActive] = useState(false);
   const [editorHasChanges, setEditorHasChanges] = useState<Set<string>>(
     new Set(),
   );
@@ -380,6 +383,10 @@ export function usePassageNotesUiState({
   useLayoutEffect(() => {
     openEditorsRef.current = openEditors;
   }, [openEditors]);
+  const retargetingEditorKeyRef = useRef(retargetingEditorKey);
+  useLayoutEffect(() => {
+    retargetingEditorKeyRef.current = retargetingEditorKey;
+  }, [retargetingEditorKey]);
 
   // --- Derived values from the unified openEditors map ---
 
@@ -578,10 +585,15 @@ export function usePassageNotesUiState({
         setOpenEditors(new Map());
         setEditorHasChanges(new Set());
         setRetargetingEditorKey(null);
+        setInPlaceRetargetActive(false);
       } else {
-        setRetargetingEditorKey((current) =>
-          current !== null && dirtyKeys.has(current) ? current : null,
-        );
+        const keepRetarget =
+          retargetingEditorKeyRef.current !== null &&
+          dirtyKeys.has(retargetingEditorKeyRef.current);
+        if (!keepRetarget) {
+          setRetargetingEditorKey(null);
+          setInPlaceRetargetActive(false);
+        }
         setOpenEditors((prev) => {
           const next = new Map<string, EditorSlot>();
           for (const [key, slot] of prev) {
@@ -689,6 +701,18 @@ export function usePassageNotesUiState({
         return next;
       });
       setRetargetingEditorKey(key);
+      setInPlaceRetargetActive(
+        isInPlaceGroupRetarget(
+          {
+            startVerse: slot.verseRef.startVerse,
+            endVerse: slot.verseRef.endVerse,
+          },
+          {
+            startVerse: nextRef.startVerse,
+            endVerse: nextRef.endVerse,
+          },
+        ),
+      );
       setOpenEditors((prev) => {
         const current = prev.get(key);
         if (!current || current.kind !== "new") return prev;
@@ -713,7 +737,10 @@ export function usePassageNotesUiState({
     if (activeEditorKeyRef.current === key) {
       activeEditorKeyRef.current = null;
     }
-    setRetargetingEditorKey((current) => (current === key ? null : current));
+    if (retargetingEditorKeyRef.current === key) {
+      setRetargetingEditorKey(null);
+      setInPlaceRetargetActive(false);
+    }
     setOpenEditors((prev) => {
       if (!prev.has(key)) return prev;
       const next = new Map(prev);
@@ -753,6 +780,7 @@ export function usePassageNotesUiState({
       setOpenEditors(new Map());
       setEditorHasChanges(new Set());
       setRetargetingEditorKey(null);
+      setInPlaceRetargetActive(false);
       action();
       return true;
     },
@@ -895,6 +923,7 @@ export function usePassageNotesUiState({
     setOpenEditors(new Map());
     setEditorHasChanges(new Set());
     setRetargetingEditorKey(null);
+    setInPlaceRetargetActive(false);
     setViewSelectedVerses(new Set());
     setIsPassageSelection(false);
     clearSelection();
@@ -1114,6 +1143,7 @@ export function usePassageNotesUiState({
     setOpenEditors(new Map());
     setEditorHasChanges(new Set());
     setRetargetingEditorKey(null);
+    setInPlaceRetargetActive(false);
     setViewSelectedVerses(new Set());
     setIsPassageSelection(false);
     clearSelection();
@@ -1373,6 +1403,7 @@ export function usePassageNotesUiState({
       setOpenEditors(new Map());
       setEditorHasChanges(new Set());
       setRetargetingEditorKey(null);
+      setInPlaceRetargetActive(false);
       pendingEditorAction();
     } else {
       handleClickAway();
@@ -1544,6 +1575,7 @@ export function usePassageNotesUiState({
     editingNoteIds,
     newDraftsByAnchor,
     retargetingEditorKey,
+    inPlaceRetargetActive,
     isPassageSelection,
     containerRef,
     isDragging,

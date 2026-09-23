@@ -7,8 +7,11 @@ import {
   draftSpanLayoutId,
   groupListPresenceMotion,
   groupOwnsRetargetingDraft,
+  groupUsesRetargetMotion,
+  isInPlaceGroupRetarget,
   singleVersePresenceKind,
   singleVersePresenceMotion,
+  verseListPresenceMode,
 } from "./draft-retarget-presence";
 
 const EDITOR_KEY = "new:16:16";
@@ -60,6 +63,41 @@ describe("draft retarget presence", () => {
     expect(groupListPresenceMotion(true, true).exit).toEqual({ opacity: 1 });
   });
 
+  it("uses popLayout for first grouping, shrink-to-single, and close", () => {
+    expect(
+      isInPlaceGroupRetarget(
+        { startVerse: 16, endVerse: 16 },
+        { startVerse: 16, endVerse: 17 },
+      ),
+    ).toBe(false);
+    expect(
+      isInPlaceGroupRetarget(
+        { startVerse: 16, endVerse: 17 },
+        { startVerse: 16, endVerse: 16 },
+      ),
+    ).toBe(false);
+    expect(
+      isInPlaceGroupRetarget(
+        { startVerse: 16, endVerse: 17 },
+        { startVerse: 15, endVerse: 17 },
+      ),
+    ).toBe(true);
+    expect(verseListPresenceMode(false)).toBe("popLayout");
+    expect(verseListPresenceMode(true)).toBe("sync");
+    expect(
+      groupUsesRetargetMotion([{ editorKey: EDITOR_KEY }], EDITOR_KEY, false),
+    ).toBe(false);
+    expect(
+      groupUsesRetargetMotion([{ editorKey: EDITOR_KEY }], EDITOR_KEY, true),
+    ).toBe(true);
+    expect(
+      groupListPresenceMotion(
+        groupUsesRetargetMotion([{ editorKey: EDITOR_KEY }], EDITOR_KEY, false),
+        false,
+      ).initial,
+    ).toEqual({ opacity: 0 });
+  });
+
   it("orders presence as host, then reenter, then neighbor, then default", () => {
     const openDrafts = [{ startVerse: 16, endVerse: 16 }];
 
@@ -69,9 +107,19 @@ describe("draft retarget presence", () => {
         reenteringFromGroup: true,
         verseNumber: 16,
         openDrafts,
-        smoothDraftPresence: true,
+        inPlaceRetarget: true,
       }),
     ).toBe("draft-host");
+
+    expect(
+      singleVersePresenceKind({
+        hostsOpenDraft: true,
+        reenteringFromGroup: false,
+        verseNumber: 16,
+        openDrafts,
+        inPlaceRetarget: false,
+      }),
+    ).toBe("default");
 
     expect(
       singleVersePresenceKind({
@@ -79,7 +127,7 @@ describe("draft retarget presence", () => {
         reenteringFromGroup: true,
         verseNumber: 17,
         openDrafts,
-        smoothDraftPresence: true,
+        inPlaceRetarget: true,
       }),
     ).toBe("reenter");
 
@@ -89,7 +137,7 @@ describe("draft retarget presence", () => {
         reenteringFromGroup: false,
         verseNumber: 17,
         openDrafts,
-        smoothDraftPresence: true,
+        inPlaceRetarget: true,
       }),
     ).toBe("retarget-neighbor");
 
@@ -99,7 +147,7 @@ describe("draft retarget presence", () => {
         reenteringFromGroup: false,
         verseNumber: 20,
         openDrafts,
-        smoothDraftPresence: true,
+        inPlaceRetarget: true,
       }),
     ).toBe("default");
 
@@ -109,7 +157,7 @@ describe("draft retarget presence", () => {
         reenteringFromGroup: false,
         verseNumber: 17,
         openDrafts,
-        smoothDraftPresence: false,
+        inPlaceRetarget: false,
       }),
     ).toBe("default");
 

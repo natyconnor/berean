@@ -1044,6 +1044,7 @@ describe("usePassageNotesUiState retargetNewDraft", () => {
         tags: ["hope"],
       });
     });
+    expect(result.current.inPlaceRetargetActive).toBe(false);
     act(() => {
       result.current.retargetNewDraft("new:16:16", johnRef(15, 17), {
         body: "Draft stays",
@@ -1059,6 +1060,7 @@ describe("usePassageNotesUiState retargetNewDraft", () => {
     expect(slot.snapshot).toEqual({ body: "Draft stays", tags: ["hope"] });
     expect(result.current.hasDirtyEditors).toBe(true);
     expect(result.current.retargetingEditorKey).toBe("new:16:16");
+    expect(result.current.inPlaceRetargetActive).toBe(true);
     expect(result.current.newDraftsByAnchor.get(15)?.[0]).toMatchObject({
       editorKey: "new:16:16",
       snapshot: { body: "Draft stays", tags: ["hope"] },
@@ -1086,6 +1088,7 @@ describe("usePassageNotesUiState retargetNewDraft", () => {
     expect(slot?.kind).toBe("new");
     if (slot?.kind === "new") expect(slot.snapshot).toBeUndefined();
     expect(result.current.retargetingEditorKey).toBeNull();
+    expect(result.current.inPlaceRetargetActive).toBe(false);
 
     act(() => {
       result.current.startEditingNote(
@@ -1103,6 +1106,24 @@ describe("usePassageNotesUiState retargetNewDraft", () => {
       });
     });
     expect(result.current.openEditors.get("edit:note-16")).toEqual(editSlot);
+  });
+
+  it("does not arm in-place retarget motion on first 1→2 grouping", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "first group",
+        tags: [],
+      });
+    });
+    expect(result.current.retargetingEditorKey).toBe("new:16:16");
+    expect(result.current.inPlaceRetargetActive).toBe(false);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 16, startVerse: 16, endVerse: 17 },
+    ]);
   });
 
   it("treats the current span as occupancy and allocates a new key for the freed verse", () => {
@@ -1176,6 +1197,7 @@ describe("usePassageNotesUiState retargetNewDraft", () => {
     );
     expect(result.current.openEditors.size).toBe(0);
     expect(result.current.retargetingEditorKey).toBeNull();
+    expect(result.current.inPlaceRetargetActive).toBe(false);
 
     act(() => {
       result.current.handleAddNote(16);
