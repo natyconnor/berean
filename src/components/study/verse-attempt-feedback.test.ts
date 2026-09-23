@@ -194,7 +194,33 @@ describe("attemptFeedbackLead", () => {
 });
 
 describe("reviewFeedbackMessage", () => {
-  it("invites a retry instead of naming a due date", () => {
+  it("invites a retry and names the current interval", () => {
+    expect(
+      reviewFeedbackMessage({
+        lead: "Almost there",
+        outcome: "retry",
+        nextSchedule: reviewingTomorrow,
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe("Almost there — try again to wait longer than tomorrow.");
+  });
+
+  it("names a multi-day gap on retry", () => {
+    expect(
+      reviewFeedbackMessage({
+        lead: "Oh so close! Just one word off",
+        outcome: "retry",
+        nextSchedule: { ...reviewingTomorrow, intervalDays: 5 },
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe(
+      "Oh so close! Just one word off — try again to wait longer than 5 days.",
+    );
+  });
+
+  it("still invites a retry when the current interval is unknown", () => {
     expect(
       reviewFeedbackMessage({
         lead: "Almost there",
@@ -202,7 +228,7 @@ describe("reviewFeedbackMessage", () => {
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toBe("Almost there — try again to earn a longer wait.");
+    ).toBe("Almost there — try again to wait longer.");
   });
 
   it("names Challenge when a daily review lapses into learning", () => {

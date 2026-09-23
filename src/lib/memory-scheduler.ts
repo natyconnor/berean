@@ -757,8 +757,8 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
  * Keep the current review interval and spend the verse.
  *
  * Used for a 60–79% hold and when the learner declines an 80%+ retry offer
- * ("keep this wait"). Does not insert a new recitation grade — callers that
- * already logged the close attempt should only patch the schedule.
+ * ("It's okay — keep going"). Does not insert a new recitation grade — callers
+ * that already logged the close attempt should only patch the schedule.
  *
  * A second early hold after {@link MemorySchedule.earlyReviewApplied} leaves
  * the schedule unchanged, matching a second early exact.

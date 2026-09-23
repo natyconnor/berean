@@ -2,7 +2,10 @@ import {
   wordErrorCount,
   type AttemptErrorCounts,
 } from "@/components/study/study-attempt-quality";
-import { formatNextReviewPhrase } from "@/lib/memory-due-label";
+import {
+  formatNextReviewPhrase,
+  formatReviewIntervalPhrase,
+} from "@/lib/memory-due-label";
 import {
   type MemorySchedule,
   type ReviewGradeOutcome,
@@ -126,6 +129,9 @@ export function attemptFeedbackLead(input: AttemptFeedbackInput): string {
   return leadForAccuracy(LAPSE_ACCURACY_LEADS, input.accuracy);
 }
 
+/** Decline the extra retry and move on at the current interval. */
+export const REVIEW_RETRY_KEEP_GOING_LABEL = "It's okay — keep going";
+
 function withNextReview(
   lead: string,
   schedule: MemorySchedule | null | undefined,
@@ -138,7 +144,8 @@ function withNextReview(
 /**
  * Review-queue banner: lead plus the schedule consequence.
  *
- * Retry stays due, so we invite another attempt instead of naming a due date.
+ * Retry stays due, so we invite another attempt and name the current gap
+ * instead of a due date the verse has not spent yet.
  */
 export function reviewFeedbackMessage(input: {
   lead: string;
@@ -148,7 +155,10 @@ export function reviewFeedbackMessage(input: {
   lapsedToLearning: boolean;
 }): string {
   if (input.outcome === "retry") {
-    return `${input.lead} — try again to earn a longer wait.`;
+    const wait = formatReviewIntervalPhrase(input.nextSchedule?.intervalDays);
+    return wait
+      ? `${input.lead} — try again to wait longer than ${wait}.`
+      : `${input.lead} — try again to wait longer.`;
   }
   if (input.outcome === "lapse" && input.lapsedToLearning) {
     return `${input.lead} — back to Challenge.`;

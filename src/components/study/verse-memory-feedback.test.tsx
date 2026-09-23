@@ -79,7 +79,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Almost there — try again to earn a longer wait.",
+      "Almost there — try again to wait longer.",
     );
   });
 
@@ -97,10 +97,21 @@ describe("VerseMemoryFeedback", () => {
         }}
         attemptKey="review-one-word"
         showScheduleOutcome
+        nextSchedule={{
+          status: "reviewing",
+          learnStage: 3,
+          stageReps: 0,
+          ease: 2.3,
+          intervalDays: 5,
+          dueAt: 1_700_000_000_000,
+          consecutiveCorrect: 3,
+          lapses: 0,
+          earlyReviewApplied: false,
+        }}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Oh so close! Just one word off — try again to earn a longer wait.",
+      "Oh so close! Just one word off — try again to wait longer than 5 days.",
     );
   });
 

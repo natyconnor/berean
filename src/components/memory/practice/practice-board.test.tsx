@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
@@ -758,7 +759,7 @@ describe("PracticeBoard review retry", () => {
     mutationMock("verseMemory.acceptRetryHold").mockResolvedValue(heldSchedule);
   });
 
-  it("offers Keep this wait after an 80%+ review and spends the verse without another grade", async () => {
+  it("offers keep going after an 80%+ review and spends the verse without another grade", async () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PracticeBoard
@@ -779,10 +780,12 @@ describe("PracticeBoard review retry", () => {
     expect(
       await screen.findByRole("button", { name: /Try again/ }),
     ).toBeVisible();
-    const keepWait = screen.getByRole("button", { name: /Keep this wait/ });
-    expect(keepWait).toBeVisible();
+    const keepGoing = screen.getByRole("button", {
+      name: REVIEW_RETRY_KEEP_GOING_LABEL,
+    });
+    expect(keepGoing).toBeVisible();
 
-    await userEvent.click(keepWait);
+    await userEvent.click(keepGoing);
 
     await waitFor(() => {
       expect(mutationMock("verseMemory.acceptRetryHold")).toHaveBeenCalledTimes(
@@ -793,7 +796,7 @@ describe("PracticeBoard review retry", () => {
     expect(await screen.findByText("Average accuracy")).toBeVisible();
     expect(screen.getByText(/recalled/)).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: /Keep this wait/ }),
+      screen.queryByRole("button", { name: REVIEW_RETRY_KEEP_GOING_LABEL }),
     ).not.toBeInTheDocument();
   });
 

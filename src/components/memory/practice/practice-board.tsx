@@ -95,6 +95,7 @@ import {
 import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
+import { REVIEW_RETRY_KEEP_GOING_LABEL } from "../../study/verse-attempt-feedback";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import {
   currentStageStep,
@@ -873,7 +874,7 @@ interface PracticeCardProps {
   /** Fired when the learner dismisses a checked attempt's result. */
   onContinueAfterResult?: () => void;
   /**
-   * Review retry offer: keep the current wait and move on instead of trying
+   * Review retry offer: move on at the current interval instead of trying
    * again for a stretch. The parent persists the hold and advances.
    */
   onKeepWait?: () => Promise<void>;
@@ -997,8 +998,8 @@ function PracticeCard({
   // Once graduated, another strong recall is just another practice pass — offer
   // "Try again" instead of implying the learning journey still advances. Review
   // spends the verse after a hold, stretch, or lapse (`advancesOnContinue`);
-  // an 80%+ retry stays due so this path still shows Try again, plus Keep this
-  // wait so they can decline the extra attempt.
+  // an 80%+ retry stays due so this path still shows Try again, plus Keep
+  // going so they can decline the extra attempt.
   const offerPracticeAgain =
     !advancesOnContinue &&
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
@@ -1313,7 +1314,7 @@ function PracticeCard({
                     onClick={keepThisWait}
                     loading={submitPending}
                   >
-                    Keep this wait
+                    {REVIEW_RETRY_KEEP_GOING_LABEL}
                   </Button>
                   <Button
                     ref={reviewActionRef}
