@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.0](https://github.com/natyconnor/berean/compare/v1.16.2...v1.17.0) (2026-09-24)
+
+
+### Features
+
+* Add preset memory packs for chapters and verse collections ([#226](https://github.com/natyconnor/berean/issues/226)) ([7da9949](https://github.com/natyconnor/berean/commit/7da994922f0d6ad336d694e00f4004f3869c0592))
+
 ## [1.16.2](https://github.com/natyconnor/berean/compare/v1.16.1...v1.16.2) (2026-09-24)
 
 
