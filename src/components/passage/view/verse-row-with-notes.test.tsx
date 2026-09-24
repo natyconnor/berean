@@ -365,4 +365,47 @@ describe("VerseRowWithNotes – draft retarget", () => {
       "yes",
     );
   });
+
+  it("hides the saved single bubble when that note is retargeted to a range", () => {
+    const noteId = "note-12" as Id<"notes">;
+    const originalRef = {
+      book: "John",
+      chapter: 1,
+      startVerse: 12,
+      endVerse: 12,
+    };
+    const nextRef = { ...originalRef, endVerse: 13 };
+    renderVerseRow({
+      ...defaultProps(),
+      verseNumber: 12,
+      text: "But to all who did receive him",
+      editingNoteIds: new Set([noteId]),
+      onRetargetEditNote: vi.fn(),
+      savedEditOverrides: new Map([
+        [noteId, { verseRef: nextRef, rangeDirty: true }],
+      ]),
+      singleNotes: [
+        {
+          noteId,
+          content: "Children of God",
+          tags: [],
+          verseRef: originalRef,
+          createdAt: 1,
+        },
+      ],
+      editComposersForThisAnchor: [
+        {
+          noteId,
+          editorKey: "edit:note-12",
+          verseRef: nextRef,
+          originalVerseRef: originalRef,
+          snapshot: { body: "Children of God", tags: [] },
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("note-editor")).toBeInTheDocument();
+    expect(screen.queryByText("New note")).not.toBeInTheDocument();
+    expect(screen.queryByText("Collapse")).not.toBeInTheDocument();
+  });
 });

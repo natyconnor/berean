@@ -294,9 +294,19 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
 
   const isVerseOpen = openVerseKeys.has(verseNumber);
   const isPassageOpen = openPassageKeys.has(verseNumber);
+  const visibleSingleNotes = useMemo(() => {
+    if (editingNoteIds.size === 0) return singleNotes;
+    return singleNotes.filter((note) => {
+      if (!editingNoteIds.has(note.noteId)) return true;
+      const override = savedEditOverrides?.get(note.noteId)?.verseRef;
+      if (!override) return true;
+      return override.startVerse === override.endVerse;
+    });
+  }, [editingNoteIds, savedEditOverrides, singleNotes]);
+
   const dockedEditComposers = editComposersForThisAnchor.filter(
     (composer) =>
-      !singleNotes.some((note) => note.noteId === composer.noteId) &&
+      !visibleSingleNotes.some((note) => note.noteId === composer.noteId) &&
       !passageNotes.some((note) => note.noteId === composer.noteId),
   );
   const isCreatingHere =
@@ -304,7 +314,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
 
   const isEditingSingleHere =
     editingNoteIds.size > 0 &&
-    singleNotes.some((note) => editingNoteIds.has(note.noteId));
+    visibleSingleNotes.some((note) => editingNoteIds.has(note.noteId));
   const isEditingPassageHere =
     editingNoteIds.size > 0 &&
     passageNotes.some((note) => editingNoteIds.has(note.noteId));
@@ -316,7 +326,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
     isEditingSingleHere ||
     isEditingPassageHere;
 
-  const hasBothNoteTypes = singleNotes.length > 0 && passageNotes.length > 0;
+  const hasBothNoteTypes =
+    visibleSingleNotes.length > 0 && passageNotes.length > 0;
   const useSideBySide = hasBothNoteTypes && !isCreatingHere;
   const showVerseAsPill =
     useSideBySide &&
@@ -473,7 +484,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               isPassageSelection,
             }}
             noteIndicator={{
-              hasOwnNote: singleNotes.length > 0,
+              hasOwnNote: visibleSingleNotes.length > 0,
               isPassageAnchor,
               isInPassageRange,
             }}
@@ -514,7 +525,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           )}
           {...(isAnyOpen ? { "data-notes-open": "" } : {})}
         >
-          {singleNotes.length > 0 || isExitingSingleNote ? (
+          {visibleSingleNotes.length > 0 || isExitingSingleNote ? (
             <motion.div
               layout="position"
               transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
@@ -524,7 +535,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
               )}
             >
               <VerseNotes
-                notes={singleNotes}
+                notes={visibleSingleNotes}
                 isOpen={isVerseOpen}
                 viewMode={viewMode}
                 isPill={showVerseAsPill}
@@ -541,7 +552,9 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                 onOpen={() => onOpenVerseNotes(verseNumber)}
                 onClose={() => onCloseVerseNotes(verseNumber)}
                 onEdit={(noteId) => {
-                  const note = singleNotes.find((n) => n.noteId === noteId);
+                  const note = visibleSingleNotes.find(
+                    (n) => n.noteId === noteId,
+                  );
                   if (note)
                     onEditNote(noteId, note.verseRef, verseNumber, false);
                 }}

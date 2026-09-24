@@ -6,7 +6,10 @@ import {
   type RefObject,
 } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  passageHoverSpanForNotes,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 import type { HighlightRange } from "@/lib/highlight-utils";
 import type { EsvVerseHeading } from "../../../shared/esv-api";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -152,6 +155,7 @@ export function PassageViewBody({
     isInSelection,
     isPassageSelection,
     verseToPassageAnchor,
+    passageNotesByAnchor,
     hoveredPassageBubble,
     hoveredSingleBubble,
     openVerseKeys,
@@ -256,6 +260,22 @@ export function PassageViewBody({
       verseNumber >= hoveredSavedPassage.startVerse &&
       verseNumber <= hoveredSavedPassage.endVerse,
     [hoveredSavedPassage],
+  );
+
+  const hoveredPassageNoteRange = useMemo(() => {
+    if (hoveredPassageBubble === null) return null;
+    return passageHoverSpanForNotes(
+      passageNotesByAnchor.get(hoveredPassageBubble) ?? [],
+      savedEditOverrides,
+    );
+  }, [hoveredPassageBubble, passageNotesByAnchor, savedEditOverrides]);
+
+  const isInHoveredPassageNote = useCallback(
+    (verseNumber: number) =>
+      hoveredPassageNoteRange !== null &&
+      verseNumber >= hoveredPassageNoteRange.startVerse &&
+      verseNumber <= hoveredPassageNoteRange.endVerse,
+    [hoveredPassageNoteRange],
   );
 
   const multiVersePassageSelection =
@@ -581,9 +601,9 @@ export function PassageViewBody({
                 const passageAnchor = verseToPassageAnchor.get(
                   item.verseNumber,
                 );
-                const isPassageRangeActive =
-                  passageAnchor !== undefined &&
-                  hoveredPassageBubble === passageAnchor;
+                const isPassageRangeActive = isInHoveredPassageNote(
+                  item.verseNumber,
+                );
                 const isNoteBubbleHovered =
                   hoveredSingleBubble === item.verseNumber;
                 const isReentering = reenteringFromGroup.has(item.verseNumber);

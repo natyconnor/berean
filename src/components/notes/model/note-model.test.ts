@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
+  applyNoteLocationOverrides,
   collectPassageNotesStartingInRange,
   openPassageAnchorsIntersectingRange,
+  passageHoverSpanForNotes,
   verseRangesOverlap,
   type NoteWithRef,
 } from "./note-model";
@@ -73,5 +75,85 @@ describe("collectPassageNotesStartingInRange", () => {
       at4,
       at7,
     ]);
+  });
+});
+
+describe("applyNoteLocationOverrides", () => {
+  it("moves a saved single into a passage span and rebuilds hover anchors", () => {
+    const note = passageNote(12, 12, "note-12");
+    const singles = new Map([[12, [note]]]);
+    const passages = new Map<number, NoteWithRef[]>();
+    const nextRef = {
+      book: "John",
+      chapter: 1,
+      startVerse: 12,
+      endVerse: 13,
+    } as const;
+
+    const resolved = applyNoteLocationOverrides(
+      singles,
+      passages,
+      new Map(),
+      new Map([[note.noteId, nextRef]]),
+    );
+
+    expect(resolved.singleVerseNotes.get(12)).toBeUndefined();
+    expect(resolved.passageNotesByAnchor.get(12)).toEqual([
+      { ...note, verseRef: nextRef },
+    ]);
+    expect(resolved.verseToPassageAnchor.get(12)).toBe(12);
+    expect(resolved.verseToPassageAnchor.get(13)).toBe(12);
+  });
+
+  it("leaves live maps untouched when there are no overrides", () => {
+    const note = passageNote(12, 13);
+    const singles = new Map<number, NoteWithRef[]>();
+    const passages = new Map([[12, [note]]]);
+    const anchors = new Map([
+      [12, 12],
+      [13, 12],
+    ]);
+
+    const resolved = applyNoteLocationOverrides(
+      singles,
+      passages,
+      anchors,
+      new Map(),
+    );
+
+    expect(resolved.singleVerseNotes).toBe(singles);
+    expect(resolved.passageNotesByAnchor).toBe(passages);
+    expect(resolved.verseToPassageAnchor).toBe(anchors);
+  });
+});
+
+describe("passageHoverSpanForNotes", () => {
+  it("uses the live span for a retargeted passage note", () => {
+    expect(passageHoverSpanForNotes([passageNote(12, 13)])).toEqual({
+      startVerse: 12,
+      endVerse: 13,
+    });
+  });
+
+  it("uses an optimistic override span when the row is still the old single", () => {
+    const note = passageNote(12, 12, "note-12");
+    expect(
+      passageHoverSpanForNotes(
+        [note],
+        new Map([
+          [
+            note.noteId,
+            {
+              verseRef: {
+                book: "John",
+                chapter: 1,
+                startVerse: 12,
+                endVerse: 13,
+              },
+            },
+          ],
+        ]),
+      ),
+    ).toEqual({ startVerse: 12, endVerse: 13 });
   });
 });

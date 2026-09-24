@@ -206,6 +206,131 @@ export function buildVerseToPassageAnchor(
   return map;
 }
 
+function cloneNotesByVerse(
+  source: Map<number, NoteWithRef[]>,
+): Map<number, NoteWithRef[]> {
+  const clone = new Map<number, NoteWithRef[]>();
+  for (const [verse, notes] of source) {
+    clone.set(verse, [...notes]);
+  }
+  return clone;
+}
+
+function takeNoteFromVerseMap(
+  map: Map<number, NoteWithRef[]>,
+  noteId: Id<"notes">,
+): NoteWithRef | null {
+  for (const [verse, notes] of map) {
+    const index = notes.findIndex((note) => note.noteId === noteId);
+    if (index === -1) continue;
+    const [note] = notes.splice(index, 1);
+    if (notes.length === 0) map.delete(verse);
+    return note ?? null;
+  }
+  return null;
+}
+
+function addNoteAtVerse(
+  map: Map<number, NoteWithRef[]>,
+  verse: number,
+  note: NoteWithRef,
+) {
+  const existing = map.get(verse);
+  if (!existing) {
+    map.set(verse, [note]);
+    return;
+  }
+  const index = existing.findIndex((entry) => entry.noteId === note.noteId);
+  if (index === -1) {
+    existing.push(note);
+    return;
+  }
+  existing[index] = note;
+}
+
+function verseToPassageAnchorFromPassages(
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const notes of passageNotesByAnchor.values()) {
+    for (const note of notes) {
+      const ref = note.verseRef;
+      if (ref.startVerse === ref.endVerse) continue;
+      for (let verse = ref.startVerse; verse <= ref.endVerse; verse += 1) {
+        map.set(verse, ref.startVerse);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Relocate notes whose live/optimistic verseRef no longer matches the
+ * server-classified single vs passage maps. Used when a saved single is
+ * grown into a span (edit overlay or a just-saved `notes.update`).
+ */
+export function applyNoteLocationOverrides(
+  singleVerseNotes: Map<number, NoteWithRef[]>,
+  passageNotesByAnchor: Map<number, NoteWithRef[]>,
+  verseToPassageAnchor: Map<number, number>,
+  overrides: ReadonlyMap<Id<"notes">, VerseRef>,
+): {
+  singleVerseNotes: Map<number, NoteWithRef[]>;
+  passageNotesByAnchor: Map<number, NoteWithRef[]>;
+  verseToPassageAnchor: Map<number, number>;
+} {
+  if (overrides.size === 0) {
+    return {
+      singleVerseNotes,
+      passageNotesByAnchor,
+      verseToPassageAnchor,
+    };
+  }
+
+  const nextSingles = cloneNotesByVerse(singleVerseNotes);
+  const nextPassages = cloneNotesByVerse(passageNotesByAnchor);
+
+  for (const [noteId, nextRef] of overrides) {
+    const existing =
+      takeNoteFromVerseMap(nextSingles, noteId) ??
+      takeNoteFromVerseMap(nextPassages, noteId);
+    if (!existing) continue;
+
+    const relocated: NoteWithRef = {
+      ...existing,
+      verseRef: nextRef,
+    };
+    if (nextRef.startVerse === nextRef.endVerse) {
+      addNoteAtVerse(nextSingles, nextRef.startVerse, relocated);
+    } else {
+      addNoteAtVerse(nextPassages, nextRef.startVerse, relocated);
+    }
+  }
+
+  return {
+    singleVerseNotes: nextSingles,
+    passageNotesByAnchor: nextPassages,
+    verseToPassageAnchor: verseToPassageAnchorFromPassages(nextPassages),
+  };
+}
+
+/** Inclusive highlight span for the notes docked on a passage bubble. */
+export function passageHoverSpanForNotes(
+  notes: NoteWithRef[],
+  overrides?: ReadonlyMap<Id<"notes">, { verseRef: VerseRef }>,
+): { startVerse: number; endVerse: number } | null {
+  if (notes.length === 0) return null;
+  let startVerse = Infinity;
+  let endVerse = -Infinity;
+  for (const note of notes) {
+    const ref = overrides?.get(note.noteId)?.verseRef ?? note.verseRef;
+    startVerse = Math.min(startVerse, ref.startVerse);
+    endVerse = Math.max(endVerse, ref.endVerse);
+  }
+  if (!Number.isFinite(startVerse) || !Number.isFinite(endVerse)) return null;
+  return { startVerse, endVerse };
+}
+
 export function chapterScopeVerseRef(book: string, chapter: number): VerseRef {
   return {
     book,

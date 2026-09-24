@@ -141,6 +141,40 @@ describe("useChapterNotesData", () => {
     expect(result.current.chapterScopedNotes).toEqual([]);
   });
 
+  it("maps a retargeted single-to-span note as a full passage hover range", () => {
+    useQueryMock.mockReturnValue([
+      {
+        verseRef: {
+          book: "John",
+          chapter: 1,
+          startVerse: 12,
+          endVerse: 13,
+        },
+        notes: [
+          {
+            _id: "note-was-single",
+            content: "Children of God",
+            tags: [],
+            createdAt: 10,
+            updatedAt: 20,
+          },
+        ],
+      },
+    ]);
+
+    const { result } = renderHook(() => useChapterNotesData("John", 1));
+
+    expect(result.current.singleVerseNotes.get(12)).toBeUndefined();
+    expect(result.current.passageNotesByAnchor.get(12)?.[0]?.verseRef).toEqual({
+      book: "John",
+      chapter: 1,
+      startVerse: 12,
+      endVerse: 13,
+    });
+    expect(result.current.verseToPassageAnchor.get(12)).toBe(12);
+    expect(result.current.verseToPassageAnchor.get(13)).toBe(12);
+  });
+
   it("separates chapter-scoped notes from verse 1 notes", () => {
     useQueryMock.mockReturnValue([
       {

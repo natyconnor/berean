@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
+  applyNoteLocationOverrides,
   collectPassageNotesStartingInRange,
   type NoteWithRef,
 } from "@/components/notes/model/note-model";
@@ -1257,6 +1258,26 @@ describe("usePassageNotesUiState retargetEditNote", () => {
     expect(result.current.editComposersByAnchor.get(16)?.[0]?.noteId).toBe(
       savedNoteId,
     );
+
+    const liveSingle: NoteWithRef = {
+      noteId: savedNoteId,
+      content: "Saved body",
+      tags: ["hope"],
+      verseRef: johnRef(16, 16),
+      createdAt: 1,
+    };
+    const resolved = applyNoteLocationOverrides(
+      new Map([[16, [liveSingle]]]),
+      new Map(),
+      new Map(),
+      new Map([[savedNoteId, slot.verseRef]]),
+    );
+    expect(resolved.singleVerseNotes.get(16)).toBeUndefined();
+    expect(resolved.passageNotesByAnchor.get(16)?.[0]?.verseRef).toEqual(
+      johnRef(16, 17),
+    );
+    expect(resolved.verseToPassageAnchor.get(16)).toBe(16);
+    expect(resolved.verseToPassageAnchor.get(17)).toBe(16);
   });
 
   it("passes the retargeted verseRef on save and skips it when unchanged", async () => {

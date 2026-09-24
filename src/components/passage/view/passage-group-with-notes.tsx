@@ -212,13 +212,23 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
     [anchorVerse, onClosePassageNotes, onOpenVerseNotes],
   );
 
+  const visibleSingleNotesByVerse = useMemo(() => {
+    if (editingNoteIds.size === 0) return singleNotesByVerse;
+    const next = new Map<number, NoteWithRef[]>();
+    for (const [verse, notes] of singleNotesByVerse) {
+      const visible = notes.filter((note) => !editingNoteIds.has(note.noteId));
+      if (visible.length > 0) next.set(verse, visible);
+    }
+    return next;
+  }, [editingNoteIds, singleNotesByVerse]);
+
   const versesWithSingleNotes = useMemo(
     () =>
       verses.filter((v) => {
-        const notes = singleNotesByVerse.get(v.verseNumber);
+        const notes = visibleSingleNotesByVerse.get(v.verseNumber);
         return notes !== undefined && notes.length > 0;
       }),
-    [verses, singleNotesByVerse],
+    [verses, visibleSingleNotesByVerse],
   );
 
   const isReadMode = viewMode === "read";
@@ -327,7 +337,9 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
             {versesWithSingleNotes.length > 0 && (
               <div className="shrink-0 flex flex-col items-start gap-1.5 pt-0.5">
                 {versesWithSingleNotes.map((verse) => {
-                  const notes = singleNotesByVerse.get(verse.verseNumber)!;
+                  const notes = visibleSingleNotesByVerse.get(
+                    verse.verseNumber,
+                  )!;
                   return (
                     <div
                       key={verse.verseNumber}

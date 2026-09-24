@@ -1,8 +1,11 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  applyNoteLocationOverrides,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 import { useChapterNotesData } from "./use-chapter-notes-data";
 import {
   useChapterNotesPanel,
@@ -148,6 +151,31 @@ export function usePassageNotesInteraction(
     onDeleteNote: deleteNote,
   });
 
+  const locationOverrides = useMemo(() => {
+    const overrides = new Map<Id<"notes">, VerseRef>();
+    for (const slot of uiState.openEditors.values()) {
+      if (slot.kind !== "edit") continue;
+      overrides.set(slot.noteId, slot.verseRef);
+    }
+    return overrides;
+  }, [uiState.openEditors]);
+
+  const resolvedNoteLocations = useMemo(
+    () =>
+      applyNoteLocationOverrides(
+        singleVerseNotes,
+        passageNotesByAnchor,
+        verseToPassageAnchor,
+        locationOverrides,
+      ),
+    [
+      locationOverrides,
+      passageNotesByAnchor,
+      singleVerseNotes,
+      verseToPassageAnchor,
+    ],
+  );
+
   const chapterNotesPanel = useChapterNotesPanel({
     book,
     chapter,
@@ -280,8 +308,8 @@ export function usePassageNotesInteraction(
     confirmDiscard,
     chapterScopedNotes,
     chapterNotesPanel,
-    singleVerseNotes,
-    passageNotesByAnchor,
-    verseToPassageAnchor,
+    singleVerseNotes: resolvedNoteLocations.singleVerseNotes,
+    passageNotesByAnchor: resolvedNoteLocations.passageNotesByAnchor,
+    verseToPassageAnchor: resolvedNoteLocations.verseToPassageAnchor,
   };
 }

@@ -264,4 +264,102 @@ describe("PassageGroupWithNotes retarget scope", () => {
       "yes",
     );
   });
+
+  it("hides the saved single's side pill when that note is being retargeted to a passage", () => {
+    render(
+      <TooltipProvider>
+        <PassageGroupWithNotes
+          verses={[
+            { verseNumber: 12, text: "But to all who did receive him" },
+            { verseNumber: 13, text: "who were born" },
+          ]}
+          passageNotes={[]}
+          singleNotesByVerse={
+            new Map([
+              [
+                12,
+                [
+                  {
+                    noteId: "note-12" as never,
+                    content: "Children of God",
+                    tags: [],
+                    verseRef: {
+                      book: "John",
+                      chapter: 1,
+                      startVerse: 12,
+                      endVerse: 12,
+                    },
+                    createdAt: 1,
+                  },
+                ],
+              ],
+              [
+                13,
+                [
+                  {
+                    noteId: "note-13" as never,
+                    content: "Other note stays",
+                    tags: [],
+                    verseRef: {
+                      book: "John",
+                      chapter: 1,
+                      startVerse: 13,
+                      endVerse: 13,
+                    },
+                    createdAt: 2,
+                  },
+                ],
+              ],
+            ])
+          }
+          viewMode="compose"
+          currentChapter={{ book: "John", chapter: 1 }}
+          highlightsByVerse={new Map()}
+          isPassageOpen={false}
+          editingNoteIds={new Set(["note-12" as never])}
+          draftsForAnchor={[]}
+          editComposersForAnchor={[
+            {
+              noteId: "note-12" as never,
+              editorKey: "edit:note-12",
+              verseRef: {
+                book: "John",
+                chapter: 1,
+                startVerse: 12,
+                endVerse: 13,
+              },
+              originalVerseRef: {
+                book: "John",
+                chapter: 1,
+                startVerse: 12,
+                endVerse: 12,
+              },
+              snapshot: { body: "Children of God", tags: [] },
+            },
+          ]}
+          onRetargetEditNote={vi.fn()}
+          onOpenPassageNotes={vi.fn()}
+          onClosePassageNotes={vi.fn()}
+          onOpenVerseNotes={vi.fn()}
+          onEditNote={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onSaveEdit={vi.fn().mockResolvedValue(undefined)}
+          onSaveNew={vi.fn().mockResolvedValue(undefined)}
+          onCancelEditor={vi.fn()}
+          onEditorDirtyChange={vi.fn()}
+          onEditorFocus={vi.fn()}
+          onStartCreatingPassageNote={vi.fn()}
+          onNoteDeleteCleanup={vi.fn()}
+          onPassageBubbleMouseEnter={vi.fn()}
+          onPassageBubbleMouseLeave={vi.fn()}
+          onCollapse={vi.fn()}
+          groupPassageHeart={null}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByTestId("note-editor")).toBeInTheDocument();
+    expect(screen.queryByText("v12")).not.toBeInTheDocument();
+    expect(screen.getByText("v13")).toBeInTheDocument();
+  });
 });

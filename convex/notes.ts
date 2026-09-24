@@ -405,13 +405,12 @@ async function replaceNoteLocationLinks(
   const verseRefId = await findOrCreateVerseRefId(ctx, userId, verseRef);
   const existing = await ctx.db
     .query("noteVerseLinks")
-    .withIndex("by_userId_noteId", (q) =>
-      q.eq("userId", userId).eq("noteId", noteId),
-    )
+    .withIndex("by_noteId", (q) => q.eq("noteId", noteId))
     .collect();
 
   let hasTarget = false;
   for (const link of existing) {
+    if (link.userId !== undefined && link.userId !== userId) continue;
     if (link.verseRefId === verseRefId) {
       hasTarget = true;
       continue;
