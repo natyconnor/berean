@@ -1,5 +1,4 @@
 import { useState, type JSX } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { Loader2 } from "lucide-react";
 
@@ -8,6 +7,7 @@ import { MemorySessionRunner } from "@/components/memory/practice/memory-session
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { MemoryAllSessionPage } from "@/components/routes/memory-practice-page";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useMemoryBack } from "@/hooks/use-memory-back";
 import { hasLearnVerseScope } from "@/lib/memory-learn-search";
 import { isMemorySessionCandidate } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
@@ -27,7 +27,7 @@ export function MemoryLearnPage() {
 }
 
 function GlobalMemoryLearnPage(): JSX.Element {
-  const navigate = useNavigate();
+  const onExitHome = useMemoryBack();
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const savedVerses = useQuery(api.savedVerses.listAll, {});
@@ -50,7 +50,7 @@ function GlobalMemoryLearnPage(): JSX.Element {
     <GlobalLearnSession
       passages={duePassages}
       verses={verses}
-      onExitHome={() => void navigate({ to: "/memory" })}
+      onExitHome={onExitHome}
     />
   );
 }
@@ -91,12 +91,13 @@ function GlobalLearnSession({
             Start a verse from your library, or come back when an in-progress
             verse or passage is ready.
           </p>
-          <Link
-            to="/memory"
+          <button
+            type="button"
+            onClick={onExitHome}
             className="inline-flex text-sm font-medium text-primary hover:underline"
           >
-            Back to Memory
-          </Link>
+            Back
+          </button>
         </div>
       </div>
     );
@@ -118,12 +119,13 @@ function GlobalLearnSession({
               Start a verse from your library, or come back when an in-progress
               verse is ready.
             </p>
-            <Link
-              to="/memory"
+            <button
+              type="button"
+              onClick={onExitHome}
               className="inline-flex text-sm font-medium text-primary hover:underline"
             >
-              Back to Memory
-            </Link>
+              Back
+            </button>
           </div>
         </div>
       }
@@ -183,7 +185,7 @@ function BuildingPassageLearnCard({
       packName={packName}
       onExit={onExitHome}
       onFinish={onDone}
-      exitTooltip="Back to Memory"
+      exitTooltip="Go back"
     />
   );
 }

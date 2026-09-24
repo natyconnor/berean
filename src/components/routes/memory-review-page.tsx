@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { Clock3, Loader2, Sparkles } from "lucide-react";
 
@@ -9,6 +8,7 @@ import type { PracticeVerse } from "@/components/memory/practice/practice-board"
 import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useMemoryBack } from "@/hooks/use-memory-back";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
 import { sortSessionVerses } from "@/lib/memory-session-order";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
@@ -76,7 +76,7 @@ function MemoryReviewSessionPage({
 }
 
 export function MemoryReviewPage() {
-  const navigate = useNavigate();
+  const onExit = useMemoryBack();
   const search = Route.useSearch();
   const now = useLiveNow();
   const hasScope = hasReviewVerseScope(search);
@@ -138,7 +138,7 @@ export function MemoryReviewPage() {
         verses={globalVerses}
         scopeLabel="All due today"
         remainingDue={remainingDue}
-        onExit={() => void navigate({ to: "/memory" })}
+        onExit={onExit}
       />
     );
   }
@@ -166,11 +166,8 @@ export function MemoryReviewPage() {
             then come back for a one-off review anytime.
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => void navigate({ to: "/memory" })}
-        >
-          Back to memory
+        <Button variant="outline" onClick={onExit}>
+          Back
         </Button>
       </div>
     );
@@ -181,7 +178,7 @@ export function MemoryReviewPage() {
       verses={[scopedSnapshot]}
       scopeLabel={formatVerseRef(search)}
       remainingDue={0}
-      onExit={() => void navigate({ to: "/memory" })}
+      onExit={onExit}
     />
   );
 }
