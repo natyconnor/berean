@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
@@ -103,10 +103,9 @@ function CollectionStart({ presetId }: { presetId: string }) {
   const [pending, setPending] = useState<"all" | "subset" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const hearted = useMemo(() => {
-    const row = progress?.find((item) => item.presetId === presetId);
-    return new Set(row?.heartedPassageIds ?? []);
-  }, [progress, presetId]);
+  const progressRow = progress?.find((item) => item.presetId === presetId);
+  const existingPackId = progressRow?.packId ?? null;
+  const hearted = new Set(progressRow?.heartedPassageIds ?? []);
 
   if (!preset || preset.kind !== "collection") return null;
 
@@ -165,13 +164,15 @@ function CollectionStart({ presetId }: { presetId: string }) {
           {preset.description} Deleting the pack later keeps the verses hearted.
         </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder={preset.title}
-            aria-label="Pack name"
-            className="sm:max-w-xs"
-          />
+          {selectedCount > 0 || !existingPackId ? (
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={preset.title}
+              aria-label="Pack name"
+              className="sm:max-w-xs"
+            />
+          ) : null}
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -221,9 +222,19 @@ function CollectionStart({ presetId }: { presetId: string }) {
                   ? "Creating…"
                   : `Create pack with ${selectedCount}`}
               </Button>
+            ) : existingPackId ? (
+              <Button asChild>
+                <Link
+                  to="/memory/$packId"
+                  params={{ packId: existingPackId }}
+                  search={{}}
+                >
+                  Continue
+                </Link>
+              </Button>
             ) : (
               <Button
-                disabled={pending !== null}
+                disabled={pending !== null || progress === undefined}
                 onClick={() => void start("all")}
               >
                 {pending === "all" ? "Starting…" : "Start all"}

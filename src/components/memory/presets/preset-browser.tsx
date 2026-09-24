@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, BookOpen, Library } from "lucide-react";
+import { ArrowLeft, BookOpen } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
@@ -110,6 +110,10 @@ export function PresetBrowser() {
                     (item) => item.presetId === preset.id,
                   );
                   const hearted = row?.heartedPassageIds.length ?? 0;
+                  const existingPackId = row?.packId ?? null;
+                  const fullyHearted =
+                    progress !== undefined && hearted >= preset.passages.length;
+                  const alreadyAdded = Boolean(existingPackId) || fullyHearted;
                   return (
                     <li
                       key={preset.id}
@@ -119,24 +123,52 @@ export function PresetBrowser() {
                         <div className="min-w-0">
                           <p className="text-sm font-medium">{preset.title}</p>
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {preset.description}
+                            {alreadyAdded
+                              ? existingPackId
+                                ? "This collection is already a pack."
+                                : "Every passage in this collection is already in your library."
+                              : preset.description}
                           </p>
                           <p className="mt-2 text-xs text-muted-foreground">
                             {preset.passages.length} passages
-                            {hearted > 0
+                            {!alreadyAdded && hearted > 0
                               ? ` · ${hearted} already in your library`
                               : ""}
                           </p>
                         </div>
-                        <Button asChild size="sm" className="shrink-0 gap-1.5">
-                          <Link
-                            to="/memory/presets/$presetId"
-                            params={{ presetId: preset.id }}
+                        {existingPackId ? (
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0"
                           >
-                            <Library className="h-3.5 w-3.5" aria-hidden />
-                            Open
-                          </Link>
-                        </Button>
+                            <Link
+                              to="/memory/$packId"
+                              params={{ packId: existingPackId }}
+                              search={{}}
+                            >
+                              Continue
+                            </Link>
+                          </Button>
+                        ) : fullyHearted ? (
+                          <span className="shrink-0 pt-1 text-xs font-medium text-muted-foreground">
+                            Added
+                          </span>
+                        ) : progress === undefined ? null : (
+                          <Button
+                            asChild
+                            size="sm"
+                            className="shrink-0 gap-1.5"
+                          >
+                            <Link
+                              to="/memory/presets/$presetId"
+                              params={{ presetId: preset.id }}
+                            >
+                              Open
+                            </Link>
+                          </Button>
+                        )}
                       </div>
                     </li>
                   );
