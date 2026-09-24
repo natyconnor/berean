@@ -26,6 +26,8 @@ import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
 import { Route as StudyIndexRouteImport } from './routes/study/index'
 import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
 import { Route as StudyNewRouteImport } from './routes/study/new'
+import { Route as MemoryPresetsIndexRouteImport } from './routes/memory/presets/index'
+import { Route as MemoryPresetsPresetIdRouteImport } from './routes/memory/presets/$presetId'
 import { Route as MemoryPackIdLearnRouteImport } from './routes/memory_.$packId.learn'
 import { Route as MemoryPackIdPracticeRouteImport } from './routes/memory_.$packId.practice'
 import { Route as MemoryPackIdReviewRouteImport } from './routes/memory_.$packId.review'
@@ -115,6 +117,16 @@ const StudyNewRoute = StudyNewRouteImport.update({
   path: '/study/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryPresetsIndexRoute = MemoryPresetsIndexRouteImport.update({
+  id: '/memory/presets/',
+  path: '/memory/presets/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryPresetsPresetIdRoute = MemoryPresetsPresetIdRouteImport.update({
+  id: '/memory/presets/$presetId',
+  path: '/memory/presets/$presetId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MemoryPackIdLearnRoute = MemoryPackIdLearnRouteImport.update({
   id: '/memory_/$packId/learn',
   path: '/memory/$packId/learn',
@@ -149,9 +161,11 @@ export interface FileRoutesByFullPath {
   '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
+  '/memory/presets/$presetId': typeof MemoryPresetsPresetIdRoute
   '/memory/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory/$packId/review': typeof MemoryPackIdReviewRoute
+  '/memory/presets/': typeof MemoryPresetsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -171,9 +185,11 @@ export interface FileRoutesByTo {
   '/memory': typeof MemoryIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/study': typeof StudyIndexRoute
+  '/memory/presets/$presetId': typeof MemoryPresetsPresetIdRoute
   '/memory/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory/$packId/review': typeof MemoryPackIdReviewRoute
+  '/memory/presets': typeof MemoryPresetsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -194,9 +210,11 @@ export interface FileRoutesById {
   '/memory/': typeof MemoryIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
+  '/memory/presets/$presetId': typeof MemoryPresetsPresetIdRoute
   '/memory_/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory_/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory_/$packId/review': typeof MemoryPackIdReviewRoute
+  '/memory/presets/': typeof MemoryPresetsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -218,9 +236,11 @@ export interface FileRouteTypes {
     | '/memory/'
     | '/settings/'
     | '/study/'
+    | '/memory/presets/$presetId'
     | '/memory/$packId/learn'
     | '/memory/$packId/practice'
     | '/memory/$packId/review'
+    | '/memory/presets/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -240,9 +260,11 @@ export interface FileRouteTypes {
     | '/memory'
     | '/settings'
     | '/study'
+    | '/memory/presets/$presetId'
     | '/memory/$packId/learn'
     | '/memory/$packId/practice'
     | '/memory/$packId/review'
+    | '/memory/presets'
   id:
     | '__root__'
     | '/'
@@ -262,9 +284,11 @@ export interface FileRouteTypes {
     | '/memory/'
     | '/settings/'
     | '/study/'
+    | '/memory/presets/$presetId'
     | '/memory_/$packId/learn'
     | '/memory_/$packId/practice'
     | '/memory_/$packId/review'
+    | '/memory/presets/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -285,9 +309,11 @@ export interface RootRouteChildren {
   MemoryIndexRoute: typeof MemoryIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
   StudyIndexRoute: typeof StudyIndexRoute
+  MemoryPresetsPresetIdRoute: typeof MemoryPresetsPresetIdRoute
   MemoryPackIdLearnRoute: typeof MemoryPackIdLearnRoute
   MemoryPackIdPracticeRoute: typeof MemoryPackIdPracticeRoute
   MemoryPackIdReviewRoute: typeof MemoryPackIdReviewRoute
+  MemoryPresetsIndexRoute: typeof MemoryPresetsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -411,6 +437,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudyNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/presets/': {
+      id: '/memory/presets/'
+      path: '/memory/presets'
+      fullPath: '/memory/presets/'
+      preLoaderRoute: typeof MemoryPresetsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory/presets/$presetId': {
+      id: '/memory/presets/$presetId'
+      path: '/memory/presets/$presetId'
+      fullPath: '/memory/presets/$presetId'
+      preLoaderRoute: typeof MemoryPresetsPresetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/memory_/$packId/learn': {
       id: '/memory_/$packId/learn'
       path: '/memory/$packId/learn'
@@ -453,9 +493,11 @@ const rootRouteChildren: RootRouteChildren = {
   MemoryIndexRoute: MemoryIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   StudyIndexRoute: StudyIndexRoute,
+  MemoryPresetsPresetIdRoute: MemoryPresetsPresetIdRoute,
   MemoryPackIdLearnRoute: MemoryPackIdLearnRoute,
   MemoryPackIdPracticeRoute: MemoryPackIdPracticeRoute,
   MemoryPackIdReviewRoute: MemoryPackIdReviewRoute,
+  MemoryPresetsIndexRoute: MemoryPresetsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -89,6 +89,13 @@ describe("mode-last-location", () => {
 
   it("parses stored hrefs into typed navigate targets", () => {
     expect(modeNavigateTargetFromHref("/memory")).toEqual({ to: "/memory" });
+    expect(modeNavigateTargetFromHref("/memory/presets")).toEqual({
+      to: "/memory/presets",
+    });
+    expect(modeNavigateTargetFromHref("/memory/presets/psalm-23")).toEqual({
+      to: "/memory/presets/$presetId",
+      params: { presetId: "psalm-23" },
+    });
     expect(modeNavigateTargetFromHref("/memory/pack-abc")).toEqual({
       to: "/memory/$packId",
       params: { packId: "pack-abc" },

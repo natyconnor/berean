@@ -141,6 +141,11 @@ export type ModeNavigateTarget =
     }
   | { to: "/memory" }
   | { to: "/memory/new" }
+  | { to: "/memory/presets" }
+  | {
+      to: "/memory/presets/$presetId";
+      params: { presetId: string };
+    }
   | {
       to: "/memory/learn" | "/memory/practice" | "/memory/review";
       search: ReturnType<typeof validateMemoryVerseSearch>;
@@ -226,6 +231,15 @@ export function modeNavigateTargetFromHref(
   if (parts[0] === "memory") {
     if (parts.length === 1) return { to: "/memory" };
     if (parts.length === 2 && parts[1] === "new") return { to: "/memory/new" };
+    if (parts.length === 2 && parts[1] === "presets") {
+      return { to: "/memory/presets" };
+    }
+    if (parts.length === 3 && parts[1] === "presets" && parts[2]) {
+      return {
+        to: "/memory/presets/$presetId",
+        params: { presetId: decodeURIComponent(parts[2]) },
+      };
+    }
     if (parts.length === 2 && parts[1] === "learn") {
       return { to: "/memory/learn", search: verseSearch };
     }
