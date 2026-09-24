@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.16.0](https://github.com/natyconnor/berean/compare/v1.15.5...v1.16.0) (2026-09-24)
+
+
+### Features
+
+* Adjust verse ranges from the note badge ([#224](https://github.com/natyconnor/berean/issues/224)) ([d9d793b](https://github.com/natyconnor/berean/commit/d9d793b85205f8d7daa6f20af66fd7302ae4b208))
+
 ## [1.15.5](https://github.com/natyconnor/berean/compare/v1.15.4...v1.15.5) (2026-09-24)
 
 
