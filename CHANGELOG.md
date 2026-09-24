@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.16.2](https://github.com/natyconnor/berean/compare/v1.16.1...v1.16.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* return memory sessions to the previous screen ([#229](https://github.com/natyconnor/berean/issues/229)) ([67b6d66](https://github.com/natyconnor/berean/commit/67b6d661b0bf47e0717f965316c3d6e77e78dea2))
+
 ## [1.16.1](https://github.com/natyconnor/berean/compare/v1.16.0...v1.16.1) (2026-09-24)
 
 
