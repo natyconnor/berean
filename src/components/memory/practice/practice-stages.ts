@@ -38,9 +38,24 @@ const STAGE_BY_BAND_KEY: Record<SupportBand["key"], HintStage> = {
 };
 
 /**
- * Practice chrome intentionally mirrors lifecycle colors: Read starts as New,
- * Guided/Challenge are Learning, From Memory is Reviewing, and Mastered gets
- * the emerald completion override via {@link practiceChromeFor}.
+ * Learning chrome. From Memory is the last learning band (recall with no
+ * hints), so it stays amber with Guided and Challenge. Reviewing and Mastered
+ * are separate phases and override this via {@link practiceChromeFor}.
+ */
+const LEARNING_CHROME: PracticeChrome = {
+  dot: "bg-amber-500",
+  text: "text-amber-700 dark:text-amber-300",
+  panel:
+    "border-amber-500/30 bg-amber-500/5 dark:border-amber-400/25 dark:bg-amber-400/10",
+  selectedButton:
+    "bg-amber-500/15 text-amber-900 shadow-sm ring-1 ring-inset ring-amber-500/30 dark:text-amber-100",
+  railActive:
+    "border-amber-500/40 bg-amber-500/15 text-amber-950 dark:text-amber-100",
+};
+
+/**
+ * Practice chrome while a verse is still being learned: Read starts as New,
+ * and every later learning band — including From Memory — stays Learning.
  */
 const STAGE_COLORS: readonly PracticeChrome[] = [
   {
@@ -53,37 +68,20 @@ const STAGE_COLORS: readonly PracticeChrome[] = [
     railActive:
       "border-slate-400/35 bg-slate-400/15 text-slate-950 dark:border-slate-500/35 dark:bg-slate-500/15 dark:text-slate-100",
   },
-  {
-    dot: "bg-amber-500",
-    text: "text-amber-700 dark:text-amber-300",
-    panel:
-      "border-amber-500/30 bg-amber-500/5 dark:border-amber-400/25 dark:bg-amber-400/10",
-    selectedButton:
-      "bg-amber-500/15 text-amber-900 shadow-sm ring-1 ring-inset ring-amber-500/30 dark:text-amber-100",
-    railActive:
-      "border-amber-500/40 bg-amber-500/15 text-amber-950 dark:text-amber-100",
-  },
-  {
-    dot: "bg-amber-500",
-    text: "text-amber-700 dark:text-amber-300",
-    panel:
-      "border-amber-500/30 bg-amber-500/5 dark:border-amber-400/25 dark:bg-amber-400/10",
-    selectedButton:
-      "bg-amber-500/15 text-amber-900 shadow-sm ring-1 ring-inset ring-amber-500/30 dark:text-amber-100",
-    railActive:
-      "border-amber-500/40 bg-amber-500/15 text-amber-950 dark:text-amber-100",
-  },
-  {
-    dot: "bg-sky-500",
-    text: "text-sky-700 dark:text-sky-300",
-    panel:
-      "border-sky-500/25 bg-sky-500/5 dark:border-sky-400/20 dark:bg-sky-400/10",
-    selectedButton:
-      "bg-sky-500/15 text-sky-900 shadow-sm ring-1 ring-inset ring-sky-500/25 dark:text-sky-100",
-    railActive:
-      "border-sky-500/35 bg-sky-500/15 text-sky-950 dark:text-sky-100",
-  },
+  LEARNING_CHROME,
+  LEARNING_CHROME,
+  LEARNING_CHROME,
 ];
+
+const REVIEWING_CHROME: PracticeChrome = {
+  dot: "bg-sky-500",
+  text: "text-sky-700 dark:text-sky-300",
+  panel:
+    "border-sky-500/25 bg-sky-500/5 dark:border-sky-400/20 dark:bg-sky-400/10",
+  selectedButton:
+    "bg-sky-500/15 text-sky-900 shadow-sm ring-1 ring-inset ring-sky-500/25 dark:text-sky-100",
+  railActive: "border-sky-500/35 bg-sky-500/15 text-sky-950 dark:text-sky-100",
+};
 
 const MASTERED_CHROME: PracticeChrome = {
   dot: "bg-emerald-500",
@@ -115,6 +113,7 @@ export function practiceChromeFor(
   status?: MemoryStatus,
 ): PracticeChrome {
   if (status === "mastered") return MASTERED_CHROME;
+  if (status === "reviewing") return REVIEWING_CHROME;
 
   const clampedStage = Math.max(
     0,

@@ -39,7 +39,10 @@ import { predictLearning } from "@/lib/verse-practice-progress";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { LearningJourneyBar } from "../memory/practice/learning-journey-bar";
-import { PRACTICE_STAGES } from "../memory/practice/practice-stages";
+import {
+  PRACTICE_STAGES,
+  practiceChromeFor,
+} from "../memory/practice/practice-stages";
 import {
   fromMemoryPromptLine,
   isFromMemoryLearning,
@@ -158,7 +161,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
   const repsIndex = progress?.stageReps ?? 0;
   const status = progress?.status ?? "learning";
   const stageInfo = PRACTICE_STAGES[stageIndex] ?? PRACTICE_STAGES[0];
-  const stageColor = stageInfo.color;
+  const stageColor = practiceChromeFor(stageIndex, status);
   const { hintStage, tokens, wordCount } = useMemo(() => {
     const wc = countVerseWords(versePlainText);
     const hint = hintForProgress(stageIndex, repsIndex, wc);

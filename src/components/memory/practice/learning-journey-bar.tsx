@@ -17,24 +17,28 @@ interface LearningJourneyBarProps {
    */
   wordCount?: number;
   /**
-   * Lifecycle status. Learning fills the first half of the bar; reviewing
-   * grows from there toward mastered using `intervalDays`.
+   * Lifecycle status. Learning fills its own bar to 100% learned. Reviewing
+   * and mastered replace that with a separate mastery bar driven by
+   * `intervalDays`.
    */
   status?: MemoryStatus;
   /**
-   * Review interval in days. Ignored while learning; drives progress toward
-   * mastered once the verse has graduated.
+   * Review interval in days. Ignored while learning. Once the verse has
+   * graduated, this is how full the mastery bar is.
    */
   intervalDays?: number;
   className?: string;
 }
 
 /**
- * Compact progress bar: learning bands fill the first half, then reviewing
- * grows toward mastered. Fill fraction is {@link memoryProgressFraction},
- * keeping it in step with the mastery heart ring's two-phase mapping.
+ * Compact progress bar for the phase the verse is in now.
  *
- * Colors mirror the lifecycle palette: New → Learning → Reviewing → Mastered.
+ * While learning, the track fills to 100% learned. After graduation it is
+ * replaced by a new mastery track that starts empty and fills as the review
+ * interval approaches mastered. Fill fraction is {@link memoryProgressFraction}.
+ *
+ * From Memory stays the learning (amber) color. Reviewing is sky and mastered
+ * is emerald.
  */
 export function LearningJourneyBar({
   learnStage,
@@ -45,6 +49,7 @@ export function LearningJourneyBar({
   className,
 }: LearningJourneyBarProps): JSX.Element {
   const graduated = status === "reviewing" || status === "mastered";
+  const phase = graduated ? "mastery" : "learning";
   const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
   const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
   const chrome = practiceChromeFor(clampedStage, status);
@@ -85,7 +90,10 @@ export function LearningJourneyBar({
           {pct}%
         </span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
+      <div
+        key={phase}
+        className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
+      >
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-300",
