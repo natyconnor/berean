@@ -33,8 +33,8 @@ interface VerseMemoryFeedbackProps {
    */
   showScheduleOutcome?: boolean;
   /**
-   * From Memory is the only learning band that requires a perfect recall.
-   * When true, a close attempt explains that 100% is needed to advance.
+   * The graduating From Memory recall is the only learning step that requires
+   * a perfect grade. When true, a close attempt explains that 100% is needed.
    */
   requireExactToAdvance?: boolean;
   /** Next schedule from `recordAttempt` (or a local optimistic fallback). */

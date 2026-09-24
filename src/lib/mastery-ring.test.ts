@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { learningJourneyFraction, masteryRingFraction } from "./mastery-ring";
+import {
+  learningJourneyFraction,
+  LEARNING_RING_CEILING,
+  masteryRingFraction,
+  memoryProgressFraction,
+} from "./mastery-ring";
 import { MASTERED_INTERVAL_DAYS, requiredRepsFor } from "./memory-scheduler";
 
 describe("masteryRingFraction", () => {
@@ -167,5 +172,40 @@ describe("learningJourneyFraction", () => {
   it("clamps out-of-range inputs", () => {
     expect(learningJourneyFraction(99, 999)).toBeCloseTo(1);
     expect(learningJourneyFraction(-1, -5)).toBe(0);
+  });
+});
+
+describe("memoryProgressFraction", () => {
+  it("maps learning onto the first half of the bar", () => {
+    expect(memoryProgressFraction("learning", 0, 0)).toBe(0);
+    const mid = memoryProgressFraction("learning", 2, 2);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(LEARNING_RING_CEILING);
+    expect(
+      memoryProgressFraction("learning", 3, requiredRepsFor(3)),
+    ).toBeCloseTo(LEARNING_RING_CEILING);
+  });
+
+  it("grows from the learning ceiling toward mastered while reviewing", () => {
+    expect(memoryProgressFraction("reviewing", 3, 0, 0)).toBe(
+      LEARNING_RING_CEILING,
+    );
+    expect(
+      memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS),
+    ).toBeCloseTo(1);
+    const mid = memoryProgressFraction(
+      "reviewing",
+      3,
+      0,
+      MASTERED_INTERVAL_DAYS / 2,
+    );
+    expect(mid).toBeGreaterThan(LEARNING_RING_CEILING);
+    expect(mid).toBeLessThan(1);
+  });
+
+  it("fills fully once mastered", () => {
+    expect(
+      memoryProgressFraction("mastered", 3, 0, MASTERED_INTERVAL_DAYS),
+    ).toBe(1);
   });
 });

@@ -67,7 +67,7 @@ interface VerseAttemptResultProps {
   /** Review mode: show schedule-consequence copy above the diff. */
   showScheduleOutcome?: boolean;
   /**
-   * From Memory learning requires a perfect recall to bank a rep. Passed
+   * The graduating From Memory recall requires a perfect grade to bank. Passed
    * through to the close-attempt banner so it can explain why Continue is
    * still "Try again".
    */

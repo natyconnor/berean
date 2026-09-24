@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-import { learningJourneyFraction } from "@/lib/mastery-ring";
+import { memoryProgressFraction } from "@/lib/mastery-ring";
 import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
@@ -17,20 +17,22 @@ interface LearningJourneyBarProps {
    */
   wordCount?: number;
   /**
-   * Lifecycle status. Graduated verses (`reviewing` / `mastered`) fill the bar
-   * to 100% — the scheduler resets `stageReps` on graduation, so stage alone
-   * would incorrectly leave the track at the From Memory floor.
+   * Lifecycle status. Learning fills the first half of the bar; reviewing
+   * grows from there toward mastered using `intervalDays`.
    */
   status?: MemoryStatus;
+  /**
+   * Review interval in days. Ignored while learning; drives progress toward
+   * mastered once the verse has graduated.
+   */
+  intervalDays?: number;
   className?: string;
 }
 
 /**
- * Compact learning-journey progress bar: a band label and a thin filled track
- * that advances one equal step per successful checked attempt across all four
- * bands (Read → Guided → Challenge → From Memory). Fill fraction is
- * {@link learningJourneyFraction}, keeping it in sync with the mastery heart
- * ring.
+ * Compact progress bar: learning bands fill the first half, then reviewing
+ * grows toward mastered. Fill fraction is {@link memoryProgressFraction},
+ * keeping it in step with the mastery heart ring's two-phase mapping.
  *
  * Colors mirror the lifecycle palette: New → Learning → Reviewing → Mastered.
  */
@@ -39,6 +41,7 @@ export function LearningJourneyBar({
   stageReps,
   wordCount,
   status,
+  intervalDays,
   className,
 }: LearningJourneyBarProps): JSX.Element {
   const graduated = status === "reviewing" || status === "mastered";
@@ -50,18 +53,20 @@ export function LearningJourneyBar({
       ? "Mastered"
       : "Reviewing"
     : stage.label;
-  const fraction = learningJourneyFraction(
+  const fraction = memoryProgressFraction(
+    status,
     learnStage,
     stageReps ?? 0,
+    intervalDays ?? 0,
     wordCount,
-    status,
   );
   const pct = Math.round(fraction * 100);
+  const ariaKind = graduated ? "Progress to mastered" : "Learning journey";
 
   return (
     <div
       className={cn("space-y-1", className)}
-      aria-label={`Learning journey: ${label} · ${pct}%`}
+      aria-label={`${ariaKind}: ${label} · ${pct}%`}
     >
       <div className="flex items-center justify-between gap-2">
         <span

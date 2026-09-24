@@ -5,6 +5,11 @@
 
 ### Features
 
+* From Memory only requires 100% on the last recall; earlier memory reps bank at 85%
+* Reviewing verses show progress toward mastered instead of a full bar
+* Review close-retries name the current interval and the stretch a perfect recall would earn
+* Review summaries average every recitation, including a retry after a close first try
+
 * Passage mode on eligible scope packs with a scaffolded rope and opt-in migration
 * Pack creation walks type → scope or verses → name before create
 

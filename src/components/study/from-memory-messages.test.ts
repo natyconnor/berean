@@ -6,6 +6,7 @@ import {
   FROM_MEMORY_SECOND_ROUND_PROMPT,
   fromMemoryPromptLine,
   isFromMemoryLearning,
+  requiresExactToAdvance,
 } from "./from-memory-messages";
 
 describe("isFromMemoryLearning", () => {
@@ -23,8 +24,17 @@ describe("fromMemoryPromptLine", () => {
     expect(fromMemoryPromptLine(0)).toBe(FROM_MEMORY_FIRST_ROUND_PROMPT);
   });
 
-  it("asks for one more exact after the first From Memory recall", () => {
+  it("asks for one more recall after the first From Memory rep", () => {
     expect(fromMemoryPromptLine(1)).toBe(FROM_MEMORY_SECOND_ROUND_PROMPT);
+  });
+});
+
+describe("requiresExactToAdvance", () => {
+  it("is only true on the graduating From Memory recall", () => {
+    expect(requiresExactToAdvance(3, "learning", 0)).toBe(false);
+    expect(requiresExactToAdvance(3, "learning", 1)).toBe(true);
+    expect(requiresExactToAdvance(2, "learning", 3)).toBe(false);
+    expect(requiresExactToAdvance(3, "reviewing", 1)).toBe(false);
   });
 });
 

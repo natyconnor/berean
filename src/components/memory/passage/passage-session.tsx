@@ -311,7 +311,7 @@ export function PassageSession({
     if (result.via === "typed" && liveRecall) {
       // Freeze hint/prompt chrome on the pre-check snapshot, but adopt the
       // post-attempt journey fields so the progress bar and step label move
-      // as soon as the check qualifies — including the final 100% fill.
+      // as soon as the check qualifies.
       setHeldRecall(heldRecallWithJourneyProgress(liveRecall, next));
       setHoldResult(true);
     }
@@ -582,6 +582,7 @@ export function PassageSession({
             stageReps={recall.stageReps}
             status={recall.status}
             showJourneyBar={recall.showJourneyBar}
+            intervalDays={view.intervalDays}
             readContinue={recall.readContinue}
             onSubmit={handleGraded}
             onContinueAfterResult={handleContinueAfterResult}

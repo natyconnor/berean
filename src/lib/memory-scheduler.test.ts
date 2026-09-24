@@ -24,6 +24,9 @@ import {
   nextLearningSessionDueAt,
   dueAtInCalendarDays,
   dueIndexUntil,
+  holdReviewingInterval,
+  isFromMemoryGraduationAttempt,
+  nextExactReviewIntervalDays,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -244,13 +247,23 @@ describe("learning phase grades", () => {
     expect(next.status).toBe("learning");
   });
 
-  it("From Memory does not bank a near-perfect close recall", () => {
+  it("the first From Memory recall banks a near-perfect close", () => {
     const next = scheduleNext(
       learningAt(3, 0),
       review({ quality: "close", accuracy: 92 }),
     );
     expect(next.learnStage).toBe(MAX_LEARN_STAGE);
-    expect(next.stageReps).toBe(0);
+    expect(next.stageReps).toBe(1);
+    expect(next.status).toBe("learning");
+  });
+
+  it("the graduating From Memory recall does not bank a near-perfect close", () => {
+    const next = scheduleNext(
+      learningAt(3, 1),
+      review({ quality: "close", accuracy: 92 }),
+    );
+    expect(next.learnStage).toBe(MAX_LEARN_STAGE);
+    expect(next.stageReps).toBe(1);
     expect(next.status).toBe("learning");
   });
 
@@ -358,6 +371,22 @@ describe("reviewing phase grades", () => {
     expect(next).toEqual(s);
   });
 
+  it("declining a retry holds the current interval and spends the verse", () => {
+    const s = reviewing({ intervalDays: 5, ease: 2.3, consecutiveCorrect: 3 });
+    const next = holdReviewingInterval(s, NOW);
+    expect(next.intervalDays).toBe(5);
+    expect(next.ease).toBeCloseTo(2.3, 5);
+    expect(next.consecutiveCorrect).toBe(3);
+    expect(next.status).toBe("reviewing");
+    expect(next.dueAt).toBe(NOW + 5 * DAY_MS);
+  });
+
+  it("isFromMemoryGraduationAttempt is only the last From Memory rep", () => {
+    expect(isFromMemoryGraduationAttempt(3, 0)).toBe(false);
+    expect(isFromMemoryGraduationAttempt(3, 1)).toBe(true);
+    expect(isFromMemoryGraduationAttempt(2, 3)).toBe(false);
+  });
+
   it("daily-review miss lapses to Challenge: ease -0.2, lapses++", () => {
     const s = reviewing({
       intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
@@ -449,6 +478,28 @@ describe("post-graduation review ladder", () => {
   function exactAt(s: MemorySchedule, now: number): MemorySchedule {
     return scheduleNext(s, review({ quality: "exact", now, mode: "review" }));
   }
+
+  it("previews the interval an exact recall would land on", () => {
+    expect(
+      nextExactReviewIntervalDays(
+        reviewing({
+          intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+          stageReps: 0,
+        }),
+      ),
+    ).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(
+      nextExactReviewIntervalDays(
+        reviewing({
+          intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+          stageReps: REVIEW_DAILY_REPS - 1,
+        }),
+      ),
+    ).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+    expect(
+      nextExactReviewIntervalDays(reviewing({ intervalDays: 5, ease: 2.3 })),
+    ).toBeCloseTo(5 * 2.3);
+  });
 
   it("keeps a newly graduated verse daily for REVIEW_DAILY_REPS exacts", () => {
     let s = reviewing({

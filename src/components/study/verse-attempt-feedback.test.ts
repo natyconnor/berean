@@ -194,7 +194,51 @@ describe("attemptFeedbackLead", () => {
 });
 
 describe("reviewFeedbackMessage", () => {
-  it("invites a retry instead of naming a due date", () => {
+  it("names current and next interval when a perfect recall would stretch", () => {
+    expect(
+      reviewFeedbackMessage({
+        lead: "Oh so close! Just one word off",
+        outcome: "retry",
+        nextSchedule: {
+          ...reviewingTomorrow,
+          intervalDays: 1,
+          stageReps: 3,
+        },
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe(
+      "Oh so close! Just one word off — try again to extend your review interval from 1 day to 2 days.",
+    );
+  });
+
+  it("names a growing interval and the ease-stretched next gap", () => {
+    expect(
+      reviewFeedbackMessage({
+        lead: "Almost there",
+        outcome: "retry",
+        nextSchedule: { ...reviewingTomorrow, intervalDays: 5, ease: 2.3 },
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe(
+      "Almost there — try again to extend your review interval from 5 days to 12 days.",
+    );
+  });
+
+  it("names the current interval when a perfect recall would not stretch yet", () => {
+    expect(
+      reviewFeedbackMessage({
+        lead: "Almost there",
+        outcome: "retry",
+        nextSchedule: reviewingTomorrow,
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe("Almost there — try again to keep your review interval at 1 day.");
+  });
+
+  it("still invites a retry when the current interval is unknown", () => {
     expect(
       reviewFeedbackMessage({
         lead: "Almost there",
@@ -202,7 +246,7 @@ describe("reviewFeedbackMessage", () => {
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toBe("Almost there — try again to earn a longer wait.");
+    ).toBe("Almost there — try again to extend your review interval.");
   });
 
   it("names Challenge when a daily review lapses into learning", () => {

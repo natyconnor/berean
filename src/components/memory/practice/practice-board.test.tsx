@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
@@ -51,10 +52,19 @@ vi.mock("../../../../convex/_generated/api", () => ({
       getChaptersBatch: "esv.getChaptersBatch",
       getPassage: "esv.getPassage",
     },
-    packs: { recordUnifiedReview: "packs.recordUnifiedReview" },
-    passageMemory: { recordAttempt: "passageMemory.recordAttempt" },
+    packs: {
+      recordUnifiedReview: "packs.recordUnifiedReview",
+      acceptRetryHold: "packs.acceptRetryHold",
+    },
+    passageMemory: {
+      recordAttempt: "passageMemory.recordAttempt",
+      acceptRetryHold: "passageMemory.acceptRetryHold",
+    },
     savedVerses: { listAll: "savedVerses.listAll" },
-    verseMemory: { recordAttempt: "verseMemory.recordAttempt" },
+    verseMemory: {
+      recordAttempt: "verseMemory.recordAttempt",
+      acceptRetryHold: "verseMemory.acceptRetryHold",
+    },
   },
 }));
 
@@ -692,5 +702,145 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     expect(
       screen.queryByRole("button", { name: "Shuffle" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+const reviewingVerse: PracticeVerse = {
+  reference: span(1, 1),
+  learnStage: 3,
+  stageReps: 0,
+  status: "reviewing",
+  dueAt: getSessionNow() - 1000,
+  ease: 2.3,
+  intervalDays: 5,
+  consecutiveCorrect: 3,
+  lapses: 0,
+  earlyReviewApplied: false,
+};
+
+const stillDueSchedule = {
+  status: "reviewing" as const,
+  learnStage: 3,
+  stageReps: 0,
+  ease: 2.3,
+  intervalDays: 5,
+  dueAt: getSessionNow() - 1000,
+  consecutiveCorrect: 3,
+  lapses: 0,
+  earlyReviewApplied: false,
+};
+
+const heldSchedule = {
+  ...stillDueSchedule,
+  dueAt: getSessionNow() + 5 * 24 * 60 * 60 * 1000,
+};
+
+describe("PracticeBoard review retry", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listAll", [
+      {
+        verseRefId: VERSE_REF_ID,
+        book: "Psalms",
+        chapter: 23,
+        startVerse: 1,
+        endVerse: 1,
+      },
+    ]);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      stillDueSchedule,
+    );
+    mutationMock("verseMemory.acceptRetryHold").mockResolvedValue(heldSchedule);
+  });
+
+  it("offers keep going after an 80%+ review and spends the verse without another grade", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("The Lord is my shepherd I shall not eat");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(
+      await screen.findByRole("button", { name: /Try again/ }),
+    ).toBeVisible();
+    const keepGoing = screen.getByRole("button", {
+      name: REVIEW_RETRY_KEEP_GOING_LABEL,
+    });
+    expect(keepGoing).toBeVisible();
+
+    await userEvent.click(keepGoing);
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.acceptRetryHold")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Average accuracy")).toBeVisible();
+    expect(screen.getByText(/recalled/)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: REVIEW_RETRY_KEEP_GOING_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("averages the first recitation with a successful retry", async () => {
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(stillDueSchedule)
+      .mockResolvedValueOnce(heldSchedule);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const firstAnswer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(firstAnswer);
+    await userEvent.paste("The Lord is my shepherd I shall not eat");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+
+    const secondAnswer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(secondAnswer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(await screen.findByText("Average accuracy")).toBeVisible();
+    expect(screen.getByText(/then 100% recalled/)).toBeVisible();
+    const averageText =
+      screen.getByText("Average accuracy").parentElement?.textContent ?? "";
+    const average = Number(averageText.match(/(\d+)%/)?.[1]);
+    expect(average).toBeGreaterThan(0);
+    expect(average).toBeLessThan(100);
   });
 });

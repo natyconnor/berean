@@ -54,6 +54,20 @@ export function formatNextReviewPhrase(
   );
 }
 
+/**
+ * Review gap as a count of days ("1 day", "5 days").
+ * Returns null when there is no real wait to name.
+ */
+export function formatReviewIntervalPhrase(
+  intervalDays: number | undefined,
+): string | null {
+  if (intervalDays === undefined || !Number.isFinite(intervalDays)) {
+    return null;
+  }
+  const days = Math.max(1, Math.round(intervalDays));
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 export function formatMemoryStatusSubtitle({
   status,
   statusLabel,

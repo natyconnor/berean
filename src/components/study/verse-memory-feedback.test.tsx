@@ -44,7 +44,7 @@ describe("VerseMemoryFeedback", () => {
     );
   });
 
-  it("explains that From Memory needs 100% before the verse can advance", () => {
+  it("explains that the last From Memory recall needs 100% to graduate", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -79,7 +79,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Almost there — try again to earn a longer wait.",
+      "Almost there — try again to extend your review interval.",
     );
   });
 
@@ -97,10 +97,21 @@ describe("VerseMemoryFeedback", () => {
         }}
         attemptKey="review-one-word"
         showScheduleOutcome
+        nextSchedule={{
+          status: "reviewing",
+          learnStage: 3,
+          stageReps: 3,
+          ease: 2.3,
+          intervalDays: 1,
+          dueAt: 1_700_000_000_000,
+          consecutiveCorrect: 3,
+          lapses: 0,
+          earlyReviewApplied: false,
+        }}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Oh so close! Just one word off — try again to earn a longer wait.",
+      "Oh so close! Just one word off — try again to extend your review interval from 1 day to 2 days.",
     );
   });
 

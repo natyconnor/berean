@@ -4,6 +4,7 @@ import {
   formatMemoryDueLabel,
   formatMemoryStatusSubtitle,
   formatNextReviewPhrase,
+  formatReviewIntervalPhrase,
 } from "./memory-due-label";
 
 const NOW = 1_700_000_000_000;
@@ -65,6 +66,22 @@ describe("formatNextReviewPhrase", () => {
         NOW,
       ),
     ).toBe("in 2 days");
+  });
+});
+
+describe("formatReviewIntervalPhrase", () => {
+  it("names a 1-day gap as 1 day", () => {
+    expect(formatReviewIntervalPhrase(1)).toBe("1 day");
+  });
+
+  it("names multi-day gaps in days", () => {
+    expect(formatReviewIntervalPhrase(2)).toBe("2 days");
+    expect(formatReviewIntervalPhrase(5.4)).toBe("5 days");
+  });
+
+  it("omits missing gaps and floors empty ones to 1 day", () => {
+    expect(formatReviewIntervalPhrase(undefined)).toBeNull();
+    expect(formatReviewIntervalPhrase(0)).toBe("1 day");
   });
 });
 
