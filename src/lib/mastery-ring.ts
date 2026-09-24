@@ -58,11 +58,17 @@ export function learningJourneyFraction(
 }
 
 /**
- * Fill fraction for the session progress bar: learning occupies
- * `[0, {@link LEARNING_RING_CEILING})`, reviewing grows from that floor to 1
- * as `intervalDays` approaches {@link MASTERED_INTERVAL_DAYS}, and mastered
- * is full. Unlike {@link learningJourneyFraction}, reviewing is not stuck at
- * 100% after graduation.
+ * Fill fraction for the session progress bar that is on screen right now.
+ *
+ * Learning and mastery are separate bars, each on its own 0–100% scale:
+ * - While learning (or not yet started), the bar is {@link learningJourneyFraction}
+ *   and reaches 100% when the verse is fully learned.
+ * - Once reviewing, a new bar starts at 0 and fills to 1 as `intervalDays`
+ *   approaches {@link MASTERED_INTERVAL_DAYS}.
+ * - Mastered is a full mastery bar.
+ *
+ * The heart ring still compresses both phases onto one circle via
+ * {@link LEARNING_RING_CEILING}. This helper does not.
  *
  * Pure: no React, no `Date.now()`.
  */
@@ -75,13 +81,9 @@ export function memoryProgressFraction(
 ): number {
   if (status === "mastered") return 1;
   if (status === "reviewing") {
-    const t = Math.max(0, Math.min(1, intervalDays / MASTERED_INTERVAL_DAYS));
-    return LEARNING_RING_CEILING + t * (1 - LEARNING_RING_CEILING);
+    return Math.max(0, Math.min(1, intervalDays / MASTERED_INTERVAL_DAYS));
   }
-  return (
-    learningJourneyFraction(learnStage, stageReps, wordCount, status) *
-    LEARNING_RING_CEILING
-  );
+  return learningJourneyFraction(learnStage, stageReps, wordCount, status);
 }
 
 /**
@@ -115,8 +117,9 @@ export function masteryRingFraction(
       return 0.5 + t * 0.4;
     }
     case "learning":
-      // Reuse the shared fraction; multiply by the ceiling so the heart ring
-      // and the progress bar never drift apart.
+      // The heart ring compresses learning into the first half so reviewing
+      // can continue from 0.5. The session progress bar is a separate 0–100%
+      // scale and does not use this ceiling.
       return (
         learningJourneyFraction(learnStage, stageReps) * LEARNING_RING_CEILING
       );

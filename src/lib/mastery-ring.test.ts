@@ -176,34 +176,35 @@ describe("learningJourneyFraction", () => {
 });
 
 describe("memoryProgressFraction", () => {
-  it("maps learning onto the first half of the bar", () => {
+  it("fills a learning bar from 0 to 100% learned", () => {
     expect(memoryProgressFraction("learning", 0, 0)).toBe(0);
     const mid = memoryProgressFraction("learning", 2, 2);
-    expect(mid).toBeGreaterThan(0);
-    expect(mid).toBeLessThan(LEARNING_RING_CEILING);
+    expect(mid).toBeCloseTo(
+      learningJourneyFraction(2, 2, undefined, "learning"),
+    );
+    expect(mid).toBeGreaterThan(LEARNING_RING_CEILING);
     expect(
       memoryProgressFraction("learning", 3, requiredRepsFor(3)),
-    ).toBeCloseTo(LEARNING_RING_CEILING);
+    ).toBeCloseTo(1);
   });
 
-  it("grows from the learning ceiling toward mastered while reviewing", () => {
-    expect(memoryProgressFraction("reviewing", 3, 0, 0)).toBe(
-      LEARNING_RING_CEILING,
+  it("starts a separate mastery bar once the verse is reviewing", () => {
+    expect(memoryProgressFraction("reviewing", 3, 0, 0)).toBe(0);
+    expect(memoryProgressFraction("reviewing", 3, 0, 1)).toBeCloseTo(
+      1 / MASTERED_INTERVAL_DAYS,
     );
+    expect(
+      memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS / 2),
+    ).toBeCloseTo(0.5);
     expect(
       memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS),
     ).toBeCloseTo(1);
-    const mid = memoryProgressFraction(
-      "reviewing",
-      3,
-      0,
-      MASTERED_INTERVAL_DAYS / 2,
-    );
-    expect(mid).toBeGreaterThan(LEARNING_RING_CEILING);
-    expect(mid).toBeLessThan(1);
+    expect(
+      memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS * 4),
+    ).toBe(1);
   });
 
-  it("fills fully once mastered", () => {
+  it("fills the mastery bar once mastered", () => {
     expect(
       memoryProgressFraction("mastered", 3, 0, MASTERED_INTERVAL_DAYS),
     ).toBe(1);

@@ -7,7 +7,12 @@ describe("practiceChromeFor", () => {
     expect(practiceChromeFor(0).dot).toContain("slate");
     expect(practiceChromeFor(1).dot).toContain("amber");
     expect(practiceChromeFor(2).dot).toContain("amber");
-    expect(practiceChromeFor(3).dot).toContain("sky");
+    expect(practiceChromeFor(3).dot).toContain("amber");
+    expect(practiceChromeFor(3, "learning").dot).toContain("amber");
+  });
+
+  it("uses reviewing colors only after the verse has graduated", () => {
+    expect(practiceChromeFor(3, "reviewing").dot).toContain("sky");
   });
 
   it("uses mastered colors once the verse reaches mastered status", () => {
