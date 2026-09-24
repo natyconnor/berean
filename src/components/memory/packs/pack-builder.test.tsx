@@ -151,6 +151,7 @@ describe("PackBuilder", () => {
     const preset = screen.getByRole("button", {
       name: /^Preset/,
     });
+    expect(preset.querySelector("svg")).toBeInTheDocument();
     expect(preset).toHaveClass("rounded-xl", "border");
     expect(screen.getByRole("button", { name: /^Scope/ })).toHaveClass(
       "rounded-xl",

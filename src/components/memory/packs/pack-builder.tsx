@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, BookOpen, PackagePlus } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Library,
+  ListChecks,
+  PackagePlus,
+  type LucideIcon,
+} from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
@@ -283,18 +291,21 @@ export function PackBuilder() {
                 <TypeChoice
                   title="Scope"
                   description="A book or chapter range. Verses come from what you heart inside that range."
+                  icon={BookOpen}
                   selected={kind === "scope"}
                   onSelect={() => setKind("scope")}
                 />
                 <TypeChoice
                   title="Custom"
                   description="A fixed list of verses you pick one by one."
+                  icon={ListChecks}
                   selected={kind === "custom"}
                   onSelect={() => setKind("custom")}
                 />
                 <TypeChoice
                   title="Preset"
                   description="A ready-made chapter or verse list."
+                  icon={Library}
                   selected={false}
                   onSelect={() => {
                     void navigate({ to: "/memory/presets" });
@@ -462,11 +473,13 @@ export function PackBuilder() {
 function TypeChoice({
   title,
   description,
+  icon: Icon,
   selected,
   onSelect,
 }: {
   title: string;
   description: string;
+  icon: LucideIcon;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -482,6 +495,16 @@ function TypeChoice({
           : "border-border bg-card hover:bg-muted/40",
       )}
     >
+      <span
+        className={cn(
+          "mb-3 flex h-8 w-8 items-center justify-center rounded-lg",
+          selected
+            ? "bg-primary/15 text-primary"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        <Icon className="h-4 w-4" aria-hidden />
+      </span>
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-1 text-xs leading-5 text-muted-foreground">
         {description}
