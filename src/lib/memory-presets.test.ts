@@ -56,6 +56,17 @@ describe("memory presets", () => {
       expect(packAllowsPassageMode(chapterPresetScope(preset))).toBe(true);
       expect(chapterPresetVerseCount(preset)).toBeGreaterThan(0);
     }
+
+    const chapterIds = chapterPresets().map((preset) => preset.id);
+    expect(chapterIds).toContain("matthew-5-7");
+    expect(chapterIds).not.toContain("matthew-5");
+    expect(chapterIds).not.toContain("matthew-6");
+    expect(chapterIds).not.toContain("matthew-7");
+    expect(getMemoryPreset("matthew-5-7")).toMatchObject({
+      title: "Sermon on the Mount",
+      startChapter: 5,
+      endChapter: 7,
+    });
   });
 
   it("treats a full id list as the whole collection, in catalog order", () => {

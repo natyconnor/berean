@@ -1,10 +1,4 @@
-import {
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
@@ -13,14 +7,10 @@ import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useCachedEsvQuery } from "@/hooks/use-cached-esv-query";
-import { useNearViewportVisible } from "@/hooks/use-near-viewport-visible";
-import { toEsvQuery } from "../../../../shared/esv-query";
 import {
   formatChapterRange,
   formatPresetPassage,
   getMemoryPreset,
-  type PresetPassage,
 } from "../../../../shared/memory-presets";
 
 export function CollectionPresetPage() {
@@ -107,7 +97,6 @@ function CollectionStart({ presetId }: { presetId: string }) {
   const navigate = useNavigate();
   const progress = useQuery(api.packs.presetProgress, {});
   const startPreset = useMutation(api.packs.startPreset);
-  const viewportRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -192,13 +181,12 @@ function CollectionStart({ presetId }: { presetId: string }) {
           />
         </div>
       </header>
-      <ScrollArea viewportRef={viewportRef} className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <ul className="mx-auto max-w-3xl space-y-1 px-5 pt-4 pb-28">
           {visible.map((passage) => (
             <PassageRow
               key={passage.id}
-              passage={passage}
-              rootRef={viewportRef}
+              label={formatPresetPassage(passage)}
               checked={selected.has(passage.id)}
               inLibrary={hearted.has(passage.id)}
               onToggle={() => toggle(passage.id)}
@@ -249,34 +237,18 @@ function CollectionStart({ presetId }: { presetId: string }) {
 }
 
 function PassageRow({
-  passage,
-  rootRef,
+  label,
   checked,
   inLibrary,
   onToggle,
 }: {
-  passage: PresetPassage;
-  rootRef: RefObject<HTMLDivElement | null>;
+  label: string;
   checked: boolean;
   inLibrary: boolean;
   onToggle: () => void;
 }) {
-  const rowRef = useRef<HTMLLIElement>(null);
-  const visible = useNearViewportVisible(rowRef, rootRef);
-  const loaded = useCachedEsvQuery(
-    visible ? toEsvQuery(passage.book, passage.chapter) : null,
-  );
-  const preview = loaded.data?.verses
-    .filter(
-      (verse) =>
-        verse.number >= passage.startVerse && verse.number <= passage.endVerse,
-    )
-    .map((verse) => verse.text.trim())
-    .join(" ");
-  const label = formatPresetPassage(passage);
-
   return (
-    <li ref={rowRef}>
+    <li>
       <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-muted/60">
         <input
           type="checkbox"
@@ -294,11 +266,6 @@ function PassageRow({
               </span>
             ) : null}
           </span>
-          {preview ? (
-            <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
-              {preview}
-            </span>
-          ) : null}
         </span>
       </label>
     </li>

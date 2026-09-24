@@ -145,6 +145,26 @@ describe("PackBuilder", () => {
     resetEligibleJohn3();
   });
 
+  it("offers preset as a peer choice that opens the preset browser", async () => {
+    renderBuilder();
+
+    const preset = screen.getByRole("button", {
+      name: /^Preset/,
+    });
+    expect(preset).toHaveClass("rounded-xl", "border");
+    expect(screen.getByRole("button", { name: /^Scope/ })).toHaveClass(
+      "rounded-xl",
+      "border",
+    );
+    expect(screen.getByRole("button", { name: /^Custom/ })).toHaveClass(
+      "rounded-xl",
+      "border",
+    );
+
+    await userEvent.click(preset);
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/memory/presets" });
+  });
+
   it("walks type → scope → name before create actions", async () => {
     renderBuilder();
 

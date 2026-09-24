@@ -279,7 +279,7 @@ export function PackBuilder() {
                   What kind of pack are you making?
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <TypeChoice
                   title="Scope"
                   description="A book or chapter range. Verses come from what you heart inside that range."
@@ -292,16 +292,15 @@ export function PackBuilder() {
                   selected={kind === "custom"}
                   onSelect={() => setKind("custom")}
                 />
+                <TypeChoice
+                  title="Preset"
+                  description="A ready-made chapter or verse list."
+                  selected={false}
+                  onSelect={() => {
+                    void navigate({ to: "/memory/presets" });
+                  }}
+                />
               </div>
-              <p className="text-sm text-muted-foreground">
-                <Link
-                  to="/memory/presets"
-                  className="font-medium text-foreground underline-offset-4 hover:underline"
-                >
-                  Start from a preset
-                </Link>{" "}
-                to memorize a chapter or a ready-made verse list.
-              </p>
             </section>
           ) : null}
 
