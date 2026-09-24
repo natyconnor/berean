@@ -1,11 +1,11 @@
 import { useMemo } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { Loader2 } from "lucide-react";
 
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useMemoryBack } from "@/hooks/use-memory-back";
 import {
   hasPracticeVerseScope,
   type MemoryPracticeSearch,
@@ -33,7 +33,7 @@ export function MemoryAllSessionPage({
   kind: MemorySessionKind;
   search: MemoryPracticeSearch;
 }) {
-  const navigate = useNavigate();
+  const onExit = useMemoryBack();
   const savedVerses = useQuery(api.savedVerses.listAll, {});
   const now = useLiveNow();
 
@@ -61,7 +61,7 @@ export function MemoryAllSessionPage({
       kind={kind}
       verses={verses}
       scopeLabel={scopeLabel}
-      onExit={() => void navigate({ to: "/memory" })}
+      onExit={onExit}
       emptyState={
         <div className="flex h-full items-center justify-center bg-background px-6">
           <div className="max-w-sm space-y-3 text-center">
@@ -75,12 +75,13 @@ export function MemoryAllSessionPage({
                 ? "Start a verse from your library, or come back when an in-progress verse is ready."
                 : "Verses become available for extra practice after they finish Learning."}
             </p>
-            <Link
-              to="/memory"
+            <button
+              type="button"
+              onClick={onExit}
               className="inline-flex text-sm font-medium text-primary hover:underline"
             >
-              Back to Memory
-            </Link>
+              Back
+            </button>
           </div>
         </div>
       }

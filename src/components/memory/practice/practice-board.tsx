@@ -1536,7 +1536,7 @@ function PracticeShell({
   sessionLabel,
   scopeLabel,
   onExit,
-  exitTooltip = "Go back to the Memory dashboard",
+  exitTooltip = "Go back",
   children,
 }: {
   sessionLabel: MemorySessionLabel;
