@@ -293,6 +293,15 @@ export function PackBuilder() {
                   onSelect={() => setKind("custom")}
                 />
               </div>
+              <p className="text-sm text-muted-foreground">
+                <Link
+                  to="/memory/presets"
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Start from a preset
+                </Link>{" "}
+                to memorize a chapter or a ready-made verse list.
+              </p>
             </section>
           ) : null}
 

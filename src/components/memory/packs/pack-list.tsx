@@ -44,12 +44,17 @@ export function PackList({ now }: { now: number }) {
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Packs
         </h2>
-        <Button asChild size="sm" variant="outline" className="h-7 gap-1.5">
-          <Link to="/memory/new">
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-            New pack
-          </Link>
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button asChild size="sm" variant="outline" className="h-7">
+            <Link to="/memory/presets">Browse presets</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="h-7 gap-1.5">
+            <Link to="/memory/new">
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              New pack
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {isLoadingFirstPage && !isRefreshingFirstPage ? (
@@ -63,16 +68,19 @@ export function PackList({ now }: { now: number }) {
             aria-hidden
           />
           <p className="text-sm text-muted-foreground">
-            No packs yet. Group verses by scope (a book, chapter, or tag) —
-            eligible scopes can be learned as a passage — or hand-pick a custom
-            set.
+            Start from a preset chapter or verse list, or build your own pack.
           </p>
-          <Button asChild size="sm" className="mt-4 gap-1.5">
-            <Link to="/memory/new">
-              <Plus className="h-4 w-4" aria-hidden />
-              New pack
-            </Link>
-          </Button>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <Button asChild size="sm">
+              <Link to="/memory/presets">Browse presets</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="gap-1.5">
+              <Link to="/memory/new">
+                <Plus className="h-4 w-4" aria-hidden />
+                New pack
+              </Link>
+            </Button>
+          </div>
         </div>
       ) : (
         <>

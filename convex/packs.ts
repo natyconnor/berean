@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
-import { findOrCreateVerseRefId } from "./lib/verseRefs";
+import { findOrCreateVerseRefId, findVerseRefId } from "./lib/verseRefs";
 import {
   adjustUserMemoryStats,
   findVerseMemory,
@@ -46,6 +46,13 @@ import {
 import { scopesEqual } from "../src/lib/scope-equality";
 import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
 import { verseMatchesScope } from "../src/lib/verse-scope-match";
+import {
+  MEMORY_PRESETS,
+  chapterPresetScope,
+  getMemoryPreset,
+  passagesForCollectionStart,
+  type PresetPassage,
+} from "../shared/memory-presets";
 
 /**
  * A pack is a per-user named verse set. `scope` packs resolve their members
@@ -829,5 +836,230 @@ export const acceptRetryHold = mutation({
     }
 
     return next;
+  },
+});
+
+const presetProgressItem = v.object({
+  presetId: v.string(),
+  packId: v.union(v.id("packs"), v.null()),
+  heartedPassageIds: v.array(v.string()),
+});
+
+async function heartPassageIntoPack(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  packId: Id<"packs">,
+  passage: PresetPassage,
+  order: number,
+  now: number,
+): Promise<void> {
+  const verseRefId = await findOrCreateVerseRefId(ctx, userId, {
+    book: passage.book,
+    chapter: passage.chapter,
+    startVerse: passage.startVerse,
+    endVerse: passage.endVerse,
+  });
+  const existingSaved = await ctx.db
+    .query("savedVerses")
+    .withIndex("by_userId_verseRefId", (q) =>
+      q.eq("userId", userId).eq("verseRefId", verseRefId),
+    )
+    .unique();
+  if (!existingSaved) {
+    await ctx.db.insert("savedVerses", {
+      userId,
+      verseRefId,
+      book: passage.book,
+      chapter: passage.chapter,
+      createdAt: now,
+    });
+  }
+  await seedVerseMemory(ctx, userId, verseRefId, now);
+
+  const existingMember = await ctx.db
+    .query("packVerses")
+    .withIndex("by_userId_packId_verseRefId", (q) =>
+      q.eq("userId", userId).eq("packId", packId).eq("verseRefId", verseRefId),
+    )
+    .unique();
+  if (!existingMember) {
+    await ctx.db.insert("packVerses", {
+      userId,
+      packId,
+      verseRefId,
+      order,
+      createdAt: now,
+    });
+  }
+}
+
+function presetPackName(fallback: string, name: string | undefined): string {
+  const trimmed = name?.trim();
+  return trimmed ? trimmed : fallback;
+}
+
+/**
+ * Start a catalog preset as a normal pack. Chapters become scope packs and
+ * open into passage learning on the client. A full collection is idempotent
+ * via `presetId`. A subset becomes a new custom pack without `presetId`.
+ */
+export const startPreset = mutation({
+  args: {
+    presetId: v.string(),
+    name: v.optional(v.string()),
+    passageIds: v.optional(v.array(v.string())),
+  },
+  returns: v.object({
+    packId: v.id("packs"),
+    created: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const preset = getMemoryPreset(args.presetId);
+    if (!preset) throw new Error("Unknown preset");
+    const now = Date.now();
+
+    if (preset.kind === "chapter") {
+      const scope = chapterPresetScope(preset);
+      const existing = await ctx.db
+        .query("packs")
+        .withIndex("by_userId_presetId", (q) =>
+          q.eq("userId", userId).eq("presetId", preset.id),
+        )
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, { lastOpenedAt: now });
+        return { packId: existing._id, created: false };
+      }
+      const owned = await ctx.db
+        .query("packs")
+        .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+        .collect();
+      const sameScope = owned.find(
+        (pack) =>
+          pack.kind === "scope" &&
+          pack.scope !== undefined &&
+          scopesEqual(pack.scope, scope),
+      );
+      if (sameScope) {
+        await ctx.db.patch(sameScope._id, { lastOpenedAt: now });
+        return { packId: sameScope._id, created: false };
+      }
+      const packId = await ctx.db.insert("packs", {
+        userId,
+        name: presetPackName(preset.title, args.name),
+        kind: "scope",
+        scope,
+        presetId: preset.id,
+        createdAt: now,
+        lastOpenedAt: now,
+      });
+      return { packId, created: true };
+    }
+
+    let passages;
+    let full;
+    try {
+      ({ passages, full } = passagesForCollectionStart(
+        preset,
+        args.passageIds,
+      ));
+    } catch {
+      throw new Error("Unknown passage in this preset");
+    }
+    if (passages.length === 0) {
+      throw new Error("Choose at least one passage");
+    }
+
+    if (full) {
+      const existing = await ctx.db
+        .query("packs")
+        .withIndex("by_userId_presetId", (q) =>
+          q.eq("userId", userId).eq("presetId", preset.id),
+        )
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, { lastOpenedAt: now });
+        return { packId: existing._id, created: false };
+      }
+    }
+
+    const packId = await ctx.db.insert("packs", {
+      userId,
+      name: presetPackName(preset.title, args.name),
+      kind: "custom",
+      ...(full ? { presetId: preset.id } : {}),
+      createdAt: now,
+      lastOpenedAt: now,
+    });
+    for (let index = 0; index < passages.length; index++) {
+      await heartPassageIntoPack(
+        ctx,
+        userId,
+        packId,
+        passages[index],
+        index,
+        now,
+      );
+    }
+    return { packId, created: true };
+  },
+});
+
+/** Which presets already have a pack, and how many collection spans are hearted. */
+export const presetProgress = query({
+  args: {},
+  returns: v.array(presetProgressItem),
+  handler: async (ctx) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+
+    const owned = await ctx.db
+      .query("packs")
+      .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+      .order("desc")
+      .collect();
+
+    const items = [];
+    for (const preset of MEMORY_PRESETS) {
+      if (preset.kind === "chapter") {
+        const scope = chapterPresetScope(preset);
+        const match = owned.find(
+          (pack) =>
+            pack.presetId === preset.id ||
+            (pack.kind === "scope" &&
+              pack.scope !== undefined &&
+              scopesEqual(pack.scope, scope)),
+        );
+        items.push({
+          presetId: preset.id,
+          packId: match?._id ?? null,
+          heartedPassageIds: [],
+        });
+        continue;
+      }
+
+      const match = owned.find(
+        (pack) => pack.presetId === preset.id && pack.kind === "custom",
+      );
+      const heartedPassageIds: string[] = [];
+      for (const passage of preset.passages) {
+        const verseRefId = await findVerseRefId(ctx, userId, passage);
+        if (!verseRefId) continue;
+        const saved = await ctx.db
+          .query("savedVerses")
+          .withIndex("by_userId_verseRefId", (q) =>
+            q.eq("userId", userId).eq("verseRefId", verseRefId),
+          )
+          .unique();
+        if (saved) heartedPassageIds.push(passage.id);
+      }
+      items.push({
+        presetId: preset.id,
+        packId: match?._id ?? null,
+        heartedPassageIds,
+      });
+    }
+    return items;
   },
 });
