@@ -26,6 +26,7 @@ import {
   dueIndexUntil,
   holdReviewingInterval,
   isFromMemoryGraduationAttempt,
+  nextExactReviewIntervalDays,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -477,6 +478,28 @@ describe("post-graduation review ladder", () => {
   function exactAt(s: MemorySchedule, now: number): MemorySchedule {
     return scheduleNext(s, review({ quality: "exact", now, mode: "review" }));
   }
+
+  it("previews the interval an exact recall would land on", () => {
+    expect(
+      nextExactReviewIntervalDays(
+        reviewing({
+          intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+          stageReps: 0,
+        }),
+      ),
+    ).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(
+      nextExactReviewIntervalDays(
+        reviewing({
+          intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+          stageReps: REVIEW_DAILY_REPS - 1,
+        }),
+      ),
+    ).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+    expect(
+      nextExactReviewIntervalDays(reviewing({ intervalDays: 5, ease: 2.3 })),
+    ).toBeCloseTo(5 * 2.3);
+  });
 
   it("keeps a newly graduated verse daily for REVIEW_DAILY_REPS exacts", () => {
     let s = reviewing({

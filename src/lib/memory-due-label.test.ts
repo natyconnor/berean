@@ -70,8 +70,8 @@ describe("formatNextReviewPhrase", () => {
 });
 
 describe("formatReviewIntervalPhrase", () => {
-  it("names a 1-day gap as tomorrow", () => {
-    expect(formatReviewIntervalPhrase(1)).toBe("tomorrow");
+  it("names a 1-day gap as 1 day", () => {
+    expect(formatReviewIntervalPhrase(1)).toBe("1 day");
   });
 
   it("names multi-day gaps in days", () => {
@@ -79,10 +79,9 @@ describe("formatReviewIntervalPhrase", () => {
     expect(formatReviewIntervalPhrase(5.4)).toBe("5 days");
   });
 
-  it("omits empty or non-positive gaps", () => {
+  it("omits missing gaps and floors empty ones to 1 day", () => {
     expect(formatReviewIntervalPhrase(undefined)).toBeNull();
-    expect(formatReviewIntervalPhrase(0)).toBeNull();
-    expect(formatReviewIntervalPhrase(-1)).toBeNull();
+    expect(formatReviewIntervalPhrase(0)).toBe("1 day");
   });
 });
 

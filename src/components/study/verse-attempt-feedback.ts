@@ -7,6 +7,8 @@ import {
   formatReviewIntervalPhrase,
 } from "@/lib/memory-due-label";
 import {
+  isReviewPhase,
+  nextExactReviewIntervalDays,
   type MemorySchedule,
   type ReviewGradeOutcome,
 } from "@/lib/memory-scheduler";
@@ -141,11 +143,25 @@ function withNextReview(
   return phrase ? `${lead} — next review ${phrase}` : lead;
 }
 
+function reviewRetryScheduleCopy(
+  schedule: MemorySchedule | null | undefined,
+): string {
+  const from = formatReviewIntervalPhrase(schedule?.intervalDays);
+  if (!schedule || !from || !isReviewPhase(schedule.status)) {
+    return "try again to extend your review interval";
+  }
+  const to = formatReviewIntervalPhrase(nextExactReviewIntervalDays(schedule));
+  if (!to || to === from) {
+    return `try again to keep your review interval at ${from}`;
+  }
+  return `try again to extend your review interval from ${from} to ${to}`;
+}
+
 /**
  * Review-queue banner: lead plus the schedule consequence.
  *
  * Retry stays due, so we invite another attempt and name the current gap
- * instead of a due date the verse has not spent yet.
+ * plus the interval a perfect recall would land.
  */
 export function reviewFeedbackMessage(input: {
   lead: string;
@@ -155,10 +171,7 @@ export function reviewFeedbackMessage(input: {
   lapsedToLearning: boolean;
 }): string {
   if (input.outcome === "retry") {
-    const wait = formatReviewIntervalPhrase(input.nextSchedule?.intervalDays);
-    return wait
-      ? `${input.lead} — try again to wait longer than ${wait}.`
-      : `${input.lead} — try again to wait longer.`;
+    return `${input.lead} — ${reviewRetryScheduleCopy(input.nextSchedule)}.`;
   }
   if (input.outcome === "lapse" && input.lapsedToLearning) {
     return `${input.lead} — back to Challenge.`;

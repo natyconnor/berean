@@ -612,7 +612,10 @@ function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
 }
 
 function nextReviewingOnExact(
-  s: MemorySchedule,
+  s: Pick<
+    MemorySchedule,
+    "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+  >,
 ): Pick<
   MemorySchedule,
   "status" | "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
@@ -670,6 +673,16 @@ function nextReviewingOnExact(
     stageReps: 0,
     consecutiveCorrect,
   };
+}
+
+/** Interval an exact recall would land on, in days. */
+export function nextExactReviewIntervalDays(
+  s: Pick<
+    MemorySchedule,
+    "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+  >,
+): number {
+  return nextReviewingOnExact(s).intervalDays;
 }
 
 /**

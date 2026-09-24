@@ -55,7 +55,7 @@ export function formatNextReviewPhrase(
 }
 
 /**
- * Human-readable review gap for retry copy ("tomorrow", "5 days").
+ * Review gap as a count of days ("1 day", "5 days").
  * Returns null when there is no real wait to name.
  */
 export function formatReviewIntervalPhrase(
@@ -64,10 +64,8 @@ export function formatReviewIntervalPhrase(
   if (intervalDays === undefined || !Number.isFinite(intervalDays)) {
     return null;
   }
-  const days = Math.max(0, Math.round(intervalDays));
-  if (days <= 0) return null;
-  if (days === 1) return "tomorrow";
-  return `${days} days`;
+  const days = Math.max(1, Math.round(intervalDays));
+  return days === 1 ? "1 day" : `${days} days`;
 }
 
 export function formatMemoryStatusSubtitle({
