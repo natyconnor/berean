@@ -383,12 +383,53 @@ export const create = mutation({
   },
 });
 
+async function replaceNoteLocationLinks(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  noteId: Id<"notes">,
+  verseRef: {
+    book: string;
+    chapter: number;
+    startVerse: number;
+    endVerse: number;
+    scope?: "chapter";
+  },
+) {
+  const errorMessage = getVerseRefBoundsErrorMessage(verseRef);
+  if (errorMessage) {
+    throw new Error(
+      `Invalid verse reference "${formatInlineVerseRef(verseRef)}": ${errorMessage}`,
+    );
+  }
+
+  const verseRefId = await findOrCreateVerseRefId(ctx, userId, verseRef);
+  const existing = await ctx.db
+    .query("noteVerseLinks")
+    .withIndex("by_noteId", (q) => q.eq("noteId", noteId))
+    .collect();
+
+  let hasTarget = false;
+  for (const link of existing) {
+    if (link.userId !== undefined && link.userId !== userId) continue;
+    if (link.verseRefId === verseRefId) {
+      hasTarget = true;
+      continue;
+    }
+    await ctx.db.delete(link._id);
+  }
+
+  if (!hasTarget) {
+    await ctx.db.insert("noteVerseLinks", { userId, noteId, verseRefId });
+  }
+}
+
 export const update = mutation({
   args: {
     id: v.id("notes"),
     content: v.optional(v.string()),
     body: v.optional(noteBodyValue),
     tags: v.optional(v.array(v.string())),
+    verseRef: v.optional(verseRefSummaryValue),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -428,6 +469,9 @@ export const update = mutation({
     await ctx.db.patch(args.id, patch);
     if (args.body !== undefined) {
       await syncInlineVerseLinksForNote(ctx, userId, args.id, args.body);
+    }
+    if (args.verseRef !== undefined) {
+      await replaceNoteLocationLinks(ctx, userId, args.id, args.verseRef);
     }
 
     if (patch.tags) {

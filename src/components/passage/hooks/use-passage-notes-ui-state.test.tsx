@@ -1,7 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  applyNoteLocationOverrides,
+  collectPassageNotesStartingInRange,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 import { EMPTY_NOTE_BODY } from "@/lib/note-inline-content";
 import {
   usePassageNotesUiState,
@@ -206,6 +210,27 @@ describe("usePassageNotesUiState outside-click dismissal", () => {
 
     expect(result.current.openVerseKeys.size).toBe(0);
     expect(result.current.openEditors.has(editorKey)).toBe(true);
+  });
+
+  it("does NOT close a dirty draft when clicking an overlay nudge", () => {
+    const nudge = document.createElement("button");
+    nudge.setAttribute("data-verse-nudge", "end:grow");
+    document.body.appendChild(nudge);
+
+    const { result } = renderUiState();
+    act(() => {
+      result.current.handleAddNote(1);
+    });
+    const key = Array.from(result.current.openEditors.keys())[0];
+    act(() => {
+      result.current.notifyEditorDirty(key, true);
+    });
+
+    clickElement(nudge);
+
+    expect(result.current.openEditors.has(key)).toBe(true);
+    expect(result.current.hasDirtyEditors).toBe(true);
+    nudge.remove();
   });
 });
 
@@ -984,5 +1009,421 @@ describe("usePassageNotesUiState focus mode save behavior", () => {
     expect(result.current.openEditors.size).toBe(0);
     expect(result.current.openEditors.has("new:2:2")).toBe(false);
     expect(result.current.openVerseKeys).toEqual(new Set([1]));
+  });
+});
+
+function johnRef(startVerse: number, endVerse: number) {
+  return { book: "John", chapter: 1, startVerse, endVerse };
+}
+
+describe("usePassageNotesUiState retargetNewDraft", () => {
+  function renderJohn() {
+    return renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+      }),
+    );
+  }
+
+  it("keeps the create-time key, dirty bit, and snapshot across 16 → 16–17 → 15–17", () => {
+    const { result } = renderJohn();
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    expect(result.current.openEditors.has("new:16:16")).toBe(true);
+
+    act(() => {
+      result.current.notifyEditorDirty("new:16:16", true);
+    });
+
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "Draft stays",
+        tags: ["hope"],
+      });
+    });
+    expect(result.current.inPlaceRetargetActive).toBe(false);
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(15, 17), {
+        body: "Draft stays",
+        tags: ["hope"],
+      });
+    });
+
+    const slot = result.current.openEditors.get("new:16:16");
+    expect(slot?.kind).toBe("new");
+    if (slot?.kind !== "new") return;
+    expect(slot.editorKey).toBe("new:16:16");
+    expect(slot.verseRef).toEqual(johnRef(15, 17));
+    expect(slot.snapshot).toEqual({ body: "Draft stays", tags: ["hope"] });
+    expect(result.current.hasDirtyEditors).toBe(true);
+    expect(result.current.retargetingEditorKey).toBe("new:16:16");
+    expect(result.current.inPlaceRetargetActive).toBe(true);
+    expect(result.current.newDraftsByAnchor.get(15)?.[0]).toMatchObject({
+      editorKey: "new:16:16",
+      snapshot: { body: "Draft stays", tags: ["hope"] },
+    });
+    expect(result.current.newDraftsByAnchor.has(16)).toBe(false);
+    expect(result.current.selectedVerses).toEqual(new Set([15, 16, 17]));
+    expect(result.current.isPassageSelection).toBe(true);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 15, startVerse: 15, endVerse: 17 },
+    ]);
+  });
+
+  it("no-ops when the span is unchanged or the key is an edit slot", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 16), {
+        body: "ignored",
+        tags: [],
+      });
+    });
+    const slot = result.current.openEditors.get("new:16:16");
+    expect(slot?.kind).toBe("new");
+    if (slot?.kind === "new") expect(slot.snapshot).toBeUndefined();
+    expect(result.current.retargetingEditorKey).toBeNull();
+    expect(result.current.inPlaceRetargetActive).toBe(false);
+
+    act(() => {
+      result.current.startEditingNote(
+        "note-16" as Id<"notes">,
+        johnRef(16, 16),
+        16,
+        false,
+      );
+    });
+    const editSlot = result.current.openEditors.get("edit:note-16");
+    act(() => {
+      result.current.retargetNewDraft("edit:note-16", johnRef(15, 16), {
+        body: "nope",
+        tags: [],
+      });
+    });
+    expect(result.current.openEditors.get("edit:note-16")).toEqual(editSlot);
+  });
+
+  it("does not arm in-place retarget motion on first 1→2 grouping", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "first group",
+        tags: [],
+      });
+    });
+    expect(result.current.retargetingEditorKey).toBe("new:16:16");
+    expect(result.current.inPlaceRetargetActive).toBe(false);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 16, startVerse: 16, endVerse: 17 },
+    ]);
+  });
+
+  it("treats the current span as occupancy and allocates a new key for the freed verse", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "kept",
+        tags: [],
+      });
+    });
+    act(() => {
+      result.current.startCreatingPassageNote(johnRef(16, 17));
+    });
+    expect(result.current.openEditors.size).toBe(1);
+
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(17, 17), {
+        body: "kept",
+        tags: [],
+      });
+    });
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+
+    expect(result.current.openEditors.size).toBe(2);
+    const moved = result.current.openEditors.get("new:16:16");
+    expect(moved?.kind).toBe("new");
+    if (moved?.kind === "new") expect(moved.verseRef).toEqual(johnRef(17, 17));
+    const reopened = result.current.openEditors.get("new:16:16:2");
+    expect(reopened?.kind).toBe("new");
+    if (reopened?.kind === "new") {
+      expect(reopened.verseRef).toEqual(johnRef(16, 16));
+    }
+  });
+
+  it("saves and cancels a retargeted draft by its original key at the new span", async () => {
+    const onSaveNewNote = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+        onSaveNewNote,
+      }),
+    );
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(16, 17), {
+        body: "kept",
+        tags: ["a"],
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleSaveNew(johnRef(16, 17), EMPTY_NOTE_BODY, [
+        "a",
+      ]);
+    });
+
+    expect(onSaveNewNote).toHaveBeenCalledWith(
+      johnRef(16, 17),
+      EMPTY_NOTE_BODY,
+      ["a"],
+    );
+    expect(result.current.openEditors.size).toBe(0);
+    expect(result.current.retargetingEditorKey).toBeNull();
+    expect(result.current.inPlaceRetargetActive).toBe(false);
+
+    act(() => {
+      result.current.handleAddNote(16);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:16:16", johnRef(15, 16), {
+        body: "kept",
+        tags: [],
+      });
+    });
+    act(() => {
+      result.current.cancelEditor("new:16:16");
+    });
+    expect(result.current.openEditors.size).toBe(0);
+  });
+});
+
+describe("usePassageNotesUiState retargetEditNote", () => {
+  const savedNoteId = "note-16" as Id<"notes">;
+
+  function renderJohn() {
+    return renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+      }),
+    );
+  }
+
+  it("updates a saved note's live verseRef and arms grouping", () => {
+    const { result } = renderJohn();
+    act(() => {
+      result.current.startEditingNote(savedNoteId, johnRef(16, 16), 16, false);
+    });
+
+    act(() => {
+      result.current.retargetEditNote(savedNoteId, johnRef(16, 17), {
+        body: "Saved body",
+        tags: ["hope"],
+      });
+    });
+
+    const slot = result.current.openEditors.get("edit:note-16");
+    expect(slot?.kind).toBe("edit");
+    if (slot?.kind !== "edit") return;
+    expect(slot.verseRef).toEqual(johnRef(16, 17));
+    expect(slot.originalVerseRef).toEqual(johnRef(16, 16));
+    expect(slot.snapshot).toEqual({ body: "Saved body", tags: ["hope"] });
+    expect(result.current.savedEditOverrides.get(savedNoteId)?.rangeDirty).toBe(
+      true,
+    );
+    expect(result.current.inPlaceRetargetActive).toBe(false);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 16, startVerse: 16, endVerse: 17 },
+    ]);
+    expect(result.current.editComposersByAnchor.get(16)?.[0]?.noteId).toBe(
+      savedNoteId,
+    );
+
+    const liveSingle: NoteWithRef = {
+      noteId: savedNoteId,
+      content: "Saved body",
+      tags: ["hope"],
+      verseRef: johnRef(16, 16),
+      createdAt: 1,
+    };
+    const resolved = applyNoteLocationOverrides(
+      new Map([[16, [liveSingle]]]),
+      new Map(),
+      new Map(),
+      new Map([[savedNoteId, slot.verseRef]]),
+    );
+    expect(resolved.singleVerseNotes.get(16)).toBeUndefined();
+    expect(resolved.passageNotesByAnchor.get(16)?.[0]?.verseRef).toEqual(
+      johnRef(16, 17),
+    );
+    expect(resolved.verseToPassageAnchor.get(16)).toBe(16);
+    expect(resolved.verseToPassageAnchor.get(17)).toBe(16);
+  });
+
+  it("passes the retargeted verseRef on save and skips it when unchanged", async () => {
+    const onSaveEditNote = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+        onSaveEditNote,
+      }),
+    );
+
+    act(() => {
+      result.current.startEditingNote(savedNoteId, johnRef(16, 16), 16, false);
+    });
+    await act(async () => {
+      await result.current.handleSaveEdit(savedNoteId, EMPTY_NOTE_BODY, [
+        "hope",
+      ]);
+    });
+    expect(onSaveEditNote).toHaveBeenCalledWith(
+      savedNoteId,
+      EMPTY_NOTE_BODY,
+      ["hope"],
+      undefined,
+    );
+
+    act(() => {
+      result.current.startEditingNote(savedNoteId, johnRef(16, 16), 16, false);
+    });
+    act(() => {
+      result.current.retargetEditNote(savedNoteId, johnRef(15, 16), {
+        body: "Saved body",
+        tags: ["hope"],
+      });
+    });
+    await act(async () => {
+      await result.current.handleSaveEdit(savedNoteId, EMPTY_NOTE_BODY, [
+        "hope",
+      ]);
+    });
+    expect(onSaveEditNote).toHaveBeenLastCalledWith(
+      savedNoteId,
+      EMPTY_NOTE_BODY,
+      ["hope"],
+      johnRef(15, 16),
+    );
+  });
+});
+
+describe("usePassageNotesUiState draft overlap with saved passages", () => {
+  const saved715: NoteWithRef = {
+    noteId: "john-7-15" as Id<"notes">,
+    content: "Saved 7–15",
+    tags: [],
+    verseRef: johnRef(7, 15),
+    createdAt: 1,
+  };
+  const saved1215: NoteWithRef = {
+    noteId: "john-12-15" as Id<"notes">,
+    content: "Saved 12–15",
+    tags: [],
+    verseRef: johnRef(12, 15),
+    createdAt: 1,
+  };
+
+  function renderJohnWithPassages(
+    passageNotesByAnchor: Map<number, NoteWithRef[]>,
+  ) {
+    return renderHook(() =>
+      usePassageNotesUiState({
+        ...defaultOptions(),
+        book: "John",
+        chapter: 1,
+        passageNotesByAnchor,
+      }),
+    );
+  }
+
+  it("collapses an expanded saved passage when a draft grows into it", () => {
+    const { result } = renderJohnWithPassages(new Map([[7, [saved715]]]));
+
+    act(() => {
+      result.current.openPassageNotes(7);
+    });
+    expect(result.current.openPassageKeys).toEqual(new Set([7]));
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 7, startVerse: 7, endVerse: 15 },
+    ]);
+
+    act(() => {
+      result.current.handleAddNote(4);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:4:4", johnRef(4, 11), {
+        body: "draft",
+        tags: [],
+      });
+    });
+
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 4, startVerse: 4, endVerse: 11 },
+    ]);
+    expect(result.current.newDraftsByAnchor.get(4)?.[0]?.verseRef).toEqual(
+      johnRef(4, 11),
+    );
+  });
+
+  it("keeps a closed saved note collapsed and on the draft group when its start is covered", () => {
+    const byAnchor = new Map([[12, [saved1215]]]);
+    const { result } = renderJohnWithPassages(byAnchor);
+
+    act(() => {
+      result.current.handleAddNote(4);
+    });
+    act(() => {
+      result.current.retargetNewDraft("new:4:4", johnRef(4, 12), {
+        body: "draft",
+        tags: [],
+      });
+    });
+
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 4, startVerse: 4, endVerse: 12 },
+    ]);
+    expect(collectPassageNotesStartingInRange(byAnchor, 4, 12)).toEqual([
+      saved1215,
+    ]);
+  });
+
+  it("collapses an intersecting open passage for a fresh multi-verse draft", () => {
+    const { result } = renderJohnWithPassages(new Map([[7, [saved715]]]));
+
+    act(() => {
+      result.current.openPassageNotes(7);
+    });
+    act(() => {
+      result.current.startCreatingPassageNote(johnRef(4, 11));
+    });
+
+    expect(result.current.openPassageKeys.size).toBe(0);
+    expect(result.current.expandedPassageRanges).toEqual([
+      { anchorVerse: 4, startVerse: 4, endVerse: 11 },
+    ]);
   });
 });

@@ -10,6 +10,12 @@ import { normalizeTags } from "@/lib/tag-utils";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import {
+  nudgeVerseRange,
+  type VerseRangeEnd,
+  type VerseRangeNudge,
+} from "@/lib/verse-range-nudge";
+import { VerseRangeOverlayChip } from "@/components/notes/verse-range-overlay-chip";
+import {
   normalizeNoteBody,
   noteBodyHasSubstantiveContent,
   noteBodyToPlainText,
@@ -51,6 +57,19 @@ interface NoteEditorProps {
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onFocusWithin?: () => void;
+  /**
+   * When set, the verse badge becomes the range overlay. New drafts and
+   * saved-note edits on the passage both pass this. Dirty tracking for
+   * snapshot remounts is `dirtyAsNewDraft`; saved edits use `rangeDirty`.
+   */
+  onRetargetVerse?: (
+    nextRef: VerseRef,
+    snapshot: { body: string; tags: string[] },
+  ) => void;
+  /** Force create-draft dirty tracking (has content) even after a snapshot remount. */
+  dirtyAsNewDraft?: boolean;
+  /** Verse-range change on a saved note that the body/tags diff cannot see. */
+  rangeDirty?: boolean;
 }
 
 export function NoteEditor({
@@ -64,6 +83,9 @@ export function NoteEditor({
   onCancel,
   onDirtyChange,
   onFocusWithin,
+  onRetargetVerse,
+  dirtyAsNewDraft,
+  rangeDirty = false,
 }: NoteEditorProps) {
   const [initialEditorBody] = useState<NoteBody>(() =>
     normalizeNoteBody(initialBody, initialContent),
@@ -115,7 +137,9 @@ export function NoteEditor({
     setSaveError(null);
   }, []);
 
-  const isNewNote = !initialContent && !initialBody;
+  const isNewNote =
+    dirtyAsNewDraft ??
+    (onRetargetVerse !== undefined || (!initialContent && !initialBody));
 
   useEffect(() => {
     if (!onDirtyChange) return;
@@ -127,7 +151,7 @@ export function NoteEditor({
       const tagsChanged =
         tags.length !== normalizedInitialTags.length ||
         tags.some((t, i) => t !== normalizedInitialTags[i]);
-      onDirtyChange(bodyChanged || tagsChanged);
+      onDirtyChange(bodyChanged || tagsChanged || rangeDirty);
     }
   }, [
     body,
@@ -136,6 +160,7 @@ export function NoteEditor({
     isNewNote,
     initialEditorBody,
     normalizedInitialTags,
+    rangeDirty,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -168,6 +193,19 @@ export function NoteEditor({
     [body, handleSave],
   );
 
+  const handleVerseNudge = useCallback(
+    (end: VerseRangeEnd, nudge: VerseRangeNudge) => {
+      if (!onRetargetVerse || isSaving) return;
+      const nextRef = nudgeVerseRange(verseRef, end, nudge);
+      if (!nextRef) return;
+      onRetargetVerse(nextRef, {
+        body: noteBodyToPlainText(body),
+        tags,
+      });
+    },
+    [body, isSaving, onRetargetVerse, tags, verseRef],
+  );
+
   const isPassage = variant === "passage";
   const isChapter = variant === "chapter";
   const canSave = noteBodyHasSubstantiveContent(body);
@@ -190,13 +228,22 @@ export function NoteEditor({
         className={cn(
           "flex items-center",
           isChapter ? "justify-end" : "justify-between",
+          onRetargetVerse && "overflow-visible",
         )}
       >
         {!isChapter ? (
-          <Badge variant="secondary" className="text-xs">
-            {isPassage ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
-            {formatVerseRef(verseRef)}
-          </Badge>
+          onRetargetVerse ? (
+            <VerseRangeOverlayChip
+              verseRef={verseRef}
+              disabled={isSaving}
+              onNudge={handleVerseNudge}
+            />
+          ) : (
+            <Badge variant="secondary" className="text-xs">
+              {isPassage ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
+              {formatVerseRef(verseRef)}
+            </Badge>
+          )
         ) : null}
         <TooltipButton
           variant="ghost"

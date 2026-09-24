@@ -1,7 +1,24 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PassageNotesBubble } from "./passage-notes-bubble";
+
+vi.mock("convex-helpers/react/cache", () => ({
+  useQuery: () => [],
+}));
+
+vi.mock("convex/react", () => ({
+  useAction: () => vi.fn(),
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => () => Promise.resolve(),
+}));
+
+vi.mock("@/components/notes/editor/inline-verse-editor", () => ({
+  InlineVerseEditor: () => <textarea aria-label="Note" />,
+}));
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 
@@ -104,5 +121,75 @@ describe("PassageNotesBubble overlapping ranges", () => {
 
     expect(screen.getByText("2 Samuel 23:9-11")).toBeInTheDocument();
     expect(screen.queryByText("9-11")).not.toBeInTheDocument();
+  });
+
+  it("keeps a static badge while editing a saved passage note without overlay wiring", () => {
+    render(
+      <TooltipProvider>
+        <PassageNotesBubble
+          notes={overlappingNotes}
+          isOpen
+          isGlowing={false}
+          editingNoteIds={new Set([overlappingNotes[0].noteId])}
+          onSaveEdit={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onAddNote={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText("2 Samuel 23:9-11")).toBeInTheDocument();
+    expect(document.querySelector("[data-verse-range-chip]")).toBeNull();
+    expect(document.querySelector("[data-verse-nudge]")).toBeNull();
+  });
+
+  it("shows the range overlay while editing a saved passage note", async () => {
+    const user = userEvent.setup();
+    const onRetargetVerse = vi.fn();
+    const note = overlappingNotes[0];
+
+    render(
+      <TooltipProvider>
+        <PassageNotesBubble
+          notes={overlappingNotes}
+          isOpen
+          isGlowing={false}
+          editingNoteIds={new Set([note.noteId])}
+          onSaveEdit={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onRetargetVerse={onRetargetVerse}
+          savedEditOverrides={
+            new Map([
+              [note.noteId, { verseRef: note.verseRef, rangeDirty: false }],
+            ])
+          }
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onAddNote={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    const chip = document.querySelector("[data-verse-range-chip]");
+    expect(chip).not.toBeNull();
+    await user.hover(chip!);
+    const grow = document.querySelector(
+      '[data-verse-nudge="end:grow"]',
+    ) as HTMLButtonElement;
+    await user.click(grow);
+
+    expect(onRetargetVerse).toHaveBeenCalledWith(
+      note.noteId,
+      { ...note.verseRef, endVerse: 12 },
+      expect.objectContaining({
+        body: "When people withdraw, the mighty are revealed.",
+      }),
+    );
   });
 });

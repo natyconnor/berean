@@ -1,8 +1,11 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  applyNoteLocationOverrides,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 import { useChapterNotesData } from "./use-chapter-notes-data";
 import {
   useChapterNotesPanel,
@@ -13,6 +16,10 @@ import {
   type EditorSlot,
   type ExpandedPassageRange,
   type FocusTarget,
+  type NewDraftAtAnchor,
+  type NewDraftSnapshot,
+  type EditComposerAtAnchor,
+  type SavedEditOverride,
 } from "./use-passage-notes-ui-state";
 
 const CHAPTER_NOTES_DIRTY_KEY = "chapter-notes";
@@ -31,7 +38,11 @@ export interface PassageNotesInteraction {
   openEditors: Map<string, EditorSlot>;
   currentFocusTarget: FocusTarget | null;
   editingNoteIds: Set<Id<"notes">>;
-  newDraftsByAnchor: Map<number, VerseRef[]>;
+  newDraftsByAnchor: Map<number, NewDraftAtAnchor[]>;
+  editComposersByAnchor: Map<number, EditComposerAtAnchor[]>;
+  savedEditOverrides: Map<Id<"notes">, SavedEditOverride>;
+  retargetingEditorKey: string | null;
+  inPlaceRetargetActive: boolean;
   isPassageSelection: boolean;
 
   chapterScopedNotes: NoteWithRef[];
@@ -58,6 +69,16 @@ export interface PassageNotesInteraction {
     body: NoteBody,
     tags: string[],
   ) => Promise<void>;
+  retargetNewDraft: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
+  retargetEditNote: (
+    noteId: Id<"notes">,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
   handleSaveEdit: (
     noteId: Id<"notes">,
     body: NoteBody,
@@ -129,6 +150,31 @@ export function usePassageNotesInteraction(
     onSaveEditNote: saveEditedNote,
     onDeleteNote: deleteNote,
   });
+
+  const locationOverrides = useMemo(() => {
+    const overrides = new Map<Id<"notes">, VerseRef>();
+    for (const slot of uiState.openEditors.values()) {
+      if (slot.kind !== "edit") continue;
+      overrides.set(slot.noteId, slot.verseRef);
+    }
+    return overrides;
+  }, [uiState.openEditors]);
+
+  const resolvedNoteLocations = useMemo(
+    () =>
+      applyNoteLocationOverrides(
+        singleVerseNotes,
+        passageNotesByAnchor,
+        verseToPassageAnchor,
+        locationOverrides,
+      ),
+    [
+      locationOverrides,
+      passageNotesByAnchor,
+      singleVerseNotes,
+      verseToPassageAnchor,
+    ],
+  );
 
   const chapterNotesPanel = useChapterNotesPanel({
     book,
@@ -262,8 +308,8 @@ export function usePassageNotesInteraction(
     confirmDiscard,
     chapterScopedNotes,
     chapterNotesPanel,
-    singleVerseNotes,
-    passageNotesByAnchor,
-    verseToPassageAnchor,
+    singleVerseNotes: resolvedNoteLocations.singleVerseNotes,
+    passageNotesByAnchor: resolvedNoteLocations.passageNotesByAnchor,
+    verseToPassageAnchor: resolvedNoteLocations.verseToPassageAnchor,
   };
 }

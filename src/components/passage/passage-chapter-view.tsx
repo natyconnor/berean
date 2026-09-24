@@ -5,7 +5,10 @@ import { Loader2 } from "lucide-react";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
 import type { EsvVerse, EsvVerseHeading } from "../../../shared/esv-api";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  collectPassageNotesStartingInRange,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 import { useTutorial } from "@/components/tutorial/tutorial-context";
 import { Button } from "@/components/ui/button";
 import { useEsvPassage } from "@/hooks/use-esv-passage";
@@ -456,7 +459,11 @@ export function PassageChapterView({
             subheading: data.verses.find((v) => inRange(v) && v.subheading)
               ?.subheading,
             verses: blockVerses,
-            passageNotes: passageNotesByAnchor.get(range.anchorVerse) ?? [],
+            passageNotes: collectPassageNotesStartingInRange(
+              passageNotesByAnchor,
+              range.startVerse,
+              range.endVerse,
+            ),
             singleNotesByVerse,
           });
         }

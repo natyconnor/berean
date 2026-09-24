@@ -1,6 +1,15 @@
-import { useCallback, useMemo, useState, type RefObject } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type RefObject,
+} from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {
+  passageHoverSpanForNotes,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
 import type { HighlightRange } from "@/lib/highlight-utils";
 import type { EsvVerseHeading } from "../../../shared/esv-api";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,9 +20,16 @@ import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
 import { SectionHeading } from "./section-heading";
 import { ChapterNotesChrome } from "./chapter-notes-chrome";
 import {
-  NOTE_ENTER_TRANSITION,
-  CROSSFADE_TRANSITION,
-} from "./note-animation-config";
+  draftGroupPresenceKey,
+  draftSpanLayoutId,
+  groupListPresenceMotion,
+  groupUsesRetargetMotion,
+  listItemTransition,
+  singleVersePresenceKind,
+  singleVersePresenceMotion,
+  verseListPresenceMode,
+  type OpenDraftSpan,
+} from "./draft-retarget-presence";
 import type { PassageNotesInteraction } from "./hooks/use-passage-notes-interaction";
 import {
   FOCUS_MODE_SPOTLIGHT_VERSE_END,
@@ -26,6 +42,10 @@ import { masteryRingFraction } from "@/lib/mastery-ring";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import type { PassageHeartControl } from "./verse-row";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
+import {
+  logPassagePresence,
+  passagePresenceDebugEnabled,
+} from "@/lib/dev-passage-presence-logger";
 
 type SavedSpan = {
   startVerse: number;
@@ -135,12 +155,19 @@ export function PassageViewBody({
     isInSelection,
     isPassageSelection,
     verseToPassageAnchor,
+    passageNotesByAnchor,
     hoveredPassageBubble,
     hoveredSingleBubble,
     openVerseKeys,
     openPassageKeys,
     currentFocusTarget,
     newDraftsByAnchor,
+    editComposersByAnchor,
+    savedEditOverrides,
+    retargetingEditorKey,
+    inPlaceRetargetActive,
+    retargetNewDraft,
+    retargetEditNote,
     editingNoteIds,
     handleAddNote,
     handleVerseMouseDown,
@@ -235,6 +262,22 @@ export function PassageViewBody({
     [hoveredSavedPassage],
   );
 
+  const hoveredPassageNoteRange = useMemo(() => {
+    if (hoveredPassageBubble === null) return null;
+    return passageHoverSpanForNotes(
+      passageNotesByAnchor.get(hoveredPassageBubble) ?? [],
+      savedEditOverrides,
+    );
+  }, [hoveredPassageBubble, passageNotesByAnchor, savedEditOverrides]);
+
+  const isInHoveredPassageNote = useCallback(
+    (verseNumber: number) =>
+      hoveredPassageNoteRange !== null &&
+      verseNumber >= hoveredPassageNoteRange.startVerse &&
+      verseNumber <= hoveredPassageNoteRange.endVerse,
+    [hoveredPassageNoteRange],
+  );
+
   const multiVersePassageSelection =
     isPassageSelection && selectedVerses.size > 1;
   const passageSelectLo = multiVersePassageSelection
@@ -313,6 +356,29 @@ export function PassageViewBody({
     filteredVerses,
   ]);
 
+  const reduceMotion = useReducedMotion() === true;
+  const listPresenceMode = verseListPresenceMode(inPlaceRetargetActive);
+  const openDraftSpans = useMemo((): OpenDraftSpan[] => {
+    const spans: OpenDraftSpan[] = [];
+    for (const drafts of newDraftsByAnchor.values()) {
+      for (const draft of drafts) {
+        spans.push({
+          startVerse: draft.verseRef.startVerse,
+          endVerse: draft.verseRef.endVerse,
+        });
+      }
+    }
+    for (const composers of editComposersByAnchor.values()) {
+      for (const composer of composers) {
+        spans.push({
+          startVerse: composer.verseRef.startVerse,
+          endVerse: composer.verseRef.endVerse,
+        });
+      }
+    }
+    return spans;
+  }, [editComposersByAnchor, newDraftsByAnchor]);
+
   const { darkMode } = useTheme();
 
   const focusGlowStyle = useMemo(() => {
@@ -330,6 +396,53 @@ export function PassageViewBody({
       boxShadow: `inset 0 0 ${innerBlur}px color-mix(in oklab, var(--primary) ${innerPercent}%, transparent), inset 0 0 ${outerBlur}px color-mix(in oklab, var(--primary) ${outerPercent}%, transparent)`,
     };
   }, [darkMode, focusGlowAmount, isFocusMode]);
+
+  useEffect(() => {
+    if (!passagePresenceDebugEnabled()) return;
+    const groupKeys: string[] = [];
+    const verseKinds: Array<{ verse: number; kind: string }> = [];
+    for (const item of filteredVerses) {
+      if (item.kind === "passageGroup") {
+        const drafts = newDraftsByAnchor.get(item.anchorVerse) ?? [];
+        groupKeys.push(draftGroupPresenceKey(item.anchorVerse, drafts));
+      } else {
+        verseKinds.push({
+          verse: item.verseNumber,
+          kind: singleVersePresenceKind({
+            hostsOpenDraft:
+              (newDraftsByAnchor.get(item.verseNumber) ?? []).length > 0,
+            reenteringFromGroup: reenteringFromGroup.has(item.verseNumber),
+            verseNumber: item.verseNumber,
+            openDrafts: openDraftSpans,
+            inPlaceRetarget: inPlaceRetargetActive,
+          }),
+        });
+      }
+    }
+    const phase = inPlaceRetargetActive
+      ? "retarget"
+      : newDraftsByAnchor.size > 0
+        ? "first-open"
+        : reenteringFromGroup.size > 0
+          ? "close"
+          : "idle";
+    logPassagePresence({
+      phase,
+      listPresenceMode,
+      inPlaceRetargetActive,
+      retargetingEditorKey,
+      groupKeys,
+      verseKinds,
+    });
+  }, [
+    filteredVerses,
+    inPlaceRetargetActive,
+    listPresenceMode,
+    newDraftsByAnchor,
+    openDraftSpans,
+    reenteringFromGroup,
+    retargetingEditorKey,
+  ]);
 
   return (
     <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -353,7 +466,7 @@ export function PassageViewBody({
           onMouseLeave={handleMouseUp}
         >
           <div>
-            <AnimatePresence initial={false} mode="popLayout">
+            <AnimatePresence initial={false} mode={listPresenceMode}>
               {filteredVerses.map((item) => {
                 if (item.kind === "passageGroup") {
                   const gLo = item.verses[0]?.verseNumber ?? 0;
@@ -367,13 +480,56 @@ export function PassageViewBody({
                           masteryFraction: spanMasteryFraction(gLo, gHi),
                         }
                       : null;
+                  const draftsForAnchor =
+                    newDraftsByAnchor.get(item.anchorVerse) ?? [];
+                  const editComposersForAnchor =
+                    editComposersByAnchor.get(item.anchorVerse) ?? [];
+                  const ownsRetarget = groupUsesRetargetMotion(
+                    [...draftsForAnchor, ...editComposersForAnchor],
+                    retargetingEditorKey,
+                    inPlaceRetargetActive,
+                  );
+                  const groupMotion = groupListPresenceMotion(
+                    ownsRetarget,
+                    reduceMotion,
+                  );
+                  const spanLayoutId =
+                    ownsRetarget &&
+                    (draftsForAnchor[0] || editComposersForAnchor[0])
+                      ? draftSpanLayoutId(
+                          (draftsForAnchor[0] ?? editComposersForAnchor[0])
+                            .editorKey,
+                        )
+                      : undefined;
+                  const groupPresenceKey = draftGroupPresenceKey(
+                    item.anchorVerse,
+                    [...draftsForAnchor, ...editComposersForAnchor],
+                  );
                   return (
                     <motion.div
-                      key={`passage-group-${item.anchorVerse}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={CROSSFADE_TRANSITION}
+                      key={groupPresenceKey}
+                      data-presence-kind={
+                        ownsRetarget ? "draft-group" : "passage-group"
+                      }
+                      data-list-presence-mode={listPresenceMode}
+                      data-presence-phase={
+                        inPlaceRetargetActive ? "retarget" : "enter-exit"
+                      }
+                      data-span-layout-id={spanLayoutId}
+                      layout={
+                        inPlaceRetargetActive || groupMotion.layout
+                          ? true
+                          : undefined
+                      }
+                      layoutId={spanLayoutId}
+                      initial={groupMotion.initial}
+                      animate={groupMotion.animate}
+                      exit={groupMotion.exit}
+                      transition={listItemTransition(
+                        groupMotion.transition,
+                        inPlaceRetargetActive,
+                        reduceMotion,
+                      )}
                     >
                       {item.heading ? (
                         <AnimatePresence initial={false}>
@@ -406,9 +562,13 @@ export function PassageViewBody({
                         onRecolorHighlight={onRecolorHighlight}
                         isPassageOpen={openPassageKeys.has(item.anchorVerse)}
                         editingNoteIds={editingNoteIds}
-                        draftsForAnchor={
-                          newDraftsByAnchor.get(item.anchorVerse) ?? []
-                        }
+                        draftsForAnchor={draftsForAnchor}
+                        editComposersForAnchor={editComposersForAnchor}
+                        onRetargetNewDraft={retargetNewDraft}
+                        onRetargetEditNote={retargetEditNote}
+                        retargetingEditorKey={retargetingEditorKey}
+                        inPlaceRetargetActive={inPlaceRetargetActive}
+                        savedEditOverrides={savedEditOverrides}
                         focusDistance={
                           focusDistanceByKey.get(
                             `passage-group-${item.anchorVerse}`,
@@ -441,36 +601,59 @@ export function PassageViewBody({
                 const passageAnchor = verseToPassageAnchor.get(
                   item.verseNumber,
                 );
-                const isPassageRangeActive =
-                  passageAnchor !== undefined &&
-                  hoveredPassageBubble === passageAnchor;
+                const isPassageRangeActive = isInHoveredPassageNote(
+                  item.verseNumber,
+                );
                 const isNoteBubbleHovered =
                   hoveredSingleBubble === item.verseNumber;
                 const isReentering = reenteringFromGroup.has(item.verseNumber);
 
+                const draftsForVerse =
+                  newDraftsByAnchor.get(item.verseNumber) ?? [];
+                const editComposersForVerse =
+                  editComposersByAnchor.get(item.verseNumber) ?? [];
+                const presenceKind = singleVersePresenceKind({
+                  hostsOpenDraft:
+                    draftsForVerse.length > 0 ||
+                    editComposersForVerse.length > 0,
+                  reenteringFromGroup: isReentering,
+                  verseNumber: item.verseNumber,
+                  openDrafts: openDraftSpans,
+                  inPlaceRetarget: inPlaceRetargetActive,
+                });
+                const verseMotion = singleVersePresenceMotion(
+                  presenceKind,
+                  reduceMotion,
+                );
+                const spanLayoutId =
+                  presenceKind === "draft-host" &&
+                  (draftsForVerse[0] || editComposersForVerse[0])
+                    ? draftSpanLayoutId(
+                        (draftsForVerse[0] ?? editComposersForVerse[0])
+                          .editorKey,
+                      )
+                    : undefined;
+
                 return (
                   <motion.div
                     key={item.verseNumber}
-                    initial={
-                      isReentering
-                        ? { opacity: 0 }
-                        : { height: 0, opacity: 0, overflow: "hidden" }
+                    data-presence-kind={presenceKind}
+                    data-list-presence-mode={listPresenceMode}
+                    data-span-layout-id={spanLayoutId}
+                    layout={
+                      inPlaceRetargetActive || verseMotion.layout
+                        ? true
+                        : undefined
                     }
-                    animate={
-                      isReentering
-                        ? { opacity: 1 }
-                        : {
-                            height: "auto",
-                            opacity: 1,
-                            transitionEnd: { overflow: "visible" },
-                          }
-                    }
-                    exit={{ opacity: 0 }}
-                    transition={
-                      isReentering
-                        ? CROSSFADE_TRANSITION
-                        : NOTE_ENTER_TRANSITION
-                    }
+                    layoutId={spanLayoutId}
+                    initial={verseMotion.initial}
+                    animate={verseMotion.animate}
+                    exit={verseMotion.exit}
+                    transition={listItemTransition(
+                      verseMotion.transition,
+                      inPlaceRetargetActive,
+                      reduceMotion,
+                    )}
                   >
                     {item.heading ? (
                       <AnimatePresence initial={false}>
@@ -508,9 +691,12 @@ export function PassageViewBody({
                       isNoteBubbleHovered={isNoteBubbleHovered}
                       openVerseKeys={openVerseKeys}
                       openPassageKeys={openPassageKeys}
-                      draftsForThisAnchor={
-                        newDraftsByAnchor.get(item.verseNumber) ?? []
-                      }
+                      draftsForThisAnchor={draftsForVerse}
+                      editComposersForThisAnchor={editComposersForVerse}
+                      onRetargetNewDraft={retargetNewDraft}
+                      onRetargetEditNote={retargetEditNote}
+                      retargetingEditorKey={retargetingEditorKey}
+                      savedEditOverrides={savedEditOverrides}
                       editingNoteIds={editingNoteIds}
                       isFocusTarget={
                         hasFocusRange

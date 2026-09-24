@@ -3,6 +3,22 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { VerseNotes } from "./verse-notes";
+
+vi.mock("convex-helpers/react/cache", () => ({
+  useQuery: () => [],
+}));
+
+vi.mock("convex/react", () => ({
+  useAction: () => vi.fn(),
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => () => Promise.resolve(),
+}));
+
+vi.mock("@/components/notes/editor/inline-verse-editor", () => ({
+  InlineVerseEditor: () => <textarea aria-label="Note" />,
+}));
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 
@@ -82,5 +98,73 @@ describe("VerseNotes", () => {
       screen.getByRole("button", { name: /2 notes/i }),
     ).toBeInTheDocument();
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a static badge while editing a saved note without overlay wiring", () => {
+    render(
+      <TooltipProvider>
+        <VerseNotes
+          notes={[baseNote]}
+          isOpen
+          editingNoteIds={new Set([baseNote.noteId])}
+          onSaveEdit={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onAddNote={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText("John 1:1")).toBeInTheDocument();
+    expect(document.querySelector("[data-verse-range-chip]")).toBeNull();
+    expect(document.querySelector("[data-verse-nudge]")).toBeNull();
+  });
+
+  it("shows the range overlay while editing a saved note", async () => {
+    const user = userEvent.setup();
+    const onRetargetVerse = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <VerseNotes
+          notes={[baseNote]}
+          isOpen
+          editingNoteIds={new Set([baseNote.noteId])}
+          onSaveEdit={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onRetargetVerse={onRetargetVerse}
+          savedEditOverrides={
+            new Map([
+              [
+                baseNote.noteId,
+                { verseRef: baseNote.verseRef, rangeDirty: false },
+              ],
+            ])
+          }
+          onOpen={vi.fn()}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onAddNote={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    const chip = document.querySelector("[data-verse-range-chip]");
+    expect(chip).not.toBeNull();
+    await user.hover(chip!);
+    const grow = document.querySelector(
+      '[data-verse-nudge="end:grow"]',
+    ) as HTMLButtonElement;
+    await user.click(grow);
+
+    expect(onRetargetVerse).toHaveBeenCalledWith(
+      baseNote.noteId,
+      { ...baseNote.verseRef, endVerse: 2 },
+      expect.objectContaining({ body: "A short sample note" }),
+    );
   });
 });

@@ -5,7 +5,12 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  LayoutGroup,
+  useReducedMotion,
+} from "framer-motion";
 import { cn } from "@/lib/utils";
 import { VerseTextPane } from "./verse-text-pane";
 import { PassageNotesBubble } from "../passage-notes-bubble";
@@ -19,11 +24,23 @@ import {
 import {
   LAYOUT_CORRECTION_TRANSITION,
   CROSSFADE_TRANSITION,
-  NOTE_ENTER_TRANSITION,
+  retargetLayoutTransition,
 } from "../note-animation-config";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
+import type {
+  EditComposerAtAnchor,
+  NewDraftAtAnchor,
+  NewDraftSnapshot,
+  SavedEditOverride,
+} from "../hooks/use-passage-notes-ui-state";
+import {
+  draftComposerLayoutId,
+  draftComposerMotionProps,
+  draftDockLayoutGroupId,
+  groupUsesRetargetMotion,
+} from "../draft-retarget-presence";
 import type { NoteWithRef } from "@/components/notes/model/note-model";
 import type {
   HighlightRange,
@@ -52,7 +69,21 @@ interface PassageGroupWithNotesProps {
   onRecolorHighlight?: (highlightId: string, color: string) => void;
   isPassageOpen: boolean;
   editingNoteIds: Set<Id<"notes">>;
-  draftsForAnchor: VerseRef[];
+  draftsForAnchor: NewDraftAtAnchor[];
+  editComposersForAnchor?: EditComposerAtAnchor[];
+  onRetargetNewDraft?: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
+  onRetargetEditNote?: (
+    noteId: Id<"notes">,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
+  retargetingEditorKey?: string | null;
+  inPlaceRetargetActive?: boolean;
+  savedEditOverrides?: Map<Id<"notes">, SavedEditOverride>;
   focusDistance?: number | null;
   onOpenPassageNotes: (verseNumber: number) => void;
   onClosePassageNotes: (verseNumber: number) => void;
@@ -127,6 +158,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   isPassageOpen,
   editingNoteIds,
   draftsForAnchor,
+  editComposersForAnchor = [],
   focusDistance = null,
   onOpenPassageNotes,
   onClosePassageNotes,
@@ -145,11 +177,32 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onCollapse,
   groupPassageHeart,
   hoveredSavedPassage = null,
+  onRetargetNewDraft,
+  onRetargetEditNote,
+  retargetingEditorKey = null,
+  inPlaceRetargetActive = false,
+  savedEditOverrides,
 }: PassageGroupWithNotesProps) {
+  const reduceMotion = useReducedMotion() === true;
+  const ownsRetarget = groupUsesRetargetMotion(
+    [...draftsForAnchor, ...editComposersForAnchor],
+    retargetingEditorKey,
+    inPlaceRetargetActive,
+  );
+  const dockedEditorKey =
+    draftsForAnchor[0]?.editorKey ?? editComposersForAnchor[0]?.editorKey;
+  const dockedEditComposers = editComposersForAnchor.filter(
+    (composer) => !passageNotes.some((note) => note.noteId === composer.noteId),
+  );
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
   const anchorVerse = verses[0]?.verseNumber ?? 0;
 
-  const handleCollapseGroup = useCallback(() => onCollapse(), [onCollapse]);
+  const handleCollapseGroup = useCallback(() => {
+    for (const composer of dockedEditComposers) {
+      onCancelEditor(composer.editorKey);
+    }
+    onCollapse();
+  }, [dockedEditComposers, onCancelEditor, onCollapse]);
 
   const handleVerseNotePillClick = useCallback(
     (verseNumber: number) => {
@@ -159,13 +212,23 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
     [anchorVerse, onClosePassageNotes, onOpenVerseNotes],
   );
 
+  const visibleSingleNotesByVerse = useMemo(() => {
+    if (editingNoteIds.size === 0) return singleNotesByVerse;
+    const next = new Map<number, NoteWithRef[]>();
+    for (const [verse, notes] of singleNotesByVerse) {
+      const visible = notes.filter((note) => !editingNoteIds.has(note.noteId));
+      if (visible.length > 0) next.set(verse, visible);
+    }
+    return next;
+  }, [editingNoteIds, singleNotesByVerse]);
+
   const versesWithSingleNotes = useMemo(
     () =>
       verses.filter((v) => {
-        const notes = singleNotesByVerse.get(v.verseNumber);
+        const notes = visibleSingleNotesByVerse.get(v.verseNumber);
         return notes !== undefined && notes.length > 0;
       }),
-    [verses, singleNotesByVerse],
+    [verses, visibleSingleNotesByVerse],
   );
 
   const isReadMode = viewMode === "read";
@@ -183,6 +246,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   return (
     <LayoutGroup id={`passage-group-${anchorVerse}`}>
       <div
+        data-retarget-owner={ownsRetarget ? "true" : "false"}
         className={cn(
           "grid items-start",
           isReadMode
@@ -201,10 +265,14 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
           className="flex h-full min-h-0 flex-col self-stretch"
         >
           <motion.div
-            initial={{ opacity: 0 }}
+            initial={ownsRetarget ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={CROSSFADE_TRANSITION}
+            exit={{ opacity: ownsRetarget && reduceMotion ? 1 : 0 }}
+            transition={
+              ownsRetarget
+                ? retargetLayoutTransition(reduceMotion)
+                : CROSSFADE_TRANSITION
+            }
             className="flex h-full min-h-0 flex-col justify-center rounded-lg bg-amber-100/60 dark:bg-[var(--cl-passage-surface-soft)] cl-depth-2 cl-transition"
           >
             <div className="flex">
@@ -220,29 +288,38 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
               )}
               <div className="flex flex-1 flex-col">
                 {verses.map((verse, index) => (
-                  <VerseTextPane
+                  <motion.div
                     key={verse.verseNumber}
-                    verseNumber={verse.verseNumber}
-                    text={verse.text}
-                    midHeadings={verse.midHeadings}
-                    selection={EMPTY_SELECTION}
-                    noteIndicator={EMPTY_NOTE_INDICATOR}
-                    hover={EMPTY_HOVER}
-                    isExpanded={true}
-                    variant="groupedPassage"
-                    showCollapseControl={index === 0}
-                    onCollapseVerse={handleCollapseGroup}
-                    highlights={highlightsByVerse.get(verse.verseNumber)}
-                    onCreateHighlight={onCreateHighlight}
-                    onDeleteHighlight={onDeleteHighlight}
-                    onRecolorHighlight={onRecolorHighlight}
-                    isInHoveredSavedPassage={
-                      hoveredSavedPassage !== null &&
-                      verse.verseNumber >= hoveredSavedPassage.startVerse &&
-                      verse.verseNumber <= hoveredSavedPassage.endVerse
+                    layout={ownsRetarget}
+                    layoutId={
+                      ownsRetarget && dockedEditorKey
+                        ? `draft-verse-${dockedEditorKey}-${verse.verseNumber}`
+                        : undefined
                     }
-                    handlers={NOOP_HANDLERS}
-                  />
+                  >
+                    <VerseTextPane
+                      verseNumber={verse.verseNumber}
+                      text={verse.text}
+                      midHeadings={verse.midHeadings}
+                      selection={EMPTY_SELECTION}
+                      noteIndicator={EMPTY_NOTE_INDICATOR}
+                      hover={EMPTY_HOVER}
+                      isExpanded={true}
+                      variant="groupedPassage"
+                      showCollapseControl={index === 0}
+                      onCollapseVerse={handleCollapseGroup}
+                      highlights={highlightsByVerse.get(verse.verseNumber)}
+                      onCreateHighlight={onCreateHighlight}
+                      onDeleteHighlight={onDeleteHighlight}
+                      onRecolorHighlight={onRecolorHighlight}
+                      isInHoveredSavedPassage={
+                        hoveredSavedPassage !== null &&
+                        verse.verseNumber >= hoveredSavedPassage.startVerse &&
+                        verse.verseNumber <= hoveredSavedPassage.endVerse
+                      }
+                      handlers={NOOP_HANDLERS}
+                    />
+                  </motion.div>
                 ))}
               </div>
             </div>
@@ -260,7 +337,9 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
             {versesWithSingleNotes.length > 0 && (
               <div className="shrink-0 flex flex-col items-start gap-1.5 pt-0.5">
                 {versesWithSingleNotes.map((verse) => {
-                  const notes = singleNotesByVerse.get(verse.verseNumber)!;
+                  const notes = visibleSingleNotesByVerse.get(
+                    verse.verseNumber,
+                  )!;
                   return (
                     <div
                       key={verse.verseNumber}
@@ -293,6 +372,8 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                     viewMode={viewMode}
                     currentChapter={currentChapter}
                     editingNoteIds={editingNoteIds}
+                    savedEditOverrides={savedEditOverrides}
+                    onRetargetVerse={onRetargetEditNote}
                     onSaveEdit={onSaveEdit}
                     onCancelEdit={(noteId) => onCancelEditor(`edit:${noteId}`)}
                     onEditorDirtyChange={(noteId, isDirty) =>
@@ -329,32 +410,122 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
 
               <AnimatePresence initial={false}>
                 {draftsForAnchor.map((draft) => {
-                  const draftEditorKey = `new:${draft.startVerse}:${draft.endVerse}`;
+                  const composerMotion = draftComposerMotionProps(
+                    retargetingEditorKey === draft.editorKey,
+                    reduceMotion,
+                  );
+                  const composerLayoutId = draftComposerLayoutId(
+                    draft.editorKey,
+                  );
                   return (
-                    <motion.div
-                      key={draftEditorKey}
-                      layout
-                      data-note-surface
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={NOTE_ENTER_TRANSITION}
+                    <LayoutGroup
+                      key={draft.editorKey}
+                      id={draftDockLayoutGroupId(draft.editorKey)}
+                      inherit={false}
                     >
-                      <NoteEditor
-                        verseRef={draft}
-                        variant={
-                          draft.startVerse !== draft.endVerse
-                            ? "passage"
-                            : "default"
-                        }
-                        onSave={(body, tags) => onSaveNew(draft, body, tags)}
-                        onCancel={() => onCancelEditor(draftEditorKey)}
-                        onDirtyChange={(isDirty) =>
-                          onEditorDirtyChange(draftEditorKey, isDirty)
-                        }
-                        onFocusWithin={() => onEditorFocus(draftEditorKey)}
-                      />
-                    </motion.div>
+                      <motion.div
+                        layout
+                        layoutId={composerLayoutId}
+                        data-draft-layout-id={composerLayoutId}
+                        data-note-surface
+                        initial={composerMotion.initial}
+                        animate={composerMotion.animate}
+                        exit={composerMotion.exit}
+                        transition={composerMotion.transition}
+                      >
+                        <NoteEditor
+                          verseRef={draft.verseRef}
+                          initialContent={draft.snapshot?.body}
+                          initialTags={draft.snapshot?.tags}
+                          variant={
+                            draft.verseRef.startVerse !==
+                            draft.verseRef.endVerse
+                              ? "passage"
+                              : "default"
+                          }
+                          onSave={(body, tags) =>
+                            onSaveNew(draft.verseRef, body, tags)
+                          }
+                          onCancel={() => onCancelEditor(draft.editorKey)}
+                          onDirtyChange={(isDirty) =>
+                            onEditorDirtyChange(draft.editorKey, isDirty)
+                          }
+                          onFocusWithin={() => onEditorFocus(draft.editorKey)}
+                          onRetargetVerse={
+                            onRetargetNewDraft
+                              ? (nextRef, snapshot) =>
+                                  onRetargetNewDraft(
+                                    draft.editorKey,
+                                    nextRef,
+                                    snapshot,
+                                  )
+                              : undefined
+                          }
+                        />
+                      </motion.div>
+                    </LayoutGroup>
+                  );
+                })}
+                {dockedEditComposers.map((composer) => {
+                  const composerMotion = draftComposerMotionProps(
+                    retargetingEditorKey === composer.editorKey,
+                    reduceMotion,
+                  );
+                  const composerLayoutId = draftComposerLayoutId(
+                    composer.editorKey,
+                  );
+                  return (
+                    <LayoutGroup
+                      key={composer.editorKey}
+                      id={draftDockLayoutGroupId(composer.editorKey)}
+                      inherit={false}
+                    >
+                      <motion.div
+                        layout
+                        layoutId={composerLayoutId}
+                        data-draft-layout-id={composerLayoutId}
+                        data-note-surface
+                        initial={composerMotion.initial}
+                        animate={composerMotion.animate}
+                        exit={composerMotion.exit}
+                        transition={composerMotion.transition}
+                      >
+                        <NoteEditor
+                          verseRef={composer.verseRef}
+                          initialContent={composer.snapshot?.body}
+                          initialTags={composer.snapshot?.tags}
+                          variant={
+                            composer.verseRef.startVerse !==
+                            composer.verseRef.endVerse
+                              ? "passage"
+                              : "default"
+                          }
+                          dirtyAsNewDraft={false}
+                          rangeDirty
+                          currentChapter={currentChapter}
+                          onSave={(body, tags) =>
+                            onSaveEdit(composer.noteId, body, tags)
+                          }
+                          onCancel={() => onCancelEditor(composer.editorKey)}
+                          onDirtyChange={(isDirty) =>
+                            onEditorDirtyChange(composer.editorKey, isDirty)
+                          }
+                          onFocusWithin={() =>
+                            onEditorFocus(composer.editorKey)
+                          }
+                          onRetargetVerse={
+                            onRetargetEditNote
+                              ? (nextRef, snapshot) =>
+                                  onRetargetEditNote(
+                                    composer.noteId,
+                                    nextRef,
+                                    snapshot,
+                                  )
+                              : undefined
+                          }
+                        />
+                      </motion.div>
+                    </LayoutGroup>
                   );
                 })}
               </AnimatePresence>

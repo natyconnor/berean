@@ -93,16 +93,38 @@ export function useChapterNotesData(book: string, chapter: number) {
     noteId: Id<"notes">,
     body: NoteBody,
     tags: string[],
+    verseRef?: VerseRef,
   ) => {
     logInteraction("notes", "update-started", {
       noteId,
       tagCount: tags.length,
+      ...(verseRef
+        ? {
+            book: verseRef.book,
+            chapter: verseRef.chapter,
+            startVerse: verseRef.startVerse,
+            endVerse: verseRef.endVerse,
+          }
+        : {}),
     });
     try {
-      await updateNote({ id: noteId, body, tags });
+      await updateNote({
+        id: noteId,
+        body,
+        tags,
+        ...(verseRef ? { verseRef } : {}),
+      });
       logInteraction("notes", "updated", {
         noteId,
         tagCount: tags.length,
+        ...(verseRef
+          ? {
+              book: verseRef.book,
+              chapter: verseRef.chapter,
+              startVerse: verseRef.startVerse,
+              endVerse: verseRef.endVerse,
+            }
+          : {}),
       });
     } catch (error) {
       logInteraction("notes", "update-failed", {

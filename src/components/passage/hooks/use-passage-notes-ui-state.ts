@@ -12,7 +12,11 @@ import { logInteraction } from "@/lib/dev-log";
 import { getChapterVerseCount } from "@/lib/bible-verse-counts";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
-import type { NoteWithRef } from "@/components/notes/model/note-model";
+import {
+  openPassageAnchorsIntersectingRange,
+  type NoteWithRef,
+} from "@/components/notes/model/note-model";
+import { isInPlaceGroupRetarget } from "@/components/passage/draft-retarget-presence";
 
 type PassageViewMode = "compose" | "read";
 
@@ -35,13 +39,47 @@ interface UsePassageNotesUiStateOptions {
     noteId: Id<"notes">,
     body: NoteBody,
     tags: string[],
+    verseRef?: VerseRef,
   ) => Promise<void>;
   onDeleteNote: (noteId: Id<"notes">) => Promise<void>;
 }
 
+export type NewDraftSnapshot = { body: string; tags: string[] };
+
+export interface NewDraftAtAnchor {
+  editorKey: string;
+  verseRef: VerseRef;
+  snapshot?: NewDraftSnapshot;
+}
+
 export type EditorSlot =
-  | { kind: "new"; verseRef: VerseRef }
-  | { kind: "edit"; noteId: Id<"notes">; verseRef: VerseRef };
+  | {
+      kind: "new";
+      editorKey: string;
+      verseRef: VerseRef;
+      snapshot?: NewDraftSnapshot;
+    }
+  | {
+      kind: "edit";
+      noteId: Id<"notes">;
+      verseRef: VerseRef;
+      originalVerseRef: VerseRef;
+      snapshot?: NewDraftSnapshot;
+    };
+
+export interface EditComposerAtAnchor {
+  noteId: Id<"notes">;
+  editorKey: string;
+  verseRef: VerseRef;
+  originalVerseRef: VerseRef;
+  snapshot?: NewDraftSnapshot;
+}
+
+export interface SavedEditOverride {
+  verseRef: VerseRef;
+  snapshot?: NewDraftSnapshot;
+  rangeDirty: boolean;
+}
 
 export interface ExpandedPassageRange {
   anchorVerse: number;
@@ -72,7 +110,11 @@ export interface PassageNotesUiState {
   openEditors: Map<string, EditorSlot>;
   currentFocusTarget: FocusTarget | null;
   editingNoteIds: Set<Id<"notes">>;
-  newDraftsByAnchor: Map<number, VerseRef[]>;
+  newDraftsByAnchor: Map<number, NewDraftAtAnchor[]>;
+  editComposersByAnchor: Map<number, EditComposerAtAnchor[]>;
+  savedEditOverrides: Map<Id<"notes">, SavedEditOverride>;
+  retargetingEditorKey: string | null;
+  inPlaceRetargetActive: boolean;
   isPassageSelection: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
   isDragging: boolean;
@@ -91,6 +133,16 @@ export interface PassageNotesUiState {
     body: NoteBody,
     tags: string[],
   ) => Promise<void>;
+  retargetNewDraft: (
+    editorKey: string,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
+  retargetEditNote: (
+    noteId: Id<"notes">,
+    nextRef: VerseRef,
+    snapshot: NewDraftSnapshot,
+  ) => void;
   handleSaveEdit: (
     noteId: Id<"notes">,
     body: NoteBody,
@@ -124,13 +176,43 @@ export interface PassageNotesUiState {
 }
 
 export function editorKey(slot: EditorSlot): string {
-  return slot.kind === "new"
-    ? `new:${slot.verseRef.startVerse}:${slot.verseRef.endVerse}`
-    : `edit:${slot.noteId}`;
+  return slot.kind === "new" ? slot.editorKey : `edit:${slot.noteId}`;
 }
 
-function newEditorKey(ref: VerseRef): string {
-  return `new:${ref.startVerse}:${ref.endVerse}`;
+function verseRefsMatch(a: VerseRef, b: VerseRef): boolean {
+  return (
+    a.book === b.book &&
+    a.chapter === b.chapter &&
+    a.startVerse === b.startVerse &&
+    a.endVerse === b.endVerse
+  );
+}
+
+/** No-op (null) when a new slot already points at this span. */
+function allocateNewEditorKey(
+  ref: VerseRef,
+  editors: Map<string, EditorSlot>,
+): string | null {
+  for (const slot of editors.values()) {
+    if (slot.kind === "new" && verseRefsMatch(slot.verseRef, ref)) return null;
+  }
+  const base = `new:${ref.startVerse}:${ref.endVerse}`;
+  if (!editors.has(base)) return base;
+  let suffix = 2;
+  while (editors.has(`${base}:${suffix}`)) suffix += 1;
+  return `${base}:${suffix}`;
+}
+
+function findNewDraftKey(
+  editors: Map<string, EditorSlot>,
+  verseRef: VerseRef,
+): string | null {
+  for (const [key, slot] of editors) {
+    if (slot.kind === "new" && verseRefsMatch(slot.verseRef, verseRef)) {
+      return key;
+    }
+  }
+  return null;
 }
 
 function editEditorKey(noteId: Id<"notes">): string {
@@ -291,6 +373,10 @@ export function usePassageNotesUiState({
   const [openEditors, setOpenEditors] = useState<Map<string, EditorSlot>>(
     new Map(),
   );
+  const [retargetingEditorKey, setRetargetingEditorKey] = useState<
+    string | null
+  >(null);
+  const [inPlaceRetargetActive, setInPlaceRetargetActive] = useState(false);
   const [editorHasChanges, setEditorHasChanges] = useState<Set<string>>(
     new Set(),
   );
@@ -325,6 +411,10 @@ export function usePassageNotesUiState({
   useLayoutEffect(() => {
     openEditorsRef.current = openEditors;
   }, [openEditors]);
+  const retargetingEditorKeyRef = useRef(retargetingEditorKey);
+  useLayoutEffect(() => {
+    retargetingEditorKeyRef.current = retargetingEditorKey;
+  }, [retargetingEditorKey]);
 
   // --- Derived values from the unified openEditors map ---
 
@@ -337,16 +427,56 @@ export function usePassageNotesUiState({
   }, [openEditors]);
 
   const newDraftsByAnchor = useMemo(() => {
-    const m = new Map<number, VerseRef[]>();
+    const m = new Map<number, NewDraftAtAnchor[]>();
     for (const slot of openEditors.values()) {
       if (slot.kind !== "new") continue;
       const anchor = slot.verseRef.startVerse;
+      const entry: NewDraftAtAnchor = {
+        editorKey: slot.editorKey,
+        verseRef: slot.verseRef,
+        snapshot: slot.snapshot,
+      };
       const arr = m.get(anchor);
       if (arr) {
-        arr.push(slot.verseRef);
+        arr.push(entry);
       } else {
-        m.set(anchor, [slot.verseRef]);
+        m.set(anchor, [entry]);
       }
+    }
+    return m;
+  }, [openEditors]);
+
+  const editComposersByAnchor = useMemo(() => {
+    const m = new Map<number, EditComposerAtAnchor[]>();
+    for (const slot of openEditors.values()) {
+      if (slot.kind !== "edit") continue;
+      const anchor = slot.verseRef.startVerse;
+      const entry: EditComposerAtAnchor = {
+        noteId: slot.noteId,
+        editorKey: editorKey(slot),
+        verseRef: slot.verseRef,
+        originalVerseRef: slot.originalVerseRef,
+        snapshot: slot.snapshot,
+      };
+      const arr = m.get(anchor);
+      if (arr) {
+        arr.push(entry);
+      } else {
+        m.set(anchor, [entry]);
+      }
+    }
+    return m;
+  }, [openEditors]);
+
+  const savedEditOverrides = useMemo(() => {
+    const m = new Map<Id<"notes">, SavedEditOverride>();
+    for (const slot of openEditors.values()) {
+      if (slot.kind !== "edit") continue;
+      m.set(slot.noteId, {
+        verseRef: slot.verseRef,
+        snapshot: slot.snapshot,
+        rangeDirty: !verseRefsMatch(slot.verseRef, slot.originalVerseRef),
+      });
     }
     return m;
   }, [openEditors]);
@@ -354,7 +484,6 @@ export function usePassageNotesUiState({
   const draftCoveredVerses = useMemo(() => {
     const s = new Set<number>();
     for (const slot of openEditors.values()) {
-      if (slot.kind !== "new") continue;
       for (let v = slot.verseRef.startVerse; v <= slot.verseRef.endVerse; v++) {
         s.add(v);
       }
@@ -365,7 +494,6 @@ export function usePassageNotesUiState({
   const passageDraftVerses = useMemo(() => {
     const s = new Set<number>();
     for (const slot of openEditors.values()) {
-      if (slot.kind !== "new") continue;
       if (slot.verseRef.startVerse === slot.verseRef.endVerse) continue;
       for (let v = slot.verseRef.startVerse; v <= slot.verseRef.endVerse; v++) {
         s.add(v);
@@ -382,9 +510,13 @@ export function usePassageNotesUiState({
     for (const anchor of openPassageKeys) {
       const notes = passageNotesByAnchor.get(anchor);
       if (!notes || notes.length === 0) continue;
+      const visibleNotes = notes.filter(
+        (note) => !editingNoteIds.has(note.noteId),
+      );
+      if (visibleNotes.length === 0) continue;
       let minVerse = Infinity;
       let maxVerse = -Infinity;
-      for (const note of notes) {
+      for (const note of visibleNotes) {
         minVerse = Math.min(minVerse, note.verseRef.startVerse);
         maxVerse = Math.max(maxVerse, note.verseRef.endVerse);
       }
@@ -395,39 +527,15 @@ export function usePassageNotesUiState({
       });
     }
 
-    for (const [, slot] of openEditors) {
-      if (
-        slot.kind === "new" &&
-        slot.verseRef.startVerse !== slot.verseRef.endVerse
-      ) {
-        const anchor = slot.verseRef.startVerse;
-        if (!ranges.some((r) => r.anchorVerse === anchor)) {
-          ranges.push({
-            anchorVerse: anchor,
-            startVerse: slot.verseRef.startVerse,
-            endVerse: slot.verseRef.endVerse,
-          });
-        }
-      }
-    }
-
-    for (const noteId of editingNoteIds) {
-      for (const [anchor, notes] of passageNotesByAnchor) {
-        if (notes.some((n) => n.noteId === noteId)) {
-          if (!ranges.some((r) => r.anchorVerse === anchor)) {
-            let minV = Infinity;
-            let maxV = -Infinity;
-            for (const note of notes) {
-              minV = Math.min(minV, note.verseRef.startVerse);
-              maxV = Math.max(maxV, note.verseRef.endVerse);
-            }
-            ranges.push({
-              anchorVerse: anchor,
-              startVerse: minV,
-              endVerse: maxV,
-            });
-          }
-        }
+    for (const slot of openEditors.values()) {
+      if (slot.verseRef.startVerse === slot.verseRef.endVerse) continue;
+      const anchor = slot.verseRef.startVerse;
+      if (!ranges.some((r) => r.anchorVerse === anchor)) {
+        ranges.push({
+          anchorVerse: anchor,
+          startVerse: slot.verseRef.startVerse,
+          endVerse: slot.verseRef.endVerse,
+        });
       }
     }
 
@@ -517,7 +625,16 @@ export function usePassageNotesUiState({
       if (dirtyKeys.size === 0) {
         setOpenEditors(new Map());
         setEditorHasChanges(new Set());
+        setRetargetingEditorKey(null);
+        setInPlaceRetargetActive(false);
       } else {
+        const keepRetarget =
+          retargetingEditorKeyRef.current !== null &&
+          dirtyKeys.has(retargetingEditorKeyRef.current);
+        if (!keepRetarget) {
+          setRetargetingEditorKey(null);
+          setInPlaceRetargetActive(false);
+        }
         setOpenEditors((prev) => {
           const next = new Map<string, EditorSlot>();
           for (const [key, slot] of prev) {
@@ -544,28 +661,176 @@ export function usePassageNotesUiState({
     [passageNotesByAnchor],
   );
 
+  const closePassageNotes = useCallback(
+    (verseNumber: number) => {
+      if (viewMode === "read") {
+        readPassageAutoOpenSuppressedRef.current.add(verseNumber);
+      }
+      setOpenPassageKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(verseNumber);
+        return next;
+      });
+      const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
+      setViewSelectedVerses((prev) => {
+        const next = new Set(prev);
+        for (const v of passageVerses) next.delete(v);
+        return next;
+      });
+    },
+    [getSelectedVersesForPassageAnchor, viewMode],
+  );
+
+  const closePassagesIntersectingRange = useCallback(
+    (startVerse: number, endVerse: number, excludeNoteId?: Id<"notes">) => {
+      const anchors = openPassageAnchorsIntersectingRange(
+        openPassageKeys,
+        startVerse,
+        endVerse,
+        passageNotesByAnchor,
+      );
+      for (const anchor of anchors) {
+        if (excludeNoteId) {
+          const notes = passageNotesByAnchor.get(anchor) ?? [];
+          if (notes.some((note) => note.noteId === excludeNoteId)) continue;
+        }
+        closePassageNotes(anchor);
+      }
+    },
+    [closePassageNotes, openPassageKeys, passageNotesByAnchor],
+  );
+
   const addNewDraft = useCallback(
     (ref: VerseRef) => {
-      const key = newEditorKey(ref);
-      if (openEditorsRef.current.has(key)) return;
+      if (allocateNewEditorKey(ref, openEditorsRef.current) === null) return;
       markTargetActive(targetFromVerseRef(ref));
       logInteraction("notes", "editor-opened", {
         mode: "create",
         ...getVerseRefLogDetails(ref),
       });
       setOpenEditors((prev) => {
-        if (prev.has(key)) return prev;
+        const key = allocateNewEditorKey(ref, prev);
+        if (!key) return prev;
         const next = new Map(prev);
-        next.set(key, { kind: "new", verseRef: ref });
+        next.set(key, { kind: "new", editorKey: key, verseRef: ref });
         return next;
       });
     },
     [markTargetActive],
   );
 
+  const retargetOpenEditor = useCallback(
+    (key: string, nextRef: VerseRef, snapshot: NewDraftSnapshot) => {
+      const slot = openEditorsRef.current.get(key);
+      if (!slot) return;
+      if (verseRefsMatch(slot.verseRef, nextRef)) return;
+
+      markTargetActive(targetFromVerseRef(nextRef));
+      setIsPassageSelection(nextRef.startVerse !== nextRef.endVerse);
+      setViewSelectedVerses((prev) => {
+        const next = new Set(prev);
+        for (
+          let verse = slot.verseRef.startVerse;
+          verse <= slot.verseRef.endVerse;
+          verse += 1
+        ) {
+          next.delete(verse);
+        }
+        for (
+          let verse = nextRef.startVerse;
+          verse <= nextRef.endVerse;
+          verse += 1
+        ) {
+          next.add(verse);
+        }
+        return next;
+      });
+      setRetargetingEditorKey(key);
+      setInPlaceRetargetActive(
+        isInPlaceGroupRetarget(
+          {
+            startVerse: slot.verseRef.startVerse,
+            endVerse: slot.verseRef.endVerse,
+          },
+          {
+            startVerse: nextRef.startVerse,
+            endVerse: nextRef.endVerse,
+          },
+        ),
+      );
+      setOpenEditors((prev) => {
+        const current = prev.get(key);
+        if (!current) return prev;
+        if (verseRefsMatch(current.verseRef, nextRef)) return prev;
+        const next = new Map(prev);
+        if (current.kind === "new") {
+          next.set(key, {
+            kind: "new",
+            editorKey: current.editorKey,
+            verseRef: nextRef,
+            snapshot,
+          });
+        } else {
+          next.set(key, {
+            kind: "edit",
+            noteId: current.noteId,
+            verseRef: nextRef,
+            originalVerseRef: current.originalVerseRef,
+            snapshot,
+          });
+        }
+        return next;
+      });
+      if (slot.kind === "edit") {
+        const oldStart = slot.verseRef.startVerse;
+        const nextIsRange = nextRef.startVerse !== nextRef.endVerse;
+        setOpenVerseKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(oldStart);
+          if (!nextIsRange) next.add(nextRef.startVerse);
+          return next;
+        });
+        setOpenPassageKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(oldStart);
+          if (nextIsRange) next.add(nextRef.startVerse);
+          return next;
+        });
+      }
+      if (nextRef.startVerse !== nextRef.endVerse) {
+        closePassagesIntersectingRange(
+          nextRef.startVerse,
+          nextRef.endVerse,
+          slot.kind === "edit" ? slot.noteId : undefined,
+        );
+      }
+    },
+    [closePassagesIntersectingRange, markTargetActive],
+  );
+
+  const retargetNewDraft = useCallback(
+    (key: string, nextRef: VerseRef, snapshot: NewDraftSnapshot) => {
+      const slot = openEditorsRef.current.get(key);
+      if (!slot || slot.kind !== "new") return;
+      retargetOpenEditor(key, nextRef, snapshot);
+    },
+    [retargetOpenEditor],
+  );
+
+  const retargetEditNote = useCallback(
+    (noteId: Id<"notes">, nextRef: VerseRef, snapshot: NewDraftSnapshot) => {
+      retargetOpenEditor(editEditorKey(noteId), nextRef, snapshot);
+    },
+    [retargetOpenEditor],
+  );
+
   const removeEditor = useCallback((key: string) => {
     if (activeEditorKeyRef.current === key) {
       activeEditorKeyRef.current = null;
+    }
+    if (retargetingEditorKeyRef.current === key) {
+      setRetargetingEditorKey(null);
+      setInPlaceRetargetActive(false);
     }
     setOpenEditors((prev) => {
       if (!prev.has(key)) return prev;
@@ -605,6 +870,8 @@ export function usePassageNotesUiState({
       }
       setOpenEditors(new Map());
       setEditorHasChanges(new Set());
+      setRetargetingEditorKey(null);
+      setInPlaceRetargetActive(false);
       action();
       return true;
     },
@@ -672,6 +939,10 @@ export function usePassageNotesUiState({
           endVerse: selection.endVerse,
         });
         setIsPassageSelection(true);
+        closePassagesIntersectingRange(
+          selection.startVerse,
+          selection.endVerse,
+        );
       };
 
       gateReadModeEditor(executeSelection);
@@ -681,6 +952,7 @@ export function usePassageNotesUiState({
       book,
       chapter,
       clearActiveEditorFocus,
+      closePassagesIntersectingRange,
       gateReadModeEditor,
       isFocusMode,
       markTargetActive,
@@ -741,6 +1013,8 @@ export function usePassageNotesUiState({
     setOpenPassageKeys(new Set());
     setOpenEditors(new Map());
     setEditorHasChanges(new Set());
+    setRetargetingEditorKey(null);
+    setInPlaceRetargetActive(false);
     setViewSelectedVerses(new Set());
     setIsPassageSelection(false);
     clearSelection();
@@ -854,7 +1128,8 @@ export function usePassageNotesUiState({
   const handleSaveNew = useCallback(
     async (verseRef: VerseRef, body: NoteBody, tags: string[]) => {
       await onSaveNewNote(verseRef, body, tags);
-      removeEditor(newEditorKey(verseRef));
+      const slotKey = findNewDraftKey(openEditorsRef.current, verseRef);
+      if (slotKey) removeEditor(slotKey);
       if (verseRef.startVerse !== verseRef.endVerse) {
         if (isFocusMode) {
           setOpenPassageKeys(new Set([verseRef.startVerse]));
@@ -891,7 +1166,13 @@ export function usePassageNotesUiState({
 
   const handleSaveEdit = useCallback(
     async (noteId: Id<"notes">, body: NoteBody, tags: string[]) => {
-      await onSaveEditNote(noteId, body, tags);
+      const slot = openEditorsRef.current.get(editEditorKey(noteId));
+      const verseRef =
+        slot?.kind === "edit" &&
+        !verseRefsMatch(slot.verseRef, slot.originalVerseRef)
+          ? slot.verseRef
+          : undefined;
+      await onSaveEditNote(noteId, body, tags, verseRef);
       removeEditor(editEditorKey(noteId));
     },
     [onSaveEditNote, removeEditor],
@@ -958,6 +1239,8 @@ export function usePassageNotesUiState({
     }
     setOpenEditors(new Map());
     setEditorHasChanges(new Set());
+    setRetargetingEditorKey(null);
+    setInPlaceRetargetActive(false);
     setViewSelectedVerses(new Set());
     setIsPassageSelection(false);
     clearSelection();
@@ -1102,26 +1385,6 @@ export function usePassageNotesUiState({
     ],
   );
 
-  const closePassageNotes = useCallback(
-    (verseNumber: number) => {
-      if (viewMode === "read") {
-        readPassageAutoOpenSuppressedRef.current.add(verseNumber);
-      }
-      setOpenPassageKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(verseNumber);
-        return next;
-      });
-      const passageVerses = getSelectedVersesForPassageAnchor(verseNumber);
-      setViewSelectedVerses((prev) => {
-        const next = new Set(prev);
-        for (const v of passageVerses) next.delete(v);
-        return next;
-      });
-    },
-    [getSelectedVersesForPassageAnchor, viewMode],
-  );
-
   const handleNoteDeleteCleanup = useCallback(
     (noteId: Id<"notes">, verseNumber: number, isPassage: boolean) => {
       removeEditor(editEditorKey(noteId));
@@ -1168,7 +1431,12 @@ export function usePassageNotesUiState({
         setOpenEditors((prev) => {
           if (prev.has(key)) return prev;
           const next = new Map(prev);
-          next.set(key, { kind: "edit", noteId, verseRef });
+          next.set(key, {
+            kind: "edit",
+            noteId,
+            verseRef,
+            originalVerseRef: verseRef,
+          });
           return next;
         });
         if (isPassage) {
@@ -1202,9 +1470,21 @@ export function usePassageNotesUiState({
         markTargetActive(targetFromVerseRef(verseRef));
         addNewDraft(verseRef);
         setIsPassageSelection(true);
+        if (verseRef.startVerse !== verseRef.endVerse) {
+          closePassagesIntersectingRange(
+            verseRef.startVerse,
+            verseRef.endVerse,
+          );
+        }
       });
     },
-    [addNewDraft, clearActiveEditorFocus, gateReadModeEditor, markTargetActive],
+    [
+      addNewDraft,
+      clearActiveEditorFocus,
+      closePassagesIntersectingRange,
+      gateReadModeEditor,
+      markTargetActive,
+    ],
   );
 
   const confirmDiscard = useCallback(() => {
@@ -1224,6 +1504,8 @@ export function usePassageNotesUiState({
     } else if (pendingEditorAction !== null) {
       setOpenEditors(new Map());
       setEditorHasChanges(new Set());
+      setRetargetingEditorKey(null);
+      setInPlaceRetargetActive(false);
       pendingEditorAction();
     } else {
       handleClickAway();
@@ -1394,6 +1676,10 @@ export function usePassageNotesUiState({
     currentFocusTarget,
     editingNoteIds,
     newDraftsByAnchor,
+    editComposersByAnchor,
+    savedEditOverrides,
+    retargetingEditorKey,
+    inPlaceRetargetActive,
     isPassageSelection,
     containerRef,
     isDragging,
@@ -1408,6 +1694,8 @@ export function usePassageNotesUiState({
     handlePassageBubbleMouseLeave,
     handleAddNote,
     handleSaveNew,
+    retargetNewDraft,
+    retargetEditNote,
     handleSaveEdit,
     handleDelete,
     handleNoteDeleteCleanup,
@@ -1432,6 +1720,7 @@ const INTERACTIVE_SURFACE_SELECTORS = [
   "[data-note-trigger]",
   "[data-note-surface]",
   "[data-verse-number]",
+  "[data-verse-nudge]",
   "[data-highlight-popover]",
   "[data-highlight-toolbar]",
 ] as const;

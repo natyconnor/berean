@@ -6,6 +6,49 @@ import { VerseRowWithNotes } from "./verse-row-with-notes";
 import type { HighlightRange } from "@/lib/highlight-utils";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { VerseRef } from "@/lib/verse-ref-utils";
+
+vi.mock("@/components/notes/note-editor", () => ({
+  NoteEditor: ({
+    onRetargetVerse,
+    verseRef,
+    initialContent,
+    onCancel,
+  }: {
+    onRetargetVerse?: (
+      nextRef: VerseRef,
+      snapshot: { body: string; tags: string[] },
+    ) => void;
+    verseRef: VerseRef;
+    initialContent?: string;
+    onCancel: () => void;
+  }) => (
+    <div
+      data-testid="note-editor"
+      data-has-retarget={onRetargetVerse ? "yes" : "no"}
+      data-initial={initialContent ?? ""}
+      data-start={verseRef.startVerse}
+      data-end={verseRef.endVerse}
+    >
+      <button type="button" onClick={onCancel}>
+        Cancel draft
+      </button>
+      {onRetargetVerse ? (
+        <button
+          type="button"
+          onClick={() =>
+            onRetargetVerse(
+              { ...verseRef, endVerse: verseRef.endVerse + 1 },
+              { body: initialContent ?? "kept", tags: [] },
+            )
+          }
+        >
+          Nudge draft
+        </button>
+      ) : null}
+    </div>
+  ),
+}));
 
 const VERSE_TEXT = "In the beginning";
 
@@ -214,5 +257,155 @@ describe("VerseRowWithNotes – mid-verse headings", () => {
     const label = container.querySelector("[data-verse-aside]")!;
     expect(label).toHaveTextContent("Others");
     expect(label.className).toContain("font-sans");
+  });
+});
+
+describe("VerseRowWithNotes – draft retarget", () => {
+  it("passes onRetargetVerse and restores a snapshot for a new draft", async () => {
+    const user = userEvent.setup();
+    const onRetargetNewDraft = vi.fn();
+    const onCancelEditor = vi.fn();
+    renderVerseRow({
+      ...defaultProps(),
+      onCancelEditor,
+      onRetargetNewDraft,
+      retargetingEditorKey: "new:16:16",
+      draftsForThisAnchor: [
+        {
+          editorKey: "new:16:16",
+          verseRef: {
+            book: "John",
+            chapter: 1,
+            startVerse: 16,
+            endVerse: 17,
+          },
+          snapshot: { body: "kept", tags: ["hope"] },
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("note-editor")).toHaveAttribute(
+      "data-has-retarget",
+      "yes",
+    );
+    expect(screen.getByTestId("note-editor")).toHaveAttribute(
+      "data-initial",
+      "kept",
+    );
+    expect(document.querySelector("[data-draft-layout-id]")).toHaveAttribute(
+      "data-draft-layout-id",
+      "draft-new:16:16",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Nudge draft" }));
+    expect(onRetargetNewDraft).toHaveBeenCalledWith(
+      "new:16:16",
+      {
+        book: "John",
+        chapter: 1,
+        startVerse: 16,
+        endVerse: 18,
+      },
+      { body: "kept", tags: [] },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Cancel draft" }));
+    expect(onCancelEditor).toHaveBeenCalledWith("new:16:16");
+  });
+
+  it("does not pass onRetargetVerse when the parent does not", () => {
+    renderVerseRow({
+      ...defaultProps(),
+      draftsForThisAnchor: [
+        {
+          editorKey: "new:1:1",
+          verseRef: {
+            book: "John",
+            chapter: 1,
+            startVerse: 1,
+            endVerse: 1,
+          },
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("note-editor")).toHaveAttribute(
+      "data-has-retarget",
+      "no",
+    );
+  });
+
+  it("passes onRetargetVerse for a saved single-verse note being edited", () => {
+    const noteId = "note-1" as Id<"notes">;
+    const verseRef = {
+      book: "John",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    };
+    renderVerseRow({
+      ...defaultProps(),
+      openVerseKeys: new Set([1]),
+      editingNoteIds: new Set([noteId]),
+      onRetargetEditNote: vi.fn(),
+      savedEditOverrides: new Map([[noteId, { verseRef, rangeDirty: false }]]),
+      singleNotes: [
+        {
+          noteId,
+          content: "Saved",
+          tags: [],
+          verseRef,
+          createdAt: 1,
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("note-editor")).toHaveAttribute(
+      "data-has-retarget",
+      "yes",
+    );
+  });
+
+  it("hides the saved single bubble when that note is retargeted to a range", () => {
+    const noteId = "note-12" as Id<"notes">;
+    const originalRef = {
+      book: "John",
+      chapter: 1,
+      startVerse: 12,
+      endVerse: 12,
+    };
+    const nextRef = { ...originalRef, endVerse: 13 };
+    renderVerseRow({
+      ...defaultProps(),
+      verseNumber: 12,
+      text: "But to all who did receive him",
+      editingNoteIds: new Set([noteId]),
+      onRetargetEditNote: vi.fn(),
+      savedEditOverrides: new Map([
+        [noteId, { verseRef: nextRef, rangeDirty: true }],
+      ]),
+      singleNotes: [
+        {
+          noteId,
+          content: "Children of God",
+          tags: [],
+          verseRef: originalRef,
+          createdAt: 1,
+        },
+      ],
+      editComposersForThisAnchor: [
+        {
+          noteId,
+          editorKey: "edit:note-12",
+          verseRef: nextRef,
+          originalVerseRef: originalRef,
+          snapshot: { body: "Children of God", tags: [] },
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("note-editor")).toBeInTheDocument();
+    expect(screen.queryByText("New note")).not.toBeInTheDocument();
+    expect(screen.queryByText("Collapse")).not.toBeInTheDocument();
   });
 });
