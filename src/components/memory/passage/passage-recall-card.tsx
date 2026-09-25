@@ -265,7 +265,6 @@ export function PassageRecallCard({
               <div
                 className={cn(
                   "min-h-[140px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
-                  compositeField && "max-h-[min(14rem,32vh)] overflow-y-auto",
                   stageColor.panel,
                 )}
               >
@@ -313,7 +312,7 @@ export function PassageRecallCard({
                   className={cn(
                     "bg-background/80",
                     compositeField
-                      ? "min-h-[180px] max-h-[36vh] resize-y"
+                      ? "min-h-[180px] resize-y"
                       : "min-h-[170px] resize-none",
                   )}
                   aria-label={fieldLabel}

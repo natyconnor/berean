@@ -39,6 +39,7 @@ import {
   pieceCardTitle,
   pieceReference,
   pieceStatus,
+  pickUpCue,
   remainingAddsIn,
   repairPromptIndexes,
   ropeWindowPieceIndexes,
@@ -101,6 +102,8 @@ type BuiltRecall = {
   error: string | null;
   retry: () => void;
   hint: PassageRecallHint;
+  /** End of the verse before this recall when it starts mid-passage. */
+  pickUpCue: StallCueContent | null;
   learnStage: number;
   stageReps: number;
   status: "learning" | "reviewing";
@@ -187,6 +190,7 @@ export function PassageSession({
         ropeIndexes,
       });
   const recall = holdResult && heldRecall ? heldRecall : liveRecall;
+  const cue = stallCue ?? recall?.pickUpCue ?? null;
 
   const autoIntroduceStarted = useRef(false);
 
@@ -576,8 +580,8 @@ export function PassageSession({
             error={recall.error}
             retry={recall.retry}
             hint={recall.hint}
-            stallCue={stallCue?.text}
-            stallCueLabel={stallCue?.label}
+            stallCue={cue?.text}
+            stallCueLabel={cue?.label}
             learnStage={recall.learnStage}
             stageReps={recall.stageReps}
             status={recall.status}
@@ -780,6 +784,7 @@ function reviewRecall(
       message:
         "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
     },
+    pickUpCue: null,
     learnStage: 3,
     stageReps: 0,
     status: "reviewing",
@@ -822,6 +827,7 @@ function ropeRecall(
             "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
         }
       : { type: "text", text: hintText, label: "Hint" },
+    pickUpCue: pickUpCue(pieces, pieceTexts, start),
     learnStage: chromeStage(pieces, indexes),
     stageReps: 0,
     status: "learning",
@@ -917,6 +923,7 @@ function buildingRecall(args: {
         text: compositeHintForWindow(state.pieces, start, end, pieceTexts),
         label: "Hint",
       },
+      pickUpCue: null,
       learnStage: chromeStage(state.pieces, indexes),
       stageReps: 0,
       status: "learning",
@@ -954,6 +961,10 @@ function buildingRecall(args: {
                 "No hint text. Type the verse from memory, then check your answer.",
             }
           : { type: "tokens", tokens: masked.tokens },
+      pickUpCue:
+        masked.stage === "hidden"
+          ? pickUpCue(state.pieces, pieceTexts, due, { includeLearning: true })
+          : null,
       learnStage: piece.learnStage,
       stageReps: piece.stageReps,
       status: pieceStatus(piece),

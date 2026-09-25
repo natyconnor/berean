@@ -74,7 +74,7 @@ export const PRACTICE_ROPE_PROMPT_COPY =
 
 export const PRACTICE_WHAT_YOU_KNOW_LABEL = "Practice what you know";
 
-const STALL_CUE_PREVIOUS_WORDS = 6;
+const PICK_UP_CUE_WORDS = 6;
 
 export type RopeStartOverride = "rehearsal" | "section" | "beginning";
 
@@ -108,28 +108,58 @@ export type StallCueContent = {
   label: "Pick up after" | "Starting hint";
 };
 
+function isRopeVerse(piece: PassagePiece): boolean {
+  return piece.attachment === "attached" || piece.attachment === "solid";
+}
+
+function isStartedVerse(piece: PassagePiece): boolean {
+  return piece.attachment !== "unreached";
+}
+
 /**
- * Last learned verse before the repair window. Walks backward so a gapped
- * pack still cues from a verse the learner already knows, not an unreached
- * hole — and never from the verse they are about to type.
+ * Nearest known verse before `start`. Walks backward so a gapped pack still
+ * cues from a verse the learner has seen, not an unreached hole — and never
+ * from the verse they are about to type.
  */
-function learnedTextBeforeRepair(
+function knownTextBefore(
   pieces: readonly PassagePiece[],
   texts: readonly string[],
-  repairStart: number,
+  start: number,
+  isKnown: (piece: PassagePiece) => boolean,
 ): string | undefined {
-  for (let index = repairStart - 1; index >= 0; index -= 1) {
+  for (let index = start - 1; index >= 0; index -= 1) {
     const piece = pieces[index];
-    if (
-      piece == null ||
-      (piece.attachment !== "attached" && piece.attachment !== "solid")
-    ) {
-      continue;
-    }
+    if (piece == null || !isKnown(piece)) continue;
     const text = texts[index];
     if (text != null && text.trim().length > 0) return text;
   }
   return undefined;
+}
+
+function verseEnding(text: string): string {
+  return text.trim().split(/\s+/).slice(-PICK_UP_CUE_WORDS).join(" ");
+}
+
+/**
+ * Clear-text ending of the verse before `start`, so a recall that begins
+ * mid-passage shows where it sits. Null at the start of the passage.
+ * `includeLearning` also cues from verses still being learned (a single
+ * frontier verse), not just ones already in the warm-up rope.
+ */
+export function pickUpCue(
+  pieces: readonly PassagePiece[],
+  texts: readonly string[],
+  start: number,
+  options?: { includeLearning?: boolean },
+): StallCueContent | null {
+  const previousText = knownTextBefore(
+    pieces,
+    texts,
+    start,
+    options?.includeLearning ? isStartedVerse : isRopeVerse,
+  );
+  if (!previousText) return null;
+  return { text: verseEnding(previousText), label: "Pick up after" };
 }
 
 /**
@@ -144,13 +174,7 @@ export function stallRepairCue(
   stalledText: string,
   options?: { includeStalledLetters?: boolean },
 ): string {
-  const previousEnd = previousText
-    ? previousText
-        .trim()
-        .split(/\s+/)
-        .slice(-STALL_CUE_PREVIOUS_WORDS)
-        .join(" ")
-    : "";
+  const previousEnd = previousText ? verseEnding(previousText) : "";
   if (options?.includeStalledLetters === false) {
     return previousEnd;
   }
@@ -284,7 +308,7 @@ export function computeStallCue(
   const previousText =
     repairStart === undefined
       ? undefined
-      : learnedTextBeforeRepair(state.pieces, texts, repairStart);
+      : knownTextBefore(state.pieces, texts, repairStart, isRopeVerse);
   const showsStageHints = repairWindowShowsStageHints(state.pieces, indexes);
   const cue = stallRepairCue(previousText, stalledText, {
     includeStalledLetters: !showsStageHints,
