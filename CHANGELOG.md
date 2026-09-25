@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.1](https://github.com/natyconnor/berean/compare/v1.17.0...v1.17.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* Show previous-verse pick-up cues in passage recall and let long passages grow ([#233](https://github.com/natyconnor/berean/issues/233)) ([cb2b888](https://github.com/natyconnor/berean/commit/cb2b888d6696006ae94008db1c4ba5e6abcb3c81))
+
 ## [1.17.0](https://github.com/natyconnor/berean/compare/v1.16.2...v1.17.0) (2026-09-24)
 
 
