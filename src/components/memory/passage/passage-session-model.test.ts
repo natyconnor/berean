@@ -4,6 +4,7 @@ import type { PassagePiece } from "@/lib/passage-pieces";
 
 import {
   computeStallCue,
+  pickUpCue,
   repairWindowShowsStageHints,
   stallRepairCue,
 } from "./passage-session-model";
@@ -49,6 +50,54 @@ describe("stallRepairCue", () => {
       },
     );
     expect(cue).toBe("end of previous verse here");
+  });
+});
+
+describe("pickUpCue", () => {
+  const texts = [
+    "Preserve me, O God, for in you I take refuge.",
+    "I say to the LORD, You are my Lord; I have no good apart from you.",
+    "As for the saints in the land, they are the excellent ones, in whom is all my delight.",
+  ];
+
+  it("cues the last few words of the verse before", () => {
+    const pieces = [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "solid", { learnStage: 3 }),
+      piece(2, "learning", { learnStage: 3 }),
+    ];
+    expect(pickUpCue(pieces, texts, 2)).toEqual({
+      text: "have no good apart from you.",
+      label: "Pick up after",
+    });
+  });
+
+  it("returns null at the start of the passage", () => {
+    const pieces = [piece(0, "learning", { learnStage: 3 })];
+    expect(pickUpCue(pieces, texts, 0)).toBeNull();
+  });
+
+  it("only cues from a learning verse when asked", () => {
+    const pieces = [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "learning", { learnStage: 2 }),
+      piece(2, "learning", { learnStage: 3 }),
+    ];
+    expect(pickUpCue(pieces, texts, 2)?.text).toMatch(/refuge\.$/);
+    expect(
+      pickUpCue(pieces, texts, 2, { includeLearning: true })?.text,
+    ).toMatch(/apart from you\.$/);
+  });
+
+  it("skips unreached verses", () => {
+    const pieces = [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "unreached"),
+      piece(2, "learning", { learnStage: 3 }),
+    ];
+    expect(
+      pickUpCue(pieces, texts, 2, { includeLearning: true })?.text,
+    ).toMatch(/refuge\.$/);
   });
 });
 

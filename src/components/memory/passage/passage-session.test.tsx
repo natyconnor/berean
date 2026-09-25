@@ -295,6 +295,36 @@ describe("PassageSession", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the end of the previous verse at From Memory", async () => {
+    renderSession(
+      passageView([
+        piece(0, "solid", { learnStage: 3 }),
+        piece(1, "learning", { learnStage: 3, stageReps: 0 }),
+      ]),
+    );
+
+    expect(
+      await screen.findByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+    const cue = await screen.findByLabelText("Pick up after");
+    expect(cue).toHaveTextContent("my shepherd; I shall not want.");
+    expect(cue).not.toHaveTextContent(PASSAGE_TWO);
+  });
+
+  it("does not add a pick-up cue while hints are still shown", async () => {
+    renderSession(
+      passageView([
+        piece(0, "solid", { learnStage: 3 }),
+        piece(1, "learning", { learnStage: 2, stageReps: 0 }),
+      ]),
+    );
+
+    expect(
+      await screen.findByText("Type what you remember"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Pick up after")).not.toBeInTheDocument();
+  });
+
   it("sends the verse word count with a frontier attempt", async () => {
     renderSession(
       passageView([piece(0, "learning", { learnStage: 0, stageReps: 0 })]),
