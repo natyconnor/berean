@@ -454,12 +454,19 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               // the next rep renders, so it can't re-record stale.
               loading={submitPending}
             >
-              {madeLearningProgress ? (
-                <ArrowRight className="h-4 w-4" aria-hidden />
+              {submitPending ? (
+                "Checking..."
+              ) : madeLearningProgress ? (
+                <>
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                  Continue
+                </>
               ) : (
-                <RotateCcw className="h-4 w-4" aria-hidden />
+                <>
+                  <RotateCcw className="h-4 w-4" aria-hidden />
+                  Try again
+                </>
               )}
-              {madeLearningProgress ? "Continue" : "Try again"}
             </Button>
           ) : isReadPrime ? (
             <Button
@@ -483,8 +490,14 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               disabled={!stageReady || !canCheckAnswer}
               loading={submitPending}
             >
-              <CheckCircle2 className="h-4 w-4" aria-hidden />
-              Check answer
+              {submitPending ? (
+                "Checking..."
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  Check answer
+                </>
+              )}
             </Button>
           )}
         </div>

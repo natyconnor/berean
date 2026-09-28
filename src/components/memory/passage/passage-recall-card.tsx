@@ -148,6 +148,8 @@ export function PassageRecallCard({
     if (!canCheckAnswer || checked) return;
     // Capture before `onSubmit` so a parent that adopts journey progress early
     // cannot advance the step label while the result is still on screen.
+    // The check button stays mounted until the save resolves, so its label
+    // switches to Checking... for that wait instead of sitting on Check answer.
     const goalAtCheck = liveGoalLabel;
     submit(async () => {
       const tokens = diffWords(typedAnswer, versePlainText);
@@ -354,12 +356,19 @@ export function PassageRecallCard({
                 onClick={continueAttempt}
                 loading={submitPending}
               >
-                {offerTryAgain ? (
-                  <RotateCcw className="h-4 w-4" aria-hidden />
+                {submitPending ? (
+                  "Checking..."
+                ) : offerTryAgain ? (
+                  <>
+                    <RotateCcw className="h-4 w-4" aria-hidden />
+                    Try again
+                  </>
                 ) : (
-                  <ArrowRight className="h-4 w-4" aria-hidden />
+                  <>
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                    Continue
+                  </>
                 )}
-                {offerTryAgain ? "Try again" : "Continue"}
               </Button>
             ) : isReadPrime ? (
               <Button
@@ -383,8 +392,14 @@ export function PassageRecallCard({
                 disabled={!canCheckAnswer}
                 loading={submitPending}
               >
-                <CheckCircle2 className="h-4 w-4" aria-hidden />
-                Check answer
+                {submitPending ? (
+                  "Checking..."
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" aria-hidden />
+                    Check answer
+                  </>
+                )}
               </Button>
             )}
           </div>
