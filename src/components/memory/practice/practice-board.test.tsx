@@ -498,7 +498,7 @@ describe("PracticeBoard recall submit loading", () => {
     getPassageMock.mockResolvedValue(psalm23);
   });
 
-  it("shows a spinner on Continue while the recall is saving", async () => {
+  it("shows Checking… while a passing recall is saving, then Continue", async () => {
     let resolveRecord!: (value: unknown) => void;
     const pendingRecord = new Promise((resolve) => {
       resolveRecord = resolve;
@@ -528,10 +528,13 @@ describe("PracticeBoard recall submit loading", () => {
     await userEvent.click(check);
 
     expect(await screen.findByText("100% recalled.")).toBeVisible();
-    const continueButton = screen.getByRole("button", { name: /Continue/ });
-    expect(continueButton).toBeDisabled();
-    expect(continueButton).toHaveAttribute("aria-busy", "true");
-    expect(continueButton.querySelector("[data-icon=spinner]")).not.toBeNull();
+    const checkingButton = screen.getByRole("button", { name: "Checking..." });
+    expect(checkingButton).toBeDisabled();
+    expect(checkingButton).toHaveAttribute("aria-busy", "true");
+    expect(checkingButton.querySelector("[data-icon=spinner]")).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Try again|Continue/ }),
+    ).not.toBeInTheDocument();
 
     resolveRecord({
       status: "learning",
@@ -545,11 +548,73 @@ describe("PracticeBoard recall submit loading", () => {
       earlyReviewApplied: false,
     });
 
+    const continueButton = await screen.findByRole("button", {
+      name: /Continue/,
+    });
     await waitFor(() => {
       expect(continueButton).toBeEnabled();
       expect(continueButton).not.toHaveAttribute("aria-busy");
     });
     expect(continueButton.querySelector("[data-icon=spinner]")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Checking..." }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Checking… instead of Try again while a miss is saving", async () => {
+    let resolveRecord!: (value: unknown) => void;
+    const pendingRecord = new Promise((resolve) => {
+      resolveRecord = resolve;
+    });
+    mutationMock("verseMemory.recordAttempt").mockReturnValue(pendingRecord);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[guidedVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("not the verse");
+
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const checkingButton = await screen.findByRole("button", {
+      name: "Checking...",
+    });
+    expect(checkingButton).toBeDisabled();
+    expect(checkingButton).toHaveAttribute("aria-busy", "true");
+    expect(checkingButton.querySelector("[data-icon=spinner]")).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Try again/ }),
+    ).not.toBeInTheDocument();
+
+    resolveRecord({
+      status: "learning",
+      learnStage: 1,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + 1000,
+      consecutiveCorrect: 0,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+
+    const tryAgain = await screen.findByRole("button", { name: /Try again/ });
+    await waitFor(() => {
+      expect(tryAgain).toBeEnabled();
+      expect(tryAgain).not.toHaveAttribute("aria-busy");
+    });
+    expect(
+      screen.queryByRole("button", { name: "Checking..." }),
+    ).not.toBeInTheDocument();
   });
 });
 

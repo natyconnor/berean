@@ -913,9 +913,18 @@ function PracticeCard({
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
   // click) into a single recorded attempt, and `submitPending` shows a spinner
-  // on the disabled control while it's in flight. One lock suffices because
-  // only one submit path (Read prime *or* check-answer) is mounted at a time.
+  // on the disabled control while it's in flight. One lock covers Read, check,
+  // and keep-going so those actions can't overlap.
   const { submit, pending: submitPending } = useSubmitLock();
+  // Which submit owns the spinner. The result button mounts as soon as the
+  // answer is checked, while the save is still running — "Checking..." holds
+  // that label until the grade settles so it doesn't offer Try again or
+  // Continue early. Set in the same turn as the lock, so it batches with
+  // `submitPending` and both clear on the render that ends the save.
+  const [submitKind, setSubmitKind] = useState<
+    "grade" | "read" | "keep" | null
+  >(null);
+  const showCheckingLabel = submitPending && submitKind === "grade";
 
   const refLabel = formatVerseRef(reference);
   // A composite card recites many spans, so it takes its text from the pack's
@@ -1013,8 +1022,9 @@ function PracticeCard({
     if (!canCheckAnswer || checked) return;
     // Practice counts fully: every checked attempt records and reschedules. The
     // lock keeps a double-tap from recording twice before the result view
-    // (driven by `checked`) mounts and replaces this button. Continue stays
-    // disabled with a spinner until the record settles.
+    // (driven by `checked`) mounts and replaces this button. The action stays
+    // disabled, labeled Checking..., until the record settles.
+    setSubmitKind("grade");
     submit(async () => {
       const now = Date.now();
       const tokens = diffWords(typedAnswer, versePlainText);
@@ -1057,6 +1067,7 @@ function PracticeCard({
     // (mutation error, verse not hearted) re-enables Continue rather than
     // stranding it. On the normal success path the band advances and this
     // button is unmounted.
+    setSubmitKind("read");
     submit(async () => {
       setOutcomeNow(Date.now());
       setNextSchedule(null);
@@ -1078,6 +1089,7 @@ function PracticeCard({
 
   function keepThisWait() {
     if (!onKeepWait) return;
+    setSubmitKind("keep");
     submit(async () => {
       await onKeepWait();
     });
@@ -1105,6 +1117,21 @@ function PracticeCard({
     event.preventDefault();
     checkAnswer();
   }
+
+  const settledResultAction = offerPracticeAgain ? (
+    <>
+      <RotateCcw className="h-4 w-4" aria-hidden />
+      Try again
+    </>
+  ) : (
+    <>
+      <ArrowRight className="h-4 w-4" aria-hidden />
+      Continue
+    </>
+  );
+  const resultActionLabel = showCheckingLabel
+    ? "Checking..."
+    : settledResultAction;
 
   return (
     <motion.div
@@ -1324,8 +1351,7 @@ function PracticeCard({
                     onClick={continueAttempt}
                     loading={submitPending}
                   >
-                    <RotateCcw className="h-4 w-4" aria-hidden />
-                    Try again
+                    {resultActionLabel}
                   </Button>
                 </>
               ) : (
@@ -1341,12 +1367,7 @@ function PracticeCard({
                   // land before the next rep renders, so it can't re-record stale.
                   loading={submitPending}
                 >
-                  {offerPracticeAgain ? (
-                    <RotateCcw className="h-4 w-4" aria-hidden />
-                  ) : (
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  )}
-                  {offerPracticeAgain ? "Try again" : "Continue"}
+                  {resultActionLabel}
                 </Button>
               )
             ) : isReadPrime ? (
