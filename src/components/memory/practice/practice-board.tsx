@@ -1392,8 +1392,14 @@ function PracticeCard({
                 disabled={!canCheckAnswer}
                 loading={submitPending}
               >
-                <CheckCircle2 className="h-4 w-4" aria-hidden />
-                Check answer
+                {showCheckingLabel ? (
+                  "Checking..."
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" aria-hidden />
+                    Check answer
+                  </>
+                )}
               </Button>
             )}
           </div>

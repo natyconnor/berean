@@ -136,4 +136,57 @@ describe("PassageRecallCard step label and focus", () => {
       expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
     });
   });
+
+  it("labels the check button Checking... while the grade is saving", async () => {
+    const user = userEvent.setup();
+    let resolveSubmit!: (value: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => {
+      resolveSubmit = resolve;
+    });
+
+    render(
+      <PassageRecallCard
+        mode="frontier"
+        phaseLabel="Guided"
+        title="Psalm 16:1"
+        promptLine="Type what you remember"
+        versePlainText="Preserve me, O God, for in you I take refuge."
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{
+          type: "tokens",
+          tokens: [{ text: "P", word: true, masked: false }],
+        }}
+        learnStage={1}
+        stageReps={0}
+        status="learning"
+        onSubmit={() => pending}
+      />,
+    );
+
+    const answer = screen.getByLabelText("Your recalled verse");
+    await user.click(answer);
+    await user.paste("not the verse");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const checking = await screen.findByRole("button", { name: "Checking..." });
+    expect(checking).toBeDisabled();
+    expect(checking).toHaveAttribute("aria-busy", "true");
+    expect(checking.querySelector("[data-icon=spinner]")).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Check answer|Try again/ }),
+    ).not.toBeInTheDocument();
+
+    resolveSubmit(true);
+
+    const tryAgain = await screen.findByRole("button", { name: /Try again/ });
+    await waitFor(() => {
+      expect(tryAgain).toBeEnabled();
+      expect(tryAgain).not.toHaveAttribute("aria-busy");
+    });
+    expect(
+      screen.queryByRole("button", { name: "Checking..." }),
+    ).not.toBeInTheDocument();
+  });
 });
