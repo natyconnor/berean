@@ -227,10 +227,7 @@ function ScheduleBanner({
           "border-rose-500/35 bg-rose-500/10 font-medium text-rose-800 dark:text-rose-200",
       )}
     >
-      <span className="relative mt-0.5 shrink-0">
-        {icon}
-        {sparkle && !reduceMotion && <ConfettiBurst />}
-      </span>
+      <span className="mt-0.5">{icon}</span>
       <span className="min-w-0 flex-1 leading-snug">{message}</span>
       {sparkle && (
         <Sparkles
@@ -238,6 +235,7 @@ function ScheduleBanner({
           aria-hidden
         />
       )}
+      {sparkle && !reduceMotion && <ConfettiBurst />}
     </motion.div>
   );
 }

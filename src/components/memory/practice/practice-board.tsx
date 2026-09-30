@@ -1392,7 +1392,7 @@ function PracticeCard({
                 loading={submitPending}
               >
                 {gradePending ? (
-                  "Checking..."
+                  "Saving..."
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" aria-hidden />

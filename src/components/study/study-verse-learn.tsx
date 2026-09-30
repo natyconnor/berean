@@ -492,7 +492,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               loading={submitPending}
             >
               {submitPending ? (
-                "Checking..."
+                "Saving..."
               ) : (
                 <>
                   <CheckCircle2 className="h-4 w-4" aria-hidden />
