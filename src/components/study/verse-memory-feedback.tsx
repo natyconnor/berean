@@ -160,16 +160,7 @@ export function VerseMemoryFeedback({
           className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-300"
           aria-hidden
         />
-        {!reduceMotion && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-0 flex items-center justify-center"
-          >
-            {Array.from({ length: CONFETTI_COUNT }).map((_, i) => (
-              <ConfettiDot key={i} index={i} />
-            ))}
-          </span>
-        )}
+        {!reduceMotion && <ConfettiBurst />}
       </motion.div>
     );
   }
@@ -227,7 +218,7 @@ function ScheduleBanner({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: "easeOut" }}
       className={cn(
-        "mx-auto flex w-full max-w-xl items-start gap-2 rounded-xl border px-3.5 py-2.5 text-left text-sm shadow-sm",
+        "relative mx-auto flex w-full max-w-xl items-start gap-2 overflow-visible rounded-xl border px-3.5 py-2.5 text-left text-sm shadow-sm",
         tone === "exact" &&
           "border-emerald-500/40 bg-emerald-500/10 font-medium text-emerald-800 dark:text-emerald-200",
         tone === "close" &&
@@ -236,7 +227,10 @@ function ScheduleBanner({
           "border-rose-500/35 bg-rose-500/10 font-medium text-rose-800 dark:text-rose-200",
       )}
     >
-      <span className="mt-0.5">{icon}</span>
+      <span className="relative mt-0.5 shrink-0">
+        {icon}
+        {sparkle && !reduceMotion && <ConfettiBurst />}
+      </span>
       <span className="min-w-0 flex-1 leading-snug">{message}</span>
       {sparkle && (
         <Sparkles
@@ -245,6 +239,20 @@ function ScheduleBanner({
         />
       )}
     </motion.div>
+  );
+}
+
+function ConfettiBurst(): JSX.Element {
+  return (
+    <span
+      aria-hidden
+      data-testid="confetti-burst"
+      className="pointer-events-none absolute inset-0 flex items-center justify-center"
+    >
+      {Array.from({ length: CONFETTI_COUNT }).map((_, i) => (
+        <ConfettiDot key={i} index={i} />
+      ))}
+    </span>
   );
 }
 

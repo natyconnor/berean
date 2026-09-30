@@ -1,12 +1,16 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
 import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
+const { useReducedMotion } = vi.hoisted(() => ({
+  useReducedMotion: vi.fn(() => true),
+}));
+
 vi.mock("framer-motion", () => ({
-  useReducedMotion: () => true,
+  useReducedMotion: () => useReducedMotion(),
   motion: {
     div: ({
       children,
@@ -23,7 +27,23 @@ vi.mock("framer-motion", () => ({
   },
 }));
 
+const reviewingSchedule = {
+  status: "reviewing" as const,
+  learnStage: 3,
+  stageReps: 3,
+  ease: 2.3,
+  intervalDays: 2,
+  dueAt: 1_700_000_000_000 + 2 * 24 * 60 * 60 * 1000,
+  consecutiveCorrect: 4,
+  lapses: 0,
+  earlyReviewApplied: false,
+};
+
 describe("VerseMemoryFeedback", () => {
+  beforeEach(() => {
+    useReducedMotion.mockReturnValue(true);
+  });
+
   it("celebrates a one-word miss on bands that still accept close recalls", () => {
     render(
       <VerseMemoryFeedback
@@ -67,6 +87,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("Exactly right!");
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
   });
 
   it("tells Review to retry at 80%+ so the interval can still stretch", () => {
@@ -191,5 +212,36 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       /A handful of words came back — next review/,
     );
+  });
+
+  it("bursts particles on a 100% Review recall", () => {
+    useReducedMotion.mockReturnValue(false);
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={100}
+        attemptKey="review-exact"
+        showScheduleOutcome
+        nextSchedule={reviewingSchedule}
+        now={1_700_000_000_000}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Nailed it");
+    expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
+  });
+
+  it("skips the particle burst on a 100% Review recall when motion is reduced", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={100}
+        attemptKey="review-exact-reduced"
+        showScheduleOutcome
+        nextSchedule={reviewingSchedule}
+        now={1_700_000_000_000}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Nailed it");
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
   });
 });
