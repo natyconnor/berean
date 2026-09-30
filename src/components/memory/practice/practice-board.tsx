@@ -917,14 +917,14 @@ function PracticeCard({
   // and keep-going so those actions can't overlap.
   const { submit, pending: submitPending } = useSubmitLock();
   // Which submit owns the spinner. The result button mounts as soon as the
-  // answer is checked, while the save is still running — "Checking..." holds
-  // that label until the grade settles so it doesn't offer Try again or
+  // answer is checked, while the save is still running — "Saving..." holds
+  // that label until the record settles so it doesn't offer Try again or
   // Continue early. Set in the same turn as the lock, so it batches with
   // `submitPending` and both clear on the render that ends the save.
   const [submitKind, setSubmitKind] = useState<
     "grade" | "read" | "keep" | null
   >(null);
-  const showCheckingLabel = submitPending && submitKind === "grade";
+  const gradePending = submitPending && submitKind === "grade";
 
   const refLabel = formatVerseRef(reference);
   // A composite card recites many spans, so it takes its text from the pack's
@@ -1023,7 +1023,8 @@ function PracticeCard({
     // Practice counts fully: every checked attempt records and reschedules. The
     // lock keeps a double-tap from recording twice before the result view
     // (driven by `checked`) mounts and replaces this button. The action stays
-    // disabled, labeled Checking..., until the record settles.
+    // disabled, labeled Saving..., until the record settles. Grading is local
+    // and already on screen; the wait is the Convex write.
     setSubmitKind("grade");
     submit(async () => {
       const now = Date.now();
@@ -1129,9 +1130,7 @@ function PracticeCard({
       Continue
     </>
   );
-  const resultActionLabel = showCheckingLabel
-    ? "Checking..."
-    : settledResultAction;
+  const resultActionLabel = gradePending ? "Saving..." : settledResultAction;
 
   return (
     <motion.div
@@ -1392,7 +1391,7 @@ function PracticeCard({
                 disabled={!canCheckAnswer}
                 loading={submitPending}
               >
-                {showCheckingLabel ? (
+                {gradePending ? (
                   "Checking..."
                 ) : (
                   <>

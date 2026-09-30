@@ -498,7 +498,7 @@ describe("PracticeBoard recall submit loading", () => {
     getPassageMock.mockResolvedValue(psalm23);
   });
 
-  it("shows Checking… while a passing recall is saving, then Continue", async () => {
+  it("shows Saving… while a passing recall is saving, then Continue", async () => {
     let resolveRecord!: (value: unknown) => void;
     const pendingRecord = new Promise((resolve) => {
       resolveRecord = resolve;
@@ -528,10 +528,10 @@ describe("PracticeBoard recall submit loading", () => {
     await userEvent.click(check);
 
     expect(await screen.findByText("100% recalled.")).toBeVisible();
-    const checkingButton = screen.getByRole("button", { name: "Checking..." });
-    expect(checkingButton).toBeDisabled();
-    expect(checkingButton).toHaveAttribute("aria-busy", "true");
-    expect(checkingButton.querySelector("[data-icon=spinner]")).not.toBeNull();
+    const savingButton = screen.getByRole("button", { name: "Saving..." });
+    expect(savingButton).toBeDisabled();
+    expect(savingButton).toHaveAttribute("aria-busy", "true");
+    expect(savingButton.querySelector("[data-icon=spinner]")).not.toBeNull();
     expect(
       screen.queryByRole("button", { name: /Try again|Continue/ }),
     ).not.toBeInTheDocument();
@@ -557,11 +557,11 @@ describe("PracticeBoard recall submit loading", () => {
     });
     expect(continueButton.querySelector("[data-icon=spinner]")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Checking..." }),
+      screen.queryByRole("button", { name: "Saving..." }),
     ).not.toBeInTheDocument();
   });
 
-  it("shows Checking… instead of Try again while a miss is saving", async () => {
+  it("shows Saving… instead of Try again while a miss is saving", async () => {
     let resolveRecord!: (value: unknown) => void;
     const pendingRecord = new Promise((resolve) => {
       resolveRecord = resolve;
@@ -585,12 +585,12 @@ describe("PracticeBoard recall submit loading", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    const checkingButton = await screen.findByRole("button", {
-      name: "Checking...",
+    const savingButton = await screen.findByRole("button", {
+      name: "Saving...",
     });
-    expect(checkingButton).toBeDisabled();
-    expect(checkingButton).toHaveAttribute("aria-busy", "true");
-    expect(checkingButton.querySelector("[data-icon=spinner]")).not.toBeNull();
+    expect(savingButton).toBeDisabled();
+    expect(savingButton).toHaveAttribute("aria-busy", "true");
+    expect(savingButton.querySelector("[data-icon=spinner]")).not.toBeNull();
     expect(
       screen.queryByRole("button", { name: /Try again/ }),
     ).not.toBeInTheDocument();
@@ -613,7 +613,7 @@ describe("PracticeBoard recall submit loading", () => {
       expect(tryAgain).not.toHaveAttribute("aria-busy");
     });
     expect(
-      screen.queryByRole("button", { name: "Checking..." }),
+      screen.queryByRole("button", { name: "Saving..." }),
     ).not.toBeInTheDocument();
   });
 });

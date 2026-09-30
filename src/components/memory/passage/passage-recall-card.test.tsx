@@ -137,7 +137,7 @@ describe("PassageRecallCard step label and focus", () => {
     });
   });
 
-  it("labels the check button Checking... while the grade is saving", async () => {
+  it("labels the check button Saving... while the grade is saving", async () => {
     const user = userEvent.setup();
     let resolveSubmit!: (value: boolean) => void;
     const pending = new Promise<boolean>((resolve) => {
@@ -170,10 +170,10 @@ describe("PassageRecallCard step label and focus", () => {
     await user.paste("not the verse");
     await user.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    const checking = await screen.findByRole("button", { name: "Checking..." });
-    expect(checking).toBeDisabled();
-    expect(checking).toHaveAttribute("aria-busy", "true");
-    expect(checking.querySelector("[data-icon=spinner]")).not.toBeNull();
+    const saving = await screen.findByRole("button", { name: "Saving..." });
+    expect(saving).toBeDisabled();
+    expect(saving).toHaveAttribute("aria-busy", "true");
+    expect(saving.querySelector("[data-icon=spinner]")).not.toBeNull();
     expect(
       screen.queryByRole("button", { name: /Check answer|Try again/ }),
     ).not.toBeInTheDocument();
@@ -186,7 +186,7 @@ describe("PassageRecallCard step label and focus", () => {
       expect(tryAgain).not.toHaveAttribute("aria-busy");
     });
     expect(
-      screen.queryByRole("button", { name: "Checking..." }),
+      screen.queryByRole("button", { name: "Saving..." }),
     ).not.toBeInTheDocument();
   });
 });

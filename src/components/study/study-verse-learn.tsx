@@ -262,8 +262,9 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
     // Record the graded attempt but keep the review stable: hold the returned
     // rung and adopt it only after the learner continues. The lock keeps a
     // double-tap from recording twice before the result view (driven by
-    // `checked`) mounts and replaces this button. Continue stays disabled with
-    // a spinner until the record settles.
+    // `checked`) mounts and replaces this button. Continue stays disabled,
+    // labeled Saving..., until the record settles. Grading is local and
+    // already on screen; the wait is the Convex write.
     submit(() => {
       setChecked(true);
       return recordDeferred({
@@ -455,7 +456,7 @@ export function StudyVerseLearn({ card }: StudyVerseLearnProps) {
               loading={submitPending}
             >
               {submitPending ? (
-                "Checking..."
+                "Saving..."
               ) : madeLearningProgress ? (
                 <>
                   <ArrowRight className="h-4 w-4" aria-hidden />
