@@ -7,6 +7,7 @@ import {
   isMemorySessionCandidate,
   isPracticeSessionCandidate,
   isReviewSessionCandidate,
+  remainingDueAfterQueue,
   reviewPhaseListAction,
 } from "./memory-session";
 
@@ -186,5 +187,13 @@ describe("hasSessionWorkLeft", () => {
         NOW,
       ),
     ).toBe(false);
+  });
+});
+
+describe("remainingDueAfterQueue", () => {
+  it("is the due count beyond this frozen page", () => {
+    expect(remainingDueAfterQueue(80, 50)).toBe(30);
+    expect(remainingDueAfterQueue(12, 12)).toBe(0);
+    expect(remainingDueAfterQueue(3, 10)).toBe(0);
   });
 });

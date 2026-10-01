@@ -274,9 +274,19 @@ function toRowView(row: Doc<"verseMemory">) {
  * start, and packs with a passage row are excluded from that set).
  */
 export const dueQueue = query({
-  args: { now: v.number(), limit: v.optional(v.number()) },
+  args: {
+    now: v.number(),
+    limit: v.optional(v.number()),
+    /**
+     * Client cache key only. Review passes a new value when "Keep reviewing"
+     * re-subscribes after skipping this query, so the next snapshot is not a
+     * stale skipped result. The handler ignores it.
+     */
+    generation: v.optional(v.number()),
+  },
   returns: v.array(dueQueueEntry),
   handler: async (ctx, args) => {
+    void args.generation;
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
       return [];

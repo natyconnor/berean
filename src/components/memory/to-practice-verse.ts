@@ -20,6 +20,7 @@ export function toPracticeVerse(row: {
   consecutiveCorrect?: number;
   lapses?: number;
   earlyReviewApplied?: boolean;
+  verseRefId?: Id<"verseRefs">;
 }): PracticeVerse {
   const reference: CardReference = {
     book: row.book,
@@ -28,6 +29,7 @@ export function toPracticeVerse(row: {
     endVerse: row.endVerse,
   };
   return {
+    ...(row.verseRefId ? { verseRefId: row.verseRefId } : {}),
     reference,
     learnStage: row.learnStage,
     stageReps: row.stageReps,
@@ -63,6 +65,7 @@ export type DueQueuePackEntry = {
 
 export type DueQueueVerseEntry = {
   kind?: "verse";
+  verseRefId?: Id<"verseRefs">;
   book: string;
   chapter: number;
   startVerse: number;

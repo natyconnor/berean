@@ -129,6 +129,12 @@ export interface PracticeCompositeSet {
 }
 
 export interface PracticeVerse {
+  /**
+   * Owned `verseRefs` id when the session already resolved it (due queue,
+   * library row, pack member). Recording uses this instead of joining every
+   * hearted verse through `savedVerses.listAll`.
+   */
+  verseRefId?: Id<"verseRefs">;
   reference: CardReference;
   /** Server-authoritative memory rung for this verse (0..3). */
   learnStage: number;
@@ -199,6 +205,7 @@ interface VerseProgress {
 
 interface OrderedVerse {
   id: string;
+  verseRefId?: Id<"verseRefs">;
   reference: CardReference;
   learnStage: number;
   stageReps: number;
@@ -345,6 +352,7 @@ export function PracticeBoard({
       id: verse.composite
         ? `unified:${verse.composite.packId}`
         : verseRefKey(verse.reference),
+      verseRefId: verse.verseRefId,
       reference: verse.reference,
       composite: verse.composite,
       learnStage: normalizeStageIndex(verse.learnStage),
@@ -613,7 +621,8 @@ export function PracticeBoard({
         tzOffsetMinutes,
       });
     }
-    const verseRefId = resolveVerseRefId(currentVerse.reference);
+    const verseRefId =
+      currentVerse.verseRefId ?? resolveVerseRefId(currentVerse.reference);
     if (!verseRefId) return null;
     return await acceptVerseRetryHold({
       verseRefId,
@@ -747,6 +756,7 @@ export function PracticeBoard({
                   verseId,
                   {
                     reference: currentVerse.reference,
+                    verseRefId: currentVerse.verseRefId,
                     tokens,
                     stage: currentProgress.learnStage,
                     wordCount,

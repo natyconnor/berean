@@ -36,6 +36,16 @@ const savedMemoryValidator = v.object({
   lastReviewedAt: v.optional(v.number()),
 });
 
+const savedVerseRefItem = v.object({
+  _id: v.id("savedVerses"),
+  verseRefId: v.id("verseRefs"),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  createdAt: v.number(),
+});
+
 const savedVerseListItem = v.object({
   _id: v.id("savedVerses"),
   verseRefId: v.id("verseRefs"),
@@ -47,7 +57,7 @@ const savedVerseListItem = v.object({
   memory: v.optional(savedMemoryValidator),
 });
 
-type SavedVerseListItem = {
+type SavedVerseRefItem = {
   _id: Id<"savedVerses">;
   verseRefId: Id<"verseRefs">;
   book: string;
@@ -55,6 +65,9 @@ type SavedVerseListItem = {
   startVerse: number;
   endVerse: number;
   createdAt: number;
+};
+
+type SavedVerseListItem = SavedVerseRefItem & {
   memory?: {
     status: Doc<"verseMemory">["status"];
     learnStage: number;
@@ -65,16 +78,15 @@ type SavedVerseListItem = {
   };
 };
 
-async function toListItem(
+async function toRefItem(
   ctx: QueryCtx,
   row: Doc<"savedVerses">,
   userId: Id<"users">,
-): Promise<SavedVerseListItem | null> {
+): Promise<SavedVerseRefItem | null> {
   const ref = await ctx.db.get(row.verseRefId);
   if (!ref || ref.userId !== userId) {
     return null;
   }
-  const memory = await findVerseMemory(ctx, userId, row.verseRefId);
   return {
     _id: row._id,
     verseRefId: row.verseRefId,
@@ -83,6 +95,21 @@ async function toListItem(
     startVerse: ref.startVerse,
     endVerse: ref.endVerse,
     createdAt: row.createdAt,
+  };
+}
+
+async function toListItem(
+  ctx: QueryCtx,
+  row: Doc<"savedVerses">,
+  userId: Id<"users">,
+): Promise<SavedVerseListItem | null> {
+  const item = await toRefItem(ctx, row, userId);
+  if (!item) {
+    return null;
+  }
+  const memory = await findVerseMemory(ctx, userId, row.verseRefId);
+  return {
+    ...item,
     memory: memory
       ? {
           status: memory.status,
@@ -94,6 +121,18 @@ async function toListItem(
         }
       : undefined,
   };
+}
+
+async function loadHeartedRowsNewestFirst(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+): Promise<Doc<"savedVerses">[]> {
+  const rows = await ctx.db
+    .query("savedVerses")
+    .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
+    .collect();
+  rows.sort((a, b) => b.createdAt - a.createdAt);
+  return rows;
 }
 
 export const listForChapter = query({
@@ -128,6 +167,41 @@ export const listForChapter = query({
   },
 });
 
+/**
+ * Hearted verse ids and refs only — no `verseMemory` join.
+ *
+ * Recording an attempt patches `verseMemory`. Subscribing to {@link listAll}
+ * would re-run this whole collect after every save. Session recorders should
+ * pass `verseRefId` on the card and use this query only as a fallback.
+ */
+export const listRecordingIds = query({
+  args: {},
+  returns: v.array(savedVerseRefItem),
+  handler: async (ctx) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return [];
+    }
+
+    const rows = await loadHeartedRowsNewestFirst(ctx, userId);
+    const items: SavedVerseRefItem[] = [];
+
+    for (const row of rows) {
+      const item = await toRefItem(ctx, row, userId);
+      if (item) {
+        items.push(item);
+      }
+    }
+
+    return items;
+  },
+});
+
+/**
+ * Full library rows with mastery-ring memory. A `verseMemory` patch
+ * invalidates this query — do not subscribe during Learn / Practice / Review
+ * recording. Use {@link listRecordingIds} (or a frozen snapshot) instead.
+ */
 export const listAll = query({
   args: {},
   returns: v.array(savedVerseListItem),
@@ -137,13 +211,7 @@ export const listAll = query({
       return [];
     }
 
-    const rows = await ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
-      .collect();
-
-    rows.sort((a, b) => b.createdAt - a.createdAt);
-
+    const rows = await loadHeartedRowsNewestFirst(ctx, userId);
     const items: SavedVerseListItem[] = [];
 
     for (const row of rows) {

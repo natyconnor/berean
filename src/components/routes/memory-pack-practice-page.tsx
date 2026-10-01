@@ -6,7 +6,11 @@ import { ArrowLeft, Loader2, SearchX } from "lucide-react";
 import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
-import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
+import {
+  dueQueueEntryToPracticeVerse,
+  toPracticeVerse,
+} from "@/components/memory/to-practice-verse";
+import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import {
@@ -38,7 +42,7 @@ export function MemoryPackSessionPage({
   const now = useLiveNow();
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
-  const members = useQuery(api.packs.resolveMembers, {
+  const members = useFrozenQuery(api.packs.resolveMembers, {
     id: typedPackId,
     now,
   });
@@ -85,21 +89,33 @@ export function MemoryPackSessionPage({
     }
     return sortSessionVerses(
       members
-        .map((m) => ({
-          reference: {
+        .map((m) =>
+          toPracticeVerse({
+            verseRefId: m.verseRefId,
             book: m.book,
             chapter: m.chapter,
             startVerse: m.startVerse,
             endVerse: m.endVerse,
-          },
-          learnStage: m.learnStage,
-          stageReps: m.stageReps ?? 0,
-          status: m.status,
-          dueAt: m.dueAt,
-          lastReviewedAt: m.lastReviewedAt,
-        }))
+            learnStage: m.learnStage,
+            stageReps: m.stageReps ?? 0,
+            status: m.status,
+            dueAt: m.dueAt,
+            lastReviewedAt: m.lastReviewedAt,
+            ease: m.ease,
+            intervalDays: m.intervalDays,
+            consecutiveCorrect: m.consecutiveCorrect,
+            lapses: m.lapses,
+            earlyReviewApplied: m.earlyReviewApplied,
+          }),
+        )
         .filter((verse) => {
-          if (unifiedEnabled && isReviewPhase(verse.status)) return false;
+          if (
+            unifiedEnabled &&
+            verse.status !== undefined &&
+            isReviewPhase(verse.status)
+          ) {
+            return false;
+          }
           return isMemorySessionCandidate(
             verse,
             kind,

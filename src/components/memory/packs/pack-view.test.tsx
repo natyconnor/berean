@@ -75,6 +75,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     savedVerses: {
       heartMany: "savedVerses.heartMany",
       listAll: "savedVerses.listAll",
+      listRecordingIds: "savedVerses.listRecordingIds",
     },
     passageMemory: {
       getForPack: "passageMemory.getForPack",
