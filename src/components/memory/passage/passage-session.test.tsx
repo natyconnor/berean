@@ -94,13 +94,17 @@ function passageView(
   extra?: Partial<PassageView>,
 ): PassageView {
   const now = getSessionNow();
-  const ropePieceIndexes = pieces
-    .map((item, index) =>
-      item.attachment === "attached" || item.attachment === "solid"
-        ? index
-        : -1,
-    )
-    .filter((index) => index >= 0);
+  const ropePieceIndexes = [];
+  for (let index = 0; index < pieces.length; index += 1) {
+    const item = pieces[index];
+    if (
+      !item ||
+      (item.attachment !== "attached" && item.attachment !== "solid")
+    ) {
+      break;
+    }
+    ropePieceIndexes.push(index);
+  }
   const frontierIndex = pieces.findIndex((item) => item.attachment !== "solid");
   return {
     _id: "passage_1" as Id<"passageMemory">,

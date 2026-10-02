@@ -100,7 +100,7 @@ describe("passage introduce budget", () => {
 });
 
 describe("frontierIndex / ropePieceIndexes / connect pairs", () => {
-  it("points frontier at the first non-solid and lists the rope in order", () => {
+  it("points frontier at the first non-solid and lists the contiguous prefix rope", () => {
     const pieces = [
       piece(0, "solid"),
       piece(1, "learning"),
@@ -109,10 +109,39 @@ describe("frontierIndex / ropePieceIndexes / connect pairs", () => {
       piece(4, "unreached"),
     ];
     expect(frontierIndex(pieces)).toBe(1);
-    expect(ropePieceIndexes(pieces)).toEqual([0, 2, 3]);
+    expect(ropePieceIndexes(pieces)).toEqual([0]);
     expect(
       frontierIndex(pieces.map((p) => ({ ...p, attachment: "solid" }))),
     ).toBe(5);
+  });
+
+  it("keeps later pre-hearted solids off the practice rope", () => {
+    const pieces = [
+      piece(0, "attached", {
+        book: "Matthew",
+        chapter: 5,
+        startVerse: 1,
+        endVerse: 1,
+        learnStage: 2,
+      }),
+      piece(1, "unreached", {
+        book: "Matthew",
+        chapter: 5,
+        startVerse: 2,
+        endVerse: 2,
+      }),
+      piece(2, "solid", {
+        book: "Matthew",
+        chapter: 6,
+        startVerse: 33,
+        endVerse: 33,
+        learnStage: 3,
+      }),
+    ];
+    expect(ropePieceIndexes(pieces)).toEqual([0]);
+    expect(connectPairForPiece(pieces, 0)).toBeNull();
+    expect(connectPairIndexes(pieces)).toBeNull();
+    expect(rehearsalStartIndex(pieces)).toBe(0);
   });
 
   it("returns the first piece of the same section", () => {
@@ -163,7 +192,7 @@ describe("frontierIndex / ropePieceIndexes / connect pairs", () => {
         [piece(0, "attached"), piece(1, "learning"), piece(2, "attached")],
         2,
       ),
-    ).toEqual([0, 2]);
+    ).toBeNull();
   });
 
   it("treats Guided attach, Challenge, and From Memory as rope-band clears", () => {
@@ -206,7 +235,7 @@ describe("rehearsalStartIndex", () => {
     expect(start).toBe(3);
   });
 
-  it("applies caps on rope pieces only and ignores unreached", () => {
+  it("does not start rehearsal on later isolated solids ahead of the frontier", () => {
     const pieces = [
       piece(0, "unreached"),
       piece(1, "unreached"),
@@ -214,7 +243,8 @@ describe("rehearsalStartIndex", () => {
       piece(3, "attached", { learnStage: 2 }),
       piece(4, "solid"),
     ];
-    expect(rehearsalStartIndex(pieces)).toBe(2);
+    expect(ropePieceIndexes(pieces)).toEqual([]);
+    expect(rehearsalStartIndex(pieces)).toBe(0);
     expect(rehearsalStartIndex([])).toBe(0);
     expect(
       rehearsalStartIndex([piece(0, "learning"), piece(1, "unreached")]),

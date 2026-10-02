@@ -91,20 +91,31 @@ export function frontierIndex(pieces: readonly PassagePiece[]): number {
   return index === -1 ? pieces.length : index;
 }
 
-/** Indexes where attachment is attached | solid, ascending. */
+/**
+ * Practice-rope indexes: the contiguous attached|solid prefix from the start
+ * of the passage. Isolated later solids (a verse hearted before this passage
+ * began) stay solid on the map but are not warmup or "recite together" targets.
+ */
 export function ropePieceIndexes(pieces: readonly PassagePiece[]): number[] {
   const indexes: number[] = [];
   for (let index = 0; index < pieces.length; index += 1) {
     const piece = pieces[index];
-    if (piece && isRopeAttachment(piece.attachment)) indexes.push(index);
+    if (!piece || !isRopeAttachment(piece.attachment)) break;
+    indexes.push(index);
   }
   return indexes;
+}
+
+function isNeighborIndex(left: number, right: number): boolean {
+  return right === left + 1;
 }
 
 /**
  * Neighbor pair to recitation-connect after `pieceIndex` advances on the rope.
  * Prefer the previous rope piece (verse 3 → 2-3). If this is the first rope
  * piece, link forward so verse 1 still connects at Challenge / From Memory.
+ * Only adjacent piece indexes count as neighbors — never skip unreached verses
+ * to a later pre-hearted solid.
  */
 export function connectPairForPiece(
   pieces: readonly PassagePiece[],
@@ -116,10 +127,14 @@ export function connectPairForPiece(
   if (position === -1) return null;
   if (position > 0) {
     const previous = rope[position - 1];
-    return previous === undefined ? null : [previous, pieceIndex];
+    if (previous === undefined || !isNeighborIndex(previous, pieceIndex)) {
+      return null;
+    }
+    return [previous, pieceIndex];
   }
   const next = rope[position + 1];
-  return next === undefined ? null : [pieceIndex, next];
+  if (next === undefined || !isNeighborIndex(pieceIndex, next)) return null;
+  return [pieceIndex, next];
 }
 
 /**
@@ -160,10 +175,11 @@ export function sectionStartIndex(
 }
 
 /**
- * Default rope warm-up start. Rope only. If no attached/solid pieces, return 0
- * (caller skips rope). Caps at {@link PASSAGE_REHEARSAL_MAX_PIECES} then trims
- * oldest pieces while the window exceeds {@link PASSAGE_REHEARSAL_MAX_WORDS}.
- * Explicit section/passage start (UI) bypasses these caps.
+ * Default rope warm-up start on the contiguous prefix rope. If the prefix is
+ * empty, return 0 (caller skips rope). Caps at {@link PASSAGE_REHEARSAL_MAX_PIECES}
+ * then trims oldest pieces while the window exceeds
+ * {@link PASSAGE_REHEARSAL_MAX_WORDS}. Explicit section/passage start (UI)
+ * bypasses these caps.
  */
 export function rehearsalStartIndex(
   pieces: readonly PassagePiece[],
@@ -283,8 +299,9 @@ export function coerceUnstartedLearningPieces<T extends PassagePiece>(
 /**
  * Infer attachment / stages from covering hearts at migration.
  * Review/mastered coverage → solid. Learning-phase coverage maps Guided-cleared
- * (stage ≥ 2) to attached. Isolated later solids are allowed; the frontier is
- * still the first non-solid.
+ * (stage ≥ 2) to attached. Isolated later solids are allowed on the map; the
+ * frontier is still the first non-solid. Those later solids are not on the
+ * practice rope.
  *
  * Hearts that are `learning` at Read with no reps (pack enroll, never opened)
  * stay unreached so the map and introduce budget match an unread verse.
