@@ -386,4 +386,36 @@ export default defineSchema({
   })
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_packId", ["packId"]),
+
+  /**
+   * 1:1 skinny cache of `passageMemory` due facts. Due/forecast/list queries
+   * must not `.collect()` fat `passageMemory` rows (Convex reads `pieces`).
+   */
+  passageMemoryDue: defineTable({
+    userId: v.id("users"),
+    packId: v.id("packs"),
+    passageMemoryId: v.id("passageMemory"),
+    status: passageStatusValidator,
+    dueAt: v.number(),
+    learningDueAt: v.number(),
+    addsOnDay: v.number(),
+    addDayKey: v.optional(v.number()),
+    hasUnreached: v.boolean(),
+    hasIntroduced: v.boolean(),
+    minIntroducedDueAt: v.optional(v.number()),
+    solidCount: v.number(),
+    attachedCount: v.number(),
+    pieceCount: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_passageMemoryId", ["passageMemoryId"])
+    .index("by_packId", ["packId"])
+    .index("by_userId_status_dueAt", ["userId", "status", "dueAt"]),
+
+  /** Set once this user's `passageMemoryDue` rows cover every passage row. */
+  userPassageDueState: defineTable({
+    userId: v.id("users"),
+    backfilled: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
 });

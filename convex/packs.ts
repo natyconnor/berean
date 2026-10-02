@@ -16,20 +16,18 @@ import {
   loadHeartedMembers,
   loadOwnedPack,
   loadPackMembers,
-  loadPassageMemoryByUser,
   nextPackOrder,
-  passageMemoryByPackId,
   type PackMember,
 } from "./lib/packs";
 import {
   deletePassageAndReviews,
   findPassageByPackId,
 } from "./lib/passageMemory";
+import { loadPassageDueRecords, passageDueByPackId } from "./lib/passageDue";
 import { passageStatusValidator } from "./lib/passageValues";
 import {
-  isPassageDueForLearning,
   isPassageDueForReview,
-  passageRopeCounts,
+  isProjectedPassageDueForLearning,
 } from "../src/lib/passage-due";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import {
@@ -247,8 +245,8 @@ export const listMine = query({
     const memoryByRef = new Map(
       memories.map((m) => [m.verseRefId, m] as const),
     );
-    const passageByPackId = passageMemoryByPackId(
-      await loadPassageMemoryByUser(ctx, userId),
+    const passageByPackId = passageDueByPackId(
+      await loadPassageDueRecords(ctx, userId, args.now),
     );
 
     const page = [];
@@ -286,7 +284,6 @@ export const listMine = query({
 
       const passage = passageByPackId.get(pack._id);
       if (passage) {
-        const rope = passageRopeCounts(passage.pieces);
         page.push({
           _id: pack._id,
           name: pack.name,
@@ -294,15 +291,19 @@ export const listMine = query({
           verseCount,
           dueCount:
             isPassageDueForReview(passage, args.now) ||
-            isPassageDueForLearning(passage, args.now, args.tzOffsetMinutes)
+            isProjectedPassageDueForLearning(
+              passage,
+              args.now,
+              args.tzOffsetMinutes,
+            )
               ? 1
               : 0,
           lastOpenedAt: pack.lastOpenedAt,
           unifiedReviewEnabled: pack.unifiedReviewEnabled,
           passageStatus: passage.status,
-          solidCount: rope.solidCount,
-          attachedCount: rope.attachedCount,
-          pieceCount: rope.pieceCount,
+          solidCount: passage.solidCount,
+          attachedCount: passage.attachedCount,
+          pieceCount: passage.pieceCount,
         });
         continue;
       }

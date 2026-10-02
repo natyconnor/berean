@@ -4,12 +4,19 @@ import { DAY_MS, MAX_LEARN_STAGE } from "./memory-scheduler";
 import {
   countDuePassageLearning,
   countDuePassageReviews,
+  countProjectedPassageLearning,
   isPassageDueForLearning,
   isPassageDueForReview,
+  isProjectedPassageDueForLearning,
   passageLearningDueAt,
   passageRopeCounts,
+  projectPassageDue,
+  type PassageDueRow,
 } from "./passage-due";
-import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
+import {
+  coerceUnstartedLearningPieces,
+  PASSAGE_MAX_ADDS_PER_DAY,
+} from "./passage-frontier";
 import type { PassagePiece } from "./passage-pieces";
 
 const NOW = DAY_MS * 10;
@@ -208,5 +215,110 @@ describe("passageRopeCounts / passageLearningDueAt", () => {
         NOW,
       ),
     ).toBe(NOW + 10);
+  });
+});
+
+function expectProjectionMatches(row: PassageDueRow, now = NOW, tz = TZ) {
+  const projected = projectPassageDue(row, now);
+  const coerced: PassageDueRow = {
+    ...row,
+    pieces: coerceUnstartedLearningPieces(row.pieces),
+  };
+  expect(isProjectedPassageDueForLearning(projected, now, tz)).toBe(
+    isPassageDueForLearning(coerced, now, tz),
+  );
+  expect(isPassageDueForReview(projected, now)).toBe(
+    isPassageDueForReview(row, now),
+  );
+}
+
+describe("projectPassageDue", () => {
+  it("matches isPassageDueForLearning / isPassageDueForReview on the due fixtures", () => {
+    const rows: PassageDueRow[] = [
+      {
+        status: "building",
+        dueAt: NOW,
+        addsOnDay: 0,
+        addDayKey: undefined,
+        pieces: [piece(0, "unreached")],
+      },
+      {
+        status: "building",
+        dueAt: NOW,
+        addsOnDay: PASSAGE_MAX_ADDS_PER_DAY,
+        addDayKey: Math.floor(NOW / DAY_MS),
+        pieces: [
+          piece(0, "learning", { dueAt: undefined }),
+          piece(1, "unreached"),
+        ],
+      },
+      {
+        status: "building",
+        dueAt: NOW,
+        addsOnDay: PASSAGE_MAX_ADDS_PER_DAY,
+        addDayKey: Math.floor(NOW / DAY_MS),
+        pieces: [piece(0, "attached", { dueAt: NOW, learnStage: 2 })],
+      },
+      {
+        status: "building",
+        dueAt: NOW,
+        addsOnDay: PASSAGE_MAX_ADDS_PER_DAY,
+        addDayKey: Math.floor(NOW / DAY_MS),
+        pieces: [
+          piece(0, "attached", { dueAt: NOW + DAY_MS, learnStage: 2 }),
+          piece(1, "solid", { learnStage: MAX_LEARN_STAGE }),
+          piece(2, "unreached"),
+        ],
+      },
+      {
+        status: "reviewing",
+        dueAt: NOW,
+        addsOnDay: 0,
+        pieces: [piece(0, "solid")],
+      },
+      {
+        status: "mastered",
+        dueAt: NOW + DAY_MS,
+        addsOnDay: 0,
+        pieces: [piece(0, "solid")],
+      },
+      {
+        status: "building",
+        dueAt: NOW,
+        addsOnDay: 0,
+        pieces: [piece(0, "solid"), piece(1, "unreached")],
+      },
+    ];
+    for (const row of rows) expectProjectionMatches(row);
+  });
+
+  it("counts projected learning dues the same as piece-array counts", () => {
+    const rows: PassageDueRow[] = [
+      {
+        status: "building",
+        dueAt: NOW,
+        addsOnDay: 0,
+        addDayKey: undefined,
+        pieces: [piece(0, "unreached")],
+      },
+      {
+        status: "building",
+        dueAt: NOW,
+        addsOnDay: PASSAGE_MAX_ADDS_PER_DAY,
+        addDayKey: Math.floor(NOW / DAY_MS),
+        pieces: [
+          piece(0, "learning", { dueAt: NOW + DAY_MS }),
+          piece(1, "unreached"),
+        ],
+      },
+    ];
+    const projected = rows.map((row) => projectPassageDue(row, NOW));
+    const coerced = rows.map((row) => ({
+      ...row,
+      pieces: coerceUnstartedLearningPieces(row.pieces),
+    }));
+    expect(countProjectedPassageLearning(projected, NOW, TZ)).toBe(
+      countDuePassageLearning(coerced, NOW, TZ),
+    );
   });
 });

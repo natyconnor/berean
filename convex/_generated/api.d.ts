@@ -19,6 +19,7 @@ import type * as lib_deleteAccount from "../lib/deleteAccount.js";
 import type * as lib_noteContent from "../lib/noteContent.js";
 import type * as lib_onboarding from "../lib/onboarding.js";
 import type * as lib_packs from "../lib/packs.js";
+import type * as lib_passageDue from "../lib/passageDue.js";
 import type * as lib_passageMemory from "../lib/passageMemory.js";
 import type * as lib_passageValues from "../lib/passageValues.js";
 import type * as lib_publicValues from "../lib/publicValues.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "lib/noteContent": typeof lib_noteContent;
   "lib/onboarding": typeof lib_onboarding;
   "lib/packs": typeof lib_packs;
+  "lib/passageDue": typeof lib_passageDue;
   "lib/passageMemory": typeof lib_passageMemory;
   "lib/passageValues": typeof lib_passageValues;
   "lib/publicValues": typeof lib_publicValues;

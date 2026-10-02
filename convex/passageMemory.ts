@@ -24,7 +24,8 @@ import {
   pieceBaseValidator,
   qualityValidator,
 } from "./lib/passageValues";
-import { loadPackMembers, loadPassageMemoryByUser } from "./lib/packs";
+import { loadPackMembers } from "./lib/packs";
+import { loadPassageDueRecords } from "./lib/passageDue";
 import { unheartByVerseRefId } from "./lib/savedVerses";
 import { findVerseRefId } from "./lib/verseRefs";
 import {
@@ -32,7 +33,10 @@ import {
   SHORT_VERSE_WORDS,
 } from "../src/lib/memory-scheduler";
 import { packAllowsPassageMode } from "../src/lib/passage-eligibility";
-import { isPassageDueForLearning } from "../src/lib/passage-due";
+import {
+  isPassageDueForLearning,
+  isProjectedPassageDueForLearning,
+} from "../src/lib/passage-due";
 import {
   isPassagePieceLocked,
   localDayIndex,
@@ -429,11 +433,18 @@ export const dueForLearning = query({
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) return [];
 
-    const rows = await loadPassageMemoryByUser(ctx, userId);
+    const projected = await loadPassageDueRecords(ctx, userId, args.now);
     const items: Array<
       NonNullable<ReturnType<typeof toBuildingPassagePackItem>>
     > = [];
-    for (const raw of rows) {
+    for (const due of projected) {
+      if (
+        !isProjectedPassageDueForLearning(due, args.now, args.tzOffsetMinutes)
+      ) {
+        continue;
+      }
+      const raw = await ctx.db.get(due.passageMemoryId);
+      if (!raw || raw.userId !== userId) continue;
       const row = withNormalizedPieces(raw);
       if (!isPassageDueForLearning(row, args.now, args.tzOffsetMinutes)) {
         continue;
