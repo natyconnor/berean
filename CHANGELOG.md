@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.4](https://github.com/natyconnor/berean/compare/v1.17.3...v1.17.4) (2026-10-02)
+
+
+### Bug Fixes
+
+* Keep recall Saving... from scaling with the hearted library ([#241](https://github.com/natyconnor/berean/issues/241)) ([d3432f7](https://github.com/natyconnor/berean/commit/d3432f79493cc9c5a9cdd81ab7926b0526e060b3))
+
 ## [1.17.3](https://github.com/natyconnor/berean/compare/v1.17.2...v1.17.3) (2026-09-30)
 
 
