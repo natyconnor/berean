@@ -22,6 +22,7 @@ import {
   modeNavigateTargetFromHref,
   type AppMode,
 } from "@/lib/mode-last-location";
+import { isMemorySessionPath } from "@/lib/memory-session-path";
 import { useTabs } from "@/lib/use-tabs";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
@@ -81,10 +82,13 @@ export function ModeDock() {
   // Shared session clock (same snapshot as the Memory dashboard). Completing a
   // review or learn still updates the count (same args, reactive data).
   const now = useLiveNow();
-  const dueCountResult = useQuery(api.verseMemory.dueCount, {
-    now,
-    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
-  });
+  const skipDueCount = isMemorySessionPath(location.pathname);
+  const dueCountResult = useQuery(
+    api.verseMemory.dueCount,
+    skipDueCount
+      ? "skip"
+      : { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() },
+  );
   // Keep the last loaded count so a reconnect or loading gap after a long-lived
   // tab doesn't blank the badge (which looks like the number "disappeared").
   const [dueCount, setDueCount] = useState<number | undefined>(undefined);
