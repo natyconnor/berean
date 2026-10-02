@@ -28,11 +28,14 @@ export function MemoryHome() {
   const now = useLiveNow();
   const navigate = useNavigate();
 
+  // Status totals are O(1) and must not wait on the due scan that still
+  // powers Today / dueToday.
+  const status = useQuery(api.verseMemory.memoryStatus, {});
   const stats = useQuery(api.verseMemory.memoryStats, {
     now,
     tzOffsetMinutes: new Date(now).getTimezoneOffset(),
   });
-  const canPractice = (stats?.reviewing ?? 0) + (stats?.mastered ?? 0) > 0;
+  const canPractice = (status?.reviewing ?? 0) + (status?.mastered ?? 0) > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -62,13 +65,14 @@ export function MemoryHome() {
         <div className="mx-auto max-w-6xl space-y-8 px-5 pt-6 pb-24">
           <PreviewMemorySeedCard
             now={now}
-            heartedTotal={stats?.total}
+            heartedTotal={status?.total}
             enabled={isPreviewTestToolsEnabled()}
             autoSeed={Boolean(__IS_PREVIEW__)}
           />
           <MemoryDashboard
             now={now}
             stats={stats}
+            status={status}
             onStartReview={() => void navigate({ to: "/memory/review" })}
             onStartLearning={() =>
               void navigate({ to: "/memory/learn", search: {} })
