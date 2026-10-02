@@ -7,6 +7,10 @@ vi.mock("convex-helpers/react/cache", () => ({
   useQuery: () => undefined,
 }));
 
+vi.mock("convex/react", () => ({
+  useMutation: () => () => Promise.resolve(null),
+}));
+
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
     verseMemory: {
@@ -14,6 +18,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       memoryStatus: "verseMemory.memoryStatus",
       reviewActivity: "verseMemory.reviewActivity",
       reviewForecast: "verseMemory.reviewForecast",
+      ensureReviewActivityDays: "verseMemory.ensureReviewActivityDays",
     },
   },
 }));

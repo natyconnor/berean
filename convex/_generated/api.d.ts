@@ -23,6 +23,7 @@ import type * as lib_passageDue from "../lib/passageDue.js";
 import type * as lib_passageMemory from "../lib/passageMemory.js";
 import type * as lib_passageValues from "../lib/passageValues.js";
 import type * as lib_publicValues from "../lib/publicValues.js";
+import type * as lib_reviewActivityDays from "../lib/reviewActivityDays.js";
 import type * as lib_savedVerses from "../lib/savedVerses.js";
 import type * as lib_seed_devSeedSupport from "../lib/seed/devSeedSupport.js";
 import type * as lib_tags from "../lib/tags.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "lib/passageMemory": typeof lib_passageMemory;
   "lib/passageValues": typeof lib_passageValues;
   "lib/publicValues": typeof lib_publicValues;
+  "lib/reviewActivityDays": typeof lib_reviewActivityDays;
   "lib/savedVerses": typeof lib_savedVerses;
   "lib/seed/devSeedSupport": typeof lib_seed_devSeedSupport;
   "lib/tags": typeof lib_tags;

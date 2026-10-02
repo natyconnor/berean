@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { GraduationCap, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
+import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { motion, useReducedMotion } from "framer-motion";
 import { api } from "../../../../convex/_generated/api";
@@ -47,6 +49,12 @@ export function MemoryDashboard({
   onStartLearning: () => void;
 }) {
   const timeZone = getViewerTimeZone();
+  const ensureReviewActivityDays = useMutation(
+    api.verseMemory.ensureReviewActivityDays,
+  );
+  useEffect(() => {
+    void ensureReviewActivityDays({ now, timeZone });
+  }, [ensureReviewActivityDays, now, timeZone]);
   const activity = useQuery(api.verseMemory.reviewActivity, {
     now,
     timeZone,

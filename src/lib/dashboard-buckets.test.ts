@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DAY_MS,
+  aggregateReviewDays,
   bucketAccuracyAverages,
   bucketForecastCounts,
   bucketReviewCounts,
@@ -8,6 +9,8 @@ import {
   isReadPrimeAttempt,
   normalizeTimeZone,
   overallAccuracy,
+  reviewActivityFromDayAggregates,
+  reviewActivityFromLogs,
   startOfUtcDay,
   startOfZonedDay,
   utcDayStarts,
@@ -208,5 +211,88 @@ describe("overallAccuracy", () => {
 
   it("returns null with no reviews", () => {
     expect(overallAccuracy([{ average: null, count: 0 }])).toBeNull();
+  });
+});
+
+describe("aggregateReviewDays / reviewActivityFromLogs", () => {
+  const pacific = "America/Los_Angeles";
+  const saturdayEveningPdt = Date.parse("2026-07-12T04:15:00.000Z");
+  const fridayEveningPdt = Date.parse("2026-07-11T03:00:00.000Z");
+  const logs = [
+    {
+      createdAt: fridayEveningPdt,
+      accuracy: 80,
+      mode: "review" as const,
+      stage: 3,
+    },
+    {
+      createdAt: fridayEveningPdt + 1,
+      accuracy: 100,
+      mode: "learn" as const,
+      stage: 0,
+    },
+    {
+      createdAt: saturdayEveningPdt,
+      accuracy: 90,
+      mode: "practice" as const,
+      stage: 2,
+    },
+  ];
+
+  it("matches heatmap counts and 30-day accuracy buckets, including Read primes", () => {
+    const activity = reviewActivityFromLogs(
+      logs,
+      saturdayEveningPdt,
+      3,
+      3,
+      pacific,
+    );
+    expect(activity.heatmap.map((d) => d.count)).toEqual(
+      bucketReviewCounts(
+        logs.map((row) => row.createdAt),
+        saturdayEveningPdt,
+        3,
+        pacific,
+      ),
+    );
+    expect(
+      activity.trend.map((d) => ({ average: d.average, count: d.count })),
+    ).toEqual(bucketAccuracyAverages(logs, saturdayEveningPdt, 3, pacific));
+  });
+
+  it("stores sparse days and still fills empty heatmap slots", () => {
+    const days = aggregateReviewDays(logs, saturdayEveningPdt, 3, pacific);
+    expect(days.every((day) => day.count > 0)).toBe(true);
+    expect(days.length).toBeLessThan(3);
+  });
+
+  it("keeps heatmap and trend windows independent", () => {
+    const activity = reviewActivityFromLogs(
+      logs,
+      saturdayEveningPdt,
+      5,
+      2,
+      pacific,
+    );
+    expect(activity.heatmap).toHaveLength(5);
+    expect(activity.trend).toHaveLength(2);
+    expect(activity.heatmap.map((d) => d.count)).toEqual(
+      bucketReviewCounts(
+        logs.map((row) => row.createdAt),
+        saturdayEveningPdt,
+        5,
+        pacific,
+      ),
+    );
+    expect(
+      activity.trend.map((d) => ({ average: d.average, count: d.count })),
+    ).toEqual(bucketAccuracyAverages(logs, saturdayEveningPdt, 2, pacific));
+
+    const stored = reviewActivityFromDayAggregates(
+      aggregateReviewDays(logs, saturdayEveningPdt, 5, pacific),
+      zonedDayStarts(saturdayEveningPdt, 5, pacific),
+      zonedDayStarts(saturdayEveningPdt, 2, pacific),
+    );
+    expect(stored).toEqual(activity);
   });
 });

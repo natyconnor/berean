@@ -189,6 +189,105 @@ export function bucketAccuracyAverages(
   }));
 }
 
+export type ReviewLogRow = {
+  createdAt: number;
+  accuracy: number;
+  mode?: string;
+  stage?: number;
+};
+
+export type ReviewDayAggregate = {
+  dayStart: number;
+  count: number;
+  accuracySum: number;
+  accuracyCount: number;
+};
+
+/**
+ * Per-local-day heatmap counts (all logs) and accuracy sums (excluding Read
+ * primes). Only days with at least one log are returned so callers can persist
+ * a sparse ~365-row table.
+ */
+export function aggregateReviewDays(
+  reviews: readonly ReviewLogRow[],
+  now: number,
+  days: number,
+  timeZone: string,
+): ReviewDayAggregate[] {
+  const starts = zonedDayStarts(now, days, timeZone);
+  const indexByKey = dayKeyIndex(starts, timeZone);
+  const counts = Array.from({ length: days }, () => 0);
+  const accuracySums = Array.from({ length: days }, () => 0);
+  const accuracyCounts = Array.from({ length: days }, () => 0);
+  for (const review of reviews) {
+    const index = indexByKey.get(zonedDateKey(review.createdAt, timeZone));
+    if (index === undefined) continue;
+    counts[index] += 1;
+    if (isReadPrimeAttempt(review)) continue;
+    accuracySums[index] += review.accuracy;
+    accuracyCounts[index] += 1;
+  }
+  const aggregates: ReviewDayAggregate[] = [];
+  for (let i = 0; i < days; i += 1) {
+    if (counts[i] === 0) continue;
+    aggregates.push({
+      dayStart: starts[i],
+      count: counts[i],
+      accuracySum: accuracySums[i],
+      accuracyCount: accuracyCounts[i],
+    });
+  }
+  return aggregates;
+}
+
+export function reviewActivityFromDayAggregates(
+  days: readonly ReviewDayAggregate[],
+  heatmapDayStarts: readonly number[],
+  trendDayStarts: readonly number[],
+): {
+  heatmap: Array<{ dayStart: number; count: number }>;
+  trend: Array<{ dayStart: number; average: number | null; count: number }>;
+} {
+  const byStart = new Map(days.map((day) => [day.dayStart, day]));
+  return {
+    heatmap: heatmapDayStarts.map((dayStart) => ({
+      dayStart,
+      count: byStart.get(dayStart)?.count ?? 0,
+    })),
+    trend: trendDayStarts.map((dayStart) => {
+      const day = byStart.get(dayStart);
+      const accuracyCount = day?.accuracyCount ?? 0;
+      return {
+        dayStart,
+        average:
+          accuracyCount > 0 && day ? day.accuracySum / accuracyCount : null,
+        count: accuracyCount,
+      };
+    }),
+  };
+}
+
+/** Same heatmap + trend shape as `verseMemory.reviewActivity`. */
+export function reviewActivityFromLogs(
+  reviews: readonly ReviewLogRow[],
+  now: number,
+  heatmapDays: number,
+  trendDays: number,
+  timeZone: string,
+): {
+  heatmap: Array<{ dayStart: number; count: number }>;
+  trend: Array<{ dayStart: number; average: number | null; count: number }>;
+} {
+  const heatmapDayStarts = zonedDayStarts(now, heatmapDays, timeZone);
+  const trendDayStarts = zonedDayStarts(now, trendDays, timeZone);
+  const windowDays = Math.max(heatmapDays, trendDays);
+  return reviewActivityFromDayAggregates(
+    aggregateReviewDays(reviews, now, windowDays, timeZone),
+    heatmapDayStarts,
+    trendDayStarts,
+  );
+}
+
 /**
  * True for the learning Read band: `learnStage` 0 recorded as `mode: "learn"`.
  * The UI banks that rep by submitting the shown text (`Continue`), not a recall.
