@@ -17,7 +17,9 @@ import type { CardReference } from "@/components/study/study-card-model";
 import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { isReviewPhase, type MemorySchedule } from "@/lib/memory-scheduler";
+import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
 import { canonicalUnifiedSchedule } from "@/lib/unified-review-schedule";
 import { Route } from "@/routes/memory_.$packId.review";
@@ -58,7 +60,7 @@ export function MemoryPackReviewPage() {
   const [sessionEpoch, setSessionEpoch] = useState(0);
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
-  const members = useQuery(api.packs.resolveMembers, {
+  const members = useFrozenQuery(api.packs.resolveMembers, {
     id: typedPackId,
     now,
   });
@@ -127,12 +129,10 @@ export function MemoryPackReviewPage() {
     );
   }, [members, dueMembers, compositeVerse, unifiedEnabled]);
 
-  // One recitation is one due item, matching the pack list's 0|1 due count.
-  const remainingDue = unifiedEnabled
-    ? compositeVerse
-      ? 1
-      : 0
-    : dueMembers.length;
+  const remainingDue = remainingDueAfterQueue(
+    unifiedEnabled ? (compositeVerse ? 1 : 0) : dueMembers.length,
+    reviewVerses.length,
+  );
 
   const onExit = () =>
     void navigate({

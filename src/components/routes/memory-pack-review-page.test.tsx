@@ -73,7 +73,10 @@ vi.mock("../../../convex/_generated/api", () => ({
       recordUnifiedReview: "packs.recordUnifiedReview",
       resolveMembers: "packs.resolveMembers",
     },
-    savedVerses: { listAll: "savedVerses.listAll" },
+    savedVerses: {
+      listAll: "savedVerses.listAll",
+      listRecordingIds: "savedVerses.listRecordingIds",
+    },
     verseMemory: { recordAttempt: "verseMemory.recordAttempt" },
     passageMemory: {
       getForPack: "passageMemory.getForPack",
@@ -141,6 +144,7 @@ function renderReview({
   });
   queryResults.set("packs.resolveMembers", members);
   queryResults.set("savedVerses.listAll", []);
+  queryResults.set("savedVerses.listRecordingIds", []);
   queryResults.set("passageMemory.getForPack", passage);
 
   return render(

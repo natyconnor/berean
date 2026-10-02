@@ -60,7 +60,10 @@ vi.mock("../../../../convex/_generated/api", () => ({
       recordAttempt: "passageMemory.recordAttempt",
       acceptRetryHold: "passageMemory.acceptRetryHold",
     },
-    savedVerses: { listAll: "savedVerses.listAll" },
+    savedVerses: {
+      listAll: "savedVerses.listAll",
+      listRecordingIds: "savedVerses.listRecordingIds",
+    },
     verseMemory: {
       recordAttempt: "verseMemory.recordAttempt",
       acceptRetryHold: "verseMemory.acceptRetryHold",
@@ -125,7 +128,7 @@ describe("PracticeBoard composite recitation", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
-    queryResults.set("savedVerses.listAll", []);
+    queryResults.set("savedVerses.listRecordingIds", []);
     fetchChaptersBatchMock.mockReset();
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
     getPassageMock.mockReset();
@@ -285,6 +288,7 @@ describe("PracticeBoard composite recitation", () => {
 const VERSE_REF_ID = "vr_ps23_1" as Id<"verseRefs">;
 
 const learningVerse: PracticeVerse = {
+  verseRefId: VERSE_REF_ID,
   reference: span(1, 1),
   learnStage: 0,
   stageReps: 0,
@@ -298,15 +302,7 @@ describe("PracticeBoard learning Read prime", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
-    queryResults.set("savedVerses.listAll", [
-      {
-        verseRefId: VERSE_REF_ID,
-        book: "Psalms",
-        chapter: 23,
-        startVerse: 1,
-        endVerse: 1,
-      },
-    ]);
+    queryResults.set("savedVerses.listRecordingIds", []);
     fetchChaptersBatchMock.mockReset();
     getPassageMock.mockReset();
     getPassageMock.mockResolvedValue(psalm23);
@@ -384,15 +380,7 @@ describe("PracticeBoard learning step label", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
-    queryResults.set("savedVerses.listAll", [
-      {
-        verseRefId: VERSE_REF_ID,
-        book: "Psalms",
-        chapter: 23,
-        startVerse: 1,
-        endVerse: 1,
-      },
-    ]);
+    queryResults.set("savedVerses.listRecordingIds", []);
     fetchChaptersBatchMock.mockReset();
     getPassageMock.mockReset();
     getPassageMock.mockResolvedValue(psalm23);
@@ -484,15 +472,7 @@ describe("PracticeBoard recall submit loading", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
-    queryResults.set("savedVerses.listAll", [
-      {
-        verseRefId: VERSE_REF_ID,
-        book: "Psalms",
-        chapter: 23,
-        startVerse: 1,
-        endVerse: 1,
-      },
-    ]);
+    queryResults.set("savedVerses.listRecordingIds", []);
     fetchChaptersBatchMock.mockReset();
     getPassageMock.mockReset();
     getPassageMock.mockResolvedValue(psalm23);
@@ -625,6 +605,7 @@ function learningRef(
   endVerse = startVerse,
 ): PracticeVerse {
   return {
+    verseRefId: `${book}.${chapter}.${startVerse}` as Id<"verseRefs">,
     reference: { book, chapter, startVerse, endVerse },
     learnStage: 1,
     stageReps: 0,
@@ -668,7 +649,7 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
-    queryResults.set("savedVerses.listAll", []);
+    queryResults.set("savedVerses.listRecordingIds", []);
     fetchChaptersBatchMock.mockReset();
     getPassageMock.mockReset();
     getPassageMock.mockImplementation(({ query }: { query: string }) =>
@@ -771,6 +752,7 @@ describe("PracticeBoard in-order Scripture sequence", () => {
 });
 
 const reviewingVerse: PracticeVerse = {
+  verseRefId: VERSE_REF_ID,
   reference: span(1, 1),
   learnStage: 3,
   stageReps: 0,
@@ -806,15 +788,7 @@ describe("PracticeBoard review retry", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
-    queryResults.set("savedVerses.listAll", [
-      {
-        verseRefId: VERSE_REF_ID,
-        book: "Psalms",
-        chapter: 23,
-        startVerse: 1,
-        endVerse: 1,
-      },
-    ]);
+    queryResults.set("savedVerses.listRecordingIds", []);
     fetchChaptersBatchMock.mockReset();
     getPassageMock.mockReset();
     getPassageMock.mockResolvedValue(psalm23);

@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { useQuery } from "convex-helpers/react/cache";
 import { Loader2 } from "lucide-react";
 
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { toPracticeVerse } from "@/components/memory/to-practice-verse";
+import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryBack } from "@/hooks/use-memory-back";
 import {
@@ -19,6 +20,7 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/practice";
 
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export function MemoryPracticePage() {
   const search = Route.useSearch();
@@ -34,7 +36,7 @@ export function MemoryAllSessionPage({
   search: MemoryPracticeSearch;
 }) {
   const onExit = useMemoryBack();
-  const savedVerses = useQuery(api.savedVerses.listAll, {});
+  const savedVerses = useFrozenQuery(api.savedVerses.listAll, {});
   const now = useLiveNow();
 
   const verses = useMemo(
@@ -92,6 +94,7 @@ export function MemoryAllSessionPage({
 function scopeMemorySessionVerses(
   savedVerses:
     | ReadonlyArray<{
+        verseRefId: Id<"verseRefs">;
         book: string;
         chapter: number;
         startVerse: number;
@@ -102,6 +105,11 @@ function scopeMemorySessionVerses(
           status?: PracticeVerse["status"];
           dueAt?: number;
           lastReviewedAt?: number;
+          ease?: number;
+          intervalDays?: number;
+          consecutiveCorrect?: number;
+          lapses?: number;
+          earlyReviewApplied?: boolean;
         } | null;
       }>
     | undefined,
@@ -141,19 +149,23 @@ function scopeMemorySessionVerses(
     }
 
     return [
-      {
-        reference: {
-          book: verse.book,
-          chapter: verse.chapter,
-          startVerse: verse.startVerse,
-          endVerse: verse.endVerse,
-        },
+      toPracticeVerse({
+        verseRefId: verse.verseRefId,
+        book: verse.book,
+        chapter: verse.chapter,
+        startVerse: verse.startVerse,
+        endVerse: verse.endVerse,
         learnStage: verse.memory?.learnStage ?? 0,
         stageReps: verse.memory?.stageReps ?? 0,
-        status: verse.memory?.status,
+        status: verse.memory?.status ?? "new",
         dueAt: verse.memory?.dueAt,
         lastReviewedAt: verse.memory?.lastReviewedAt,
-      },
+        ease: verse.memory?.ease,
+        intervalDays: verse.memory?.intervalDays,
+        consecutiveCorrect: verse.memory?.consecutiveCorrect,
+        lapses: verse.memory?.lapses,
+        earlyReviewApplied: verse.memory?.earlyReviewApplied,
+      }),
     ];
   });
   return sortSessionVerses(verses);

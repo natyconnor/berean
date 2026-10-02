@@ -94,6 +94,20 @@ export function isMemorySessionCandidate(
 }
 
 /**
+ * Due items still waiting after this frozen queue is finished.
+ *
+ * Review snapshots `memoryStats.due` and the due-queue page at mount, then
+ * skips those queries. Overflow is the due count beyond this page (the queue
+ * is capped); it is not a live remaining-due scan.
+ */
+export function remainingDueAfterQueue(
+  totalDue: number,
+  queueLength: number,
+): number {
+  return Math.max(0, totalDue - queueLength);
+}
+
+/**
  * Whether this verse still has work left in the current session.
  *
  * Learning is rationed one band per day, so a verse drops out once it

@@ -5,7 +5,9 @@ import { Loader2 } from "lucide-react";
 import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { MemoryAllSessionPage } from "@/components/routes/memory-practice-page";
+import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryBack } from "@/hooks/use-memory-back";
 import { hasLearnVerseScope } from "@/lib/memory-learn-search";
@@ -30,8 +32,8 @@ function GlobalMemoryLearnPage(): JSX.Element {
   const onExitHome = useMemoryBack();
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
-  const savedVerses = useQuery(api.savedVerses.listAll, {});
-  const duePassages = useQuery(api.passageMemory.dueForLearning, {
+  const savedVerses = useFrozenQuery(api.savedVerses.listAll, {});
+  const duePassages = useFrozenQuery(api.passageMemory.dueForLearning, {
     now,
     tzOffsetMinutes,
   });
@@ -192,6 +194,7 @@ function BuildingPassageLearnCard({
 
 function learningVersesFromSaved(
   savedVerses: ReadonlyArray<{
+    verseRefId: Id<"verseRefs">;
     book: string;
     chapter: number;
     startVerse: number;
@@ -202,6 +205,11 @@ function learningVersesFromSaved(
       status?: PracticeVerse["status"];
       dueAt?: number;
       lastReviewedAt?: number;
+      ease?: number;
+      intervalDays?: number;
+      consecutiveCorrect?: number;
+      lapses?: number;
+      earlyReviewApplied?: boolean;
     } | null;
   }>,
   now: number,
@@ -223,19 +231,23 @@ function learningVersesFromSaved(
         return [];
       }
       return [
-        {
-          reference: {
-            book: verse.book,
-            chapter: verse.chapter,
-            startVerse: verse.startVerse,
-            endVerse: verse.endVerse,
-          },
+        toPracticeVerse({
+          verseRefId: verse.verseRefId,
+          book: verse.book,
+          chapter: verse.chapter,
+          startVerse: verse.startVerse,
+          endVerse: verse.endVerse,
           learnStage: verse.memory?.learnStage ?? 0,
           stageReps: verse.memory?.stageReps ?? 0,
-          status: verse.memory?.status,
+          status: verse.memory?.status ?? "new",
           dueAt: verse.memory?.dueAt,
           lastReviewedAt: verse.memory?.lastReviewedAt,
-        },
+          ease: verse.memory?.ease,
+          intervalDays: verse.memory?.intervalDays,
+          consecutiveCorrect: verse.memory?.consecutiveCorrect,
+          lapses: verse.memory?.lapses,
+          earlyReviewApplied: verse.memory?.earlyReviewApplied,
+        }),
       ];
     }),
   );

@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
-import { Clock3, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Clock3, Sparkles } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
 import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
+import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryBack } from "@/hooks/use-memory-back";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
+import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/review";
@@ -51,25 +52,24 @@ function MemoryReviewSessionPage({
   remainingDue,
   onExit,
   exitLabel = "Back to memory",
+  onContinueSession,
 }: {
   verses: ReadonlyArray<PracticeVerse>;
   scopeLabel: string;
   remainingDue: number;
   onExit: () => void;
   exitLabel?: string;
+  onContinueSession?: () => void;
 }) {
-  const [sessionEpoch, setSessionEpoch] = useState(0);
-
   return (
     <MemorySessionRunner
-      key={`review-${sessionEpoch}`}
       kind="review"
       verses={verses}
       scopeLabel={scopeLabel}
       onExit={onExit}
       exitLabel={exitLabel}
       remainingDue={remainingDue}
-      onContinueSession={() => setSessionEpoch((value) => value + 1)}
+      onContinueSession={onContinueSession}
       emptyState={<ReviewCaughtUp onExit={onExit} doneLabel={exitLabel} />}
     />
   );
@@ -80,7 +80,10 @@ export function MemoryReviewPage() {
   const search = Route.useSearch();
   const now = useLiveNow();
   const hasScope = hasReviewVerseScope(search);
-  const scopedDue = useQuery(
+  const [queueEpoch, setQueueEpoch] = useState(0);
+  const [drainedDue, setDrainedDue] = useState(0);
+
+  const scopedDue = useFrozenQuery(
     api.verseMemory.dueForVerse,
     hasScope
       ? {
@@ -92,37 +95,28 @@ export function MemoryReviewPage() {
         }
       : "skip",
   );
-  const globalDue = useQuery(
+  const globalDue = useFrozenQuery(
     api.verseMemory.dueQueue,
-    hasScope ? "skip" : { now },
+    hasScope ? "skip" : { now, generation: queueEpoch },
+    queueEpoch,
   );
-  const globalStats = useQuery(
+  const globalStats = useFrozenQuery(
     api.verseMemory.memoryStats,
     hasScope
       ? "skip"
       : { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() },
   );
 
-  // Freeze the scoped due row once it first resolves so Check → reschedule
-  // doesn't bounce this page to "Not due yet" mid-session.
-  const [scopedSnapshot, setScopedSnapshot] = useState<
-    ReturnType<typeof dueRowToPracticeVerse> | null | undefined
-  >(undefined);
-  if (hasScope && scopedDue !== undefined && scopedSnapshot === undefined) {
-    setScopedSnapshot(
-      scopedDue === null ? null : dueRowToPracticeVerse(scopedDue),
-    );
-  }
-
   const globalVerses = useMemo(
     () => sortSessionVerses((globalDue ?? []).map(dueRowToPracticeVerse)),
     [globalDue],
   );
   const remainingDue = hasScope
-    ? scopedSnapshot === null
-      ? 0
-      : 1
-    : (globalStats?.due ?? globalVerses.length);
+    ? 0
+    : remainingDueAfterQueue(
+        (globalStats?.due ?? 0) - drainedDue,
+        globalVerses.length,
+      );
 
   if (!hasScope) {
     if (globalDue === undefined || globalStats === undefined) {
@@ -135,15 +129,20 @@ export function MemoryReviewPage() {
 
     return (
       <MemoryReviewSessionPage
+        key={`review-${queueEpoch}`}
         verses={globalVerses}
         scopeLabel="All due today"
         remainingDue={remainingDue}
         onExit={onExit}
+        onContinueSession={() => {
+          setDrainedDue((value) => value + globalVerses.length);
+          setQueueEpoch((value) => value + 1);
+        }}
       />
     );
   }
 
-  if (scopedSnapshot === undefined) {
+  if (scopedDue === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -151,7 +150,7 @@ export function MemoryReviewPage() {
     );
   }
 
-  if (scopedSnapshot === null) {
+  if (scopedDue === null) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-background px-6 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -175,7 +174,7 @@ export function MemoryReviewPage() {
 
   return (
     <MemoryReviewSessionPage
-      verses={[scopedSnapshot]}
+      verses={[dueRowToPracticeVerse(scopedDue)]}
       scopeLabel={formatVerseRef(search)}
       remainingDue={0}
       onExit={onExit}

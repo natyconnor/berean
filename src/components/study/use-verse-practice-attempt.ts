@@ -20,6 +20,7 @@ export type { VersePracticeProgress } from "@/lib/verse-practice-progress";
 
 interface RecordAttemptArgs {
   reference: CardReference;
+  verseRefId?: Id<"verseRefs">;
   tokens: ReadonlyArray<DiffToken>;
   stage: number;
   wordCount?: number;
@@ -89,6 +90,7 @@ export function useVersePracticeAttempt(
       attemptSeqByVerseId.current.set(verseKey, seq);
       const schedule = await record({
         reference: args.reference,
+        verseRefId: args.verseRefId,
         tokens: args.tokens,
         stage: args.stage,
         mode,
@@ -115,6 +117,7 @@ export function useVersePracticeAttempt(
     ): Promise<void> => {
       const schedule = await record({
         reference: args.reference,
+        verseRefId: args.verseRefId,
         tokens: args.tokens,
         stage: args.stage,
         mode,
@@ -142,6 +145,7 @@ export function useVersePracticeAttempt(
     async (args: RecordAttemptArgs): Promise<void> => {
       const schedule = await record({
         reference: args.reference,
+        verseRefId: args.verseRefId,
         tokens: args.tokens,
         stage: args.stage,
         mode,

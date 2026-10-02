@@ -10,6 +10,7 @@ describe("dueQueueEntryToPracticeVerse", () => {
   it("maps a verse row without a composite card", () => {
     const verse = dueQueueEntryToPracticeVerse({
       kind: "verse",
+      verseRefId: "vr_ps23_1" as Id<"verseRefs">,
       book: "Psalms",
       chapter: 23,
       startVerse: 1,
@@ -20,6 +21,7 @@ describe("dueQueueEntryToPracticeVerse", () => {
     });
     expect(verse.learnStage).toBe(3);
     expect(verse.composite).toBeUndefined();
+    expect(verse.verseRefId).toBe("vr_ps23_1");
   });
 
   it("maps a dueForVerse row that has no kind field", () => {

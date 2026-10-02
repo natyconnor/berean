@@ -36,9 +36,11 @@ function practiceVerseFromSpan(
     dueAt?: number;
     lastReviewedAt?: number;
   },
+  verseRefId?: SavedVerseRow["verseRefId"],
 ): PracticeVerse {
   return toPracticeVerse({
     ...span,
+    ...(verseRefId ? { verseRefId } : {}),
     status: memory?.status ?? "new",
     learnStage: memory?.learnStage ?? 0,
     stageReps: memory?.stageReps,
@@ -148,7 +150,11 @@ export function LearnVerseDialog({
             (memory.status === "reviewing" || memory.status === "mastered")
           ) {
             onOpenChange(false);
-            const practiceVerse = practiceVerseFromSpan(span, memory);
+            const practiceVerse = practiceVerseFromSpan(
+              span,
+              memory,
+              match.verseRefId,
+            );
             if (reviewPhaseListAction(practiceVerse, now) === "review") {
               onReviewVerse(practiceVerse);
             } else {
@@ -158,7 +164,7 @@ export function LearnVerseDialog({
           }
 
           onOpenChange(false);
-          onLearnVerse(practiceVerseFromSpan(span, memory));
+          onLearnVerse(practiceVerseFromSpan(span, memory, match.verseRefId));
         } catch {
           setError("Couldn't start that verse. Please try again.");
         } finally {

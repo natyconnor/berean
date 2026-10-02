@@ -19,6 +19,11 @@ export type VerseAttemptMode = "learn" | "review" | "deck" | "practice";
 
 interface RecordVerseAttemptInput {
   reference: CardReference;
+  /**
+   * When the session card already carries this id, record without resolving
+   * through the hearted-verse list (which must not join `verseMemory`).
+   */
+  verseRefId?: Id<"verseRefs">;
   tokens: ReadonlyArray<DiffToken>;
   stage: number;
   mode: VerseAttemptMode;
@@ -54,23 +59,23 @@ interface RecordVerseAttempt {
 /**
  * Bridges the study UI to `verseMemory.recordAttempt`.
  *
- * The verse's `verseRefs` id is resolved from the user's hearted verses
- * (the same `savedVerses` list the deck is built from), so cards only need to
- * carry a plain reference.
+ * Prefer `verseRefId` on the card (due-queue / library / pack member). The
+ * fallback id map is `savedVerses.listRecordingIds` — saved verses + refs
+ * only — so a `verseMemory` patch does not re-run it during Saving...
  */
 export function useRecordVerseAttempt(): RecordVerseAttempt {
   const recordAttempt = useMutation(api.verseMemory.recordAttempt);
   // `undefined` while the subscription loads; an array (possibly empty) once
   // resolved. We must distinguish the two so early attempts aren't dropped.
-  const savedVerses = useQuery(api.savedVerses.listAll, {});
+  const recordingIds = useQuery(api.savedVerses.listRecordingIds, {});
 
   const verseRefIdByRefKey = useMemo(() => {
     const map = new Map<string, Id<"verseRefs">>();
-    for (const saved of savedVerses ?? []) {
+    for (const saved of recordingIds ?? []) {
       map.set(verseRefKey(saved), saved.verseRefId);
     }
     return map;
-  }, [savedVerses]);
+  }, [recordingIds]);
 
   const resolveVerseRefId = useCallback(
     (reference: CardReference): Id<"verseRefs"> | null =>
@@ -108,7 +113,13 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
     [recordAttempt],
   );
 
-  // Attempts recorded before `savedVerses` resolved, awaiting a flush.
+  const verseRefIdFor = useCallback(
+    (input: RecordVerseAttemptInput): Id<"verseRefs"> | null =>
+      input.verseRefId ?? resolveVerseRefId(input.reference),
+    [resolveVerseRefId],
+  );
+
+  // Attempts recorded before `recordingIds` resolved, awaiting a flush.
   const pendingRef = useRef<PendingAttempt[]>([]);
 
   const record = useCallback(
@@ -117,8 +128,10 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
       if (!classifyVerseAttempt(input.tokens)) return Promise.resolve(null);
 
       const now = Date.now();
+      const verseRefId = verseRefIdFor(input);
+      if (verseRefId) return performRecord(input, verseRefId, now);
 
-      if (savedVerses === undefined) {
+      if (recordingIds === undefined) {
         // Hearted verses still loading: defer so a real attempt isn't lost.
         // The flush effect resolves this once resolution is possible.
         return new Promise<MemorySchedule | null>((resolve) => {
@@ -126,20 +139,18 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
         });
       }
 
-      const verseRefId = resolveVerseRefId(input.reference);
-      if (!verseRefId) return Promise.resolve(null);
-      return performRecord(input, verseRefId, now);
+      return Promise.resolve(null);
     },
-    [savedVerses, resolveVerseRefId, performRecord],
+    [recordingIds, verseRefIdFor, performRecord],
   );
 
-  // Flush deferred attempts once the hearted-verse list is available.
+  // Flush deferred attempts once the hearted-verse id list is available.
   useEffect(() => {
-    if (savedVerses === undefined || pendingRef.current.length === 0) return;
+    if (recordingIds === undefined || pendingRef.current.length === 0) return;
     const queued = pendingRef.current;
     pendingRef.current = [];
     for (const { input, now, resolve } of queued) {
-      const verseRefId = resolveVerseRefId(input.reference);
+      const verseRefId = verseRefIdFor(input);
       if (!verseRefId) {
         // Resolved list, still not a hearted verse: a no-op is correct.
         resolve(null);
@@ -147,11 +158,11 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
       }
       void performRecord(input, verseRefId, now).then(resolve);
     }
-  }, [savedVerses, resolveVerseRefId, performRecord]);
+  }, [recordingIds, verseRefIdFor, performRecord]);
 
   return {
     record,
     resolveVerseRefId,
-    heartedVersesReady: savedVerses !== undefined,
+    heartedVersesReady: recordingIds !== undefined,
   };
 }
