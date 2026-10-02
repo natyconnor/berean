@@ -3,12 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MemoryDashboard } from "./dashboard";
 
+const { ensureReviewActivityDaysMock } = vi.hoisted(() => ({
+  ensureReviewActivityDaysMock: vi.fn(() => Promise.resolve(null)),
+}));
+
 vi.mock("convex-helpers/react/cache", () => ({
   useQuery: () => undefined,
 }));
 
 vi.mock("convex/react", () => ({
-  useMutation: () => () => Promise.resolve(null),
+  useMutation: () => ensureReviewActivityDaysMock,
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -61,5 +65,23 @@ describe("MemoryDashboard query split", () => {
     expect(
       screen.queryByRole("button", { name: "Review" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("asks Convex to backfill per-day heatmap rows for the viewer timezone", () => {
+    ensureReviewActivityDaysMock.mockClear();
+    render(
+      <MemoryDashboard
+        now={1_700_000_000_000}
+        stats={undefined}
+        status={status}
+        onStartReview={() => undefined}
+        onStartLearning={() => undefined}
+      />,
+    );
+
+    expect(ensureReviewActivityDaysMock).toHaveBeenCalledWith({
+      now: 1_700_000_000_000,
+      timeZone: "UTC",
+    });
   });
 });
