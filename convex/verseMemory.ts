@@ -21,6 +21,12 @@ import {
 } from "./lib/packs";
 import { loadPassageDueRecords } from "./lib/passageDue";
 import {
+  MAX_REVIEW_ACTIVITY_ROWS,
+  ensureReviewActivityDays as backfillReviewActivityDaysIfNeeded,
+  loadBackfilledReviewDays,
+  noteVerseReviewForActivity,
+} from "./lib/reviewActivityDays";
+import {
   toReviewingPassagePackItem,
   withNormalizedPieces,
   type DueQueuePassagePackItem,
@@ -44,10 +50,10 @@ import {
   isPassageDueForReview,
 } from "../src/lib/passage-due";
 import {
-  bucketAccuracyAverages,
   bucketForecastCounts,
-  bucketReviewCounts,
   normalizeTimeZone,
+  reviewActivityFromDayAggregates,
+  reviewActivityFromLogs,
   startOfZonedDay,
   zonedDayStarts,
   zonedUpcomingDayStarts,
@@ -68,8 +74,6 @@ function normalizeDays(days: number | undefined): number {
 const DEFAULT_DUE_LIMIT = 50;
 /** Cap how many due-index rows we scan when filling a limited queue / count. */
 const MAX_DUE_SCAN = 500;
-/** Safety cap on review-log rows read for dashboard windows. */
-const MAX_REVIEW_ACTIVITY_ROWS = 5000;
 
 const statusValidator = v.union(
   v.literal("new"),
@@ -507,6 +511,8 @@ export const recordAttempt = mutation({
     wordCount: v.optional(v.number()),
     /** Client `getTimezoneOffset()`; lands learning soft locks on their day. */
     tzOffsetMinutes: v.optional(v.number()),
+    /** IANA zone for Practice heatmap day buckets; same as `reviewActivity`. */
+    timeZone: v.optional(v.string()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -569,6 +575,17 @@ export const recordAttempt = mutation({
       durationMs: args.durationMs,
       createdAt: args.now,
     });
+
+    if (args.timeZone) {
+      await noteVerseReviewForActivity(ctx, {
+        userId,
+        createdAt: args.now,
+        accuracy: args.accuracy,
+        mode: args.mode,
+        stage: args.stage,
+        timeZone: args.timeZone,
+      });
+    }
 
     const next = scheduleNext(current, {
       quality: args.quality,
@@ -864,8 +881,10 @@ const dayAccuracyValidator = v.object({
 });
 
 /**
- * Per-day practice count and accuracy aggregates for the dashboard. A single
- * review-log window feeds both the heatmap (up to a year) and 30-day trend.
+ * Per-day practice count and accuracy aggregates for the dashboard. Prefers
+ * `userMemoryReviewDays` (~365 skinny rows) once that timezone is backfilled;
+ * otherwise scans up to {@link MAX_REVIEW_ACTIVITY_ROWS} verse review logs.
+ * Passage grades are not included (same as the log table).
  */
 export const reviewActivity = query({
   args: {
@@ -899,6 +918,20 @@ export const reviewActivity = query({
 
     const windowStarts = zonedDayStarts(args.now, windowDays, timeZone);
     const windowStart = windowStarts[0];
+    const stored = await loadBackfilledReviewDays(
+      ctx,
+      userId,
+      timeZone,
+      windowStart,
+    );
+    if (stored) {
+      return reviewActivityFromDayAggregates(
+        stored,
+        heatmapDayStarts,
+        trendDayStarts,
+      );
+    }
+
     const rows = await ctx.db
       .query("verseMemoryReviews")
       .withIndex("by_userId_createdAt", (q) =>
@@ -906,13 +939,7 @@ export const reviewActivity = query({
       )
       .take(MAX_REVIEW_ACTIVITY_ROWS);
 
-    const counts = bucketReviewCounts(
-      rows.map((row) => row.createdAt),
-      args.now,
-      heatmapDays,
-      timeZone,
-    );
-    const buckets = bucketAccuracyAverages(
+    return reviewActivityFromLogs(
       rows.map((row) => ({
         createdAt: row.createdAt,
         accuracy: row.accuracy,
@@ -920,20 +947,30 @@ export const reviewActivity = query({
         stage: row.stage,
       })),
       args.now,
+      heatmapDays,
       trendDays,
       timeZone,
     );
-    return {
-      heatmap: heatmapDayStarts.map((dayStart, i) => ({
-        dayStart,
-        count: counts[i],
-      })),
-      trend: trendDayStarts.map((dayStart, i) => ({
-        dayStart,
-        average: buckets[i].average,
-        count: buckets[i].count,
-      })),
-    };
+  },
+});
+
+/**
+ * Build per-local-day heatmap/accuracy aggregates for this viewer timezone.
+ * Idempotent. Dashboard calls this once so `reviewActivity` can stop scanning
+ * the raw review log. Verse logs only — passage grades stay off the heatmap.
+ */
+export const ensureReviewActivityDays = mutation({
+  args: { now: v.number(), timeZone: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    await backfillReviewActivityDaysIfNeeded(
+      ctx,
+      userId,
+      args.timeZone,
+      args.now,
+    );
+    return null;
   },
 });
 

@@ -24,6 +24,10 @@ vi.mock("../../../convex/_generated/api", () => ({
   },
 }));
 
+vi.mock("@/lib/viewer-timezone", () => ({
+  getViewerTimeZone: () => "America/Los_Angeles",
+}));
+
 const VERSE_REF_ID = "vr_john_3_16" as Id<"verseRefs">;
 const reference = {
   book: "John",
@@ -69,7 +73,11 @@ describe("useRecordVerseAttempt", () => {
 
     expect(recordAttemptMock).toHaveBeenCalledTimes(1);
     expect(recordAttemptMock).toHaveBeenCalledWith(
-      expect.objectContaining({ verseRefId: VERSE_REF_ID, mode: "learn" }),
+      expect.objectContaining({
+        verseRefId: VERSE_REF_ID,
+        mode: "learn",
+        timeZone: "America/Los_Angeles",
+      }),
     );
   });
 

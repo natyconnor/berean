@@ -418,4 +418,28 @@ export default defineSchema({
     backfilled: v.boolean(),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
+
+  /**
+   * Per-user per-local-day review aggregates for the Practice heatmap and
+   * accuracy trend. Verse logs only (same as `verseMemoryReviews`).
+   */
+  userMemoryReviewDays: defineTable({
+    userId: v.id("users"),
+    timeZone: v.string(),
+    dayStart: v.number(),
+    count: v.number(),
+    accuracySum: v.number(),
+    accuracyCount: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_timeZone_dayStart", ["userId", "timeZone", "dayStart"]),
+
+  userMemoryReviewDayState: defineTable({
+    userId: v.id("users"),
+    timeZone: v.string(),
+    backfilled: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_timeZone", ["userId", "timeZone"]),
 });

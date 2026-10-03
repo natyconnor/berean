@@ -75,6 +75,22 @@ async function clearUserMemory(ctx: MutationCtx, userId: Id<"users">) {
     .unique();
   if (passageDueState) await ctx.db.delete(passageDueState._id);
 
+  const reviewDays = await ctx.db
+    .query("userMemoryReviewDays")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const row of reviewDays) {
+    await ctx.db.delete(row._id);
+  }
+
+  const reviewDayState = await ctx.db
+    .query("userMemoryReviewDayState")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const row of reviewDayState) {
+    await ctx.db.delete(row._id);
+  }
+
   const packs = await ctx.db
     .query("packs")
     .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))

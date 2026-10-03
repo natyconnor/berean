@@ -9,6 +9,7 @@ import type { MemorySchedule } from "@/lib/memory-scheduler";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { verseRefKey } from "../../../shared/verse-ref-key";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import {
   classifyVerseAttempt,
   verseAttemptAccuracy,
@@ -103,6 +104,7 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
         // Lets the scheduler land a learning soft lock on the start of the
         // learner's next local day instead of a rolling 24 hours.
         tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+        timeZone: getViewerTimeZone(),
       })
         .then((schedule): MemorySchedule | null => schedule)
         .catch((error: unknown) => {
