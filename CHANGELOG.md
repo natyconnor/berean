@@ -30,6 +30,22 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.5](https://github.com/natyconnor/berean/compare/v1.17.4...v1.17.5) (2026-10-03)
+
+
+### Bug Fixes
+
+* Keep passage warmup on contiguous neighbors ([#249](https://github.com/natyconnor/berean/issues/249)) ([8fd2445](https://github.com/natyconnor/berean/commit/8fd24453c6a939f5d3119c3d5dafabc57e5d6762))
+* Skip live dueCount on Memory session routes ([#245](https://github.com/natyconnor/berean/issues/245)) ([846f879](https://github.com/natyconnor/berean/commit/846f879ca7bc489aedfbb230fd91eeefb3240ee9))
+* Split Mastery status totals off the memory due query ([#244](https://github.com/natyconnor/berean/issues/244)) ([f983c12](https://github.com/natyconnor/berean/commit/f983c1234f90c60b4b51b98cadf9ad47a9219654))
+
+
+### Performance Improvements
+
+* Denorm Practice heatmap to per-day review aggregates ([#247](https://github.com/natyconnor/berean/issues/247)) ([611e0e1](https://github.com/natyconnor/berean/commit/611e0e137324baeb081512af49660dd85335016d))
+* Load scoped Memory sessions without the full library ([#250](https://github.com/natyconnor/berean/issues/250)) ([ad8979e](https://github.com/natyconnor/berean/commit/ad8979e736e0f5c6d02cbca1d16f4b09f9b5d0e7))
+* Skinny passage due reads without collecting pieces ([#246](https://github.com/natyconnor/berean/issues/246)) ([f5a912e](https://github.com/natyconnor/berean/commit/f5a912e666911e6e2e064c99988e6bfb1fa92360))
+
 ## [1.17.4](https://github.com/natyconnor/berean/compare/v1.17.3...v1.17.4) (2026-10-02)
 
 
