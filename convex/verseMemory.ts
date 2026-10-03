@@ -13,15 +13,16 @@ import {
 import {
   countDueUnifiedReviewPacks,
   dueUnifiedPackDueAt,
-  loadPassageMemoryByUser,
   loadUnifiedReviewPacks,
   loadUnifiedReviewVerseRefIds,
   unifiedPackForecastDueAt,
   unifiedReviewPhaseVerseRefIds,
   type PackMember,
 } from "./lib/packs";
+import { loadPassageDueRecords } from "./lib/passageDue";
 import {
   toReviewingPassagePackItem,
+  withNormalizedPieces,
   type DueQueuePassagePackItem,
 } from "./lib/passageMemory";
 import { dueQueuePackItemValidator } from "./lib/passageValues";
@@ -38,8 +39,8 @@ import {
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
 import {
-  countDuePassageLearning,
   countDuePassageReviews,
+  countProjectedPassageLearning,
   isPassageDueForReview,
 } from "../src/lib/passage-due";
 import {
@@ -293,7 +294,13 @@ export const dueQueue = query({
     }
 
     const limit = args.limit ?? DEFAULT_DUE_LIMIT;
-    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const passageRows = await loadPassageDueRecords(ctx, userId, args.now);
+    const passagePackIds = new Set(passageRows.map((row) => row.packId));
+    const unifiedPacks = await loadUnifiedReviewPacks(
+      ctx,
+      userId,
+      passagePackIds,
+    );
     const unifiedVerseRefIds = unifiedReviewPhaseVerseRefIds(unifiedPacks);
     const scanCap = dueScanCap(limit, unifiedVerseRefIds.size);
 
@@ -329,12 +336,13 @@ export const dueQueue = query({
       if (item) packItems.push(item);
     }
 
-    const passageRows = await loadPassageMemoryByUser(ctx, userId);
-    for (const row of passageRows) {
-      if (!isPassageDueForReview(row, args.now)) continue;
+    for (const projected of passageRows) {
+      if (!isPassageDueForReview(projected, args.now)) continue;
+      const row = await ctx.db.get(projected.passageMemoryId);
+      if (!row || row.userId !== userId) continue;
       const pack = await ctx.db.get(row.packId);
       if (!pack || pack.userId !== userId) continue;
-      const item = toReviewingPassagePackItem(pack, row);
+      const item = toReviewingPassagePackItem(pack, withNormalizedPieces(row));
       if (item) packItems.push(item);
     }
 
@@ -444,11 +452,16 @@ export const dueCount = query({
       .order("asc")
       .take(MAX_DUE_SCAN);
 
-    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const tzOffsetMinutes = args.tzOffsetMinutes ?? 0;
+    const passageRows = await loadPassageDueRecords(ctx, userId, args.now);
+    const passagePackIds = new Set(passageRows.map((row) => row.packId));
+    const unifiedPacks = await loadUnifiedReviewPacks(
+      ctx,
+      userId,
+      passagePackIds,
+    );
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
-    const passageRows = await loadPassageMemoryByUser(ctx, userId);
-    const tzOffsetMinutes = args.tzOffsetMinutes ?? 0;
 
     let count = 0;
     for (const row of dueRows) {
@@ -467,7 +480,7 @@ export const dueCount = query({
       count +
       countDueUnifiedReviewPacks(unifiedPacks, args.now) +
       countDuePassageReviews(passageRows, args.now) +
-      countDuePassageLearning(passageRows, args.now, tzOffsetMinutes)
+      countProjectedPassageLearning(passageRows, args.now, tzOffsetMinutes)
     );
   },
 });
@@ -808,11 +821,16 @@ export const memoryStats = query({
       .order("asc")
       .take(MAX_DUE_SCAN);
 
-    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const tzOffsetMinutes = args.tzOffsetMinutes ?? 0;
+    const passageRows = await loadPassageDueRecords(ctx, userId, args.now);
+    const passagePackIds = new Set(passageRows.map((row) => row.packId));
+    const unifiedPacks = await loadUnifiedReviewPacks(
+      ctx,
+      userId,
+      passagePackIds,
+    );
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
-    const passageRows = await loadPassageMemoryByUser(ctx, userId);
-    const tzOffsetMinutes = args.tzOffsetMinutes ?? 0;
 
     let due = 0;
     let learningDue = 0;
@@ -824,7 +842,7 @@ export const memoryStats = query({
     }
     due += countDueUnifiedReviewPacks(unifiedPacks, args.now);
     due += countDuePassageReviews(passageRows, args.now);
-    learningDue += countDuePassageLearning(
+    learningDue += countProjectedPassageLearning(
       passageRows,
       args.now,
       tzOffsetMinutes,
@@ -957,7 +975,13 @@ export const reviewForecast = query({
       )
       .take(MAX_DUE_SCAN);
 
-    const unifiedPacks = await loadUnifiedReviewPacks(ctx, userId);
+    const passageRows = await loadPassageDueRecords(ctx, userId, args.now);
+    const passagePackIds = new Set(passageRows.map((row) => row.packId));
+    const unifiedPacks = await loadUnifiedReviewPacks(
+      ctx,
+      userId,
+      passagePackIds,
+    );
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
 
@@ -974,7 +998,6 @@ export const reviewForecast = query({
       if (dueAt !== null && dueAt < windowEnd) dueAts.push(dueAt);
     }
 
-    const passageRows = await loadPassageMemoryByUser(ctx, userId);
     for (const row of passageRows) {
       if (row.status !== "reviewing" && row.status !== "mastered") continue;
       if (row.dueAt < windowEnd) dueAts.push(row.dueAt);

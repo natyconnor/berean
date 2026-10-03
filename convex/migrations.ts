@@ -2,6 +2,7 @@ import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { findVerseMemory, seedVerseMemory } from "./lib/verseMemory";
+import { ensurePassageDueBackfill } from "./lib/passageDue";
 
 const DEFAULT_BACKFILL_BATCH_SIZE = 200;
 
@@ -295,6 +296,57 @@ export const backfillUserMemoryStats = internalMutation({
       await ctx.scheduler.runAfter(
         0,
         internal.migrations.backfillUserMemoryStats,
+        {
+          cursor: continueCursor,
+          batchSize: args.batchSize,
+          scannedSoFar: totalScanned,
+        },
+      );
+    }
+
+    return {
+      batchScanned: page.length,
+      totalScanned,
+      isDone,
+      continueCursor: isDone ? null : continueCursor,
+    };
+  },
+});
+
+/**
+ * Write skinny `passageMemoryDue` rows for every `passageMemory` document so
+ * due/forecast/list queries stop collecting fat `pieces` arrays.
+ */
+export const backfillPassageMemoryDue = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+    scannedSoFar: v.optional(v.number()),
+  },
+  returns: v.object({
+    batchScanned: v.number(),
+    totalScanned: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const batchSize = args.batchSize ?? DEFAULT_BACKFILL_BATCH_SIZE;
+
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("users")
+      .paginate({ cursor: args.cursor ?? null, numItems: batchSize });
+
+    for (const user of page) {
+      await ensurePassageDueBackfill(ctx, user._id, now);
+    }
+
+    const totalScanned = (args.scannedSoFar ?? 0) + page.length;
+
+    if (!isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.migrations.backfillPassageMemoryDue,
         {
           cursor: continueCursor,
           batchSize: args.batchSize,

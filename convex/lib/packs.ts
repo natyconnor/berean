@@ -1,6 +1,7 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { findVerseMemory, isLiveHeartedMemory } from "./verseMemory";
+import { loadPassagePackIds } from "./passageDue";
 import {
   verseMatchesScope,
   type VerseScope,
@@ -206,17 +207,18 @@ export async function loadCustomMembers(
 export async function loadUnifiedReviewPacks(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
+  passagePackIds?: ReadonlySet<Id<"packs">>,
 ): Promise<Array<{ pack: Doc<"packs">; members: PackMember[] }>> {
   const packs = await ctx.db
     .query("packs")
     .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
     .collect();
 
-  const passageRows = await loadPassageMemoryByUser(ctx, userId);
-  const passagePackIds = new Set(passageRows.map((row) => row.packId));
-  const unifiedPacks = packs.filter(
-    (pack) => pack.unifiedReviewEnabled && !passagePackIds.has(pack._id),
-  );
+  const flagged = packs.filter((pack) => pack.unifiedReviewEnabled);
+  if (flagged.length === 0) return [];
+
+  const passageIds = passagePackIds ?? (await loadPassagePackIds(ctx, userId));
+  const unifiedPacks = flagged.filter((pack) => !passageIds.has(pack._id));
   if (unifiedPacks.length === 0) return [];
 
   // Scope packs all share the same hearted set — load it once instead of

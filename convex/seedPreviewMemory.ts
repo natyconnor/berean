@@ -5,6 +5,10 @@ import type { MutationCtx } from "./_generated/server";
 import { getCurrentUserId } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
 import { adjustUserMemoryStats, seedVerseMemory } from "./lib/verseMemory";
+import {
+  ensurePassageDueBackfill,
+  upsertPassageMemoryDue,
+} from "./lib/passageDue";
 import { isDueForLearning, isDueForReview } from "../src/lib/memory-scheduler";
 import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
 import { buildPreviewPassageSeed } from "../src/lib/preview-passage-seed";
@@ -56,6 +60,20 @@ async function clearUserMemory(ctx: MutationCtx, userId: Id<"users">) {
   for (const passage of passages) {
     await ctx.db.delete(passage._id);
   }
+
+  const passageDue = await ctx.db
+    .query("passageMemoryDue")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const row of passageDue) {
+    await ctx.db.delete(row._id);
+  }
+
+  const passageDueState = await ctx.db
+    .query("userPassageDueState")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+  if (passageDueState) await ctx.db.delete(passageDueState._id);
 
   const packs = await ctx.db
     .query("packs")
@@ -251,7 +269,7 @@ export const seedPreviewMemory = mutation({
         lastOpenedAt: args.now,
       });
       if (!pack.passage) continue;
-      await ctx.db.insert("passageMemory", {
+      const passageId = await ctx.db.insert("passageMemory", {
         userId,
         packId,
         status: pack.passage.status,
@@ -268,7 +286,13 @@ export const seedPreviewMemory = mutation({
         createdAt: args.now,
         updatedAt: args.now,
       });
+      const passageRow = await ctx.db.get(passageId);
+      if (passageRow) {
+        await upsertPassageMemoryDue(ctx, passageRow, args.now);
+      }
     }
+
+    await ensurePassageDueBackfill(ctx, userId, args.now);
 
     const dueReviewCount = plan.verses.filter((verse) =>
       isDueForReview(verse.schedule, args.now),

@@ -1,5 +1,9 @@
 import { isDueForReview } from "./memory-scheduler";
-import { localDayIndex, remainingIntroduces } from "./passage-frontier";
+import {
+  coerceUnstartedLearningPieces,
+  localDayIndex,
+  remainingIntroduces,
+} from "./passage-frontier";
 import type { PassagePiece, PieceAttachment } from "./passage-pieces";
 
 export type PassageDueStatus = "building" | "reviewing" | "mastered";
@@ -90,6 +94,98 @@ export function countDuePassageLearning(
   let count = 0;
   for (const row of rows) {
     if (isPassageDueForLearning(row, now, tzOffsetMinutes)) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Skinny cache of the piece facts due queries need. Convex cannot omit
+ * `pieces` from a `passageMemory` read, so aggregations must not collect
+ * those documents. Keep {@link isPassageDueForLearning} as the source of
+ * truth; this projection is written on every passage insert/patch.
+ *
+ * `minIntroducedDueAt` is the min `dueAt` among learning/attached pieces,
+ * using `0` when a piece has no `dueAt` (always due). Omitted when there are
+ * no introduced pieces.
+ */
+export type PassageDueProjection = {
+  status: PassageDueStatus;
+  dueAt: number;
+  learningDueAt: number;
+  addsOnDay: number;
+  addDayKey?: number;
+  hasUnreached: boolean;
+  hasIntroduced: boolean;
+  minIntroducedDueAt?: number;
+  solidCount: number;
+  attachedCount: number;
+  pieceCount: number;
+};
+
+/** Project a passage row for due/forecast/list reads. Coerces freeze-time pieces. */
+export function projectPassageDue(
+  row: PassageDueRow,
+  now: number,
+): PassageDueProjection {
+  const pieces = coerceUnstartedLearningPieces(row.pieces);
+  let hasUnreached = false;
+  let hasIntroduced = false;
+  let minIntroducedDueAt: number | undefined;
+  for (const piece of pieces) {
+    if (piece.attachment === "unreached") hasUnreached = true;
+    if (piece.attachment === "learning" || piece.attachment === "attached") {
+      hasIntroduced = true;
+      const due = piece.dueAt ?? 0;
+      if (minIntroducedDueAt === undefined || due < minIntroducedDueAt) {
+        minIntroducedDueAt = due;
+      }
+    }
+  }
+  const rope = passageRopeCounts(pieces);
+  return {
+    status: row.status,
+    dueAt: row.dueAt,
+    learningDueAt: passageLearningDueAt(pieces, now),
+    addsOnDay: row.addsOnDay,
+    addDayKey: row.addDayKey,
+    hasUnreached,
+    hasIntroduced,
+    ...(hasIntroduced ? { minIntroducedDueAt } : {}),
+    solidCount: rope.solidCount,
+    attachedCount: rope.attachedCount,
+    pieceCount: rope.pieceCount,
+  };
+}
+
+/**
+ * Same rules as {@link isPassageDueForLearning}, using the cached piece
+ * facts instead of the piece array.
+ */
+export function isProjectedPassageDueForLearning(
+  row: PassageDueProjection,
+  now: number,
+  tzOffsetMinutes: number,
+): boolean {
+  if (row.status !== "building") return false;
+
+  const remaining = remainingIntroduces({
+    addsOnDay: row.addsOnDay,
+    addDayKey: row.addDayKey,
+    todayKey: localDayIndex(now, tzOffsetMinutes),
+  });
+  if (remaining > 0 && row.hasUnreached) return true;
+  if (!row.hasIntroduced) return false;
+  return (row.minIntroducedDueAt ?? 0) <= now;
+}
+
+export function countProjectedPassageLearning(
+  rows: readonly PassageDueProjection[],
+  now: number,
+  tzOffsetMinutes: number,
+): number {
+  let count = 0;
+  for (const row of rows) {
+    if (isProjectedPassageDueForLearning(row, now, tzOffsetMinutes)) count += 1;
   }
   return count;
 }
