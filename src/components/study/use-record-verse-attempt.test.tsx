@@ -120,4 +120,35 @@ describe("useRecordVerseAttempt", () => {
     renderHook(() => useRecordVerseAttempt());
     expect(useQueryMock.mock.calls.flat()).not.toContain("savedVerses.listAll");
   });
+
+  it("skips the hearted-id list when session cards already have verseRefId", async () => {
+    useQueryMock.mockReturnValue(undefined);
+
+    const { result } = renderHook(() =>
+      useRecordVerseAttempt({ skipLibraryIds: true }),
+    );
+
+    expect(useQueryMock).toHaveBeenCalledWith(
+      "savedVerses.listRecordingIds",
+      "skip",
+    );
+    expect(result.current.heartedVersesReady).toBe(true);
+
+    await act(async () => {
+      await result.current.record({
+        reference,
+        verseRefId: VERSE_REF_ID,
+        tokens: exactTokens,
+        stage: 0,
+        mode: "practice",
+      });
+    });
+
+    expect(recordAttemptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verseRefId: VERSE_REF_ID,
+        mode: "practice",
+      }),
+    );
+  });
 });

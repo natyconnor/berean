@@ -2,13 +2,17 @@ import { query, mutation, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
-import { findOrCreateVerseRefId } from "./lib/verseRefs";
+import { findOrCreateVerseRefId, findVerseRefId } from "./lib/verseRefs";
 import {
   heartSpanIfAbsent,
   loadUserHeartSpans,
   unheartByVerseRefId,
 } from "./lib/savedVerses";
-import { findSavedVerse, findVerseMemory } from "./lib/verseMemory";
+import {
+  findSavedVerse,
+  findVerseMemory,
+  loadHeartedVerseMemoryByRef,
+} from "./lib/verseMemory";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import {
   exactSpanMatch,
@@ -98,29 +102,58 @@ async function toRefItem(
   };
 }
 
+function listItemMemory(
+  memory: Doc<"verseMemory">,
+): SavedVerseListItem["memory"] {
+  return {
+    status: memory.status,
+    learnStage: memory.learnStage,
+    stageReps: memory.stageReps,
+    intervalDays: memory.intervalDays,
+    dueAt: memory.dueAt,
+    lastReviewedAt: memory.lastReviewedAt,
+  };
+}
+
 async function toListItem(
   ctx: QueryCtx,
   row: Doc<"savedVerses">,
   userId: Id<"users">,
+  memory?: Doc<"verseMemory"> | null,
 ): Promise<SavedVerseListItem | null> {
   const item = await toRefItem(ctx, row, userId);
   if (!item) {
     return null;
   }
-  const memory = await findVerseMemory(ctx, userId, row.verseRefId);
+  const joined =
+    memory !== undefined
+      ? memory
+      : await findVerseMemory(ctx, userId, row.verseRefId);
   return {
     ...item,
-    memory: memory
-      ? {
-          status: memory.status,
-          learnStage: memory.learnStage,
-          stageReps: memory.stageReps,
-          intervalDays: memory.intervalDays,
-          dueAt: memory.dueAt,
-          lastReviewedAt: memory.lastReviewedAt,
-        }
-      : undefined,
+    memory: joined ? listItemMemory(joined) : undefined,
   };
+}
+
+function compactItems<T>(items: ReadonlyArray<T | null>): T[] {
+  return items.filter((item): item is T => item !== null);
+}
+
+async function toListItems(
+  ctx: QueryCtx,
+  rows: Doc<"savedVerses">[],
+  userId: Id<"users">,
+): Promise<SavedVerseListItem[]> {
+  const memoryByRef = await loadHeartedVerseMemoryByRef(ctx, userId);
+  const items = await Promise.all(
+    rows.map(async (row) => {
+      const memory =
+        memoryByRef.get(row.verseRefId) ??
+        (await findVerseMemory(ctx, userId, row.verseRefId));
+      return await toListItem(ctx, row, userId, memory);
+    }),
+  );
+  return compactItems(items);
 }
 
 async function loadHeartedRowsNewestFirst(
@@ -154,16 +187,7 @@ export const listForChapter = query({
       )
       .collect();
 
-    const items: SavedVerseListItem[] = [];
-
-    for (const row of rows) {
-      const item = await toListItem(ctx, row, userId);
-      if (item) {
-        items.push(item);
-      }
-    }
-
-    return items;
+    return await toListItems(ctx, rows, userId);
   },
 });
 
@@ -184,16 +208,9 @@ export const listRecordingIds = query({
     }
 
     const rows = await loadHeartedRowsNewestFirst(ctx, userId);
-    const items: SavedVerseRefItem[] = [];
-
-    for (const row of rows) {
-      const item = await toRefItem(ctx, row, userId);
-      if (item) {
-        items.push(item);
-      }
-    }
-
-    return items;
+    return compactItems(
+      await Promise.all(rows.map((row) => toRefItem(ctx, row, userId))),
+    );
   },
 });
 
@@ -212,16 +229,41 @@ export const listAll = query({
     }
 
     const rows = await loadHeartedRowsNewestFirst(ctx, userId);
-    const items: SavedVerseListItem[] = [];
+    return await toListItems(ctx, rows, userId);
+  },
+});
 
-    for (const row of rows) {
-      const item = await toListItem(ctx, row, userId);
-      if (item) {
-        items.push(item);
-      }
+/**
+ * One hearted library row for a verse-scoped Learn / Practice URL.
+ *
+ * Scoped sessions must not snapshot {@link listAll}: that join grows with
+ * every hearted verse and made pack → verse navigation wait on the library.
+ */
+export const getHearted = query({
+  args: {
+    book: v.string(),
+    chapter: v.number(),
+    startVerse: v.number(),
+    endVerse: v.number(),
+  },
+  returns: v.union(savedVerseListItem, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return null;
     }
 
-    return items;
+    const verseRefId = await findVerseRefId(ctx, userId, args);
+    if (!verseRefId) {
+      return null;
+    }
+
+    const saved = await findSavedVerse(ctx, userId, verseRefId);
+    if (!saved) {
+      return null;
+    }
+
+    return await toListItem(ctx, saved, userId);
   },
 });
 

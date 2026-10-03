@@ -36,7 +36,26 @@ export function MemoryAllSessionPage({
   search: MemoryPracticeSearch;
 }) {
   const onExit = useMemoryBack();
-  const savedVerses = useFrozenQuery(api.savedVerses.listAll, {});
+  const scoped = hasPracticeVerseScope(search);
+  const library = useFrozenQuery(api.savedVerses.listAll, scoped ? "skip" : {});
+  const hearted = useFrozenQuery(
+    api.savedVerses.getHearted,
+    scoped
+      ? {
+          book: search.book,
+          chapter: search.chapter,
+          startVerse: search.startVerse,
+          endVerse: search.endVerse,
+        }
+      : "skip",
+  );
+  const savedVerses = scoped
+    ? hearted === undefined
+      ? undefined
+      : hearted
+        ? [hearted]
+        : []
+    : library;
   const now = useLiveNow();
 
   const verses = useMemo(

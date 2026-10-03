@@ -334,6 +334,7 @@ export function PracticeBoard({
 
   const { recordWithSeqAdopt, resolveVerseRefId } = useVersePracticeAttempt(
     recordModeFor(kind),
+    { skipLibraryIds: true },
   );
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);

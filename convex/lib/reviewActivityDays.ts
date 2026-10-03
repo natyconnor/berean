@@ -156,7 +156,8 @@ export async function noteVerseReviewForActivity(
 ): Promise<void> {
   const tz = normalizeTimeZone(args.timeZone);
   if (!(await isReviewActivityBackfilled(ctx, args.userId, tz))) {
-    await rebuildReviewActivityDays(ctx, args.userId, tz, args.createdAt);
+    // Dashboard `ensureReviewActivityDays` backfills. Do not rebuild the
+    // ~5000-row log here — that made Saving... wait on library-sized work.
     return;
   }
 

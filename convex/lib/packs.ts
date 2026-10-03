@@ -1,6 +1,10 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { findVerseMemory, isLiveHeartedMemory } from "./verseMemory";
+import {
+  findVerseMemory,
+  isLiveHeartedMemory,
+  loadHeartedVerseMemoryByRef,
+} from "./verseMemory";
 import { loadPassagePackIds } from "./passageDue";
 import {
   verseMatchesScope,
@@ -102,6 +106,23 @@ function toMember(
   };
 }
 
+async function memberForVerseRef(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+  memoryByRef: Map<Id<"verseRefs">, Doc<"verseMemory">>,
+  requireLiveHearted: boolean,
+): Promise<PackMember | null> {
+  const ref = await ctx.db.get(verseRefId);
+  if (!ref || ref.userId !== userId) return null;
+  const memory =
+    memoryByRef.get(verseRefId) ??
+    (await findVerseMemory(ctx, userId, verseRefId));
+  if (!memory) return null;
+  if (requireLiveHearted && !isLiveHeartedMemory(memory)) return null;
+  return toMember(ref, memory);
+}
+
 /**
  * All of the user's hearted verses joined to their `verseMemory` schedule.
  *
@@ -109,25 +130,28 @@ function toMember(
  * exactly when a `savedVerses` row exists (the same read contract used across
  * `verseMemory.ts`). Rows whose memory seed is missing (legacy, pre-backfill)
  * are skipped rather than fabricated. Bounded by the user's hearted set.
+ *
+ * Hearts and live `verseMemory` are collected once; verse refs are `db.get` in
+ * parallel so a 100-verse pack is two index scans plus N point reads.
  */
 export async function loadHeartedMembers(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<PackMember[]> {
-  const saved = await ctx.db
-    .query("savedVerses")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .collect();
+  const [saved, memoryByRef] = await Promise.all([
+    ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect(),
+    loadHeartedVerseMemoryByRef(ctx, userId),
+  ]);
 
-  const members: PackMember[] = [];
-  for (const row of saved) {
-    const ref = await ctx.db.get(row.verseRefId);
-    if (!ref || ref.userId !== userId) continue;
-    const memory = await findVerseMemory(ctx, userId, row.verseRefId);
-    if (!memory) continue;
-    members.push(toMember(ref, memory));
-  }
-  return members;
+  const loaded = await Promise.all(
+    saved.map((row) =>
+      memberForVerseRef(ctx, userId, row.verseRefId, memoryByRef, false),
+    ),
+  );
+  return loaded.filter((member): member is PackMember => member !== null);
 }
 
 /**
@@ -164,37 +188,36 @@ export function filterScopeMembers(
  * Joins each `packVerses` row to its verse reference and `verseMemory` row.
  * Membership is hearted-only: unhearting deletes `packVerses` rows, and this
  * loader also skips any stale membership whose verse is no longer hearted.
- * Bounded by pack size.
+ * Hearts and live memory are collected once; refs are fetched in parallel.
  */
 export async function loadCustomMembers(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   packId: Id<"packs">,
 ): Promise<PackMember[]> {
-  const rows = await ctx.db
-    .query("packVerses")
-    .withIndex("by_userId_packId_order", (q) =>
-      q.eq("userId", userId).eq("packId", packId),
-    )
-    .order("asc")
-    .collect();
-
-  const members: PackMember[] = [];
-  for (const row of rows) {
-    const saved = await ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId_verseRefId", (q) =>
-        q.eq("userId", userId).eq("verseRefId", row.verseRefId),
+  const [rows, saved, memoryByRef] = await Promise.all([
+    ctx.db
+      .query("packVerses")
+      .withIndex("by_userId_packId_order", (q) =>
+        q.eq("userId", userId).eq("packId", packId),
       )
-      .unique();
-    if (!saved) continue;
-    const ref = await ctx.db.get(row.verseRefId);
-    if (!ref || ref.userId !== userId) continue;
-    const memory = await findVerseMemory(ctx, userId, row.verseRefId);
-    if (!memory || !isLiveHeartedMemory(memory)) continue;
-    members.push(toMember(ref, memory));
-  }
-  return members;
+      .order("asc")
+      .collect(),
+    ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect(),
+    loadHeartedVerseMemoryByRef(ctx, userId),
+  ]);
+  const savedIds = new Set(saved.map((row) => row.verseRefId));
+
+  const loaded = await Promise.all(
+    rows.map((row) => {
+      if (!savedIds.has(row.verseRefId)) return Promise.resolve(null);
+      return memberForVerseRef(ctx, userId, row.verseRefId, memoryByRef, true);
+    }),
+  );
+  return loaded.filter((member): member is PackMember => member !== null);
 }
 
 /**
