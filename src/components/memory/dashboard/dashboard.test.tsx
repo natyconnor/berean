@@ -3,16 +3,23 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MemoryDashboard } from "./dashboard";
 
-const { ensureReviewActivityDaysMock } = vi.hoisted(() => ({
-  ensureReviewActivityDaysMock: vi.fn(() => Promise.resolve(null)),
-}));
+const { ensureReviewActivityDaysMock, ensurePassageDueBackfillMock } =
+  vi.hoisted(() => ({
+    ensureReviewActivityDaysMock: vi.fn(() => Promise.resolve(null)),
+    ensurePassageDueBackfillMock: vi.fn(() => Promise.resolve(null)),
+  }));
 
 vi.mock("convex-helpers/react/cache", () => ({
   useQuery: () => undefined,
 }));
 
 vi.mock("convex/react", () => ({
-  useMutation: () => ensureReviewActivityDaysMock,
+  useMutation: (fn: unknown) => {
+    if (fn === "passageMemory.ensureDueBackfill") {
+      return ensurePassageDueBackfillMock;
+    }
+    return ensureReviewActivityDaysMock;
+  },
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -23,6 +30,9 @@ vi.mock("../../../../convex/_generated/api", () => ({
       reviewActivity: "verseMemory.reviewActivity",
       reviewForecast: "verseMemory.reviewForecast",
       ensureReviewActivityDays: "verseMemory.ensureReviewActivityDays",
+    },
+    passageMemory: {
+      ensureDueBackfill: "passageMemory.ensureDueBackfill",
     },
   },
 }));
@@ -67,8 +77,9 @@ describe("MemoryDashboard query split", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("asks Convex to backfill per-day heatmap rows for the viewer timezone", () => {
+  it("asks Convex to backfill heatmap days and skinny passage due rows", () => {
     ensureReviewActivityDaysMock.mockClear();
+    ensurePassageDueBackfillMock.mockClear();
     render(
       <MemoryDashboard
         now={1_700_000_000_000}
@@ -82,6 +93,9 @@ describe("MemoryDashboard query split", () => {
     expect(ensureReviewActivityDaysMock).toHaveBeenCalledWith({
       now: 1_700_000_000_000,
       timeZone: "UTC",
+    });
+    expect(ensurePassageDueBackfillMock).toHaveBeenCalledWith({
+      now: 1_700_000_000_000,
     });
   });
 });

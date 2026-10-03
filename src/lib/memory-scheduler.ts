@@ -325,6 +325,15 @@ export function nextLearningSessionDueAt(
  */
 export const LEARNING_LOCK_GRACE_MS = 30 * 60 * 1000;
 
+/**
+ * Saving can resolve after the mutation `now` that computed the 6-hour lock
+ * floor. The client then stamps `lastReviewedAt` with a later `Date.now()`.
+ * Without this slack, `dueAt - lastReviewedAt` falls just short of
+ * {@link MIN_LEARNING_LOCK_MS}, the session looks open, and Challenge can be
+ * attempted while the server refuses further reps.
+ */
+export const LEARNING_LOCK_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 function clampEase(ease: number): number {
   return Math.min(EASE_MAX, Math.max(EASE_MIN, ease));
 }
@@ -424,7 +433,10 @@ export type MemoryAvailability = Pick<MemorySchedule, "status" | "dueAt"> & {
  */
 function isLearningSessionClosed(schedule: MemoryAvailability): boolean {
   if (schedule.lastReviewedAt === undefined) return false;
-  return schedule.dueAt - schedule.lastReviewedAt >= MIN_LEARNING_LOCK_MS;
+  return (
+    schedule.dueAt - schedule.lastReviewedAt >=
+    MIN_LEARNING_LOCK_MS - LEARNING_LOCK_CLOCK_SKEW_MS
+  );
 }
 
 /**

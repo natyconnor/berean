@@ -286,6 +286,15 @@ function recordModeFor(
   return "practice";
 }
 
+/** Skip the library-wide id map only when every verse card can record without it. */
+function sessionVersesCanSkipLibraryIds(
+  verses: readonly PracticeVerse[],
+): boolean {
+  return verses.every(
+    (verse) => verse.composite !== undefined || verse.verseRefId !== undefined,
+  );
+}
+
 const SHUFFLE_DURATION_MS = 750;
 const DEAL_COUNT = 6;
 const DEAL_STAGGER_S = 0.08;
@@ -334,6 +343,7 @@ export function PracticeBoard({
 
   const { recordWithSeqAdopt, resolveVerseRefId } = useVersePracticeAttempt(
     recordModeFor(kind),
+    { skipLibraryIds: sessionVersesCanSkipLibraryIds(verses) },
   );
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);
@@ -567,7 +577,7 @@ export function PracticeBoard({
         stageReps: next.stageReps,
         status: next.status,
         dueAt: next.dueAt,
-        lastReviewedAt: Date.now(),
+        lastReviewedAt: now,
         ease: next.ease,
         intervalDays: next.intervalDays,
         consecutiveCorrect: next.consecutiveCorrect,

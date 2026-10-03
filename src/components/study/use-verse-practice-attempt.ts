@@ -12,6 +12,7 @@ import {
 import type { CardReference } from "./study-card-model";
 import {
   useRecordVerseAttempt,
+  type RecordVerseAttemptOptions,
   type VerseAttemptMode,
 } from "./use-record-verse-attempt";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -67,9 +68,10 @@ interface UseVersePracticeAttemptReturn {
  */
 export function useVersePracticeAttempt(
   mode: VerseAttemptMode,
+  options?: RecordVerseAttemptOptions,
 ): UseVersePracticeAttemptReturn {
   const { record, heartedVersesReady, resolveVerseRefId } =
-    useRecordVerseAttempt();
+    useRecordVerseAttempt(options);
   const attemptSeqByVerseId = useRef<Map<string, number>>(new Map());
   const appliedSeqByVerseId = useRef<Map<string, number>>(new Map());
   const pendingProgressRef = useRef<VersePracticeProgress | null>(null);

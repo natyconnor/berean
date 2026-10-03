@@ -39,6 +39,14 @@ interface PendingAttempt {
   resolve: (schedule: MemorySchedule | null) => void;
 }
 
+export interface RecordVerseAttemptOptions {
+  /**
+   * Session cards already carry `verseRefId`. Skip the library-wide id map so
+   * Learn / Practice / Review do not collect every hearted verse on open.
+   */
+  skipLibraryIds?: boolean;
+}
+
 interface RecordVerseAttempt {
   /** True once the user's hearted-verse list has loaded. */
   heartedVersesReady: boolean;
@@ -64,11 +72,17 @@ interface RecordVerseAttempt {
  * fallback id map is `savedVerses.listRecordingIds` — saved verses + refs
  * only — so a `verseMemory` patch does not re-run it during Saving...
  */
-export function useRecordVerseAttempt(): RecordVerseAttempt {
+export function useRecordVerseAttempt(
+  options?: RecordVerseAttemptOptions,
+): RecordVerseAttempt {
+  const skipLibraryIds = options?.skipLibraryIds === true;
   const recordAttempt = useMutation(api.verseMemory.recordAttempt);
   // `undefined` while the subscription loads; an array (possibly empty) once
   // resolved. We must distinguish the two so early attempts aren't dropped.
-  const recordingIds = useQuery(api.savedVerses.listRecordingIds, {});
+  const recordingIds = useQuery(
+    api.savedVerses.listRecordingIds,
+    skipLibraryIds ? "skip" : {},
+  );
 
   const verseRefIdByRefKey = useMemo(() => {
     const map = new Map<string, Id<"verseRefs">>();
@@ -133,17 +147,17 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
       const verseRefId = verseRefIdFor(input);
       if (verseRefId) return performRecord(input, verseRefId, now);
 
-      if (recordingIds === undefined) {
-        // Hearted verses still loading: defer so a real attempt isn't lost.
-        // The flush effect resolves this once resolution is possible.
-        return new Promise<MemorySchedule | null>((resolve) => {
-          pendingRef.current.push({ input, now, resolve });
-        });
+      if (skipLibraryIds || recordingIds !== undefined) {
+        return Promise.resolve(null);
       }
 
-      return Promise.resolve(null);
+      // Hearted verses still loading: defer so a real attempt isn't lost.
+      // The flush effect resolves this once resolution is possible.
+      return new Promise<MemorySchedule | null>((resolve) => {
+        pendingRef.current.push({ input, now, resolve });
+      });
     },
-    [recordingIds, verseRefIdFor, performRecord],
+    [recordingIds, skipLibraryIds, verseRefIdFor, performRecord],
   );
 
   // Flush deferred attempts once the hearted-verse id list is available.
@@ -165,6 +179,6 @@ export function useRecordVerseAttempt(): RecordVerseAttempt {
   return {
     record,
     resolveVerseRefId,
-    heartedVersesReady: recordingIds !== undefined,
+    heartedVersesReady: skipLibraryIds || recordingIds !== undefined,
   };
 }

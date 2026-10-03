@@ -23,6 +23,26 @@ export async function findVerseMemory(
     .unique();
 }
 
+/**
+ * Live hearted `verseMemory` rows, keyed by verse ref.
+ *
+ * Pack / library joins should load this once instead of `findVerseMemory` per
+ * heart. Rows whose `isHearted` flag was never backfilled are absent; callers
+ * fall back to {@link findVerseMemory} for those.
+ */
+export async function loadHeartedVerseMemoryByRef(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<Map<Id<"verseRefs">, Doc<"verseMemory">>> {
+  const memories = await ctx.db
+    .query("verseMemory")
+    .withIndex("by_userId_isHearted", (q) =>
+      q.eq("userId", userId).eq("isHearted", true),
+    )
+    .collect();
+  return new Map(memories.map((row) => [row.verseRefId, row]));
+}
+
 export function isLiveHeartedMemory(row: Doc<"verseMemory">): boolean {
   return row.isHearted === true;
 }

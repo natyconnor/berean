@@ -25,7 +25,10 @@ import {
   qualityValidator,
 } from "./lib/passageValues";
 import { loadPackMembers } from "./lib/packs";
-import { loadPassageDueRecords } from "./lib/passageDue";
+import {
+  ensurePassageDueBackfill,
+  loadPassageDueRecords,
+} from "./lib/passageDue";
 import { unheartByVerseRefId } from "./lib/savedVerses";
 import { findVerseRefId } from "./lib/verseRefs";
 import {
@@ -455,6 +458,21 @@ export const dueForLearning = query({
       if (item) items.push(item);
     }
     return items.sort((a, b) => a.dueAt - b.dueAt);
+  },
+});
+
+/**
+ * Write skinny `passageMemoryDue` rows for this user so dashboard due queries
+ * stop collecting fat `pieces` arrays. Idempotent. Memory home calls this
+ * instead of doing the work inside Saving / a passage grade.
+ */
+export const ensureDueBackfill = mutation({
+  args: { now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    await ensurePassageDueBackfill(ctx, userId, args.now);
+    return null;
   },
 });
 

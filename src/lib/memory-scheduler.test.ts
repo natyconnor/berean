@@ -960,6 +960,16 @@ describe("isDueForLearning / isLearningLocked", () => {
     expect(isDueForLearning(locked, staleNow)).toBe(false);
   });
 
+  it("still locks when lastReviewedAt lands after the 6-hour floor clock", () => {
+    const locked = {
+      ...learningAt(2),
+      lastReviewedAt: NOW + 2_000,
+      dueAt: NOW + MIN_LEARNING_LOCK_MS,
+    };
+    expect(isLearningLocked(locked, NOW)).toBe(true);
+    expect(isDueForLearning(locked, NOW)).toBe(false);
+  });
+
   it("unlocks a session-ended verse once now reaches dueAt", () => {
     const locked = {
       ...learningAt(2),

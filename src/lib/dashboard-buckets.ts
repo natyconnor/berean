@@ -240,6 +240,27 @@ export function aggregateReviewDays(
   return aggregates;
 }
 
+/**
+ * Collapse duplicate per-day rows (concurrent first-insert races) by summing.
+ * Full snapshot rebuilds are serialized on `userMemoryReviewDayState`.
+ */
+export function mergeReviewDayAggregates(
+  days: readonly ReviewDayAggregate[],
+): ReviewDayAggregate[] {
+  const byStart = new Map<number, ReviewDayAggregate>();
+  for (const day of days) {
+    const existing = byStart.get(day.dayStart);
+    if (!existing) {
+      byStart.set(day.dayStart, { ...day });
+      continue;
+    }
+    existing.count += day.count;
+    existing.accuracySum += day.accuracySum;
+    existing.accuracyCount += day.accuracyCount;
+  }
+  return [...byStart.values()].sort((a, b) => a.dayStart - b.dayStart);
+}
+
 export function reviewActivityFromDayAggregates(
   days: readonly ReviewDayAggregate[],
   heatmapDayStarts: readonly number[],
@@ -248,7 +269,9 @@ export function reviewActivityFromDayAggregates(
   heatmap: Array<{ dayStart: number; count: number }>;
   trend: Array<{ dayStart: number; average: number | null; count: number }>;
 } {
-  const byStart = new Map(days.map((day) => [day.dayStart, day]));
+  const byStart = new Map(
+    mergeReviewDayAggregates(days).map((day) => [day.dayStart, day]),
+  );
   return {
     heatmap: heatmapDayStarts.map((dayStart) => ({
       dayStart,
