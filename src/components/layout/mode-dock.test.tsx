@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
     pathname: "/passage/John-1",
     href: "/passage/John-1",
   })),
+  useQuery: vi.fn((_query: unknown, args?: unknown) => {
+    if (args === "skip") return undefined;
+    if (args && typeof args === "object" && "now" in args) return 3;
+    return "always";
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -24,7 +29,7 @@ vi.mock("@/lib/use-tabs", () => ({
 }));
 
 vi.mock("convex/react", () => ({
-  useQuery: () => "always",
+  useQuery: (query: unknown, args?: unknown) => mocks.useQuery(query, args),
 }));
 
 vi.mock("framer-motion", () => ({
@@ -51,6 +56,7 @@ vi.mock("@/components/tutorial/feature-callout", () => ({
 describe("ModeDock last-mode restore", () => {
   beforeEach(() => {
     mocks.navigate.mockReset();
+    mocks.useQuery.mockClear();
     mocks.useLocation.mockReturnValue({
       pathname: "/passage/John-1",
       href: "/passage/John-1",
@@ -140,5 +146,66 @@ describe("ModeDock last-mode restore", () => {
       "href",
       "/memory",
     );
+  });
+});
+
+describe("ModeDock dueCount subscription", () => {
+  beforeEach(() => {
+    mocks.navigate.mockReset();
+    mocks.useQuery.mockClear();
+    clearModeLastLocations();
+  });
+
+  afterEach(() => {
+    clearModeLastLocations();
+  });
+
+  it("skips live dueCount on Learn, Practice, Review, and pack sessions", () => {
+    const paths = [
+      "/memory/learn",
+      "/memory/practice",
+      "/memory/review",
+      "/memory/pack123/learn",
+      "/memory/pack123/practice",
+      "/memory/pack123/review",
+    ];
+    for (const pathname of paths) {
+      mocks.useLocation.mockReturnValue({ pathname, href: pathname });
+      mocks.useQuery.mockClear();
+      const { unmount } = render(<ModeDock />);
+      expect(mocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip");
+      unmount();
+    }
+  });
+
+  it("subscribes to dueCount on Memory home and keeps the badge after entering a session", () => {
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory",
+      href: "/memory",
+    });
+    const { rerender } = render(<ModeDock />);
+
+    const dueArgs = mocks.useQuery.mock.calls
+      .map((call) => call[1])
+      .find(
+        (args): args is { now: number; tzOffsetMinutes: number } =>
+          typeof args === "object" &&
+          args !== null &&
+          "now" in args &&
+          "tzOffsetMinutes" in args,
+      );
+    expect(dueArgs).toBeDefined();
+    expect(typeof dueArgs?.now).toBe("number");
+    expect(typeof dueArgs?.tzOffsetMinutes).toBe("number");
+    expect(screen.getByLabelText("3 verses due today")).toBeInTheDocument();
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/review",
+      href: "/memory/review",
+    });
+    rerender(<ModeDock />);
+
+    expect(mocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip");
+    expect(screen.getByLabelText("3 verses due today")).toBeInTheDocument();
   });
 });
