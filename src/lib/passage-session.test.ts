@@ -199,6 +199,66 @@ describe("reducePassageSession", () => {
     expect(current.rehearsalRopeIndexes).toEqual([2, 3]);
   });
 
+  it("does not connect the first verse to a later pre-hearted solid", () => {
+    let current = session([
+      piece(0, "unreached", {
+        book: "Matthew",
+        chapter: 5,
+        startVerse: 1,
+        endVerse: 1,
+      }),
+      piece(1, "unreached", {
+        book: "Matthew",
+        chapter: 5,
+        startVerse: 2,
+        endVerse: 2,
+      }),
+      piece(2, "solid", {
+        book: "Matthew",
+        chapter: 6,
+        startVerse: 33,
+        endVerse: 33,
+        learnStage: 3,
+      }),
+    ]);
+    expect(current.phase).toBe("offer-introduce");
+
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[0]?.attachment === "attached",
+    );
+    expect(current.phase).not.toBe("connect");
+    expect(current.rehearsalRopeIndexes).toBeUndefined();
+  });
+
+  it("does not open a session warming up a later pre-hearted verse", () => {
+    const start = session([
+      piece(0, "attached", {
+        book: "Matthew",
+        chapter: 5,
+        startVerse: 1,
+        endVerse: 1,
+        learnStage: 2,
+        dueAt: NOW + DAY_MS,
+      }),
+      piece(1, "unreached", {
+        book: "Matthew",
+        chapter: 5,
+        startVerse: 2,
+        endVerse: 2,
+      }),
+      piece(2, "solid", {
+        book: "Matthew",
+        chapter: 6,
+        startVerse: 33,
+        endVerse: 33,
+        learnStage: 3,
+      }),
+    ]);
+    expect(start.phase).toBe("offer-introduce");
+  });
+
   it("offers a neighbor connect after Challenge and From Memory, not only Guided attach", () => {
     const afterChallenge = pass(
       session(
@@ -286,8 +346,8 @@ describe("reducePassageSession", () => {
     );
   });
 
-  it("repairs from one rope piece earlier in a gapped window", () => {
-    const twoPieceGap = session(
+  it("does not recitation-warmup across unreached verses to a later rope piece", () => {
+    const start = session(
       [
         piece(0, "solid", { learnStage: 3 }),
         piece(1, "unreached"),
@@ -298,22 +358,14 @@ describe("reducePassageSession", () => {
         pieceWordCounts: [3, 3, 3],
       },
     );
-    const tokens = diffWords(
-      "one two three four five WRONG",
-      "one two three four five six",
-    );
-    const stalled = reducePassageSession(twoPieceGap, {
+    const tokens = diffWords("WRONG two three", "one two three");
+    const stalled = reducePassageSession(start, {
       type: "attempt",
       accuracy: 40,
       tokens,
     });
-    expect(stalled.phase).toBe("stall-repair");
-    expect(stalled.rehearsalRopeIndexes).toEqual([0, 2]);
-    expect(stalled.stallIndex).toBe(1);
-    expect(repairWindowStart(stalled)).toBe(0);
-    expect(stalled.pieces[repairWindowStart(stalled)]?.attachment).not.toBe(
-      "unreached",
-    );
+    expect(stalled.rehearsalRopeIndexes).toEqual([0]);
+    expect(stalled.stallIndex).toBe(0);
   });
 
   it("does not remap a failed repair onto rope pieces omitted from the prompt", () => {

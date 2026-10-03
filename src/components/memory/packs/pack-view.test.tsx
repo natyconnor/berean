@@ -190,13 +190,20 @@ function passageRow(extra?: {
     remainingIntroduces: 5,
     frontierIndex: 0,
     rehearsalStartIndex: 0,
-    ropePieceIndexes: pieces
-      .map((piece, index) =>
-        piece.attachment === "attached" || piece.attachment === "solid"
-          ? index
-          : -1,
-      )
-      .filter((index) => index >= 0),
+    ropePieceIndexes: (() => {
+      const indexes: number[] = [];
+      for (let index = 0; index < pieces.length; index += 1) {
+        const piece = pieces[index];
+        if (
+          !piece ||
+          (piece.attachment !== "attached" && piece.attachment !== "solid")
+        ) {
+          break;
+        }
+        indexes.push(index);
+      }
+      return indexes;
+    })(),
     migratedAt: extra?.migratedAt,
     unheartedCount: extra?.unheartedCount,
     keptHeartCount: extra?.keptHeartCount,
