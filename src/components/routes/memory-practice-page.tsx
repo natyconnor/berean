@@ -49,13 +49,11 @@ export function MemoryAllSessionPage({
         }
       : "skip",
   );
-  const savedVerses = scoped
-    ? hearted === undefined
-      ? undefined
-      : hearted
-        ? [hearted]
-        : []
-    : library;
+  const savedVerses = useMemo(() => {
+    if (!scoped) return library;
+    if (hearted === undefined) return undefined;
+    return hearted ? [hearted] : [];
+  }, [scoped, library, hearted]);
   const now = useLiveNow();
 
   const verses = useMemo(
