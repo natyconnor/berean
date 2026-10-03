@@ -13,12 +13,14 @@ import { PracticeBoard, type PracticeVerse } from "./practice-board";
 
 const {
   queryResults,
+  queryCalls,
   mutationMocks,
   navigateMock,
   fetchChaptersBatchMock,
   getPassageMock,
 } = vi.hoisted(() => ({
   queryResults: new Map<string, unknown>(),
+  queryCalls: [] as Array<[string, unknown]>,
   mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
   navigateMock: vi.fn(),
   fetchChaptersBatchMock: vi.fn(),
@@ -40,7 +42,11 @@ vi.mock("convex/react", () => ({
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
-  useQuery: (name: string) => queryResults.get(name),
+  useQuery: (name: string, args?: unknown) => {
+    queryCalls.push([name, args]);
+    if (args === "skip") return undefined;
+    return queryResults.get(name);
+  },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -126,6 +132,7 @@ function renderComposite() {
 describe("PracticeBoard composite recitation", () => {
   beforeEach(() => {
     queryResults.clear();
+    queryCalls.length = 0;
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
@@ -300,6 +307,7 @@ const learningVerse: PracticeVerse = {
 describe("PracticeBoard learning Read prime", () => {
   beforeEach(() => {
     queryResults.clear();
+    queryCalls.length = 0;
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
@@ -368,6 +376,43 @@ describe("PracticeBoard learning Read prime", () => {
       expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
     });
   });
+
+  it("skips the hearted-id list when every card already has verseRefId", () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[learningVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(queryCalls).toContainEqual(["savedVerses.listRecordingIds", "skip"]);
+  });
+
+  it("subscribes to the hearted-id list when a card is missing verseRefId", () => {
+    const withoutRefId: PracticeVerse = {
+      reference: learningVerse.reference,
+      learnStage: learningVerse.learnStage,
+      stageReps: learningVerse.stageReps,
+      status: learningVerse.status,
+      dueAt: learningVerse.dueAt,
+    };
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[withoutRefId]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(queryCalls).toContainEqual(["savedVerses.listRecordingIds", {}]);
+  });
 });
 
 const guidedVerse: PracticeVerse = {
@@ -378,6 +423,7 @@ const guidedVerse: PracticeVerse = {
 describe("PracticeBoard learning step label", () => {
   beforeEach(() => {
     queryResults.clear();
+    queryCalls.length = 0;
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
@@ -511,6 +557,7 @@ describe("PracticeBoard learning step label", () => {
 describe("PracticeBoard recall submit loading", () => {
   beforeEach(() => {
     queryResults.clear();
+    queryCalls.length = 0;
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
@@ -688,6 +735,7 @@ function verseRailLabels(): string[] {
 describe("PracticeBoard in-order Scripture sequence", () => {
   beforeEach(() => {
     queryResults.clear();
+    queryCalls.length = 0;
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
@@ -827,6 +875,7 @@ const heldSchedule = {
 describe("PracticeBoard review retry", () => {
   beforeEach(() => {
     queryResults.clear();
+    queryCalls.length = 0;
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();

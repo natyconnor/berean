@@ -151,4 +151,25 @@ describe("useRecordVerseAttempt", () => {
       }),
     );
   });
+
+  it("does not record a skipLibraryIds attempt that has no verseRefId", async () => {
+    useQueryMock.mockReturnValue(undefined);
+
+    const { result } = renderHook(() =>
+      useRecordVerseAttempt({ skipLibraryIds: true }),
+    );
+
+    let recorded: unknown;
+    await act(async () => {
+      recorded = await result.current.record({
+        reference,
+        tokens: exactTokens,
+        stage: 0,
+        mode: "practice",
+      });
+    });
+
+    expect(recorded).toBeNull();
+    expect(recordAttemptMock).not.toHaveBeenCalled();
+  });
 });

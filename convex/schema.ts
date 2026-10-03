@@ -412,7 +412,7 @@ export default defineSchema({
     .index("by_packId", ["packId"])
     .index("by_userId_status_dueAt", ["userId", "status", "dueAt"]),
 
-  /** Set once this user's `passageMemoryDue` rows cover every passage row. */
+  /** True once Memory home or the optional migration wrote every skinny row. */
   userPassageDueState: defineTable({
     userId: v.id("users"),
     backfilled: v.boolean(),

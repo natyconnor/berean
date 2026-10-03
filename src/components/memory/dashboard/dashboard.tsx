@@ -52,9 +52,13 @@ export function MemoryDashboard({
   const ensureReviewActivityDays = useMutation(
     api.verseMemory.ensureReviewActivityDays,
   );
+  const ensurePassageDueBackfill = useMutation(
+    api.passageMemory.ensureDueBackfill,
+  );
   useEffect(() => {
     void ensureReviewActivityDays({ now, timeZone });
-  }, [ensureReviewActivityDays, now, timeZone]);
+    void ensurePassageDueBackfill({ now });
+  }, [ensureReviewActivityDays, ensurePassageDueBackfill, now, timeZone]);
   const activity = useQuery(api.verseMemory.reviewActivity, {
     now,
     timeZone,

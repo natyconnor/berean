@@ -21,11 +21,7 @@ import {
   passagePiecesAsMembers,
   type PackMember,
 } from "./packs";
-import {
-  deletePassageMemoryDue,
-  ensurePassageDueBackfill,
-  upsertPassageMemoryDue,
-} from "./passageDue";
+import { deletePassageMemoryDue, upsertPassageMemoryDue } from "./passageDue";
 import type { PassageView } from "./passageValues";
 
 /** Pack card for global Learn / Review. Members are frozen pieces, not hearts. */
@@ -230,7 +226,6 @@ export async function insertPassageMemory(
   const row = await ctx.db.get(id);
   if (!row) throw new Error("Failed to create passage memory");
   await upsertPassageMemoryDue(ctx, row, args.now);
-  await ensurePassageDueBackfill(ctx, args.userId, args.now);
   return row;
 }
 
@@ -245,11 +240,6 @@ export async function patchPassageMemory(
   const row = await ctx.db.get(id);
   if (!row) throw new Error("Failed to update passage memory");
   await upsertPassageMemoryDue(ctx, row, patch.updatedAt ?? row.updatedAt);
-  await ensurePassageDueBackfill(
-    ctx,
-    row.userId,
-    patch.updatedAt ?? row.updatedAt,
-  );
   return row;
 }
 

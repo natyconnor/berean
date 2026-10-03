@@ -9,6 +9,7 @@ import {
   isReadPrimeAttempt,
   normalizeTimeZone,
   overallAccuracy,
+  mergeReviewDayAggregates,
   reviewActivityFromDayAggregates,
   reviewActivityFromLogs,
   startOfUtcDay,
@@ -294,5 +295,32 @@ describe("aggregateReviewDays / reviewActivityFromLogs", () => {
       zonedDayStarts(saturdayEveningPdt, 2, pacific),
     );
     expect(stored).toEqual(activity);
+  });
+
+  it("sums duplicate day rows so a concurrent first-insert race still counts", () => {
+    const dayStart = startOfZonedDay(saturdayEveningPdt, pacific);
+    const merged = mergeReviewDayAggregates([
+      { dayStart, count: 1, accuracySum: 80, accuracyCount: 1 },
+      { dayStart, count: 1, accuracySum: 90, accuracyCount: 1 },
+    ]);
+    expect(merged).toEqual([
+      { dayStart, count: 2, accuracySum: 170, accuracyCount: 2 },
+    ]);
+
+    const heatmapStarts = zonedDayStarts(saturdayEveningPdt, 1, pacific);
+    const activity = reviewActivityFromDayAggregates(
+      [
+        { dayStart, count: 1, accuracySum: 80, accuracyCount: 1 },
+        { dayStart, count: 1, accuracySum: 90, accuracyCount: 1 },
+      ],
+      heatmapStarts,
+      heatmapStarts,
+    );
+    expect(activity.heatmap[0]?.count).toBe(2);
+    expect(activity.trend[0]).toEqual({
+      dayStart,
+      average: 85,
+      count: 2,
+    });
   });
 });

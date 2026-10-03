@@ -1,8 +1,9 @@
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
   aggregateReviewDays,
   isReadPrimeAttempt,
+  mergeReviewDayAggregates,
   normalizeTimeZone,
   startOfZonedDay,
   zonedDayStarts,
@@ -13,18 +14,54 @@ import {
 /** Same cap as the historical `reviewActivity` log scan. */
 export const MAX_REVIEW_ACTIVITY_ROWS = 5000;
 const BACKFILL_WINDOW_DAYS = 366;
+/** Convex `.unique()` throws if a race inserted two rows with the same key. */
+const DUPLICATE_TAKE = 8;
 
-async function loadDayState(
+async function loadDayStateRows(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   timeZone: string,
-) {
+): Promise<Doc<"userMemoryReviewDayState">[]> {
   return await ctx.db
     .query("userMemoryReviewDayState")
     .withIndex("by_userId_timeZone", (q) =>
       q.eq("userId", userId).eq("timeZone", timeZone),
     )
-    .unique();
+    .take(DUPLICATE_TAKE);
+}
+
+async function loadDayState(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  timeZone: string,
+): Promise<Doc<"userMemoryReviewDayState"> | null> {
+  const rows = await loadDayStateRows(ctx, userId, timeZone);
+  return rows[0] ?? null;
+}
+
+async function getOrCreateDayState(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  timeZone: string,
+  now: number,
+): Promise<Doc<"userMemoryReviewDayState">> {
+  const rows = await loadDayStateRows(ctx, userId, timeZone);
+  const first = rows[0];
+  if (first) {
+    for (const extra of rows.slice(1)) {
+      await ctx.db.delete(extra._id);
+    }
+    return first;
+  }
+  const id = await ctx.db.insert("userMemoryReviewDayState", {
+    userId,
+    timeZone,
+    backfilled: false,
+    updatedAt: now,
+  });
+  const created = await ctx.db.get(id);
+  if (!created) throw new Error("Failed to create review-day state");
+  return created;
 }
 
 async function loadDayAggregates(
@@ -42,12 +79,14 @@ async function loadDayAggregates(
         .gte("dayStart", windowStart),
     )
     .collect();
-  return rows.map((row) => ({
-    dayStart: row.dayStart,
-    count: row.count,
-    accuracySum: row.accuracySum,
-    accuracyCount: row.accuracyCount,
-  }));
+  return mergeReviewDayAggregates(
+    rows.map((row) => ({
+      dayStart: row.dayStart,
+      count: row.count,
+      accuracySum: row.accuracySum,
+      accuracyCount: row.accuracyCount,
+    })),
+  );
 }
 
 export async function isReviewActivityBackfilled(
@@ -74,7 +113,6 @@ async function replaceReviewDays(
   userId: Id<"users">,
   timeZone: string,
   days: readonly ReviewDayAggregate[],
-  now: number,
 ): Promise<void> {
   const existing = await ctx.db
     .query("userMemoryReviewDays")
@@ -95,17 +133,6 @@ async function replaceReviewDays(
       accuracyCount: day.accuracyCount,
     });
   }
-  const state = await loadDayState(ctx, userId, timeZone);
-  if (state) {
-    await ctx.db.patch(state._id, { backfilled: true, updatedAt: now });
-    return;
-  }
-  await ctx.db.insert("userMemoryReviewDayState", {
-    userId,
-    timeZone,
-    backfilled: true,
-    updatedAt: now,
-  });
 }
 
 export async function rebuildReviewActivityDays(
@@ -129,7 +156,7 @@ export async function rebuildReviewActivityDays(
     stage: row.stage,
   }));
   const days = aggregateReviewDays(logs, now, BACKFILL_WINDOW_DAYS, tz);
-  await replaceReviewDays(ctx, userId, tz, days, now);
+  await replaceReviewDays(ctx, userId, tz, days);
 }
 
 export async function ensureReviewActivityDays(
@@ -139,8 +166,28 @@ export async function ensureReviewActivityDays(
   now: number,
 ): Promise<void> {
   const tz = normalizeTimeZone(timeZone);
-  if (await isReviewActivityBackfilled(ctx, userId, tz)) return;
+  const state = await getOrCreateDayState(ctx, userId, tz, now);
+  if (state.backfilled) return;
+
+  // Touch the state row first so a concurrent ensure / grade OCC-retries this
+  // mutation and re-scans logs, instead of inserting a second state row.
+  await ctx.db.patch(state._id, { updatedAt: now });
   await rebuildReviewActivityDays(ctx, userId, tz, now);
+  await ctx.db.patch(state._id, { backfilled: true, updatedAt: now });
+}
+
+async function loadDayRows(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  timeZone: string,
+  dayStart: number,
+): Promise<Doc<"userMemoryReviewDays">[]> {
+  return await ctx.db
+    .query("userMemoryReviewDays")
+    .withIndex("by_userId_timeZone_dayStart", (q) =>
+      q.eq("userId", userId).eq("timeZone", timeZone).eq("dayStart", dayStart),
+    )
+    .take(DUPLICATE_TAKE);
 }
 
 export async function noteVerseReviewForActivity(
@@ -155,27 +202,36 @@ export async function noteVerseReviewForActivity(
   },
 ): Promise<void> {
   const tz = normalizeTimeZone(args.timeZone);
-  if (!(await isReviewActivityBackfilled(ctx, args.userId, tz))) {
-    // Dashboard `ensureReviewActivityDays` backfills. Do not rebuild the
-    // ~5000-row log here — that made Saving... wait on library-sized work.
+  const state = await getOrCreateDayState(ctx, args.userId, tz, args.createdAt);
+  if (!state.backfilled) {
+    // Dashboard `ensureReviewActivityDays` rebuilds from logs. Patch the state
+    // row so an in-flight backfill OCC-retries and includes this review.
+    await ctx.db.patch(state._id, { updatedAt: args.createdAt });
     return;
   }
 
   const dayStart = startOfZonedDay(args.createdAt, tz);
-  const existing = await ctx.db
-    .query("userMemoryReviewDays")
-    .withIndex("by_userId_timeZone_dayStart", (q) =>
-      q.eq("userId", args.userId).eq("timeZone", tz).eq("dayStart", dayStart),
-    )
-    .unique();
+  const existingRows = await loadDayRows(ctx, args.userId, tz, dayStart);
   const accuracyDelta = isReadPrimeAttempt(args) ? 0 : args.accuracy;
   const accuracyCountDelta = isReadPrimeAttempt(args) ? 0 : 1;
+  const existing = existingRows[0];
   if (existing) {
+    let count = 0;
+    let accuracySum = 0;
+    let accuracyCount = 0;
+    for (const row of existingRows) {
+      count += row.count;
+      accuracySum += row.accuracySum;
+      accuracyCount += row.accuracyCount;
+    }
     await ctx.db.patch(existing._id, {
-      count: existing.count + 1,
-      accuracySum: existing.accuracySum + accuracyDelta,
-      accuracyCount: existing.accuracyCount + accuracyCountDelta,
+      count: count + 1,
+      accuracySum: accuracySum + accuracyDelta,
+      accuracyCount: accuracyCount + accuracyCountDelta,
     });
+    for (const extra of existingRows.slice(1)) {
+      await ctx.db.delete(extra._id);
+    }
     return;
   }
   await ctx.db.insert("userMemoryReviewDays", {
