@@ -680,6 +680,14 @@ export const getOrCreateForVerse = mutation({
   },
 });
 
+const memoryStatusValidator = v.object({
+  new: v.number(),
+  learning: v.number(),
+  reviewing: v.number(),
+  mastered: v.number(),
+  total: v.number(),
+});
+
 const memoryStatsValidator = v.object({
   new: v.number(),
   learning: v.number(),
@@ -688,6 +696,76 @@ const memoryStatsValidator = v.object({
   total: v.number(),
   due: v.number(),
   learningDue: v.number(),
+});
+
+const EMPTY_MEMORY_STATUS = {
+  new: 0,
+  learning: 0,
+  reviewing: 0,
+  mastered: 0,
+  total: 0,
+};
+
+/**
+ * Hearted-verse status totals from `userMemoryStats` (O(1)). Pre-backfill
+ * fallback counts hearted `verseMemory` rows once. Does not scan dues, packs,
+ * or `passageMemory`.
+ */
+async function loadMemoryStatus(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+): Promise<{
+  new: number;
+  learning: number;
+  reviewing: number;
+  mastered: number;
+  total: number;
+}> {
+  const rollup = await ctx.db
+    .query("userMemoryStats")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+
+  if (rollup) {
+    return {
+      new: rollup.new,
+      learning: rollup.learning,
+      reviewing: rollup.reviewing,
+      mastered: rollup.mastered,
+      total: rollup.total,
+    };
+  }
+
+  // Pre-backfill fallback: count from hearted rows once.
+  const rows = await ctx.db
+    .query("verseMemory")
+    .withIndex("by_userId_isHearted", (q) =>
+      q.eq("userId", userId).eq("isHearted", true),
+    )
+    .take(MAX_DUE_SCAN);
+  const stats = { ...EMPTY_MEMORY_STATUS };
+  for (const memory of rows) {
+    stats[memory.status] += 1;
+    stats.total += 1;
+  }
+  return stats;
+}
+
+/**
+ * Per-status hearted-verse totals for Mastery, Practice All, and seed
+ * `heartedTotal`. O(1) from `userMemoryStats` — does not load due scans,
+ * unified packs, or passage rows.
+ */
+export const memoryStatus = query({
+  args: {},
+  returns: memoryStatusValidator,
+  handler: async (ctx) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return EMPTY_MEMORY_STATUS;
+    }
+    return await loadMemoryStatus(ctx, userId);
+  },
 });
 
 /**
@@ -702,34 +780,22 @@ const memoryStatsValidator = v.object({
  *   as {@link dueCount} so a frozen query clock does not hide a verse the
  *   learner is still working through. Pass `tzOffsetMinutes` so introduce
  *   budget uses the viewer's local day.
-
  *
  * Status totals come from denormalized `userMemoryStats` (O(1)). Due counts are
- * still computed live from a bounded due-index scan (time-dependent).
+ * still computed live from a bounded due-index scan (time-dependent). Dashboard
+ * Mastery / in-memory KPIs should subscribe to {@link memoryStatus} instead so
+ * they do not wait on this due half.
  */
 export const memoryStats = query({
   args: { now: v.number(), tzOffsetMinutes: v.optional(v.number()) },
   returns: memoryStatsValidator,
   handler: async (ctx, args) => {
-    const empty = {
-      new: 0,
-      learning: 0,
-      reviewing: 0,
-      mastered: 0,
-      total: 0,
-      due: 0,
-      learningDue: 0,
-    };
-
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
-      return empty;
+      return { ...EMPTY_MEMORY_STATUS, due: 0, learningDue: 0 };
     }
 
-    const rollup = await ctx.db
-      .query("userMemoryStats")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .unique();
+    const status = await loadMemoryStatus(ctx, userId);
 
     const dueRows = await ctx.db
       .query("verseMemory")
@@ -764,31 +830,7 @@ export const memoryStats = query({
       tzOffsetMinutes,
     );
 
-    if (!rollup) {
-      // Pre-backfill fallback: count from hearted rows once.
-      const rows = await ctx.db
-        .query("verseMemory")
-        .withIndex("by_userId_isHearted", (q) =>
-          q.eq("userId", userId).eq("isHearted", true),
-        )
-        .take(MAX_DUE_SCAN);
-      const stats = { ...empty, due, learningDue };
-      for (const memory of rows) {
-        stats[memory.status] += 1;
-        stats.total += 1;
-      }
-      return stats;
-    }
-
-    return {
-      new: rollup.new,
-      learning: rollup.learning,
-      reviewing: rollup.reviewing,
-      mastered: rollup.mastered,
-      total: rollup.total,
-      due,
-      learningDue,
-    };
+    return { ...status, due, learningDue };
   },
 });
 

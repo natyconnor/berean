@@ -42,7 +42,7 @@ export function PreviewMemorySeedCard({
   autoSeed = false,
 }: {
   now: number;
-  /** Hearted verse count from `memoryStats.total`. Undefined while loading. */
+  /** Hearted verse count from `memoryStatus.total`. Undefined while loading. */
   heartedTotal: number | undefined;
   /** Preview deploys and local `pnpm dev`. Hidden in production. */
   enabled: boolean;

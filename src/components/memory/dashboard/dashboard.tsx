@@ -19,6 +19,9 @@ const TREND_DAYS = 30;
 const FORECAST_DAYS = 14;
 
 type MemoryStats = FunctionReturnType<typeof api.verseMemory.memoryStats>;
+type MemoryStatusCounts = FunctionReturnType<
+  typeof api.verseMemory.memoryStatus
+>;
 
 /**
  * The Memory progress dashboard: a "Today" hero (keeping Review reachable),
@@ -26,18 +29,20 @@ type MemoryStats = FunctionReturnType<typeof api.verseMemory.memoryStats>;
  * supplied by the caller (never `Date.now()` inside Convex). Day buckets use
  * the viewer's IANA timezone so streaks and heatmaps follow local midnights.
  *
- * Each section loads independently — the Today hero + Review render as
- * soon as `memoryStats` (the due count) resolves, so the primary review action
- * is never blocked on the heatmap/trend/forecast/distribution aggregates.
+ * Each section loads independently — Mastery / in-memory KPIs use
+ * `memoryStatus` (O(1) rollup) so they are not blocked on the due scan inside
+ * `memoryStats`. The Today hero + Review wait on that due half only.
  */
 export function MemoryDashboard({
   now,
   stats,
+  status,
   onStartReview,
   onStartLearning,
 }: {
   now: number;
   stats: MemoryStats | undefined;
+  status: MemoryStatusCounts | undefined;
   onStartReview: () => void;
   onStartLearning: () => void;
 }) {
@@ -59,9 +64,9 @@ export function MemoryDashboard({
       ? undefined
       : computeStreak(activity.heatmap.map((d) => d.count));
   const inMemory =
-    stats === undefined
+    status === undefined
       ? undefined
-      : stats.learning + stats.reviewing + stats.mastered;
+      : status.learning + status.reviewing + status.mastered;
   const accuracy30d =
     activity === undefined
       ? undefined
@@ -102,10 +107,10 @@ export function MemoryDashboard({
           {activity ? <PracticeHeatmap data={activity.heatmap} /> : null}
         </ChartSlot>
         <ChartSlot
-          loading={stats === undefined}
+          loading={status === undefined}
           skeleton={<ChartSkeleton title="Mastery" />}
         >
-          {stats ? <MasteryDonut data={stats} /> : null}
+          {status ? <MasteryDonut data={status} /> : null}
         </ChartSlot>
         <ChartSlot
           loading={activity === undefined}
