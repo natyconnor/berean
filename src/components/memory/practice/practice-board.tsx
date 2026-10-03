@@ -568,7 +568,7 @@ export function PracticeBoard({
         stageReps: next.stageReps,
         status: next.status,
         dueAt: next.dueAt,
-        lastReviewedAt: Date.now(),
+        lastReviewedAt: now,
         ease: next.ease,
         intervalDays: next.intervalDays,
         consecutiveCorrect: next.consecutiveCorrect,

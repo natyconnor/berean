@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
+import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 
@@ -463,6 +464,47 @@ describe("PracticeBoard learning step label", () => {
     expect(
       await screen.findByText(/Guided · 2 of \d+ today/),
     ).toBeInTheDocument();
+  });
+
+  it("ends the day after clearing Guided instead of opening Challenge", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 2,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + MIN_LEARNING_LOCK_MS,
+      consecutiveCorrect: 3,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...guidedVerse, stageReps: 2 }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(
+      await screen.findByText("Today's learning is done"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Challenge tomorrow/)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Your recalled verse"),
+    ).not.toBeInTheDocument();
   });
 });
 

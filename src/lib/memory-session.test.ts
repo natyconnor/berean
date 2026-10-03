@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DAY_MS } from "./memory-scheduler";
+import { DAY_MS, MIN_LEARNING_LOCK_MS } from "./memory-scheduler";
 import {
   hasSessionWorkLeft,
   isLearningSessionCandidate,
@@ -183,6 +183,20 @@ describe("hasSessionWorkLeft", () => {
           status: "learning",
           dueAt: NOW + DAY_MS,
           lastReviewedAt: NOW,
+        },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  it("ends Learning when lastReviewedAt is slightly after a 6-hour floor lock", () => {
+    expect(
+      hasSessionWorkLeft(
+        "learning",
+        {
+          status: "learning",
+          dueAt: NOW + MIN_LEARNING_LOCK_MS,
+          lastReviewedAt: NOW + 2_000,
         },
         NOW,
       ),
