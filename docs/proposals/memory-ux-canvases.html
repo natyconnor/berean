@@ -1,0 +1,1406 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memory UX canvases — Berean</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --page: #efe8d8;
+        --ink: #241c12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e0d6c2;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --sans: "Source Sans 3", system-ui, sans-serif;
+        --serif: "Cormorant Garamond", Georgia, serif;
+        --bg: oklch(0.97 0.002 80);
+        --fg: oklch(0.2 0.03 70);
+        --card: oklch(0.985 0.01 80);
+        --muted: oklch(0.45 0.04 65);
+        --muted-bg: oklch(0.94 0.02 78);
+        --primary: oklch(0.42 0.1 58);
+        --primary-fg: oklch(0.98 0.01 80);
+        --border: oklch(0.88 0.035 75);
+        --amber: #d97706;
+        --sky: #0ea5e9;
+        --emerald: #10b981;
+        --slate: #94a3b8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        min-height: 100%;
+      }
+      button,
+      a {
+        font-family: inherit;
+      }
+      aside {
+        border-right: 1px solid var(--hairline);
+        padding: 28px 20px 40px;
+        overflow: auto;
+        background: color-mix(in oklab, var(--page) 88%, white);
+      }
+      .brand {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      h1 {
+        font-family: var(--serif);
+        font-size: 28px;
+        line-height: 1.15;
+        margin: 8px 0 10px;
+        font-weight: 600;
+      }
+      .lede {
+        font-size: 13.5px;
+        color: var(--ink-2);
+        line-height: 1.5;
+        margin: 0 0 22px;
+      }
+      nav {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      nav button {
+        text-align: left;
+        border: 0;
+        background: transparent;
+        border-radius: 10px;
+        padding: 9px 10px;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      nav button:hover {
+        background: color-mix(in oklab, white 55%, var(--page));
+      }
+      nav button.active {
+        background: white;
+        box-shadow: 0 0 0 1px var(--hairline);
+      }
+      nav .kicker {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+      nav .title {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 1px;
+      }
+      .note {
+        margin-top: 24px;
+        font-size: 12px;
+        color: var(--ink-3);
+        line-height: 1.45;
+      }
+      main {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        min-width: 0;
+        min-height: 100vh;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 28px 0;
+      }
+      .toolbar h2 {
+        font-family: var(--serif);
+        font-size: 26px;
+        margin: 0;
+        font-weight: 600;
+      }
+      .toolbar p {
+        margin: 4px 0 0;
+        color: var(--ink-2);
+        font-size: 14px;
+        max-width: 62ch;
+        line-height: 1.45;
+      }
+      .toggles {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .toggles button {
+        border: 1px solid var(--hairline);
+        background: white;
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        color: var(--ink-2);
+      }
+      .toggles button.active {
+        background: var(--ink);
+        color: #f7f1e4;
+        border-color: var(--ink);
+      }
+      .notices {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 14px 28px 8px;
+      }
+      .chip {
+        font-size: 12.5px;
+        background: white;
+        border: 1px solid var(--hairline);
+        border-radius: 999px;
+        padding: 6px 11px;
+        color: var(--ink-2);
+      }
+      .chip strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .stage {
+        padding: 8px 28px 40px;
+        overflow: auto;
+      }
+      .app {
+        --radius: 12px;
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        overflow: hidden;
+        position: relative;
+        box-shadow:
+          0 1px 2px rgba(50, 35, 15, 0.04),
+          0 18px 40px rgba(50, 35, 15, 0.08);
+        max-width: 1120px;
+        margin: 0 auto;
+        min-height: 720px;
+      }
+      body.compact .app {
+        max-width: 390px;
+        min-height: 760px;
+      }
+      .app-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 18px 22px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+      }
+      .app-header h3 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      .app-header p {
+        margin: 3px 0 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .scroll {
+        padding: 22px;
+        padding-bottom: 88px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 8px 12px;
+        cursor: pointer;
+        background: var(--primary);
+        color: var(--primary-fg);
+      }
+      .btn.lg {
+        padding: 10px 14px;
+        font-size: 14px;
+      }
+      .btn.ghost {
+        background: var(--card);
+        color: var(--fg);
+        border-color: var(--border);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .btn.sm {
+        padding: 5px 9px;
+        font-size: 12px;
+        border-radius: 7px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 1px 2px rgba(50, 35, 15, 0.04);
+      }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+      .kpi {
+        padding: 12px;
+      }
+      .kpi span {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .kpi b {
+        display: block;
+        margin-top: 6px;
+        font-size: 24px;
+        letter-spacing: -0.03em;
+      }
+      .charts {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-top: 14px;
+      }
+      .chart {
+        padding: 14px;
+        min-height: 148px;
+      }
+      .chart h4 {
+        margin: 0 0 10px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .heat {
+        display: grid;
+        grid-template-columns: repeat(14, 1fr);
+        gap: 3px;
+      }
+      .heat i {
+        display: block;
+        aspect-ratio: 1;
+        border-radius: 2px;
+        background: color-mix(in oklab, var(--amber) var(--o, 18%), white);
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1.6fr 1fr;
+        gap: 22px;
+        margin-top: 22px;
+      }
+      .label-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+      }
+      .tab {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 9px;
+        border-radius: 7px;
+        cursor: pointer;
+      }
+      .tab.on {
+        background: var(--muted-bg);
+        color: var(--fg);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 99px;
+        background: var(--sky);
+        flex-shrink: 0;
+      }
+      .row .meta {
+        flex: 1;
+        min-width: 0;
+      }
+      .row .meta b {
+        display: block;
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+      .row .meta span {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .search {
+        width: 100%;
+        border: 1px solid var(--border);
+        background: var(--card);
+        border-radius: 8px;
+        padding: 8px 12px 8px 32px;
+        font-size: 13px;
+        color: var(--fg);
+        margin-bottom: 10px;
+      }
+      .search-wrap {
+        position: relative;
+      }
+      .search-wrap svg {
+        position: absolute;
+        left: 10px;
+        top: 9px;
+        color: var(--muted);
+      }
+      .pack {
+        display: flex;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        align-items: center;
+      }
+      .pack-ico {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: color-mix(in oklab, var(--primary) 12%, white);
+        color: var(--primary);
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .hero {
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+      .hero .kicker {
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .hero h4 {
+        margin: 4px 0 6px;
+        font-size: 26px;
+        letter-spacing: -0.03em;
+        font-weight: 650;
+      }
+      .hero p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      .dock {
+        position: absolute;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 4px;
+        padding: 5px;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--card) 92%, white);
+        border: 1px solid var(--border);
+        box-shadow: 0 10px 30px rgba(50, 35, 15, 0.12);
+      }
+      .dock span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .dock span.on {
+        background: var(--primary);
+        color: var(--primary-fg);
+      }
+      .badge {
+        min-width: 18px;
+        height: 18px;
+        border-radius: 99px;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        background: var(--primary-fg);
+        color: var(--primary);
+      }
+      body.compact .kpis,
+      body.compact .charts,
+      body.compact .split,
+      body.compact .desk-grid,
+      body.compact .starts,
+      body.compact .passages,
+      body.compact .famous {
+        grid-template-columns: 1fr;
+      }
+      .desk-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 16px;
+      }
+      .verse {
+        font-family: var(--serif);
+        font-size: 17px;
+        line-height: 1.45;
+        color: color-mix(in oklab, var(--fg) 88%, var(--primary));
+      }
+      .passage-card {
+        padding: 14px 16px;
+        margin-bottom: 8px;
+        cursor: pointer;
+      }
+      .passage-card h5 {
+        margin: 0;
+        font-size: 15px;
+      }
+      .bar {
+        height: 4px;
+        border-radius: 99px;
+        background: var(--muted-bg);
+        margin-top: 10px;
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--primary);
+        border-radius: inherit;
+      }
+      .quiet {
+        margin-top: 18px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .quiet a {
+        color: var(--primary);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .reader {
+        display: grid;
+        grid-template-columns: 36px 1fr 84px;
+        gap: 8px;
+        align-items: start;
+      }
+      .vnum {
+        font-size: 12px;
+        color: var(--muted);
+        padding-top: 5px;
+        text-align: right;
+      }
+      .vtext {
+        font-family: var(--serif);
+        font-size: 19px;
+        line-height: 1.5;
+      }
+      .vtext.known {
+        background: linear-gradient(
+          transparent 70%,
+          color-mix(in oklab, var(--primary) 18%, transparent) 70%
+        );
+      }
+      .vtext.next {
+        box-shadow: inset 3px 0 0 var(--primary);
+        padding-left: 8px;
+      }
+      .heartcol {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding-top: 2px;
+      }
+      .heart {
+        width: 32px;
+        height: 32px;
+        border: 0;
+        background: transparent;
+        color: #dc2626;
+        cursor: pointer;
+        border-radius: 8px;
+      }
+      .mem-btn {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border: 1px solid var(--border);
+        background: var(--card);
+        border-radius: 6px;
+        padding: 4px 6px;
+        cursor: pointer;
+        color: var(--primary);
+      }
+      .sheet {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background: rgba(36, 28, 18, 0.28);
+        place-items: end center;
+        padding: 18px;
+        z-index: 5;
+      }
+      .sheet.open {
+        display: grid;
+      }
+      .sheet .card {
+        width: min(420px, 100%);
+        padding: 18px;
+        margin-bottom: 48px;
+      }
+      .sheet h4 {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+      .sheet p {
+        margin: 0 0 14px;
+        color: var(--muted);
+        font-size: 13.5px;
+        line-height: 1.45;
+      }
+      .starts {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin: 14px 0 22px;
+      }
+      .start {
+        padding: 18px;
+        cursor: pointer;
+      }
+      .start h5 {
+        margin: 0 0 6px;
+        font-size: 16px;
+      }
+      .start p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .famous {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .famous .card {
+        padding: 14px;
+        cursor: pointer;
+      }
+      .passages {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .lib-line {
+        font-family: var(--serif);
+        font-size: 15px;
+        margin-top: 2px;
+        color: var(--fg);
+      }
+      .group-title {
+        margin: 18px 0 8px;
+        font-size: 12px;
+        font-weight: 650;
+        color: var(--muted);
+      }
+      .session {
+        max-width: 520px;
+        margin: 40px auto 0;
+        padding: 22px;
+      }
+      .session h4 {
+        margin: 0 0 4px;
+      }
+      .mask {
+        font-family: var(--serif);
+        font-size: 22px;
+        line-height: 1.5;
+        margin: 16px 0;
+      }
+      .hidden-canvas {
+        display: none;
+      }
+      .compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+      body.compact .compare {
+        grid-template-columns: 1fr;
+      }
+      .compare .app {
+        min-height: 0;
+        max-height: 820px;
+        overflow: auto;
+        transform-origin: top center;
+      }
+      .frame-label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin: 0 0 8px 6px;
+      }
+      .tiny-charts .chart {
+        min-height: 88px;
+        padding: 10px;
+      }
+      .tiny-charts .charts {
+        grid-template-columns: 1fr 1fr;
+      }
+      .compare-desk .desk-grid,
+      .compare-desk .passages {
+        grid-template-columns: 1fr;
+      }
+      @media (max-width: 980px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          border-right: 0;
+          border-bottom: 1px solid var(--hairline);
+        }
+        nav {
+          flex-direction: row;
+          overflow: auto;
+        }
+        nav button {
+          min-width: 160px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <div class="brand">Berean · design</div>
+      <h1>Memory canvases</h1>
+      <p class="lede">
+        Click through the directions from the critique. These are feel-sketches,
+        not specs — same Warm Manuscript chrome, different jobs on the page.
+      </p>
+      <nav id="nav"></nav>
+      <p class="note">
+        Static HTML. Open this file directly, or from
+        <code>docs/proposals/memory-ux-canvases.html</code>.
+      </p>
+    </aside>
+    <main>
+      <div class="toolbar">
+        <div>
+          <h2 id="heading">Now</h2>
+          <p id="subhead">
+            The current home: a spaced-repetition dashboard. Work is a counter.
+          </p>
+        </div>
+        <div class="toggles" role="group" aria-label="Frame size">
+          <button type="button" id="wideBtn" class="active">Wide</button>
+          <button type="button" id="compactBtn">Compact</button>
+        </div>
+      </div>
+      <div class="notices" id="notices"></div>
+      <div class="stage">
+        <div id="stage"></div>
+      </div>
+    </main>
+
+    <script>
+      const canvases = [
+        {
+          id: "compare",
+          kicker: "01",
+          title: "Now vs desk",
+          heading: "Same person, two homes",
+          sub: "Left is today’s Memory. Right is the same returning user, with the work named.",
+          notices: [
+            "Hero is a named passage, not a due total",
+            "Charts leave the first screen",
+            "Packs become stories with verse text",
+          ],
+        },
+        {
+          id: "desk",
+          kicker: "02",
+          title: "The desk",
+          heading: "Returning home",
+          sub: "One next action. Passages you already care about. A way to start something without a wizard.",
+          notices: [
+            "Continue Psalm 1 is the only primary button",
+            "Recite is secondary, because learning is still the job",
+            "Progress is a sentence, not four widgets",
+          ],
+        },
+        {
+          id: "first",
+          kicker: "03",
+          title: "First visit",
+          heading: "Start from desire",
+          sub: "No empty charts. The first Memory screen should help you pick a chapter or verse and begin.",
+          notices: [
+            "Famous chapters with first lines",
+            "Search is a Bible search, not a list filter",
+            "No pack types, no glossary",
+          ],
+        },
+        {
+          id: "reader",
+          kicker: "04",
+          title: "From the page",
+          heading: "Memorize Psalm 1 where it lives",
+          sub: "The chapter is the object. Hearting can still save; Memorize is the verb that starts work.",
+          notices: [
+            "Chapter action: Memorize Psalm 1",
+            "Verse action is visible, not hover-only",
+            "Click Memorize to feel the sheet",
+          ],
+        },
+        {
+          id: "starts",
+          kicker: "05",
+          title: "Two starts",
+          heading: "Passage or verse — not a factory",
+          sub: "Replace New pack → Scope / Custom / Preset with the two things people actually want.",
+          notices: [
+            "A passage becomes one recitation",
+            "A verse starts learning now",
+            "Lists and groups come later, if at all",
+          ],
+        },
+        {
+          id: "library",
+          kicker: "06",
+          title: "Library as Scripture",
+          heading: "Show the words",
+          sub: "If a list remains, it should look like verses you are carrying — not a queue of references.",
+          notices: [
+            "Ready / still learning / saved",
+            "First line of the text on every row",
+            "One action: Recite, Continue, or Start",
+          ],
+        },
+        {
+          id: "progress",
+          kicker: "07",
+          title: "In the text",
+          heading: "Progress lives in the Word",
+          sub: "Mastery should be visible on the page you read, not only on a donut in Memory.",
+          notices: [
+            "Known lines are marked in the chapter",
+            "Next section is obvious",
+            "After a session: a sentence, not a stats dump",
+          ],
+        },
+        {
+          id: "caught",
+          kicker: "08",
+          title: "Caught up",
+          heading: "Still a place to grow",
+          sub: "When nothing is due, don’t park a disabled Review button on a dashboard. Invite one more line.",
+          notices: [
+            "Caught-up is warm, not empty",
+            "Psalm 1 can still grow",
+            "Optional extra practice is tucked away",
+          ],
+        },
+      ];
+
+      const ico = {
+        play: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 4 20 12 6 20 6 4"/></svg>`,
+        cap: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`,
+        layers: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>`,
+        search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`,
+        heart: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 12.6 12 20l-7.5-7.4a5 5 0 1 1 7.5-6.6 5 5 0 1 1 7.5 6.6z"/></svg>`,
+        heartOff: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.5 12.6 12 20l-7.5-7.4a5 5 0 1 1 7.5-6.6 5 5 0 1 1 7.5 6.6z"/></svg>`,
+      };
+
+      function dockHtml(count) {
+        const badge =
+          count > 0 ? ` Memory <i class="badge">${count}</i>` : " Memory";
+        return `<div class="dock" aria-hidden="true">
+        <span>Notes</span>
+        <span class="on">${badge}</span>
+        <span>Study</span>
+      </div>`;
+      }
+
+      function heat() {
+        return Array.from({ length: 56 }, (_, i) => {
+          const o = [12, 18, 28, 45, 70, 22, 8][i % 7];
+          return `<i style="--o:${o}%"></i>`;
+        }).join("");
+      }
+
+      function nowBody(opts = {}) {
+        const tiny = opts.tiny ? "tiny-charts" : "";
+        return `
+        <header class="app-header">
+          <div>
+            <h3>Memory</h3>
+            <p>Review verses and passages, or start something new</p>
+          </div>
+          <button class="btn ghost sm">${ico.play} Practice All</button>
+        </header>
+        <div class="scroll">
+          <div class="card hero">
+            <div>
+              <div class="kicker">Today</div>
+              <h4>4 to learn · 5 to review</h4>
+              <p>Continue learning sessions, then clear today's reviews.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn ghost lg">${ico.cap} Continue Learning</button>
+              <button class="btn lg">${ico.play} Review</button>
+            </div>
+          </div>
+          <div class="kpis" style="margin-top:12px">
+            <div class="card kpi"><span>Due today</span><b>9</b></div>
+            <div class="card kpi"><span>Day streak</span><b>0</b></div>
+            <div class="card kpi"><span>In memory</span><b>8</b></div>
+            <div class="card kpi"><span>30d accuracy</span><b>98%</b></div>
+          </div>
+          <div class="charts ${tiny}">
+            <div class="card chart"><h4>Practice</h4><div class="heat">${heat()}</div></div>
+            <div class="card chart"><h4>Mastery</h4><div style="font-size:28px;font-weight:700;color:#0ea5e9">100%</div><div style="font-size:12px;color:var(--muted)">Reviewing · 8 started</div></div>
+            <div class="card chart"><h4>Accuracy trend</h4><div style="height:54px;background:linear-gradient(#f9731633,#f9731608);border-radius:8px;border:1px solid #f9731622"></div></div>
+            <div class="card chart"><h4>Upcoming</h4><div style="display:flex;gap:8px;align-items:end;height:54px"><i style="width:18px;height:90%;background:#ea580c;border-radius:3px"></i><i style="width:18px;height:20%;background:#fdbA74;border-radius:3px"></i><i style="width:18px;height:20%;background:#fdbA74;border-radius:3px"></i></div></div>
+          </div>
+          <div class="split">
+            <div>
+              <div class="label-row"><span class="eyebrow">Library</span>
+                <div class="tabs"><span class="tab on">Due</span><span class="tab">In memory</span><span class="tab">Not started</span></div>
+              </div>
+              <div class="search-wrap">${ico.search}<input class="search" value="" placeholder="Filter this list…" readonly></div>
+              ${[
+                ["Luke 9:23-24", "Reviewing · Due now"],
+                ["Matthew 6:33", "Reviewing · Due now"],
+                ["Deuteronomy 6:4-5", "Reviewing · Due now"],
+                ["2 Corinthians 4:7-10", "Reviewing · Due now"],
+              ]
+                .map(
+                  ([r, s]) =>
+                    `<div class="card row"><i class="dot"></i><div class="meta"><b>${r}</b><span>${s}</span></div><button class="btn sm">${ico.play} Review</button></div>`,
+                )
+                .join("")}
+            </div>
+            <div>
+              <div class="label-row"><span class="eyebrow">Packs</span>
+                <div style="display:flex;gap:6px"><button class="btn ghost sm">Browse presets</button><button class="btn ghost sm">+ New pack</button></div>
+              </div>
+              ${[
+                ["Psalm 23", "Passage · 0 of 6 memorized · due today"],
+                ["Psalm 1", "Passage · 0 of 4 memorized · due today"],
+                ["Merced Team", "Custom · 9 verses · 5 due"],
+                ["Psalm 16", "Passage · 4 of 11 memorized · due today"],
+              ]
+                .map(
+                  ([n, s]) =>
+                    `<div class="card pack"><div class="pack-ico">${ico.layers}</div><div class="meta"><b>${n}</b><span>${s}</span></div></div>`,
+                )
+                .join("")}
+            </div>
+          </div>
+        </div>
+        ${dockHtml(9)}`;
+      }
+
+      function deskBody(compare) {
+        const cls = compare ? "compare-desk" : "";
+        return `
+        <header class="app-header">
+          <div>
+            <h3>Memory</h3>
+            <p>Keep what you’ve started. Add what you want next.</p>
+          </div>
+        </header>
+        <div class="scroll ${cls}">
+          <div class="card hero">
+            <div style="min-width:0">
+              <div class="kicker">Continue</div>
+              <h4>Psalm 1</h4>
+              <p>2 of 4 sections · next, verses 4–6</p>
+              <p class="verse" style="margin-top:8px">Blessed is the man that walketh not in the counsel of the ungodly…</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn lg">${ico.cap} Continue</button>
+              <button class="btn ghost sm">Recite 5 due verses</button>
+            </div>
+          </div>
+          <div class="desk-grid" style="margin-top:18px">
+            <div>
+              <div class="eyebrow" style="margin-bottom:10px">Your passages</div>
+              <div class="passages">
+                <div class="card passage-card">
+                  <h5>Psalm 1</h5>
+                  <div class="verse" style="font-size:15px;margin-top:4px">Blessed is the man that walketh not…</div>
+                  <div class="bar"><i style="width:50%"></i></div>
+                  <span style="font-size:12px;color:var(--muted)">2 of 4 sections</span>
+                </div>
+                <div class="card passage-card">
+                  <h5>Psalm 23</h5>
+                  <div class="verse" style="font-size:15px;margin-top:4px">The Lord is my shepherd; I shall not want.</div>
+                  <div class="bar"><i style="width:8%"></i></div>
+                  <span style="font-size:12px;color:var(--muted)">Just started</span>
+                </div>
+                <div class="card passage-card">
+                  <h5>Psalm 8</h5>
+                  <div class="verse" style="font-size:15px;margin-top:4px">O Lord, our Lord, how majestic is your name…</div>
+                  <div class="bar"><i style="width:20%"></i></div>
+                  <span style="font-size:12px;color:var(--muted)">1 of 6 sections</span>
+                </div>
+                <div class="card passage-card">
+                  <h5>Merced Team</h5>
+                  <div style="font-size:13px;color:var(--muted);margin-top:4px">A list of 9 verses · 5 ready to recite</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="eyebrow" style="margin-bottom:10px">Start something</div>
+              <div class="search-wrap">${ico.search}<input class="search" placeholder="Psalm 1, John 3:16, peace…" readonly></div>
+              <div class="card passage-card">
+                <h5>Psalm 1</h5>
+                <div class="verse" style="font-size:15px;margin-top:4px">Blessed is the man that walketh not…</div>
+                <button class="btn sm" style="margin-top:10px">Memorize</button>
+              </div>
+              <div class="card passage-card">
+                <h5>John 3:16</h5>
+                <div class="verse" style="font-size:15px;margin-top:4px">For God so loved the world, that he gave his only begotten Son…</div>
+                <button class="btn sm" style="margin-top:10px">Memorize</button>
+              </div>
+              <p class="quiet"><a href="#">See progress</a> · 268 practices this year</p>
+            </div>
+          </div>
+        </div>
+        ${dockHtml(9)}`;
+      }
+
+      function firstBody() {
+        return `
+        <header class="app-header">
+          <div>
+            <h3>Memory</h3>
+            <p>What do you want to carry with you?</p>
+          </div>
+        </header>
+        <div class="scroll">
+          <div class="search-wrap" style="max-width:520px">${ico.search}<input class="search" placeholder="A chapter, a verse, a word…" readonly></div>
+          <div class="eyebrow" style="margin:18px 0 10px">Start with something well-loved</div>
+          <div class="famous">
+            ${[
+              [
+                "Psalm 1",
+                "Blessed is the man that walketh not in the counsel of the ungodly…",
+              ],
+              ["Psalm 23", "The Lord is my shepherd; I shall not want."],
+              [
+                "John 1",
+                "In the beginning was the Word, and the Word was with God…",
+              ],
+              [
+                "The Beatitudes",
+                "Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
+              ],
+            ]
+              .map(
+                ([t, l]) =>
+                  `<div class="card"><h5 style="margin:0 0 6px">${t}</h5><div class="verse" style="font-size:16px">${l}</div><button class="btn sm" style="margin-top:12px">Memorize</button></div>`,
+              )
+              .join("")}
+          </div>
+          <p class="quiet">Already reading a chapter? Open it and tap <strong>Memorize</strong> on the page.</p>
+        </div>
+        ${dockHtml(0)}`;
+      }
+
+      function readerBody() {
+        const verses = [
+          [
+            1,
+            "Blessed is the man that walketh not in the counsel of the ungodly, nor standeth in the way of sinners, nor sitteth in the seat of the scornful.",
+          ],
+          [
+            2,
+            "But his delight is in the law of the Lord; and in his law doth he meditate day and night.",
+          ],
+          [
+            3,
+            "And he shall be like a tree planted by the rivers of water, that bringeth forth his fruit in his season; his leaf also shall not wither; and whatsoever he doeth shall prosper.",
+          ],
+          [
+            4,
+            "The ungodly are not so: but are like the chaff which the wind driveth away.",
+          ],
+          [
+            5,
+            "Therefore the ungodly shall not stand in the judgment, nor sinners in the congregation of the righteous.",
+          ],
+          [
+            6,
+            "For the Lord knoweth the way of the righteous: but the way of the ungodly shall perish.",
+          ],
+        ];
+        return `
+        <header class="app-header">
+          <div>
+            <h3 style="font-family:var(--serif);font-size:22px">Psalm 1</h3>
+            <p>Notes beside the text · Memory is a verb on this chapter</p>
+          </div>
+          <button class="btn" data-open-sheet>Memorize Psalm 1</button>
+        </header>
+        <div class="scroll">
+          ${verses
+            .map(
+              ([n, t]) => `
+            <div class="reader" style="margin-bottom:14px">
+              <div class="vnum">${n}</div>
+              <div class="vtext">${t}</div>
+              <div class="heartcol">
+                <button class="heart" style="color:var(--muted)" title="Save for later" aria-label="Save verse ${n} for later">${ico.heartOff}</button>
+                <button class="mem-btn" data-open-sheet>Memorize</button>
+              </div>
+            </div>`,
+            )
+            .join("")}
+        </div>
+        <div class="sheet" id="sheet">
+          <div class="card">
+            <h4>Memorize Psalm 1</h4>
+            <p>Learn it as one recitation — four short sections, growing until you can say the whole psalm.</p>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn lg">${ico.cap} Start the psalm</button>
+              <button class="btn ghost">Just this verse</button>
+              <button class="btn ghost" data-close-sheet>Save for later</button>
+            </div>
+          </div>
+        </div>
+        ${dockHtml(0)}`;
+      }
+
+      function startsBody() {
+        return `
+        <header class="app-header">
+          <div>
+            <h3>Memorize</h3>
+            <p>A passage you recite as one, or a verse to begin today.</p>
+          </div>
+        </header>
+        <div class="scroll">
+          <div class="search-wrap">${ico.search}<input class="search" id="startSearch" placeholder="Search chapters or verses"></div>
+          <div class="starts">
+            <div class="card start">
+              <h5>A passage</h5>
+              <p>A chapter or stretch. You learn it as one growing recitation — Psalm 1, not six separate cards.</p>
+            </div>
+            <div class="card start">
+              <h5>A verse</h5>
+              <p>Pick one verse, start the first reading now. Hearting happens for you.</p>
+            </div>
+          </div>
+          <div class="eyebrow">Famous passages</div>
+          <div class="famous" style="margin-top:10px">
+            ${[
+              ["Psalm 1", "6 verses · about 4 sections"],
+              ["Psalm 23", "6 verses"],
+              ["John 14", "A longer chapter — we’ll pace it"],
+              ["Romans 8:1–11", "A defined stretch"],
+            ]
+              .map(
+                ([t, s]) =>
+                  `<div class="card"><h5 style="margin:0">${t}</h5><p style="margin:4px 0 10px;color:var(--muted);font-size:13px">${s}</p><button class="btn sm">Memorize</button></div>`,
+              )
+              .join("")}
+          </div>
+        </div>
+        ${dockHtml(0)}`;
+      }
+
+      function libraryBody() {
+        const row = (ref, line, action, cls) => `
+          <div class="card row">
+            <i class="dot" style="background:${cls}"></i>
+            <div class="meta">
+              <b>${ref}</b>
+              <span class="lib-line">${line}</span>
+            </div>
+            <button class="btn sm ${action === "Start" || action === "Continue" ? "ghost" : ""}">${action}</button>
+          </div>`;
+        return `
+        <header class="app-header">
+          <div>
+            <h3>Your verses</h3>
+            <p>The words, then the next step. No Due / In memory / Not started tabs.</p>
+          </div>
+        </header>
+        <div class="scroll" style="max-width:720px">
+          <div class="search-wrap">${ico.search}<input class="search" placeholder="Search the verses you’re carrying" readonly></div>
+          <div class="group-title">Ready today</div>
+          ${row("Luke 9:23-24", "If any man will come after me, let him deny himself…", "Recite", "var(--sky)")}
+          ${row("Matthew 6:33", "But seek ye first the kingdom of God, and his righteousness…", "Recite", "var(--sky)")}
+          <div class="group-title">Still learning</div>
+          ${row("Psalm 16:1-2", "Preserve me, O God: for in thee do I put my trust.", "Continue", "var(--amber)")}
+          ${row("Deuteronomy 6:4-5", "Hear, O Israel: The Lord our God is one Lord.", "Continue", "var(--amber)")}
+          <div class="group-title">Saved, not started</div>
+          ${row("Ephesians 2:10", "For we are his workmanship, created in Christ Jesus…", "Start", "var(--slate)")}
+        </div>
+        ${dockHtml(9)}`;
+      }
+
+      function progressBody() {
+        const verses = [
+          [
+            1,
+            "Blessed is the man that walketh not in the counsel of the ungodly…",
+            "known",
+          ],
+          [
+            2,
+            "But his delight is in the law of the Lord; and in his law doth he meditate day and night.",
+            "known",
+          ],
+          [
+            3,
+            "And he shall be like a tree planted by the rivers of water…",
+            "known",
+          ],
+          [
+            4,
+            "The ungodly are not so: but are like the chaff which the wind driveth away.",
+            "next",
+          ],
+          [5, "Therefore the ungodly shall not stand in the judgment…", ""],
+          [
+            6,
+            "For the Lord knoweth the way of the righteous: but the way of the ungodly shall perish.",
+            "",
+          ],
+        ];
+        return `
+        <header class="app-header">
+          <div>
+            <h3 style="font-family:var(--serif);font-size:22px">Psalm 1</h3>
+            <p>2 of 4 sections in your mouth · next, verses 4–6</p>
+          </div>
+          <button class="btn ghost sm">Continue in Memory</button>
+        </header>
+        <div class="scroll">
+          ${verses
+            .map(
+              ([n, t, kind]) => `
+            <div class="reader" style="margin-bottom:14px">
+              <div class="vnum">${n}</div>
+              <div class="vtext ${kind}">${t}</div>
+              <div class="heartcol">${
+                kind === "known"
+                  ? `<button class="heart">${ico.heart}</button><span style="font-size:10px;color:var(--muted)">solid</span>`
+                  : kind === "next"
+                    ? `<button class="mem-btn">Next</button>`
+                    : `<button class="heart" style="color:var(--muted)">${ico.heartOff}</button>`
+              }</div>
+            </div>`,
+            )
+            .join("")}
+          <div class="card session">
+            <div class="kicker">After today’s session</div>
+            <h4>Psalm 1:1–3 is solid.</h4>
+            <p style="color:var(--muted);margin:6px 0 0">Tomorrow you’ll add verses 4–6. The ungodly are not so…</p>
+          </div>
+        </div>
+        ${dockHtml(1)}`;
+      }
+
+      function caughtBody() {
+        return `
+        <header class="app-header">
+          <div>
+            <h3>Memory</h3>
+            <p>Nothing is waiting on you. You could still grow a psalm.</p>
+          </div>
+        </header>
+        <div class="scroll">
+          <div class="card hero">
+            <div>
+              <div class="kicker">Today</div>
+              <h4>You’re caught up</h4>
+              <p>Psalm 1 is halfway. One more section would take a few minutes.</p>
+            </div>
+            <button class="btn lg">${ico.cap} Learn verses 4–6</button>
+          </div>
+          <div class="passages" style="margin-top:16px">
+            <div class="card passage-card">
+              <h5>Psalm 1</h5>
+              <div class="bar"><i style="width:50%"></i></div>
+              <span style="font-size:12px;color:var(--muted)">Next due in 2 days</span>
+            </div>
+            <div class="card passage-card">
+              <h5>John 3:16</h5>
+              <div class="verse" style="font-size:15px;margin-top:4px">For God so loved the world…</div>
+              <button class="btn sm" style="margin-top:10px">Memorize</button>
+            </div>
+          </div>
+          <p class="quiet">Want extra recall anyway? <a href="#">Practice a verse that’s already solid</a></p>
+        </div>
+        ${dockHtml(0)}`;
+      }
+
+      const render = {
+        compare() {
+          return `<div class="compare">
+            <div><p class="frame-label">Now</p><div class="app">${nowBody({ tiny: true })}</div></div>
+            <div><p class="frame-label">Proposed</p><div class="app">${deskBody(true)}</div></div>
+          </div>`;
+        },
+        desk: () => `<div class="app">${deskBody(false)}</div>`,
+        first: () => `<div class="app">${firstBody()}</div>`,
+        reader: () => `<div class="app">${readerBody()}</div>`,
+        starts: () => `<div class="app">${startsBody()}</div>`,
+        library: () => `<div class="app">${libraryBody()}</div>`,
+        progress: () => `<div class="app">${progressBody()}</div>`,
+        caught: () => `<div class="app">${caughtBody()}</div>`,
+      };
+
+      const nav = document.getElementById("nav");
+      const stage = document.getElementById("stage");
+      const heading = document.getElementById("heading");
+      const subhead = document.getElementById("subhead");
+      const notices = document.getElementById("notices");
+      let current = "compare";
+
+      canvases.forEach((c) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.id = c.id;
+        b.innerHTML = `<span class="kicker">${c.kicker}</span><span class="title">${c.title}</span>`;
+        b.addEventListener("click", () => show(c.id));
+        nav.appendChild(b);
+      });
+
+      function bindStage() {
+        const sheet = stage.querySelector("#sheet");
+        stage.querySelectorAll("[data-open-sheet]").forEach((el) => {
+          el.addEventListener(
+            "click",
+            () => sheet && sheet.classList.add("open"),
+          );
+        });
+        stage.querySelectorAll("[data-close-sheet]").forEach((el) => {
+          el.addEventListener(
+            "click",
+            () => sheet && sheet.classList.remove("open"),
+          );
+        });
+        if (sheet) {
+          sheet.addEventListener("click", (e) => {
+            if (e.target === sheet) sheet.classList.remove("open");
+          });
+        }
+        const startSearch = stage.querySelector("#startSearch");
+        if (startSearch) {
+          startSearch.addEventListener("input", () => {
+            const q = startSearch.value.trim().toLowerCase();
+            stage.querySelectorAll(".famous .card").forEach((card) => {
+              card.style.display = card.textContent.toLowerCase().includes(q)
+                ? ""
+                : "none";
+            });
+          });
+        }
+      }
+
+      function show(id) {
+        current = id;
+        const c = canvases.find((x) => x.id === id);
+        heading.textContent = c.heading;
+        subhead.textContent = c.sub;
+        notices.innerHTML = c.notices
+          .map((n) => `<span class="chip"><strong>Notice.</strong> ${n}</span>`)
+          .join("");
+        nav.querySelectorAll("button").forEach((b) => {
+          b.classList.toggle("active", b.dataset.id === id);
+        });
+        stage.innerHTML = render[id]();
+        bindStage();
+        history.replaceState(null, "", "#" + id);
+      }
+
+      document.getElementById("wideBtn").onclick = () => {
+        document.body.classList.remove("compact");
+        document.getElementById("wideBtn").classList.add("active");
+        document.getElementById("compactBtn").classList.remove("active");
+      };
+      document.getElementById("compactBtn").onclick = () => {
+        document.body.classList.add("compact");
+        document.getElementById("compactBtn").classList.add("active");
+        document.getElementById("wideBtn").classList.remove("active");
+      };
+
+      document.addEventListener("keydown", (event) => {
+        if (event.target instanceof HTMLInputElement) return;
+        const index = Number(event.key) - 1;
+        if (index >= 0 && index < canvases.length) show(canvases[index].id);
+      });
+
+      const start = location.hash.replace("#", "") || "compare";
+      show(canvases.some((c) => c.id === start) ? start : "compare");
+    </script>
+  </body>
+</html>
