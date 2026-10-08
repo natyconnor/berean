@@ -3,7 +3,6 @@
 import { BookOpen, Crosshair, Pencil } from "lucide-react";
 import { ChapterHeader } from "@/components/bible/chapter-header";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -15,6 +14,14 @@ import { shouldRevealReadingMode } from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
+import {
+  NOTES_CHROME_COMPACT_HIDE_CLASS,
+  NOTES_CHROME_COMPACT_LABEL_CLASS,
+  NOTES_CHROME_COMPACT_SHORT_CLASS,
+  NOTES_CHROME_CONTAINER_CLASS,
+  SHORTCUT_KBD_CLASS,
+} from "./header-chrome";
+import { HeaderShortcutToggle } from "./header-shortcut-toggle";
 
 type PassageViewMode = "compose" | "read";
 type NoteVisibility = "all" | "noted";
@@ -109,70 +116,65 @@ export function PassageViewHeader({
             onChapterNotesClick={onChapterNotesClick}
           />
         </div>
-        <div className="pb-3 pt-1">
+        <div className={cn(NOTES_CHROME_CONTAINER_CLASS, "pb-3 pt-1")}>
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               Notes
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {!isReadMode && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div
+                <HeaderShortcutToggle
+                  id="passage-focus-mode"
+                  label="Focus"
+                  shortcut="F"
+                  checked={isFocusMode}
+                  onToggle={onToggleFocusMode}
+                  compactLabelClassName={NOTES_CHROME_COMPACT_LABEL_CLASS}
+                  tooltip={
+                    isFocusMode ? "Turn off focus mode" : "Turn on focus mode"
+                  }
+                  icon={
+                    <Crosshair
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,box-shadow,color] duration-200",
-                        isFocusMode
-                          ? "border-primary/35 bg-primary/8 text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.45),0_0_0_1px_hsl(var(--primary)/0.06),0_8px_24px_hsl(var(--primary)/0.10)]"
-                          : "border-border bg-background",
+                        "h-3 w-3 shrink-0 transition-colors",
+                        isFocusMode && "text-primary",
                       )}
-                    >
-                      <label
-                        htmlFor="passage-focus-mode"
-                        className={cn(
-                          "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
-                          isFocusMode
-                            ? "text-foreground"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        <Crosshair
-                          className={cn(
-                            "h-3 w-3 shrink-0 transition-colors",
-                            isFocusMode && "text-primary",
-                          )}
-                          aria-hidden
-                        />
-                        Focus
-                        <kbd className="rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
-                          F
-                        </kbd>
-                      </label>
-                      <Switch
-                        id="passage-focus-mode"
-                        checked={isFocusMode}
-                        onCheckedChange={(checked) => {
-                          if (checked !== isFocusMode) {
-                            onToggleFocusMode();
-                          }
-                        }}
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isFocusMode ? "Turn off focus mode" : "Turn on focus mode"}
-                  </TooltipContent>
-                </Tooltip>
+                      aria-hidden
+                    />
+                  }
+                  className={
+                    isFocusMode
+                      ? "border-primary/35 bg-primary/8 text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.45),0_0_0_1px_hsl(var(--primary)/0.06),0_8px_24px_hsl(var(--primary)/0.10)]"
+                      : "border-border bg-background"
+                  }
+                  labelClassName={
+                    isFocusMode ? "text-foreground" : "text-muted-foreground"
+                  }
+                />
               )}
               {isReadMode && hasAnyNotes && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Show</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className={cn(
+                      "text-xs text-muted-foreground",
+                      NOTES_CHROME_COMPACT_HIDE_CLASS,
+                    )}
+                  >
+                    Show
+                  </span>
                   <div className="inline-flex items-center rounded-md border bg-background p-0.5">
                     <Button
                       size="xs"
                       variant={noteVisibility === "all" ? "secondary" : "ghost"}
                       onClick={() => setNoteVisibility("all")}
+                      aria-label="All Verses"
                     >
-                      All Verses
+                      <span className={NOTES_CHROME_COMPACT_HIDE_CLASS}>
+                        All Verses
+                      </span>
+                      <span className={NOTES_CHROME_COMPACT_SHORT_CLASS}>
+                        All
+                      </span>
                     </Button>
                     <Button
                       size="xs"
@@ -180,15 +182,26 @@ export function PassageViewHeader({
                         noteVisibility === "noted" ? "secondary" : "ghost"
                       }
                       onClick={() => setNoteVisibility("noted")}
+                      aria-label="Only Verses with Notes"
                     >
-                      Only Verses with Notes
+                      <span className={NOTES_CHROME_COMPACT_HIDE_CLASS}>
+                        Only Verses with Notes
+                      </span>
+                      <span className={NOTES_CHROME_COMPACT_SHORT_CLASS}>
+                        Noted
+                      </span>
                     </Button>
                   </div>
                 </div>
               )}
               {isReadMode && !hasAnyNotes && (
                 <p className="text-xs text-muted-foreground italic">
-                  No notes for this chapter
+                  <span className={NOTES_CHROME_COMPACT_HIDE_CLASS}>
+                    No notes for this chapter
+                  </span>
+                  <span className={NOTES_CHROME_COMPACT_SHORT_CLASS}>
+                    No notes
+                  </span>
                 </p>
               )}
               {showViewModeToggle ? (
@@ -226,8 +239,10 @@ export function PassageViewHeader({
                           className="gap-1.5"
                         >
                           <Pencil className="h-3 w-3" />
-                          Compose
-                          <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                          <span className={NOTES_CHROME_COMPACT_LABEL_CLASS}>
+                            Compose
+                          </span>
+                          <kbd className={cn("ml-1", SHORTCUT_KBD_CLASS)}>
                             C
                           </kbd>
                         </Button>
@@ -255,8 +270,10 @@ export function PassageViewHeader({
                           className="gap-1.5"
                         >
                           <BookOpen className="h-3 w-3" />
-                          Read
-                          <kbd className="ml-1 rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
+                          <span className={NOTES_CHROME_COMPACT_LABEL_CLASS}>
+                            Read
+                          </span>
+                          <kbd className={cn("ml-1", SHORTCUT_KBD_CLASS)}>
                             R
                           </kbd>
                         </Button>
