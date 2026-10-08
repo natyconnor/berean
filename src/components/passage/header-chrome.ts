@@ -7,9 +7,12 @@
  * is tight, and independently compact the notes toolbar when its column is.
  *
  * `@max-2xl` is 42rem (672px): the read-mode passage column sits under this
- * even at the 1400px content cap. `@max-xl` is 36rem (576px): the compose-mode
- * notes pane (360–440px) and the tightest read-mode notes pane compact, while
- * a typical wide read-mode notes pane keeps full labels.
+ * even at the 1400px content cap.
+ *
+ * Notes-side labels (Focus, Compose, Read) stay expanded through the
+ * compose-mode notes pane (`minmax(360px, 440px)`). `@max-sm` is 24rem
+ * (384px), so they only collapse at the tightest compose widths — not at the
+ * usual 440px pane, which still has room for the words.
  */
 export const CHAPTER_CHROME_CONTAINER_CLASS = "@container/chapter-chrome";
 export const CHAPTER_CHROME_COMPACT_LABEL_CLASS =
@@ -20,10 +23,10 @@ export const CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS =
   "@max-2xl/chapter-chrome:size-8 @max-2xl/chapter-chrome:max-w-none @max-2xl/chapter-chrome:justify-center @max-2xl/chapter-chrome:gap-0 @max-2xl/chapter-chrome:px-0 @max-2xl/chapter-chrome:py-0";
 
 export const NOTES_CHROME_CONTAINER_CLASS = "@container/notes-chrome";
-export const NOTES_CHROME_COMPACT_LABEL_CLASS = "@max-xl/notes-chrome:sr-only";
-export const NOTES_CHROME_COMPACT_HIDE_CLASS = "@max-xl/notes-chrome:hidden";
+export const NOTES_CHROME_COMPACT_LABEL_CLASS = "@max-sm/notes-chrome:sr-only";
+export const NOTES_CHROME_COMPACT_HIDE_CLASS = "@max-sm/notes-chrome:hidden";
 export const NOTES_CHROME_COMPACT_SHORT_CLASS =
-  "hidden @max-xl/notes-chrome:inline";
+  "hidden @max-sm/notes-chrome:inline";
 
 export const SHORTCUT_KBD_CLASS =
   "rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground";
