@@ -492,6 +492,10 @@
       body.compact .famous {
         grid-template-columns: 1fr;
       }
+      body.compact .chapter-ctas {
+        margin-left: 0;
+        width: 100%;
+      }
       .desk-grid {
         display: grid;
         grid-template-columns: 1.4fr 1fr;
@@ -535,9 +539,69 @@
         font-weight: 600;
         text-decoration: none;
       }
+      .chapter-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        width: 100%;
+      }
+      .chapter-bar h3 {
+        font-family: var(--serif);
+        font-size: 22px;
+        margin: 0;
+        font-weight: 600;
+      }
+      .chapter-ctas {
+        margin-left: auto;
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .chapter-well {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 10px;
+        padding: 6px 10px;
+        background: color-mix(in oklab, var(--muted-bg) 70%, white);
+        border: 1px solid transparent;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+      }
+      .chapter-well.mem {
+        background: color-mix(in oklab, var(--primary) 8%, var(--card));
+        border-color: color-mix(in oklab, var(--primary) 22%, var(--border));
+      }
+      .chapter-well .k {
+        display: block;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .chapter-well .s {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .chapter-well.mem .k {
+        color: var(--primary);
+      }
+      .mem-tabs {
+        display: flex;
+        gap: 4px;
+        margin: 0 0 16px;
+      }
+      .mem-tabs .tab {
+        padding: 6px 12px;
+        font-size: 13px;
+      }
       .reader {
         display: grid;
-        grid-template-columns: 36px 1fr 84px;
+        grid-template-columns: 36px minmax(0, 1fr) 48px;
         gap: 8px;
         align-items: start;
       }
@@ -563,11 +627,19 @@
         padding-left: 8px;
       }
       .heartcol {
+        position: relative;
         display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 4px;
+        justify-content: flex-end;
         padding-top: 2px;
+        overflow: visible;
+      }
+      .heart-slot {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        color: var(--primary);
       }
       .heart {
         width: 32px;
@@ -577,18 +649,47 @@
         color: #dc2626;
         cursor: pointer;
         border-radius: 8px;
+        position: relative;
+        z-index: 1;
       }
-      .mem-btn {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        border: 1px solid var(--border);
-        background: var(--card);
-        border-radius: 6px;
-        padding: 4px 6px;
-        cursor: pointer;
-        color: var(--primary);
+      .heart.off {
+        color: var(--muted);
+        opacity: 0;
+      }
+      .reader:hover .heart.off,
+      .reader:focus-within .heart.off {
+        opacity: 1;
+      }
+      .ring {
+        position: absolute;
+        inset: 1px;
+        pointer-events: none;
+      }
+      .ring circle {
+        fill: none;
+        stroke-width: 2.4;
+      }
+      .fly {
+        position: absolute;
+        right: 38px;
+        top: 50%;
+        transform: translate(10px, -50%);
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 180ms ease;
+        white-space: nowrap;
+        z-index: 2;
+      }
+      .heart-slot:hover .fly,
+      .heart-slot:focus-within .fly {
+        opacity: 1;
+        transform: translate(0, -50%);
+        pointer-events: auto;
+      }
+      .fly .btn {
+        box-shadow: 0 6px 18px rgba(50, 35, 15, 0.12);
       }
       .sheet {
         display: none;
@@ -622,6 +723,12 @@
         grid-template-columns: 1fr 1fr;
         gap: 12px;
         margin: 14px 0 22px;
+      }
+      .starts.triple {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      body.compact .starts.triple {
+        grid-template-columns: 1fr;
       }
       .start {
         padding: 18px;
@@ -740,8 +847,8 @@
       <div class="brand">Berean · design</div>
       <h1>Memory canvases</h1>
       <p class="lede">
-        Click through the directions from the critique. These are feel-sketches,
-        not specs — same Warm Manuscript chrome, different jobs on the page.
+        Refined after review: verse-first Memory, stats and packs still here,
+        and Notes stays quiet — a hearted heart slides out Learn or Review.
       </p>
       <nav id="nav"></nav>
       <p class="note">
@@ -777,21 +884,21 @@
           heading: "Same person, two homes",
           sub: "Left is today’s Memory. Right is the same returning user, with the work named.",
           notices: [
-            "Hero is a named passage, not a due total",
-            "Charts leave the first screen",
-            "Packs become stories with verse text",
+            "Today names the next verse work",
+            "Packs and Progress are tabs, not gone",
+            "Hover a hearted heart in Notes for Learn/Review",
           ],
         },
         {
           id: "desk",
           kicker: "02",
           title: "The desk",
-          heading: "Returning home",
-          sub: "One next action. Passages you already care about. A way to start something without a wizard.",
+          heading: "Today, packs, and progress",
+          sub: "Verse work stays on the first screen. Packs keep the current builder. Dashboard stats live under Progress.",
           notices: [
-            "Continue Psalm 1 is the only primary button",
-            "Recite is secondary, because learning is still the job",
-            "Progress is a sentence, not four widgets",
+            "Click Packs and Progress in the mock",
+            "New pack still opens Scope / Custom / Preset",
+            "Due verses stay the main job of Today",
           ],
         },
         {
@@ -799,35 +906,35 @@
           kicker: "03",
           title: "First visit",
           heading: "Start from desire",
-          sub: "No empty charts. The first Memory screen should help you pick a chapter or verse and begin.",
+          sub: "No empty charts. Pick a chapter or verse, or go make a pack the way you already do.",
           notices: [
             "Famous chapters with first lines",
             "Search is a Bible search, not a list filter",
-            "No pack types, no glossary",
+            "Packs remain a real path, not a hidden advanced mode",
           ],
         },
         {
           id: "reader",
           kicker: "04",
           title: "From the page",
-          heading: "Memorize Psalm 1 where it lives",
-          sub: "The chapter is the object. Hearting can still save; Memorize is the verb that starts work.",
+          heading: "Quiet Notes, one chapter action",
+          sub: "Memorize sits beside chapter notes. On a verse, only the heart — hover a hearted one and Learn or Review slides out.",
           notices: [
-            "Chapter action: Memorize Psalm 1",
-            "Verse action is visible, not hover-only",
-            "Click Memorize to feel the sheet",
+            "Hover verses 1–3 (already hearted)",
+            "Empty hearts stay hover-only, like today",
+            "Chapter Memorize is next to the chapter note well",
           ],
         },
         {
           id: "starts",
           kicker: "05",
-          title: "Two starts",
-          heading: "Passage or verse — not a factory",
-          sub: "Replace New pack → Scope / Custom / Preset with the two things people actually want.",
+          title: "Packs",
+          heading: "The pack builder stays",
+          sub: "Quick-start a passage or verse, and keep Scope / Custom / Preset exactly as they work now.",
           notices: [
-            "A passage becomes one recitation",
-            "A verse starts learning now",
-            "Lists and groups come later, if at all",
+            "Scope still auto-adds hearts in a range",
+            "Custom is still a hand-picked list",
+            "Preset is still the famous-chapter shortcut",
           ],
         },
         {
@@ -849,9 +956,9 @@
           heading: "Progress lives in the Word",
           sub: "Mastery should be visible on the page you read, not only on a donut in Memory.",
           notices: [
-            "Known lines are marked in the chapter",
-            "Next section is obvious",
-            "After a session: a sentence, not a stats dump",
+            "Known lines still mark the chapter",
+            "Hearted hearts keep the mastery ring",
+            "Hover the ring to continue — no extra row button",
           ],
         },
         {
@@ -875,14 +982,88 @@
         search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`,
         heart: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 12.6 12 20l-7.5-7.4a5 5 0 1 1 7.5-6.6 5 5 0 1 1 7.5 6.6z"/></svg>`,
         heartOff: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.5 12.6 12 20l-7.5-7.4a5 5 0 1 1 7.5-6.6 5 5 0 1 1 7.5 6.6z"/></svg>`,
+        plus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`,
+        scroll: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12.5a1.5 1.5 0 0 0 1.5-1.5v-7a2 2 0 0 0-2-2H4"/><path d="M8 21a4 4 0 0 1-4-4V3"/></svg>`,
       };
 
-      function dockHtml(count) {
+      let deskTab = "today";
+
+      function memTabs(active) {
+        return `<div class="mem-tabs" role="tablist" aria-label="Memory views">
+          ${["today", "packs", "progress"]
+            .map(
+              (id) =>
+                `<button type="button" class="tab${active === id ? " on" : ""}" data-desk-tab="${id}">${id[0].toUpperCase() + id.slice(1)}</button>`,
+            )
+            .join("")}
+        </div>`;
+      }
+
+      function ringSvg(pct) {
+        const c = 2 * Math.PI * 15;
+        const dash = (Math.max(0, Math.min(100, pct)) / 100) * c;
+        return `<svg class="ring" viewBox="0 0 36 36" aria-hidden><circle cx="18" cy="18" r="15" stroke="currentColor" opacity="0.18"/><circle cx="18" cy="18" r="15" stroke="currentColor" stroke-dasharray="${dash} ${c}" stroke-linecap="round" transform="rotate(-90 18 18)"/></svg>`;
+      }
+
+      function heartSlot({ filled, pct, action, label }) {
+        const fly = action
+          ? `<span class="fly"><button class="btn sm">${action}</button></span>`
+          : "";
+        const ring = filled ? ringSvg(pct ?? 40) : "";
+        const icon = filled ? ico.heart : ico.heartOff;
+        return `<div class="heart-slot">
+          ${ring}
+          <button class="heart${filled ? "" : " off"}" aria-label="${label}">${icon}</button>
+          ${fly}
+        </div>`;
+      }
+
+      function chapterChrome({
+        memorize = true,
+        subtitle = "Add a chapter note",
+      }) {
+        const mem = memorize
+          ? `<button class="chapter-well mem" type="button" data-open-sheet>
+              ${ico.cap}
+              <span><span class="k">Memory</span><span class="s">Memorize this chapter</span></span>
+            </button>`
+          : "";
+        return `<div class="chapter-bar">
+          <h3>Psalm 1</h3>
+          <div class="chapter-ctas">
+            <button class="chapter-well" type="button">
+              ${ico.scroll}
+              <span><span class="k">Chapter</span><span class="s">${subtitle}</span></span>
+            </button>
+            ${mem}
+          </div>
+        </div>`;
+      }
+
+      function statsBlock(tiny) {
+        return `
+          <div class="kpis">
+            <div class="card kpi"><span>Due today</span><b>9</b></div>
+            <div class="card kpi"><span>Day streak</span><b>0</b></div>
+            <div class="card kpi"><span>In memory</span><b>8</b></div>
+            <div class="card kpi"><span>30d accuracy</span><b>98%</b></div>
+          </div>
+          <div class="charts ${tiny ? "tiny-charts" : ""}" style="margin-top:12px">
+            <div class="card chart"><h4>Practice</h4><div class="heat">${heat()}</div></div>
+            <div class="card chart"><h4>Mastery</h4><div style="font-size:28px;font-weight:700;color:#0ea5e9">100%</div><div style="font-size:12px;color:var(--muted)">Reviewing · 8 started</div></div>
+            <div class="card chart"><h4>Accuracy trend</h4><div style="height:54px;background:linear-gradient(#f9731633,#f9731608);border-radius:8px;border:1px solid #f9731622"></div></div>
+            <div class="card chart"><h4>Upcoming</h4><div style="display:flex;gap:8px;align-items:end;height:54px"><i style="width:18px;height:90%;background:#ea580c;border-radius:3px"></i><i style="width:18px;height:20%;background:#fdba74;border-radius:3px"></i><i style="width:18px;height:20%;background:#fdba74;border-radius:3px"></i></div></div>
+          </div>`;
+      }
+
+      function dockHtml(count, mode = "memory") {
         const badge =
           count > 0 ? ` Memory <i class="badge">${count}</i>` : " Memory";
+        const notesOn = mode === "notes" ? " on" : "";
+        const memOn = mode === "memory" ? " on" : "";
         return `<div class="dock" aria-hidden="true">
-        <span>Notes</span>
-        <span class="on">${badge}</span>
+        <span class="${notesOn.trim()}">Notes</span>
+        <span class="${memOn.trim()}">${badge}</span>
         <span>Study</span>
       </div>`;
       }
@@ -967,72 +1148,121 @@
         ${dockHtml(9)}`;
       }
 
-      function deskBody(compare) {
-        const cls = compare ? "compare-desk" : "";
-        return `
-        <header class="app-header">
-          <div>
-            <h3>Memory</h3>
-            <p>Keep what you’ve started. Add what you want next.</p>
+      function packRows() {
+        return [
+          ["Psalm 23", "Passage · 0 of 6 memorized · due today"],
+          ["Psalm 1", "Passage · 0 of 4 memorized · due today"],
+          ["Merced Team", "Custom · 9 verses · 5 due"],
+          ["Psalm 16", "Passage · 4 of 11 memorized · due today"],
+        ]
+          .map(
+            ([n, s]) =>
+              `<div class="card pack"><div class="pack-ico">${ico.layers}</div><div class="meta"><b>${n}</b><span>${s}</span></div></div>`,
+          )
+          .join("");
+      }
+
+      function packSheet() {
+        return `<div class="sheet" id="packSheet">
+          <div class="card" style="width:min(560px,100%)">
+            <h4>New pack</h4>
+            <p>Same builder as today. Type first, then the range, list, or preset.</p>
+            <div class="starts triple">
+              <div class="card start"><h5>Scope</h5><p>A book or chapter range. Verses come from what you heart inside that range.</p></div>
+              <div class="card start"><h5>Custom</h5><p>A fixed list of verses you pick one by one.</p></div>
+              <div class="card start"><h5>Preset</h5><p>A ready-made chapter or verse list.</p></div>
+            </div>
+            <button class="btn ghost" data-close-pack>Close</button>
           </div>
-        </header>
-        <div class="scroll ${cls}">
+        </div>`;
+      }
+
+      function deskToday() {
+        const row = (ref, line, action, cls) => `
+          <div class="card row">
+            <i class="dot" style="background:${cls}"></i>
+            <div class="meta">
+              <b>${ref}</b>
+              <span class="lib-line">${line}</span>
+            </div>
+            <button class="btn sm ${action === "Review" ? "" : "ghost"}">${action}</button>
+          </div>`;
+        return `
           <div class="card hero">
             <div style="min-width:0">
-              <div class="kicker">Continue</div>
-              <h4>Psalm 1</h4>
-              <p>2 of 4 sections · next, verses 4–6</p>
-              <p class="verse" style="margin-top:8px">Blessed is the man that walketh not in the counsel of the ungodly…</p>
+              <div class="kicker">Today</div>
+              <h4>5 verses to recite</h4>
+              <p>Then continue Psalm 1 — 2 of 4 sections.</p>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px">
-              <button class="btn lg">${ico.cap} Continue</button>
-              <button class="btn ghost sm">Recite 5 due verses</button>
+              <button class="btn lg">${ico.play} Review due</button>
+              <button class="btn ghost sm">${ico.cap} Continue Psalm 1</button>
             </div>
           </div>
           <div class="desk-grid" style="margin-top:18px">
             <div>
-              <div class="eyebrow" style="margin-bottom:10px">Your passages</div>
-              <div class="passages">
-                <div class="card passage-card">
-                  <h5>Psalm 1</h5>
-                  <div class="verse" style="font-size:15px;margin-top:4px">Blessed is the man that walketh not…</div>
-                  <div class="bar"><i style="width:50%"></i></div>
-                  <span style="font-size:12px;color:var(--muted)">2 of 4 sections</span>
-                </div>
-                <div class="card passage-card">
-                  <h5>Psalm 23</h5>
-                  <div class="verse" style="font-size:15px;margin-top:4px">The Lord is my shepherd; I shall not want.</div>
-                  <div class="bar"><i style="width:8%"></i></div>
-                  <span style="font-size:12px;color:var(--muted)">Just started</span>
-                </div>
-                <div class="card passage-card">
-                  <h5>Psalm 8</h5>
-                  <div class="verse" style="font-size:15px;margin-top:4px">O Lord, our Lord, how majestic is your name…</div>
-                  <div class="bar"><i style="width:20%"></i></div>
-                  <span style="font-size:12px;color:var(--muted)">1 of 6 sections</span>
-                </div>
-                <div class="card passage-card">
-                  <h5>Merced Team</h5>
-                  <div style="font-size:13px;color:var(--muted);margin-top:4px">A list of 9 verses · 5 ready to recite</div>
-                </div>
-              </div>
+              <div class="eyebrow" style="margin-bottom:10px">Due now</div>
+              ${row("Luke 9:23-24", "If any man will come after me, let him deny himself…", "Review", "var(--sky)")}
+              ${row("Matthew 6:33", "But seek ye first the kingdom of God…", "Review", "var(--sky)")}
+              ${row("Deuteronomy 6:4-5", "Hear, O Israel: The Lord our God is one Lord.", "Continue", "var(--amber)")}
+              ${row("Psalm 16:1-2", "Preserve me, O God: for in thee do I put my trust.", "Continue", "var(--amber)")}
             </div>
             <div>
-              <div class="eyebrow" style="margin-bottom:10px">Start something</div>
-              <div class="search-wrap">${ico.search}<input class="search" placeholder="Psalm 1, John 3:16, peace…" readonly></div>
+              <div class="eyebrow" style="margin-bottom:10px">In progress</div>
               <div class="card passage-card">
                 <h5>Psalm 1</h5>
                 <div class="verse" style="font-size:15px;margin-top:4px">Blessed is the man that walketh not…</div>
-                <button class="btn sm" style="margin-top:10px">Memorize</button>
+                <div class="bar"><i style="width:50%"></i></div>
+                <span style="font-size:12px;color:var(--muted)">2 of 4 sections</span>
               </div>
               <div class="card passage-card">
-                <h5>John 3:16</h5>
-                <div class="verse" style="font-size:15px;margin-top:4px">For God so loved the world, that he gave his only begotten Son…</div>
-                <button class="btn sm" style="margin-top:10px">Memorize</button>
+                <h5>Merced Team</h5>
+                <div style="font-size:13px;color:var(--muted);margin-top:4px">Custom pack · 5 of 9 due</div>
               </div>
-              <p class="quiet"><a href="#">See progress</a> · 268 practices this year</p>
+              <p class="quiet">Need a new set? Open <a href="#" data-desk-tab="packs">Packs</a>. Charts live under <a href="#" data-desk-tab="progress">Progress</a>.</p>
+            </div>
+          </div>`;
+      }
+
+      function deskPacks() {
+        return `
+          <div class="label-row">
+            <span class="eyebrow">Your packs</span>
+            <div style="display:flex;gap:6px">
+              <button class="btn ghost sm">Browse presets</button>
+              <button class="btn sm" data-open-pack>${ico.plus} New pack</button>
             </div>
           </div>
+          ${packRows()}
+          <p class="quiet">Scope, custom, and preset packs work as they do today — including Memorize whole passage / Learn as a passage on the pack itself.</p>
+          ${packSheet()}`;
+      }
+
+      function deskProgress() {
+        return `
+          <p class="quiet" style="margin-top:0">Same dashboard as now — just not the front door.</p>
+          ${statsBlock(false)}`;
+      }
+
+      function deskBody(compare) {
+        const cls = compare ? "compare-desk" : "";
+        const tab = compare ? "today" : deskTab;
+        const panel =
+          tab === "packs"
+            ? deskPacks()
+            : tab === "progress"
+              ? deskProgress()
+              : deskToday();
+        return `
+        <header class="app-header">
+          <div>
+            <h3>Memory</h3>
+            <p>Review what’s due, keep packs, check progress when you want it.</p>
+          </div>
+        </header>
+        <div class="scroll ${cls}">
+          ${memTabs(tab)}
+          ${panel}
         </div>
         ${dockHtml(9)}`;
       }
@@ -1070,7 +1300,7 @@
               )
               .join("")}
           </div>
-          <p class="quiet">Already reading a chapter? Open it and tap <strong>Memorize</strong> on the page.</p>
+          <p class="quiet">Already reading? Memorize the chapter from Notes. Building a list or a team set? <strong>Packs</strong> still has Scope, Custom, and Preset.</p>
         </div>
         ${dockHtml(0)}`;
       }
@@ -1080,46 +1310,52 @@
           [
             1,
             "Blessed is the man that walketh not in the counsel of the ungodly, nor standeth in the way of sinners, nor sitteth in the seat of the scornful.",
+            { filled: true, pct: 72, action: "Continue" },
           ],
           [
             2,
             "But his delight is in the law of the Lord; and in his law doth he meditate day and night.",
+            { filled: true, pct: 45, action: "Continue" },
           ],
           [
             3,
             "And he shall be like a tree planted by the rivers of water, that bringeth forth his fruit in his season; his leaf also shall not wither; and whatsoever he doeth shall prosper.",
+            { filled: true, pct: 100, action: "Review" },
           ],
           [
             4,
             "The ungodly are not so: but are like the chaff which the wind driveth away.",
+            { filled: false },
           ],
           [
             5,
             "Therefore the ungodly shall not stand in the judgment, nor sinners in the congregation of the righteous.",
+            { filled: false },
           ],
           [
             6,
             "For the Lord knoweth the way of the righteous: but the way of the ungodly shall perish.",
+            { filled: false },
           ],
         ];
         return `
         <header class="app-header">
-          <div>
-            <h3 style="font-family:var(--serif);font-size:22px">Psalm 1</h3>
-            <p>Notes beside the text · Memory is a verb on this chapter</p>
-          </div>
-          <button class="btn" data-open-sheet>Memorize Psalm 1</button>
+          ${chapterChrome({ subtitle: "Add a chapter note" })}
         </header>
         <div class="scroll">
           ${verses
             .map(
-              ([n, t]) => `
+              ([n, t, heart]) => `
             <div class="reader" style="margin-bottom:14px">
               <div class="vnum">${n}</div>
               <div class="vtext">${t}</div>
               <div class="heartcol">
-                <button class="heart" style="color:var(--muted)" title="Save for later" aria-label="Save verse ${n} for later">${ico.heartOff}</button>
-                <button class="mem-btn" data-open-sheet>Memorize</button>
+                ${heartSlot({
+                  ...heart,
+                  label: heart.filled
+                    ? `Hearted verse ${n}`
+                    : `Heart verse ${n}`,
+                })}
               </div>
             </div>`,
             )
@@ -1128,51 +1364,42 @@
         <div class="sheet" id="sheet">
           <div class="card">
             <h4>Memorize Psalm 1</h4>
-            <p>Learn it as one recitation — four short sections, growing until you can say the whole psalm.</p>
+            <p>Learn it as one recitation — four short sections, growing until you can say the whole psalm. This is a pack under the hood; you don’t have to build one first.</p>
             <div style="display:flex;flex-direction:column;gap:8px">
               <button class="btn lg">${ico.cap} Start the psalm</button>
-              <button class="btn ghost">Just this verse</button>
-              <button class="btn ghost" data-close-sheet>Save for later</button>
+              <button class="btn ghost" data-close-sheet>Not now</button>
             </div>
           </div>
         </div>
-        ${dockHtml(0)}`;
+        ${dockHtml(0, "notes")}`;
       }
 
       function startsBody() {
         return `
         <header class="app-header">
           <div>
-            <h3>Memorize</h3>
-            <p>A passage you recite as one, or a verse to begin today.</p>
+            <h3>New pack</h3>
+            <p>Type → choose → name. Unchanged from today, plus a faster Memorize on the chapter.</p>
           </div>
         </header>
         <div class="scroll">
-          <div class="search-wrap">${ico.search}<input class="search" id="startSearch" placeholder="Search chapters or verses"></div>
-          <div class="starts">
+          <div class="eyebrow">Type</div>
+          <p style="margin:4px 0 12px;color:var(--muted);font-size:13.5px">What kind of pack are you making?</p>
+          <div class="starts triple">
             <div class="card start">
-              <h5>A passage</h5>
-              <p>A chapter or stretch. You learn it as one growing recitation — Psalm 1, not six separate cards.</p>
+              <h5>Scope</h5>
+              <p>A book or chapter range. Verses come from what you heart inside that range.</p>
             </div>
             <div class="card start">
-              <h5>A verse</h5>
-              <p>Pick one verse, start the first reading now. Hearting happens for you.</p>
+              <h5>Custom</h5>
+              <p>A fixed list of verses you pick one by one.</p>
+            </div>
+            <div class="card start">
+              <h5>Preset</h5>
+              <p>A ready-made chapter or verse list.</p>
             </div>
           </div>
-          <div class="eyebrow">Famous passages</div>
-          <div class="famous" style="margin-top:10px">
-            ${[
-              ["Psalm 1", "6 verses · about 4 sections"],
-              ["Psalm 23", "6 verses"],
-              ["John 14", "A longer chapter — we’ll pace it"],
-              ["Romans 8:1–11", "A defined stretch"],
-            ]
-              .map(
-                ([t, s]) =>
-                  `<div class="card"><h5 style="margin:0">${t}</h5><p style="margin:4px 0 10px;color:var(--muted);font-size:13px">${s}</p><button class="btn sm">Memorize</button></div>`,
-              )
-              .join("")}
-          </div>
+          <p class="quiet">From Notes, <strong>Memorize this chapter</strong> creates a scope pack and can start passage learning — you don’t have to walk this wizard unless you want a custom or themed set.</p>
         </div>
         ${dockHtml(0)}`;
       }
@@ -1239,26 +1466,33 @@
         ];
         return `
         <header class="app-header">
-          <div>
-            <h3 style="font-family:var(--serif);font-size:22px">Psalm 1</h3>
-            <p>2 of 4 sections in your mouth · next, verses 4–6</p>
-          </div>
-          <button class="btn ghost sm">Continue in Memory</button>
+          ${chapterChrome({ subtitle: "2 notes for all of Psalm 1" })}
         </header>
         <div class="scroll">
+          <p class="quiet" style="margin-top:0">2 of 4 sections in your mouth · next, verses 4–6. Hover a hearted verse.</p>
           ${verses
             .map(
               ([n, t, kind]) => `
             <div class="reader" style="margin-bottom:14px">
               <div class="vnum">${n}</div>
               <div class="vtext ${kind}">${t}</div>
-              <div class="heartcol">${
+              <div class="heartcol">${heartSlot(
                 kind === "known"
-                  ? `<button class="heart">${ico.heart}</button><span style="font-size:10px;color:var(--muted)">solid</span>`
+                  ? {
+                      filled: true,
+                      pct: 100,
+                      action: "Review",
+                      label: `Hearted verse ${n}`,
+                    }
                   : kind === "next"
-                    ? `<button class="mem-btn">Next</button>`
-                    : `<button class="heart" style="color:var(--muted)">${ico.heartOff}</button>`
-              }</div>
+                    ? {
+                        filled: true,
+                        pct: 20,
+                        action: "Continue",
+                        label: `Hearted verse ${n}`,
+                      }
+                    : { filled: false, label: `Heart verse ${n}` },
+              )}</div>
             </div>`,
             )
             .join("")}
@@ -1268,7 +1502,7 @@
             <p style="color:var(--muted);margin:6px 0 0">Tomorrow you’ll add verses 4–6. The ungodly are not so…</p>
           </div>
         </div>
-        ${dockHtml(1)}`;
+        ${dockHtml(1, "notes")}`;
       }
 
       function caughtBody() {
@@ -1333,7 +1567,10 @@
         b.type = "button";
         b.dataset.id = c.id;
         b.innerHTML = `<span class="kicker">${c.kicker}</span><span class="title">${c.title}</span>`;
-        b.addEventListener("click", () => show(c.id));
+        b.addEventListener("click", () => {
+          if (c.id === "desk") deskTab = "today";
+          show(c.id);
+        });
         nav.appendChild(b);
       });
 
@@ -1367,6 +1604,42 @@
             });
           });
         }
+        stage.querySelectorAll("[data-desk-tab]").forEach((el) => {
+          el.addEventListener("click", (event) => {
+            event.preventDefault();
+            deskTab = el.dataset.deskTab;
+            show("desk");
+          });
+        });
+        const packSheetEl = stage.querySelector("#packSheet");
+        stage.querySelectorAll("[data-open-pack]").forEach((el) => {
+          el.addEventListener("click", () => {
+            packSheetEl && packSheetEl.classList.add("open");
+          });
+        });
+        stage.querySelectorAll("[data-close-pack]").forEach((el) => {
+          el.addEventListener("click", () => {
+            packSheetEl && packSheetEl.classList.remove("open");
+          });
+        });
+        if (packSheetEl) {
+          packSheetEl.addEventListener("click", (event) => {
+            if (event.target === packSheetEl)
+              packSheetEl.classList.remove("open");
+          });
+        }
+        stage.querySelectorAll(".heart.off").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const slot = btn.closest(".heart-slot");
+            if (!slot) return;
+            slot.outerHTML = heartSlot({
+              filled: true,
+              pct: 8,
+              action: "Learn",
+              label: "Hearted verse",
+            });
+          });
+        });
       }
 
       function show(id) {
