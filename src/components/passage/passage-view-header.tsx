@@ -18,7 +18,7 @@ import {
   NOTES_CHROME_COMPACT_HIDE_CLASS,
   NOTES_CHROME_COMPACT_LABEL_CLASS,
   NOTES_CHROME_COMPACT_SHORT_CLASS,
-  NOTES_CHROME_CONTAINER_CLASS,
+  PASSAGE_HEADER_CONTAINER_CLASS,
   SHORTCUT_KBD_CLASS,
 } from "./header-chrome";
 import { HeaderShortcutToggle } from "./header-shortcut-toggle";
@@ -104,7 +104,14 @@ export function PassageViewHeader({
       )}
       data-passage-dismiss-exempt
     >
-      <div className={cn("grid", passageGridClass, headerInnerClass)}>
+      <div
+        className={cn(
+          PASSAGE_HEADER_CONTAINER_CLASS,
+          "grid",
+          passageGridClass,
+          headerInnerClass,
+        )}
+      >
         <div className="flex w-full min-w-0 items-center">
           <ChapterHeader
             book={book}
@@ -116,7 +123,7 @@ export function PassageViewHeader({
             onChapterNotesClick={onChapterNotesClick}
           />
         </div>
-        <div className={cn(NOTES_CHROME_CONTAINER_CLASS, "pb-3 pt-1")}>
+        <div className="pb-3 pt-1">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               Notes

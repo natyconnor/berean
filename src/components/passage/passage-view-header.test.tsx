@@ -6,7 +6,7 @@ import {
   NOTES_CHROME_COMPACT_HIDE_CLASS,
   NOTES_CHROME_COMPACT_LABEL_CLASS,
   NOTES_CHROME_COMPACT_SHORT_CLASS,
-  NOTES_CHROME_CONTAINER_CLASS,
+  PASSAGE_HEADER_CONTAINER_CLASS,
 } from "./header-chrome";
 import { PassageViewHeader } from "./passage-view-header";
 
@@ -48,10 +48,10 @@ function renderHeader(
 }
 
 describe("PassageViewHeader compact chrome", () => {
-  it("compacts Compose/Read to shortcut chips in a tight notes column", () => {
+  it("compacts Compose/Read to shortcut chips when the header is tight", () => {
     const { container } = renderHeader();
     expect(
-      container.querySelector(`[class*='${NOTES_CHROME_CONTAINER_CLASS}']`),
+      container.querySelector(`[class*='${PASSAGE_HEADER_CONTAINER_CLASS}']`),
     ).not.toBeNull();
 
     expect(screen.getByText("Compose").className).toContain(
