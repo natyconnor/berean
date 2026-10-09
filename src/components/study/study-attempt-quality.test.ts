@@ -67,6 +67,15 @@ describe("classifyVerseAttempt", () => {
     expect(classifyVerseAttempt(tokens)).toBe("exact");
   });
 
+  it("does not penalize a quote typed as its own token", () => {
+    const actual = `He said \u201CMy grace is sufficient`;
+    const typed = `He said " My grace is sufficient`;
+    const tokens = diffWords(typed, actual);
+    expect(verseAttemptAccuracy(tokens)).toBe(100);
+    expect(classifyVerseAttempt(tokens)).toBe("exact");
+    expect(hasAttemptErrors(tokens)).toBe(false);
+  });
+
   it("marks a two-word verse with one wrong word as off (50%)", () => {
     const tokens = diffWords("Jesus cried", "Jesus wept");
     expect(verseAttemptAccuracy(tokens)).toBe(50);

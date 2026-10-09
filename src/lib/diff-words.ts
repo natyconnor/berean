@@ -43,8 +43,11 @@ function tokenize(input: string): string[] {
   if (trimmed.length === 0) return [];
   // Bible text commonly uses em dashes while people naturally type a space or
   // hyphen. Treat every dash form as a word boundary so those choices grade
-  // identically.
-  return trimmed.split(WORD_SEPARATOR_PATTERN).filter(Boolean);
+  // identically. Drop punctuation-only tokens (`"`, commas, periods) so a
+  // quote typed as its own "word" does not count as extra or missing.
+  return trimmed
+    .split(WORD_SEPARATOR_PATTERN)
+    .filter((word) => normalize(word).length > 0);
 }
 
 /** True for a single insertion, deletion, substitution, or adjacent swap. */

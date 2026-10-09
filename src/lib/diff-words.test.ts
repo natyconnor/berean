@@ -139,4 +139,27 @@ describe("diffWords", () => {
       { text: `\u201Ctruth\u201D`, status: "match" },
     ]);
   });
+
+  it("ignores standalone punctuation so typed quotes do not count as extras", () => {
+    const actual =
+      "But he said to me, \u201CMy grace is sufficient for you, for my power is made perfect in weakness.\u201D Therefore I will boast all the more gladly of my weaknesses, so that the power of Christ may rest upon me.";
+    const typed =
+      'But he said to me, " My grace is sufficient for you, for my power is made perfect in weakness." Therefore I will boast all the more gladly of my weaknesses, so that the power of Christ may rest upon me.';
+    const tokens = diffWords(typed, actual);
+    expect(tokens.every((token) => token.status === "match")).toBe(true);
+    expect(tokens.some((token) => token.text === '"')).toBe(false);
+  });
+
+  it("ignores punctuation-only tokens on both sides", () => {
+    expect(diffWords("Jesus , wept .", "Jesus wept.")).toEqual([
+      { text: "Jesus", status: "match" },
+      { text: "wept.", status: "match" },
+    ]);
+    expect(diffWords(`He said " My grace`, `He said \u201CMy grace`)).toEqual([
+      { text: "He", status: "match" },
+      { text: "said", status: "match" },
+      { text: "\u201CMy", status: "match" },
+      { text: "grace", status: "match" },
+    ]);
+  });
 });
