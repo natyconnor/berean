@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppRefreshPrompt } from "@/components/app-refresh-prompt";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/components/login-page";
+import { NotFoundPage } from "@/components/routes/not-found-page";
+import { useDismissSplashBackdrop } from "@/hooks/use-dismiss-splash";
 import { StagedOnboardingProvider } from "@/components/tutorial/staged-onboarding-provider";
 import { TutorialProvider } from "@/components/tutorial/tutorial-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +19,7 @@ import {
 } from "@/lib/hero-backdrop";
 import { TabProvider } from "@/lib/tab-context";
 import { ThemeProvider } from "@/lib/theme-provider";
+import { resolveAppPath } from "../../../shared/http-routes";
 import { api } from "../../../convex/_generated/api";
 
 const MIN_SPLASH_MS = 600;
@@ -25,6 +28,33 @@ const AUTH_BOOTSTRAP_TIMEOUT_MS = 15_000;
 const PUBLIC_LEGAL_PATHS = new Set(["/privacy", "/terms"]);
 
 export function RootRouteComponent() {
+  const { pathname } = useLocation();
+  const decision = resolveAppPath(pathname);
+
+  if (decision.type === "not-found") {
+    return <NotFoundPage />;
+  }
+
+  if (decision.type === "redirect") {
+    return <RedirectToCanonicalPath pathname={decision.pathname} />;
+  }
+
+  return <RootRouteShell />;
+}
+
+function RedirectToCanonicalPath({ pathname }: { pathname: string }) {
+  useDismissSplashBackdrop();
+
+  useEffect(() => {
+    const href = `${pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(href);
+  }, [pathname]);
+
+  return null;
+}
+
+function RootRouteShell() {
+  useDismissSplashBackdrop();
   usePreviewAutoSignIn();
   const { latestVersion, showRefreshPrompt, refreshToLatestVersion } =
     useAppVersionMonitor();
@@ -57,18 +87,6 @@ export function RootRouteComponent() {
     () => alreadyReady && tutorialStatus !== undefined,
   );
   const [authBootstrapTimedOut, setAuthBootstrapTimedOut] = useState(false);
-
-  useEffect(() => {
-    const el = document.getElementById("splash-bg");
-    if (!el) return;
-    el.style.transition = "opacity 400ms ease-out";
-    el.style.opacity = "0";
-    const remove = () => el.remove();
-    el.addEventListener("transitionend", remove, { once: true });
-    // Fallback: remove even if transitionend doesn't fire (e.g. iPad Safari)
-    const fallback = setTimeout(remove, 500);
-    return () => clearTimeout(fallback);
-  }, []);
 
   useEffect(() => {
     if (minTimePassed) return;
