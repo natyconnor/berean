@@ -68,15 +68,15 @@ function GlobalLearnSession({
 }): JSX.Element {
   const [frozenPassages] = useState(passages);
   const [frozenVerses] = useState(verses);
-  const [passageIndex, setPassageIndex] = useState(0);
 
-  const current = frozenPassages[passageIndex];
-  if (current) {
+  // One passage per visit. "That's enough for today" leaves for the Memory
+  // dashboard; it does not open the next due pack.
+  const passage = frozenPassages[0];
+  if (passage) {
     return (
       <BuildingPassageLearnCard
-        packId={current.packId}
-        packName={current.packName}
-        onDone={() => setPassageIndex((index) => index + 1)}
+        packId={passage.packId}
+        packName={passage.packName}
         onExitHome={onExitHome}
       />
     );
@@ -138,12 +138,10 @@ function GlobalLearnSession({
 function BuildingPassageLearnCard({
   packId,
   packName,
-  onDone,
   onExitHome,
 }: {
   packId: Id<"packs">;
   packName: string;
-  onDone: () => void;
   onExitHome: () => void;
 }): JSX.Element {
   const now = useLiveNow();
@@ -171,9 +169,9 @@ function BuildingPassageLearnCard({
           <button
             type="button"
             className="inline-flex text-sm font-medium text-primary hover:underline"
-            onClick={onDone}
+            onClick={onExitHome}
           >
-            Continue
+            Back
           </button>
         </div>
       </div>
@@ -186,7 +184,6 @@ function BuildingPassageLearnCard({
       view={view}
       packName={packName}
       onExit={onExitHome}
-      onFinish={onDone}
       exitTooltip="Go back"
     />
   );
