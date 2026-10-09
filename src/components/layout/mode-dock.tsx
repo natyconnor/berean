@@ -80,7 +80,8 @@ export function ModeDock() {
   const { backPassageId } = useTabs();
 
   // Shared session clock (same snapshot as the Memory dashboard). Completing a
-  // review or learn still updates the count (same args, reactive data).
+  // review or learn still updates the count (same args, reactive data). The
+  // clock catches up on a new local day so overnight locks can expire.
   const now = useLiveNow();
   const skipDueCount = isMemorySessionPath(location.pathname);
   const dueCountResult = useQuery(

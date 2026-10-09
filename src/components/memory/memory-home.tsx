@@ -25,6 +25,7 @@ import { PreviewMemorySeedCard } from "./preview-memory-seed-card";
 export function MemoryHome() {
   // Shared session clock with the dock badge. Passed as a query arg; never
   // Date.now() inside Convex. Counts still move when an attempt patches a row.
+  // The clock catches up on a new local day so yesterday's learning unlocks.
   const now = useLiveNow();
   const navigate = useNavigate();
 
