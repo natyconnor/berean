@@ -11,13 +11,18 @@ import { DAY_MS, MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
  * The clock does catch up without a reload when the local calendar day
  * changes, or when a 6-hour learning lock could have expired — otherwise a
  * verse started yesterday stays on a disabled Learn / "Tomorrow" CTA until
- * the tab is fully reloaded.
+ * the tab is fully reloaded. A one-minute recheck covers sleep/wake while
+ * the tab stays focused and the midnight timer never fires.
  */
 let sessionNow: number | undefined;
 const sessionNowListeners = new Set<() => void>();
 
 let watchesAttached = false;
 let catchUpTimer: number | undefined;
+let catchUpInterval: number | undefined;
+
+/** Fallback when a sleep/wake drops the scheduled midnight or lock timer. */
+const SESSION_CLOCK_RECHECK_MS = 60 * 1000;
 
 function localDayKey(timestamp: number, tzOffsetMinutes: number): number {
   return Math.floor((timestamp - tzOffsetMinutes * 60 * 1000) / DAY_MS);
@@ -36,19 +41,25 @@ function nextLocalMidnightUtc(
  * Whether the frozen session clock should sample `Date.now()` again.
  *
  * A new local day must catch up so yesterday's Guided/Challenge lock can
- * expire. Same-day catch-up waits for {@link MIN_LEARNING_LOCK_MS} so a
- * late-night 6-hour floor (due at 5am) unlocks after midnight without a
- * reload, while a 10-minute tab switch does not churn query args.
+ * expire. Pass each instant's own `getTimezoneOffset()`: one offset applied
+ * to both hides a spring-forward midnight (11pm standard time and 3am
+ * daylight land on the same day), and catch-up then waits for
+ * {@link MIN_LEARNING_LOCK_MS}. Same-day catch-up still waits for that floor
+ * so a 10-minute tab switch does not churn query args.
+ *
+ * `tzOffsetMinutes` is the offset at `currentNow`. `frozenTzOffsetMinutes`
+ * defaults to it when the offset did not change.
  */
 export function shouldAdvanceSessionNow(
   frozenNow: number,
   currentNow: number,
   tzOffsetMinutes: number,
+  frozenTzOffsetMinutes = tzOffsetMinutes,
 ): boolean {
   if (currentNow <= frozenNow) return false;
   if (
     localDayKey(currentNow, tzOffsetMinutes) !==
-    localDayKey(frozenNow, tzOffsetMinutes)
+    localDayKey(frozenNow, frozenTzOffsetMinutes)
   ) {
     return true;
   }
@@ -66,12 +77,19 @@ function notifySessionNowListeners(): void {
 
 function maybeAdvanceSessionNow(): boolean {
   const current = Date.now();
-  const tzOffsetMinutes = new Date(current).getTimezoneOffset();
   if (sessionNow === undefined) {
     sessionNow = current;
     return false;
   }
-  if (!shouldAdvanceSessionNow(sessionNow, current, tzOffsetMinutes)) {
+  const frozen = sessionNow;
+  if (
+    !shouldAdvanceSessionNow(
+      frozen,
+      current,
+      new Date(current).getTimezoneOffset(),
+      new Date(frozen).getTimezoneOffset(),
+    )
+  ) {
     return false;
   }
   sessionNow = current;
@@ -83,6 +101,12 @@ function clearCatchUpTimer(): void {
   if (catchUpTimer === undefined) return;
   window.clearTimeout(catchUpTimer);
   catchUpTimer = undefined;
+}
+
+function clearCatchUpInterval(): void {
+  if (catchUpInterval === undefined) return;
+  window.clearInterval(catchUpInterval);
+  catchUpInterval = undefined;
 }
 
 function scheduleCatchUpTimer(): void {
@@ -103,6 +127,27 @@ function scheduleCatchUpTimer(): void {
   }, delay);
 }
 
+/**
+ * The scheduled timer is exact when it runs. After sleep it may not run at
+ * all while the tab is already focused (`visibilitychange` / `focus` do not
+ * fire). The interval only notifies subscribers when the clock actually
+ * advances, so a quiet minute does not re-render.
+ */
+function recheckSessionClock(): void {
+  const advanced = maybeAdvanceSessionNow();
+  if (advanced || catchUpTimer === undefined) {
+    scheduleCatchUpTimer();
+  }
+}
+
+function startCatchUpInterval(): void {
+  if (catchUpInterval !== undefined) return;
+  catchUpInterval = window.setInterval(
+    recheckSessionClock,
+    SESSION_CLOCK_RECHECK_MS,
+  );
+}
+
 function handleVisibilityOrFocus(): void {
   if (
     typeof document !== "undefined" &&
@@ -121,6 +166,7 @@ function ensureSessionClockWatches(): void {
   window.addEventListener("focus", handleVisibilityOrFocus);
   window.addEventListener("pageshow", handleVisibilityOrFocus);
   scheduleCatchUpTimer();
+  startCatchUpInterval();
 }
 
 function teardownSessionClockWatches(): void {
@@ -130,6 +176,7 @@ function teardownSessionClockWatches(): void {
   window.removeEventListener("focus", handleVisibilityOrFocus);
   window.removeEventListener("pageshow", handleVisibilityOrFocus);
   clearCatchUpTimer();
+  clearCatchUpInterval();
 }
 
 function subscribeSessionNow(onStoreChange: () => void): () => void {
