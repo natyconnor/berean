@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TooltipButton } from "@/components/ui/tooltip-button";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -23,6 +22,14 @@ import {
   chapterNoteInkClass,
   chapterNoteSurfaceClass,
 } from "@/components/passage/chapter-note-styles";
+import {
+  CHAPTER_CHROME_COMPACT_HIDE_CLASS,
+  CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
+  CHAPTER_CHROME_COMPACT_LABEL_CLASS,
+  CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+} from "@/components/passage/header-chrome";
+import { HeaderShortcutToggle } from "@/components/passage/header-shortcut-toggle";
 import {
   CHAPTER_CHROME_TRANSITION,
   CHAPTER_HEADER_CTA_VARIANTS,
@@ -97,6 +104,15 @@ export function ChapterHeader({
   const chapterNotesSubtitle = hasChapterNotes
     ? `Notes for all of ${chapterLabel} · ${chapterScopedNoteCount}`
     : "Add a chapter note";
+  const chapterNotesAction = chapterNotesOpen
+    ? "Close chapter notes"
+    : hasChapterNotes
+      ? "Open chapter notes"
+      : "Add a chapter note";
+  // Compact chrome hides the count subtitle, so the tooltip keeps it.
+  const chapterNotesTooltip = hasChapterNotes
+    ? `${chapterNotesAction} · ${chapterScopedNoteCount}`
+    : chapterNotesAction;
 
   function goPrev() {
     if (!previous) return;
@@ -126,8 +142,13 @@ export function ChapterHeader({
   }
 
   return (
-    <div className="flex w-full min-w-0 items-center gap-3 py-4 px-2">
-      <div className="flex min-w-0 shrink-0 items-center gap-2">
+    <div
+      className={cn(
+        CHAPTER_CHROME_CONTAINER_CLASS,
+        "flex w-full min-w-0 items-center gap-3 py-4 px-2 @max-2xl/chapter-chrome:gap-2",
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2 @max-xs/chapter-chrome:gap-1">
         <TooltipButton
           variant="ghost"
           size="icon"
@@ -143,17 +164,27 @@ export function ChapterHeader({
           <TooltipButton
             variant="ghost"
             onClick={openBookNavigator}
-            className={cn(REFERENCE_SEGMENT_CLASS, "min-w-0")}
-            tooltip={`Change book (${passageShortcutLabel})`}
+            className={cn(
+              REFERENCE_SEGMENT_CLASS,
+              // Button's base `shrink-0` would ignore `min-w-0` and overflow
+              // the chapter number. `shrink` lets the name ellipsize.
+              "min-w-0 shrink overflow-hidden",
+            )}
+            tooltip={`${displayBookName(book)} · Change book (${passageShortcutLabel})`}
             aria-label={`Change book, currently ${displayBookName(book)}`}
           >
-            <span className="truncate">{displayBookName(book)}</span>
+            <span className="min-w-0 truncate" title={displayBookName(book)}>
+              {displayBookName(book)}
+            </span>
             <ReferenceCaret />
           </TooltipButton>
           <TooltipButton
             variant="ghost"
             onClick={openChapterNavigator}
-            className={cn(REFERENCE_SEGMENT_CLASS, "shrink-0 tabular-nums")}
+            className={cn(
+              REFERENCE_SEGMENT_CLASS,
+              "shrink-0 tabular-nums @max-xs/chapter-chrome:px-1",
+            )}
             tooltip={`Change chapter in ${book}`}
             aria-label={`Change chapter in ${book}, currently chapter ${chapter}`}
           >
@@ -183,95 +214,86 @@ export function ChapterHeader({
         </TooltipButton>
       </div>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,color] duration-200",
-              showSectionHeaders
-                ? "border-border bg-muted/40 text-foreground"
-                : "border-border bg-background",
-            )}
-          >
-            <label
-              htmlFor="passage-section-headers"
-              className={cn(
-                "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
-                showSectionHeaders
-                  ? "text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              Headers
-              <kbd className="rounded border bg-muted px-1 py-0 text-[10px] font-medium leading-none text-muted-foreground">
-                H
-              </kbd>
-            </label>
-            <Switch
-              id="passage-section-headers"
-              checked={showSectionHeaders}
-              onCheckedChange={(checked) => {
-                if (checked !== showSectionHeaders) {
-                  onToggleSectionHeaders();
-                }
-              }}
-            />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          {showSectionHeaders
+      <HeaderShortcutToggle
+        id="passage-section-headers"
+        label="Headers"
+        shortcut="H"
+        checked={showSectionHeaders}
+        onToggle={onToggleSectionHeaders}
+        compactLabelClassName={CHAPTER_CHROME_COMPACT_LABEL_CLASS}
+        tooltip={
+          showSectionHeaders
             ? "Hide editorial section headings"
-            : "Show editorial section headings"}
-        </TooltipContent>
-      </Tooltip>
+            : "Show editorial section headings"
+        }
+        className={cn(
+          showSectionHeaders
+            ? "border-border bg-muted/40 text-foreground"
+            : "border-border bg-background",
+          CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+        )}
+        labelClassName={
+          showSectionHeaders ? "text-foreground" : "text-muted-foreground"
+        }
+      />
 
       {onChapterNotesClick ? (
-        <button
-          type="button"
-          onClick={onChapterNotesClick}
-          data-note-trigger
-          aria-expanded={chapterNotesOpen}
-          aria-label={
-            chapterNotesOpen
-              ? `Close chapter notes for ${chapterLabel}`
-              : hasChapterNotes
-                ? `Open chapter notes for ${chapterLabel}`
-                : `Add a chapter note for ${chapterLabel}`
-          }
-          className={cn(
-            // Match the chapter reference well: carved inset, no dashed outline.
-            "ml-auto inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left cl-well transition-colors",
-            chapterNoteSurfaceClass,
-            chapterNotesOpen
-              ? "brightness-[0.97] ring-1 ring-[oklch(0.72_0.06_200)/40] dark:brightness-110"
-              : "hover:brightness-[0.98] dark:hover:brightness-110",
-          )}
-        >
-          <ScrollText className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)} />
-          <span className="min-w-0">
-            <span
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onChapterNotesClick}
+              data-note-trigger
+              aria-expanded={chapterNotesOpen}
+              aria-label={
+                chapterNotesOpen
+                  ? `Close chapter notes for ${chapterLabel}`
+                  : hasChapterNotes
+                    ? `Open chapter notes for ${chapterLabel}`
+                    : `Add a chapter note for ${chapterLabel}`
+              }
               className={cn(
-                "block text-[10px] font-semibold uppercase tracking-wide",
-                chapterNoteInkClass,
+                // Match the chapter reference well: carved inset, no dashed outline.
+                "ml-auto inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left cl-well transition-colors",
+                CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
+                chapterNoteSurfaceClass,
+                chapterNotesOpen
+                  ? "brightness-[0.97] ring-1 ring-[oklch(0.72_0.06_200)/40] dark:brightness-110"
+                  : "hover:brightness-[0.98] dark:hover:brightness-110",
               )}
             >
-              Chapter
-            </span>
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.span
-                key={chapterNotesSubtitle}
-                variants={CHAPTER_HEADER_CTA_VARIANTS}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                transition={CHAPTER_CHROME_TRANSITION}
-                className="block truncate text-sm text-muted-foreground"
+              <ScrollText
+                className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)}
+              />
+              <span
+                className={cn("min-w-0", CHAPTER_CHROME_COMPACT_HIDE_CLASS)}
               >
-                {chapterNotesSubtitle}
-              </motion.span>
-            </AnimatePresence>
-          </span>
-        </button>
+                <span
+                  className={cn(
+                    "block text-[10px] font-semibold uppercase tracking-wide",
+                    chapterNoteInkClass,
+                  )}
+                >
+                  Chapter
+                </span>
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={chapterNotesSubtitle}
+                    variants={CHAPTER_HEADER_CTA_VARIANTS}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={CHAPTER_CHROME_TRANSITION}
+                    className="block truncate text-sm text-muted-foreground"
+                  >
+                    {chapterNotesSubtitle}
+                  </motion.span>
+                </AnimatePresence>
+              </span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{chapterNotesTooltip}</TooltipContent>
+        </Tooltip>
       ) : (
         <div className="ml-auto" aria-hidden />
       )}

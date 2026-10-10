@@ -30,6 +30,7 @@ import type {
   VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
 import { LAYOUT_CORRECTION_TRANSITION } from "../note-animation-config";
+import { passageColumnsClass } from "../passage-columns";
 import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -441,9 +442,8 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
       <div
         className={cn(
           "relative overflow-visible hover:z-30 focus-within:z-30",
-          isReadMode
-            ? "grid grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6 items-start"
-            : "grid grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5 items-start",
+          "grid items-start",
+          passageColumnsClass(isReadMode),
           isExpanded && "min-h-[240px]",
           "transition-[margin,opacity,filter] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)]",
           isExpanded && "my-3",
@@ -472,7 +472,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         <motion.div
           layout="position"
           transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
-          className="flex h-full flex-col"
+          className="flex h-full min-w-0 flex-col"
         >
           <VerseTextPane
             verseNumber={verseNumber}
@@ -522,7 +522,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
           layout="position"
           transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
           className={cn(
-            "py-1 select-none",
+            "min-w-0 py-1 select-none",
             useSideBySide ? "flex gap-2 items-start" : "space-y-1.5",
           )}
           {...(isAnyOpen ? { "data-notes-open": "" } : {})}

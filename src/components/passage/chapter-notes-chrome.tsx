@@ -22,6 +22,7 @@ import {
   chapterNoteLineClass,
   chapterNoteSurfaceClass,
 } from "./chapter-note-styles";
+import { COMPOSE_PASSAGE_COLUMNS_CLASS } from "./passage-columns";
 
 interface ChapterNotesChromeProps {
   panel: ChapterNotesPanelState;
@@ -34,7 +35,7 @@ interface ChapterNotesChromeProps {
 export function ChapterNotesChrome({
   panel,
   viewMode,
-  notesGridClass = "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5",
+  notesGridClass = COMPOSE_PASSAGE_COLUMNS_CLASS,
 }: ChapterNotesChromeProps) {
   const {
     chapterRef,
@@ -73,13 +74,13 @@ export function ChapterNotesChrome({
             <div
               data-note-surface
               className={cn(
-                "pointer-events-auto flex min-h-[min(52vh,440px)] max-h-[min(85vh,720px)] flex-col overflow-hidden rounded-xl border",
+                "pointer-events-auto flex min-h-[min(52vh,440px)] max-h-[min(85vh,720px)] min-w-0 flex-col overflow-hidden rounded-xl border",
                 chapterNoteLineClass,
                 chapterNoteElevatedClass,
                 "cl-depth-4 shadow-none",
               )}
             >
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b px-3 py-2">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <ScrollText
                     className={cn("h-3.5 w-3.5 shrink-0", chapterNoteInkClass)}
