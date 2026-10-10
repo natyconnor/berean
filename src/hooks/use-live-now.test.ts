@@ -177,11 +177,63 @@ describe("useLiveNow", () => {
     const { unmount } = renderHook(() => useLiveNow());
     unmount();
 
+    expect(vi.getTimerCount()).toBe(0);
+
     act(() => {
       vi.setSystemTime(start + DAY_MS);
       vi.advanceTimersByTime(60_000);
     });
 
     expect(getSessionNow()).toBe(start);
+  });
+
+  it("advances when the midnight timer fires with no visibility or focus events", () => {
+    const probe = Date.UTC(2026, 5, 15, 12, 0, 0);
+    const offset = new Date(probe).getTimezoneOffset();
+    const elevenPm = localMidnightUtc(probe, offset) + 23 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(elevenPm);
+    resetSessionNowForTests();
+
+    const { result, unmount } = renderHook(() => useLiveNow());
+    expect(result.current).toBe(elevenPm);
+
+    act(() => {
+      vi.advanceTimersByTime(60 * 60 * 1000);
+    });
+
+    expect(result.current).toBe(elevenPm + 60 * 60 * 1000);
+    unmount();
+  });
+
+  it("schedules next midnight from the frozen instant's offset across spring-forward", () => {
+    const standard = 480;
+    const daylight = 420;
+    const elevenPm =
+      localMidnightUtc(Date.UTC(2026, 2, 8), standard) + 23 * 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(elevenPm);
+    vi.spyOn(Date.prototype, "getTimezoneOffset").mockImplementation(function (
+      this: Date,
+    ) {
+      return this.getTime() < elevenPm + 60 * 60 * 1000 ? standard : daylight;
+    });
+    resetSessionNowForTests();
+
+    const first = renderHook(() => useLiveNow());
+    expect(first.result.current).toBe(elevenPm);
+    first.unmount();
+
+    const afterLockFloor = elevenPm + MIN_LEARNING_LOCK_MS + 60 * 60 * 1000;
+    act(() => {
+      vi.setSystemTime(afterLockFloor);
+    });
+
+    const { result, unmount } = renderHook(() => useLiveNow());
+    expect(result.current).toBe(afterLockFloor);
+    // The minute recheck is running. A current-offset midnight would still
+    // be pending; the frozen calendar day has already passed both deadlines.
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
   });
 });

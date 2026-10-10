@@ -13,6 +13,12 @@ import { DAY_MS, MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
  * verse started yesterday stays on a disabled Learn / "Tomorrow" CTA until
  * the tab is fully reloaded. A one-minute recheck covers sleep/wake while
  * the tab stays focused and the midnight timer never fires.
+ *
+ * Practice, learn, review, and pack screens subscribe too. Soft-lock and due
+ * checks that read this clock refresh when it advances at local midnight or
+ * after that 6-hour floor, with no reload. Queues snapshotted at mount
+ * (`MemorySessionRunner`, `useFrozenQuery`) keep the verse list they opened
+ * with.
  */
 let sessionNow: number | undefined;
 const sessionNowListeners = new Set<() => void>();
@@ -28,6 +34,14 @@ function localDayKey(timestamp: number, tzOffsetMinutes: number): number {
   return Math.floor((timestamp - tzOffsetMinutes * 60 * 1000) / DAY_MS);
 }
 
+/**
+ * UTC instant of the next local midnight after `timestamp`.
+ *
+ * `tzOffsetMinutes` is the offset at `timestamp` — that instant's calendar
+ * day, the same per-instant offset {@link localDayKey} uses. The offset at
+ * "now" mis-reads a spring-forward night: 11pm standard, interpreted as
+ * daylight, is already the next local day, so the timer aims a day late.
+ */
 function nextLocalMidnightUtc(
   timestamp: number,
   tzOffsetMinutes: number,
@@ -114,8 +128,9 @@ function scheduleCatchUpTimer(): void {
   clearCatchUpTimer();
   const current = Date.now();
   const frozen = getSessionNow();
-  const tzOffsetMinutes = new Date(current).getTimezoneOffset();
-  const untilMidnight = nextLocalMidnightUtc(frozen, tzOffsetMinutes) - current;
+  const untilMidnight =
+    nextLocalMidnightUtc(frozen, new Date(frozen).getTimezoneOffset()) -
+    current;
   const untilLockFloor = frozen + MIN_LEARNING_LOCK_MS - current;
   const delay = Math.min(
     ...[untilMidnight, untilLockFloor].filter((value) => value > 0),
