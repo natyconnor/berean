@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.9](https://github.com/natyconnor/berean/compare/v1.17.8...v1.17.9) (2026-10-10)
+
+
+### Bug Fixes
+
+* End Learn when the learner is done for the day ([#261](https://github.com/natyconnor/berean/issues/261)) ([5690c17](https://github.com/natyconnor/berean/commit/5690c170a293393b3b19b5fcf1893af94c2cfbbe))
+
 ## [1.17.8](https://github.com/natyconnor/berean/compare/v1.17.7...v1.17.8) (2026-10-10)
 
 
