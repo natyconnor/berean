@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+} from "@/lib/learn-dismissed-packs";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
@@ -51,6 +55,16 @@ vi.mock("convex/react", () => ({
 vi.mock("convex-helpers/react/cache", () => ({
   useQuery: (name: string, args: unknown) => {
     if (args === "skip") return undefined;
+    if (
+      name === "passageMemory.getForPack" &&
+      args &&
+      typeof args === "object" &&
+      "packId" in args &&
+      typeof args.packId === "string"
+    ) {
+      const byPack = `passageMemory.getForPack:${args.packId}`;
+      if (queryResults.has(byPack)) return queryResults.get(byPack);
+    }
     return queryResults.get(name);
   },
 }));
@@ -69,12 +83,24 @@ vi.mock("../../../convex/_generated/api", () => ({
       getChaptersBatch: "esv.getChaptersBatch",
       getPassage: "esv.getPassage",
     },
-    savedVerses: { listAll: "savedVerses.listAll" },
+    savedVerses: {
+      listAll: "savedVerses.listAll",
+      listRecordingIds: "savedVerses.listRecordingIds",
+    },
+    packs: {
+      recordUnifiedReview: "packs.recordUnifiedReview",
+      acceptRetryHold: "packs.acceptRetryHold",
+    },
+    verseMemory: {
+      recordAttempt: "verseMemory.recordAttempt",
+      acceptRetryHold: "verseMemory.acceptRetryHold",
+    },
     passageMemory: {
       dueForLearning: "passageMemory.dueForLearning",
       getForPack: "passageMemory.getForPack",
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
+      acceptRetryHold: "passageMemory.acceptRetryHold",
     },
   },
 }));
@@ -139,19 +165,44 @@ function passageView(
   };
 }
 
-function renderLearn(view: PassageView) {
-  queryResults.set("savedVerses.listAll", []);
-  queryResults.set("passageMemory.dueForLearning", [
-    { packId: PACK_JUDE, packName: JUDE },
-    { packId: PACK_3JOHN, packName: THIRD_JOHN },
-  ]);
+const DEFAULT_DUE_PACKS = [
+  { packId: PACK_JUDE, packName: JUDE },
+  { packId: PACK_3JOHN, packName: THIRD_JOHN },
+];
+
+function renderLearn(
+  view: PassageView,
+  options?: {
+    passages?: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
+    savedVerses?: unknown[];
+    missingPackIds?: ReadonlyArray<Id<"packs">>;
+  },
+) {
+  queryResults.set("savedVerses.listAll", options?.savedVerses ?? []);
+  queryResults.set(
+    "passageMemory.dueForLearning",
+    options?.passages ?? DEFAULT_DUE_PACKS,
+  );
   queryResults.set("passageMemory.getForPack", view);
+  for (const packId of options?.missingPackIds ?? []) {
+    queryResults.set(`passageMemory.getForPack:${packId}`, null);
+  }
 
   return render(
     <TooltipProvider delayDuration={0}>
       <MemoryLearnPage />
     </TooltipProvider>,
   );
+}
+
+function nextVerseView(): PassageView {
+  return passageView([
+    piece(0, "attached", {
+      learnStage: 2,
+      dueAt: getSessionNow() + DAY_MS,
+    }),
+    piece(1, "unreached"),
+  ]);
 }
 
 describe("MemoryLearnPage", () => {
@@ -226,15 +277,7 @@ describe("MemoryLearnPage", () => {
   );
 
   it("keeps Start next verse on the current pack", async () => {
-    renderLearn(
-      passageView([
-        piece(0, "attached", {
-          learnStage: 2,
-          dueAt: getSessionNow() + DAY_MS,
-        }),
-        piece(1, "unreached"),
-      ]),
-    );
+    renderLearn(nextVerseView());
 
     await userEvent.click(
       await screen.findByRole("button", { name: "Start Psalm 23:2" }),
@@ -246,5 +289,131 @@ describe("MemoryLearnPage", () => {
     expect(onExitHome).not.toHaveBeenCalled();
     expect(screen.getByText(JUDE)).toBeInTheDocument();
     expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+  });
+
+  it("returns home from the retry panel instead of starting the next pack", async () => {
+    mutationMock("passageMemory.introduceNext").mockRejectedValue(
+      new Error("ConvexError"),
+    );
+    renderLearn(passageView([piece(0, "unreached"), piece(1, "unreached")]));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /couldn't start the next verse/i,
+    );
+    expect(screen.getByText(JUDE)).toBeInTheDocument();
+    expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+
+    expect(onExitHome).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(JUDE)).toBeInTheDocument();
+    expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Warm up/i)).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.introduceNext")).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("opens the next due pack on a later visit after That's enough for today", async () => {
+    const first = renderLearn(nextVerseView());
+
+    expect(await screen.findByText(JUDE)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+    expect(onExitHome).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+
+    first.unmount();
+    onExitHome.mockClear();
+    renderLearn(nextVerseView());
+
+    expect(await screen.findByText(THIRD_JOHN)).toBeInTheDocument();
+    expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
+    expect(screen.getByText(NEXT_VERSE_PROMPT_COPY)).toBeInTheDocument();
+    expect(onExitHome).not.toHaveBeenCalled();
+  });
+
+  it("opens the verse session on a later visit when the only due pack was dismissed", async () => {
+    const savedVerses = [
+      {
+        verseRefId: "verse_john316" as Id<"verseRefs">,
+        book: "John",
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+        memory: {
+          status: "learning" as const,
+          learnStage: 1,
+          stageReps: 0,
+          dueAt: getSessionNow(),
+        },
+      },
+    ];
+    const passages = [{ packId: PACK_JUDE, packName: JUDE }];
+    const first = renderLearn(nextVerseView(), { passages, savedVerses });
+
+    expect(await screen.findByText(JUDE)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+    first.unmount();
+
+    renderLearn(nextVerseView(), { passages, savedVerses });
+
+    expect(await screen.findByText("Today's learning")).toBeInTheDocument();
+    expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
+    expect(screen.queryByText(DONE_FOR_NOW_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("opens the same pack again after Back", async () => {
+    const first = renderLearn(nextVerseView());
+
+    await userEvent.click(await screen.findByRole("button", { name: "Back" }));
+    expect(onExitHome).toHaveBeenCalledTimes(1);
+
+    first.unmount();
+    onExitHome.mockClear();
+    renderLearn(nextVerseView());
+
+    expect(await screen.findByText(JUDE)).toBeInTheDocument();
+    expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+  });
+
+  it("still opens a pack dismissed on an earlier local day", async () => {
+    dismissLearnPackForToday(
+      PACK_JUDE,
+      learnDismissDayKey(getSessionNow()) - 1,
+    );
+    renderLearn(nextVerseView());
+
+    expect(await screen.findByText(JUDE)).toBeInTheDocument();
+    expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+  });
+
+  it("drops a missing passage on Back and opens the next pack next visit", async () => {
+    const first = renderLearn(nextVerseView(), {
+      missingPackIds: [PACK_JUDE],
+    });
+
+    expect(await screen.findByText("Passage not found")).toBeInTheDocument();
+    expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
+    expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(onExitHome).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Passage not found")).toBeInTheDocument();
+    expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+
+    first.unmount();
+    onExitHome.mockClear();
+    renderLearn(nextVerseView(), { missingPackIds: [PACK_JUDE] });
+
+    expect(await screen.findByText(THIRD_JOHN)).toBeInTheDocument();
+    expect(screen.queryByText("Passage not found")).not.toBeInTheDocument();
+    expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
   });
 });
