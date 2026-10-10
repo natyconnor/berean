@@ -22,6 +22,15 @@ function localMidnightUtc(timestamp: number, tzOffsetMinutes: number): number {
   return Math.floor((timestamp - offsetMs) / DAY_MS) * DAY_MS + offsetMs;
 }
 
+function nextLocalMidnightUtc(
+  timestamp: number,
+  tzOffsetMinutes: number,
+): number {
+  const offsetMs = tzOffsetMinutes * 60 * 1000;
+  const startOfLocalDay = Math.floor((timestamp - offsetMs) / DAY_MS) * DAY_MS;
+  return startOfLocalDay + DAY_MS + offsetMs;
+}
+
 describe("shouldAdvanceSessionNow", () => {
   it("stays frozen through a short tab switch on the same local day", () => {
     const nineAm = localMidnightUtc(1_700_000_000_000, TZ) + 9 * 60 * 60 * 1000;
@@ -177,11 +186,104 @@ describe("useLiveNow", () => {
     const { unmount } = renderHook(() => useLiveNow());
     unmount();
 
+    expect(vi.getTimerCount()).toBe(0);
+
     act(() => {
       vi.setSystemTime(start + DAY_MS);
       vi.advanceTimersByTime(60_000);
     });
 
     expect(getSessionNow()).toBe(start);
+  });
+
+  it("advances when the midnight timer fires with no visibility or focus events", () => {
+    const probe = Date.UTC(2026, 5, 15, 12, 0, 0);
+    const offset = new Date(probe).getTimezoneOffset();
+    // 23:59:30 local — 30s before midnight, inside the first recheck minute.
+    const justBeforeMidnight =
+      localMidnightUtc(probe, offset) + DAY_MS - 30_000;
+    vi.useFakeTimers();
+    vi.setSystemTime(justBeforeMidnight);
+    resetSessionNowForTests();
+
+    const { result, unmount } = renderHook(() => useLiveNow());
+    expect(result.current).toBe(justBeforeMidnight);
+
+    act(() => {
+      vi.advanceTimersByTime(29_999);
+    });
+    expect(result.current).toBe(justBeforeMidnight);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(result.current).toBe(justBeforeMidnight + 30_000);
+    unmount();
+  });
+
+  it("schedules next midnight from the frozen instant's offset across spring-forward", () => {
+    const standard = 480;
+    const daylight = 420;
+    const elevenPm =
+      localMidnightUtc(Date.UTC(2026, 2, 8), standard) + 23 * 60 * 60 * 1000;
+    const frozenMidnight = elevenPm + 60 * 60 * 1000;
+    vi.useFakeTimers();
+    vi.setSystemTime(elevenPm);
+    vi.spyOn(Date.prototype, "getTimezoneOffset").mockImplementation(function (
+      this: Date,
+    ) {
+      return this.getTime() < frozenMidnight ? standard : daylight;
+    });
+    resetSessionNowForTests();
+
+    const first = renderHook(() => useLiveNow());
+    expect(first.result.current).toBe(elevenPm);
+    first.unmount();
+
+    // Frozen at 11pm. 30s before that day's midnight is still the same local
+    // day and inside the 6-hour floor, so only the midnight timer can move it.
+    act(() => {
+      vi.setSystemTime(frozenMidnight - 30_000);
+    });
+    const acrossMidnight = renderHook(() => useLiveNow());
+    expect(acrossMidnight.result.current).toBe(elevenPm);
+
+    act(() => {
+      vi.advanceTimersByTime(29_999);
+    });
+    expect(acrossMidnight.result.current).toBe(elevenPm);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(acrossMidnight.result.current).toBe(frozenMidnight);
+    acrossMidnight.unmount();
+
+    resetSessionNowForTests();
+    act(() => {
+      vi.setSystemTime(elevenPm);
+    });
+    const seeded = renderHook(() => useLiveNow());
+    expect(seeded.result.current).toBe(elevenPm);
+    seeded.unmount();
+
+    const afterLockFloor = elevenPm + MIN_LEARNING_LOCK_MS + 60 * 60 * 1000;
+    act(() => {
+      vi.setSystemTime(afterLockFloor);
+    });
+
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    const { result, unmount } = renderHook(() => useLiveNow());
+    expect(result.current).toBe(afterLockFloor);
+    const delays = setTimeoutSpy.mock.calls.map((call) => call[1]);
+    const dayLateDelay =
+      nextLocalMidnightUtc(elevenPm, daylight) - afterLockFloor;
+    // A current-offset midnight is still ~17h out. The frozen day has passed
+    // both of its deadlines, so that delay must not be scheduled. What remains
+    // is the minute recheck plus a timer aimed at the new instant's 6h floor.
+    expect(delays).toContain(MIN_LEARNING_LOCK_MS);
+    expect(delays).not.toContain(dayLateDelay);
+    expect(vi.getTimerCount()).toBe(2);
+    unmount();
   });
 });
