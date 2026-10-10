@@ -41,6 +41,8 @@ export interface VerseTextPaneProps {
   density?: "default" | "reading";
   showCollapseControl?: boolean;
   forceAddButtonVisible?: boolean;
+  book?: string;
+  chapter?: number;
   addNoteTourId?: string;
   rowTourId?: string;
   passageHeart?: PassageHeartControl | null;
@@ -66,6 +68,8 @@ export const VerseTextPane = memo(function VerseTextPane({
   density = "default",
   showCollapseControl = true,
   forceAddButtonVisible = false,
+  book,
+  chapter,
   addNoteTourId,
   rowTourId,
   passageHeart = null,
@@ -110,6 +114,8 @@ export const VerseTextPane = memo(function VerseTextPane({
         verseTextRef={verseTextRef}
         onMarkClick={handleMarkClick}
         forceAddButtonVisible={forceAddButtonVisible}
+        book={book}
+        chapter={chapter}
         addNoteTourId={addNoteTourId}
         rowTourId={rowTourId}
         passageHeart={passageHeart}
