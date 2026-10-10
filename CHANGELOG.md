@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.11](https://github.com/natyconnor/berean/compare/v1.17.10...v1.17.11) (2026-10-10)
+
+
+### Bug Fixes
+
+* Give passage chapter and add-note buttons accessible names ([#270](https://github.com/natyconnor/berean/issues/270)) ([30e1397](https://github.com/natyconnor/berean/commit/30e13972ef0698e566459e1e72f0ff37705030f2))
+
 ## [1.17.10](https://github.com/natyconnor/berean/compare/v1.17.9...v1.17.10) (2026-10-10)
 
 
