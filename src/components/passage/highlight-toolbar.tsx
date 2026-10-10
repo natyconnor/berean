@@ -137,18 +137,22 @@ export function HighlightToolbar({
       }}
       onMouseDown={(e) => e.preventDefault()}
     >
-      {HIGHLIGHT_COLORS.map((color) => (
-        <button
-          key={color.id}
-          type="button"
-          className={cn(
-            "h-6 w-6 rounded-full border border-border/50 transition-transform hover:scale-110 hover:ring-2 hover:ring-ring/30",
-            color.swatchBg,
-          )}
-          title={`Highlight ${color.label}`}
-          onClick={() => handleColorClick(color.id)}
-        />
-      ))}
+      {HIGHLIGHT_COLORS.map((color) => {
+        const name = `Highlight ${color.label}`;
+        return (
+          <button
+            key={color.id}
+            type="button"
+            className={cn(
+              "h-6 w-6 rounded-full border border-border/50 transition-transform hover:scale-110 hover:ring-2 hover:ring-ring/30",
+              color.swatchBg,
+            )}
+            aria-label={name}
+            title={name}
+            onClick={() => handleColorClick(color.id)}
+          />
+        );
+      })}
     </div>,
     document.body,
   );

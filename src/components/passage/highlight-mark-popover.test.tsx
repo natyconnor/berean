@@ -103,4 +103,27 @@ describe("HighlightMarkPopover", () => {
 
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
+
+  it("names the icon-only highlight controls", () => {
+    render(
+      <HighlightMarkPopover
+        anchorRect={anchorRect}
+        highlightId="hl_123"
+        currentColor="yellow"
+        onDelete={() => {}}
+        onRecolor={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Change to Yellow" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Change to Green" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove highlight" }),
+    ).toBeInTheDocument();
+  });
 });

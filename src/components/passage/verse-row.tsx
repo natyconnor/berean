@@ -22,6 +22,7 @@ import {
   type VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
 import { getHighlightColor } from "@/lib/highlight-colors";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { VERSE_EXPAND_TRANSITION } from "./note-animation-config";
 
 export interface VerseSelectionState {
@@ -80,6 +81,9 @@ interface VerseRowLeftProps {
   onTextMouseUp?: () => void;
   onMarkClick?: (highlightId: string, rect: DOMRect) => void;
   forceAddButtonVisible?: boolean;
+  /** Passage the verse belongs to, used to name the add-note button. */
+  book?: string;
+  chapter?: number;
   addNoteTourId?: string;
   rowTourId?: string;
   /** When set, shows a heart toggle (including when expanded, e.g. grouped passage). */
@@ -132,6 +136,20 @@ const GROUPED_EXPANDED = {
   textFontSize: "1.25rem", // text-xl — slightly smaller than solo expanded
   verseNumberPaddingTop: "0.25rem",
 } as const;
+
+function addNoteButtonName(
+  verseNumber: number,
+  book: string | undefined,
+  chapter: number | undefined,
+): string {
+  if (book === undefined || chapter === undefined) return "Add a note";
+  return `Add a note to ${formatVerseRef({
+    book,
+    chapter,
+    startVerse: verseNumber,
+    endVerse: verseNumber,
+  })}`;
+}
 
 const HEART_BURST_SPARK_DEGREES = [0, 45, 90, 135, 180, 225, 270, 315] as const;
 const HEART_BURST_SPARK_DISTANCE_PX = 22;
@@ -362,6 +380,8 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   onTextMouseUp,
   onMarkClick,
   forceAddButtonVisible = false,
+  book,
+  chapter,
   addNoteTourId,
   rowTourId,
   passageHeart = null,
@@ -375,6 +395,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
   const { isPassageRangeActive, isNoteBubbleHovered } = hover;
   const isFocusTarget = focus?.isTarget ?? false;
   const shouldFlipTooltipBelow = verseNumber <= 2;
+  const addNoteLabel = addNoteButtonName(verseNumber, book, chapter);
   const { onAddNote, onMouseDown, onMouseEnter, onMouseLeave } = handlers;
 
   const glintRef = useRef<{ x: number; y: number } | null>(null);
@@ -776,29 +797,31 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                   : "opacity-0 group-hover:opacity-100",
               )}
             >
-              <div className="group/addbtn relative flex h-full min-w-8 items-center justify-center">
-                <button
-                  type="button"
-                  className="flex h-full min-h-9 w-full min-w-9 items-center justify-center rounded px-2 hover:bg-primary/10"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddNote(verseNumber);
-                  }}
-                  {...(addNoteTourId ? { "data-tour-id": addNoteTourId } : {})}
-                >
-                  <Plus className="h-[18px] w-[18px] text-primary" />
-                </button>
-                <span
-                  className={cn(
-                    "pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/addbtn:opacity-100",
-                    shouldFlipTooltipBelow
-                      ? "top-full mt-1.5"
-                      : "bottom-full mb-1.5",
-                  )}
-                >
-                  Add note
-                </span>
+              <div className="flex h-full min-w-8 items-center justify-center">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={addNoteLabel}
+                      className="flex h-full min-h-9 w-full min-w-9 items-center justify-center rounded px-2 hover:bg-primary/10"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddNote(verseNumber);
+                      }}
+                      {...(addNoteTourId
+                        ? { "data-tour-id": addNoteTourId }
+                        : {})}
+                    >
+                      <Plus className="h-[18px] w-[18px] text-primary" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side={shouldFlipTooltipBelow ? "bottom" : "top"}
+                  >
+                    {addNoteLabel}
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
           )}

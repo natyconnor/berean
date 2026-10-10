@@ -82,28 +82,33 @@ export function HighlightMarkPopover({
         transition={POPOVER_SPRING}
         onMouseDown={(e) => e.preventDefault()}
       >
-        {HIGHLIGHT_COLORS.map((color) => (
-          <motion.button
-            key={color.id}
-            type="button"
-            className={cn(
-              "h-6 w-6 rounded-full border transition-[border-color,box-shadow]",
-              color.swatchBg,
-              currentColor === color.id
-                ? "border-foreground/50 ring-2 ring-ring/30 scale-110"
-                : "border-border/50",
-            )}
-            title={`Change to ${color.label}`}
-            whileHover={{ scale: 1.18 }}
-            whileTap={{ scale: 0.92 }}
-            transition={{ type: "spring", stiffness: 500, damping: 28 }}
-            onClick={() => onRecolor(color.id)}
-          />
-        ))}
+        {HIGHLIGHT_COLORS.map((color) => {
+          const name = `Change to ${color.label}`;
+          return (
+            <motion.button
+              key={color.id}
+              type="button"
+              className={cn(
+                "h-6 w-6 rounded-full border transition-[border-color,box-shadow]",
+                color.swatchBg,
+                currentColor === color.id
+                  ? "border-foreground/50 ring-2 ring-ring/30 scale-110"
+                  : "border-border/50",
+              )}
+              aria-label={name}
+              title={name}
+              whileHover={{ scale: 1.18 }}
+              whileTap={{ scale: 0.92 }}
+              transition={{ type: "spring", stiffness: 500, damping: 28 }}
+              onClick={() => onRecolor(color.id)}
+            />
+          );
+        })}
         <div className="mx-1 h-5 w-px bg-border" />
         <motion.button
           type="button"
           className="flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          aria-label="Remove highlight"
           title="Remove highlight"
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
