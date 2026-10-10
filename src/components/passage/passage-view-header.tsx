@@ -124,12 +124,12 @@ export function PassageViewHeader({
             onChapterNotesClick={onChapterNotesClick}
           />
         </div>
-        <div className="pb-3 pt-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+        <div className="min-w-0 pb-3 pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <span className="shrink-0 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               Notes
             </span>
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               {!isReadMode && (
                 <HeaderShortcutToggle
                   id="passage-focus-mode"

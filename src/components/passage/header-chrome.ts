@@ -4,20 +4,20 @@
  * Compact in stages as the header gets tighter:
  *
  * 1. Passage column (`@container/chapter-chrome`): `@max-2xl` is 42rem
- *    (672px). Read mode's left track is under this even at the 1400px content
- *    cap, so Headers + the chapter-note CTA collapse first.
- * 2. Whole header (`@container/passage-header`): the compose notes track is
- *    `minmax(360px, 440px)`, so a query on that column never sees "the window
- *    got narrow" — it stays ~440px while the passage side is crushed. Query
- *    the header instead so notes chrome can follow.
+ *    (672px). Read mode's passage track tops out at 34rem, so Headers and
+ *    the chapter-note CTA stay collapsed in Read even at the 1400px cap.
+ * 2. Whole header (`@container/passage-header`): notes chrome follows the
+ *    header, not the notes track. Compose notes are capped at 27.5rem and
+ *    shrink below that once the passage side is tight, so a query on the
+ *    notes column would not match the window.
  *    - `@max-6xl` (72rem / 1152px): shorten long copy (All Verses, empty state).
  *    - `@max-5xl` (64rem / 1024px): hide Focus / Compose / Read words.
  *    These widths are the header's content box, inside the compose gutter
  *    (`pl-16` + `pr-5` = 84px). They trip around a 1236px / 1108px window.
  * 3. Passage column under `@max-xs` (20rem / 320px): drop the Headers switch
- *    from the row. Arrows, a truncating book name, the chapter, and the note
- *    icon still fit a ~224px compose column (about a 768px window). H still
- *    toggles section headings from the keyboard.
+ *    from the row. Compose holds the passage track at about 24rem on a 768px
+ *    window, so the switch stays; it leaves only when that column itself is
+ *    under 20rem. H still toggles section headings from the keyboard.
  *
  * At a typical 1280px compose layout the header content box is still above
  * 5xl, so those words stay. They drop once the window is actually tight.
