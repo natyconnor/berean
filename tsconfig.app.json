@@ -28,5 +28,5 @@
       "*": ["./*"]
     }
   },
-  "include": ["src", "shared"]
+  "include": ["src", "shared", "middleware.ts"]
 }

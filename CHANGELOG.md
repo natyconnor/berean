@@ -30,6 +30,41 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.10](https://github.com/natyconnor/berean/compare/v1.17.9...v1.17.10) (2026-10-10)
+
+
+### Bug Fixes
+
+* Memory clock follow-ups from [#256](https://github.com/natyconnor/berean/issues/256) review ([#264](https://github.com/natyconnor/berean/issues/264)) ([96b23e8](https://github.com/natyconnor/berean/commit/96b23e81b76d5b3000fc834a40d78fd79861c239))
+
+## [1.17.9](https://github.com/natyconnor/berean/compare/v1.17.8...v1.17.9) (2026-10-10)
+
+
+### Bug Fixes
+
+* End Learn when the learner is done for the day ([#261](https://github.com/natyconnor/berean/issues/261)) ([5690c17](https://github.com/natyconnor/berean/commit/5690c170a293393b3b19b5fcf1893af94c2cfbbe))
+
+## [1.17.8](https://github.com/natyconnor/berean/compare/v1.17.7...v1.17.8) (2026-10-10)
+
+
+### Bug Fixes
+
+* Serve unknown routes as a real 404 page ([#262](https://github.com/natyconnor/berean/issues/262)) ([d203d68](https://github.com/natyconnor/berean/commit/d203d680de0107129ac334f44d6b4635b0580a0b))
+
+## [1.17.7](https://github.com/natyconnor/berean/compare/v1.17.6...v1.17.7) (2026-10-10)
+
+
+### Bug Fixes
+
+* Catch up the Memory session clock overnight so Learn unlocks ([#256](https://github.com/natyconnor/berean/issues/256)) ([05270c9](https://github.com/natyconnor/berean/commit/05270c91fbc41ac6c86c76ee71ea3f30d07cd2c0))
+
+## [1.17.6](https://github.com/natyconnor/berean/compare/v1.17.5...v1.17.6) (2026-10-09)
+
+
+### Bug Fixes
+
+* Ignore standalone punctuation in memory recall scoring ([#257](https://github.com/natyconnor/berean/issues/257)) ([77b6717](https://github.com/natyconnor/berean/commit/77b67172ed95761c720f2ebf69c23900c6507f04))
+
 ## [1.17.5](https://github.com/natyconnor/berean/compare/v1.17.4...v1.17.5) (2026-10-03)
 
 

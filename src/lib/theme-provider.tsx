@@ -6,7 +6,7 @@ import { ThemeContext } from "@/lib/theme-context";
 import type { AppTheme } from "@/themes/theme-types";
 
 const THEME_STORAGE_KEY = "bible-notes-theme";
-const DARK_MODE_STORAGE_KEY = "bible-notes-dark-mode";
+export const DARK_MODE_STORAGE_KEY = "bible-notes-dark-mode";
 
 function resolveInitialTheme(): AppTheme {
   try {
