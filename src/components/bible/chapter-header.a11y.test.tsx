@@ -111,6 +111,19 @@ describe("ChapterHeader accessible chapter controls", () => {
     ).toBeEnabled();
   });
 
+  it("names the section-headers switch from its visible label", () => {
+    renderHeader("John", 1);
+
+    const headers = screen.getByRole("switch", { name: /^Headers/ });
+    expect(headers).toHaveAttribute("id", "passage-section-headers");
+    expect(headers).not.toHaveAttribute("aria-label");
+    expect(screen.getByLabelText(/^Headers/)).toBe(headers);
+    const label = document.querySelector(
+      'label[for="passage-section-headers"]',
+    );
+    expect(label).toHaveTextContent("Headers");
+  });
+
   it("keeps a name at the first and last chapters of the Bible", () => {
     renderHeader("Genesis", 1);
     expect(

@@ -11,6 +11,8 @@ import { THEMES } from "@/lib/themes";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
+const THEME_MENU_NAME = "Change theme";
+
 export function ThemeDropdown() {
   const { theme, setTheme, darkMode, setDarkMode } = useTheme();
   const [open, setOpen] = useState(false);
@@ -31,7 +33,8 @@ export function ThemeDropdown() {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          tooltip="Change theme"
+          tooltip={THEME_MENU_NAME}
+          aria-label={THEME_MENU_NAME}
         >
           <Palette className="h-4 w-4" />
         </TooltipButton>
