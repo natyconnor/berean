@@ -10,6 +10,11 @@ import { MemoryAllSessionPage } from "@/components/routes/memory-practice-page";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryBack } from "@/hooks/use-memory-back";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+  readLearnPacksDismissedToday,
+} from "@/lib/learn-dismissed-packs";
 import { hasLearnVerseScope } from "@/lib/memory-learn-search";
 import { isMemorySessionCandidate } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
@@ -52,6 +57,7 @@ function GlobalMemoryLearnPage(): JSX.Element {
     <GlobalLearnSession
       passages={duePassages}
       verses={verses}
+      dayKey={learnDismissDayKey(now)}
       onExitHome={onExitHome}
     />
   );
@@ -60,24 +66,38 @@ function GlobalMemoryLearnPage(): JSX.Element {
 function GlobalLearnSession({
   passages,
   verses,
+  dayKey,
   onExitHome,
 }: {
   passages: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
   verses: PracticeVerse[];
+  dayKey: number;
   onExitHome: () => void;
 }): JSX.Element {
+  // Freeze the due list for this visit so a live update cannot swap packs
+  // mid-session. Walk every frozen pack: the first one not set aside earlier
+  // today is the session. "That's enough for today" records the dismissal and
+  // leaves; it does not open the next pack until a later visit.
   const [frozenPassages] = useState(passages);
   const [frozenVerses] = useState(verses);
-  const [passageIndex, setPassageIndex] = useState(0);
+  const [dismissedPackIds] = useState(() =>
+    readLearnPacksDismissedToday(dayKey),
+  );
 
-  const current = frozenPassages[passageIndex];
-  if (current) {
+  const passage = frozenPassages.find(
+    (item) => !dismissedPackIds.has(item.packId),
+  );
+  if (passage) {
+    const dismissAndLeave = () => {
+      dismissLearnPackForToday(passage.packId, dayKey);
+      onExitHome();
+    };
     return (
       <BuildingPassageLearnCard
-        packId={current.packId}
-        packName={current.packName}
-        onDone={() => setPassageIndex((index) => index + 1)}
+        packId={passage.packId}
+        packName={passage.packName}
         onExitHome={onExitHome}
+        onDismissPack={dismissAndLeave}
       />
     );
   }
@@ -138,13 +158,14 @@ function GlobalLearnSession({
 function BuildingPassageLearnCard({
   packId,
   packName,
-  onDone,
   onExitHome,
+  onDismissPack,
 }: {
   packId: Id<"packs">;
   packName: string;
-  onDone: () => void;
   onExitHome: () => void;
+  /** "That's enough for today", or Back from a pack this query cannot load. */
+  onDismissPack: () => void;
 }): JSX.Element {
   const now = useLiveNow();
   const view = useQuery(api.passageMemory.getForPack, {
@@ -171,9 +192,9 @@ function BuildingPassageLearnCard({
           <button
             type="button"
             className="inline-flex text-sm font-medium text-primary hover:underline"
-            onClick={onDone}
+            onClick={onDismissPack}
           >
-            Continue
+            Back
           </button>
         </div>
       </div>
@@ -186,7 +207,7 @@ function BuildingPassageLearnCard({
       view={view}
       packName={packName}
       onExit={onExitHome}
-      onFinish={onDone}
+      onDoneForToday={onDismissPack}
       exitTooltip="Go back"
     />
   );

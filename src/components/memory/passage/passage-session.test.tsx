@@ -10,6 +10,7 @@ import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 import {
+  BUDGET_EXHAUSTED_COPY,
   CONNECT_COPY,
   CONNECT_RECITE_LABEL,
   CONNECT_TITLE,
@@ -219,10 +220,14 @@ describe("PassageSession", () => {
   });
 
   it("lets the learner retry when auto-start fails", async () => {
+    const onExit = vi.fn();
     mutationMock("passageMemory.introduceNext").mockRejectedValue(
       new Error("ConvexError"),
     );
-    renderSession(passageView([piece(0, "unreached"), piece(1, "unreached")]));
+    renderSession(
+      passageView([piece(0, "unreached"), piece(1, "unreached")]),
+      onExit,
+    );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /couldn't start the next verse/i,
@@ -237,6 +242,14 @@ describe("PassageSession", () => {
       screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
     ).toBeInTheDocument();
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("passageMemory.introduceNext")).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it("prompts the next verse without a recitation box after today's work", async () => {
@@ -277,7 +290,8 @@ describe("PassageSession", () => {
     expect(mutationMock("passageMemory.introduceNext")).not.toHaveBeenCalled();
   });
 
-  it("does not render a blank Learn screen when the current verse is locked", () => {
+  it("does not render a blank Learn screen when the current verse is locked", async () => {
+    const onExit = vi.fn();
     renderSession(
       passageView([
         piece(0, "attached", {
@@ -285,6 +299,7 @@ describe("PassageSession", () => {
           dueAt: getSessionNow() + DAY_MS,
         }),
       ]),
+      onExit,
     );
 
     expect(screen.getByText(FRONTIER_LOCKED_COPY)).toBeInTheDocument();
@@ -297,6 +312,33 @@ describe("PassageSession", () => {
     expect(
       screen.queryByLabelText("Your recited passage"),
     ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends the session when today's introduce budget is used", async () => {
+    const onExit = vi.fn();
+    renderSession(
+      passageView(
+        [piece(0, "solid", { learnStage: 3 }), piece(1, "unreached")],
+        { remainingIntroduces: 0, addsOnDay: 5 },
+      ),
+      onExit,
+    );
+
+    expect(screen.getByText(BUDGET_EXHAUSTED_COPY)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Start / }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("passageMemory.introduceNext")).not.toHaveBeenCalled();
   });
 
   it("shows the end of the previous verse at From Memory", async () => {

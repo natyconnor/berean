@@ -116,8 +116,12 @@ interface PassageSessionProps {
   view: PassageView;
   packName: string;
   onExit: () => void;
-  /** Done-for-now / continue; defaults to onExit. Back always uses onExit. */
-  onFinish?: () => void;
+  /**
+   * "That's enough for today". Defaults to `onExit`. Global Learn uses this
+   * to remember the pack was dismissed without treating the header Back the
+   * same way.
+   */
+  onDoneForToday?: () => void;
   exitTooltip?: string;
 }
 
@@ -126,10 +130,10 @@ export function PassageSession({
   view,
   packName,
   onExit,
-  onFinish,
+  onDoneForToday,
   exitTooltip = "Go back to the pack",
 }: PassageSessionProps): JSX.Element {
-  const finish = onFinish ?? onExit;
+  const finishForToday = onDoneForToday ?? onExit;
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
   const introduceNext = useMutation(api.passageMemory.introduceNext);
@@ -459,8 +463,7 @@ export function PassageSession({
             onStart={() => {
               void handleIntroduce();
             }}
-            onDone={finish}
-
+            onDone={finishForToday}
             busy={introduceBusy}
           />
         ) : (
@@ -480,8 +483,7 @@ export function PassageSession({
           onStart={() => {
             void handleIntroduce();
           }}
-          onDone={finish}
-
+          onDone={finishForToday}
           busy={introduceBusy}
         />
       ) : null}
@@ -524,7 +526,7 @@ export function PassageSession({
               pendingMutation: undefined,
             }));
           }}
-          onDone={finish}
+          onDone={finishForToday}
         />
       ) : null}
 
