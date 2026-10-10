@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.8](https://github.com/natyconnor/berean/compare/v1.17.7...v1.17.8) (2026-10-10)
+
+
+### Bug Fixes
+
+* Serve unknown routes as a real 404 page ([#262](https://github.com/natyconnor/berean/issues/262)) ([d203d68](https://github.com/natyconnor/berean/commit/d203d680de0107129ac334f44d6b4635b0580a0b))
+
 ## [1.17.7](https://github.com/natyconnor/berean/compare/v1.17.6...v1.17.7) (2026-10-10)
 
 
