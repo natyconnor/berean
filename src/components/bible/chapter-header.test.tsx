@@ -8,6 +8,7 @@ import {
   CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_TIGHT_HIDE_CLASS,
 } from "@/components/passage/header-chrome";
 import { ChapterHeader } from "./chapter-header";
 
@@ -80,7 +81,68 @@ describe("ChapterHeader compact chrome", () => {
     });
     await user.hover(button);
     expect(
-      await screen.findByRole("tooltip", { name: "Open chapter notes" }),
+      await screen.findByRole("tooltip", { name: "Open chapter notes · 2" }),
     ).toBeInTheDocument();
+  });
+
+  it("lets a long book name shrink and exposes the full title", async () => {
+    const user = userEvent.setup();
+    renderHeader({ book: "1 Thessalonians", chapter: 1 });
+
+    const bookButton = screen.getByRole("button", {
+      name: "Change book, currently 1 Thessalonians",
+    });
+    expect(bookButton.className.split(/\s+/)).toContain("shrink");
+    expect(bookButton.className.split(/\s+/)).not.toContain("shrink-0");
+
+    const label = bookButton.querySelector("span.truncate");
+    expect(label).toHaveClass("min-w-0");
+    expect(label).toHaveAttribute("title", "1 Thessalonians");
+
+    await user.hover(bookButton);
+    expect(
+      await screen.findByRole("tooltip", { name: /1 Thessalonians/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Headers switch on the tightest passage column", () => {
+    renderHeader();
+    const headersSwitch = screen.getByRole("switch", { name: /Headers/ });
+    expect(headersSwitch.closest("div")?.className).toContain(
+      CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+    );
+  });
+
+  it("shows the Headers tooltip when the label is hovered", async () => {
+    const user = userEvent.setup();
+    renderHeader();
+
+    await user.hover(screen.getByText("Headers"));
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Show editorial section headings",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the Headers tooltip when the switch is focused from the keyboard", async () => {
+    const user = userEvent.setup();
+    renderHeader();
+
+    const headersSwitch = screen.getByRole("switch", { name: /Headers/ });
+    for (
+      let step = 0;
+      step < 8 && document.activeElement !== headersSwitch;
+      step += 1
+    ) {
+      await user.tab();
+    }
+
+    expect(headersSwitch).toHaveFocus();
+    const tooltip = await screen.findByRole("tooltip", {
+      name: "Show editorial section headings",
+    });
+    expect(tooltip).toBeInTheDocument();
+    expect(headersSwitch.getAttribute("aria-describedby")).toBe(tooltip.id);
   });
 });

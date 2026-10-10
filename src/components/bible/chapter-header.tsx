@@ -27,6 +27,7 @@ import {
   CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_TIGHT_HIDE_CLASS,
 } from "@/components/passage/header-chrome";
 import { HeaderShortcutToggle } from "@/components/passage/header-shortcut-toggle";
 import {
@@ -97,11 +98,15 @@ export function ChapterHeader({
   const chapterNotesSubtitle = hasChapterNotes
     ? `Notes for all of ${chapterLabel} · ${chapterScopedNoteCount}`
     : "Add a chapter note";
-  const chapterNotesTooltip = chapterNotesOpen
+  const chapterNotesAction = chapterNotesOpen
     ? "Close chapter notes"
     : hasChapterNotes
       ? "Open chapter notes"
       : "Add a chapter note";
+  // Compact chrome hides the count subtitle, so the tooltip keeps it.
+  const chapterNotesTooltip = hasChapterNotes
+    ? `${chapterNotesAction} · ${chapterScopedNoteCount}`
+    : chapterNotesAction;
 
   function goPrev() {
     if (!previous) return;
@@ -137,7 +142,7 @@ export function ChapterHeader({
         "flex w-full min-w-0 items-center gap-3 py-4 px-2 @max-2xl/chapter-chrome:gap-2",
       )}
     >
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2 @max-xs/chapter-chrome:gap-1">
         <TooltipButton
           variant="ghost"
           size="icon"
@@ -152,17 +157,27 @@ export function ChapterHeader({
           <TooltipButton
             variant="ghost"
             onClick={openBookNavigator}
-            className={cn(REFERENCE_SEGMENT_CLASS, "min-w-0")}
-            tooltip={`Change book (${passageShortcutLabel})`}
+            className={cn(
+              REFERENCE_SEGMENT_CLASS,
+              // Button's base `shrink-0` would ignore `min-w-0` and overflow
+              // the chapter number. `shrink` lets the name ellipsize.
+              "min-w-0 shrink overflow-hidden",
+            )}
+            tooltip={`${displayBookName(book)} · Change book (${passageShortcutLabel})`}
             aria-label={`Change book, currently ${displayBookName(book)}`}
           >
-            <span className="truncate">{displayBookName(book)}</span>
+            <span className="min-w-0 truncate" title={displayBookName(book)}>
+              {displayBookName(book)}
+            </span>
             <ReferenceCaret />
           </TooltipButton>
           <TooltipButton
             variant="ghost"
             onClick={openChapterNavigator}
-            className={cn(REFERENCE_SEGMENT_CLASS, "shrink-0 tabular-nums")}
+            className={cn(
+              REFERENCE_SEGMENT_CLASS,
+              "shrink-0 tabular-nums @max-xs/chapter-chrome:px-1",
+            )}
             tooltip={`Change chapter in ${book}`}
             aria-label={`Change chapter in ${book}, currently chapter ${chapter}`}
           >
@@ -203,11 +218,12 @@ export function ChapterHeader({
             ? "Hide editorial section headings"
             : "Show editorial section headings"
         }
-        className={
+        className={cn(
           showSectionHeaders
             ? "border-border bg-muted/40 text-foreground"
-            : "border-border bg-background"
-        }
+            : "border-border bg-background",
+          CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+        )}
         labelClassName={
           showSectionHeaders ? "text-foreground" : "text-muted-foreground"
         }

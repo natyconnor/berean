@@ -18,6 +18,7 @@ import {
   NOTES_CHROME_COMPACT_HIDE_CLASS,
   NOTES_CHROME_COMPACT_LABEL_CLASS,
   NOTES_CHROME_COMPACT_SHORT_CLASS,
+  NOTES_CHROME_COMPACT_SR_CLASS,
   PASSAGE_HEADER_CONTAINER_CLASS,
   SHORTCUT_KBD_CLASS,
 } from "./header-chrome";
@@ -174,9 +175,8 @@ export function PassageViewHeader({
                       size="xs"
                       variant={noteVisibility === "all" ? "secondary" : "ghost"}
                       onClick={() => setNoteVisibility("all")}
-                      aria-label="All Verses"
                     >
-                      <span className={NOTES_CHROME_COMPACT_HIDE_CLASS}>
+                      <span className={NOTES_CHROME_COMPACT_SR_CLASS}>
                         All Verses
                       </span>
                       <span className={NOTES_CHROME_COMPACT_SHORT_CLASS}>
@@ -189,9 +189,8 @@ export function PassageViewHeader({
                         noteVisibility === "noted" ? "secondary" : "ghost"
                       }
                       onClick={() => setNoteVisibility("noted")}
-                      aria-label="Only Verses with Notes"
                     >
-                      <span className={NOTES_CHROME_COMPACT_HIDE_CLASS}>
+                      <span className={NOTES_CHROME_COMPACT_SR_CLASS}>
                         Only Verses with Notes
                       </span>
                       <span className={NOTES_CHROME_COMPACT_SHORT_CLASS}>
