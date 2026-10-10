@@ -251,6 +251,7 @@ export function NoteEditor({
           className="h-6 w-6"
           onClick={onCancel}
           tooltip="Cancel"
+          aria-label="Cancel"
         >
           <X className="h-3.5 w-3.5" />
         </TooltipButton>

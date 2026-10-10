@@ -94,6 +94,12 @@ export function ChapterHeader({
   const [navigatorBook, setNavigatorBook] = useState<string | null>(null);
 
   const chapterLabel = formatBookChapter(book, chapter);
+  const previousChapterName = previous
+    ? `Previous chapter (${previous.label})`
+    : "Previous chapter";
+  const nextChapterName = next
+    ? `Next chapter (${next.label})`
+    : "Next chapter";
   const hasChapterNotes = chapterScopedNoteCount > 0;
   const chapterNotesSubtitle = hasChapterNotes
     ? `Notes for all of ${chapterLabel} · ${chapterScopedNoteCount}`
@@ -149,8 +155,8 @@ export function ChapterHeader({
           onClick={goPrev}
           disabled={!hasPrev}
           className="h-8 w-8 shrink-0"
-          tooltip="Previous chapter"
-          aria-label="Previous chapter"
+          tooltip={previousChapterName}
+          aria-label={previousChapterName}
         >
           <ChevronLeft className="h-4 w-4" />
         </TooltipButton>
@@ -201,8 +207,8 @@ export function ChapterHeader({
           onClick={goNext}
           disabled={!hasNext}
           className="h-8 w-8 shrink-0"
-          tooltip="Next chapter"
-          aria-label="Next chapter"
+          tooltip={nextChapterName}
+          aria-label={nextChapterName}
         >
           <ChevronRight className="h-4 w-4" />
         </TooltipButton>

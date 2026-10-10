@@ -200,15 +200,19 @@ describe("ChapterHeader compact chrome", () => {
   it("names the previous and next chapter buttons", () => {
     renderHeader();
     expect(
-      screen.getByRole("button", { name: "Previous chapter" }),
+      screen.getByRole("button", { name: "Previous chapter (Mark 8)" }),
     ).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Next chapter" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Next chapter (Mark 10)" }),
+    ).toBeEnabled();
 
     cleanup();
     renderHeader({ book: "Genesis", chapter: 1 });
     expect(
       screen.getByRole("button", { name: "Previous chapter" }),
     ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next chapter" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Next chapter (Genesis 2)" }),
+    ).toBeEnabled();
   });
 });

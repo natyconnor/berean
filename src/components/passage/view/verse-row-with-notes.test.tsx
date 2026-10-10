@@ -409,3 +409,51 @@ describe("VerseRowWithNotes – draft retarget", () => {
     expect(screen.queryByText("Collapse")).not.toBeInTheDocument();
   });
 });
+
+describe("VerseRowWithNotes – add-note name", () => {
+  it("names the add-note button for its verse and matches the tooltip", async () => {
+    const user = userEvent.setup();
+    const onAddNote = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <VerseRowWithNotes
+          {...defaultProps()}
+          verseNumber={5}
+          currentChapter={{ book: "John", chapter: 1 }}
+          onAddNote={onAddNote}
+        />
+      </TooltipProvider>,
+    );
+
+    const button = screen.getByRole("button", {
+      name: "Add a note to John 1:5",
+    });
+    await user.hover(button);
+    expect(
+      await screen.findByRole("tooltip", { name: "Add a note to John 1:5" }),
+    ).toBeInTheDocument();
+
+    await user.click(button);
+    expect(onAddNote).toHaveBeenCalledWith(5);
+  });
+
+  it("uses the reader-facing psalm name", () => {
+    renderVerseRow({
+      ...defaultProps(),
+      verseNumber: 1,
+      currentChapter: { book: "Psalms", chapter: 23 },
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Add a note to Psalm 23:1" }),
+    ).toBeInTheDocument();
+  });
+
+  it("still names the add-note button when the chapter is unknown", () => {
+    renderVerseRow(defaultProps());
+
+    expect(
+      screen.getByRole("button", { name: "Add a note" }),
+    ).toBeInTheDocument();
+  });
+});

@@ -306,6 +306,8 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                       isExpanded={true}
                       variant="groupedPassage"
                       showCollapseControl={index === 0}
+                      book={currentChapter.book}
+                      chapter={currentChapter.chapter}
                       onCollapseVerse={handleCollapseGroup}
                       highlights={highlightsByVerse.get(verse.verseNumber)}
                       onCreateHighlight={onCreateHighlight}
