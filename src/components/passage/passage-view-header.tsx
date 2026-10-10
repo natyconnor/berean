@@ -179,7 +179,10 @@ export function PassageViewHeader({
                       <span className={NOTES_CHROME_COMPACT_SR_CLASS}>
                         All Verses
                       </span>
-                      <span className={NOTES_CHROME_COMPACT_SHORT_CLASS}>
+                      <span
+                        aria-hidden="true"
+                        className={NOTES_CHROME_COMPACT_SHORT_CLASS}
+                      >
                         All
                       </span>
                     </Button>
@@ -191,9 +194,17 @@ export function PassageViewHeader({
                       onClick={() => setNoteVisibility("noted")}
                     >
                       <span className={NOTES_CHROME_COMPACT_SR_CLASS}>
-                        Only Verses with Notes
+                        <span className="@max-6xl/passage-header:hidden">
+                          Only Verses with Notes
+                        </span>
+                        <span className="hidden @max-6xl/passage-header:inline">
+                          Noted, Only Verses with Notes
+                        </span>
                       </span>
-                      <span className={NOTES_CHROME_COMPACT_SHORT_CLASS}>
+                      <span
+                        aria-hidden="true"
+                        className={NOTES_CHROME_COMPACT_SHORT_CLASS}
+                      >
                         Noted
                       </span>
                     </Button>

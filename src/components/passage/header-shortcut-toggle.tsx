@@ -1,10 +1,11 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { tooltipOpensOnFocus } from "@/components/ui/tooltip-focus";
 import { cn } from "@/lib/utils";
 import { SHORTCUT_KBD_CLASS } from "./header-chrome";
 
@@ -36,49 +37,65 @@ export function HeaderShortcutToggle({
 }: HeaderShortcutToggleProps) {
   const [open, setOpen] = useState(false);
   const chipRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
 
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
-      <div
-        ref={chipRef}
-        className={cn(
-          "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,box-shadow,color] duration-200",
-          className,
-        )}
-        onPointerEnter={() => setOpen(true)}
-        onPointerLeave={() => {
-          const active = document.activeElement;
-          if (active instanceof Node && chipRef.current?.contains(active)) {
-            return;
-          }
-          setOpen(false);
-        }}
-      >
-        <label
-          htmlFor={id}
+    <Tooltip open={open}>
+      {/*
+        The trigger has to stay off the switch. Radix writes its own
+        data-state (closed / instant-open) onto the trigger, which would
+        replace the switch's checked / unchecked state and clear the track.
+      */}
+      <TooltipTrigger asChild>
+        <div
+          ref={chipRef}
           className={cn(
-            "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
-            labelClassName,
+            "inline-flex shrink-0 items-center gap-2 rounded-md border px-2 py-1 transition-[background-color,border-color,box-shadow,color] duration-200",
+            className,
           )}
+          onPointerEnter={() => setOpen(true)}
+          onPointerLeave={() => {
+            const active = document.activeElement;
+            if (active instanceof Node && chipRef.current?.contains(active)) {
+              return;
+            }
+            setOpen(false);
+          }}
         >
-          {icon}
-          <span className={compactLabelClassName}>{label}</span>
-          <kbd className={SHORTCUT_KBD_CLASS}>{shortcut}</kbd>
-        </label>
-        {/* The switch is the tab stop, so the tooltip has to be on it. */}
-        <TooltipTrigger asChild>
+          <label
+            htmlFor={id}
+            className={cn(
+              "flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors",
+              labelClassName,
+            )}
+          >
+            {icon}
+            <span className={compactLabelClassName}>{label}</span>
+            <kbd className={SHORTCUT_KBD_CLASS}>{shortcut}</kbd>
+          </label>
           <Switch
             id={id}
             checked={checked}
+            aria-describedby={open ? tooltipId : undefined}
+            onFocus={() => {
+              if (tooltipOpensOnFocus()) setOpen(true);
+            }}
+            onBlur={(event) => {
+              const next = event.relatedTarget;
+              if (next instanceof Node && chipRef.current?.contains(next)) {
+                return;
+              }
+              setOpen(false);
+            }}
             onCheckedChange={(nextChecked) => {
               if (nextChecked !== checked) {
                 onToggle();
               }
             }}
           />
-        </TooltipTrigger>
-      </div>
-      <TooltipContent>{tooltip}</TooltipContent>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent id={tooltipId}>{tooltip}</TooltipContent>
     </Tooltip>
   );
 }

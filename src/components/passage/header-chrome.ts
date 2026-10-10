@@ -37,8 +37,9 @@ export const NOTES_CHROME_COMPACT_LABEL_CLASS =
   "@max-5xl/passage-header:sr-only";
 export const NOTES_CHROME_COMPACT_HIDE_CLASS = "@max-6xl/passage-header:hidden";
 /**
- * Long labels stay in the accessibility tree when the short word is showing,
- * so the accessible name still contains the visible text.
+ * Long labels stay in the accessibility tree when the short word is showing.
+ * The short word is `aria-hidden`, so the name is not "All Verses All".
+ * Noted's compact string still includes the visible word "Noted".
  */
 export const NOTES_CHROME_COMPACT_SR_CLASS = "@max-6xl/passage-header:sr-only";
 export const NOTES_CHROME_COMPACT_SHORT_CLASS =

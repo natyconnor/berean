@@ -58,7 +58,10 @@ function overlaps(a: Rect, b: Rect): boolean {
   );
 }
 
-function chromeExecutable(): string {
+const CHROME_SKIP_NOTE =
+  "Chrome not found. Set CHROME_PATH to run the chapter-header layout test.";
+
+function findChromeExecutable(): string | undefined {
   const candidates = [
     process.env.CHROME_PATH,
     "/usr/bin/google-chrome-stable",
@@ -68,14 +71,10 @@ function chromeExecutable(): string {
     "/usr/bin/chromium-browser",
   ].filter((candidate): candidate is string => Boolean(candidate));
 
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
-  }
-
-  throw new Error(
-    `Chrome not found for the chapter-header layout test. Set CHROME_PATH. Looked in: ${candidates.join(", ")}`,
-  );
+  return candidates.find((candidate) => existsSync(candidate));
 }
+
+const chromeExecutablePath = findChromeExecutable();
 
 function headerMarkup(book: string, chapter: number, width: number): string {
   return renderToStaticMarkup(
@@ -98,6 +97,8 @@ let browser: Browser | undefined;
 let origin = "";
 
 beforeAll(async () => {
+  if (!chromeExecutablePath) return;
+
   server = await createServer({
     configFile: false,
     root: process.cwd(),
@@ -118,7 +119,7 @@ beforeAll(async () => {
   origin = `http://127.0.0.1:${address.port}`;
 
   browser = await chromium.launch({
-    executablePath: chromeExecutable(),
+    executablePath: chromeExecutablePath,
     headless: true,
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
@@ -217,7 +218,8 @@ async function measureColumn(
 }
 
 describe("ChapterHeader narrow column layout", () => {
-  it("truncates a long book name instead of covering the chapter", async () => {
+  it("truncates a long book name instead of covering the chapter", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
     // 340px keeps the Headers switch on the row, which is where a
     // non-shrinking book name used to paint over the chapter.
     const report = await measureColumn("1 Thessalonians", 1, 340);
@@ -247,7 +249,9 @@ describe("ChapterHeader narrow column layout", () => {
     );
   }, 30_000);
 
-  it("keeps John 1 from overlapping in a 224px passage column", async () => {
+  it("keeps John 1 from overlapping in a 224px passage column", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+
     const report = await measureColumn("John", 1, 224);
 
     expect(report.truncated, JSON.stringify(report)).toBe(false);

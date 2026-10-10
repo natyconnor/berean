@@ -4,8 +4,10 @@ import * as React from "react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
-
-let shouldOpenTooltipOnFocus = false;
+import {
+  setTooltipOpensOnFocus,
+  tooltipOpensOnFocus,
+} from "@/components/ui/tooltip-focus";
 
 function TooltipProvider({
   delayDuration = 150,
@@ -19,14 +21,14 @@ function TooltipProvider({
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   React.useEffect(() => {
     const disableFocusOpen = () => {
-      shouldOpenTooltipOnFocus = false;
+      setTooltipOpensOnFocus(false);
     };
     const updateFocusIntent = (event: KeyboardEvent) => {
       // Radix opens tooltips on focus. In this app many buttons open dialogs or
       // navigate, and focus is then restored programmatically to the trigger
       // after pointer clicks or Escape closes. Only Tab should make a focus
       // event announce the tooltip; pointer hover still opens normally.
-      shouldOpenTooltipOnFocus = event.key === "Tab";
+      setTooltipOpensOnFocus(event.key === "Tab");
     };
 
     document.addEventListener("keydown", updateFocusIntent, { capture: true });
@@ -68,7 +70,7 @@ function TooltipTrigger({
       onFocus={(event) => {
         onFocus?.(event);
 
-        if (!shouldOpenTooltipOnFocus) {
+        if (!tooltipOpensOnFocus()) {
           event.preventDefault();
         }
       }}

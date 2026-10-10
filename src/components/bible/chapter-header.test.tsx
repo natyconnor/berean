@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -144,5 +144,71 @@ describe("ChapterHeader compact chrome", () => {
     });
     expect(tooltip).toBeInTheDocument();
     expect(headersSwitch.getAttribute("aria-describedby")).toBe(tooltip.id);
+    expect(headersSwitch).toHaveAttribute("data-state", "unchecked");
+  });
+
+  it("keeps checked and unchecked on the switch while the tooltip is open", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderHeader({ showSectionHeaders: false });
+
+    const unchecked = screen.getByRole("switch", { name: /Headers/ });
+    expect(unchecked).toHaveAttribute("data-state", "unchecked");
+    expect(unchecked.closest("[data-slot='tooltip-trigger']")).not.toBe(
+      unchecked,
+    );
+
+    await user.hover(screen.getByText("Headers"));
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Show editorial section headings",
+      }),
+    ).toBeInTheDocument();
+    expect(unchecked).toHaveAttribute("data-state", "unchecked");
+
+    rerender(
+      <TooltipProvider delayDuration={0}>
+        <ChapterHeader
+          book="Mark"
+          chapter={9}
+          showSectionHeaders
+          onToggleSectionHeaders={vi.fn()}
+          onChapterNotesClick={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    const checked = screen.getByRole("switch", { name: /Headers/ });
+    await user.hover(screen.getByText("Headers"));
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Hide editorial section headings",
+      }),
+    ).toBeInTheDocument();
+    expect(checked).toHaveAttribute("data-state", "checked");
+    expect(checked.closest("[data-slot='tooltip-trigger']")).not.toBe(checked);
+  });
+
+  it("toggles section headers from the switch", async () => {
+    const user = userEvent.setup();
+    const onToggleSectionHeaders = vi.fn();
+    renderHeader({ onToggleSectionHeaders, showSectionHeaders: false });
+
+    await user.click(screen.getByRole("switch", { name: /Headers/ }));
+    expect(onToggleSectionHeaders).toHaveBeenCalledOnce();
+  });
+
+  it("names the previous and next chapter buttons", () => {
+    renderHeader();
+    expect(
+      screen.getByRole("button", { name: "Previous chapter" }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Next chapter" })).toBeEnabled();
+
+    cleanup();
+    renderHeader({ book: "Genesis", chapter: 1 });
+    expect(
+      screen.getByRole("button", { name: "Previous chapter" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next chapter" })).toBeEnabled();
   });
 });

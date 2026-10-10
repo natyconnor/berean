@@ -150,6 +150,7 @@ export function ChapterHeader({
           disabled={!hasPrev}
           className="h-8 w-8 shrink-0"
           tooltip="Previous chapter"
+          aria-label="Previous chapter"
         >
           <ChevronLeft className="h-4 w-4" />
         </TooltipButton>
@@ -201,6 +202,7 @@ export function ChapterHeader({
           disabled={!hasNext}
           className="h-8 w-8 shrink-0"
           tooltip="Next chapter"
+          aria-label="Next chapter"
         >
           <ChevronRight className="h-4 w-4" />
         </TooltipButton>

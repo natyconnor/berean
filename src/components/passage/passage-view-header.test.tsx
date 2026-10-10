@@ -86,26 +86,34 @@ describe("PassageViewHeader compact chrome", () => {
     );
 
     const allVerses = screen.getByText("All Verses");
-    const notedLabel = screen.getByText("Only Verses with Notes");
+    const notedWide = screen.getByText("Only Verses with Notes");
+    const notedCompact = screen.getByText("Noted, Only Verses with Notes");
     expect(allVerses.className).toContain(NOTES_CHROME_COMPACT_SR_CLASS);
     expect(allVerses.className).not.toContain(NOTES_CHROME_COMPACT_HIDE_CLASS);
-    expect(screen.getByText("All").className).toContain(
-      NOTES_CHROME_COMPACT_SHORT_CLASS,
+    const allShort = screen.getByText("All");
+    expect(allShort.className).toContain(NOTES_CHROME_COMPACT_SHORT_CLASS);
+    expect(allShort).toHaveAttribute("aria-hidden", "true");
+    expect(notedWide.parentElement).toHaveClass(NOTES_CHROME_COMPACT_SR_CLASS);
+    expect(notedWide.parentElement?.className).not.toContain(
+      NOTES_CHROME_COMPACT_HIDE_CLASS,
     );
-    expect(notedLabel.className).toContain(NOTES_CHROME_COMPACT_SR_CLASS);
-    expect(notedLabel.className).not.toContain(NOTES_CHROME_COMPACT_HIDE_CLASS);
-    expect(screen.getByText("Noted").className).toContain(
-      NOTES_CHROME_COMPACT_SHORT_CLASS,
-    );
+    // Wide copy drops out of the tree at compact so the name is the phrase
+    // that still contains the visible word, not both strings at once.
+    expect(notedWide.className).toContain("@max-6xl/passage-header:hidden");
+    expect(notedCompact.className).toContain("hidden");
+    expect(notedCompact.className).toContain("@max-6xl/passage-header:inline");
+    const notedShort = screen.getByText("Noted");
+    expect(notedShort.className).toContain(NOTES_CHROME_COMPACT_SHORT_CLASS);
+    expect(notedShort).toHaveAttribute("aria-hidden", "true");
 
     const allButton = screen.getByRole("button", { name: /All Verses/ });
     const notedButton = screen.getByRole("button", { name: /Noted/ });
     expect(allButton).not.toHaveAttribute("aria-label");
     expect(notedButton).not.toHaveAttribute("aria-label");
-    expect(allButton).toHaveAccessibleName(/All Verses/);
-    expect(allButton).toHaveAccessibleName(/\bAll\b/);
-    expect(notedButton).toHaveAccessibleName(/Only Verses with Notes/);
-    expect(notedButton).toHaveAccessibleName(/Noted/);
+    // "All Verses" already contains the visible word, so the name is not "All Verses All".
+    expect(allButton).toHaveAccessibleName("All Verses");
+    // Compact copy leads with the visible word so label-in-name still holds.
+    expect(notedButton).toHaveAccessibleName(/Noted, Only Verses with Notes/);
   });
 
   it("keeps the Focus shortcut and hides the word in compact chrome", () => {
@@ -134,5 +142,9 @@ describe("PassageViewHeader compact chrome", () => {
       name: "Turn on focus mode",
     });
     expect(focusSwitch.getAttribute("aria-describedby")).toBe(tooltip.id);
+    expect(focusSwitch).toHaveAttribute("data-state", "unchecked");
+    expect(focusSwitch.closest("[data-slot='tooltip-trigger']")).not.toBe(
+      focusSwitch,
+    );
   });
 });
