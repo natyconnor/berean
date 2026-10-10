@@ -401,7 +401,7 @@ describe("passage column layout", () => {
     expect(narrow.notes, JSON.stringify(narrow)).toBeLessThanOrEqual(300);
   });
 
-  it("narrows compose and focus notes once the passage track would get tight", (ctx) => {
+  it("shrinks compose and focus notes before the passage track gets tight", (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
 
     for (const width of VIEWPORTS) {
@@ -429,22 +429,42 @@ describe("passage column layout", () => {
         JSON.stringify({ width, long }),
       ).toBeGreaterThanOrEqual(270);
       expect(long.notes, JSON.stringify({ width, long })).toBeLessThanOrEqual(
-        450,
+        400,
       );
-
-      if (width >= 1100) {
-        expect(
-          long.notes,
-          JSON.stringify({ width, long }),
-        ).toBeGreaterThanOrEqual(430);
-      }
-      if (width <= 861) {
-        expect(long.notes, JSON.stringify({ width, long })).toBeLessThan(400);
-        expect(long.text, JSON.stringify({ width, long })).toBeGreaterThan(
-          long.notes,
-        );
-      }
+      expect(long.text, JSON.stringify({ width, long })).toBeGreaterThan(
+        long.notes,
+      );
     }
+
+    // Notes is already at its 280px floor by 1024, while scripture stays
+    // above ~30rem through 900 (measured 640/280, 576/280, 516/280).
+    const at = (width: number) => {
+      const row = grids.find(
+        (candidate) =>
+          candidate.mode === "compose" &&
+          candidate.width === width &&
+          candidate.copy === "long",
+      );
+      if (!row) throw new Error(`missing compose row ${width}`);
+      return row;
+    };
+
+    expect(at(1600).text, JSON.stringify(at(1600))).toBeGreaterThanOrEqual(820);
+    expect(at(1280).notes, JSON.stringify(at(1280))).toBeLessThan(380);
+    expect(at(1100).text, JSON.stringify(at(1100))).toBeGreaterThanOrEqual(680);
+    expect(at(1100).notes, JSON.stringify(at(1100))).toBeLessThan(320);
+
+    for (const width of [1024, 960, 900, 861] as const) {
+      const row = at(width);
+      expect(row.notes, JSON.stringify(row)).toBeLessThanOrEqual(300);
+      expect(row.text, JSON.stringify(row)).toBeGreaterThan(row.notes);
+    }
+    expect(at(1024).text, JSON.stringify(at(1024))).toBeGreaterThanOrEqual(620);
+    expect(at(960).text, JSON.stringify(at(960))).toBeGreaterThanOrEqual(560);
+    expect(at(900).text, JSON.stringify(at(900))).toBeGreaterThanOrEqual(500);
+    expect(at(861).text, JSON.stringify(at(861))).toBeGreaterThanOrEqual(460);
+    expect(at(768).text, JSON.stringify(at(768))).toBeGreaterThanOrEqual(370);
+    expect(at(768).notes, JSON.stringify(at(768))).toBeLessThanOrEqual(300);
   });
 
   it("keeps header controls inside the frame in read, compose, and focus", (ctx) => {

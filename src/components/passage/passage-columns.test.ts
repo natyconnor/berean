@@ -14,9 +14,9 @@ describe("passage column tracks", () => {
     expect(READ_PASSAGE_COLUMNS_CLASS).not.toContain("520px");
   });
 
-  it("caps compose and focus notes, then gives that width back", () => {
+  it("lets compose and focus notes shrink before the passage track", () => {
     expect(COMPOSE_PASSAGE_COLUMNS_CLASS).toBe(
-      "grid-cols-[minmax(24rem,1fr)_minmax(17.5rem,27.5rem)] gap-5",
+      "grid-cols-[minmax(24rem,2.5fr)_minmax(17.5rem,1fr)] gap-5",
     );
     expect(passageColumnsClass(false)).toBe(COMPOSE_PASSAGE_COLUMNS_CLASS);
     expect(COMPOSE_PASSAGE_COLUMNS_CLASS).not.toContain("360px");

@@ -40,7 +40,22 @@ export function HeaderShortcutToggle({
   const tooltipId = useId();
 
   return (
-    <Tooltip open={open}>
+    <Tooltip
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          setOpen(true);
+          return;
+        }
+        // Pointer-leave must not dismiss a tooltip the keyboard user still
+        // has focused. Escape is handled on the chip below.
+        const active = document.activeElement;
+        if (active instanceof Node && chipRef.current?.contains(active)) {
+          return;
+        }
+        setOpen(false);
+      }}
+    >
       {/*
         The trigger has to stay off the switch. Radix writes its own
         data-state (closed / instant-open) onto the trigger, which would
@@ -59,6 +74,12 @@ export function HeaderShortcutToggle({
             if (active instanceof Node && chipRef.current?.contains(active)) {
               return;
             }
+            setOpen(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !open) return;
+            event.preventDefault();
+            event.stopPropagation();
             setOpen(false);
           }}
         >

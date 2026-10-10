@@ -147,4 +147,50 @@ describe("PassageViewHeader compact chrome", () => {
       focusSwitch,
     );
   });
+
+  it("dismisses the Focus tooltip on Escape without toggling the switch", async () => {
+    const user = userEvent.setup();
+    renderHeader({
+      effectiveViewMode: "compose",
+      isReadMode: false,
+    });
+
+    const focusSwitch = screen.getByRole("switch", { name: /Focus/ });
+    await user.tab();
+    expect(focusSwitch).toHaveFocus();
+    expect(
+      await screen.findByRole("tooltip", { name: "Turn on focus mode" }),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByRole("tooltip", { name: "Turn on focus mode" }),
+    ).not.toBeInTheDocument();
+    expect(focusSwitch).toHaveAttribute("data-state", "unchecked");
+    expect(focusSwitch).toHaveFocus();
+  });
+
+  it("dismisses a hovered Focus tooltip on Escape", async () => {
+    const user = userEvent.setup();
+    renderHeader({
+      effectiveViewMode: "compose",
+      isReadMode: false,
+    });
+
+    await user.hover(screen.getByText("Focus"));
+    expect(
+      await screen.findByRole("tooltip", { name: "Turn on focus mode" }),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByRole("tooltip", { name: "Turn on focus mode" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /Focus/ })).toHaveAttribute(
+      "data-state",
+      "unchecked",
+    );
+  });
 });

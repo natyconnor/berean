@@ -10,15 +10,17 @@
  * instead of the old 360 / 520 overflow.
  *
  * Compose and Focus (`gap-5`, gutter `pl-16 pr-5`, cap 1320px):
- * notes stay at their 27.5rem (440px) cap while the passage is wide, then
- * give width back once the passage track would drop under 24rem (384px).
- * Notes floor at 17.5rem. Both floors fit a 768px window (about 384 / 280).
+ * the passage track takes about 2.5 shares and notes takes 1, so notes
+ * gives width back before scripture tightens. Notes floors at 17.5rem
+ * (280px) while the passage is still above 30rem: around 1024 / 960 / 900
+ * that is about 640 / 280, 576 / 280, and 516 / 280. Both floors fit a
+ * 768px window (about 384 / 280).
  */
 export const READ_PASSAGE_COLUMNS_CLASS =
   "grid-cols-[minmax(22rem,34rem)_minmax(17.5rem,1fr)] gap-6";
 
 export const COMPOSE_PASSAGE_COLUMNS_CLASS =
-  "grid-cols-[minmax(24rem,1fr)_minmax(17.5rem,27.5rem)] gap-5";
+  "grid-cols-[minmax(24rem,2.5fr)_minmax(17.5rem,1fr)] gap-5";
 
 export function passageColumnsClass(isReadMode: boolean): string {
   return isReadMode
