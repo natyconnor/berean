@@ -1,3 +1,8 @@
+import {
+  canonicalPassageId,
+  passageVerseSearchIsInvalid,
+} from "./passage-path";
+
 /**
  * Canonical route table for Berean HTTP routing.
  *
@@ -6,9 +11,11 @@
  * to the sign-in page. Keep this list aligned with `src/routeTree.gen.ts`
  * (a unit test fails when they drift).
  *
- * Dynamic segments keep their original casing. Static segments are
- * case-insensitive and redirect to the lowercase canonical path. Trailing
- * slashes redirect to the path without one.
+ * Dynamic segments keep their original casing, except passage ids, which must
+ * name a real chapter and redirect to the canonical book spelling. Static
+ * segments are case-insensitive and redirect to the lowercase canonical path.
+ * Trailing slashes redirect to the path without one. A passage verse query
+ * past the end of that chapter is not a route.
  */
 
 export const CANONICAL_ORIGIN = "https://berean.nathanconnor.dev";
@@ -139,11 +146,32 @@ function matchCanonical(segments: readonly string[]): string | null {
     }
 
     if (!matched) continue;
-    if (canonicalSegments.length === 0) return "/";
-    return `/${canonicalSegments.join("/")}`;
+
+    const matchedPath =
+      canonicalSegments.length === 0 ? "/" : `/${canonicalSegments.join("/")}`;
+    const canonical = canonicalizeDynamicPath(pattern, matchedPath);
+    if (canonical) return canonical;
   }
 
   return null;
+}
+
+/** Passage ids must name a real chapter. Other params keep their casing. */
+function canonicalizeDynamicPath(
+  pattern: ParsedPattern,
+  matchedPath: string,
+): string | null {
+  const [head, param] = pattern.segments;
+  const isPassage =
+    pattern.segments.length === 2 &&
+    head?.type === "static" &&
+    head.value === "passage" &&
+    param?.type === "param";
+  if (!isPassage) return matchedPath;
+
+  const passageId = canonicalPassageId(matchedPath.slice("/passage/".length));
+  if (!passageId) return null;
+  return `/passage/${passageId}`;
 }
 
 function hasFileExtension(pathname: string): boolean {
@@ -152,7 +180,7 @@ function hasFileExtension(pathname: string): boolean {
   return base.includes(".");
 }
 
-export function resolveAppPath(pathname: string): AppPathDecision {
+export function resolveAppPath(pathname: string, search = ""): AppPathDecision {
   if (!pathname.startsWith("/")) return { type: "not-found" };
 
   const stripped = stripTrailingSlashes(pathname);
@@ -160,6 +188,9 @@ export function resolveAppPath(pathname: string): AppPathDecision {
   if (segments) {
     const canonical = matchCanonical(segments);
     if (canonical) {
+      if (passageVerseSearchIsInvalid(canonical, search)) {
+        return { type: "not-found" };
+      }
       if (pathname !== canonical)
         return { type: "redirect", pathname: canonical };
       return { type: "serve" };
@@ -184,7 +215,7 @@ export function canonicalRedirectHref(
   searchStr = "",
   hash = "",
 ): string | null {
-  const decision = resolveAppPath(pathname);
+  const decision = resolveAppPath(pathname, searchStr);
   if (decision.type !== "redirect") return null;
   const hashSuffix =
     hash === "" ? "" : hash.startsWith("#") ? hash : `#${hash}`;

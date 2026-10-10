@@ -137,7 +137,7 @@ function bereanHttpRoutingPlugin(): PluginOption {
       return;
     }
 
-    const decision = resolveAppPath(pathname);
+    const decision = resolveAppPath(pathname, search);
     if (decision.type === "redirect") {
       res.statusCode = 308;
       res.setHeader("Location", `${decision.pathname}${search}`);

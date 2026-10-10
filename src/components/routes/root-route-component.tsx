@@ -28,8 +28,8 @@ const AUTH_BOOTSTRAP_TIMEOUT_MS = 15_000;
 const PUBLIC_LEGAL_PATHS = new Set(["/privacy", "/terms"]);
 
 export function RootRouteComponent() {
-  const { pathname } = useLocation();
-  const decision = resolveAppPath(pathname);
+  const { pathname, searchStr } = useLocation();
+  const decision = resolveAppPath(pathname, searchStr);
 
   if (decision.type === "not-found") {
     return <NotFoundPage />;

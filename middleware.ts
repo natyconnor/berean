@@ -10,7 +10,7 @@ import { resolveAppPath } from "./shared/http-routes";
  */
 export default function middleware(request: Request): Response {
   const url = new URL(request.url);
-  const decision = resolveAppPath(url.pathname);
+  const decision = resolveAppPath(url.pathname, url.search);
 
   if (decision.type === "redirect") {
     url.pathname = decision.pathname;

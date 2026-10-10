@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { BIBLE_BOOKS } from "@/lib/bible-books";
 import {
   APP_ROUTE_PATTERNS,
   PUBLIC_SITEMAP_PATHS,
@@ -78,6 +79,7 @@ describe("resolveAppPath", () => {
       type: "not-found",
     });
     expect(resolveAppPath("/passage")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/John-3")).toEqual({ type: "serve" });
     expect(resolveAppPath("/memory/pack/unknown")).toEqual({
       type: "not-found",
     });
@@ -97,6 +99,100 @@ describe("resolveAppPath", () => {
       type: "redirect",
       pathname: "/favicon.ico",
     });
+  });
+});
+
+describe("passage references", () => {
+  it("serves canonical chapters and in-range verse queries", () => {
+    expect(resolveAppPath("/passage/John-1")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/passage/John-21")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/passage/1Corinthians-13")).toEqual({
+      type: "serve",
+    });
+    expect(resolveAppPath("/passage/SongOfSolomon-8")).toEqual({
+      type: "serve",
+    });
+    expect(resolveAppPath("/passage/Psalms-119")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/passage/3John-1")).toEqual({ type: "serve" });
+    expect(
+      resolveAppPath("/passage/John-3", "?startVerse=16&endVerse=16"),
+    ).toEqual({ type: "serve" });
+    expect(resolveAppPath("/passage/John-3", "?startVerse=36")).toEqual({
+      type: "serve",
+    });
+    expect(resolveAppPath("/passage/John-3", "?mode=read")).toEqual({
+      type: "serve",
+    });
+    expect(
+      resolveAppPath("/passage/John-3", "?startVerse=16&endVerse=10"),
+    ).toEqual({ type: "serve" });
+  });
+
+  it("404s unparseable, unknown, and out-of-range passage references", () => {
+    expect(resolveAppPath("/passage/John")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/John-")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/John-0")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/-1")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/NotABook-1")).toEqual({
+      type: "not-found",
+    });
+    expect(resolveAppPath("/passage/John-22")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/John-99")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/Obadiah-2")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/SongOfSolomon-9")).toEqual({
+      type: "not-found",
+    });
+    expect(resolveAppPath("/passage/John-3:16")).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/John-3", "?startVerse=37")).toEqual({
+      type: "not-found",
+    });
+    expect(
+      resolveAppPath("/passage/John-3", "?startVerse=16&endVerse=37"),
+    ).toEqual({ type: "not-found" });
+    expect(resolveAppPath("/passage/John-3", "?startVerse=foo")).toEqual({
+      type: "not-found",
+    });
+    expect(resolveAppPath("/passage/John-3", "?startVerse=0")).toEqual({
+      type: "not-found",
+    });
+    expect(resolveAppPath("/passage/john-3", "?startVerse=999")).toEqual({
+      type: "not-found",
+    });
+  });
+
+  it("serves chapter 1 of every book and rejects the next chapter", () => {
+    for (const book of BIBLE_BOOKS) {
+      const id = book.name.replace(/ of /g, " Of ").replace(/\s/g, "");
+      expect(resolveAppPath(`/passage/${id}-1`), book.name).toEqual({
+        type: "serve",
+      });
+      expect(
+        resolveAppPath(`/passage/${id}-${book.chapters + 1}`),
+        book.name,
+      ).toEqual({ type: "not-found" });
+    }
+  });
+
+  it("redirects case and trailing-slash variants of a real passage", () => {
+    expect(resolveAppPath("/passage/john-3")).toEqual({
+      type: "redirect",
+      pathname: "/passage/John-3",
+    });
+    expect(resolveAppPath("/PASSAGE/John-3/")).toEqual({
+      type: "redirect",
+      pathname: "/passage/John-3",
+    });
+    expect(resolveAppPath("/passage/1corinthians-13")).toEqual({
+      type: "redirect",
+      pathname: "/passage/1Corinthians-13",
+    });
+    expect(resolveAppPath("/passage/songofsolomon-1")).toEqual({
+      type: "redirect",
+      pathname: "/passage/SongOfSolomon-1",
+    });
+    expect(
+      canonicalRedirectHref("/passage/john-3", "?startVerse=16", "top"),
+    ).toBe("/passage/John-3?startVerse=16#top");
   });
 });
 
