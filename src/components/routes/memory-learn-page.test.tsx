@@ -211,6 +211,7 @@ describe("MemoryLearnPage", () => {
     actionMocks.clear();
     mutationMocks.clear();
     onExitHome.mockReset();
+    localStorage.clear();
     sessionStorage.clear();
     actionMock("esv.getChaptersBatch").mockResolvedValue([
       { chapter: 23, data: psalm23 },
@@ -325,6 +326,11 @@ describe("MemoryLearnPage", () => {
     );
     expect(onExitHome).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
+    expect(localStorage.getItem("berean:learn-dismissed-packs")).toContain(
+      PACK_JUDE,
+    );
+    expect(sessionStorage.getItem("berean:learn-dismissed-packs")).toBeNull();
+    sessionStorage.clear();
 
     first.unmount();
     onExitHome.mockClear();
