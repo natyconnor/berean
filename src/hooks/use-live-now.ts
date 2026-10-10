@@ -41,6 +41,10 @@ function localDayKey(timestamp: number, tzOffsetMinutes: number): number {
  * day, the same per-instant offset {@link localDayKey} uses. The offset at
  * "now" mis-reads a spring-forward night: 11pm standard, interpreted as
  * daylight, is already the next local day, so the timer aims a day late.
+ *
+ * Zones whose DST switch is at local midnight (America/Havana,
+ * America/Asuncion) can still mis-aim by an hour. The one-minute recheck
+ * covers that gap.
  */
 function nextLocalMidnightUtc(
   timestamp: number,
@@ -197,7 +201,11 @@ function teardownSessionClockWatches(): void {
 function subscribeSessionNow(onStoreChange: () => void): () => void {
   ensureSessionClockWatches();
   sessionNowListeners.add(onStoreChange);
-  maybeAdvanceSessionNow();
+  // ensureSessionClockWatches aimed the timer at the pre-advance instant.
+  // A first subscribe on a new day would otherwise wait for the minute recheck.
+  if (maybeAdvanceSessionNow()) {
+    scheduleCatchUpTimer();
+  }
   return () => {
     sessionNowListeners.delete(onStoreChange);
     if (sessionNowListeners.size === 0) {
