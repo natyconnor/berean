@@ -26,6 +26,7 @@ import {
   CROSSFADE_TRANSITION,
   retargetLayoutTransition,
 } from "../note-animation-config";
+import { passageColumnsClass } from "../passage-columns";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { NoteBody } from "@/lib/note-inline-content";
 import type { VerseRef } from "@/lib/verse-ref-utils";
@@ -249,9 +250,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
         data-retarget-owner={ownsRetarget ? "true" : "false"}
         className={cn(
           "grid items-start",
-          isReadMode
-            ? "grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
-            : "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5",
+          passageColumnsClass(isReadMode),
           "transition-[margin,opacity,filter] duration-400 ease-[cubic-bezier(0.22,1,0.36,1)] my-3",
           isFocusDimmed && "pointer-events-none",
         )}
@@ -262,7 +261,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
         <motion.div
           layout="position"
           transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
-          className="flex h-full min-h-0 flex-col self-stretch"
+          className="flex h-full min-h-0 min-w-0 flex-col self-stretch"
         >
           <motion.div
             initial={ownsRetarget ? false : { opacity: 0 }}
@@ -332,7 +331,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
         <motion.div
           layout="position"
           transition={{ layout: LAYOUT_CORRECTION_TRANSITION }}
-          className="py-1 select-none"
+          className="min-w-0 py-1 select-none"
           data-note-surface
         >
           <div className="flex items-start gap-3">

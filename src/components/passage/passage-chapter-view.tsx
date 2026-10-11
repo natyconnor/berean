@@ -22,6 +22,7 @@ import { usePassageNotesInteraction } from "./hooks/use-passage-notes-interactio
 import { usePassageScrollRestoration } from "./hooks/use-passage-scroll-restoration";
 import { usePassageViewTour } from "./hooks/use-passage-view-tour";
 import { useSectionHeaders } from "./hooks/use-section-headers";
+import { passageColumnsClass } from "./passage-columns";
 import { PassageViewBody } from "./passage-view-body";
 import { PassageViewDialogs } from "./passage-view-dialogs";
 import { PassageViewHeader } from "./passage-view-header";
@@ -534,9 +535,7 @@ export function PassageChapterView({
     setPrevGroupedVerses(currentGroupedVerses);
   }
 
-  const passageGridClass = isReadMode
-    ? "grid-cols-[minmax(360px,1fr)_minmax(520px,1.4fr)] gap-6"
-    : "grid-cols-[minmax(0,1.1fr)_minmax(360px,440px)] gap-5";
+  const passageGridClass = passageColumnsClass(isReadMode);
   const topGridClass = cn("grid", passageGridClass);
   const passageContentGutterClass = isReadMode ? "pl-16 pr-6" : "pl-16 pr-5";
   const containerClass = isReadMode
