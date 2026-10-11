@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.12](https://github.com/natyconnor/berean/compare/v1.17.11...v1.17.12) (2026-10-11)
+
+
+### Bug Fixes
+
+* Compact passage header chrome on tight columns ([#255](https://github.com/natyconnor/berean/issues/255)) ([ea1a116](https://github.com/natyconnor/berean/commit/ea1a116ac6347de6b6a13ff55b9a12352b220d62))
+
 ## [1.17.11](https://github.com/natyconnor/berean/compare/v1.17.10...v1.17.11) (2026-10-10)
 
 
