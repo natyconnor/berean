@@ -157,10 +157,18 @@ describe("StagedOnboardingProvider hint queue", () => {
           label="study-explainer"
           useDisplayQueue={false}
         />
+        <HintProbe
+          hintId={FEATURE_HINTS.MEMORY_FIRST_OPEN_EXPLAINER}
+          label="memory-explainer"
+          useDisplayQueue={false}
+        />
       </TestProvider>,
     );
 
     expect(screen.getByTestId("study-explainer-pending")).toHaveTextContent(
+      "true",
+    );
+    expect(screen.getByTestId("memory-explainer-pending")).toHaveTextContent(
       "true",
     );
   });

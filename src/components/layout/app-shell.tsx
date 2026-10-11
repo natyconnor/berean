@@ -1,6 +1,5 @@
 import { useEffect, type ReactNode } from "react";
 import { FeedbackFab } from "@/components/feedback/feedback-fab";
-import { MemoryLaunchAnnouncementDialog } from "@/components/memory/memory-launch-announcement-dialog";
 import { GRAIN_CONFIG } from "@/lib/candlelight-grain";
 import { ModeDock } from "./mode-dock";
 import { TabBar } from "./tab-bar";
@@ -59,7 +58,6 @@ function AppShellSurface({ children }: { children: ReactNode }) {
       {/* Mode Dock is position:fixed and floats over content; pages add their own scroll padding. */}
       <div className="flex-1 overflow-hidden">{children}</div>
       <ModeDock />
-      <MemoryLaunchAnnouncementDialog />
     </div>
   );
 }
