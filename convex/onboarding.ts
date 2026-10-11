@@ -33,8 +33,6 @@ const onboardingStatusValue = v.object({
   advancedSearchTutorialCompletedAt: v.optional(v.number()),
   focusModeTutorialCompletedAt: v.optional(v.number()),
   categoryColors: v.record(v.string(), v.string()),
-  /** User doc `_creationTime`. 0 when signed out (never triggers launch gates). */
-  accountCreatedAt: v.number(),
   milestones: milestonesValue,
   hints: v.array(hintRecordValue),
 });
@@ -48,13 +46,11 @@ export const getOnboardingStatus = query({
       const tutorial = resolveTutorialStatus(null);
       return {
         ...tutorial,
-        accountCreatedAt: 0,
         milestones: EMPTY_MILESTONES,
         hints: [],
       };
     }
 
-    const user = await ctx.db.get(userId);
     const settings = await ctx.db
       .query("userSettings")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -68,7 +64,6 @@ export const getOnboardingStatus = query({
 
     return {
       ...resolveTutorialStatus(settings),
-      accountCreatedAt: user?._creationTime ?? 0,
       milestones,
       hints: summarizeHints(hints),
     };
