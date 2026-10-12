@@ -16,6 +16,7 @@ export type PassageHeartProgress = {
   totalVerses: number;
   chapterCount: number;
   isFirstChapter: boolean;
+  isLastChapter: boolean;
   startVerse: number;
   endVerse: number;
   verseStates: { verse: number; state: PassageVerseState }[];
@@ -27,6 +28,8 @@ export type PassageHeartInfo = PassageHeartProgress & {
   packId: string;
   title: string;
   status: PassageStatus;
+  /** Next session: today's learning step while building, the next recite after. */
+  dueAt: number;
 };
 
 const VERSE_STATE: Record<PieceAttachment, PassageVerseState> = {
@@ -49,6 +52,7 @@ export function passageHeartProgress(
   let learnedVerses = 0;
   let totalVerses = 0;
   let firstChapter = Infinity;
+  let lastChapter = -Infinity;
   const chapters = new Set<number>();
   const verseStates: PassageHeartProgress["verseStates"] = [];
 
@@ -60,6 +64,7 @@ export function passageHeartProgress(
     if (state === "memorized") learnedVerses += verses;
     chapters.add(piece.chapter);
     firstChapter = Math.min(firstChapter, piece.chapter);
+    lastChapter = Math.max(lastChapter, piece.chapter);
     if (piece.chapter !== chapter) continue;
     for (let verse = piece.startVerse; verse <= piece.endVerse; verse += 1) {
       verseStates.push({ verse, state });
@@ -76,6 +81,7 @@ export function passageHeartProgress(
     totalVerses,
     chapterCount: chapters.size,
     isFirstChapter: chapter === firstChapter,
+    isLastChapter: chapter === lastChapter,
     startVerse: first.verse,
     endVerse: last.verse,
     verseStates,

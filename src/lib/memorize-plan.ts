@@ -237,6 +237,24 @@ export function nextStepCopy(
   }`;
 }
 
+/**
+ * When something is next due, for short lines: "today" (or overdue),
+ * "tomorrow", a weekday within the week ("Thu"), else "Oct 20".
+ */
+export function formatDueDay(
+  dueAt: number,
+  now: number,
+  timeZone?: string,
+): string {
+  const daysAway = calendarDaysBetween(now, dueAt, timeZone);
+  if (dueAt <= now || daysAway <= 0) return "today";
+  if (daysAway === 1) return "tomorrow";
+  const due = new Date(dueAt);
+  return daysAway < 7
+    ? formatWeekday(due, timeZone)
+    : formatShortDate(due, timeZone);
+}
+
 function remainingVerses({ verseCount, learnedCount }: MemorizeProgress) {
   return Math.max(0, wholeCount(verseCount) - wholeCount(learnedCount));
 }

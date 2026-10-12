@@ -35,6 +35,7 @@ import { Heart } from "lucide-react";
 import { formatSpanTitle } from "@/lib/memorize-target";
 import type { PassageHeartControl } from "../verse-row";
 import { UnheartRangeDialog } from "../unheart-memorizing-dialog";
+import { PassageRailGutter, type PassageRailMark } from "../passage-heart-rail";
 
 /** A hearted range in the left gutter, level with its first verse. */
 export interface SavedPassageAtAnchor {
@@ -200,6 +201,8 @@ export interface VerseRowWithNotesProps {
   onSavedPassageHoverEnter?: (startVerse: number, endVerse: number) => void;
   onSavedPassageHoverLeave?: () => void;
   onToggleSavedPassage?: (startVerse: number, endVerse: number) => void;
+  /** This verse's part of a memorized passage's heart and rail. */
+  passageRail?: PassageRailMark | null;
 }
 
 export const VerseRowWithNotes = memo(function VerseRowWithNotes({
@@ -256,6 +259,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onSavedPassageHoverEnter,
   onSavedPassageHoverLeave,
   onToggleSavedPassage,
+  passageRail = null,
   onRetargetNewDraft,
   onRetargetEditNote,
   retargetingEditorKey = null,
@@ -429,12 +433,18 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         )}
         style={focusDimStyle}
       >
+        {passageRail ? <PassageRailGutter mark={passageRail} /> : null}
         {savedPassagesAtAnchor &&
           savedPassagesAtAnchor.length > 0 &&
           onSavedPassageHoverEnter &&
           onSavedPassageHoverLeave &&
           onToggleSavedPassage && (
-            <div className="pointer-events-auto absolute top-1/2 right-full z-20 mr-2 flex -translate-y-1/2 flex-col items-end gap-1">
+            <div
+              className={cn(
+                "pointer-events-auto absolute right-full z-20 mr-2 flex flex-col items-end gap-1",
+                passageRail?.heart ? "top-[42px]" : "top-1/2 -translate-y-1/2",
+              )}
+            >
               {savedPassagesAtAnchor.map((span) => (
                 <SavedPassagePill
                   key={`${span.startVerse}-${span.endVerse}`}

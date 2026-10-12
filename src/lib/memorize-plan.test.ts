@@ -12,6 +12,7 @@ import {
   estimateMemorizeDays,
   estimateReviewDaysToMastery,
   estimateSessionMinutes,
+  formatDueDay,
   formatLearnDuration,
   formatMasteryDuration,
   formatMonthOrDate,
@@ -328,6 +329,22 @@ describe("nextStepCopy", () => {
       "Memorized. We'll bring it back tomorrow to keep it fresh.",
     );
     expect(nextStepCopy(schedule, evening, "UTC")).toBe("Review due today");
+  });
+});
+
+describe("formatDueDay", () => {
+  // Monday, October 12, 2026, 3pm UTC.
+  const NOW = Date.UTC(2026, 9, 12, 15);
+
+  it("says today for anything due now or earlier", () => {
+    expect(formatDueDay(NOW - HOUR_MS, NOW, "UTC")).toBe("today");
+    expect(formatDueDay(NOW + HOUR_MS, NOW, "UTC")).toBe("today");
+  });
+
+  it("says tomorrow, then a weekday, then a date", () => {
+    expect(formatDueDay(Date.UTC(2026, 9, 13, 9), NOW, "UTC")).toBe("tomorrow");
+    expect(formatDueDay(Date.UTC(2026, 9, 15), NOW, "UTC")).toBe("Thu");
+    expect(formatDueDay(Date.UTC(2026, 9, 30), NOW, "UTC")).toBe("Oct 30");
   });
 });
 

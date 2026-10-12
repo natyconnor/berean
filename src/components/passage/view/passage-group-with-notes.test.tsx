@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import { PassageGroupWithNotes } from "./passage-group-with-notes";
+import type { PassageRailMark } from "../passage-heart-rail";
 
 vi.mock("@/components/notes/note-editor", () => ({
   NoteEditor: ({
@@ -86,6 +87,7 @@ const selectionBar = {
 function renderSelectedGroup(
   verses: Array<{ verseNumber: number; text: string }>,
   bar: typeof selectionBar | null = selectionBar,
+  passageRailByVerse?: ReadonlyMap<number, PassageRailMark>,
 ) {
   return render(
     <TooltipProvider>
@@ -115,6 +117,7 @@ function renderSelectedGroup(
         onPassageBubbleMouseLeave={vi.fn()}
         onCollapse={vi.fn()}
         selectionBar={bar}
+        passageRailByVerse={passageRailByVerse}
       />
     </TooltipProvider>,
   );
@@ -174,6 +177,43 @@ describe("PassageGroupWithNotes selection bar", () => {
     expect(bar).not.toHaveClass("absolute");
     expect(bar.parentElement?.lastElementChild).toBe(bar);
     expect(screen.getByRole("button", { name: "Heart" })).toHaveClass("h-11");
+  });
+
+  it("keeps a memorized passage's rail and heart beside the selected verses", () => {
+    const { container } = renderSelectedGroup(
+      THREE_VERSES,
+      selectionBar,
+      new Map<number, PassageRailMark>([
+        [
+          15,
+          {
+            stroke: "solid",
+            foot: false,
+            heart: {
+              learnedFraction: 0.5,
+              tooltip: "John 1 · memorizing · 25 of 51 learned",
+              ariaLabel:
+                "John 1, hearted. Memorizing: 25 of 51 verses learned. Remove heart",
+              title: "John 1",
+              startVerse: 1,
+              endVerse: 51,
+              stopsMemorizing: true,
+              onUnheart: vi.fn(),
+            },
+          },
+        ],
+        [16, { stroke: "dashed", foot: false, heart: null }],
+      ]),
+    );
+
+    expect(
+      screen.getByRole("button", { name: /John 1, hearted/ }),
+    ).toBeInTheDocument();
+    expect(
+      Array.from(container.querySelectorAll("[data-passage-rail]"), (lane) =>
+        lane.getAttribute("data-passage-rail"),
+      ),
+    ).toEqual(["solid", "dashed"]);
   });
 });
 

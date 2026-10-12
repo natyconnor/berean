@@ -40,6 +40,7 @@ describe("passageHeartProgress", () => {
       totalVerses: 6,
       chapterCount: 1,
       isFirstChapter: true,
+      isLastChapter: true,
       startVerse: 1,
       endVerse: 6,
       verseStates: [
@@ -67,6 +68,7 @@ describe("passageHeartProgress", () => {
       totalVerses: 48 + 34 + 29,
       chapterCount: 3,
       isFirstChapter: false,
+      isLastChapter: false,
       startVerse: 1,
       endVerse: 34,
     });
@@ -74,9 +76,14 @@ describe("passageHeartProgress", () => {
     expect(sixth?.verseStates[3]).toEqual({ verse: 4, state: "learning" });
     expect(sixth?.verseStates[4]).toEqual({ verse: 5, state: "upNext" });
 
-    expect(passageHeartProgress(pieces, "Matthew", 5)?.isFirstChapter).toBe(
-      true,
-    );
+    expect(passageHeartProgress(pieces, "Matthew", 5)).toMatchObject({
+      isFirstChapter: true,
+      isLastChapter: false,
+    });
+    expect(passageHeartProgress(pieces, "Matthew", 7)).toMatchObject({
+      isFirstChapter: false,
+      isLastChapter: true,
+    });
   });
 
   it("treats a never-started learning piece as up next", () => {

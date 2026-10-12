@@ -50,6 +50,7 @@ import type {
   VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
 import type { CurrentChapter } from "./verse-row-with-notes";
+import { PassageRailGutter, type PassageRailMark } from "../passage-heart-rail";
 
 /** What the selection bar shows and does for this group's range. */
 export type GroupSelectionBar = Omit<
@@ -132,6 +133,8 @@ interface PassageGroupWithNotesProps {
    */
   selectionBar?: GroupSelectionBar | null;
   hoveredSavedPassage?: { startVerse: number; endVerse: number } | null;
+  /** Memorized-passage heart and rail marks for verses in this group. */
+  passageRailByVerse?: ReadonlyMap<number, PassageRailMark>;
 }
 
 const NOOP_HANDLERS: VerseInteractionHandlers = {
@@ -190,6 +193,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onCollapse,
   selectionBar = null,
   hoveredSavedPassage = null,
+  passageRailByVerse,
   onRetargetNewDraft,
   onRetargetEditNote,
   retargetingEditorKey = null,
@@ -325,43 +329,48 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
             {barPinned ? null : selectionBarElement}
             <div className="flex">
               <div className="flex flex-1 flex-col">
-                {verses.map((verse, index) => (
-                  <motion.div
-                    key={verse.verseNumber}
-                    layout={ownsRetarget}
-                    layoutId={
-                      ownsRetarget && dockedEditorKey
-                        ? `draft-verse-${dockedEditorKey}-${verse.verseNumber}`
-                        : undefined
-                    }
-                  >
-                    <VerseTextPane
-                      verseNumber={verse.verseNumber}
-                      text={verse.text}
-                      midHeadings={verse.midHeadings}
-                      selection={EMPTY_SELECTION}
-                      noteIndicator={EMPTY_NOTE_INDICATOR}
-                      hover={EMPTY_HOVER}
-                      isExpanded={true}
-                      variant="groupedPassage"
-                      showCollapseControl={index === 0}
-                      book={currentChapter.book}
-                      chapter={currentChapter.chapter}
-                      onCollapseVerse={handleCollapseGroup}
-                      highlights={highlightsByVerse.get(verse.verseNumber)}
-                      onCreateHighlight={onCreateHighlight}
-                      onDeleteHighlight={onDeleteHighlight}
-                      onRecolorHighlight={onRecolorHighlight}
-                      isInHoveredSavedPassage={
-                        hoveredSavedPassage !== null &&
-                        verse.verseNumber >= hoveredSavedPassage.startVerse &&
-                        verse.verseNumber <= hoveredSavedPassage.endVerse
+                {verses.map((verse, index) => {
+                  const railMark = passageRailByVerse?.get(verse.verseNumber);
+                  return (
+                    <motion.div
+                      key={verse.verseNumber}
+                      className="relative"
+                      layout={ownsRetarget}
+                      layoutId={
+                        ownsRetarget && dockedEditorKey
+                          ? `draft-verse-${dockedEditorKey}-${verse.verseNumber}`
+                          : undefined
                       }
-                      handlers={NOOP_HANDLERS}
-                      onHighlightToolbarChange={handleHighlightToolbarChange}
-                    />
-                  </motion.div>
-                ))}
+                    >
+                      {railMark ? <PassageRailGutter mark={railMark} /> : null}
+                      <VerseTextPane
+                        verseNumber={verse.verseNumber}
+                        text={verse.text}
+                        midHeadings={verse.midHeadings}
+                        selection={EMPTY_SELECTION}
+                        noteIndicator={EMPTY_NOTE_INDICATOR}
+                        hover={EMPTY_HOVER}
+                        isExpanded={true}
+                        variant="groupedPassage"
+                        showCollapseControl={index === 0}
+                        book={currentChapter.book}
+                        chapter={currentChapter.chapter}
+                        onCollapseVerse={handleCollapseGroup}
+                        highlights={highlightsByVerse.get(verse.verseNumber)}
+                        onCreateHighlight={onCreateHighlight}
+                        onDeleteHighlight={onDeleteHighlight}
+                        onRecolorHighlight={onRecolorHighlight}
+                        isInHoveredSavedPassage={
+                          hoveredSavedPassage !== null &&
+                          verse.verseNumber >= hoveredSavedPassage.startVerse &&
+                          verse.verseNumber <= hoveredSavedPassage.endVerse
+                        }
+                        handlers={NOOP_HANDLERS}
+                        onHighlightToolbarChange={handleHighlightToolbarChange}
+                      />
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
             {barPinned ? selectionBarElement : null}

@@ -92,10 +92,12 @@ export const passageHeartInfoValidator = v.object({
   packId: v.id("packs"),
   title: v.string(),
   status: passageStatusValidator,
+  dueAt: v.number(),
   learnedVerses: v.number(),
   totalVerses: v.number(),
   chapterCount: v.number(),
   isFirstChapter: v.boolean(),
+  isLastChapter: v.boolean(),
   startVerse: v.number(),
   endVerse: v.number(),
   verseStates: v.array(

@@ -141,6 +141,7 @@ export async function loadPassageHeartInfo(
     packId: pack._id,
     title: pack.name,
     status: row.status,
+    dueAt: row.dueAt,
     ...progress,
   };
 }

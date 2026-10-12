@@ -41,13 +41,24 @@ import { hasExactSavedSpan } from "@/lib/saved-verse-utils";
 import { masteryRingFraction } from "@/lib/mastery-ring";
 import { formatSpanTitle } from "@/lib/memorize-target";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
+import type { PassageHeartInfo } from "@/lib/passage-heart-info";
+import { passageRailSegments } from "@/lib/passage-rail";
+import {
+  passageHeartCopy,
+  verseHeartMemoryCopy,
+} from "@/lib/heart-memory-copy";
 import { logInteraction } from "@/lib/dev-log";
 import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import type { PassageHeartControl } from "./verse-row";
 import type { GroupSelectionBar } from "./view/passage-group-with-notes";
 import { HeartMemorizeNudge } from "./heart-memorize-nudge";
 import { useHeartMemorizeNudge } from "./hooks/use-heart-memorize-nudge";
+import {
+  PassageRailPastHeadings,
+  type PassageRailMark,
+} from "./passage-heart-rail";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
+import { useLiveNow } from "@/hooks/use-live-now";
 import {
   logPassagePresence,
   passagePresenceDebugEnabled,
@@ -62,10 +73,19 @@ type SavedSpan = {
     stageReps?: number;
     intervalDays: number;
     dueAt: number;
+    lastReviewedAt?: number;
     inMemory: boolean;
   };
   stopsMemorizing?: boolean;
   passageMemoryId?: string;
+  passage?: PassageHeartInfo;
+};
+
+/** A verse on a memorized passage's rail in this chapter. */
+type RailEntry = {
+  mark: PassageRailMark;
+  /** The verse above is on the rail too, so the rail runs past a heading here. */
+  joinsAbove: boolean;
 };
 
 const EMPTY_FOCUS_MAP = new Map<string, number | null>();
@@ -218,23 +238,31 @@ export function PassageViewBody({
     [savedVersesForChapter],
   );
 
-  // Mastery-ring fraction for the exact (lo, hi) span, if it's hearted and in
-  // Memory. Read from the same per-chapter saved-verses query (no extra
+  const now = useLiveNow();
+
+  // Ring and memorizing copy for the exact (lo, hi) span, if it's hearted and
+  // in Memory. Read from the same per-chapter saved-verses query (no extra
   // per-verse fetch), so the ring adds zero query round-trips.
-  const spanMasteryFraction = useCallback(
-    (startVerse: number, endVerse: number): number => {
-      const span = savedSpans.find(
+  const spanHeartMemory = useCallback(
+    (
+      startVerse: number,
+      endVerse: number,
+    ): Pick<PassageHeartControl, "masteryFraction" | "memoryCopy"> => {
+      const memory = savedSpans.find(
         (s) => s.startVerse === startVerse && s.endVerse === endVerse,
-      );
-      if (!span?.memory?.inMemory) return 0;
-      return masteryRingFraction(
-        span.memory.status,
-        span.memory.intervalDays,
-        span.memory.learnStage,
-        span.memory.stageReps ?? 0,
-      );
+      )?.memory;
+      if (!memory?.inMemory) return { masteryFraction: 0 };
+      return {
+        masteryFraction: masteryRingFraction(
+          memory.status,
+          memory.intervalDays,
+          memory.learnStage,
+          memory.stageReps ?? 0,
+        ),
+        memoryCopy: verseHeartMemoryCopy(memory, now),
+      };
     },
-    [savedSpans],
+    [now, savedSpans],
   );
 
   const heartNudge = useHeartMemorizeNudge({
@@ -284,24 +312,6 @@ export function PassageViewBody({
     [book, chapter, memorizeSheet],
   );
 
-  const savedPassagesByAnchor = useMemo(() => {
-    const map = new Map<
-      number,
-      Array<{ startVerse: number; endVerse: number; stopsMemorizing: boolean }>
-    >();
-    for (const span of savedSpans) {
-      if (span.startVerse === span.endVerse) continue;
-      const arr = map.get(span.startVerse) ?? [];
-      arr.push({
-        startVerse: span.startVerse,
-        endVerse: span.endVerse,
-        stopsMemorizing: span.stopsMemorizing === true,
-      });
-      map.set(span.startVerse, arr);
-    }
-    return map;
-  }, [savedSpans]);
-
   const [hoveredSavedPassage, setHoveredSavedPassage] = useState<{
     startVerse: number;
     endVerse: number;
@@ -317,6 +327,93 @@ export function PassageViewBody({
   const handleSavedPassageHoverLeave = useCallback(() => {
     setHoveredSavedPassage(null);
   }, []);
+
+  // A memorized passage shows once: its heart level with its first verse and
+  // a rail over its verses, instead of a range pill. When passages overlap,
+  // the first claims the shared verses; one that claims none keeps its pill.
+  const passageRail = useMemo(() => {
+    const entries = new Map<number, RailEntry>();
+    const drawnSpans = new Set<SavedSpan>();
+    for (const span of savedSpans) {
+      const { passage } = span;
+      if (!passage) continue;
+      const segments = passageRailSegments(passage);
+      const first = segments[0];
+      if (!first || entries.has(first.verse)) continue;
+      drawnSpans.add(span);
+      const copy = passageHeartCopy(passage, now);
+      for (const segment of segments) {
+        if (entries.has(segment.verse)) continue;
+        entries.set(segment.verse, {
+          joinsAbove: segment.joinsAbove,
+          mark: {
+            stroke: segment.stroke,
+            foot: segment.foot,
+            heart: segment.heart
+              ? {
+                  learnedFraction:
+                    passage.totalVerses > 0
+                      ? passage.learnedVerses / passage.totalVerses
+                      : 0,
+                  tooltip: copy.tooltip,
+                  ariaLabel: copy.ariaLabel,
+                  title: passage.title,
+                  startVerse: span.startVerse,
+                  endVerse: span.endVerse,
+                  stopsMemorizing: span.stopsMemorizing === true,
+                  onUnheart: () =>
+                    onToggleSaved(span.startVerse, span.endVerse),
+                  onHoverChange: (hovering) =>
+                    hovering
+                      ? handleSavedPassageHoverEnter(
+                          span.startVerse,
+                          span.endVerse,
+                        )
+                      : handleSavedPassageHoverLeave(),
+                }
+              : null,
+          },
+        });
+      }
+    }
+    const marks = new Map<number, PassageRailMark>();
+    for (const [verse, entry] of entries) marks.set(verse, entry.mark);
+    return { entries, marks, drawnSpans };
+  }, [
+    handleSavedPassageHoverEnter,
+    handleSavedPassageHoverLeave,
+    now,
+    onToggleSaved,
+    savedSpans,
+  ]);
+
+  const railPastHeadings = (
+    verseNumber: number | undefined,
+    hasHeading: boolean,
+  ) => {
+    if (!hasHeading || verseNumber === undefined) return null;
+    const entry = passageRail.entries.get(verseNumber);
+    return entry?.joinsAbove ? entry.mark.stroke : null;
+  };
+
+  const savedPassagesByAnchor = useMemo(() => {
+    const map = new Map<
+      number,
+      Array<{ startVerse: number; endVerse: number; stopsMemorizing: boolean }>
+    >();
+    for (const span of savedSpans) {
+      if (span.startVerse === span.endVerse) continue;
+      if (passageRail.drawnSpans.has(span)) continue;
+      const arr = map.get(span.startVerse) ?? [];
+      arr.push({
+        startVerse: span.startVerse,
+        endVerse: span.endVerse,
+        stopsMemorizing: span.stopsMemorizing === true,
+      });
+      map.set(span.startVerse, arr);
+    }
+    return map;
+  }, [passageRail, savedSpans]);
 
   const isInHoveredSavedPassage = useCallback(
     (verseNumber: number) =>
@@ -367,7 +464,7 @@ export function PassageViewBody({
         onToggle: (anchor) =>
           toggleHeart(passageSelectLo, passageSelectHi, anchor),
         alwaysVisible: true,
-        masteryFraction: spanMasteryFraction(passageSelectLo, passageSelectHi),
+        ...spanHeartMemory(passageSelectLo, passageSelectHi),
         stopsMemorizing: stopsMemorizingSpan(passageSelectLo, passageSelectHi),
         reference: spanTitle(passageSelectLo, passageSelectHi),
       };
@@ -375,7 +472,10 @@ export function PassageViewBody({
     return {
       filled: hasExactSavedSpan(savedSpans, verseNumber, verseNumber),
       onToggle: (anchor) => toggleHeart(verseNumber, verseNumber, anchor),
-      masteryFraction: spanMasteryFraction(verseNumber, verseNumber),
+      // Inside a memorized passage, progress lives on the passage heart.
+      ...(passageRail.entries.has(verseNumber)
+        ? { masteryFraction: 0 }
+        : spanHeartMemory(verseNumber, verseNumber)),
       stopsMemorizing: stopsMemorizingSpan(verseNumber, verseNumber),
       reference: spanTitle(verseNumber, verseNumber),
     };
@@ -608,23 +708,30 @@ export function PassageViewBody({
                         reduceMotion,
                       )}
                     >
-                      {item.heading ? (
-                        <AnimatePresence initial={false}>
-                          {showSectionHeaders ? (
-                            <SectionHeading
-                              key={`heading-group-${item.anchorVerse}`}
-                              title={item.heading}
-                            />
-                          ) : null}
-                        </AnimatePresence>
-                      ) : null}
-                      {item.subheading ? (
-                        <SectionHeading
-                          key={`subheading-group-${item.anchorVerse}`}
-                          title={item.subheading}
-                          variant="sub"
-                        />
-                      ) : null}
+                      <PassageRailPastHeadings
+                        stroke={railPastHeadings(
+                          item.verses[0]?.verseNumber,
+                          Boolean(item.heading || item.subheading),
+                        )}
+                      >
+                        {item.heading ? (
+                          <AnimatePresence initial={false}>
+                            {showSectionHeaders ? (
+                              <SectionHeading
+                                key={`heading-group-${item.anchorVerse}`}
+                                title={item.heading}
+                              />
+                            ) : null}
+                          </AnimatePresence>
+                        ) : null}
+                        {item.subheading ? (
+                          <SectionHeading
+                            key={`subheading-group-${item.anchorVerse}`}
+                            title={item.subheading}
+                            variant="sub"
+                          />
+                        ) : null}
+                      </PassageRailPastHeadings>
                       <PassageGroupWithNotes
                         verses={item.verses}
                         passageNotes={item.passageNotes}
@@ -633,6 +740,7 @@ export function PassageViewBody({
                         currentChapter={{ book, chapter }}
                         selectionBar={selectionBar}
                         hoveredSavedPassage={hoveredSavedPassage}
+                        passageRailByVerse={passageRail.marks}
                         highlightsByVerse={highlightsByVerse}
                         onCreateHighlight={onCreateHighlight}
                         onDeleteHighlight={onDeleteHighlight}
@@ -710,6 +818,12 @@ export function PassageViewBody({
                           .editorKey,
                       )
                     : undefined;
+                const railStrokePastHeadings = railPastHeadings(
+                  item.verseNumber,
+                  Boolean(item.heading || item.subheading),
+                );
+                const railMark =
+                  passageRail.entries.get(item.verseNumber)?.mark ?? null;
 
                 return (
                   <motion.div
@@ -732,23 +846,25 @@ export function PassageViewBody({
                       reduceMotion,
                     )}
                   >
-                    {item.heading ? (
-                      <AnimatePresence initial={false}>
-                        {showSectionHeaders ? (
-                          <SectionHeading
-                            key={`heading-${item.verseNumber}`}
-                            title={item.heading}
-                          />
-                        ) : null}
-                      </AnimatePresence>
-                    ) : null}
-                    {item.subheading ? (
-                      <SectionHeading
-                        key={`subheading-${item.verseNumber}`}
-                        title={item.subheading}
-                        variant="sub"
-                      />
-                    ) : null}
+                    <PassageRailPastHeadings stroke={railStrokePastHeadings}>
+                      {item.heading ? (
+                        <AnimatePresence initial={false}>
+                          {showSectionHeaders ? (
+                            <SectionHeading
+                              key={`heading-${item.verseNumber}`}
+                              title={item.heading}
+                            />
+                          ) : null}
+                        </AnimatePresence>
+                      ) : null}
+                      {item.subheading ? (
+                        <SectionHeading
+                          key={`subheading-${item.verseNumber}`}
+                          title={item.subheading}
+                          variant="sub"
+                        />
+                      ) : null}
+                    </PassageRailPastHeadings>
                     <VerseRowWithNotes
                       verseNumber={item.verseNumber}
                       text={item.text}
@@ -833,6 +949,11 @@ export function PassageViewBody({
                       onSavedPassageHoverEnter={handleSavedPassageHoverEnter}
                       onSavedPassageHoverLeave={handleSavedPassageHoverLeave}
                       onToggleSavedPassage={onToggleSaved}
+                      passageRail={
+                        railMark && railStrokePastHeadings
+                          ? { ...railMark, flushTop: true }
+                          : railMark
+                      }
                     />
                   </motion.div>
                 );
