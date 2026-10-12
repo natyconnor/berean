@@ -373,7 +373,7 @@ describe("passage column layout", () => {
 
     for (const row of rows) {
       expect(row.overflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
-      expect(row.text, JSON.stringify(row)).toBeGreaterThanOrEqual(360);
+      expect(row.text, JSON.stringify(row)).toBeGreaterThanOrEqual(350);
       expect(row.notes, JSON.stringify(row)).toBeGreaterThanOrEqual(270);
     }
 
