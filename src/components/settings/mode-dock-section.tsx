@@ -45,8 +45,11 @@ export function ModeDockSection() {
       <div className="space-y-1">
         <h2 className="text-sm font-semibold">Mode dock</h2>
         <p className="text-xs text-muted-foreground">
-          The floating Notes / Study pill at the bottom of the screen. Choose
-          how it behaves while you work.
+          The floating Notes / Memory / Study pill at the bottom of the screen.
+          Choose how it behaves while you work.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          The dock is hidden on Settings.
         </p>
       </div>
       <div
