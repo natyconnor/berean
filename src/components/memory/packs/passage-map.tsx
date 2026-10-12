@@ -12,7 +12,7 @@ const ATTACHMENT_ORDER: readonly PieceAttachment[] = [
 const ATTACHMENT_LABEL: Record<PieceAttachment, string> = {
   unreached: "Not started",
   learning: "Learning",
-  attached: "Practicing",
+  attached: "Joined",
   solid: "Memorized",
 };
 

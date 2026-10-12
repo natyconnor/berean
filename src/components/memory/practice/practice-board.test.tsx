@@ -182,7 +182,7 @@ describe("PracticeBoard composite recitation", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("button", {
-        name: /^Psalm 23 \(From Memory band\)$/,
+        name: /^Psalm 23 \(From memory step\)$/,
       }),
     ).toHaveLength(1);
 
@@ -446,9 +446,9 @@ describe("PracticeBoard learning step label", () => {
     );
 
     expect(
-      await screen.findByText(/Guided · 1 of \d+ today/),
+      await screen.findByText(/First letters · 1 of \d+ today/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Guided · 0 of/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/First letters · 0 of/)).not.toBeInTheDocument();
   });
 
   it("advances the journey bar when a check settles, before Continue", async () => {
@@ -475,7 +475,7 @@ describe("PracticeBoard learning step label", () => {
       </TooltipProvider>,
     );
 
-    await screen.findByText(/Guided · 1 of \d+ today/);
+    await screen.findByText(/First letters · 1 of \d+ today/);
     const pctBefore = Math.max(
       ...screen
         .getAllByLabelText(/Learning journey:/)
@@ -501,18 +501,20 @@ describe("PracticeBoard learning step label", () => {
       expect(pctAfter).toBeGreaterThan(pctBefore);
     });
     // Step label stays on the step just graded until Continue.
-    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/First letters · 1 of \d+ today/),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Continue/ }),
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(
-      await screen.findByText(/Guided · 2 of \d+ today/),
+      await screen.findByText(/First letters · 2 of \d+ today/),
     ).toBeInTheDocument();
   });
 
-  it("ends the day after clearing Guided instead of opening Challenge", async () => {
+  it("ends the day after clearing First letters instead of opening blanks", async () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue({
       status: "learning",
       learnStage: 2,
@@ -544,10 +546,13 @@ describe("PracticeBoard learning step label", () => {
     expect(await screen.findByText("100% recalled.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
+    expect(await screen.findByText("That's today's step.")).toBeInTheDocument();
     expect(
-      await screen.findByText("Today's learning is done"),
+      screen.getByText("Tomorrow: Fill in the blanks"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Challenge tomorrow/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Each day builds on the last\. See you tomorrow\./),
+    ).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Your recalled verse"),
     ).not.toBeInTheDocument();
@@ -728,7 +733,7 @@ const luke9: EsvChapterData = {
 
 function verseRailLabels(): string[] {
   return screen
-    .getAllByRole("button", { name: /band/ })
+    .getAllByRole("button", { name: / step[,)]/ })
     .map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "");
 }
 
@@ -765,7 +770,9 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     );
 
     expect(
-      await screen.findByRole("button", { name: /Psalm 8:2 \(Guided band\)/ }),
+      await screen.findByRole("button", {
+        name: /Psalm 8:2 \(First letters step\)/,
+      }),
     ).toBeVisible();
     expect(screen.getByText("Psalm 8")).toBeVisible();
     expect(screen.getByText("Luke 9")).toBeVisible();
@@ -828,7 +835,9 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     );
 
     expect(
-      await screen.findByRole("button", { name: /Psalm 8:2 \(Guided band\)/ }),
+      await screen.findByRole("button", {
+        name: /Psalm 8:2 \(First letters step\)/,
+      }),
     ).toBeVisible();
     expect(verseRailLabels()).toEqual([
       "Psalm 8:2",

@@ -18,7 +18,7 @@ describe("LearningJourneyBar", () => {
       <LearningJourneyBar learnStage={3} stageReps={0} status="learning" />,
     );
 
-    const label = screen.getByLabelText(/Learning journey: From Memory/);
+    const label = screen.getByLabelText(/Learning journey: From memory/);
     const prior = requiredRepsFor(0) + requiredRepsFor(1) + requiredRepsFor(2);
     const total = prior + requiredRepsFor(3);
     const pct = Math.round((prior / total) * 100);
@@ -40,7 +40,7 @@ describe("LearningJourneyBar", () => {
     );
 
     expect(
-      screen.getByLabelText(/Learning journey: From Memory · 100%/),
+      screen.getByLabelText(/Learning journey: From memory · 100%/),
     ).toBeInTheDocument();
   });
 
@@ -55,7 +55,7 @@ describe("LearningJourneyBar", () => {
     );
 
     expect(
-      screen.getByLabelText(/Progress to mastered: Reviewing · 0%/),
+      screen.getByLabelText(/Progress to mastered: Memorized · 0%/),
     ).toBeInTheDocument();
     const fill = container.querySelector(".h-full");
     expect(fill?.className).toContain("bg-sky-500");
@@ -73,7 +73,7 @@ describe("LearningJourneyBar", () => {
     );
 
     expect(
-      screen.getByLabelText(/Progress to mastered: Reviewing · 50%/),
+      screen.getByLabelText(/Progress to mastered: Memorized · 50%/),
     ).toBeInTheDocument();
   });
 });

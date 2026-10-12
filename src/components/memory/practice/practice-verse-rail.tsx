@@ -1,6 +1,7 @@
 import { ListOrdered, Shuffle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { UP_NEXT_TOMORROW_LABEL } from "@/lib/memory-copy";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import type { MemorySessionLabel } from "@/lib/memory-session";
 import {
@@ -172,7 +173,7 @@ export function PracticeVerseRail({
             />
             {currentLocked ? (
               <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Next session tomorrow
+                {UP_NEXT_TOMORROW_LABEL}
               </p>
             ) : null}
           </div>
@@ -219,8 +220,8 @@ export function PracticeVerseRail({
                         )}
                         onClick={() => onSelectVerse(verse.id)}
                         aria-current={active ? "true" : undefined}
-                        aria-label={`${label} (${stage.label} band${locked ? ", done for today" : ""})`}
-                        title={`${label} · ${stage.label}${locked ? " · Tomorrow" : ""}`}
+                        aria-label={`${label} (${stage.label} step${locked ? ", up next tomorrow" : ""})`}
+                        title={`${label} · ${stage.label}${locked ? ` · ${UP_NEXT_TOMORROW_LABEL}` : ""}`}
                         transition={{
                           layout: { duration: 0.28, ease: "easeOut" },
                         }}

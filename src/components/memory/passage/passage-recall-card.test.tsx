@@ -48,11 +48,11 @@ describe("PassageRecallCard footer", () => {
 });
 
 describe("PassageRecallCard step label and focus", () => {
-  it("shows the current Guided step, not completed count", () => {
+  it("shows the current First letters step, not completed count", () => {
     render(
       <PassageRecallCard
         mode="frontier"
-        phaseLabel="Guided"
+        phaseLabel="First letters"
         title="Psalm 16:1"
         promptLine="Type what you remember"
         versePlainText="Preserve me, O God, for in you I take refuge."
@@ -71,8 +71,10 @@ describe("PassageRecallCard step label and focus", () => {
       />,
     );
 
-    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
-    expect(screen.queryByText(/Guided · 0 of/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/First letters · 1 of \d+ today/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/First letters · 0 of/)).not.toBeInTheDocument();
   });
 
   it("focuses the answer box after Read Continue", async () => {
@@ -112,7 +114,7 @@ describe("PassageRecallCard step label and focus", () => {
     rerender(
       <PassageRecallCard
         mode="frontier"
-        phaseLabel="Guided"
+        phaseLabel="First letters"
         title="Psalm 16:1"
         promptLine="Type what you remember"
         versePlainText="Preserve me, O God, for in you I take refuge."
@@ -147,7 +149,7 @@ describe("PassageRecallCard step label and focus", () => {
     render(
       <PassageRecallCard
         mode="frontier"
-        phaseLabel="Guided"
+        phaseLabel="First letters"
         title="Psalm 16:1"
         promptLine="Type what you remember"
         versePlainText="Preserve me, O God, for in you I take refuge."

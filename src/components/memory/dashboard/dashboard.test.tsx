@@ -63,7 +63,7 @@ describe("MemoryDashboard query split", () => {
 
     expect(
       screen.getByRole("img", {
-        name: "Mastery distribution: 3 learning, 4 reviewing, 1 mastered.",
+        name: "Mastery distribution: 3 learning, 4 memorized, 1 mastered.",
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("8 started")).toBeInTheDocument();

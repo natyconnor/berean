@@ -39,15 +39,16 @@ describe("MasteryDonut", () => {
     expect(screen.queryByText("New")).not.toBeInTheDocument();
 
     expect(screen.getByText("Learning")).toBeInTheDocument();
-    expect(screen.getByText("Reviewing")).toBeInTheDocument();
+    expect(screen.getByText("Memorized")).toBeInTheDocument();
     expect(screen.getByText("Mastered")).toBeInTheDocument();
+    expect(screen.queryByText("Reviewing")).not.toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("6")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
 
     expect(screen.getByRole("img")).toHaveAttribute(
       "aria-label",
-      "Mastery distribution: 5 learning, 6 reviewing, 3 mastered.",
+      "Mastery distribution: 5 learning, 6 memorized, 3 mastered.",
     );
   });
 
@@ -56,7 +57,7 @@ describe("MasteryDonut", () => {
 
     // 6 of 14 started are reviewing, the biggest bucket.
     expect(screen.getByText("43%")).toBeInTheDocument();
-    expect(screen.getByText("reviewing")).toBeInTheDocument();
+    expect(screen.getByText("memorized")).toBeInTheDocument();
     expect(
       screen.getByRole("img").querySelector('circle[data-status="reviewing"]'),
     ).toHaveAttribute("data-active", "true");

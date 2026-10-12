@@ -37,6 +37,8 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
+import { SESSION_COMPLETE_FOOTER } from "@/lib/memory-copy";
+import { nextStepCopy } from "@/lib/memorize-plan";
 import {
   holdReviewingInterval,
   isLearningLocked,
@@ -455,7 +457,7 @@ export function PracticeBoard({
         dueAt: now,
       };
 
-  // Soft lock drives the card's "come back tomorrow" chrome; work-left drives
+  // Soft lock drives the card's "up next tomorrow" chrome; work-left drives
   // navigation, so a verse that graduates mid-session also hands off cleanly.
   const currentLocked = isLearningLocked(currentProgress, now);
   const currentHasWorkLeft = hasSessionWorkLeft(kind, currentProgress, now);
@@ -710,6 +712,7 @@ export function PracticeBoard({
               status={currentProgress.status}
               scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
               locked={currentLocked}
+              nextStep={nextStepCopy(currentProgress, now)}
               position={boundedIndex}
               total={orderedVerses.length}
               showScheduleOutcome={isReview}
@@ -876,6 +879,8 @@ interface PracticeCardProps {
   scheduleSnapshot: MemoryScheduleSnapshot;
   /** Soft-locked: today's learning session is done. */
   locked: boolean;
+  /** What comes next for this verse, shown while it is soft-locked. */
+  nextStep: string;
   position: number;
   total: number;
   /** Review mode: show schedule-consequence copy above the diff. */
@@ -908,6 +913,7 @@ function PracticeCard({
   status,
   scheduleSnapshot,
   locked,
+  nextStep,
   position,
   total,
   showScheduleOutcome = false,
@@ -923,8 +929,8 @@ function PracticeCard({
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
   const [checked, setChecked] = useState(false);
-  // Snapshot of "Guided · N of M today" at Check so the step label stays on the
-  // step just finished while the journey bar adopts banked progress early.
+  // Snapshot of "First letters · N of M today" at Check so the step label stays
+  // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
@@ -990,7 +996,7 @@ function PracticeCard({
   const isReadPrime = hintStage === "full";
   const fromMemoryLearn = isFromMemoryLearning(learnStage, status);
   const promptLine = showLocked
-    ? "Done for today — come back tomorrow"
+    ? nextStep
     : isReadPrime
       ? "Read it through, then continue"
       : fromMemoryLearn
@@ -1199,7 +1205,7 @@ function PracticeCard({
           />
           {locked ? (
             <p className="text-xs text-muted-foreground">
-              Next session tomorrow · {stageInfo.label} waiting
+              Tomorrow: {stageInfo.label}
             </p>
           ) : null}
         </CardHeader>
@@ -1215,8 +1221,8 @@ function PracticeCard({
                 Done for today
               </p>
               <p className="max-w-sm text-sm text-muted-foreground">
-                You finished this verse&apos;s learning session. Come back
-                tomorrow to continue with {stageInfo.label}.
+                You&apos;ve done today&apos;s step for this verse.{" "}
+                {SESSION_COMPLETE_FOOTER}
               </p>
             </div>
           ) : (

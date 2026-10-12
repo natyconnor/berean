@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
 import { memoryProgressFraction } from "@/lib/mastery-ring";
+import { statusLabel } from "@/lib/memory-copy";
 import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
@@ -12,8 +13,9 @@ interface LearningJourneyBarProps {
   /** Reps banked on the current band. Defaults to 0 when absent (e.g. legacy rows). */
   stageReps?: number;
   /**
-   * Verse word count. When provided, Guided and Challenge required-rep counts
-   * are length-adjusted so the bar matches the card and the server exactly.
+   * Verse word count. When provided, First letters and Fill in the blanks
+   * required-rep counts are length-adjusted so the bar matches the card and
+   * the server exactly.
    */
   wordCount?: number;
   /**
@@ -53,11 +55,7 @@ export function LearningJourneyBar({
   const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
   const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
   const chrome = practiceChromeFor(clampedStage, status);
-  const label = graduated
-    ? status === "mastered"
-      ? "Mastered"
-      : "Reviewing"
-    : stage.label;
+  const label = graduated ? statusLabel(status) : stage.label;
   const fraction = memoryProgressFraction(
     status,
     learnStage,

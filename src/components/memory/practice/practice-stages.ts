@@ -1,3 +1,4 @@
+import { stepShortLabel } from "@/lib/memory-copy";
 import {
   MAX_LEARN_STAGE,
   SUPPORT_BANDS,
@@ -16,7 +17,7 @@ export interface PracticeChrome {
 
 export interface PracticeStageInfo {
   stage: HintStage;
-  /** Human label for this band, sourced from {@link SUPPORT_BANDS}. */
+  /** Display name for this step, from {@link stepShortLabel}. */
   label: string;
   /**
    * Short-verse minimum reps for this band, sourced from {@link SUPPORT_BANDS}.
@@ -96,13 +97,14 @@ const MASTERED_CHROME: PracticeChrome = {
 
 /**
  * The four learning-phase bands the Practice surface renders, in ascending
- * difficulty. Labels and required reps come straight from {@link SUPPORT_BANDS}
- * (the single source of truth); index 0..3 lines up with `learnStage`.
+ * difficulty. Required reps come straight from {@link SUPPORT_BANDS} (the
+ * single source of truth); labels are the user-facing step names, never the
+ * scheduler's internal band names. Index 0..3 lines up with `learnStage`.
  */
 export const PRACTICE_STAGES: readonly PracticeStageInfo[] = SUPPORT_BANDS.map(
   (band, index) => ({
     stage: STAGE_BY_BAND_KEY[band.key],
-    label: band.label,
+    label: stepShortLabel(index),
     requiredReps: band.requiredReps,
     color: STAGE_COLORS[index] ?? STAGE_COLORS[0],
   }),

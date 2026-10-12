@@ -249,7 +249,7 @@ describe("reviewFeedbackMessage", () => {
     ).toBe("Almost there — try again to extend your review interval.");
   });
 
-  it("names Challenge when a daily review lapses into learning", () => {
+  it("names the blanks step when a daily review lapses into learning", () => {
     expect(
       reviewFeedbackMessage({
         lead: "A handful of words came back",
@@ -257,7 +257,7 @@ describe("reviewFeedbackMessage", () => {
         now: NOW,
         lapsedToLearning: true,
       }),
-    ).toBe("A handful of words came back — back to Challenge.");
+    ).toBe("A handful of words came back — back to fill in the blanks.");
   });
 
   it("keeps the next-review clause on hold and later-ladder lapses", () => {

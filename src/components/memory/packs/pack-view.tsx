@@ -50,7 +50,13 @@ import { heartSpansInChunks } from "@/lib/heart-many-client";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
-import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
+import { UP_NEXT_TOMORROW_LABEL } from "@/lib/memory-copy";
+import { nextStepCopy } from "@/lib/memorize-plan";
+import {
+  isDueForLearning,
+  isLearningLocked,
+  isReviewPhase,
+} from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
@@ -562,6 +568,10 @@ function PackViewMain({
   const canLearn = learningDueCount > 0;
   const canPractice = practiceCount > 0;
   const canEnroll = newCount > 0;
+  const waitingMember = members?.find((m) => isLearningLocked(m, now));
+  const waitingNextStep = waitingMember
+    ? nextStepCopy(waitingMember, now)
+    : undefined;
 
   // Unified recitation: a scope pack whose every member has graduated. While
   // one is on, the pack counts as a single due item (matching the pack list).
@@ -835,6 +845,7 @@ function PackViewMain({
               }
               canEnroll={canEnroll}
               canLearn={canLearn}
+              nextStep={waitingNextStep}
               pending={isEnrolling}
               onLearn={() => (canEnroll ? void handleLearnPack() : onLearn())}
             />
@@ -1327,6 +1338,7 @@ function PackLearnPanel({
   queueCount,
   canEnroll,
   canLearn,
+  nextStep,
   pending,
   onLearn,
 }: {
@@ -1336,6 +1348,8 @@ function PackLearnPanel({
   queueCount: number;
   canEnroll: boolean;
   canLearn: boolean;
+  /** What comes next for a waiting verse, shown while the whole pack waits. */
+  nextStep?: string;
   pending: boolean;
   onLearn: () => void;
 }) {
@@ -1346,15 +1360,31 @@ function PackLearnPanel({
       ? `Some verses are already in progress. This queues the rest so you can learn ${packName} together, in order.`
       : `Starting one verse at a time splits the passage. This queues every new unit in order so you learn ${packName} together.`
     : lockedUntilTomorrow
-      ? `Today's session is done. Come back tomorrow to keep learning ${packName} together.`
+      ? `You've done today's step. Tomorrow you'll keep learning ${packName} together.`
       : `Continue in order so ${packName} stays together.`;
   const label = pending
     ? "Starting\u2026"
     : canEnroll
       ? "Learn whole passage"
       : lockedUntilTomorrow
-        ? "Continue Learning · Tomorrow"
+        ? UP_NEXT_TOMORROW_LABEL
         : "Continue Learning";
+  const button = (
+    <Button
+      size="sm"
+      className="gap-1.5 shrink-0"
+      onClick={onLearn}
+      disabled={pending || lockedUntilTomorrow}
+    >
+      <GraduationCap className="h-4 w-4" aria-hidden />
+      {label}
+      {queueCount > 0 && !pending ? (
+        <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
+          {queueCount}
+        </span>
+      ) : null}
+    </Button>
+  );
 
   return (
     <section className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4 shadow-sm">
@@ -1368,20 +1398,16 @@ function PackLearnPanel({
             {description}
           </p>
         </div>
-        <Button
-          size="sm"
-          className="gap-1.5 shrink-0"
-          onClick={onLearn}
-          disabled={pending || lockedUntilTomorrow}
-        >
-          <GraduationCap className="h-4 w-4" aria-hidden />
-          {label}
-          {queueCount > 0 && !pending ? (
-            <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-foreground px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary tabular-nums">
-              {queueCount}
-            </span>
-          ) : null}
-        </Button>
+        {lockedUntilTomorrow && nextStep ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex shrink-0">{button}</span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">{nextStep}</TooltipContent>
+          </Tooltip>
+        ) : (
+          button
+        )}
       </div>
     </section>
   );

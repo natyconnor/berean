@@ -283,7 +283,9 @@ describe("MemoryPackReviewPage", () => {
     });
 
     expect(
-      await screen.findByRole("status", { name: "Session phase: Review" }),
+      await screen.findByRole("status", {
+        name: "Session phase: Recite it all",
+      }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/one recitation/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Verse 1 of/)).not.toBeInTheDocument();

@@ -162,7 +162,7 @@ describe("VerseMemoryFeedback", () => {
     );
   });
 
-  it("explains a daily-review lapse back to Challenge", () => {
+  it("explains a daily-review lapse back to the blanks step", () => {
     render(
       <VerseMemoryFeedback
         quality="off"
@@ -184,7 +184,7 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "A handful of words came back — back to Challenge.",
+      "A handful of words came back — back to fill in the blanks.",
     );
   });
 

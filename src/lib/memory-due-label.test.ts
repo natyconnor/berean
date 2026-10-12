@@ -120,10 +120,10 @@ describe("formatMemoryStatusSubtitle", () => {
     expect(
       formatMemoryStatusSubtitle({
         status: "reviewing",
-        statusLabel: "Reviewing",
+        statusLabel: "Memorized",
         dueAt: NOW,
         now: NOW,
       }),
-    ).toBe("Reviewing · Due now");
+    ).toBe("Memorized · Due now");
   });
 });

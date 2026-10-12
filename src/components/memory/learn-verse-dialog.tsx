@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { exactSpanMatch, type VerseSpan } from "@/lib/hearted-verse-coverage";
+import { stepShortLabel } from "@/lib/memory-copy";
 import { isLearningLocked, type MemoryStatus } from "@/lib/memory-scheduler";
 import { reviewPhaseListAction } from "@/lib/memory-session";
 
@@ -120,7 +121,7 @@ export function LearnVerseDialog({
           )
         ) {
           setError(
-            "Come back tomorrow. Today's session for this verse is done.",
+            `You've done today's step for this verse. Tomorrow: ${stepShortLabel(memory.learnStage)}.`,
           );
           return;
         }

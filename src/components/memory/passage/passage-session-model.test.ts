@@ -4,11 +4,27 @@ import type { PassagePiece } from "@/lib/passage-pieces";
 
 import {
   computeStallCue,
+  PASSAGE_SESSION_PHASE_LABELS,
   pickUpCue,
   repairWindowShowsStageHints,
   stallRepairCue,
 } from "./passage-session-model";
 import type { PassageSessionState } from "@/lib/passage-session";
+
+describe("PASSAGE_SESSION_PHASE_LABELS", () => {
+  it("names passage phases without reusing Practice", () => {
+    expect(PASSAGE_SESSION_PHASE_LABELS["stall-repair"]).toBe(
+      "Fix a tricky spot",
+    );
+    expect(PASSAGE_SESSION_PHASE_LABELS.connect).toBe("Join verses");
+    expect(PASSAGE_SESSION_PHASE_LABELS["passage-complete"]).toBe(
+      "Recite it all",
+    );
+    for (const label of Object.values(PASSAGE_SESSION_PHASE_LABELS)) {
+      expect(label).not.toMatch(/practic/i);
+    }
+  });
+});
 
 function piece(
   index: number,

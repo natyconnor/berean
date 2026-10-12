@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { statusLabel } from "@/lib/memory-copy";
+import { nextStepCopy } from "@/lib/memorize-plan";
 import {
   isDueForReview,
   isLearningLocked,
   isReviewPhase,
   MAX_LEARN_STAGE,
-  type MemoryStatus,
 } from "@/lib/memory-scheduler";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
@@ -21,18 +22,10 @@ import type { PracticeVerse } from "./practice/practice-board";
 import { PRACTICE_STAGES } from "./practice/practice-stages";
 
 /**
- * Learn-band labels, sourced from the shared support bands (Read / Guided /
- * Challenge / From Memory) so the drill-down never drifts from the scheduler's
- * naming.
+ * Learning step labels (Read / First letters / Fill in the blanks / From
+ * memory), shared with every session surface so the drill-down never drifts.
  */
 const STAGE_LABELS = PRACTICE_STAGES.map((s) => s.label);
-
-const STATUS_LABELS: Record<MemoryStatus, string> = {
-  new: "New",
-  learning: "Learning",
-  reviewing: "Reviewing",
-  mastered: "Mastered",
-};
 
 const QUALITY_LABELS: Record<VerseAttemptQuality, string> = {
   exact: "Exact",
@@ -239,7 +232,7 @@ export function VerseDetail({
           <p className="mt-0.5 text-sm text-muted-foreground">
             {formatMemoryStatusSubtitle({
               status: detail.status,
-              statusLabel: STATUS_LABELS[detail.status],
+              statusLabel: statusLabel(detail.status),
               dueAt: detail.dueAt,
               lastReviewedAt: detail.lastReviewedAt,
               now,
@@ -354,7 +347,15 @@ export function VerseDetail({
             />
             {learningLocked ? (
               <p className="text-xs text-muted-foreground">
-                Session done for today — next session tomorrow.
+                {nextStepCopy(
+                  {
+                    status: detail.status,
+                    learnStage: detail.learnStage,
+                    dueAt: detail.dueAt,
+                    lastReviewedAt: detail.lastReviewedAt,
+                  },
+                  now,
+                )}
               </p>
             ) : null}
           </>

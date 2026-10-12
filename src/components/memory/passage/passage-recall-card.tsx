@@ -106,8 +106,8 @@ export function PassageRecallCard({
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
-  // Snapshot of "Guided · N of M today" at Check so the step label stays on the
-  // step just finished while the journey bar adopts banked progress early.
+  // Snapshot of "First letters · N of M today" at Check so the step label stays
+  // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);

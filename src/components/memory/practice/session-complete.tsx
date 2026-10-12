@@ -4,6 +4,11 @@ import { Sparkles } from "lucide-react";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import type { CardReference } from "@/components/study/study-card-model";
 import { Button } from "@/components/ui/button";
+import {
+  SESSION_COMPLETE_FOOTER,
+  SESSION_COMPLETE_TITLE,
+  statusLabel,
+} from "@/lib/memory-copy";
 import { isReviewPhase, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
@@ -18,7 +23,7 @@ export interface SessionCompleteVerse {
 }
 
 interface SessionCompleteProps {
-  /** Every verse the session ran, with the band each one landed on. */
+  /** Every verse the session ran, with the step each one landed on. */
   verses: ReadonlyArray<SessionCompleteVerse>;
   /** Label for the exit action, e.g. "Back to Memory" or "Back to Pack". */
   exitLabel: string;
@@ -43,7 +48,7 @@ export function SessionComplete({
           <Sparkles className="h-6 w-6 text-primary" aria-hidden />
         </div>
         <h2 className="text-2xl font-semibold tracking-tight">
-          Today&apos;s learning is done
+          {SESSION_COMPLETE_TITLE}
         </h2>
         <p className="text-sm text-muted-foreground">
           {verses.length === 1
@@ -51,7 +56,7 @@ export function SessionComplete({
             : `You finished today's session for all ${verses.length} verses.`}{" "}
           {graduated.length > 0
             ? `${graduated.length} moved into review.`
-            : "Come back tomorrow for the next band."}
+            : SESSION_COMPLETE_FOOTER}
         </p>
       </div>
 
@@ -78,7 +83,9 @@ export function SessionComplete({
                   className={cn("h-1.5 w-1.5 rounded-full", chrome.dot)}
                   aria-hidden
                 />
-                {reviewing ? "In review" : `${stage.label} tomorrow`}
+                {reviewing
+                  ? statusLabel("reviewing")
+                  : `Tomorrow: ${stage.label}`}
               </span>
             </li>
           );

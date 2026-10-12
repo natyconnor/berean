@@ -308,7 +308,7 @@ describe("PackView", () => {
     );
   });
 
-  it("lets unstarted units Learn, and names a session lock Tomorrow", () => {
+  it("lets unstarted units Learn, and names a session lock Up next tomorrow", () => {
     const now = getSessionNow();
     renderPack({
       members: [
@@ -341,7 +341,9 @@ describe("PackView", () => {
     expect(screen.getByRole("button", { name: "Learn" })).toBeEnabled();
 
     expect(screen.getByText("Learning · Tomorrow")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tomorrow" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /^Up next tomorrow\. / }),
+    ).toBeDisabled();
 
     expect(
       screen.getByRole("button", { name: "Continue Learning" }),

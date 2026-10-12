@@ -40,6 +40,7 @@ import {
   pieceReference,
   pieceStatus,
   pickUpCue,
+  RECITE_IT_ALL_LABEL,
   remainingAddsIn,
   repairPromptIndexes,
   ropeWindowPieceIndexes,
@@ -408,7 +409,7 @@ export function PassageSession({
   }, [needsFirstVerse]);
 
   const phaseLabel = isMaintenance
-    ? "Review"
+    ? RECITE_IT_ALL_LABEL
     : liveRecall?.mode === "frontier"
       ? (PRACTICE_STAGES[liveRecall.learnStage]?.label ?? "Learn")
       : PASSAGE_SESSION_PHASE_LABELS[effectivePhase];

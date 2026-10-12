@@ -12,6 +12,7 @@ import {
   sectionStartIndex,
   localDayIndex,
   isPassagePieceLocked,
+  PASSAGE_MAX_ADDS_PER_DAY,
 } from "@/lib/passage-frontier";
 import { MAX_LEARN_STAGE } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
@@ -25,25 +26,29 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import type { PassageView } from "./passage-session-types";
 
+export const CONNECT_RECITE_LABEL = "Join verses";
+
+/** Phase label for reciting the whole learned passage. */
+export const RECITE_IT_ALL_LABEL = "Recite it all";
+
 export const PASSAGE_SESSION_PHASE_LABELS: Record<PassageSessionPhase, string> =
   {
     rope: "Warm up",
-    "stall-repair": "Practice",
+    "stall-repair": "Fix a tricky spot",
     frontier: "Learn",
     "offer-introduce": "Learn",
     "section-complete": "Learn",
-    connect: "Practice",
-    "passage-complete": "Review",
+    connect: CONNECT_RECITE_LABEL,
+    "passage-complete": RECITE_IT_ALL_LABEL,
     "budget-exhausted": "Learn",
     "frontier-locked": "Learn",
   };
 
 /** Soft-locked current verse; no more work on it today. */
 export const FRONTIER_LOCKED_COPY =
-  "You've got this verse down for the day. Come back tomorrow to keep going with it.";
+  "Today's new verses are in. Tomorrow we'll start with a quick recite, then add more.";
 
-export const BUDGET_EXHAUSTED_COPY =
-  "You've started as many new verses as you can today. Practice what you know, or come back tomorrow to add more.";
+export const BUDGET_EXHAUSTED_COPY = `That's ${PASSAGE_MAX_ADDS_PER_DAY} new verses today, a good day's work. Tomorrow you'll add the next ones.`;
 
 export const NEXT_VERSE_PROMPT_COPY =
   "You've got this verse down for the day. Start the next one?";
@@ -60,8 +65,6 @@ export const SECTION_RECITE_LABEL = "Recite this section";
 export const CONNECT_COPY =
   "Link this verse to its neighbor so they stay together.";
 
-export const CONNECT_RECITE_LABEL = "Recite together";
-
 export const CONNECT_TITLE = "Connect these verses";
 
 export const WARMUP_PROMPT_COPY =
@@ -70,9 +73,9 @@ export const WARMUP_PROMPT_COPY =
 export const WARMUP_SKIP_LABEL = "Skip warm-up";
 
 export const PRACTICE_ROPE_PROMPT_COPY =
-  "Practice these verses together. Hints fade as they get solid.";
+  "Go over these verses together. Hints fade as they get solid.";
 
-export const PRACTICE_WHAT_YOU_KNOW_LABEL = "Practice what you know";
+export const PRACTICE_WHAT_YOU_KNOW_LABEL = "Go over what you know";
 
 const PICK_UP_CUE_WORDS = 6;
 

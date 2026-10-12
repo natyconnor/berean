@@ -171,7 +171,9 @@ describe("PassageSession", () => {
     );
 
     expect(
-      screen.getByRole("status", { name: "Session phase: Challenge" }),
+      screen.getByRole("status", {
+        name: "Session phase: Fill in the blanks",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Session phase: Rope" }),
@@ -403,7 +405,9 @@ describe("PassageSession", () => {
     const pctBefore = Number(
       (journeyBefore.getAttribute("aria-label") ?? "").match(/(\d+)%/)?.[1],
     );
-    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/First letters · 1 of \d+ today/),
+    ).toBeInTheDocument();
 
     const answer = await screen.findByLabelText("Your recalled verse");
     await userEvent.click(answer);
@@ -419,7 +423,9 @@ describe("PassageSession", () => {
       expect(pctAfter).toBeGreaterThan(pctBefore);
     });
     // Step label stays on the graded step; only the journey bar moves early.
-    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/First letters · 1 of \d+ today/),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Continue|Try again/ }),
     ).toBeInTheDocument();
@@ -448,24 +454,29 @@ describe("PassageSession", () => {
     expect(await screen.findByText(/recalled\./)).toBeVisible();
     await waitFor(() => {
       expect(
-        screen.getByLabelText(/Progress to mastered: Reviewing/),
+        screen.getByLabelText(/Progress to mastered: Memorized/),
       ).toBeInTheDocument();
     });
   });
 
   it("uses plain language for the remaining session copy", () => {
     expect(DONE_FOR_NOW_LABEL).toBe("That's enough for today");
-    expect(FRONTIER_LOCKED_COPY).toMatch(/down for the day/);
+    expect(FRONTIER_LOCKED_COPY).toBe(
+      "Today's new verses are in. Tomorrow we'll start with a quick recite, then add more.",
+    );
     expect(FRONTIER_LOCKED_COPY).not.toMatch(/rope|set for today/i);
+    expect(BUDGET_EXHAUSTED_COPY).toBe(
+      "That's 5 new verses today, a good day's work. Tomorrow you'll add the next ones.",
+    );
     expect(NEXT_VERSE_PROMPT_COPY).toMatch(/down for the day/);
     expect(NEXT_VERSE_PROMPT_COPY).not.toMatch(/rope|frontier|introduce/i);
     expect(CONNECT_TITLE).toBe("Connect these verses");
     expect(CONNECT_COPY).toMatch(/Link this verse to its neighbor/);
-    expect(CONNECT_RECITE_LABEL).toBe("Recite together");
+    expect(CONNECT_RECITE_LABEL).toBe("Join verses");
     expect(WARMUP_PROMPT_COPY).toMatch(/Warm up/i);
     expect(WARMUP_PROMPT_COPY).not.toMatch(/rope/i);
     expect(WARMUP_SKIP_LABEL).toBe("Skip warm-up");
-    expect(PRACTICE_WHAT_YOU_KNOW_LABEL).toBe("Practice what you know");
+    expect(PRACTICE_WHAT_YOU_KNOW_LABEL).toBe("Go over what you know");
     expect(SECTION_COMPLETE_COPY).toMatch(/finished this section/);
     expect(SECTION_RECITE_LABEL).toBe("Recite this section");
   });

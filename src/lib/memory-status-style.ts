@@ -1,3 +1,4 @@
+import { statusLabel } from "./memory-copy";
 import type { MemoryStatus } from "./memory-scheduler";
 
 /**
@@ -31,28 +32,28 @@ export interface MemoryStatusStyle {
 
 export const MEMORY_STATUS_STYLE: Record<MemoryStatus, MemoryStatusStyle> = {
   new: {
-    label: "New",
+    label: statusLabel("new"),
     bar: "bg-slate-400 dark:bg-slate-500",
     dot: "bg-slate-400 dark:bg-slate-500",
     stroke: "stroke-slate-400 dark:stroke-slate-500",
     text: "text-slate-600 dark:text-slate-300",
   },
   learning: {
-    label: "Learning",
+    label: statusLabel("learning"),
     bar: "bg-amber-500",
     dot: "bg-amber-500",
     stroke: "stroke-amber-500",
     text: "text-amber-600 dark:text-amber-400",
   },
   reviewing: {
-    label: "Reviewing",
+    label: statusLabel("reviewing"),
     bar: "bg-sky-500",
     dot: "bg-sky-500",
     stroke: "stroke-sky-500",
     text: "text-sky-600 dark:text-sky-400",
   },
   mastered: {
-    label: "Mastered",
+    label: statusLabel("mastered"),
     bar: "bg-emerald-500",
     dot: "bg-emerald-500",
     stroke: "stroke-emerald-500",
@@ -69,7 +70,7 @@ export const MEMORY_STATUS_ORDER: readonly MemoryStatus[] = [
 ];
 
 /**
- * Started work: Learning → Reviewing → Mastered. Hearted `new` verses are a
+ * Started work: Learning → Memorized → Mastered. Hearted `new` verses are a
  * backlog (Library "Not started"), not a mastery bucket.
  */
 export const STARTED_MEMORY_STATUS_ORDER: readonly MemoryStatus[] =

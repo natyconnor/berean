@@ -6,9 +6,11 @@ import {
   formatNextReviewPhrase,
   formatReviewIntervalPhrase,
 } from "@/lib/memory-due-label";
+import { stepShortLabel } from "@/lib/memory-copy";
 import {
   isReviewPhase,
   nextExactReviewIntervalDays,
+  REVIEW_LAPSE_LEARN_STAGE,
   type MemorySchedule,
   type ReviewGradeOutcome,
 } from "@/lib/memory-scheduler";
@@ -174,7 +176,7 @@ export function reviewFeedbackMessage(input: {
     return `${input.lead} — ${reviewRetryScheduleCopy(input.nextSchedule)}.`;
   }
   if (input.outcome === "lapse" && input.lapsedToLearning) {
-    return `${input.lead} — back to Challenge.`;
+    return `${input.lead} — back to ${stepShortLabel(REVIEW_LAPSE_LEARN_STAGE).toLowerCase()}.`;
   }
   return withNextReview(input.lead, input.nextSchedule, input.now);
 }
