@@ -9,6 +9,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { chromium, type Browser } from "playwright-core";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  NoteContent,
+  NoteTagList,
+} from "@/components/notes/view/note-card-primitives";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StagedOnboardingContext } from "@/components/tutorial/staged-onboarding-context";
 import { PassageViewHeader } from "./passage-view-header";
@@ -21,6 +25,10 @@ vi.mock("@/lib/use-tabs", () => ({
   useTabs: () => ({
     navigateActiveTab: () => undefined,
   }),
+}));
+
+vi.mock("@/lib/tag-color-styles", () => ({
+  useStarterTagBadgeStyle: () => () => undefined,
 }));
 
 /**
@@ -50,6 +58,13 @@ const VIEWPORTS = [1600, 1440, 1280, 1100, 1024, 960, 900, 861, 768] as const;
 
 const LONG_VERSE =
   "In the beginning was the Word, and the Word was with God, and the Word was God. He was in the beginning with God. All things were made through him, and without him was not any thing made that was made.";
+
+const LONG_URL =
+  "https://example.com/a/very/long/url/without/any/breaks/in/it/at/all";
+
+const LONG_TAG = "a".repeat(48);
+
+const URL_VIEWPORTS = [900, 861, 768] as const;
 
 function revealedOnboarding(children: ReactNode) {
   return (
@@ -121,6 +136,88 @@ function gridFrame(
   );
 }
 
+function longUrlFrame(width: number): ReactNode {
+  return (
+    <div data-frame data-kind="url" data-width={width} style={{ width }}>
+      <div className="max-w-[1400px] mx-auto pl-16 pr-6">
+        <div className={`grid ${READ_PASSAGE_COLUMNS_CLASS}`}>
+          <div className="min-w-0" data-text>
+            <p className="m-0">{LONG_VERSE}</p>
+          </div>
+          <div className="min-w-0" data-notes>
+            <div className="rounded-xl bg-card px-4 py-3" data-card>
+              <div className="flex items-start justify-between gap-2">
+                <NoteContent
+                  content={`${LONG_URL}\nordinary wrapping words`}
+                  density="reading"
+                  className="min-w-0 flex-1 text-foreground"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function longTagFrame(
+  mode: "read" | "compose" | "focus",
+  width: number,
+): ReactNode {
+  const isRead = mode === "read";
+  const gutter = isRead
+    ? "max-w-[1400px] mx-auto pl-16 pr-6"
+    : "max-w-[1320px] mx-auto pl-16 pr-5";
+  const columns = isRead
+    ? READ_PASSAGE_COLUMNS_CLASS
+    : COMPOSE_PASSAGE_COLUMNS_CLASS;
+  const card = isRead ? (
+    <div className="rounded-xl bg-card px-4 py-3" data-card>
+      <div className="flex items-start justify-between gap-2">
+        <NoteContent
+          content="A short note body."
+          density="reading"
+          className="min-w-0 flex-1 text-foreground"
+        />
+      </div>
+      <NoteTagList tags={[LONG_TAG]} size="sm" className="mt-2" />
+    </div>
+  ) : (
+    <div
+      className="flex min-h-10 w-full flex-col justify-center gap-1 rounded-lg bg-card py-2 pl-3 pr-12 text-left text-[13px]"
+      data-card
+    >
+      <NoteContent
+        content="A short note body."
+        truncateAt={100}
+        className="text-muted-foreground line-clamp-2"
+      />
+      <NoteTagList tags={[LONG_TAG]} />
+    </div>
+  );
+  return (
+    <div
+      data-frame
+      data-kind="tag"
+      data-mode={mode}
+      data-width={width}
+      style={{ width }}
+    >
+      <div className={gutter}>
+        <div className={`grid ${columns}`}>
+          <div className="min-w-0" data-text>
+            <p className="m-0">{LONG_VERSE}</p>
+          </div>
+          <div className="min-w-0" data-notes>
+            {card}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function headerFrame(
   mode: "read" | "compose" | "focus",
   width: number,
@@ -185,6 +282,16 @@ function layoutMarkup(): string {
               </div>
             )),
           )}
+          {URL_VIEWPORTS.map((width) => (
+            <div key={`url-${width}`}>{longUrlFrame(width)}</div>
+          ))}
+          {URL_VIEWPORTS.flatMap((width) =>
+            (["read", "compose", "focus"] as const).map((mode) => (
+              <div key={`tag-${mode}-${width}`}>
+                {longTagFrame(mode, width)}
+              </div>
+            )),
+          )}
         </div>,
       )}
     </TooltipProvider>,
@@ -214,6 +321,26 @@ interface HeaderMeasure {
   controls: ControlBox[];
 }
 
+interface UrlMeasure {
+  width: number;
+  overflow: number;
+  notes: number;
+  card: number;
+  body: number;
+  bodyOverflow: number;
+}
+
+interface TagMeasure {
+  width: number;
+  mode: string;
+  overflow: number;
+  notes: number;
+  card: number;
+  chip: number;
+  cardOverflow: number;
+  chipOverflow: number;
+}
+
 let server: ViteDevServer | undefined;
 let browser: Browser | undefined;
 let origin = "";
@@ -221,6 +348,8 @@ let grids: Array<
   ColumnMeasure & { mode: string; width: number; copy: string }
 > = [];
 let headers: Array<HeaderMeasure & { mode: string; width: number }> = [];
+let urls: UrlMeasure[] = [];
+let tags: TagMeasure[] = [];
 
 beforeAll(async () => {
   if (!chromeExecutablePath) return;
@@ -317,7 +446,43 @@ beforeAll(async () => {
         controls,
       };
     });
-    return { gridRows, headerRows };
+    const urlRows = [...document.querySelectorAll("[data-kind='url']")].map(
+      (frame) => {
+        if (!(frame instanceof HTMLElement)) throw new Error("missing url");
+        const notes = frame.querySelector("[data-notes]");
+        const card = frame.querySelector("[data-card]");
+        const body = card?.querySelector(".wrap-break-word");
+        if (!notes || !card || !body) throw new Error("missing url notes");
+        return {
+          width: Number(frame.dataset.width),
+          overflow: Math.round(frame.scrollWidth - frame.clientWidth),
+          notes: Math.round(notes.getBoundingClientRect().width),
+          card: Math.round(card.getBoundingClientRect().width),
+          body: Math.round(body.getBoundingClientRect().width),
+          bodyOverflow: Math.round(body.scrollWidth - body.clientWidth),
+        };
+      },
+    );
+    const tagRows = [...document.querySelectorAll("[data-kind='tag']")].map(
+      (frame) => {
+        if (!(frame instanceof HTMLElement)) throw new Error("missing tag");
+        const notes = frame.querySelector("[data-notes]");
+        const card = frame.querySelector("[data-card]");
+        const chip = card?.querySelector("[data-slot='badge']");
+        if (!notes || !card || !chip) throw new Error("missing tag notes");
+        return {
+          width: Number(frame.dataset.width),
+          mode: frame.dataset.mode ?? "",
+          overflow: Math.round(frame.scrollWidth - frame.clientWidth),
+          notes: Math.round(notes.getBoundingClientRect().width),
+          card: Math.round(card.getBoundingClientRect().width),
+          chip: Math.round(chip.getBoundingClientRect().width),
+          cardOverflow: Math.round(card.scrollWidth - card.clientWidth),
+          chipOverflow: Math.round(chip.scrollWidth - chip.clientWidth),
+        };
+      },
+    );
+    return { gridRows, headerRows, urlRows, tagRows };
   });
   grids = measured.gridRows;
   headers = measured.headerRows.map((row) => ({
@@ -328,6 +493,8 @@ beforeAll(async () => {
         control.column === "notes" ? ("notes" as const) : ("text" as const),
     })),
   }));
+  urls = measured.urlRows;
+  tags = measured.tagRows;
   await page.close();
 }, 60_000);
 
@@ -526,6 +693,38 @@ describe("passage column layout", () => {
             ).toBe(false);
           }
         }
+      }
+    }
+  });
+
+  it("wraps a long unbroken URL inside the read-mode note card", (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+
+    for (const width of URL_VIEWPORTS) {
+      const row = urls.find((candidate) => candidate.width === width);
+      if (!row) throw new Error(`missing url row ${width}`);
+      expect(row.overflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
+      expect(row.bodyOverflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
+      expect(row.body, JSON.stringify(row)).toBeLessThanOrEqual(row.card + 1);
+      expect(row.card, JSON.stringify(row)).toBeLessThanOrEqual(row.notes + 1);
+    }
+  });
+
+  it("keeps a long unbroken tag inside the note card in read, compose, and focus", (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+
+    for (const mode of ["read", "compose", "focus"] as const) {
+      for (const width of URL_VIEWPORTS) {
+        const row = tags.find(
+          (candidate) => candidate.mode === mode && candidate.width === width,
+        );
+        if (!row) throw new Error(`missing tag row ${mode} ${width}`);
+        expect(row.overflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
+        expect(row.cardOverflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
+        expect(row.chip, JSON.stringify(row)).toBeLessThanOrEqual(row.card + 1);
+        expect(row.card, JSON.stringify(row)).toBeLessThanOrEqual(
+          row.notes + 1,
+        );
       }
     }
   });
