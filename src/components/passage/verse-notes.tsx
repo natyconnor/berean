@@ -407,7 +407,9 @@ function ExpandedBubble({
           body={note.body}
           density={density}
           currentChapter={currentChapter}
-          className={isReading ? "flex-1 text-foreground" : "flex-1"}
+          className={
+            isReading ? "min-w-0 flex-1 text-foreground" : "min-w-0 flex-1"
+          }
         />
         <NoteCardActions
           onEdit={onEdit}
