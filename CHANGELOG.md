@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.13](https://github.com/natyconnor/berean/compare/v1.17.12...v1.17.13) (2026-10-12)
+
+
+### Bug Fixes
+
+* Restore wide notes column defaults after [#255](https://github.com/natyconnor/berean/issues/255) ([#277](https://github.com/natyconnor/berean/issues/277)) ([d8106a9](https://github.com/natyconnor/berean/commit/d8106a90463cb7e97c097a882e06320e226dd3cc))
+
 ## [1.17.12](https://github.com/natyconnor/berean/compare/v1.17.11...v1.17.12) (2026-10-11)
 
 
