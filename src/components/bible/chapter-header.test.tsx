@@ -8,9 +8,13 @@ import {
   CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
+  CHAPTER_CHROME_MEMORIZE_FULL_CLASS,
+  CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
 } from "@/components/passage/header-chrome";
-import { ChapterHeader } from "./chapter-header";
+import type { ChapterMemorizeState } from "@/lib/chapter-memorize";
+import { ChapterHeader, type ChapterMemorizeControl } from "./chapter-header";
 
 vi.mock("@/lib/use-tabs", () => ({
   useTabs: () => ({
@@ -197,6 +201,16 @@ describe("ChapterHeader compact chrome", () => {
     expect(onToggleSectionHeaders).toHaveBeenCalledOnce();
   });
 
+  it("keeps the chapter-note well pushed right when there is no Memorize button", () => {
+    renderHeader();
+    expect(
+      screen.getByRole("button", { name: "Add a chapter note for Mark 9" }),
+    ).toHaveClass("ml-auto");
+    expect(
+      screen.getByRole("switch", { name: /Headers/ }).closest("div")?.className,
+    ).not.toContain(CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS);
+  });
+
   it("names the previous and next chapter buttons", () => {
     renderHeader();
     expect(
@@ -214,5 +228,132 @@ describe("ChapterHeader compact chrome", () => {
     expect(
       screen.getByRole("button", { name: "Next chapter (Genesis 2)" }),
     ).toBeEnabled();
+  });
+});
+
+describe("ChapterHeader Memorize button", () => {
+  function memorizeControl(
+    state: ChapterMemorizeState,
+  ): ChapterMemorizeControl {
+    return { state, onMemorize: vi.fn(), onOpenPack: vi.fn() };
+  }
+
+  const MEMORIZE_PSALM_1: ChapterMemorizeState = {
+    kind: "memorize",
+    title: "Psalm 1",
+    verseCount: 6,
+    learnDays: 4,
+  };
+
+  it("offers Memorize Psalm 1 with its plan and opens the sheet", async () => {
+    const user = userEvent.setup();
+    const memorize = memorizeControl(MEMORIZE_PSALM_1);
+    renderHeader({ book: "Psalms", chapter: 1, memorize });
+
+    const button = screen.getByRole("button", {
+      name: "Memorize Psalm 1, 6 verses, learn in about 4 days",
+    });
+    expect(button).toHaveAttribute("data-tour-id", "chapter-memorize");
+    expect(button).toHaveTextContent("Memorize Psalm 1");
+    expect(button).toHaveTextContent("6 verses · learn in about 4 days");
+
+    await user.click(button);
+    expect(memorize.onMemorize).toHaveBeenCalledWith(button);
+    expect(memorize.onOpenPack).not.toHaveBeenCalled();
+  });
+
+  it("sits beside the chapter-note well and takes over pushing right", () => {
+    renderHeader({
+      book: "Psalms",
+      chapter: 1,
+      memorize: memorizeControl(MEMORIZE_PSALM_1),
+    });
+
+    const button = screen.getByRole("button", { name: /^Memorize Psalm 1/ });
+    const note = screen.getByRole("button", {
+      name: "Add a chapter note for Psalm 1",
+    });
+    expect(button.nextElementSibling).toBe(note);
+    expect(button).toHaveClass("ml-auto");
+    expect(note).not.toHaveClass("ml-auto");
+  });
+
+  it("collapses to icon + Memorize and leaves the tightest column", () => {
+    renderHeader({
+      book: "Psalms",
+      chapter: 1,
+      memorize: memorizeControl(MEMORIZE_PSALM_1),
+    });
+
+    const button = screen.getByRole("button", { name: /^Memorize Psalm 1/ });
+    expect(button.className).toContain(CHAPTER_CHROME_TIGHT_HIDE_CLASS);
+    expect(
+      screen.getByRole("switch", { name: /Headers/ }).closest("div")?.className,
+    ).toContain(CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS);
+    const full = screen.getByText("Memorize Psalm 1").parentElement;
+    expect(full?.className).toContain(CHAPTER_CHROME_MEMORIZE_FULL_CLASS);
+    const short = screen.getByText("Memorize", { exact: true });
+    expect(short.className).toContain(CHAPTER_CHROME_MEMORIZE_SHORT_CLASS);
+    expect(short).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("shows memorizing progress and opens the passage's pack", async () => {
+    const user = userEvent.setup();
+    const memorize = memorizeControl({
+      kind: "memorizing",
+      title: "Psalm 1",
+      packId: "pack_1",
+      learnedVerses: 0,
+      totalVerses: 6,
+    });
+    renderHeader({ book: "Psalms", chapter: 1, memorize });
+
+    const button = screen.getByRole("button", {
+      name: "Memorizing Psalm 1, 0 of 6 learned",
+    });
+    expect(button).toHaveTextContent("Memorizing Psalm 1");
+    expect(button).toHaveTextContent("0 of 6 learned");
+
+    await user.click(button);
+    expect(memorize.onOpenPack).toHaveBeenCalledWith("pack_1");
+    expect(memorize.onMemorize).not.toHaveBeenCalled();
+  });
+
+  it("shows Memorized ✓ and Part of {title} as links to the pack", async () => {
+    const user = userEvent.setup();
+    const memorized = memorizeControl({
+      kind: "memorized",
+      title: "Psalm 1",
+      packId: "pack_1",
+    });
+    renderHeader({ book: "Psalms", chapter: 1, memorize: memorized });
+    const done = screen.getByRole("button", { name: "Memorized Psalm 1" });
+    expect(done).toHaveTextContent("Memorized ✓");
+    await user.click(done);
+    expect(memorized.onOpenPack).toHaveBeenCalledWith("pack_1");
+
+    cleanup();
+    const partOf = memorizeControl({
+      kind: "partOf",
+      title: "Sermon on the Mount",
+      packId: "pack_sm",
+      memorized: false,
+      learnedVerses: 4,
+      totalVerses: 111,
+    });
+    renderHeader({ book: "Matthew", chapter: 6, memorize: partOf });
+    const part = screen.getByRole("button", {
+      name: /^Part of Sermon on the Mount/,
+    });
+    expect(part).toHaveTextContent("Part of Sermon on the Mount");
+    await user.click(part);
+    expect(partOf.onOpenPack).toHaveBeenCalledWith("pack_sm");
+  });
+
+  it("is absent without a memorize control", () => {
+    renderHeader({ book: "Psalms", chapter: 1, memorize: null });
+    expect(
+      document.querySelector('[data-tour-id="chapter-memorize"]'),
+    ).toBeNull();
   });
 });

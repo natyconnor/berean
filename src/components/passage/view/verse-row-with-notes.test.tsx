@@ -457,3 +457,102 @@ describe("VerseRowWithNotes – add-note name", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("VerseRowWithNotes – unheart confirm", () => {
+  function renderHeart(stopsMemorizing: boolean) {
+    const onToggle = vi.fn();
+    const props = defaultProps();
+    renderVerseRow({
+      ...props,
+      verseNumber: 5,
+      currentChapter: { book: "Psalms", chapter: 1 },
+      onMouseDown: props.onMouseDown,
+      passageHeart: {
+        filled: true,
+        onToggle,
+        stopsMemorizing,
+        reference: "Psalm 1:5",
+      },
+    });
+    return { onToggle, onMouseDown: props.onMouseDown };
+  }
+
+  it("unhearts right away when nothing is being memorized", async () => {
+    const user = userEvent.setup();
+    const { onToggle } = renderHeart(false);
+
+    const heart = screen.getByRole("button", {
+      name: "Remove from hearted verses",
+    });
+    await user.click(heart);
+    expect(onToggle).toHaveBeenCalledWith(heart);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("asks first when unhearting stops memorizing, and Keep changes nothing", async () => {
+    const user = userEvent.setup();
+    const { onToggle, onMouseDown } = renderHeart(true);
+
+    const heart = screen.getByRole("button", {
+      name: "Remove from hearted verses",
+    });
+    await user.click(heart);
+    const dialog = screen.getByRole("alertdialog", {
+      name: "Unheart Psalm 1:5?",
+    });
+    expect(dialog).toHaveTextContent("Unhearting also stops memorizing it.");
+
+    await user.click(screen.getByRole("button", { name: "Keep" }));
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(heart).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(heart);
+    await user.click(screen.getByRole("button", { name: "Unheart and stop" }));
+    expect(onToggle).toHaveBeenCalledWith(heart);
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(heart).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("gives a range pill the memorizing confirm only when it stops memorizing", async () => {
+    const user = userEvent.setup();
+    const onToggleSavedPassage = vi.fn();
+    const pillProps = {
+      ...defaultProps(),
+      verseNumber: 5,
+      currentChapter: { book: "Psalms", chapter: 1 },
+      onSavedPassageHoverEnter: vi.fn(),
+      onSavedPassageHoverLeave: vi.fn(),
+      onToggleSavedPassage,
+    };
+    const { unmount } = renderVerseRow({
+      ...pillProps,
+      savedPassagesAtAnchor: [{ startVerse: 5, endVerse: 6 }],
+    });
+    await user.click(
+      screen.getByRole("button", { name: /Hearted passage: verses 5–6/ }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Remove this passage?" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Unheart passage" }));
+    expect(onToggleSavedPassage).toHaveBeenCalledWith(5, 6);
+    unmount();
+
+    onToggleSavedPassage.mockReset();
+    renderVerseRow({
+      ...pillProps,
+      savedPassagesAtAnchor: [
+        { startVerse: 5, endVerse: 6, stopsMemorizing: true },
+      ],
+    });
+    await user.click(
+      screen.getByRole("button", { name: /Hearted passage: verses 5–6/ }),
+    );
+    expect(
+      screen.getByRole("alertdialog", { name: "Unheart Psalm 1:5–6?" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Keep" }));
+    expect(onToggleSavedPassage).not.toHaveBeenCalled();
+  });
+});

@@ -39,8 +39,14 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/use-theme";
 import { hasExactSavedSpan } from "@/lib/saved-verse-utils";
 import { masteryRingFraction } from "@/lib/mastery-ring";
+import { formatSpanTitle } from "@/lib/memorize-target";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
+import { logInteraction } from "@/lib/dev-log";
+import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import type { PassageHeartControl } from "./verse-row";
+import type { GroupSelectionBar } from "./view/passage-group-with-notes";
+import { HeartMemorizeNudge } from "./heart-memorize-nudge";
+import { useHeartMemorizeNudge } from "./hooks/use-heart-memorize-nudge";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import {
   logPassagePresence,
@@ -58,6 +64,8 @@ type SavedSpan = {
     dueAt: number;
     inMemory: boolean;
   };
+  stopsMemorizing?: boolean;
+  passageMemoryId?: string;
 };
 
 const EMPTY_FOCUS_MAP = new Map<string, number | null>();
@@ -120,6 +128,8 @@ interface PassageViewBodyProps {
   onRecolorHighlight: (highlightId: string, color: string) => void;
   savedVersesForChapter: SavedSpan[] | undefined;
   onToggleSaved: (startVerse: number, endVerse: number) => void;
+  /** A tour is running: no selection bar and no heart nudge. */
+  tourActive: boolean;
 }
 
 export function PassageViewBody({
@@ -147,6 +157,7 @@ export function PassageViewBody({
   onRecolorHighlight,
   savedVersesForChapter,
   onToggleSaved,
+  tourActive,
 }: PassageViewBodyProps) {
   const {
     containerRef,
@@ -193,6 +204,7 @@ export function PassageViewBody({
     handleEditorFocus,
     startCreatingPassageNote,
     chapterNotesPanel,
+    requestClearSelection,
   } = passageNotesInteraction;
 
   useDragAutoScroll({
@@ -225,15 +237,66 @@ export function PassageViewBody({
     [savedSpans],
   );
 
+  const heartNudge = useHeartMemorizeNudge({
+    suppressed: isFocusMode || tourActive,
+  });
+  const { heartClicked } = heartNudge;
+  const memorizeSheet = useMemorizeSheet();
+
+  const spanTitle = useCallback(
+    (startVerse: number, endVerse: number) =>
+      formatSpanTitle({ book, chapter, startVerse, endVerse }),
+    [book, chapter],
+  );
+
+  const stopsMemorizingSpan = useCallback(
+    (startVerse: number, endVerse: number) =>
+      savedSpans.some(
+        (s) =>
+          s.startVerse === startVerse &&
+          s.endVerse === endVerse &&
+          s.stopsMemorizing === true,
+      ),
+    [savedSpans],
+  );
+
+  const toggleHeart = useCallback(
+    (startVerse: number, endVerse: number, anchor: HTMLElement) => {
+      heartClicked({ book, chapter, startVerse, endVerse }, anchor, savedSpans);
+      onToggleSaved(startVerse, endVerse);
+    },
+    [book, chapter, heartClicked, onToggleSaved, savedSpans],
+  );
+
+  const openMemorizeForRange = useCallback(
+    (startVerse: number, endVerse: number, opener: HTMLElement) => {
+      logInteraction("reader", "memorize-selection-opened", {
+        book,
+        chapter,
+        startVerse,
+        endVerse,
+      });
+      memorizeSheet.open(
+        { kind: "spans", spans: [{ book, chapter, startVerse, endVerse }] },
+        { returnFocusTo: opener },
+      );
+    },
+    [book, chapter, memorizeSheet],
+  );
+
   const savedPassagesByAnchor = useMemo(() => {
     const map = new Map<
       number,
-      Array<{ startVerse: number; endVerse: number }>
+      Array<{ startVerse: number; endVerse: number; stopsMemorizing: boolean }>
     >();
     for (const span of savedSpans) {
       if (span.startVerse === span.endVerse) continue;
       const arr = map.get(span.startVerse) ?? [];
-      arr.push(span);
+      arr.push({
+        startVerse: span.startVerse,
+        endVerse: span.endVerse,
+        stopsMemorizing: span.stopsMemorizing === true,
+      });
       map.set(span.startVerse, arr);
     }
     return map;
@@ -301,15 +364,20 @@ export function PassageViewBody({
       }
       return {
         filled: hasExactSavedSpan(savedSpans, passageSelectLo, passageSelectHi),
-        onToggle: () => onToggleSaved(passageSelectLo, passageSelectHi),
+        onToggle: (anchor) =>
+          toggleHeart(passageSelectLo, passageSelectHi, anchor),
         alwaysVisible: true,
         masteryFraction: spanMasteryFraction(passageSelectLo, passageSelectHi),
+        stopsMemorizing: stopsMemorizingSpan(passageSelectLo, passageSelectHi),
+        reference: spanTitle(passageSelectLo, passageSelectHi),
       };
     }
     return {
       filled: hasExactSavedSpan(savedSpans, verseNumber, verseNumber),
-      onToggle: () => onToggleSaved(verseNumber, verseNumber),
+      onToggle: (anchor) => toggleHeart(verseNumber, verseNumber, anchor),
       masteryFraction: spanMasteryFraction(verseNumber, verseNumber),
+      stopsMemorizing: stopsMemorizingSpan(verseNumber, verseNumber),
+      reference: spanTitle(verseNumber, verseNumber),
     };
   };
 
@@ -473,12 +541,20 @@ export function PassageViewBody({
                   const gLo = item.verses[0]?.verseNumber ?? 0;
                   const gHi =
                     item.verses[item.verses.length - 1]?.verseNumber ?? gLo;
-                  const groupPassageHeart =
-                    item.verses.length > 0
+                  const groupSelected =
+                    item.verses.length > 0 &&
+                    item.verses.every((v) => selectedVerses.has(v.verseNumber));
+                  const selectionBar: GroupSelectionBar | null =
+                    groupSelected && !isFocusMode && !tourActive
                       ? {
-                          filled: hasExactSavedSpan(savedSpans, gLo, gHi),
-                          onToggle: () => onToggleSaved(gLo, gHi),
-                          masteryFraction: spanMasteryFraction(gLo, gHi),
+                          reference: spanTitle(gLo, gHi),
+                          hearted: hasExactSavedSpan(savedSpans, gLo, gHi),
+                          stopsMemorizing: stopsMemorizingSpan(gLo, gHi),
+                          onToggleHeart: (anchor) =>
+                            toggleHeart(gLo, gHi, anchor),
+                          onMemorize: (opener) =>
+                            openMemorizeForRange(gLo, gHi, opener),
+                          onClear: requestClearSelection,
                         }
                       : null;
                   const draftsForAnchor =
@@ -555,7 +631,7 @@ export function PassageViewBody({
                         singleNotesByVerse={item.singleNotesByVerse}
                         viewMode={effectiveViewMode}
                         currentChapter={{ book, chapter }}
-                        groupPassageHeart={groupPassageHeart}
+                        selectionBar={selectionBar}
                         hoveredSavedPassage={hoveredSavedPassage}
                         highlightsByVerse={highlightsByVerse}
                         onCreateHighlight={onCreateHighlight}
@@ -781,6 +857,7 @@ export function PassageViewBody({
         </motion.div>
       </ScrollArea>
       <div className="cl-vignette" aria-hidden />
+      <HeartMemorizeNudge {...heartNudge.nudge} />
     </div>
   );
 }

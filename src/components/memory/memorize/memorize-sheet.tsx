@@ -167,10 +167,16 @@ export function MemorizeSheet({
 
   const close = () => onOpenChange(false);
 
+  // `data-passage-dismiss-exempt`: opened from a reader selection, clicks in
+  // the sheet must not clear that selection behind it.
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" onCloseAutoFocus={onCloseAutoFocus}>
+        <SheetContent
+          side="bottom"
+          onCloseAutoFocus={onCloseAutoFocus}
+          data-passage-dismiss-exempt
+        >
           <MemorizePanel target={target} layout="sheet" onClose={close} />
         </SheetContent>
       </Sheet>
@@ -182,6 +188,7 @@ export function MemorizeSheet({
       <DialogContent
         className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[580px]"
         onCloseAutoFocus={onCloseAutoFocus}
+        data-passage-dismiss-exempt
       >
         <MemorizePanel target={target} layout="dialog" onClose={close} />
       </DialogContent>

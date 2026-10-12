@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Brain,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +15,10 @@ import {
 } from "lucide-react";
 import { displayBookName } from "@/lib/bible-books";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
+import {
+  chapterMemorizeCopy,
+  type ChapterMemorizeState,
+} from "@/lib/chapter-memorize";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
 import { formatBookChapter } from "@/lib/verse-ref-utils";
 import { useTabs } from "@/lib/use-tabs";
@@ -27,6 +32,10 @@ import {
   CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_MEMORIZE_COMPACT_BUTTON_CLASS,
+  CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
+  CHAPTER_CHROME_MEMORIZE_FULL_CLASS,
+  CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
 } from "@/components/passage/header-chrome";
 import { HeaderShortcutToggle } from "@/components/passage/header-shortcut-toggle";
@@ -64,6 +73,67 @@ function ReferenceCaret() {
   );
 }
 
+export interface ChapterMemorizeControl {
+  state: ChapterMemorizeState;
+  /** Opens the Memorize sheet for the chapter; `opener` gets focus back. */
+  onMemorize: (opener: HTMLElement) => void;
+  /** Opens the pack of the passage this chapter belongs to. */
+  onOpenPack: (packId: string) => void;
+}
+
+function ChapterMemorizeButton({
+  control,
+}: {
+  control: ChapterMemorizeControl;
+}) {
+  const { state, onMemorize, onOpenPack } = control;
+  const copy = chapterMemorizeCopy(state);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-tour-id="chapter-memorize"
+          aria-label={copy.label}
+          onClick={(event) => {
+            if (state.kind === "memorize") {
+              onMemorize(event.currentTarget);
+            } else {
+              onOpenPack(state.packId);
+            }
+          }}
+          className={cn(
+            "ml-auto inline-flex min-w-0 shrink items-center gap-2.5 rounded-lg border border-primary/35 bg-primary/7 py-1.5 pr-3 pl-2.5 text-left transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
+            CHAPTER_CHROME_MEMORIZE_COMPACT_BUTTON_CLASS,
+            CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+          )}
+        >
+          <Brain aria-hidden className="h-4 w-4 shrink-0 text-primary" />
+          <span className={cn("min-w-0", CHAPTER_CHROME_MEMORIZE_FULL_CLASS)}>
+            <span className="block truncate text-[13px] leading-tight font-semibold text-primary">
+              {copy.title}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {copy.detail}
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className={cn(
+              "min-w-0 truncate text-[13px] font-semibold text-primary",
+              CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
+            )}
+          >
+            {copy.short}
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{`${copy.title} · ${copy.detail}`}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 interface ChapterHeaderProps {
   book: string;
   chapter: number;
@@ -74,6 +144,8 @@ interface ChapterHeaderProps {
   /** Floating chapter panel is open (button toggles closed). */
   chapterNotesOpen?: boolean;
   onChapterNotesClick?: () => void;
+  /** Memorize button beside the chapter-note well; absent hides it. */
+  memorize?: ChapterMemorizeControl | null;
 }
 
 export function ChapterHeader({
@@ -84,6 +156,7 @@ export function ChapterHeader({
   chapterScopedNoteCount = 0,
   chapterNotesOpen = false,
   onChapterNotesClick,
+  memorize = null,
 }: ChapterHeaderProps) {
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
@@ -231,11 +304,14 @@ export function ChapterHeader({
             ? "border-border bg-muted/40 text-foreground"
             : "border-border bg-background",
           CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+          memorize && CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
         )}
         labelClassName={
           showSectionHeaders ? "text-foreground" : "text-muted-foreground"
         }
       />
+
+      {memorize ? <ChapterMemorizeButton control={memorize} /> : null}
 
       {onChapterNotesClick ? (
         <Tooltip>
@@ -254,7 +330,8 @@ export function ChapterHeader({
               }
               className={cn(
                 // Match the chapter reference well: carved inset, no dashed outline.
-                "ml-auto inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left cl-well transition-colors",
+                "inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left cl-well transition-colors",
+                !memorize && "ml-auto",
                 CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
                 chapterNoteSurfaceClass,
                 chapterNotesOpen
@@ -294,7 +371,7 @@ export function ChapterHeader({
           </TooltipTrigger>
           <TooltipContent>{chapterNotesTooltip}</TooltipContent>
         </Tooltip>
-      ) : (
+      ) : memorize ? null : (
         <div className="ml-auto" aria-hidden />
       )}
     </div>

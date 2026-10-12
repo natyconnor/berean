@@ -16,13 +16,14 @@ import {
   type MemoryStatus,
 } from "../../src/lib/memory-scheduler";
 import { passageLearningDueAt } from "../../src/lib/passage-due";
+import { passageHeartProgress } from "../../src/lib/passage-heart-info";
 import {
   loadOwnedPack,
   passagePiecesAsMembers,
   type PackMember,
 } from "./packs";
 import { deletePassageMemoryDue, upsertPassageMemoryDue } from "./passageDue";
-import type { PassageView } from "./passageValues";
+import type { PassageHeartInfoValue, PassageView } from "./passageValues";
 
 /** Pack card for global Learn / Review. Members are frozen pieces, not hearts. */
 export type DueQueuePassagePackItem = {
@@ -117,6 +118,31 @@ export async function loadPassageForPack(
   const row = await findPassageByPackId(ctx, packId);
   if (!row || row.userId !== userId) return null;
   return row;
+}
+
+/**
+ * The reader's view of a passage from its heart row in `book` `chapter`: its
+ * pack name and progress. `null` when the pack is gone or not the user's, or
+ * no piece is in that chapter.
+ */
+export async function loadPassageHeartInfo(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  row: Doc<"passageMemory">,
+  book: string,
+  chapter: number,
+): Promise<PassageHeartInfoValue | null> {
+  const pack = await loadOwnedPack(ctx, row.packId, userId);
+  if (!pack) return null;
+  const progress = passageHeartProgress(row.pieces, book, chapter);
+  if (!progress) return null;
+  return {
+    passageMemoryId: row._id,
+    packId: pack._id,
+    title: pack.name,
+    status: row.status,
+    ...progress,
+  };
 }
 
 export async function findPassageByPackId(

@@ -24,6 +24,7 @@ import {
 import { getHighlightColor } from "@/lib/highlight-colors";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { VERSE_EXPAND_TRANSITION } from "./note-animation-config";
+import { UnheartMemorizingDialog } from "./unheart-memorizing-dialog";
 
 export interface VerseSelectionState {
   isSelected: boolean;
@@ -55,13 +56,18 @@ export interface VerseInteractionHandlers {
 
 export interface PassageHeartControl {
   filled: boolean;
-  onToggle: () => void;
+  /** `anchor` is the heart button, for a popover that points at it. */
+  onToggle: (anchor: HTMLElement) => void;
   alwaysVisible?: boolean;
   /**
    * Mastery-ring fill fraction (0..1) drawn subtly around the heart to reflect
    * spaced-repetition progress. Absent/0 = no ring. See `masteryRingFraction`.
    */
   masteryFraction?: number;
+  /** Unhearting would stop memorizing, so the heart asks first. */
+  stopsMemorizing?: boolean;
+  /** Names the verse in that confirm: "Psalm 1:5". */
+  reference?: string;
 }
 
 interface VerseRowLeftProps {
@@ -172,8 +178,10 @@ export const PassageHeartAnimatedButton = memo(
     size?: "default" | "large";
   }) {
     const reduceMotion = useReducedMotion();
+    const buttonRef = useRef<HTMLButtonElement>(null);
     const [fxKey, setFxKey] = useState(0);
     const [playHeartAnim, setPlayHeartAnim] = useState(false);
+    const [confirmUnheartOpen, setConfirmUnheartOpen] = useState(false);
     const [optimisticFilled, setOptimisticFilled] = useState(
       passageHeart.filled,
     );
@@ -248,6 +256,7 @@ export const PassageHeartAnimatedButton = memo(
           </span>
         ) : null}
         <motion.button
+          ref={buttonRef}
           type="button"
           aria-label={
             optimisticFilled ? "Remove from hearted verses" : "Heart this verse"
@@ -266,13 +275,17 @@ export const PassageHeartAnimatedButton = memo(
           aria-busy={playHeartAnim}
           onClick={(e) => {
             e.stopPropagation();
+            if (optimisticFilled && passageHeart.stopsMemorizing) {
+              setConfirmUnheartOpen(true);
+              return;
+            }
             const nextFilled = !optimisticFilled;
             setOptimisticFilled(nextFilled);
             if (nextFilled && !reduceMotion) {
               setFxKey((k) => k + 1);
               setPlayHeartAnim(true);
             }
-            passageHeart.onToggle();
+            passageHeart.onToggle(e.currentTarget);
           }}
           whileTap={
             reduceMotion
@@ -359,6 +372,17 @@ export const PassageHeartAnimatedButton = memo(
         >
           {optimisticFilled ? "Unheart" : "Heart"}
         </span>
+        {passageHeart.stopsMemorizing ? (
+          <UnheartMemorizingDialog
+            open={confirmUnheartOpen}
+            onOpenChange={setConfirmUnheartOpen}
+            reference={passageHeart.reference ?? "this verse"}
+            onConfirm={() => {
+              setOptimisticFilled(false);
+              if (buttonRef.current) passageHeart.onToggle(buttonRef.current);
+            }}
+          />
+        ) : null}
       </div>
     );
   },

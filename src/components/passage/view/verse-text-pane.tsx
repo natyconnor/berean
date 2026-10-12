@@ -47,6 +47,8 @@ export interface VerseTextPaneProps {
   rowTourId?: string;
   passageHeart?: PassageHeartControl | null;
   isInHoveredSavedPassage?: boolean;
+  /** Told when this verse's highlight toolbar opens or closes. */
+  onHighlightToolbarChange?: (verseNumber: number, open: boolean) => void;
 }
 
 export const VerseTextPane = memo(function VerseTextPane({
@@ -74,8 +76,13 @@ export const VerseTextPane = memo(function VerseTextPane({
   rowTourId,
   passageHeart = null,
   isInHoveredSavedPassage = false,
+  onHighlightToolbarChange,
 }: VerseTextPaneProps) {
   const verseTextRef = useRef<HTMLSpanElement>(null);
+  const handleToolbarVisibleChange = useCallback(
+    (open: boolean) => onHighlightToolbarChange?.(verseNumber, open),
+    [onHighlightToolbarChange, verseNumber],
+  );
 
   const {
     markPopover,
@@ -128,6 +135,9 @@ export const VerseTextPane = memo(function VerseTextPane({
         <HighlightToolbar
           verseTextRef={verseTextRef}
           onHighlight={handleHighlight}
+          onVisibleChange={
+            onHighlightToolbarChange ? handleToolbarVisibleChange : undefined
+          }
         />
       )}
       <AnimatePresence>

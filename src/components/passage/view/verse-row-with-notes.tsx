@@ -32,26 +32,28 @@ import type {
 import { LAYOUT_CORRECTION_TRANSITION } from "../note-animation-config";
 import { passageColumnsClass } from "../passage-columns";
 import { Heart } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { formatSpanTitle } from "@/lib/memorize-target";
 import type { PassageHeartControl } from "../verse-row";
+import { UnheartRangeDialog } from "../unheart-memorizing-dialog";
+
+/** A hearted range in the left gutter, level with its first verse. */
+export interface SavedPassageAtAnchor {
+  startVerse: number;
+  endVerse: number;
+  /** Unhearting would stop memorizing, so the pill asks the memorizing confirm. */
+  stopsMemorizing?: boolean;
+}
 
 const SavedPassagePill = memo(function SavedPassagePill({
   startVerse,
   endVerse,
+  stopsMemorizing = false,
+  reference,
   onHoverEnter,
   onHoverLeave,
   onToggleSavedPassage,
-}: {
-  startVerse: number;
-  endVerse: number;
+}: SavedPassageAtAnchor & {
+  reference: string;
   onHoverEnter: (startVerse: number, endVerse: number) => void;
   onHoverLeave: () => void;
   onToggleSavedPassage: (startVerse: number, endVerse: number) => void;
@@ -86,36 +88,15 @@ const SavedPassagePill = memo(function SavedPassagePill({
           </span>
         </span>
       </button>
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Remove this passage?</DialogTitle>
-            <DialogDescription>
-              This will remove verses {startVerse}–{endVerse} from your hearted
-              list. You can heart the passage again anytime from the reader.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                onToggleSavedPassage(startVerse, endVerse);
-                setConfirmOpen(false);
-              }}
-            >
-              Unheart passage
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UnheartRangeDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={() => onToggleSavedPassage(startVerse, endVerse)}
+        stopsMemorizing={stopsMemorizing}
+        reference={reference}
+        startVerse={startVerse}
+        endVerse={endVerse}
+      />
     </>
   );
 });
@@ -215,10 +196,7 @@ export interface VerseRowWithNotesProps {
   rowTourId?: string;
   passageHeart?: PassageHeartControl | null;
   isInHoveredSavedPassage?: boolean;
-  savedPassagesAtAnchor?: Array<{
-    startVerse: number;
-    endVerse: number;
-  }>;
+  savedPassagesAtAnchor?: SavedPassageAtAnchor[];
   onSavedPassageHoverEnter?: (startVerse: number, endVerse: number) => void;
   onSavedPassageHoverLeave?: () => void;
   onToggleSavedPassage?: (startVerse: number, endVerse: number) => void;
@@ -462,6 +440,12 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                   key={`${span.startVerse}-${span.endVerse}`}
                   startVerse={span.startVerse}
                   endVerse={span.endVerse}
+                  stopsMemorizing={span.stopsMemorizing}
+                  reference={
+                    currentChapter
+                      ? formatSpanTitle({ ...currentChapter, ...span })
+                      : `verses ${span.startVerse}–${span.endVerse}`
+                  }
                   onHoverEnter={onSavedPassageHoverEnter}
                   onHoverLeave={onSavedPassageHoverLeave}
                   onToggleSavedPassage={onToggleSavedPassage}

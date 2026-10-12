@@ -25,6 +25,8 @@ import {
   loadChapterInMemoryItems,
   loadInMemoryVerseMemoryByRef,
 } from "./lib/verseMemory";
+import { loadPassageHeartInfo } from "./lib/passageMemory";
+import { passageHeartInfoValidator } from "./lib/passageValues";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import {
   exactSpanMatch,
@@ -80,12 +82,14 @@ const savedVerseListItem = v.object({
 /**
  * A reader heart. `stopsMemorizing` is true when unhearting it would stop
  * memorizing something (its passage, or an in-Memory verse no other heart
- * covers). `passageMemoryId` is set on an active passage's heart.
+ * covers). `passageMemoryId` is set on an active passage's heart, and
+ * `passage` carries that passage's title and progress for this chapter.
  */
 const chapterSavedVerseItem = v.object({
   ...savedVerseListItem.fields,
   stopsMemorizing: v.boolean(),
   passageMemoryId: v.optional(v.id("passageMemory")),
+  passage: v.optional(passageHeartInfoValidator),
 });
 
 type SavedVerseRefItem = {
@@ -232,18 +236,26 @@ export const listForChapter = query({
           row.passageMemoryId !== undefined
             ? await ctx.db.get(row.passageMemoryId)
             : null;
-        const activePassageId =
-          passage && passage.userId === userId ? passage._id : undefined;
+        const activePassage =
+          passage && passage.userId === userId ? passage : null;
+        const passageInfo = activePassage
+          ? await loadPassageHeartInfo(
+              ctx,
+              userId,
+              activePassage,
+              args.book,
+              args.chapter,
+            )
+          : null;
         const others = hearts.filter((_, other) => other !== index);
         const stopsMemorizing =
-          activePassageId !== undefined ||
+          activePassage !== null ||
           spansLosingCoverage([item], others, inMemoryItems).length > 0;
         return {
           ...item,
           stopsMemorizing,
-          ...(activePassageId !== undefined
-            ? { passageMemoryId: activePassageId }
-            : {}),
+          ...(activePassage ? { passageMemoryId: activePassage._id } : {}),
+          ...(passageInfo ? { passage: passageInfo } : {}),
         };
       }),
     );

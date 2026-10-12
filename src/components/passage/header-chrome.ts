@@ -15,9 +15,17 @@
  *    These widths are the header's content box, inside the compose gutter
  *    (`pl-16` + `pr-5` = 84px). They trip around a 1236px / 1108px window.
  * 3. Passage column under `@max-xs` (20rem / 320px): drop the Headers switch
- *    from the row. Compose holds the passage track at about 24rem on a 768px
- *    window, so the switch stays; it leaves only when that column itself is
- *    under 20rem. H still toggles section headings from the keyboard.
+ *    and the Memorize button from the row. Compose holds the passage track at
+ *    about 24rem on a 768px window, so both stay; they leave only when that
+ *    column itself is under 20rem. H still toggles section headings from the
+ *    keyboard.
+ * 4. Passage column under `@max-3xl` (48rem / 768px): the Memorize button
+ *    drops its plan line to icon + one word ("Memorize"), a stage before the
+ *    chapter-note CTA compacts, because the two-line button is the widest
+ *    thing on the row.
+ * 5. Passage column under `@max-md` (28rem / 448px) with the Memorize button
+ *    on the row: the Headers switch leaves early, so icon + "Memorize" and
+ *    the book name both still fit at the 24rem compose floor.
  *
  * At a typical 1280px compose layout the header content box is still above
  * 5xl, so those words stay. They drop once the window is actually tight.
@@ -31,6 +39,18 @@ export const CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS =
   "@max-2xl/chapter-chrome:size-8 @max-2xl/chapter-chrome:max-w-none @max-2xl/chapter-chrome:justify-center @max-2xl/chapter-chrome:gap-0 @max-2xl/chapter-chrome:px-0 @max-2xl/chapter-chrome:py-0";
 /** Headers switch leaves the row once the passage column cannot hold it. */
 export const CHAPTER_CHROME_TIGHT_HIDE_CLASS = "@max-xs/chapter-chrome:hidden";
+/** Memorize button: the two-line title and plan, hidden when compact. */
+export const CHAPTER_CHROME_MEMORIZE_FULL_CLASS =
+  "@max-3xl/chapter-chrome:hidden";
+/** Memorize button: the one word shown in place of the title when compact. */
+export const CHAPTER_CHROME_MEMORIZE_SHORT_CLASS =
+  "hidden @max-3xl/chapter-chrome:inline";
+/** Headers switch, when the Memorize button shares the row. */
+export const CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS =
+  "@max-md/chapter-chrome:hidden";
+/** Compact, the one word never ellipsizes; the book name gives way instead. */
+export const CHAPTER_CHROME_MEMORIZE_COMPACT_BUTTON_CLASS =
+  "@max-3xl/chapter-chrome:h-8 @max-3xl/chapter-chrome:shrink-0 @max-3xl/chapter-chrome:gap-1.5 @max-3xl/chapter-chrome:px-2.5 @max-3xl/chapter-chrome:py-0";
 
 export const PASSAGE_HEADER_CONTAINER_CLASS = "@container/passage-header";
 export const NOTES_CHROME_COMPACT_LABEL_CLASS =

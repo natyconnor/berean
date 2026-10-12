@@ -12,15 +12,17 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { VerseTextPane } from "./verse-text-pane";
 import { PassageNotesBubble } from "../passage-notes-bubble";
 import { VerseNotesPill } from "../verse-notes";
 import { NoteEditor } from "@/components/notes/note-editor";
+import type { VerseInteractionHandlers } from "../verse-row";
 import {
-  PassageHeartAnimatedButton,
-  type VerseInteractionHandlers,
-  type PassageHeartControl,
-} from "../verse-row";
+  SELECTION_BAR_PINNED_QUERY,
+  SelectionMemorizeBar,
+  type SelectionMemorizeBarProps,
+} from "../selection-memorize-bar";
 import {
   LAYOUT_CORRECTION_TRANSITION,
   CROSSFADE_TRANSITION,
@@ -48,6 +50,12 @@ import type {
   VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
 import type { CurrentChapter } from "./verse-row-with-notes";
+
+/** What the selection bar shows and does for this group's range. */
+export type GroupSelectionBar = Omit<
+  SelectionMemorizeBarProps,
+  "startVerse" | "endVerse" | "pinned" | "className"
+>;
 
 interface PassageGroupWithNotesProps {
   verses: Array<{
@@ -118,7 +126,11 @@ interface PassageGroupWithNotesProps {
   onPassageBubbleMouseEnter: (verseNumber: number) => void;
   onPassageBubbleMouseLeave: () => void;
   onCollapse: () => void;
-  groupPassageHeart: PassageHeartControl | null;
+  /**
+   * Selection bar for a selected range of 2+ verses; `null` hides it (not
+   * selected, Focus mode, a tour). It also hides while a highlight toolbar is open.
+   */
+  selectionBar?: GroupSelectionBar | null;
   hoveredSavedPassage?: { startVerse: number; endVerse: number } | null;
 }
 
@@ -176,7 +188,7 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   onPassageBubbleMouseEnter,
   onPassageBubbleMouseLeave,
   onCollapse,
-  groupPassageHeart,
+  selectionBar = null,
   hoveredSavedPassage = null,
   onRetargetNewDraft,
   onRetargetEditNote,
@@ -197,6 +209,39 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   );
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
   const anchorVerse = verses[0]?.verseNumber ?? 0;
+  const lastVerse = verses[verses.length - 1]?.verseNumber ?? anchorVerse;
+  const barPinned = useMediaQuery(SELECTION_BAR_PINNED_QUERY);
+  const [highlightToolbarVerses, setHighlightToolbarVerses] = useState<
+    ReadonlySet<number>
+  >(() => new Set());
+  const handleHighlightToolbarChange = useCallback(
+    (verseNumber: number, open: boolean) => {
+      setHighlightToolbarVerses((prev) => {
+        if (prev.has(verseNumber) === open) return prev;
+        const next = new Set(prev);
+        if (open) next.add(verseNumber);
+        else next.delete(verseNumber);
+        return next;
+      });
+    },
+    [],
+  );
+  const hasSelectionBar = selectionBar !== null && verses.length >= 2;
+  const showSelectionBar = hasSelectionBar && highlightToolbarVerses.size === 0;
+  const selectionBarElement =
+    showSelectionBar && selectionBar ? (
+      <SelectionMemorizeBar
+        {...selectionBar}
+        startVerse={anchorVerse}
+        endVerse={lastVerse}
+        pinned={barPinned}
+        className={
+          barPinned
+            ? "mx-2 mt-1 mb-2 w-auto"
+            : "absolute -top-4 left-[50px] z-30"
+        }
+      />
+    ) : null;
 
   const handleCollapseGroup = useCallback(() => {
     for (const composer of dockedEditComposers) {
@@ -272,19 +317,13 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                 ? retargetLayoutTransition(reduceMotion)
                 : CROSSFADE_TRANSITION
             }
-            className="flex h-full min-h-0 flex-col justify-center rounded-lg bg-amber-100/60 dark:bg-[var(--cl-passage-surface-soft)] cl-depth-2 cl-transition"
+            className={cn(
+              "relative flex h-full min-h-0 flex-col justify-center rounded-lg bg-amber-100/60 dark:bg-[var(--cl-passage-surface-soft)] cl-depth-2 cl-transition",
+              hasSelectionBar && !barPinned && "pt-2",
+            )}
           >
+            {barPinned ? null : selectionBarElement}
             <div className="flex">
-              {groupPassageHeart && (
-                <div className="flex shrink-0 items-center pl-2">
-                  <PassageHeartAnimatedButton
-                    passageHeart={groupPassageHeart}
-                    shouldFlipTooltipBelow={false}
-                    alwaysVisible
-                    size="large"
-                  />
-                </div>
-              )}
               <div className="flex flex-1 flex-col">
                 {verses.map((verse, index) => (
                   <motion.div
@@ -319,11 +358,13 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
                         verse.verseNumber <= hoveredSavedPassage.endVerse
                       }
                       handlers={NOOP_HANDLERS}
+                      onHighlightToolbarChange={handleHighlightToolbarChange}
                     />
                   </motion.div>
                 ))}
               </div>
             </div>
+            {barPinned ? selectionBarElement : null}
           </motion.div>
         </motion.div>
 

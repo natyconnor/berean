@@ -9,7 +9,7 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ChapterHeader } from "./chapter-header";
+import { ChapterHeader, type ChapterMemorizeControl } from "./chapter-header";
 
 vi.mock("@/lib/use-tabs", () => ({
   useTabs: () => ({
@@ -76,7 +76,23 @@ function findChromeExecutable(): string | undefined {
 
 const chromeExecutablePath = findChromeExecutable();
 
-function headerMarkup(book: string, chapter: number, width: number): string {
+const MEMORIZE_CONTROL: ChapterMemorizeControl = {
+  state: {
+    kind: "memorize",
+    title: "Psalm 119",
+    verseCount: 176,
+    learnDays: 37,
+  },
+  onMemorize: () => undefined,
+  onOpenPack: () => undefined,
+};
+
+function headerMarkup(
+  book: string,
+  chapter: number,
+  width: number,
+  memorize: ChapterMemorizeControl | null = null,
+): string {
   return renderToStaticMarkup(
     <TooltipProvider>
       <div id="layout-root" style={{ width }}>
@@ -86,6 +102,7 @@ function headerMarkup(book: string, chapter: number, width: number): string {
           showSectionHeaders={false}
           onToggleSectionHeaders={() => undefined}
           onChapterNotesClick={() => undefined}
+          memorize={memorize}
         />
       </div>
     </TooltipProvider>,
@@ -216,6 +233,126 @@ async function measureColumn(
     await page.close();
   }
 }
+
+interface MemorizeLayoutReport {
+  headerScrollWidth: number;
+  headerClientWidth: number;
+  memorizeDisplay: string;
+  fullDisplay: string;
+  shortDisplay: string;
+  memorize: Rect;
+  next: Rect;
+  note: Rect;
+  bookTruncated: boolean;
+  shortTruncated: boolean;
+}
+
+async function measureMemorize(
+  width: number,
+  chapter = 119,
+): Promise<MemorizeLayoutReport> {
+  if (!browser) throw new Error("Chrome is not running");
+  const page: Page = await browser.newPage({
+    viewport: { width: 1000, height: 400 },
+  });
+  try {
+    await page.setContent(
+      `<!doctype html><html><head><link rel="stylesheet" href="${origin}/src/index.css"></head><body>${headerMarkup("Psalms", chapter, width, MEMORIZE_CONTROL)}</body></html>`,
+      { waitUntil: "load" },
+    );
+    await page.waitForFunction(() => {
+      const well = document.querySelector("h1");
+      return !!well && getComputedStyle(well).display === "flex";
+    });
+    await page.evaluate(() => document.fonts.ready);
+
+    return await page.evaluate(() => {
+      function required(selector: string): HTMLElement {
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`missing ${selector}`);
+        }
+        return element;
+      }
+      function rect(element: Element) {
+        const box = element.getBoundingClientRect();
+        return {
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+          width: box.width,
+        };
+      }
+
+      const header = required("#layout-root > div");
+      const memorize = required('[data-tour-id="chapter-memorize"]');
+      const [full, short] = Array.from(memorize.children).slice(1);
+      const next = document
+        .querySelector(".lucide-chevron-right")
+        ?.closest("button");
+      if (!full || !short || !next) throw new Error("missing parts");
+      const bookLabel = required('[aria-label^="Change book"] span.truncate');
+      const truncated = (element: Element) =>
+        element.scrollWidth > element.clientWidth + 1;
+      return {
+        bookTruncated: truncated(bookLabel),
+        shortTruncated: truncated(short),
+        headerScrollWidth: header.scrollWidth,
+        headerClientWidth: header.clientWidth,
+        memorizeDisplay: getComputedStyle(memorize).display,
+        fullDisplay: getComputedStyle(full).display,
+        shortDisplay: getComputedStyle(short).display,
+        memorize: rect(memorize),
+        next: rect(next),
+        note: rect(required('[aria-label^="Add a chapter note"]')),
+      };
+    });
+  } finally {
+    await page.close();
+  }
+}
+
+describe("ChapterHeader Memorize button layout", () => {
+  it("shows the two-line button on a wide passage column", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    const report = await measureMemorize(860);
+    const json = JSON.stringify(report);
+
+    expect(report.fullDisplay, json).not.toBe("none");
+    expect(report.shortDisplay, json).toBe("none");
+    expect(overlaps(report.memorize, report.note), json).toBe(false);
+    expect(overlaps(report.memorize, report.next), json).toBe(false);
+    expect(report.headerScrollWidth, json).toBeLessThanOrEqual(
+      report.headerClientWidth + 1,
+    );
+  }, 30_000);
+
+  it("collapses to icon + Memorize without overflowing a 384px column", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    for (const chapter of [1, 119]) {
+      const report = await measureMemorize(384, chapter);
+      const json = JSON.stringify(report);
+
+      expect(report.memorizeDisplay, json).not.toBe("none");
+      expect(report.fullDisplay, json).toBe("none");
+      expect(report.shortDisplay, json).not.toBe("none");
+      expect(report.shortTruncated, json).toBe(false);
+      expect(overlaps(report.memorize, report.note), json).toBe(false);
+      expect(overlaps(report.memorize, report.next), json).toBe(false);
+      expect(report.headerScrollWidth, json).toBeLessThanOrEqual(
+        report.headerClientWidth + 1,
+      );
+      if (chapter === 1) expect(report.bookTruncated, json).toBe(false);
+    }
+  }, 30_000);
+
+  it("leaves the row with the Headers switch on the tightest column", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    const report = await measureMemorize(300);
+    expect(report.memorizeDisplay, JSON.stringify(report)).toBe("none");
+  }, 30_000);
+});
 
 describe("ChapterHeader narrow column layout", () => {
   it("truncates a long book name instead of covering the chapter", async (ctx) => {

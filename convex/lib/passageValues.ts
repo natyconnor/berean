@@ -82,6 +82,35 @@ export const passageViewValidator = v.object({
   ropePieceIndexes: v.array(v.number()),
 });
 
+/**
+ * A memorized passage as seen from one chapter's heart row (see
+ * `passageHeartProgress`). Counts cover the passage; the verse range and
+ * `verseStates` cover this chapter.
+ */
+export const passageHeartInfoValidator = v.object({
+  passageMemoryId: v.id("passageMemory"),
+  packId: v.id("packs"),
+  title: v.string(),
+  status: passageStatusValidator,
+  learnedVerses: v.number(),
+  totalVerses: v.number(),
+  chapterCount: v.number(),
+  isFirstChapter: v.boolean(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  verseStates: v.array(
+    v.object({
+      verse: v.number(),
+      state: v.union(
+        v.literal("memorized"),
+        v.literal("learning"),
+        v.literal("upNext"),
+      ),
+    }),
+  ),
+});
+
+export type PassageHeartInfoValue = Infer<typeof passageHeartInfoValidator>;
 export type PieceBase = Infer<typeof pieceBaseValidator>;
 export type PassagePieceValue = Infer<typeof passagePieceValidator>;
 export type PassageView = Infer<typeof passageViewValidator>;

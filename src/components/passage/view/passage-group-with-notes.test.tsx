@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import { PassageGroupWithNotes } from "./passage-group-with-notes";
@@ -69,11 +69,113 @@ function renderGroup(
         onPassageBubbleMouseEnter={vi.fn()}
         onPassageBubbleMouseLeave={vi.fn()}
         onCollapse={vi.fn()}
-        groupPassageHeart={null}
       />
     </TooltipProvider>,
   );
 }
+
+const selectionBar = {
+  reference: "John 1:15–17",
+  hearted: false,
+  stopsMemorizing: false,
+  onToggleHeart: vi.fn(),
+  onMemorize: vi.fn(),
+  onClear: vi.fn(),
+};
+
+function renderSelectedGroup(
+  verses: Array<{ verseNumber: number; text: string }>,
+  bar: typeof selectionBar | null = selectionBar,
+) {
+  return render(
+    <TooltipProvider>
+      <PassageGroupWithNotes
+        verses={verses}
+        passageNotes={[]}
+        singleNotesByVerse={new Map()}
+        viewMode="compose"
+        currentChapter={{ book: "John", chapter: 1 }}
+        highlightsByVerse={new Map()}
+        isPassageOpen={false}
+        editingNoteIds={new Set()}
+        draftsForAnchor={[]}
+        onOpenPassageNotes={vi.fn()}
+        onClosePassageNotes={vi.fn()}
+        onOpenVerseNotes={vi.fn()}
+        onEditNote={vi.fn()}
+        onDelete={vi.fn().mockResolvedValue(undefined)}
+        onSaveEdit={vi.fn().mockResolvedValue(undefined)}
+        onSaveNew={vi.fn().mockResolvedValue(undefined)}
+        onCancelEditor={vi.fn()}
+        onEditorDirtyChange={vi.fn()}
+        onEditorFocus={vi.fn()}
+        onStartCreatingPassageNote={vi.fn()}
+        onNoteDeleteCleanup={vi.fn()}
+        onPassageBubbleMouseEnter={vi.fn()}
+        onPassageBubbleMouseLeave={vi.fn()}
+        onCollapse={vi.fn()}
+        selectionBar={bar}
+      />
+    </TooltipProvider>,
+  );
+}
+
+const THREE_VERSES = [
+  { verseNumber: 15, text: "John bore witness" },
+  { verseNumber: 16, text: "And from his fullness" },
+  { verseNumber: 17, text: "For the law" },
+];
+
+describe("PassageGroupWithNotes selection bar", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("puts the bar on a 2+ verse selection with no heart column", () => {
+    renderSelectedGroup(THREE_VERSES);
+
+    const bar = screen.getByRole("toolbar", {
+      name: "Selected verses, John 1:15–17",
+    });
+    expect(bar).toHaveClass("absolute", "-top-4");
+    expect(
+      screen.getByRole("button", { name: "Memorize" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Heart this verse" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove from hearted verses" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no bar for a single verse or when the group is not selected", () => {
+    const { unmount } = renderSelectedGroup(THREE_VERSES.slice(0, 1));
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+    unmount();
+
+    renderSelectedGroup(THREE_VERSES, null);
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+  });
+
+  it("pins the bar to the shell's bottom edge on touch screens", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    renderSelectedGroup(THREE_VERSES);
+
+    const bar = screen.getByRole("toolbar");
+    expect(bar).not.toHaveClass("absolute");
+    expect(bar.parentElement?.lastElementChild).toBe(bar);
+    expect(screen.getByRole("button", { name: "Heart" })).toHaveClass("h-11");
+  });
+});
 
 describe("PassageGroupWithNotes retarget scope", () => {
   it("wires the overlay and composer layout id for the docked draft", () => {
@@ -135,7 +237,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );
@@ -201,7 +302,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );
@@ -254,7 +354,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );
@@ -353,7 +452,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );
