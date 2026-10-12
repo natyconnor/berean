@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
+import { memoryPanelDrawerHref } from "@/lib/memory-panel";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
 import { isPreviewTestToolsEnabled } from "@/lib/preview-test-tools";
@@ -89,6 +90,11 @@ export function MemoryHome() {
             <div className="lg:col-span-2 lg:col-start-1 lg:row-start-1">
               <MemoryLibrary
                 now={now}
+                onOpenVerse={(verseRefId) => {
+                  void navigate({
+                    href: memoryPanelDrawerHref({ kind: "verse", verseRefId }),
+                  });
+                }}
                 onLearnVerse={(verse) => {
                   void navigate({
                     to: "/memory/learn",

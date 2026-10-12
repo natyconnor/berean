@@ -17,7 +17,13 @@ const LOAD_MORE_PAGE_SIZE = 10;
  * their membership from hearted verses, so counts stay live as verses are
  * hearted/reviewed.
  */
-export function PackList({ now }: { now: number }) {
+export function PackList({
+  now,
+  title = "Packs",
+}: {
+  now: number;
+  title?: string;
+}) {
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const { results, status, loadMore } = usePaginatedQuery(
     api.packs.listMine,
@@ -42,7 +48,7 @@ export function PackList({ now }: { now: number }) {
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Packs
+          {title}
         </h2>
         <div className="flex items-center gap-1.5">
           <Button asChild size="sm" variant="outline" className="h-7">

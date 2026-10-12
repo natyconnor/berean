@@ -5,12 +5,6 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
@@ -21,7 +15,6 @@ import { useMemorizeSheet } from "./memorize/memorize-context";
 import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
 import { toPracticeVerse } from "./to-practice-verse";
-import { VerseDetail } from "./verse-detail";
 
 type LibraryView = "due" | "learning" | "memorized" | "mastered" | "all";
 
@@ -50,18 +43,21 @@ const LOAD_MORE_PAGE_SIZE = 20;
 /**
  * The Library: verses in Memory in Due today / Learning / Memorized /
  * Mastered / All views, paginated (`usePaginatedQuery` over
- * `verseMemory.listLibrary`), with a drill-down dialog.
+ * `verseMemory.listLibrary`). A row opens that verse's detail.
  *
  * Search is an in-view filter of already-loaded pages (it does not fetch
  * unloaded pages) — a documented v1 limitation.
  */
 export function MemoryLibrary({
   now,
+  onOpenVerse,
   onLearnVerse,
   onReviewVerse,
   onPracticeVerse,
 }: {
   now: number;
+  /** Show one verse's detail (its drawer over Today, or its page). */
+  onOpenVerse: (verseRefId: Id<"verseRefs">) => void;
   /** Start a Learning session scoped to one library verse. */
   onLearnVerse: (verse: PracticeVerse) => void;
   /** Start a review session scoped to one library verse. */
@@ -71,7 +67,6 @@ export function MemoryLibrary({
 }) {
   const [view, setView] = useState<LibraryView>("due");
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Id<"verseRefs"> | null>(null);
   const [learnOpen, setLearnOpen] = useState(false);
   const learnOpenerRef = useRef<HTMLButtonElement | null>(null);
   const memorizeSheet = useMemorizeSheet();
@@ -237,7 +232,7 @@ export function MemoryLibrary({
                   <MemoryListRow className="flex items-center gap-3 px-3 py-2.5">
                     <button
                       type="button"
-                      onClick={() => setSelected(row.verseRefId)}
+                      onClick={() => onOpenVerse(row.verseRefId)}
                       className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
                       <span
@@ -289,37 +284,6 @@ export function MemoryLibrary({
           )
         }
       />
-
-      <Dialog
-        open={selected !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelected(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Verse detail</DialogTitle>
-          </DialogHeader>
-          {selected !== null ? (
-            <VerseDetail
-              verseRefId={selected}
-              now={now}
-              onLearn={(verse) => {
-                setSelected(null);
-                onLearnVerse(verse);
-              }}
-              onReview={(verse) => {
-                setSelected(null);
-                onReviewVerse(verse);
-              }}
-              onPractice={(verse) => {
-                setSelected(null);
-                onPracticeVerse(verse);
-              }}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }

@@ -1,29 +1,15 @@
-import { useEffect } from "react";
 import { GraduationCap, Play } from "lucide-react";
-import { useQuery } from "convex-helpers/react/cache";
-import { useMutation } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 import { motion, useReducedMotion } from "framer-motion";
-import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
-import { computeStreak, overallAccuracy } from "@/lib/dashboard-buckets";
-import { getViewerTimeZone } from "@/lib/viewer-timezone";
-import { ChartSkeleton, ChartSlot } from "./chart-card";
+import { ProgressCharts } from "@/components/memory/progress/progress-charts";
+import {
+  progressKpis,
+  useProgressActivity,
+  type MemoryStats,
+  type MemoryStatusCounts,
+} from "@/components/memory/progress/use-progress-activity";
 import { KpiRow } from "./kpi-row";
-import { PracticeHeatmap } from "./practice-heatmap";
-import { MasteryDonut } from "./mastery-donut";
-import { AccuracyTrend } from "./accuracy-trend";
-import { ReviewForecast } from "./review-forecast";
-
-const HEATMAP_DAYS = 365; // up to a year; the chart clips to available width
-const TREND_DAYS = 30;
-const FORECAST_DAYS = 14;
-
-type MemoryStats = FunctionReturnType<typeof api.verseMemory.memoryStats>;
-type MemoryStatusCounts = FunctionReturnType<
-  typeof api.verseMemory.memoryStatus
->;
 
 /**
  * The Memory progress dashboard: a "Today" hero (keeping Review reachable),
@@ -48,45 +34,7 @@ export function MemoryDashboard({
   onStartReview: () => void;
   onStartLearning: () => void;
 }) {
-  const timeZone = getViewerTimeZone();
-  const ensureReviewActivityDays = useMutation(
-    api.verseMemory.ensureReviewActivityDays,
-  );
-  const ensurePassageDueBackfill = useMutation(
-    api.passageMemory.ensureDueBackfill,
-  );
-  useEffect(() => {
-    void ensureReviewActivityDays({ now, timeZone });
-    void ensurePassageDueBackfill({ now });
-  }, [ensureReviewActivityDays, ensurePassageDueBackfill, now, timeZone]);
-  const activity = useQuery(api.verseMemory.reviewActivity, {
-    now,
-    timeZone,
-    heatmapDays: HEATMAP_DAYS,
-    trendDays: TREND_DAYS,
-  });
-  const forecast = useQuery(api.verseMemory.reviewForecast, {
-    now,
-    timeZone,
-    days: FORECAST_DAYS,
-  });
-
-  const streak =
-    activity === undefined
-      ? undefined
-      : computeStreak(activity.heatmap.map((d) => d.count));
-  const inMemory =
-    status === undefined
-      ? undefined
-      : status.learning + status.reviewing + status.mastered;
-  const accuracy30d =
-    activity === undefined
-      ? undefined
-      : overallAccuracy(
-          activity.trend.map((d) => ({ average: d.average, count: d.count })),
-        );
-  const dueToday =
-    stats === undefined ? undefined : stats.due + stats.learningDue;
+  const { activity, forecast } = useProgressActivity(now);
 
   return (
     <div className="space-y-4">
@@ -100,43 +48,16 @@ export function MemoryDashboard({
           onStartLearning={onStartLearning}
         />
         <div className="lg:col-span-2">
-          <KpiRow
-            kpis={{
-              dueToday,
-              streak,
-              inMemory,
-              accuracy30d,
-            }}
-          />
+          <KpiRow kpis={progressKpis({ activity, status, stats })} />
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <ChartSlot
-          loading={activity === undefined}
-          skeleton={<ChartSkeleton title="Practice" />}
-        >
-          {activity ? <PracticeHeatmap data={activity.heatmap} /> : null}
-        </ChartSlot>
-        <ChartSlot
-          loading={status === undefined}
-          skeleton={<ChartSkeleton title="Mastery" />}
-        >
-          {status ? <MasteryDonut data={status} /> : null}
-        </ChartSlot>
-        <ChartSlot
-          loading={activity === undefined}
-          skeleton={<ChartSkeleton title="Accuracy trend" />}
-        >
-          {activity ? <AccuracyTrend data={activity.trend} /> : null}
-        </ChartSlot>
-        <ChartSlot
-          loading={forecast === undefined}
-          skeleton={<ChartSkeleton title="Upcoming" />}
-        >
-          {forecast ? <ReviewForecast data={forecast} /> : null}
-        </ChartSlot>
-      </div>
+      <ProgressCharts
+        activity={activity}
+        forecast={forecast}
+        status={status}
+        className="sm:grid-cols-2 xl:grid-cols-4"
+      />
     </div>
   );
 }

@@ -127,6 +127,11 @@ describe("formatMasteryDuration", () => {
     expect(formatMasteryDuration(56)).toBe("Mastered in about 2 months");
     expect(formatMasteryDuration(120)).toBe("Mastered in about 4 months");
   });
+
+  it("drops the lead when short", () => {
+    expect(formatMasteryDuration(120, { short: true })).toBe("about 4 months");
+    expect(formatMasteryDuration(5, { short: true })).toBe("about a week");
+  });
 });
 
 describe("mastery estimates", () => {

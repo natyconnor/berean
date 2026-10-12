@@ -51,14 +51,11 @@ vi.mock("./memorize/memorize-context", () => ({
   useMemorizeSheet: () => ({ open: mocks.openSheet }),
 }));
 
-vi.mock("./verse-detail", () => ({
-  VerseDetail: () => null,
-}));
-
 function renderLibrary() {
   render(
     <MemoryLibrary
       now={NOW}
+      onOpenVerse={vi.fn()}
       onLearnVerse={vi.fn()}
       onReviewVerse={vi.fn()}
       onPracticeVerse={vi.fn()}

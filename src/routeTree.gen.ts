@@ -17,9 +17,12 @@ import { Route as ThemeTestRouteImport } from './routes/theme-test'
 import { Route as MemoryIndexRouteImport } from './routes/memory/index'
 import { Route as MemoryPackIdRouteImport } from './routes/memory/$packId'
 import { Route as MemoryLearnRouteImport } from './routes/memory/learn'
+import { Route as MemoryLibraryRouteImport } from './routes/memory/library'
 import { Route as MemoryNewRouteImport } from './routes/memory/new'
 import { Route as MemoryPracticeRouteImport } from './routes/memory/practice'
+import { Route as MemoryProgressRouteImport } from './routes/memory/progress'
 import { Route as MemoryReviewRouteImport } from './routes/memory/review'
+import { Route as MemoryVersesRouteImport } from './routes/memory/verses'
 import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SettingsTagsRouteImport } from './routes/settings/tags'
@@ -28,6 +31,7 @@ import { Route as StudySessionIdRouteImport } from './routes/study/$sessionId'
 import { Route as StudyNewRouteImport } from './routes/study/new'
 import { Route as MemoryPresetsIndexRouteImport } from './routes/memory/presets/index'
 import { Route as MemoryPresetsPresetIdRouteImport } from './routes/memory/presets/$presetId'
+import { Route as MemoryVerseVerseRefIdRouteImport } from './routes/memory/verse.$verseRefId'
 import { Route as MemoryPackIdLearnRouteImport } from './routes/memory_.$packId.learn'
 import { Route as MemoryPackIdPracticeRouteImport } from './routes/memory_.$packId.practice'
 import { Route as MemoryPackIdReviewRouteImport } from './routes/memory_.$packId.review'
@@ -72,6 +76,11 @@ const MemoryLearnRoute = MemoryLearnRouteImport.update({
   path: '/memory/learn',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryLibraryRoute = MemoryLibraryRouteImport.update({
+  id: '/memory/library',
+  path: '/memory/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MemoryNewRoute = MemoryNewRouteImport.update({
   id: '/memory/new',
   path: '/memory/new',
@@ -82,9 +91,19 @@ const MemoryPracticeRoute = MemoryPracticeRouteImport.update({
   path: '/memory/practice',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryProgressRoute = MemoryProgressRouteImport.update({
+  id: '/memory/progress',
+  path: '/memory/progress',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MemoryReviewRoute = MemoryReviewRouteImport.update({
   id: '/memory/review',
   path: '/memory/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryVersesRoute = MemoryVersesRouteImport.update({
+  id: '/memory/verses',
+  path: '/memory/verses',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PassagePassageIdRoute = PassagePassageIdRouteImport.update({
@@ -127,6 +146,11 @@ const MemoryPresetsPresetIdRoute = MemoryPresetsPresetIdRouteImport.update({
   path: '/memory/presets/$presetId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemoryVerseVerseRefIdRoute = MemoryVerseVerseRefIdRouteImport.update({
+  id: '/memory/verse/$verseRefId',
+  path: '/memory/verse/$verseRefId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MemoryPackIdLearnRoute = MemoryPackIdLearnRouteImport.update({
   id: '/memory_/$packId/learn',
   path: '/memory/$packId/learn',
@@ -151,9 +175,12 @@ export interface FileRoutesByFullPath {
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
   '/memory/learn': typeof MemoryLearnRoute
+  '/memory/library': typeof MemoryLibraryRoute
   '/memory/new': typeof MemoryNewRoute
   '/memory/practice': typeof MemoryPracticeRoute
+  '/memory/progress': typeof MemoryProgressRoute
   '/memory/review': typeof MemoryReviewRoute
+  '/memory/verses': typeof MemoryVersesRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -162,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
   '/memory/presets/$presetId': typeof MemoryPresetsPresetIdRoute
+  '/memory/verse/$verseRefId': typeof MemoryVerseVerseRefIdRoute
   '/memory/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory/$packId/review': typeof MemoryPackIdReviewRoute
@@ -175,9 +203,12 @@ export interface FileRoutesByTo {
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
   '/memory/learn': typeof MemoryLearnRoute
+  '/memory/library': typeof MemoryLibraryRoute
   '/memory/new': typeof MemoryNewRoute
   '/memory/practice': typeof MemoryPracticeRoute
+  '/memory/progress': typeof MemoryProgressRoute
   '/memory/review': typeof MemoryReviewRoute
+  '/memory/verses': typeof MemoryVersesRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -186,6 +217,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/study': typeof StudyIndexRoute
   '/memory/presets/$presetId': typeof MemoryPresetsPresetIdRoute
+  '/memory/verse/$verseRefId': typeof MemoryVerseVerseRefIdRoute
   '/memory/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory/$packId/review': typeof MemoryPackIdReviewRoute
@@ -200,9 +232,12 @@ export interface FileRoutesById {
   '/theme-test': typeof ThemeTestRoute
   '/memory/$packId': typeof MemoryPackIdRoute
   '/memory/learn': typeof MemoryLearnRoute
+  '/memory/library': typeof MemoryLibraryRoute
   '/memory/new': typeof MemoryNewRoute
   '/memory/practice': typeof MemoryPracticeRoute
+  '/memory/progress': typeof MemoryProgressRoute
   '/memory/review': typeof MemoryReviewRoute
+  '/memory/verses': typeof MemoryVersesRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/study/$sessionId': typeof StudySessionIdRoute
@@ -211,6 +246,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/study/': typeof StudyIndexRoute
   '/memory/presets/$presetId': typeof MemoryPresetsPresetIdRoute
+  '/memory/verse/$verseRefId': typeof MemoryVerseVerseRefIdRoute
   '/memory_/$packId/learn': typeof MemoryPackIdLearnRoute
   '/memory_/$packId/practice': typeof MemoryPackIdPracticeRoute
   '/memory_/$packId/review': typeof MemoryPackIdReviewRoute
@@ -226,9 +262,12 @@ export interface FileRouteTypes {
     | '/theme-test'
     | '/memory/$packId'
     | '/memory/learn'
+    | '/memory/library'
     | '/memory/new'
     | '/memory/practice'
+    | '/memory/progress'
     | '/memory/review'
+    | '/memory/verses'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -237,6 +276,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/study/'
     | '/memory/presets/$presetId'
+    | '/memory/verse/$verseRefId'
     | '/memory/$packId/learn'
     | '/memory/$packId/practice'
     | '/memory/$packId/review'
@@ -250,9 +290,12 @@ export interface FileRouteTypes {
     | '/theme-test'
     | '/memory/$packId'
     | '/memory/learn'
+    | '/memory/library'
     | '/memory/new'
     | '/memory/practice'
+    | '/memory/progress'
     | '/memory/review'
+    | '/memory/verses'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -261,6 +304,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/study'
     | '/memory/presets/$presetId'
+    | '/memory/verse/$verseRefId'
     | '/memory/$packId/learn'
     | '/memory/$packId/practice'
     | '/memory/$packId/review'
@@ -274,9 +318,12 @@ export interface FileRouteTypes {
     | '/theme-test'
     | '/memory/$packId'
     | '/memory/learn'
+    | '/memory/library'
     | '/memory/new'
     | '/memory/practice'
+    | '/memory/progress'
     | '/memory/review'
+    | '/memory/verses'
     | '/passage/$passageId'
     | '/settings/tags'
     | '/study/$sessionId'
@@ -285,6 +332,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/study/'
     | '/memory/presets/$presetId'
+    | '/memory/verse/$verseRefId'
     | '/memory_/$packId/learn'
     | '/memory_/$packId/practice'
     | '/memory_/$packId/review'
@@ -299,9 +347,12 @@ export interface RootRouteChildren {
   ThemeTestRoute: typeof ThemeTestRoute
   MemoryPackIdRoute: typeof MemoryPackIdRoute
   MemoryLearnRoute: typeof MemoryLearnRoute
+  MemoryLibraryRoute: typeof MemoryLibraryRoute
   MemoryNewRoute: typeof MemoryNewRoute
   MemoryPracticeRoute: typeof MemoryPracticeRoute
+  MemoryProgressRoute: typeof MemoryProgressRoute
   MemoryReviewRoute: typeof MemoryReviewRoute
+  MemoryVersesRoute: typeof MemoryVersesRoute
   PassagePassageIdRoute: typeof PassagePassageIdRoute
   SettingsTagsRoute: typeof SettingsTagsRoute
   StudySessionIdRoute: typeof StudySessionIdRoute
@@ -310,6 +361,7 @@ export interface RootRouteChildren {
   SettingsIndexRoute: typeof SettingsIndexRoute
   StudyIndexRoute: typeof StudyIndexRoute
   MemoryPresetsPresetIdRoute: typeof MemoryPresetsPresetIdRoute
+  MemoryVerseVerseRefIdRoute: typeof MemoryVerseVerseRefIdRoute
   MemoryPackIdLearnRoute: typeof MemoryPackIdLearnRoute
   MemoryPackIdPracticeRoute: typeof MemoryPackIdPracticeRoute
   MemoryPackIdReviewRoute: typeof MemoryPackIdReviewRoute
@@ -374,6 +426,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryLearnRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/library': {
+      id: '/memory/library'
+      path: '/memory/library'
+      fullPath: '/memory/library'
+      preLoaderRoute: typeof MemoryLibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/memory/new': {
       id: '/memory/new'
       path: '/memory/new'
@@ -388,11 +447,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryPracticeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/progress': {
+      id: '/memory/progress'
+      path: '/memory/progress'
+      fullPath: '/memory/progress'
+      preLoaderRoute: typeof MemoryProgressRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/memory/review': {
       id: '/memory/review'
       path: '/memory/review'
       fullPath: '/memory/review'
       preLoaderRoute: typeof MemoryReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory/verses': {
+      id: '/memory/verses'
+      path: '/memory/verses'
+      fullPath: '/memory/verses'
+      preLoaderRoute: typeof MemoryVersesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/passage/$passageId': {
@@ -451,6 +524,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryPresetsPresetIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/verse/$verseRefId': {
+      id: '/memory/verse/$verseRefId'
+      path: '/memory/verse/$verseRefId'
+      fullPath: '/memory/verse/$verseRefId'
+      preLoaderRoute: typeof MemoryVerseVerseRefIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/memory_/$packId/learn': {
       id: '/memory_/$packId/learn'
       path: '/memory/$packId/learn'
@@ -483,9 +563,12 @@ const rootRouteChildren: RootRouteChildren = {
   ThemeTestRoute: ThemeTestRoute,
   MemoryPackIdRoute: MemoryPackIdRoute,
   MemoryLearnRoute: MemoryLearnRoute,
+  MemoryLibraryRoute: MemoryLibraryRoute,
   MemoryNewRoute: MemoryNewRoute,
   MemoryPracticeRoute: MemoryPracticeRoute,
+  MemoryProgressRoute: MemoryProgressRoute,
   MemoryReviewRoute: MemoryReviewRoute,
+  MemoryVersesRoute: MemoryVersesRoute,
   PassagePassageIdRoute: PassagePassageIdRoute,
   SettingsTagsRoute: SettingsTagsRoute,
   StudySessionIdRoute: StudySessionIdRoute,
@@ -494,6 +577,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsIndexRoute: SettingsIndexRoute,
   StudyIndexRoute: StudyIndexRoute,
   MemoryPresetsPresetIdRoute: MemoryPresetsPresetIdRoute,
+  MemoryVerseVerseRefIdRoute: MemoryVerseVerseRefIdRoute,
   MemoryPackIdLearnRoute: MemoryPackIdLearnRoute,
   MemoryPackIdPracticeRoute: MemoryPackIdPracticeRoute,
   MemoryPackIdReviewRoute: MemoryPackIdReviewRoute,

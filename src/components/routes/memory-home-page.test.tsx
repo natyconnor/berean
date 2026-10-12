@@ -21,6 +21,16 @@ vi.mock("@/components/memory/memory-home", () => ({
   MemoryHome: () => <div>Memory home stub</div>,
 }));
 
+vi.mock("@/routes/memory/index", () => ({
+  Route: { useSearch: () => ({ panel: "verses" }) },
+}));
+
+vi.mock("@/components/memory/drawer/memory-panel-host", () => ({
+  MemoryPanelHost: ({ panel }: { panel?: string }) => (
+    <div>Panel host: {panel}</div>
+  ),
+}));
+
 const milestones: OnboardingMilestones = {
   notesCount: 0,
   taggedNotesCount: 0,
@@ -58,6 +68,7 @@ describe("MemoryHomePage", () => {
     renderPage();
 
     expect(screen.getByText("Memory home stub")).toBeInTheDocument();
+    expect(screen.getByText("Panel host: verses")).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { name: "Welcome to Memory" }),
     ).toBeInTheDocument();

@@ -49,6 +49,7 @@ import { useStartPassage } from "@/hooks/use-start-passage";
 import { heartSpansInChunks } from "@/lib/heart-many-client";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
+import { memoryPanelFullPagePath } from "@/lib/memory-panel";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { UP_NEXT_TOMORROW_LABEL } from "@/lib/memory-copy";
 import { nextStepCopy } from "@/lib/memorize-plan";
@@ -1008,19 +1009,7 @@ function PackViewMain({
           {selectedVerseRefId !== null ? (
             <VerseDetail
               verseRefId={selectedVerseRefId}
-              now={now}
-              onLearn={(verse) => {
-                setSelectedVerseRefId(null);
-                onLearnVerse(verse);
-              }}
-              onReview={(verse) => {
-                setSelectedVerseRefId(null);
-                onReviewVerse(verse);
-              }}
-              onPractice={(verse) => {
-                setSelectedVerseRefId(null);
-                onPracticeVerse(verse);
-              }}
+              returnTo={memoryPanelFullPagePath({ kind: "pack", packId })}
             />
           ) : null}
         </DialogContent>

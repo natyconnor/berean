@@ -16,3 +16,32 @@ export function isMemorySessionPath(pathname: string): boolean {
   }
   return /^\/memory\/[^/]+\/(learn|practice|review)$/.test(path);
 }
+
+export type MemorySessionKind = "learn" | "review" | "practice";
+
+/** A one-verse session, e.g. `/memory/review?book=Luke&chapter=9&startVerse=23&endVerse=24`. */
+export function memoryVerseSessionHref(
+  kind: MemorySessionKind,
+  reference: {
+    book: string;
+    chapter: number;
+    startVerse: number;
+    endVerse: number;
+  },
+): string {
+  const params = new URLSearchParams({
+    book: reference.book,
+    chapter: String(reference.chapter),
+    startVerse: String(reference.startVerse),
+    endVerse: String(reference.endVerse),
+  });
+  return `/memory/${kind}?${params.toString()}`;
+}
+
+/** A pack or passage session, e.g. `/memory/$packId/learn`. */
+export function memoryPackSessionHref(
+  kind: MemorySessionKind,
+  packId: string,
+): string {
+  return `/memory/${encodeURIComponent(packId)}/${kind}`;
+}

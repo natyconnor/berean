@@ -158,18 +158,22 @@ export function estimateMasteryDays(size: MemorizeSize): number {
 
 /**
  * "Mastered in about 5 weeks" under 8 weeks, else "Mastered in about N
- * months" (at least 2).
+ * months" (at least 2). `short` drops the "Mastered in " lead.
  */
-export function formatMasteryDuration(days: number): string {
+export function formatMasteryDuration(
+  days: number,
+  opts?: { short?: boolean },
+): string {
   const safeDays = Number.isFinite(days) ? Math.max(0, days) : 0;
+  let span: string;
   if (safeDays < 8 * 7) {
     const weeks = Math.max(1, Math.round(safeDays / 7));
-    return weeks === 1
-      ? "Mastered in about a week"
-      : `Mastered in about ${weeks} weeks`;
+    span = weeks === 1 ? "about a week" : `about ${weeks} weeks`;
+  } else {
+    const months = Math.max(2, Math.round(safeDays / DAYS_PER_MONTH));
+    span = `about ${months} months`;
   }
-  const months = Math.max(2, Math.round(safeDays / DAYS_PER_MONTH));
-  return `Mastered in about ${months} months`;
+  return opts?.short ? span : `Mastered in ${span}`;
 }
 
 /** Fill for a mastery bar: the review gap as a share of the mastered gap. */

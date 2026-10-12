@@ -1,6 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { isMemorySessionPath } from "./memory-session-path";
+import {
+  isMemorySessionPath,
+  memoryPackSessionHref,
+  memoryVerseSessionHref,
+} from "./memory-session-path";
+
+describe("session hrefs", () => {
+  it("builds one-verse session hrefs", () => {
+    expect(
+      memoryVerseSessionHref("review", {
+        book: "1 Samuel",
+        chapter: 12,
+        startVerse: 23,
+        endVerse: 24,
+      }),
+    ).toBe("/memory/review?book=1+Samuel&chapter=12&startVerse=23&endVerse=24");
+  });
+
+  it("builds pack session hrefs that read as session paths", () => {
+    const href = memoryPackSessionHref("learn", "k57abc");
+    expect(href).toBe("/memory/k57abc/learn");
+    expect(isMemorySessionPath(href)).toBe(true);
+  });
+});
 
 describe("isMemorySessionPath", () => {
   it("treats global Learn, Practice, and Review as sessions", () => {
