@@ -63,6 +63,37 @@ export async function unheartByVerseRefId(
   await deletePackMembershipsForVerse(ctx, userId, verseRefId);
 }
 
+/**
+ * Every heart span the user has in one chapter, passage hearts included, for
+ * `spanCoveredBy` checks.
+ */
+export async function loadChapterHeartSpans(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  book: string,
+  chapter: number,
+): Promise<VerseSpan[]> {
+  const rows = await ctx.db
+    .query("savedVerses")
+    .withIndex("by_userId_book_chapter", (q) =>
+      q.eq("userId", userId).eq("book", book).eq("chapter", chapter),
+    )
+    .collect();
+  const refs = await Promise.all(rows.map((row) => ctx.db.get(row.verseRefId)));
+
+  const spans: VerseSpan[] = [];
+  for (const ref of refs) {
+    if (!ref || ref.userId !== userId) continue;
+    spans.push({
+      book: ref.book,
+      chapter: ref.chapter,
+      startVerse: ref.startVerse,
+      endVerse: ref.endVerse,
+    });
+  }
+  return spans;
+}
+
 /** Join saved rows to their verse refs as `VerseSpan`s for overlap checks. */
 export async function loadUserHeartSpans(
   ctx: QueryCtx | MutationCtx,

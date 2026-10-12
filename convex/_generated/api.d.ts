@@ -16,6 +16,8 @@ import type * as highlights from "../highlights.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_deleteAccount from "../lib/deleteAccount.js";
+import type * as lib_inMemoryBackfill from "../lib/inMemoryBackfill.js";
+import type * as lib_memorize from "../lib/memorize.js";
 import type * as lib_noteContent from "../lib/noteContent.js";
 import type * as lib_onboarding from "../lib/onboarding.js";
 import type * as lib_packs from "../lib/packs.js";
@@ -63,6 +65,8 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/deleteAccount": typeof lib_deleteAccount;
+  "lib/inMemoryBackfill": typeof lib_inMemoryBackfill;
+  "lib/memorize": typeof lib_memorize;
   "lib/noteContent": typeof lib_noteContent;
   "lib/onboarding": typeof lib_onboarding;
   "lib/packs": typeof lib_packs;

@@ -20,6 +20,7 @@ import {
   type PackMember,
 } from "./lib/packs";
 import { loadPassageDueRecords } from "./lib/passageDue";
+import { memorizeSpan, stopMemorizingVerse } from "./lib/memorize";
 import {
   MAX_REVIEW_ACTIVITY_ROWS,
   ensureReviewActivityDays as backfillReviewActivityDaysIfNeeded,
@@ -707,6 +708,84 @@ export const getOrCreateForVerse = mutation({
       args.now,
     );
     return toRowView(memory);
+  },
+});
+
+const MAX_MEMORIZE_SPANS = 50;
+
+const memorizeSpanValidator = v.object({
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+});
+
+/**
+ * Put spans in Memory on their own: each starts learning, due now, and gets a
+ * heart when no existing heart covers it. A span already in Memory is left as
+ * is, so repeat calls are no-ops. `added` counts spans that were added,
+ * resumed, or promoted from Up next; `verseRefIds` follows the order of
+ * `spans`.
+ */
+export const memorize = mutation({
+  args: {
+    spans: v.array(memorizeSpanValidator),
+    now: v.number(),
+  },
+  returns: v.object({
+    added: v.number(),
+    alreadyMemorizing: v.number(),
+    verseRefIds: v.array(v.id("verseRefs")),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    if (args.spans.length === 0 || args.spans.length > MAX_MEMORIZE_SPANS) {
+      throw new Error(
+        `Memorize between 1 and ${MAX_MEMORIZE_SPANS} verses at a time.`,
+      );
+    }
+
+    let added = 0;
+    let alreadyMemorizing = 0;
+    const verseRefIds: Id<"verseRefs">[] = [];
+    for (const span of args.spans) {
+      const { verseRefId, result } = await memorizeSpan(
+        ctx,
+        userId,
+        span,
+        args.now,
+        { upNext: false },
+      );
+      verseRefIds.push(verseRefId);
+      if (result === "already") {
+        alreadyMemorizing += 1;
+      } else {
+        added += 1;
+      }
+    }
+
+    return { added, alreadyMemorizing, verseRefIds };
+  },
+});
+
+/**
+ * Take a verse out of Memory. The heart, schedule, and review history stay,
+ * so memorizing it again resumes where it left off.
+ */
+export const stopMemorizing = mutation({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+
+    await stopMemorizingVerse(ctx, userId, args.verseRefId, args.now);
+    return null;
   },
 });
 
