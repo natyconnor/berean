@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { passageHeartSpans } from "./hearted-verse-coverage";
 import { packAllowsPassageMode } from "./passage-eligibility";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
 import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
@@ -93,6 +94,21 @@ describe("buildPreviewPassageSeed", () => {
     expect(
       plan.packs.filter((pack) => /\bJude\b/.test(pack.name)),
     ).toHaveLength(1);
+  });
+
+  it("gives each seeded passage one heart span per chapter", () => {
+    const seeded = plan.packs.filter((pack) => pack.passage);
+    expect(seeded.length).toBeGreaterThan(0);
+    for (const pack of seeded) {
+      const pieces = pack.passage!.pieces;
+      const chapters = new Set(
+        pieces.map((piece) => `${piece.book}:${piece.chapter}`),
+      );
+      const hearts = passageHeartSpans(pieces);
+      expect(hearts).toHaveLength(chapters.size);
+      expect(hearts[0]?.startVerse).toBe(pieces[0]?.startVerse);
+      expect(hearts.at(-1)?.endVerse).toBe(pieces.at(-1)?.endVerse);
+    }
   });
 
   it("builds Jude pieces from auto-heart grouping (short chunks)", () => {

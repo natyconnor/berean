@@ -218,8 +218,8 @@ export async function insertPassageMemory(
     stageReps: args.plan.schedule.stageReps,
     earlyReviewApplied: args.plan.schedule.earlyReviewApplied,
     migratedAt: args.now,
-    unheartedCount: args.plan.unheartedCount,
-    keptHeartCount: args.plan.keptHeartCount,
+    unheartedCount: 0,
+    keptHeartCount: 0,
     createdAt: args.now,
     updatedAt: args.now,
   });
@@ -243,6 +243,10 @@ export async function patchPassageMemory(
   return row;
 }
 
+/**
+ * Delete a passage, its reviews, and its due cache. Its passage hearts stay as
+ * plain range hearts (`passageMemoryId` cleared).
+ */
 export async function deletePassageAndReviews(
   ctx: MutationCtx,
   row: Doc<"passageMemory">,
@@ -253,6 +257,15 @@ export async function deletePassageAndReviews(
     .collect();
   for (const review of reviews) {
     await ctx.db.delete(review._id);
+  }
+  const hearts = await ctx.db
+    .query("savedVerses")
+    .withIndex("by_userId_passageMemoryId", (q) =>
+      q.eq("userId", row.userId).eq("passageMemoryId", row._id),
+    )
+    .collect();
+  for (const heart of hearts) {
+    await ctx.db.patch(heart._id, { passageMemoryId: undefined });
   }
   await deletePassageMemoryDue(ctx, row._id);
   await ctx.db.delete(row._id);

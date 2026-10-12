@@ -2,7 +2,6 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { v, type Infer } from "convex/values";
-import { findVerseMemory, seedVerseMemory } from "./lib/verseMemory";
 import { ensurePassageDueBackfill } from "./lib/passageDue";
 import {
   backfillInMemoryForUser,
@@ -17,89 +16,12 @@ const IN_MEMORY_CHECK_BATCH_SIZE = 25;
 const MAX_IN_MEMORY_CHECK_SAMPLES = 20;
 
 /**
- * Backfill one `verseMemory` row for every existing `savedVerses` row that
- * lacks one, processed in bounded batches.
- *
- * Safe on large datasets: each invocation paginates a single batch of
- * `savedVerses`, seeds any missing memory rows, then self-schedules the next
- * batch (`ctx.scheduler.runAfter(0, ...)`) until the table is exhausted.
- *
- * Idempotent and safe to run twice: rows that already have a matching
- * `verseMemory` (by `by_userId_verseRefId`) are skipped. Runs globally across
- * all users, so it is an `internalMutation` (no auth context) — kick it off
- * from the Convex dashboard or `convex run` with no args.
- */
-export const backfillVerseMemory = internalMutation({
-  args: {
-    cursor: v.optional(v.union(v.string(), v.null())),
-    batchSize: v.optional(v.number()),
-    // Running totals threaded through the self-scheduled chain so the final
-    // batch's return value reflects the whole run.
-    scannedSoFar: v.optional(v.number()),
-    createdSoFar: v.optional(v.number()),
-    skippedSoFar: v.optional(v.number()),
-  },
-  returns: v.object({
-    batchScanned: v.number(),
-    batchCreated: v.number(),
-    batchSkipped: v.number(),
-    totalScanned: v.number(),
-    totalCreated: v.number(),
-    totalSkipped: v.number(),
-    isDone: v.boolean(),
-    continueCursor: v.union(v.string(), v.null()),
-  }),
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const batchSize = args.batchSize ?? DEFAULT_BACKFILL_BATCH_SIZE;
-
-    const { page, isDone, continueCursor } = await ctx.db
-      .query("savedVerses")
-      .paginate({ cursor: args.cursor ?? null, numItems: batchSize });
-
-    let created = 0;
-    let skipped = 0;
-
-    for (const row of page) {
-      const existing = await findVerseMemory(ctx, row.userId, row.verseRefId);
-      if (existing) {
-        skipped += 1;
-        continue;
-      }
-      await seedVerseMemory(ctx, row.userId, row.verseRefId, now);
-      created += 1;
-    }
-
-    const totalScanned = (args.scannedSoFar ?? 0) + page.length;
-    const totalCreated = (args.createdSoFar ?? 0) + created;
-    const totalSkipped = (args.skippedSoFar ?? 0) + skipped;
-
-    if (!isDone) {
-      await ctx.scheduler.runAfter(0, internal.migrations.backfillVerseMemory, {
-        cursor: continueCursor,
-        batchSize: args.batchSize,
-        scannedSoFar: totalScanned,
-        createdSoFar: totalCreated,
-        skippedSoFar: totalSkipped,
-      });
-    }
-
-    return {
-      batchScanned: page.length,
-      batchCreated: created,
-      batchSkipped: skipped,
-      totalScanned,
-      totalCreated,
-      totalSkipped,
-      isDone,
-      continueCursor: isDone ? null : continueCursor,
-    };
-  },
-});
-
-/**
  * Backfill the denormalized `verseMemory.isHearted` flag from the canonical
- * `savedVerses` table in bounded batches.
+ * `savedVerses` table in bounded batches. Each invocation paginates a single
+ * batch, then self-schedules the next one (`ctx.scheduler.runAfter(0, ...)`)
+ * until the table is exhausted. Idempotent; runs globally across all users,
+ * so it is an `internalMutation` — kick it off from the Convex dashboard or
+ * `convex run` with no args.
  */
 export const backfillVerseMemoryIsHearted = internalMutation({
   args: {
@@ -177,73 +99,8 @@ export const backfillVerseMemoryIsHearted = internalMutation({
 });
 
 /**
- * Delete custom-pack membership rows whose verse is no longer hearted.
- * Safe to re-run; processes packVerses in bounded batches.
- */
-export const cleanupUnheartedPackVerses = internalMutation({
-  args: {
-    cursor: v.optional(v.union(v.string(), v.null())),
-    batchSize: v.optional(v.number()),
-    scannedSoFar: v.optional(v.number()),
-    deletedSoFar: v.optional(v.number()),
-  },
-  returns: v.object({
-    batchScanned: v.number(),
-    batchDeleted: v.number(),
-    totalScanned: v.number(),
-    totalDeleted: v.number(),
-    isDone: v.boolean(),
-    continueCursor: v.union(v.string(), v.null()),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize ?? DEFAULT_BACKFILL_BATCH_SIZE;
-
-    const { page, isDone, continueCursor } = await ctx.db
-      .query("packVerses")
-      .paginate({ cursor: args.cursor ?? null, numItems: batchSize });
-
-    let deleted = 0;
-    for (const row of page) {
-      const saved = await ctx.db
-        .query("savedVerses")
-        .withIndex("by_userId_verseRefId", (q) =>
-          q.eq("userId", row.userId).eq("verseRefId", row.verseRefId),
-        )
-        .unique();
-      if (saved) continue;
-      await ctx.db.delete(row._id);
-      deleted += 1;
-    }
-
-    const totalScanned = (args.scannedSoFar ?? 0) + page.length;
-    const totalDeleted = (args.deletedSoFar ?? 0) + deleted;
-
-    if (!isDone) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.migrations.cleanupUnheartedPackVerses,
-        {
-          cursor: continueCursor,
-          batchSize: args.batchSize,
-          scannedSoFar: totalScanned,
-          deletedSoFar: totalDeleted,
-        },
-      );
-    }
-
-    return {
-      batchScanned: page.length,
-      batchDeleted: deleted,
-      totalScanned,
-      totalDeleted,
-      isDone,
-      continueCursor: isDone ? null : continueCursor,
-    };
-  },
-});
-
-/**
- * Rebuild denormalized `userMemoryStats` from hearted `verseMemory` rows.
+ * Rebuild denormalized `userMemoryStats` from in-Memory `verseMemory` rows.
+ * Patches the existing row so `inMemoryBackfilledAt` survives.
  */
 export const backfillUserMemoryStats = internalMutation({
   args: {
@@ -270,14 +127,11 @@ export const backfillUserMemoryStats = internalMutation({
         .query("userMemoryStats")
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .unique();
-      if (existing) {
-        await ctx.db.delete(existing._id);
-      }
 
-      const hearted = await ctx.db
+      const inMemory = await ctx.db
         .query("verseMemory")
-        .withIndex("by_userId_isHearted", (q) =>
-          q.eq("userId", user._id).eq("isHearted", true),
+        .withIndex("by_userId_inMemory", (q) =>
+          q.eq("userId", user._id).eq("inMemory", true),
         )
         .collect();
 
@@ -288,16 +142,20 @@ export const backfillUserMemoryStats = internalMutation({
         mastered: 0,
         total: 0,
       };
-      for (const row of hearted) {
+      for (const row of inMemory) {
         counts[row.status] += 1;
         counts.total += 1;
       }
 
-      await ctx.db.insert("userMemoryStats", {
-        userId: user._id,
-        ...counts,
-        updatedAt: now,
-      });
+      if (existing) {
+        await ctx.db.patch(existing._id, { ...counts, updatedAt: now });
+      } else {
+        await ctx.db.insert("userMemoryStats", {
+          userId: user._id,
+          ...counts,
+          updatedAt: now,
+        });
+      }
     }
 
     const totalScanned = (args.scannedSoFar ?? 0) + page.length;
@@ -416,10 +274,10 @@ function addInMemoryTotals(
  * batch and for the whole run.
  *
  * Users already stamped with `inMemoryBackfilledAt` are skipped, so it is
- * safe to run twice. Run it once Memory reads `inMemory`: before that,
- * hearting still enrolls verses, and stamped users would not be re-derived.
- * `force` re-derives stamped users too, which undoes any stop or passage
- * absorb made since their last backfill.
+ * safe to run twice (the app also runs it lazily per user through
+ * `verseMemory.ensureInMemoryBackfill`). Within a user, only rows whose
+ * `inMemory` is unset are derived. `force` re-derives stamped users and every
+ * row, which undoes any stop or passage absorb made since their last backfill.
  */
 export const backfillInMemory = internalMutation({
   args: {
@@ -448,7 +306,9 @@ export const backfillInMemory = internalMutation({
         batch = { ...batch, usersSkipped: batch.usersSkipped + 1 };
         continue;
       }
-      const counts = await backfillInMemoryForUser(ctx, user._id, now);
+      const counts = await backfillInMemoryForUser(ctx, user._id, now, {
+        force: args.force,
+      });
       batch = addInMemoryTotals(batch, {
         usersBackfilled: 1,
         usersSkipped: 0,

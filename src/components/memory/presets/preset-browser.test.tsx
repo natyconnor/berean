@@ -12,7 +12,7 @@ import { PresetBrowser } from "./preset-browser";
 let progress: Array<{
   presetId: string;
   packId: string | null;
-  heartedPassageIds: string[];
+  memorizedPassageIds: string[];
 }> = [];
 
 vi.mock("convex/react", () => ({
@@ -71,7 +71,7 @@ describe("PresetBrowser collections", () => {
       {
         presetId: HUNDRED_VERSES_PRESET_ID,
         packId: "pack_100",
-        heartedPassageIds: collection().passages.map((passage) => passage.id),
+        memorizedPassageIds: collection().passages.map((passage) => passage.id),
       },
     ];
     render(<PresetBrowser />);
@@ -88,12 +88,12 @@ describe("PresetBrowser collections", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does not offer a collection whose passages are all already hearted", () => {
+  it("does not offer a collection whose passages are all already memorized", () => {
     progress = [
       {
         presetId: HUNDRED_VERSES_PRESET_ID,
         packId: null,
-        heartedPassageIds: collection().passages.map((passage) => passage.id),
+        memorizedPassageIds: collection().passages.map((passage) => passage.id),
       },
     ];
     render(<PresetBrowser />);

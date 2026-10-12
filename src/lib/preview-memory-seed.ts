@@ -39,6 +39,8 @@ export interface PreviewMemorySeedVerse {
   reference: PreviewMemoryReference;
   schedule: MemorySchedule;
   lastReviewedAt?: number;
+  /** Seeded as being memorized (and hearted). */
+  inMemory: boolean;
 }
 
 export interface PreviewMemorySeedPack {
@@ -80,8 +82,8 @@ const VERSE_SPECS: readonly VerseSpec[] = [
   {
     id: "john-3-16",
     role: "new",
-    label: "New — not started",
-    howToTry: "Learn this verse from the library to start at Read.",
+    label: "Up next in a pack",
+    howToTry: "Open Sample · Learning and Learn this verse to start at Read.",
     reference: { book: "John", chapter: 3, startVerse: 16, endVerse: 16 },
   },
   {
@@ -391,6 +393,7 @@ export function buildPreviewMemorySeed(now: number): PreviewMemorySeedPlan {
       reference: spec.reference,
       schedule,
       lastReviewedAt,
+      inMemory: true,
     };
   });
 

@@ -1,4 +1,8 @@
-import type { VerseSpan } from "./hearted-verse-coverage";
+import {
+  passageHeartSpans,
+  spanCoveredBy,
+  type VerseSpan,
+} from "./hearted-verse-coverage";
 import {
   dueAtInCalendarDays,
   initialSchedule,
@@ -8,8 +12,6 @@ import {
 } from "./memory-scheduler";
 import {
   inferPieceLearningState,
-  looksLikeAutoHeartedPassage,
-  matchingAutoHeartSpans,
   type HeartedMemorySpan,
 } from "./passage-frontier";
 import type { PassagePiece, PassagePieceBase } from "./passage-pieces";
@@ -32,11 +34,23 @@ export type PlanStartArgs = {
 export type PlanStartResult = {
   pieces: PassagePiece[];
   status: PassageRowStatus;
-  unheartSpans: VerseSpan[];
-  unheartedCount: number;
-  keptHeartCount: number;
   schedule: MemorySchedule;
 };
+
+/**
+ * Verse items a newly started passage absorbs: in Memory on their own (no
+ * custom pack keeps them separate) and fully inside the passage's chapter
+ * spans. Their progress has already seeded the pieces, so they stop being
+ * separate items and nothing is due twice.
+ */
+export function absorbedVerseItems<
+  T extends VerseSpan & { inCustomPack: boolean },
+>(items: readonly T[], pieces: readonly VerseSpan[]): T[] {
+  const passageSpans = passageHeartSpans(pieces);
+  return items.filter(
+    (item) => !item.inCustomPack && spanCoveredBy(item, passageSpans),
+  );
+}
 
 /**
  * Fresh finished-passage maintenance: reviewing, 1-day interval, due tomorrow.
@@ -163,15 +177,15 @@ function allPiecesSolid(pieces: readonly PassagePiece[]): boolean {
 }
 
 /**
- * Pure start planner. Does not mutate hearts. The mutation layer is
+ * Pure start planner. Never touches hearts. The mutation layer is
  * create-once: if a passage row already exists, skip this and return the row.
  */
 export function planStart(args: PlanStartArgs): PlanStartResult {
-  const { pieces, hearts, scope, memberSchedules, now } = args;
+  const { pieces, hearts, memberSchedules, now } = args;
 
-  // `new` hearts were seeded on heart and never practiced — do not treat
-  // them as learning-phase coverage when freezing pieces. Enrolled
-  // `learning` hearts still at Read with no reps are also unreached
+  // `new` members are Up next and were never practiced — do not treat them
+  // as learning-phase coverage when freezing pieces. `learning` members
+  // still at Read with no reps are also unreached
   // ({@link inferPieceLearningState}).
   const progressHearts = hearts.filter((heart) => heart.status !== "new");
   const inferred = inferPieceLearningState(pieces, progressHearts);
@@ -183,18 +197,6 @@ export function planStart(args: PlanStartArgs): PlanStartResult {
     };
     return toStoredPiece(piece, state);
   });
-
-  const autoHearted = looksLikeAutoHeartedPassage(pieces, hearts, scope);
-  const unheartSpans = autoHearted
-    ? matchingAutoHeartSpans(pieces, hearts).map((span) => ({
-        book: span.book,
-        chapter: span.chapter,
-        startVerse: span.startVerse,
-        endVerse: span.endVerse,
-      }))
-    : [];
-  const unheartedCount = unheartSpans.length;
-  const keptHeartCount = Math.max(0, hearts.length - unheartedCount);
 
   const finished = allPiecesSolid(nextPieces);
   const schedule = finished
@@ -210,9 +212,6 @@ export function planStart(args: PlanStartArgs): PlanStartResult {
   return {
     pieces: nextPieces,
     status,
-    unheartSpans,
-    unheartedCount,
-    keptHeartCount,
     schedule,
   };
 }

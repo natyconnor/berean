@@ -22,30 +22,34 @@ import type { PracticeVerse } from "./practice/practice-board";
 import { toPracticeVerse } from "./to-practice-verse";
 import { VerseDetail } from "./verse-detail";
 
-type LibraryView = "due" | "inMemory" | "notStarted";
+type LibraryView = "due" | "learning" | "memorized" | "mastered" | "all";
 
 const VIEWS: Array<{ key: LibraryView; label: string }> = [
-  { key: "due", label: "Due" },
-  { key: "inMemory", label: "In memory" },
-  { key: "notStarted", label: "Not started" },
+  { key: "due", label: "Due today" },
+  { key: "learning", label: "Learning" },
+  { key: "memorized", label: "Memorized" },
+  { key: "mastered", label: "Mastered" },
+  { key: "all", label: "All" },
 ];
 
 const EMPTY_COPY: Record<LibraryView, string> = {
   due: "Nothing due right now.",
-  inMemory: "Start learning a verse to see it here.",
-  notStarted: "No unstarted hearted verses.",
+  learning: "Nothing is being learned right now.",
+  memorized: "Verses show up here once they finish learning.",
+  mastered: "No mastered verses yet.",
+  all: "Memorize a verse to see it here.",
 };
 
 const INITIAL_PAGE_SIZE = 20;
-/** New rows share the dueAt index and are skipped in-page; a larger first page
- *  cuts round-trips when many hearted New verses sit inside `dueAt <= now`. */
+/** Up-next rows share the dueAt index and are skipped in-page; a larger first
+ *  page cuts round-trips when many Up-next verses sit inside `dueAt <= now`. */
 const DUE_INITIAL_PAGE_SIZE = 40;
 const LOAD_MORE_PAGE_SIZE = 20;
 
 /**
- * The Library: hearted verses in Due / In memory / Not started views,
- * paginated (`usePaginatedQuery` over `verseMemory.listLibrary`), with a
- * drill-down dialog.
+ * The Library: verses in Memory in Due today / Learning / Memorized /
+ * Mastered / All views, paginated (`usePaginatedQuery` over
+ * `verseMemory.listLibrary`), with a drill-down dialog.
  *
  * Search is an in-view filter of already-loaded pages (it does not fetch
  * unloaded pages) — a documented v1 limitation.
@@ -109,7 +113,7 @@ export function MemoryLibrary({
   }, [displayResults, search]);
 
   // `listLibrary` can legitimately return an empty page while more pages exist
-  // (Due/In memory skip New or un-hearted rows in-page). Auto-advance past
+  // (Due skips Up-next rows in-page). Auto-advance past
   // such empty slices so a user with matching verses isn't stuck on a false
   // empty state with nothing to click.
   useEffect(() => {
@@ -143,14 +147,18 @@ export function MemoryLibrary({
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Library
           </h2>
           <LearnVerseTrigger onClick={() => setLearnOpen(true)} />
         </div>
-        <div className="flex items-center gap-1">
+        <div
+          className="flex flex-wrap items-center gap-1"
+          role="group"
+          aria-label="Filter verses"
+        >
           {VIEWS.map((tab) => (
             <Button
               key={tab.key}

@@ -84,7 +84,6 @@ vi.mock("../../../convex/_generated/api", () => ({
       getPassage: "esv.getPassage",
     },
     savedVerses: {
-      listAll: "savedVerses.listAll",
       listRecordingIds: "savedVerses.listRecordingIds",
     },
     packs: {
@@ -92,6 +91,7 @@ vi.mock("../../../convex/_generated/api", () => ({
       acceptRetryHold: "packs.acceptRetryHold",
     },
     verseMemory: {
+      listInMemory: "verseMemory.listInMemory",
       recordAttempt: "verseMemory.recordAttempt",
       acceptRetryHold: "verseMemory.acceptRetryHold",
     },
@@ -165,6 +165,32 @@ function passageView(
   };
 }
 
+function inMemoryVerse(
+  book: string,
+  chapter: number,
+  verse: number,
+  status: "new" | "learning",
+) {
+  return {
+    verseRefId: `verse_${book}_${chapter}_${verse}` as Id<"verseRefs">,
+    book,
+    chapter,
+    startVerse: verse,
+    endVerse: verse,
+    memory: {
+      status,
+      learnStage: status === "new" ? 0 : 1,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow(),
+      consecutiveCorrect: 0,
+      lapses: 0,
+    },
+    packIds: [],
+  };
+}
+
 const DEFAULT_DUE_PACKS = [
   { packId: PACK_JUDE, packName: JUDE },
   { packId: PACK_3JOHN, packName: THIRD_JOHN },
@@ -174,11 +200,11 @@ function renderLearn(
   view: PassageView,
   options?: {
     passages?: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
-    savedVerses?: unknown[];
+    inMemory?: unknown[];
     missingPackIds?: ReadonlyArray<Id<"packs">>;
   },
 ) {
-  queryResults.set("savedVerses.listAll", options?.savedVerses ?? []);
+  queryResults.set("verseMemory.listInMemory", options?.inMemory ?? []);
   queryResults.set(
     "passageMemory.dueForLearning",
     options?.passages ?? DEFAULT_DUE_PACKS,
@@ -343,23 +369,9 @@ describe("MemoryLearnPage", () => {
   });
 
   it("opens the verse session on a later visit when the only due pack was dismissed", async () => {
-    const savedVerses = [
-      {
-        verseRefId: "verse_john316" as Id<"verseRefs">,
-        book: "John",
-        chapter: 3,
-        startVerse: 16,
-        endVerse: 16,
-        memory: {
-          status: "learning" as const,
-          learnStage: 1,
-          stageReps: 0,
-          dueAt: getSessionNow(),
-        },
-      },
-    ];
+    const inMemory = [inMemoryVerse("John", 3, 16, "learning")];
     const passages = [{ packId: PACK_JUDE, packName: JUDE }];
-    const first = renderLearn(nextVerseView(), { passages, savedVerses });
+    const first = renderLearn(nextVerseView(), { passages, inMemory });
 
     expect(await screen.findByText(JUDE)).toBeInTheDocument();
     await userEvent.click(
@@ -367,11 +379,37 @@ describe("MemoryLearnPage", () => {
     );
     first.unmount();
 
-    renderLearn(nextVerseView(), { passages, savedVerses });
+    renderLearn(nextVerseView(), { passages, inMemory });
 
     expect(await screen.findByText("Today's learning")).toBeInTheDocument();
     expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
     expect(screen.queryByText(DONE_FOR_NOW_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("learns in-Memory verses and leaves Up-next pack verses for later", async () => {
+    renderLearn(nextVerseView(), {
+      passages: [],
+      inMemory: [
+        inMemoryVerse("John", 3, 16, "new"),
+        inMemoryVerse("Romans", 8, 28, "learning"),
+      ],
+    });
+
+    expect(await screen.findByText("Today's learning")).toBeInTheDocument();
+    expect(screen.getAllByText("Romans 8:28").length).toBeGreaterThan(0);
+    expect(screen.getByText("Verse 1 of 1")).toBeInTheDocument();
+    expect(screen.queryByText("John 3:16")).not.toBeInTheDocument();
+  });
+
+  it("shows the empty state when nothing in Memory is ready to learn", async () => {
+    renderLearn(nextVerseView(), {
+      passages: [],
+      inMemory: [inMemoryVerse("John", 3, 16, "new")],
+    });
+
+    expect(
+      await screen.findByText("Nothing to learn right now"),
+    ).toBeInTheDocument();
   });
 
   it("opens the same pack again after Back", async () => {

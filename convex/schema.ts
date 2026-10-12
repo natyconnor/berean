@@ -246,7 +246,8 @@ export default defineSchema({
     .index("by_userId_presetId", ["userId", "presetId"]),
 
   packVerses: defineTable({
-    // Custom-pack membership (ordered). Hearted-only: unheart deletes these rows.
+    // Custom-pack membership (ordered). Members are rows whose verse is in
+    // Memory; rows survive stop and unheart so memorizing again restores them.
     userId: v.id("users"),
     packId: v.id("packs"),
     verseRefId: v.id("verseRefs"),
@@ -259,7 +260,7 @@ export default defineSchema({
     .index("by_userId_verseRefId", ["userId", "verseRefId"]),
 
   /**
-   * Denormalized hearted-verse status counts for O(1) memoryStats.
+   * Denormalized in-Memory verse status counts for O(1) memoryStats.
    * `due` is time-dependent and is still computed live from the due index.
    */
   userMemoryStats: defineTable({

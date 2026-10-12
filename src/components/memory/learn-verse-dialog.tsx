@@ -12,8 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { exactSpanMatch, type VerseSpan } from "@/lib/hearted-verse-coverage";
+import { planMemorizeTransition } from "@/lib/memorize-transition";
 import { stepShortLabel } from "@/lib/memory-copy";
-import { isLearningLocked, type MemoryStatus } from "@/lib/memory-scheduler";
+import {
+  isLearningLocked,
+  isReviewPhase,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { reviewPhaseListAction } from "@/lib/memory-session";
 
 import { api } from "../../../convex/_generated/api";
@@ -58,9 +63,9 @@ function findExactHeartedRow(
 }
 
 /**
- * Dashboard Learn picker: Browse-first, confirmLabel Learn. Hearts unhearted
- * spans then routes like library row CTAs (Learn vs Review vs Practice vs stay
- * put).
+ * Dashboard Learn picker: Browse-first, confirmLabel Learn. Memorizes the
+ * picked span (which hearts it when no heart covers it), then routes like
+ * library row CTAs (Learn vs Review vs Practice vs stay put).
  */
 export function LearnVerseDialog({
   open,
@@ -78,7 +83,7 @@ export function LearnVerseDialog({
   onPracticeVerse: (verse: PracticeVerse) => void;
 }) {
   const savedVerses = useQuery(api.savedVerses.listAll, open ? {} : "skip");
-  const toggleSaved = useMutation(api.savedVerses.toggle);
+  const memorize = useMutation(api.verseMemory.memorize);
   const { submit } = useSubmitLock();
 
   const [pendingKey, setPendingKey] = useState<string | null>(null);
@@ -92,7 +97,7 @@ export function LearnVerseDialog({
         chapter: v.chapter,
         startVerse: v.startVerse,
         endVerse: v.endVerse,
-        memory: v.memory
+        memory: v.memory?.inMemory
           ? {
               status: v.memory.status,
               dueAt: v.memory.dueAt,
@@ -108,53 +113,45 @@ export function LearnVerseDialog({
       if (savedVerses === undefined) return;
       submit(async () => {
         const match = findExactHeartedRow(span, savedVerses);
-        const memory = match?.memory;
-        if (
-          memory &&
-          isLearningLocked(
-            {
-              status: memory.status,
-              dueAt: memory.dueAt,
-              lastReviewedAt: memory.lastReviewedAt,
-            },
-            now,
-          )
-        ) {
-          setError(
-            `You've done today's step for this verse. Tomorrow: ${stepShortLabel(memory.learnStage)}.`,
-          );
-          return;
-        }
-
+        const before = match?.memory;
         const key = packVerseKey(span);
         setError(null);
         setPendingKey(key);
         try {
-          if (!match) {
-            const result = await toggleSaved({
-              book: span.book,
-              chapter: span.chapter,
-              startVerse: span.startVerse,
-              endVerse: span.endVerse,
-            });
-            if (result !== "added") {
-              setError("Couldn't start that verse. Please try again.");
-              return;
-            }
-            onOpenChange(false);
-            onLearnVerse(practiceVerseFromSpan(span));
-            return;
-          }
+          const result = await memorize({
+            spans: [
+              {
+                book: span.book,
+                chapter: span.chapter,
+                startVerse: span.startVerse,
+                endVerse: span.endVerse,
+              },
+            ],
+            now,
+          });
+          const verseRefId = result.verseRefIds[0] ?? match?.verseRefId;
 
-          if (
-            memory &&
-            (memory.status === "reviewing" || memory.status === "mastered")
-          ) {
+          // Memorizing keeps the schedule; a `new` verse starts learning now.
+          const status = planMemorizeTransition(
+            before
+              ? { status: before.status, inMemory: before.inMemory }
+              : null,
+            false,
+          ).status;
+          const memory = before
+            ? {
+                ...before,
+                status,
+                dueAt: status === before.status ? before.dueAt : now,
+              }
+            : undefined;
+
+          if (memory && isReviewPhase(memory.status)) {
             onOpenChange(false);
             const practiceVerse = practiceVerseFromSpan(
               span,
               memory,
-              match.verseRefId,
+              verseRefId,
             );
             if (reviewPhaseListAction(practiceVerse, now) === "review") {
               onReviewVerse(practiceVerse);
@@ -164,8 +161,25 @@ export function LearnVerseDialog({
             return;
           }
 
+          if (
+            memory &&
+            isLearningLocked(
+              {
+                status: memory.status,
+                dueAt: memory.dueAt,
+                lastReviewedAt: memory.lastReviewedAt,
+              },
+              now,
+            )
+          ) {
+            setError(
+              `You've done today's step for this verse. Tomorrow: ${stepShortLabel(memory.learnStage)}.`,
+            );
+            return;
+          }
+
           onOpenChange(false);
-          onLearnVerse(practiceVerseFromSpan(span, memory, match.verseRefId));
+          onLearnVerse(practiceVerseFromSpan(span, memory, verseRefId));
         } catch {
           setError("Couldn't start that verse. Please try again.");
         } finally {
@@ -174,6 +188,7 @@ export function LearnVerseDialog({
       });
     },
     [
+      memorize,
       now,
       onLearnVerse,
       onOpenChange,
@@ -181,7 +196,6 @@ export function LearnVerseDialog({
       onReviewVerse,
       savedVerses,
       submit,
-      toggleSaved,
     ],
   );
 
@@ -197,8 +211,7 @@ export function LearnVerseDialog({
         <DialogHeader>
           <DialogTitle>Learn a verse</DialogTitle>
           <DialogDescription>
-            Browse or pick a hearted verse. Unhearted verses are saved, then
-            learning starts.
+            Pick a verse to memorize. You don&apos;t need to heart it first.
           </DialogDescription>
         </DialogHeader>
         {error ? (

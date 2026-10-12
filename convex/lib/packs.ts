@@ -1,10 +1,6 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import {
-  findVerseMemory,
-  isLiveHeartedMemory,
-  loadHeartedVerseMemoryByRef,
-} from "./verseMemory";
+import { loadInMemoryVerseMemoryByRef } from "./verseMemory";
 import { loadPassagePackIds } from "./passageDue";
 import {
   verseMatchesScope,
@@ -111,51 +107,36 @@ async function memberForVerseRef(
   userId: Id<"users">,
   verseRefId: Id<"verseRefs">,
   memoryByRef: Map<Id<"verseRefs">, Doc<"verseMemory">>,
-  requireLiveHearted: boolean,
 ): Promise<PackMember | null> {
+  const memory = memoryByRef.get(verseRefId);
+  if (!memory) return null;
   const ref = await ctx.db.get(verseRefId);
   if (!ref || ref.userId !== userId) return null;
-  const memory =
-    memoryByRef.get(verseRefId) ??
-    (await findVerseMemory(ctx, userId, verseRefId));
-  if (!memory) return null;
-  if (requireLiveHearted && !isLiveHeartedMemory(memory)) return null;
   return toMember(ref, memory);
 }
 
 /**
- * All of the user's hearted verses joined to their `verseMemory` schedule.
+ * Every verse the user has in Memory, joined to its schedule.
  *
- * This is the canonical "in Memory" set for scope packs: a verse is in Memory
- * exactly when a `savedVerses` row exists (the same read contract used across
- * `verseMemory.ts`). Rows whose memory seed is missing (legacy, pre-backfill)
- * are skipped rather than fabricated. Bounded by the user's hearted set.
- *
- * Hearts and live `verseMemory` are collected once; verse refs are `db.get` in
- * parallel so a 100-verse pack is two index scans plus N point reads.
+ * This is the member set scope packs filter by scope. In-Memory rows are
+ * collected once; verse refs are `db.get` in parallel so a 100-verse pack is
+ * one index scan plus N point reads.
  */
-export async function loadHeartedMembers(
+export async function loadInMemoryMembers(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<PackMember[]> {
-  const [saved, memoryByRef] = await Promise.all([
-    ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect(),
-    loadHeartedVerseMemoryByRef(ctx, userId),
-  ]);
-
+  const memoryByRef = await loadInMemoryVerseMemoryByRef(ctx, userId);
   const loaded = await Promise.all(
-    saved.map((row) =>
-      memberForVerseRef(ctx, userId, row.verseRefId, memoryByRef, false),
+    [...memoryByRef.keys()].map((verseRefId) =>
+      memberForVerseRef(ctx, userId, verseRefId, memoryByRef),
     ),
   );
   return loaded.filter((member): member is PackMember => member !== null);
 }
 
 /**
- * A pack's current members: scope packs resolve live from hearted verses,
+ * A pack's current members: scope packs resolve live from the in-Memory set,
  * custom packs from their explicit membership rows.
  */
 export async function loadPackMembers(
@@ -164,19 +145,19 @@ export async function loadPackMembers(
   pack: Doc<"packs">,
 ): Promise<PackMember[]> {
   if (pack.kind === "scope" && pack.scope) {
-    const hearted = await loadHeartedMembers(ctx, userId);
-    return filterScopeMembers(hearted, pack.scope);
+    const inMemory = await loadInMemoryMembers(ctx, userId);
+    return filterScopeMembers(inMemory, pack.scope);
   }
   return await loadCustomMembers(ctx, userId, pack._id);
 }
 
-/** Hearted members that fall inside a scope, in canonical Bible order. */
+/** In-Memory members that fall inside a scope, in canonical Bible order. */
 export function filterScopeMembers(
-  hearted: PackMember[],
+  inMemory: PackMember[],
   scope: VerseScope,
 ): PackMember[] {
   return sortByVerseRef(
-    hearted.filter((m) =>
+    inMemory.filter((m) =>
       verseMatchesScope({ book: m.book, chapter: m.chapter }, scope),
     ),
   );
@@ -186,16 +167,15 @@ export function filterScopeMembers(
  * Members of a custom pack, in explicit membership order.
  *
  * Joins each `packVerses` row to its verse reference and `verseMemory` row.
- * Membership is hearted-only: unhearting deletes `packVerses` rows, and this
- * loader also skips any stale membership whose verse is no longer hearted.
- * Hearts and live memory are collected once; refs are fetched in parallel.
+ * Membership is `packVerses` rows whose verse is in Memory. Rows survive
+ * stopping and unhearting, so memorizing the verse again restores it.
  */
 export async function loadCustomMembers(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   packId: Id<"packs">,
 ): Promise<PackMember[]> {
-  const [rows, saved, memoryByRef] = await Promise.all([
+  const [rows, memoryByRef] = await Promise.all([
     ctx.db
       .query("packVerses")
       .withIndex("by_userId_packId_order", (q) =>
@@ -203,21 +183,86 @@ export async function loadCustomMembers(
       )
       .order("asc")
       .collect(),
-    ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect(),
-    loadHeartedVerseMemoryByRef(ctx, userId),
+    loadInMemoryVerseMemoryByRef(ctx, userId),
   ]);
-  const savedIds = new Set(saved.map((row) => row.verseRefId));
 
   const loaded = await Promise.all(
-    rows.map((row) => {
-      if (!savedIds.has(row.verseRefId)) return Promise.resolve(null);
-      return memberForVerseRef(ctx, userId, row.verseRefId, memoryByRef, true);
-    }),
+    rows.map((row) =>
+      memberForVerseRef(ctx, userId, row.verseRefId, memoryByRef),
+    ),
   );
   return loaded.filter((member): member is PackMember => member !== null);
+}
+
+/** Verse refs listed in any of the user's custom packs. */
+export async function loadCustomPackVerseRefIds(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<Set<Id<"verseRefs">>> {
+  const index = await loadPackMembershipIndex(ctx, userId);
+  return new Set(index.customByVerseRef.keys());
+}
+
+/**
+ * Which packs list each verse, for `InMemoryVerseItem.packIds`: custom packs
+ * by their `packVerses` rows, and scope packs not in passage mode by scope.
+ * Membership of an in-Memory verse is exactly these packs. Pass
+ * `onlyVerseRefId` to read just that verse's `packVerses` rows.
+ */
+export async function loadPackMembershipIndex(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  onlyVerseRefId?: Id<"verseRefs">,
+): Promise<{
+  customByVerseRef: Map<Id<"verseRefs">, Id<"packs">[]>;
+  packIdsFor: (
+    verseRefId: Id<"verseRefs">,
+    span: { book: string; chapter: number },
+  ) => Id<"packs">[];
+}> {
+  const [packs, packVerses, passagePackIds] = await Promise.all([
+    ctx.db
+      .query("packs")
+      .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+      .collect(),
+    ctx.db
+      .query("packVerses")
+      .withIndex("by_userId_verseRefId", (q) =>
+        onlyVerseRefId === undefined
+          ? q.eq("userId", userId)
+          : q.eq("userId", userId).eq("verseRefId", onlyVerseRefId),
+      )
+      .collect(),
+    loadPassagePackIds(ctx, userId),
+  ]);
+
+  const customPackIds = new Set(
+    packs.filter((pack) => pack.kind === "custom").map((pack) => pack._id),
+  );
+  const customByVerseRef = new Map<Id<"verseRefs">, Id<"packs">[]>();
+  for (const row of packVerses) {
+    if (!customPackIds.has(row.packId)) continue;
+    const ids = customByVerseRef.get(row.verseRefId) ?? [];
+    if (!ids.includes(row.packId)) ids.push(row.packId);
+    customByVerseRef.set(row.verseRefId, ids);
+  }
+
+  const scopePacks = packs.filter(
+    (pack) =>
+      pack.kind === "scope" &&
+      pack.scope !== undefined &&
+      !passagePackIds.has(pack._id),
+  );
+
+  return {
+    customByVerseRef,
+    packIdsFor: (verseRefId, span) => [
+      ...(customByVerseRef.get(verseRefId) ?? []),
+      ...scopePacks
+        .filter((pack) => pack.scope && verseMatchesScope(span, pack.scope))
+        .map((pack) => pack._id),
+    ],
+  };
 }
 
 /**
@@ -244,18 +289,20 @@ export async function loadUnifiedReviewPacks(
   const unifiedPacks = flagged.filter((pack) => !passageIds.has(pack._id));
   if (unifiedPacks.length === 0) return [];
 
-  // Scope packs all share the same hearted set — load it once instead of
-  // collecting every heart again per pack on dueCount / dueQueue.
-  const needsHearted = unifiedPacks.some(
+  // Scope packs all share the same in-Memory set — load it once instead of
+  // collecting it again per pack on dueCount / dueQueue.
+  const needsInMemory = unifiedPacks.some(
     (pack) => pack.kind === "scope" && pack.scope,
   );
-  const hearted = needsHearted ? await loadHeartedMembers(ctx, userId) : null;
+  const inMemory = needsInMemory
+    ? await loadInMemoryMembers(ctx, userId)
+    : null;
 
   const unified: Array<{ pack: Doc<"packs">; members: PackMember[] }> = [];
   for (const pack of unifiedPacks) {
     const members =
-      pack.kind === "scope" && pack.scope && hearted
-        ? filterScopeMembers(hearted, pack.scope)
+      pack.kind === "scope" && pack.scope && inMemory
+        ? filterScopeMembers(inMemory, pack.scope)
         : await loadCustomMembers(ctx, userId, pack._id);
     unified.push({ pack, members });
   }

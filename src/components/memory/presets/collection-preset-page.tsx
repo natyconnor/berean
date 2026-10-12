@@ -105,7 +105,7 @@ function CollectionStart({ presetId }: { presetId: string }) {
 
   const progressRow = progress?.find((item) => item.presetId === presetId);
   const existingPackId = progressRow?.packId ?? null;
-  const hearted = new Set(progressRow?.heartedPassageIds ?? []);
+  const memorized = new Set(progressRow?.memorizedPassageIds ?? []);
 
   if (!preset || preset.kind !== "collection") return null;
 
@@ -189,7 +189,7 @@ function CollectionStart({ presetId }: { presetId: string }) {
               key={passage.id}
               label={formatPresetPassage(passage)}
               checked={selected.has(passage.id)}
-              inLibrary={hearted.has(passage.id)}
+              inLibrary={memorized.has(passage.id)}
               onToggle={() => toggle(passage.id)}
             />
           ))}

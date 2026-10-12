@@ -11,20 +11,24 @@ import {
 import {
   findSavedVerse,
   findVerseMemory,
-  loadHeartedVerseMemoryByRef,
+  loadChapterInMemoryItems,
+  loadInMemoryVerseMemoryByRef,
 } from "./lib/verseMemory";
 import { getVerseRefBoundsErrorMessage } from "../shared/verse-ref-validation";
 import {
   exactSpanMatch,
   HEART_MANY_CHUNK,
   overlappingSpans,
+  spansLosingCoverage,
+  type VerseSpan,
 } from "../src/lib/hearted-verse-coverage";
 
 /**
- * The verse's live memory schedule, when a `verseMemory` row exists. Included
- * so the reader can decorate the heart with a mastery ring (see
+ * The verse's memory schedule, when a `verseMemory` row exists. Included so
+ * the reader can decorate the heart with a mastery ring (see
  * `masteryRingFraction`) without a per-verse follow-up query — the join happens
- * inside this single per-chapter query.
+ * inside this single per-chapter query. `inMemory` says whether the user is
+ * memorizing it; the schedule of a stopped verse is kept for resuming.
  */
 const savedMemoryValidator = v.object({
   status: v.union(
@@ -38,6 +42,7 @@ const savedMemoryValidator = v.object({
   intervalDays: v.number(),
   dueAt: v.number(),
   lastReviewedAt: v.optional(v.number()),
+  inMemory: v.boolean(),
 });
 
 const savedVerseRefItem = v.object({
@@ -61,6 +66,17 @@ const savedVerseListItem = v.object({
   memory: v.optional(savedMemoryValidator),
 });
 
+/**
+ * A reader heart. `stopsMemorizing` is true when unhearting it would stop
+ * memorizing something (its passage, or an in-Memory verse no other heart
+ * covers). `passageMemoryId` is set on an active passage's heart.
+ */
+const chapterSavedVerseItem = v.object({
+  ...savedVerseListItem.fields,
+  stopsMemorizing: v.boolean(),
+  passageMemoryId: v.optional(v.id("passageMemory")),
+});
+
 type SavedVerseRefItem = {
   _id: Id<"savedVerses">;
   verseRefId: Id<"verseRefs">;
@@ -79,6 +95,7 @@ type SavedVerseListItem = SavedVerseRefItem & {
     intervalDays: number;
     dueAt: number;
     lastReviewedAt?: number;
+    inMemory: boolean;
   };
 };
 
@@ -112,6 +129,7 @@ function listItemMemory(
     intervalDays: memory.intervalDays,
     dueAt: memory.dueAt,
     lastReviewedAt: memory.lastReviewedAt,
+    inMemory: memory.inMemory === true,
   };
 }
 
@@ -144,7 +162,7 @@ async function toListItems(
   rows: Doc<"savedVerses">[],
   userId: Id<"users">,
 ): Promise<SavedVerseListItem[]> {
-  const memoryByRef = await loadHeartedVerseMemoryByRef(ctx, userId);
+  const memoryByRef = await loadInMemoryVerseMemoryByRef(ctx, userId);
   const items = await Promise.all(
     rows.map(async (row) => {
       const memory =
@@ -170,7 +188,7 @@ async function loadHeartedRowsNewestFirst(
 
 export const listForChapter = query({
   args: { book: v.string(), chapter: v.number() },
-  returns: v.array(savedVerseListItem),
+  returns: v.array(chapterSavedVerseItem),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) {
@@ -187,7 +205,37 @@ export const listForChapter = query({
       )
       .collect();
 
-    return await toListItems(ctx, rows, userId);
+    const [loaded, inMemoryItems] = await Promise.all([
+      Promise.all(rows.map((row) => toListItem(ctx, row, userId))),
+      loadChapterInMemoryItems(ctx, userId, args.book, args.chapter),
+    ]);
+    const entries = rows.flatMap((row, index) => {
+      const item = loaded[index];
+      return item ? [{ row, item }] : [];
+    });
+    const hearts: VerseSpan[] = entries.map(({ item }) => item);
+
+    return await Promise.all(
+      entries.map(async ({ row, item }, index) => {
+        const passage =
+          row.passageMemoryId !== undefined
+            ? await ctx.db.get(row.passageMemoryId)
+            : null;
+        const activePassageId =
+          passage && passage.userId === userId ? passage._id : undefined;
+        const others = hearts.filter((_, other) => other !== index);
+        const stopsMemorizing =
+          activePassageId !== undefined ||
+          spansLosingCoverage([item], others, inMemoryItems).length > 0;
+        return {
+          ...item,
+          stopsMemorizing,
+          ...(activePassageId !== undefined
+            ? { passageMemoryId: activePassageId }
+            : {}),
+        };
+      }),
+    );
   },
 });
 
@@ -215,9 +263,9 @@ export const listRecordingIds = query({
 });
 
 /**
- * Full library rows with mastery-ring memory. A `verseMemory` patch
- * invalidates this query — do not subscribe during Learn / Practice / Review
- * recording. Use {@link listRecordingIds} (or a frozen snapshot) instead.
+ * Every heart with its memory join (hearted verse pickers). A `verseMemory`
+ * patch invalidates this query — do not subscribe during Learn / Practice /
+ * Review recording. Memory sessions read `verseMemory.listInMemory`.
  */
 export const listAll = query({
   args: {},
@@ -234,10 +282,8 @@ export const listAll = query({
 });
 
 /**
- * One hearted library row for a verse-scoped Learn / Practice URL.
- *
- * Scoped sessions must not snapshot {@link listAll}: that join grows with
- * every hearted verse and made pack → verse navigation wait on the library.
+ * One hearted row with its memory join, for a single exact span. Memory
+ * sessions read `verseMemory.getInMemory` instead.
  */
 export const getHearted = query({
   args: {
@@ -298,12 +344,12 @@ export const toggle = mutation({
     const existing = await findSavedVerse(ctx, userId, verseRefId);
 
     if (existing) {
+      // Also stops memorizing anything this heart alone covered.
       await unheartByVerseRefId(ctx, userId, verseRefId, Date.now());
       return "removed" as const;
     }
 
-    // Hearting a verse seeds its memory record (idempotent: a re-heart after
-    // un-hearting reuses the existing row rather than creating a duplicate).
+    // Hearting only saves; it never starts memorizing.
     await heartSpanIfAbsent(ctx, userId, span, Date.now());
     return "added" as const;
   },

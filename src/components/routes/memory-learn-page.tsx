@@ -37,13 +37,13 @@ function GlobalMemoryLearnPage(): JSX.Element {
   const onExitHome = useMemoryBack();
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
-  const savedVerses = useFrozenQuery(api.savedVerses.listAll, {});
+  const inMemory = useFrozenQuery(api.verseMemory.listInMemory, {});
   const duePassages = useFrozenQuery(api.passageMemory.dueForLearning, {
     now,
     tzOffsetMinutes,
   });
 
-  if (savedVerses === undefined || duePassages === undefined) {
+  if (inMemory === undefined || duePassages === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -51,7 +51,7 @@ function GlobalMemoryLearnPage(): JSX.Element {
     );
   }
 
-  const verses = learningVersesFromSaved(savedVerses, now);
+  const verses = learningVersesFromInMemory(inMemory, now);
 
   return (
     <GlobalLearnSession
@@ -213,8 +213,8 @@ function BuildingPassageLearnCard({
   );
 }
 
-function learningVersesFromSaved(
-  savedVerses: ReadonlyArray<{
+function learningVersesFromInMemory(
+  inMemory: ReadonlyArray<{
     verseRefId: Id<"verseRefs">;
     book: string;
     chapter: number;
@@ -236,7 +236,7 @@ function learningVersesFromSaved(
   now: number,
 ): PracticeVerse[] {
   return sortSessionVerses(
-    savedVerses.flatMap((verse) => {
+    inMemory.flatMap((verse) => {
       if (
         !isMemorySessionCandidate(
           {

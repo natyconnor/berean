@@ -29,6 +29,20 @@ export function shouldBeInMemory(input: InMemoryRuleInput): boolean {
   );
 }
 
+/**
+ * The `inMemory` value a backfill writes. Rows that already have a value were
+ * written by memorize / stop / passage absorb and keep it; only rows that
+ * predate the switch (`undefined`) are derived. `force` re-derives every row.
+ */
+export function backfilledInMemory(
+  current: boolean | undefined,
+  derive: () => boolean,
+  force: boolean,
+): boolean {
+  if (!force && current !== undefined) return current;
+  return derive();
+}
+
 /** A user's pack and passage membership, loaded once per backfill. */
 export type InMemoryMembership = {
   customPackVerseRefIds: ReadonlySet<string>;

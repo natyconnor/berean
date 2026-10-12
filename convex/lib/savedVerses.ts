@@ -1,19 +1,35 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import type { Id } from "../_generated/dataModel";
-import type { VerseSpan } from "../../src/lib/hearted-verse-coverage";
-import { findOrCreateVerseRefId } from "./verseRefs";
+import type { Doc, Id } from "../_generated/dataModel";
 import {
-  adjustUserMemoryStats,
-  deletePackMembershipsForVerse,
+  spansLosingCoverage,
+  type VerseSpan,
+} from "../../src/lib/hearted-verse-coverage";
+import { findOrCreateVerseRefId } from "./verseRefs";
+import { deletePassageAndReviews } from "./passageMemory";
+import {
   findSavedVerse,
   findVerseMemory,
-  seedVerseMemory,
+  loadChapterInMemoryItems,
+  stopMemorizingVerse,
 } from "./verseMemory";
+
+/** Keep the display-only `isHearted` flag in step with the exact heart row. */
+async function mirrorIsHearted(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+  isHearted: boolean,
+): Promise<void> {
+  const memory = await findVerseMemory(ctx, userId, verseRefId);
+  if (memory && memory.isHearted !== isHearted) {
+    await ctx.db.patch(memory._id, { isHearted });
+  }
+}
 
 /**
  * Insert a heart for this exact span if the user does not already have one.
- * Seeds verse memory the same way as the reader toggle add-path.
- * Never deletes or patches an existing `savedVerses` row.
+ * Hearting only saves: it never starts memorizing. Never deletes or patches an
+ * existing `savedVerses` row.
  */
 export async function heartSpanIfAbsent(
   ctx: MutationCtx,
@@ -34,14 +50,39 @@ export async function heartSpanIfAbsent(
     chapter: span.chapter,
     createdAt: now,
   });
-  await seedVerseMemory(ctx, userId, verseRefId, now);
+  await mirrorIsHearted(ctx, userId, verseRefId, true);
   return "added";
 }
 
+/** The rows of a passage heart (one per chapter) when its passage is active. */
+async function activePassageHeartRows(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  saved: Doc<"savedVerses">,
+): Promise<{
+  passage: Doc<"passageMemory">;
+  rows: Doc<"savedVerses">[];
+} | null> {
+  if (saved.passageMemoryId === undefined) return null;
+  const passage = await ctx.db.get(saved.passageMemoryId);
+  if (!passage || passage.userId !== userId) return null;
+
+  const rows = await ctx.db
+    .query("savedVerses")
+    .withIndex("by_userId_passageMemoryId", (q) =>
+      q.eq("userId", userId).eq("passageMemoryId", passage._id),
+    )
+    .collect();
+  return { passage, rows };
+}
+
 /**
- * Remove-branch of `savedVerses.toggle`: delete the heart, drop pack
- * membership, clear `isHearted`, and adjust stats. Review history on
- * `verseMemory` is kept. No-ops when the verse is not currently hearted.
+ * Remove-branch of `savedVerses.toggle`. Deletes the heart and clears
+ * `isHearted`, then enforces that everything in Memory stays hearted: an
+ * active passage heart (all of its chapter rows) is removed together and its
+ * passage is stopped, and every in-Memory verse that no remaining heart covers
+ * stops memorizing. Review history and `packVerses` rows are kept so
+ * memorizing again restores them. No-ops when the verse is not hearted.
  */
 export async function unheartByVerseRefId(
   ctx: MutationCtx,
@@ -52,15 +93,37 @@ export async function unheartByVerseRefId(
   const existing = await findSavedVerse(ctx, userId, verseRefId);
   if (!existing) return;
 
-  await ctx.db.delete(existing._id);
-  const memory = await findVerseMemory(ctx, userId, verseRefId);
-  if (memory) {
-    if (memory.isHearted === true) {
-      await adjustUserMemoryStats(ctx, userId, now, memory.status, null);
-    }
-    await ctx.db.patch(memory._id, { isHearted: false });
+  const passageHeart = await activePassageHeartRows(ctx, userId, existing);
+  const removedRows = passageHeart?.rows ?? [existing];
+  if (!removedRows.some((row) => row._id === existing._id)) {
+    removedRows.push(existing);
   }
-  await deletePackMembershipsForVerse(ctx, userId, verseRefId);
+
+  const removed: VerseSpan[] = [];
+  for (const row of removedRows) {
+    const ref = await ctx.db.get(row.verseRefId);
+    if (ref && ref.userId === userId) removed.push(ref);
+    await ctx.db.delete(row._id);
+    await mirrorIsHearted(ctx, userId, row.verseRefId, false);
+  }
+
+  if (passageHeart) {
+    await deletePassageAndReviews(ctx, passageHeart.passage);
+  }
+
+  const chapters = new Map<string, VerseSpan>();
+  for (const span of removed) {
+    chapters.set(`${span.book}:${span.chapter}`, span);
+  }
+  for (const { book, chapter } of chapters.values()) {
+    const [remaining, items] = await Promise.all([
+      loadChapterHeartSpans(ctx, userId, book, chapter),
+      loadChapterInMemoryItems(ctx, userId, book, chapter),
+    ]);
+    for (const item of spansLosingCoverage(removed, remaining, items)) {
+      await stopMemorizingVerse(ctx, userId, item.verseRefId, now);
+    }
+  }
 }
 
 /**

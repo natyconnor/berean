@@ -37,9 +37,12 @@ export function MemoryAllSessionPage({
 }) {
   const onExit = useMemoryBack();
   const scoped = hasPracticeVerseScope(search);
-  const library = useFrozenQuery(api.savedVerses.listAll, scoped ? "skip" : {});
-  const hearted = useFrozenQuery(
-    api.savedVerses.getHearted,
+  const library = useFrozenQuery(
+    api.verseMemory.listInMemory,
+    scoped ? "skip" : {},
+  );
+  const scopedVerse = useFrozenQuery(
+    api.verseMemory.getInMemory,
     scoped
       ? {
           book: search.book,
@@ -49,16 +52,16 @@ export function MemoryAllSessionPage({
         }
       : "skip",
   );
-  const savedVerses = useMemo(() => {
+  const inMemory = useMemo(() => {
     if (!scoped) return library;
-    if (hearted === undefined) return undefined;
-    return hearted ? [hearted] : [];
-  }, [scoped, library, hearted]);
+    if (scopedVerse === undefined) return undefined;
+    return scopedVerse ? [scopedVerse] : [];
+  }, [scoped, library, scopedVerse]);
   const now = useLiveNow();
 
   const verses = useMemo(
-    () => scopeMemorySessionVerses(savedVerses, search, kind, now),
-    [savedVerses, search, kind, now],
+    () => scopeMemorySessionVerses(inMemory, search, kind, now),
+    [inMemory, search, kind, now],
   );
   const scopeLabel = hasPracticeVerseScope(search)
     ? formatVerseRef(search)
@@ -67,7 +70,7 @@ export function MemoryAllSessionPage({
       : "All learned verses";
   const isLearning = kind === "learning";
 
-  if (savedVerses === undefined) {
+  if (inMemory === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -109,7 +112,7 @@ export function MemoryAllSessionPage({
 }
 
 function scopeMemorySessionVerses(
-  savedVerses:
+  inMemory:
     | ReadonlyArray<{
         verseRefId: Id<"verseRefs">;
         book: string;
@@ -134,10 +137,10 @@ function scopeMemorySessionVerses(
   kind: MemorySessionKind,
   now: number,
 ): PracticeVerse[] {
-  if (savedVerses === undefined) return [];
+  if (inMemory === undefined) return [];
 
   const scoped = hasPracticeVerseScope(search);
-  const verses = savedVerses.flatMap((verse) => {
+  const verses = inMemory.flatMap((verse) => {
     if (
       scoped &&
       !(

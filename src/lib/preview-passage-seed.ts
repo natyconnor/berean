@@ -342,6 +342,8 @@ function psalm23PassagePieceBases(): PassagePieceBase[] {
 /**
  * Deterministic passage packs for preview/dev manual testing. Kept separate
  * from hearted-verse samples so Memory home can list how-to-try steps for each.
+ * The seed mutation gives each seeded passage its passage heart (one per
+ * chapter, from `passageHeartSpans`).
  *
  * Each scope pack uses a distinct canonical scope (no duplicate Jude/etc.).
  * Passage piece spans come from {@link buildPassagePieces} / auto-heart grouping.
@@ -404,7 +406,7 @@ export function buildPreviewPassageSeed(
       description:
         "Eligible scope pack with no passage row yet — use Learn as a passage.",
       howToTry:
-        "Open this pack → Learn as a passage. Confirm start works and pieces freeze.",
+        "Open this pack → Learn as a passage. Confirm start works, pieces freeze, and one Psalm 1 heart appears in the reader.",
       scope: scopeChapter("Psalms", 1),
     },
     {
@@ -469,7 +471,7 @@ export function buildPreviewPassageSeed(
       name: "Sample · Multi-book (collection only)",
       description: "Multi-book scope — passage mode must stay unavailable.",
       howToTry:
-        "Open the pack. Learn as a passage should be hidden; collection/heart behavior only.",
+        "Open the pack. Learn as a passage should be hidden; collection behavior only.",
       scope: multiBookScope(),
     },
   ];

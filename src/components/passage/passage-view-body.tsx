@@ -56,6 +56,7 @@ type SavedSpan = {
     stageReps?: number;
     intervalDays: number;
     dueAt: number;
+    inMemory: boolean;
   };
 };
 
@@ -205,15 +206,15 @@ export function PassageViewBody({
     [savedVersesForChapter],
   );
 
-  // Mastery-ring fraction for the exact (lo, hi) span, if it's hearted and has
-  // a memory row. Read from the same per-chapter saved-verses query (no extra
+  // Mastery-ring fraction for the exact (lo, hi) span, if it's hearted and in
+  // Memory. Read from the same per-chapter saved-verses query (no extra
   // per-verse fetch), so the ring adds zero query round-trips.
   const spanMasteryFraction = useCallback(
     (startVerse: number, endVerse: number): number => {
       const span = savedSpans.find(
         (s) => s.startVerse === startVerse && s.endVerse === endVerse,
       );
-      if (!span?.memory) return 0;
+      if (!span?.memory?.inMemory) return 0;
       return masteryRingFraction(
         span.memory.status,
         span.memory.intervalDays,

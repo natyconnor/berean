@@ -6,6 +6,7 @@ import {
   type VerseSpan,
 } from "../../src/lib/hearted-verse-coverage";
 import {
+  backfilledInMemory,
   inMemoryMembershipFlags,
   shouldBeInMemory,
   type InMemoryMembership,
@@ -47,6 +48,10 @@ export async function hasInMemoryBackfill(
  * passage heart for every active passage, rebuild `userMemoryStats` from the
  * in-Memory set, and stamp `inMemoryBackfilledAt`.
  *
+ * Only rows whose `inMemory` is still unset are derived; rows the new code
+ * already wrote keep their value unless `force` is set. Stats count every
+ * in-Memory row either way.
+ *
  * Idempotent: rows are only patched when the derived value changes, and
  * passage hearts are linked or created once. Callers decide whether to skip
  * users who are already stamped.
@@ -55,6 +60,7 @@ export async function backfillInMemoryForUser(
   ctx: MutationCtx,
   userId: Id<"users">,
   now: number,
+  opts: { force?: boolean } = {},
 ): Promise<InMemoryBackfillCounts> {
   const packs = await ctx.db
     .query("packs")
@@ -129,14 +135,18 @@ export async function backfillInMemoryForUser(
 
   for (const { memory, ref } of rows) {
     const isHearted = heartedVerseRefIds.has(memory.verseRefId);
-    const next =
-      ref !== null &&
-      ref.userId === userId &&
-      shouldBeInMemory({
-        isHearted,
-        status: memory.status,
-        ...inMemoryMembershipFlags(memory.verseRefId, ref, membership),
-      });
+    const next = backfilledInMemory(
+      memory.inMemory,
+      () =>
+        ref !== null &&
+        ref.userId === userId &&
+        shouldBeInMemory({
+          isHearted,
+          status: memory.status,
+          ...inMemoryMembershipFlags(memory.verseRefId, ref, membership),
+        }),
+      opts.force === true,
+    );
 
     if (memory.inMemory !== next) {
       await ctx.db.patch(memory._id, { inMemory: next });

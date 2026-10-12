@@ -109,11 +109,13 @@ export function PresetBrowser() {
                   const row = progress?.find(
                     (item) => item.presetId === preset.id,
                   );
-                  const hearted = row?.heartedPassageIds.length ?? 0;
+                  const memorized = row?.memorizedPassageIds.length ?? 0;
                   const existingPackId = row?.packId ?? null;
-                  const fullyHearted =
-                    progress !== undefined && hearted >= preset.passages.length;
-                  const alreadyAdded = Boolean(existingPackId) || fullyHearted;
+                  const fullyMemorized =
+                    progress !== undefined &&
+                    memorized >= preset.passages.length;
+                  const alreadyAdded =
+                    Boolean(existingPackId) || fullyMemorized;
                   return (
                     <li
                       key={preset.id}
@@ -131,8 +133,8 @@ export function PresetBrowser() {
                           </p>
                           <p className="mt-2 text-xs text-muted-foreground">
                             {preset.passages.length} passages
-                            {!alreadyAdded && hearted > 0
-                              ? ` · ${hearted} already in your library`
+                            {!alreadyAdded && memorized > 0
+                              ? ` · ${memorized} already in your library`
                               : ""}
                           </p>
                         </div>
@@ -151,7 +153,7 @@ export function PresetBrowser() {
                               Continue
                             </Link>
                           </Button>
-                        ) : fullyHearted ? (
+                        ) : fullyMemorized ? (
                           <span className="shrink-0 pt-1 text-xs font-medium text-muted-foreground">
                             Added
                           </span>

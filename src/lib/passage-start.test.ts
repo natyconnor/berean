@@ -8,6 +8,7 @@ import {
 import type { HeartedMemorySpan } from "./passage-frontier";
 import type { PassagePieceBase } from "./passage-pieces";
 import {
+  absorbedVerseItems,
   assertFrozenPieceBases,
   assertPiecesMatchScope,
   planStart,
@@ -118,7 +119,7 @@ describe("assertPiecesMatchScope", () => {
 });
 
 describe("planStart", () => {
-  it("unhearts a 1:1 auto-heart bijection covering the scope", () => {
+  it("freezes Up-next members as unreached and plans no heart changes", () => {
     const hearts = PSALM_PIECES.map((piece) =>
       psalmHeart(piece.startVerse, piece.endVerse),
     );
@@ -132,23 +133,16 @@ describe("planStart", () => {
       now: NOW,
     });
 
-    expect(plan.unheartSpans).toEqual(
-      hearts.map((heart) => ({
-        book: heart.book,
-        chapter: heart.chapter,
-        startVerse: heart.startVerse,
-        endVerse: heart.endVerse,
-      })),
-    );
-    expect(plan.unheartedCount).toBe(3);
-    expect(plan.keptHeartCount).toBe(0);
+    expect(plan).not.toHaveProperty("unheartSpans");
+    expect(plan).not.toHaveProperty("unheartedCount");
+    expect(plan).not.toHaveProperty("keptHeartCount");
     expect(plan.status).toBe("building");
     expect(plan.pieces.every((piece) => piece.attachment === "unreached")).toBe(
       true,
     );
   });
 
-  it("freezes enrolled-but-unread auto-hearts as unreached", () => {
+  it("freezes enrolled-but-unread members as unreached", () => {
     const hearts = PSALM_PIECES.map((piece) =>
       psalmHeart(piece.startVerse, piece.endVerse, {
         status: "learning",
@@ -166,7 +160,6 @@ describe("planStart", () => {
       now: NOW,
     });
 
-    expect(plan.unheartedCount).toBe(3);
     expect(plan.pieces.every((piece) => piece.attachment === "unreached")).toBe(
       true,
     );
@@ -205,9 +198,6 @@ describe("planStart", () => {
       now: NOW,
     });
 
-    expect(plan.unheartSpans).toEqual([]);
-    expect(plan.unheartedCount).toBe(0);
-    expect(plan.keptHeartCount).toBe(1);
     expect(plan.pieces[0]?.attachment).toBe("unreached");
     expect(plan.pieces[0]?.sectionLabel).toBe("Chapter 3");
     expect(plan.status).toBe("building");
@@ -232,8 +222,6 @@ describe("planStart", () => {
     expect(plan.pieces[1]?.attachment).toBe("unreached");
     expect(plan.pieces[2]?.attachment).toBe("solid");
     expect(plan.status).toBe("building");
-    expect(plan.unheartedCount).toBe(0);
-    expect(plan.keptHeartCount).toBe(2);
   });
 
   it("opens reviewing from canonical review-heart schedules when every piece is solid", () => {
@@ -303,7 +291,10 @@ describe("planStart", () => {
 
   it("documents that a second start must be idempotent at the mutation layer", () => {
     const hearts = PSALM_PIECES.map((piece) =>
-      psalmHeart(piece.startVerse, piece.endVerse),
+      psalmHeart(piece.startVerse, piece.endVerse, {
+        status: "reviewing",
+        learnStage: MAX_LEARN_STAGE,
+      }),
     );
     const first = planStart({
       pieces: PSALM_PIECES,
@@ -313,10 +304,13 @@ describe("planStart", () => {
       memberSchedules: [],
       now: NOW,
     });
-    expect(first.unheartedCount).toBe(3);
+    expect(first.pieces.every((piece) => piece.attachment === "solid")).toBe(
+      true,
+    );
 
-    // After unheart, replanning sees no auto-heart bijection. The mutation
-    // must return the stored row instead of calling planStart again.
+    // After start absorbs the members, replanning sees none of their
+    // progress. The mutation must return the stored row instead of calling
+    // planStart again.
     const replanned = planStart({
       pieces: PSALM_PIECES,
       hearts: [],
@@ -325,8 +319,69 @@ describe("planStart", () => {
       memberSchedules: [],
       now: NOW,
     });
-    expect(replanned.unheartedCount).toBe(0);
-    expect(replanned.keptHeartCount).toBe(0);
     expect(replanned).not.toEqual(first);
+  });
+});
+
+describe("absorbedVerseItems", () => {
+  function item(
+    startVerse: number,
+    endVerse: number,
+    extra?: { chapter?: number; book?: string; inCustomPack?: boolean },
+  ) {
+    return {
+      id: `${extra?.book ?? "Psalms"} ${extra?.chapter ?? 1}:${startVerse}-${endVerse}`,
+      book: extra?.book ?? "Psalms",
+      chapter: extra?.chapter ?? 1,
+      startVerse,
+      endVerse,
+      inCustomPack: extra?.inCustomPack ?? false,
+    };
+  }
+
+  it("picks standalone items fully inside the passage", () => {
+    const inside = [item(1, 1), item(3, 4), item(1, 6)];
+    expect(absorbedVerseItems(inside, PSALM_PIECES)).toEqual(inside);
+  });
+
+  it("keeps items that a custom pack holds separately", () => {
+    const packed = item(2, 2, { inCustomPack: true });
+    const standalone = item(5, 5);
+    expect(absorbedVerseItems([packed, standalone], PSALM_PIECES)).toEqual([
+      standalone,
+    ]);
+  });
+
+  it("keeps items that reach outside the passage range or chapter", () => {
+    const pieces: PassagePieceBase[] = [
+      psalmPiece(0, 3, 4),
+      psalmPiece(1, 5, 6),
+    ];
+    const items = [
+      item(2, 4),
+      item(5, 7),
+      item(3, 3, { chapter: 2 }),
+      item(3, 3, { book: "John" }),
+      item(4, 5),
+    ];
+    expect(absorbedVerseItems(items, pieces).map((i) => i.id)).toEqual([
+      "Psalms 1:4-5",
+    ]);
+  });
+
+  it("covers each chapter of a multi-chapter passage separately", () => {
+    const pieces: PassagePieceBase[] = [
+      psalmPiece(0, 1, 6),
+      { ...psalmPiece(1, 1, 3), chapter: 2 },
+    ];
+    const items = [
+      item(6, 6),
+      item(2, 3, { chapter: 2 }),
+      item(4, 4, { chapter: 2 }),
+    ];
+    expect(absorbedVerseItems(items, pieces).map((i) => i.id)).toEqual([
+      "Psalms 1:6-6",
+      "Psalms 2:2-3",
+    ]);
   });
 });

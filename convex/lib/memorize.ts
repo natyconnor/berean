@@ -19,6 +19,8 @@ import {
 } from "./verseMemory";
 import { findOrCreateVerseRefId } from "./verseRefs";
 
+export { stopMemorizingVerse } from "./verseMemory";
+
 /**
  * Heart the exact span unless an existing heart (exact, wider, or a passage
  * heart) already contains it. Never removes or changes an existing heart.
@@ -104,24 +106,6 @@ export async function memorizeSpan(
 
   await adjustUserMemoryStats(ctx, userId, now, plan.statsFrom, plan.status);
   return { verseRefId, result: plan.result };
-}
-
-/**
- * Take a verse out of Memory. Its schedule, review history, heart, and pack
- * rows are kept, so memorizing it again resumes where it left off. No-op when
- * the verse is not in Memory.
- */
-export async function stopMemorizingVerse(
-  ctx: MutationCtx,
-  userId: Id<"users">,
-  verseRefId: Id<"verseRefs">,
-  now: number,
-): Promise<void> {
-  const memory = await findVerseMemory(ctx, userId, verseRefId);
-  if (!memory || memory.inMemory !== true) return;
-
-  await ctx.db.patch(memory._id, { inMemory: false });
-  await adjustUserMemoryStats(ctx, userId, now, memory.status, null);
 }
 
 /**

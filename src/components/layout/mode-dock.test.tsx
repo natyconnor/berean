@@ -3,10 +3,13 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetEnsureInMemoryBackfillForTests } from "@/hooks/use-ensure-in-memory-backfill";
 import { clearModeLastLocations } from "@/lib/mode-last-location";
 import { ModeDock } from "./mode-dock";
 
 const mocks = vi.hoisted(() => ({
+  ensureInMemoryBackfill: vi.fn(() => Promise.resolve(null)),
+  isAuthenticated: true,
   navigate: vi.fn(),
   useLocation: vi.fn(() => ({
     pathname: "/passage/John-1",
@@ -30,6 +33,11 @@ vi.mock("@/lib/use-tabs", () => ({
 
 vi.mock("convex/react", () => ({
   useQuery: (query: unknown, args?: unknown) => mocks.useQuery(query, args),
+  useMutation: () => mocks.ensureInMemoryBackfill,
+  useConvexAuth: () => ({
+    isAuthenticated: mocks.isAuthenticated,
+    isLoading: false,
+  }),
 }));
 
 vi.mock("framer-motion", () => ({
@@ -207,5 +215,45 @@ describe("ModeDock dueCount subscription", () => {
 
     expect(mocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip");
     expect(screen.getByLabelText("3 verses due today")).toBeInTheDocument();
+  });
+});
+
+describe("ModeDock inMemory backfill", () => {
+  beforeEach(() => {
+    resetEnsureInMemoryBackfillForTests();
+    mocks.ensureInMemoryBackfill.mockClear();
+    mocks.isAuthenticated = true;
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/John-1",
+      href: "/passage/John-1",
+    });
+    clearModeLastLocations();
+  });
+
+  afterEach(() => {
+    mocks.isAuthenticated = true;
+    clearModeLastLocations();
+  });
+
+  it("asks for the backfill once per session when signed in", () => {
+    const first = render(<ModeDock />);
+    first.rerender(<ModeDock />);
+    first.unmount();
+    render(<ModeDock />);
+
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledWith({
+      now: expect.any(Number) as number,
+    });
+  });
+
+  it("waits until the user is signed in", () => {
+    mocks.isAuthenticated = false;
+    const { rerender } = render(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).not.toHaveBeenCalled();
+
+    mocks.isAuthenticated = true;
+    rerender(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
   });
 });

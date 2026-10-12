@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { VerseSpan } from "./hearted-verse-coverage";
 import {
+  backfilledInMemory,
   inMemoryMembershipFlags,
   shouldBeInMemory,
   type InMemoryMembership,
@@ -18,6 +19,27 @@ function input(overrides: Partial<InMemoryRuleInput>): InMemoryRuleInput {
     ...overrides,
   };
 }
+
+describe("backfilledInMemory", () => {
+  it("derives rows whose inMemory is unset", () => {
+    expect(backfilledInMemory(undefined, () => true, false)).toBe(true);
+    expect(backfilledInMemory(undefined, () => false, false)).toBe(false);
+  });
+
+  it("keeps rows that already have a value without deriving", () => {
+    const derive = () => {
+      throw new Error("should not derive");
+    };
+    expect(backfilledInMemory(true, derive, false)).toBe(true);
+    expect(backfilledInMemory(false, derive, false)).toBe(false);
+  });
+
+  it("re-derives rows that already have a value when forced", () => {
+    expect(backfilledInMemory(true, () => false, true)).toBe(false);
+    expect(backfilledInMemory(false, () => true, true)).toBe(true);
+    expect(backfilledInMemory(undefined, () => true, true)).toBe(true);
+  });
+});
 
 describe("shouldBeInMemory", () => {
   it("moves a hearted, never-started, unpacked verse to hearted-only", () => {
