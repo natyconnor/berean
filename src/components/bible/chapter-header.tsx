@@ -196,8 +196,8 @@ export function ChapterHeader({
             onOpenChange={handleNavigatorOpenChange}
             initialBookName={navigatorBook}
             trigger={null}
-            onSelectPassage={(passageId, label) =>
-              navigateActiveTab(passageId, label)
+            onSelectPassage={(passageId, label, search) =>
+              navigateActiveTab(passageId, label, search)
             }
           />
         </h1>

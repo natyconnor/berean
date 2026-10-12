@@ -1,4 +1,5 @@
 import { query, mutation, type QueryCtx } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
@@ -8,6 +9,16 @@ import {
   loadUserHeartSpans,
   unheartByVerseRefId,
 } from "./lib/savedVerses";
+import {
+  loadActivePassageHearts,
+  loadNotMemorizingHearts,
+  toHeartListItem,
+  type HeartListItem,
+} from "./lib/heartList";
+import {
+  NOT_MEMORIZING_MAX_LIMIT,
+  NOT_MEMORIZING_SCAN_CAP,
+} from "../src/lib/heart-list";
 import {
   findSavedVerse,
   findVerseMemory,
@@ -310,6 +321,98 @@ export const getHearted = query({
     }
 
     return await toListItem(ctx, saved, userId);
+  },
+});
+
+/** See `HeartListItem` in `convex/lib/heartList.ts`. */
+const heartListItem = v.object({
+  savedVerseId: v.id("savedVerses"),
+  verseRefId: v.id("verseRefs"),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  createdAt: v.number(),
+  inMemory: v.boolean(),
+  passage: v.optional(v.object({ packId: v.id("packs"), title: v.string() })),
+});
+
+const emptyHeartPage = {
+  page: [] as HeartListItem[],
+  isDone: true,
+  continueCursor: "",
+};
+
+/**
+ * Every heart, newest first (Go to passage → Hearted). A memorized passage is
+ * one item at its newest row, so a page can hold fewer items than requested.
+ */
+export const listHearted = query({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    page: v.array(heartListItem),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    splitCursor: v.optional(v.union(v.string(), v.null())),
+    pageStatus: v.optional(
+      v.union(
+        v.literal("SplitRecommended"),
+        v.literal("SplitRequired"),
+        v.null(),
+      ),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return emptyHeartPage;
+    }
+
+    const paginated = await ctx.db
+      .query("savedVerses")
+      .withIndex("by_userId_createdAt", (q) => q.eq("userId", userId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+    if (paginated.page.length === 0) {
+      return { ...paginated, page: [] };
+    }
+
+    const passages = await loadActivePassageHearts(ctx, userId);
+    const items = await Promise.all(
+      paginated.page.map((row) => toHeartListItem(ctx, userId, row, passages)),
+    );
+    return { ...paginated, page: compactItems(items) };
+  },
+});
+
+/**
+ * Up to `limit` (1–30) hearts the user is not memorizing, newest first, for
+ * Today's "From your hearts". Leaves out passage hearts, verses in Memory, and
+ * hearts inside an active passage. Reads at most 500 heart rows.
+ */
+export const listNotMemorizing = query({
+  args: { limit: v.number() },
+  returns: v.array(heartListItem),
+  handler: async (ctx, args) => {
+    if (
+      !Number.isInteger(args.limit) ||
+      args.limit < 1 ||
+      args.limit > NOT_MEMORIZING_MAX_LIMIT
+    ) {
+      throw new Error(
+        `limit must be a whole number from 1 to ${NOT_MEMORIZING_MAX_LIMIT}`,
+      );
+    }
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return [];
+    }
+    return await loadNotMemorizingHearts(
+      ctx,
+      userId,
+      args.limit,
+      NOT_MEMORIZING_SCAN_CAP,
+    );
   },
 });
 
