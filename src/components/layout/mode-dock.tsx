@@ -6,7 +6,6 @@ import {
   type MouseEvent,
 } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { motion, useReducedMotion } from "framer-motion";
 import { Brain, BookOpen, NotebookPen } from "lucide-react";
 import { useQuery } from "convex/react";
 
@@ -32,14 +31,6 @@ import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboar
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
 
-/** How the Mode Dock behaves. Mirrors the `modeDock` userSettings field. */
-export type ModeDockPreference = "auto-hide" | "always" | "off";
-
-/** Downward scroll (px) before the dock auto-hides. */
-const SCROLL_HIDE_THRESHOLD = 24;
-/** Idle time (ms) after scrolling stops before the dock returns. */
-const SCROLL_IDLE_MS = 500;
-
 /** The three navigable modes, in dock order. */
 type Mode = AppMode;
 
@@ -54,22 +45,11 @@ function shouldHandleSpaClick(event: MouseEvent<HTMLAnchorElement>): boolean {
   );
 }
 
-function isEditorElement(element: Element | null): boolean {
-  if (!element) return false;
-  const tag = element.tagName;
-  return (
-    tag === "TEXTAREA" ||
-    tag === "INPUT" ||
-    (element as HTMLElement).isContentEditable
-  );
-}
-
 /**
  * The Mode Dock: a floating bottom-center pill with up to three segments (Notes
  * / Memory / Study) and a due-count badge on Memory. It's `position: fixed`
- * so it never affects layout flow, and it's engineered to slide out of the way
- * while you work. Notes and Memory are always available; Study unlocks once
- * enough notes exist.
+ * so it never affects layout flow, and it stays visible wherever it is shown.
+ * Notes and Memory are always available; Study unlocks once enough notes exist.
  *
  * Dock switches restore the last href visited inside that mode (pack, review,
  * passage with search) instead of always jumping to the mode's home.
@@ -77,7 +57,6 @@ function isEditorElement(element: Element | null): boolean {
 export function ModeDock() {
   const location = useLocation();
   const navigate = useNavigate();
-  const reducedMotion = useReducedMotion();
   const { backPassageId } = useTabs();
 
   // Shared session clock (same snapshot as the Memory dashboard). Completing a
@@ -97,8 +76,6 @@ export function ModeDock() {
   if (typeof dueCountResult === "number" && dueCountResult !== dueCount) {
     setDueCount(dueCountResult);
   }
-  const preference =
-    useQuery(api.userSettings.getModeDockPreference) ?? "auto-hide";
 
   const isNotesRoute = location.pathname.startsWith("/passage");
   const isMemoryRoute = location.pathname.startsWith("/memory");
@@ -125,13 +102,8 @@ export function ModeDock() {
   const memoryHref = resolveModeHref("memory", storedLocations);
   const studyHref = resolveModeHref("study", storedLocations);
 
-  // Local-only visibility state (never persisted): scroll + editor focus.
-  const [scrollHidden, setScrollHidden] = useState(false);
-  const [editorFocused, setEditorFocused] = useState(false);
-
   const hideForRoute = shouldHideModeDock(location.pathname);
-  const dockEnabled = preference !== "off" && !hideForRoute;
-  const autoHide = preference === "auto-hide" && !hideForRoute;
+  const dockEnabled = !hideForRoute;
 
   // Notes + Memory are always unlocked so the dock is discoverable without
   // waiting on a first heart. Study still unlocks once enough notes exist.
@@ -145,8 +117,8 @@ export function ModeDock() {
   }, [studyUnlocked]);
 
   // One-time reveal callouts, reusing the shared hint system. Only claim a hint
-  // while the dock can actually render its callout — when the dock is off, the
-  // global hint queue is never pinned by an eligible-but-unrendered callout.
+  // while the dock can actually render its callout — on Settings/legal routes
+  // the global hint queue is never pinned by an eligible-but-unrendered callout.
   // Hint id kept for persisted dismissals; Memory is always available now.
   const memoryHint = useFeatureHint(
     FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
@@ -156,78 +128,6 @@ export function ModeDock() {
     FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES,
     studyUnlocked && dockEnabled,
   );
-
-  useEffect(() => {
-    if (!autoHide) return;
-
-    // App content scrolls inside nested containers rather than the window, so
-    // capture scroll events at the document level to observe every scroller.
-    const lastPositions = new WeakMap<EventTarget, number>();
-    let idleTimer: number | undefined;
-    // Accumulate downward movement so trackpad/smooth scrolls (many tiny
-    // deltas) still hide the dock once the total passes the threshold. Reset on
-    // any upward movement so a direction change re-arms the return-on-up rule.
-    let accumulatedDown = 0;
-
-    const handleScroll = (event: Event) => {
-      const target = event.target;
-      if (!target) return;
-      const y =
-        target === document
-          ? window.scrollY
-          : target instanceof HTMLElement
-            ? target.scrollTop
-            : 0;
-      const previous = lastPositions.get(target) ?? y;
-      const delta = y - previous;
-      lastPositions.set(target, y);
-
-      if (delta > 0) {
-        accumulatedDown += delta;
-        if (
-          accumulatedDown >= SCROLL_HIDE_THRESHOLD &&
-          y > SCROLL_HIDE_THRESHOLD
-        ) {
-          setScrollHidden(true);
-        }
-      } else if (delta < 0) {
-        accumulatedDown = 0;
-        setScrollHidden(false);
-      }
-
-      window.clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(() => {
-        accumulatedDown = 0;
-        setScrollHidden(false);
-      }, SCROLL_IDLE_MS);
-    };
-
-    document.addEventListener("scroll", handleScroll, true);
-    return () => {
-      document.removeEventListener("scroll", handleScroll, true);
-      window.clearTimeout(idleTimer);
-      // Reset when auto-hide is disabled so the dock returns cleanly.
-      setScrollHidden(false);
-    };
-  }, [autoHide]);
-
-  useEffect(() => {
-    if (!autoHide) return;
-
-    // A global Focus mode toggle exists only as passage-local React state
-    // (`useFocusMode`), so it isn't observable from the app shell yet — full
-    // Focus-mode integration is deferred. Hiding while a note editor/textarea
-    // is focused covers the "disappear while you work" intent in the meantime.
-    const syncFocus = () =>
-      setEditorFocused(isEditorElement(document.activeElement));
-    document.addEventListener("focusin", syncFocus);
-    document.addEventListener("focusout", syncFocus);
-    return () => {
-      document.removeEventListener("focusin", syncFocus);
-      document.removeEventListener("focusout", syncFocus);
-      setEditorFocused(false);
-    };
-  }, [autoHide]);
 
   const goToMode = useCallback(
     (mode: Mode, trigger: string) => {
@@ -253,11 +153,6 @@ export function ModeDock() {
     : isMemoryRoute
       ? "memory"
       : "notes";
-
-  const revealPending = memoryHint.pending || studyHint.pending;
-  // Keep the dock on screen while a one-time reveal callout is showing so its
-  // anchor stays visible.
-  const hidden = autoHide && !revealPending && (scrollHidden || editorFocused);
 
   useEffect(() => {
     if (!dockEnabled) return;
@@ -295,21 +190,11 @@ export function ModeDock() {
     ? `${dueCount} ${dueCount === 1 ? "verse" : "verses"} due today`
     : undefined;
 
-  const motionProps = reducedMotion
-    ? { animate: { opacity: hidden ? 0 : 1 } }
-    : { animate: { y: hidden ? 24 : 0, opacity: hidden ? 0 : 1 } };
-
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center">
-      <motion.nav
+      <nav
         aria-label="Mode"
-        initial={false}
-        {...motionProps}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        className={cn(
-          "pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-card/95 p-1 shadow-lg backdrop-blur",
-          hidden && "pointer-events-none",
-        )}
+        className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
       >
         <a
           href={notesHref}
@@ -409,7 +294,7 @@ export function ModeDock() {
             </a>
           </FeatureCallout>
         ) : null}
-      </motion.nav>
+      </nav>
     </div>
   );
 }

@@ -189,4 +189,34 @@ describe("SettingsPage", () => {
     expect(screen.getAllByText("500")).toHaveLength(2);
     expect(screen.getByText(/starter tags used:/i)).toBeInTheDocument();
   });
+
+  it("does not show Mode Dock preference options", () => {
+    useQueryMock.mockImplementation((reference: unknown) => {
+      if (reference === "api.tags.listCatalog") {
+        return [];
+      }
+      if (reference === "api.userSettings.getTutorialStatus") {
+        return { categoryColors: {} };
+      }
+      return undefined;
+    });
+
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByRole("heading", { name: /mode dock/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radiogroup", { name: /mode dock behavior/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /auto-hide/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /always show/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("The dock is hidden on Settings."),
+    ).not.toBeInTheDocument();
+  });
 });

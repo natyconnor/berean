@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   useQuery: vi.fn((_query: unknown, args?: unknown) => {
     if (args === "skip") return undefined;
     if (args && typeof args === "object" && "now" in args) return 3;
-    return "always";
+    return undefined;
   }),
 }));
 
@@ -30,23 +30,6 @@ vi.mock("@/lib/use-tabs", () => ({
 
 vi.mock("convex/react", () => ({
   useQuery: (query: unknown, args?: unknown) => mocks.useQuery(query, args),
-}));
-
-vi.mock("framer-motion", () => ({
-  motion: {
-    nav: ({
-      children,
-      className,
-    }: {
-      children: ReactNode;
-      className?: string;
-    }) => (
-      <nav aria-label="Mode" className={className}>
-        {children}
-      </nav>
-    ),
-  },
-  useReducedMotion: () => true,
 }));
 
 vi.mock("@/components/tutorial/feature-callout", () => ({
@@ -233,6 +216,19 @@ describe("ModeDock route visibility", () => {
 
     fireEvent.keyDown(document, { key: "j", ctrlKey: true });
     expect(mocks.navigate).toHaveBeenCalled();
+  });
+
+  it("stays visible after downward scroll", () => {
+    render(<ModeDock />);
+
+    fireEvent.scroll(document, { target: { scrollTop: 400 } });
+    fireEvent.scroll(window);
+
+    expect(
+      screen.getByRole("navigation", { name: "Mode" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Notes" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Memory" })).toBeVisible();
   });
 });
 
