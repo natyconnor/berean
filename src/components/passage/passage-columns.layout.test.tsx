@@ -346,7 +346,7 @@ function overlaps(a: ControlBox, b: ControlBox): boolean {
 }
 
 describe("passage column layout", () => {
-  it("gives read-mode notes width back before the scripture column collapses", (ctx) => {
+  it("restores wide read notes and still shrinks them before scripture collapses", (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
 
     const rows: Array<ColumnMeasure & { width: number; copy: string }> = [];
@@ -382,26 +382,30 @@ describe("passage column layout", () => {
     const tight = rows.find((row) => row.width === 861)!;
     const narrow = rows.find((row) => row.width === 768)!;
 
-    // Wide reading still gives the notes column the extra room.
+    // Wide reading restores the old 1fr / 1.4fr notes share (~751 at the cap).
     expect(wide.notes, JSON.stringify(wide)).toBeGreaterThan(wide.text);
-    expect(wide.text, JSON.stringify(wide)).toBeGreaterThanOrEqual(530);
+    expect(wide.notes, JSON.stringify(wide)).toBeGreaterThanOrEqual(700);
+    expect(wide.text, JSON.stringify(wide)).toBeGreaterThanOrEqual(510);
     expect(wide.text, JSON.stringify(wide)).toBeLessThanOrEqual(560);
 
-    // Notes has already given width back while the passage track is still held.
-    expect(mid.text, JSON.stringify(mid)).toBeGreaterThanOrEqual(530);
-    expect(mid.notes, JSON.stringify(mid)).toBeLessThan(wide.notes - 80);
+    // 1280 is still a wide reader: notes keep the 1.4fr share (~681), not the 280px floor.
+    expect(mid.notes, JSON.stringify(mid)).toBeGreaterThanOrEqual(640);
     expect(mid.notes, JSON.stringify(mid)).toBeGreaterThan(mid.text);
+    expect(mid.text, JSON.stringify(mid)).toBeGreaterThanOrEqual(460);
+    expect(mid.text, JSON.stringify(mid)).toBeLessThan(wide.text);
 
-    // The reported ~861px view: scripture stays readable, notes is the narrow side.
-    expect(tight.text, JSON.stringify(tight)).toBeGreaterThanOrEqual(450);
-    expect(tight.notes, JSON.stringify(tight)).toBeLessThanOrEqual(300);
-    expect(tight.text, JSON.stringify(tight)).toBeGreaterThan(tight.notes);
+    // Narrowing drops notes below the old 520px floor while scripture holds 22rem.
+    expect(tight.text, JSON.stringify(tight)).toBeGreaterThanOrEqual(350);
+    expect(tight.notes, JSON.stringify(tight)).toBeLessThan(520);
+    expect(tight.notes, JSON.stringify(tight)).toBeLessThan(mid.notes);
+    expect(tight.notes, JSON.stringify(tight)).toBeGreaterThanOrEqual(270);
 
-    expect(narrow.text, JSON.stringify(narrow)).toBeGreaterThanOrEqual(360);
-    expect(narrow.notes, JSON.stringify(narrow)).toBeLessThanOrEqual(300);
+    expect(narrow.text, JSON.stringify(narrow)).toBeGreaterThanOrEqual(350);
+    expect(narrow.notes, JSON.stringify(narrow)).toBeLessThanOrEqual(320);
+    expect(narrow.notes, JSON.stringify(narrow)).toBeLessThan(tight.notes);
   });
 
-  it("shrinks compose and focus notes before the passage track gets tight", (ctx) => {
+  it("restores wide compose notes and still shrinks them before the passage track gets tight", (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
 
     for (const width of VIEWPORTS) {
@@ -429,15 +433,12 @@ describe("passage column layout", () => {
         JSON.stringify({ width, long }),
       ).toBeGreaterThanOrEqual(270);
       expect(long.notes, JSON.stringify({ width, long })).toBeLessThanOrEqual(
-        400,
-      );
-      expect(long.text, JSON.stringify({ width, long })).toBeGreaterThan(
-        long.notes,
+        450,
       );
     }
 
-    // Notes is already at its 280px floor by 1024, while scripture stays
-    // above ~30rem through 900 (measured 640/280, 576/280, 516/280).
+    // Wide compose restores the old 360–440px notes band. Notes only give
+    // width back once the passage track would fall below 24rem.
     const at = (width: number) => {
       const row = grids.find(
         (candidate) =>
@@ -449,22 +450,28 @@ describe("passage column layout", () => {
       return row;
     };
 
-    expect(at(1600).text, JSON.stringify(at(1600))).toBeGreaterThanOrEqual(820);
-    expect(at(1280).notes, JSON.stringify(at(1280))).toBeLessThan(380);
-    expect(at(1100).text, JSON.stringify(at(1100))).toBeGreaterThanOrEqual(680);
-    expect(at(1100).notes, JSON.stringify(at(1100))).toBeLessThan(320);
-
-    for (const width of [1024, 960, 900, 861] as const) {
+    for (const width of [1600, 1440, 1280, 1100] as const) {
       const row = at(width);
-      expect(row.notes, JSON.stringify(row)).toBeLessThanOrEqual(300);
-      expect(row.text, JSON.stringify(row)).toBeGreaterThan(row.notes);
+      expect(row.notes, JSON.stringify(row)).toBeGreaterThanOrEqual(400);
+      expect(row.notes, JSON.stringify(row)).toBeLessThanOrEqual(450);
     }
-    expect(at(1024).text, JSON.stringify(at(1024))).toBeGreaterThanOrEqual(620);
-    expect(at(960).text, JSON.stringify(at(960))).toBeGreaterThanOrEqual(560);
-    expect(at(900).text, JSON.stringify(at(900))).toBeGreaterThanOrEqual(500);
-    expect(at(861).text, JSON.stringify(at(861))).toBeGreaterThanOrEqual(460);
+    expect(at(1600).text, JSON.stringify(at(1600))).toBeGreaterThanOrEqual(750);
+    expect(at(1280).text, JSON.stringify(at(1280))).toBeGreaterThanOrEqual(700);
+    expect(at(1100).text, JSON.stringify(at(1100))).toBeGreaterThanOrEqual(520);
+
+    expect(at(1024).notes, JSON.stringify(at(1024))).toBeGreaterThanOrEqual(
+      400,
+    );
+    expect(at(1024).text, JSON.stringify(at(1024))).toBeGreaterThanOrEqual(460);
+
+    for (const width of [900, 861] as const) {
+      const row = at(width);
+      expect(row.notes, JSON.stringify(row)).toBeLessThan(at(1280).notes);
+      expect(row.text, JSON.stringify(row)).toBeGreaterThanOrEqual(370);
+    }
     expect(at(768).text, JSON.stringify(at(768))).toBeGreaterThanOrEqual(370);
     expect(at(768).notes, JSON.stringify(at(768))).toBeLessThanOrEqual(300);
+    expect(at(768).notes, JSON.stringify(at(768))).toBeLessThan(at(861).notes);
   });
 
   it("keeps header controls inside the frame in read, compose, and focus", (ctx) => {
