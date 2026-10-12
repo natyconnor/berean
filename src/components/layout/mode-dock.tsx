@@ -23,6 +23,7 @@ import {
   type AppMode,
 } from "@/lib/mode-last-location";
 import { isMemorySessionPath } from "@/lib/memory-session-path";
+import { shouldHideModeDock } from "@/lib/mode-dock-hidden-path";
 import { useTabs } from "@/lib/use-tabs";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
@@ -128,8 +129,9 @@ export function ModeDock() {
   const [scrollHidden, setScrollHidden] = useState(false);
   const [editorFocused, setEditorFocused] = useState(false);
 
-  const dockEnabled = preference !== "off";
-  const autoHide = preference === "auto-hide";
+  const hideForRoute = shouldHideModeDock(location.pathname);
+  const dockEnabled = preference !== "off" && !hideForRoute;
+  const autoHide = preference === "auto-hide" && !hideForRoute;
 
   // Notes + Memory are always unlocked so the dock is discoverable without
   // waiting on a first heart. Study still unlocks once enough notes exist.

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -125,7 +125,7 @@ describe("ModeDock last-mode restore", () => {
     });
   });
 
-  it("does not treat settings as a Notes location", () => {
+  it("does not treat settings as a Notes location after leaving Settings", () => {
     mocks.useLocation.mockReturnValue({
       pathname: "/passage/John-1",
       href: "/passage/John-1",
@@ -138,6 +138,12 @@ describe("ModeDock last-mode restore", () => {
     });
     rerender(<ModeDock />);
 
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory",
+      href: "/memory",
+    });
+    rerender(<ModeDock />);
+
     expect(screen.getByRole("link", { name: "Notes" })).toHaveAttribute(
       "href",
       "/passage/John-1",
@@ -146,6 +152,83 @@ describe("ModeDock last-mode restore", () => {
       "href",
       "/memory",
     );
+  });
+});
+
+describe("ModeDock route visibility", () => {
+  beforeEach(() => {
+    mocks.navigate.mockReset();
+    mocks.useQuery.mockClear();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/John-1",
+      href: "/passage/John-1",
+    });
+    clearModeLastLocations();
+  });
+
+  afterEach(() => {
+    clearModeLastLocations();
+  });
+
+  it("does not render on Settings or nested settings routes", () => {
+    for (const pathname of ["/settings", "/settings/tags"]) {
+      mocks.useLocation.mockReturnValue({ pathname, href: pathname });
+      const { unmount } = render(<ModeDock />);
+      expect(
+        screen.queryByRole("navigation", { name: "Mode" }),
+      ).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("does not render on terms, privacy, or license paths", () => {
+    for (const pathname of ["/terms", "/privacy", "/license"]) {
+      mocks.useLocation.mockReturnValue({ pathname, href: pathname });
+      const { unmount } = render(<ModeDock />);
+      expect(
+        screen.queryByRole("navigation", { name: "Mode" }),
+      ).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("restores the dock after leaving Settings", () => {
+    const { rerender } = render(<ModeDock />);
+    expect(screen.getByRole("navigation", { name: "Mode" })).toBeInTheDocument();
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/settings",
+      href: "/settings",
+    });
+    rerender(<ModeDock />);
+    expect(
+      screen.queryByRole("navigation", { name: "Mode" }),
+    ).not.toBeInTheDocument();
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/John-1",
+      href: "/passage/John-1",
+    });
+    rerender(<ModeDock />);
+    expect(screen.getByRole("navigation", { name: "Mode" })).toBeInTheDocument();
+  });
+
+  it("does not cycle modes with the dock shortcut on Settings", () => {
+    mocks.useLocation.mockReturnValue({
+      pathname: "/settings",
+      href: "/settings",
+    });
+    render(<ModeDock />);
+
+    fireEvent.keyDown(document, { key: "j", ctrlKey: true });
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("cycles modes with the dock shortcut on Notes", () => {
+    render(<ModeDock />);
+
+    fireEvent.keyDown(document, { key: "j", ctrlKey: true });
+    expect(mocks.navigate).toHaveBeenCalled();
   });
 });
 
