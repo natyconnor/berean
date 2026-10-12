@@ -96,15 +96,16 @@ export function NoteTagList({
   const sizeClass = size === "xs" ? "text-[10px] px-1.5 py-0" : "text-xs";
 
   return (
-    <div className={cn("flex flex-wrap gap-1", className)}>
+    <div className={cn("flex min-w-0 max-w-full flex-wrap gap-1", className)}>
       {tags.map((tag) => (
         <Badge
           key={tag}
           variant="outline"
-          className={cn(sizeClass, borderClass)}
+          className={cn(sizeClass, borderClass, "max-w-full min-w-0")}
           style={resolveTagStyle(tag)}
+          title={tag}
         >
-          {tag}
+          <span className="truncate">{tag}</span>
         </Badge>
       ))}
     </div>

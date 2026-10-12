@@ -9,7 +9,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { chromium, type Browser } from "playwright-core";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { NoteContent } from "@/components/notes/view/note-card-primitives";
+import {
+  NoteContent,
+  NoteTagList,
+} from "@/components/notes/view/note-card-primitives";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StagedOnboardingContext } from "@/components/tutorial/staged-onboarding-context";
 import { PassageViewHeader } from "./passage-view-header";
@@ -22,6 +25,10 @@ vi.mock("@/lib/use-tabs", () => ({
   useTabs: () => ({
     navigateActiveTab: () => undefined,
   }),
+}));
+
+vi.mock("@/lib/tag-color-styles", () => ({
+  useStarterTagBadgeStyle: () => () => undefined,
 }));
 
 /**
@@ -54,6 +61,8 @@ const LONG_VERSE =
 
 const LONG_URL =
   "https://example.com/a/very/long/url/without/any/breaks/in/it/at/all";
+
+const LONG_TAG = "a".repeat(48);
 
 const URL_VIEWPORTS = [900, 861, 768] as const;
 
@@ -152,6 +161,63 @@ function longUrlFrame(width: number): ReactNode {
   );
 }
 
+function longTagFrame(
+  mode: "read" | "compose" | "focus",
+  width: number,
+): ReactNode {
+  const isRead = mode === "read";
+  const gutter = isRead
+    ? "max-w-[1400px] mx-auto pl-16 pr-6"
+    : "max-w-[1320px] mx-auto pl-16 pr-5";
+  const columns = isRead
+    ? READ_PASSAGE_COLUMNS_CLASS
+    : COMPOSE_PASSAGE_COLUMNS_CLASS;
+  const card = isRead ? (
+    <div className="rounded-xl bg-card px-4 py-3" data-card>
+      <div className="flex items-start justify-between gap-2">
+        <NoteContent
+          content="A short note body."
+          density="reading"
+          className="min-w-0 flex-1 text-foreground"
+        />
+      </div>
+      <NoteTagList tags={[LONG_TAG]} size="sm" className="mt-2" />
+    </div>
+  ) : (
+    <div
+      className="flex min-h-10 w-full flex-col justify-center gap-1 rounded-lg bg-card py-2 pl-3 pr-12 text-left text-[13px]"
+      data-card
+    >
+      <NoteContent
+        content="A short note body."
+        truncateAt={100}
+        className="text-muted-foreground line-clamp-2"
+      />
+      <NoteTagList tags={[LONG_TAG]} />
+    </div>
+  );
+  return (
+    <div
+      data-frame
+      data-kind="tag"
+      data-mode={mode}
+      data-width={width}
+      style={{ width }}
+    >
+      <div className={gutter}>
+        <div className={`grid ${columns}`}>
+          <div className="min-w-0" data-text>
+            <p className="m-0">{LONG_VERSE}</p>
+          </div>
+          <div className="min-w-0" data-notes>
+            {card}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function headerFrame(
   mode: "read" | "compose" | "focus",
   width: number,
@@ -219,6 +285,13 @@ function layoutMarkup(): string {
           {URL_VIEWPORTS.map((width) => (
             <div key={`url-${width}`}>{longUrlFrame(width)}</div>
           ))}
+          {URL_VIEWPORTS.flatMap((width) =>
+            (["read", "compose", "focus"] as const).map((mode) => (
+              <div key={`tag-${mode}-${width}`}>
+                {longTagFrame(mode, width)}
+              </div>
+            )),
+          )}
         </div>,
       )}
     </TooltipProvider>,
@@ -257,6 +330,17 @@ interface UrlMeasure {
   bodyOverflow: number;
 }
 
+interface TagMeasure {
+  width: number;
+  mode: string;
+  overflow: number;
+  notes: number;
+  card: number;
+  chip: number;
+  cardOverflow: number;
+  chipOverflow: number;
+}
+
 let server: ViteDevServer | undefined;
 let browser: Browser | undefined;
 let origin = "";
@@ -265,6 +349,7 @@ let grids: Array<
 > = [];
 let headers: Array<HeaderMeasure & { mode: string; width: number }> = [];
 let urls: UrlMeasure[] = [];
+let tags: TagMeasure[] = [];
 
 beforeAll(async () => {
   if (!chromeExecutablePath) return;
@@ -378,7 +463,26 @@ beforeAll(async () => {
         };
       },
     );
-    return { gridRows, headerRows, urlRows };
+    const tagRows = [...document.querySelectorAll("[data-kind='tag']")].map(
+      (frame) => {
+        if (!(frame instanceof HTMLElement)) throw new Error("missing tag");
+        const notes = frame.querySelector("[data-notes]");
+        const card = frame.querySelector("[data-card]");
+        const chip = card?.querySelector("[data-slot='badge']");
+        if (!notes || !card || !chip) throw new Error("missing tag notes");
+        return {
+          width: Number(frame.dataset.width),
+          mode: frame.dataset.mode ?? "",
+          overflow: Math.round(frame.scrollWidth - frame.clientWidth),
+          notes: Math.round(notes.getBoundingClientRect().width),
+          card: Math.round(card.getBoundingClientRect().width),
+          chip: Math.round(chip.getBoundingClientRect().width),
+          cardOverflow: Math.round(card.scrollWidth - card.clientWidth),
+          chipOverflow: Math.round(chip.scrollWidth - chip.clientWidth),
+        };
+      },
+    );
+    return { gridRows, headerRows, urlRows, tagRows };
   });
   grids = measured.gridRows;
   headers = measured.headerRows.map((row) => ({
@@ -390,6 +494,7 @@ beforeAll(async () => {
     })),
   }));
   urls = measured.urlRows;
+  tags = measured.tagRows;
   await page.close();
 }, 60_000);
 
@@ -595,6 +700,25 @@ describe("passage column layout", () => {
       expect(row.bodyOverflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
       expect(row.body, JSON.stringify(row)).toBeLessThanOrEqual(row.card + 1);
       expect(row.card, JSON.stringify(row)).toBeLessThanOrEqual(row.notes + 1);
+    }
+  });
+
+  it("keeps a long unbroken tag inside the note card in read, compose, and focus", (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+
+    for (const mode of ["read", "compose", "focus"] as const) {
+      for (const width of URL_VIEWPORTS) {
+        const row = tags.find(
+          (candidate) => candidate.mode === mode && candidate.width === width,
+        );
+        if (!row) throw new Error(`missing tag row ${mode} ${width}`);
+        expect(row.overflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
+        expect(row.cardOverflow, JSON.stringify(row)).toBeLessThanOrEqual(1);
+        expect(row.chip, JSON.stringify(row)).toBeLessThanOrEqual(row.card + 1);
+        expect(row.card, JSON.stringify(row)).toBeLessThanOrEqual(
+          row.notes + 1,
+        );
+      }
     }
   });
 });
