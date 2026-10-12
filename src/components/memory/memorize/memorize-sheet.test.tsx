@@ -1,0 +1,474 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { StagedOnboardingProvider } from "@/components/tutorial/staged-onboarding-provider";
+import type { FeatureHintRecord } from "@/components/tutorial/staged-onboarding-context";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { memorizeStartHref } from "@/hooks/use-memorize-start";
+import { FEATURE_HINTS } from "@/lib/feature-hints";
+import {
+  estimateMasteryDays,
+  formatMasteryDuration,
+} from "@/lib/memorize-plan";
+import type { MemorizeTarget } from "@/lib/memorize-target";
+import type { OnboardingMilestones } from "@/lib/staged-onboarding-thresholds";
+
+import { useMemorizeSheet } from "./memorize-context";
+import { MemorizeProvider } from "./memorize-provider";
+
+const NOW = 1_700_000_000_000;
+
+const mocks = vi.hoisted(() => ({
+  queryResults: new Map<string, unknown>(),
+  queryArgs: new Map<string, unknown>(),
+  mutations: new Map<string, ReturnType<typeof vi.fn>>(),
+  navigate: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+  isMobile: false,
+}));
+
+function mutation(name: string) {
+  let fn = mocks.mutations.get(name);
+  if (!fn) {
+    fn = vi.fn().mockResolvedValue(null);
+    mocks.mutations.set(name, fn);
+  }
+  return fn;
+}
+
+vi.mock("convex/react", () => ({
+  useMutation: (name: string) => mutation(name),
+  useAction: () => vi.fn(),
+  useConvex: () => ({ query: vi.fn() }),
+}));
+
+vi.mock("convex-helpers/react/cache", () => ({
+  useQuery: (name: string, args: unknown) => {
+    if (args === "skip") return undefined;
+    mocks.queryArgs.set(name, args);
+    return mocks.queryResults.get(name);
+  },
+}));
+
+vi.mock("../../../../convex/_generated/api", () => ({
+  api: {
+    esv: { getChaptersBatch: "esv.getChaptersBatch" },
+    onboarding: {
+      markHintShown: "onboarding.markHintShown",
+      completeHint: "onboarding.completeHint",
+      dismissHint: "onboarding.dismissHint",
+    },
+    packs: {
+      create: "packs.create",
+      createAndMemorize: "packs.createAndMemorize",
+      startPreset: "packs.startPreset",
+    },
+    passageMemory: {
+      getForPack: "passageMemory.getForPack",
+      start: "passageMemory.start",
+    },
+    verseMemory: {
+      getInMemory: "verseMemory.getInMemory",
+      memorize: "verseMemory.memorize",
+      memorizeStatus: "verseMemory.memorizeStatus",
+    },
+  },
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: "/memory/presets", searchStr: "?q=1" }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: mocks.toastSuccess, error: mocks.toastError },
+}));
+
+vi.mock("@/hooks/use-media-query", () => ({
+  useIsMobile: () => mocks.isMobile,
+}));
+
+vi.mock("@/hooks/use-live-now", () => ({
+  useLiveNow: () => NOW,
+}));
+
+vi.mock("@/lib/dev-log", () => ({
+  logInteraction: vi.fn(),
+}));
+
+const milestones: OnboardingMilestones = {
+  notesCount: 0,
+  taggedNotesCount: 0,
+  distinctTagCount: 0,
+  heartsCount: 0,
+  hasInlineVerseLink: false,
+  hasExplicitVerseLink: false,
+  starterTagCount: 0,
+  customTagCount: 0,
+};
+
+const romans828 = { book: "Romans", chapter: 8, startVerse: 28, endVerse: 28 };
+const verseTarget: MemorizeTarget = { kind: "spans", spans: [romans828] };
+const psalm1Target: MemorizeTarget = {
+  kind: "chapters",
+  book: "Psalms",
+  startChapter: 1,
+  endChapter: 1,
+};
+
+function setStatus(status: unknown) {
+  mocks.queryResults.set("verseMemory.memorizeStatus", status);
+}
+
+function Opener({ target }: { target: MemorizeTarget }) {
+  const sheet = useMemorizeSheet();
+  return (
+    <button type="button" onClick={() => sheet.open(target)}>
+      Open sheet
+    </button>
+  );
+}
+
+async function openSheet(
+  target: MemorizeTarget,
+  { hints = [] }: { hints?: FeatureHintRecord[] } = {},
+) {
+  render(
+    <TooltipProvider delayDuration={0}>
+      <StagedOnboardingProvider
+        milestones={milestones}
+        hints={hints}
+        isLoading={false}
+      >
+        <MemorizeProvider>
+          <Opener target={target} />
+        </MemorizeProvider>
+      </StagedOnboardingProvider>
+    </TooltipProvider>,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Open sheet" }));
+  return screen.getByRole("dialog");
+}
+
+function startButton(dialog: HTMLElement) {
+  return within(dialog).getByRole("button", { name: /Start memorizing/ });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+describe("MemorizeSheet", () => {
+  beforeEach(() => {
+    mocks.queryResults.clear();
+    mocks.queryArgs.clear();
+    mocks.mutations.clear();
+    mocks.navigate.mockReset();
+    mocks.toastSuccess.mockReset();
+    mocks.toastError.mockReset();
+    mocks.isMobile = false;
+    setStatus({ state: "none", allHearted: false });
+    mutation("verseMemory.memorize").mockResolvedValue({
+      added: 1,
+      alreadyMemorizing: 0,
+      verseRefIds: ["vr_1"],
+    });
+  });
+
+  it("plans a verse: three daily steps, no verse-count chip, heart line", async () => {
+    const dialog = await openSheet(verseTarget);
+
+    expect(screen.getByRole("dialog", { name: "Memorize Romans 8:28" })).toBe(
+      dialog,
+    );
+    const view = within(dialog);
+    expect(view.queryByText(/\d+ verses?$/)).not.toBeInTheDocument();
+    expect(view.getByText("Learn it in about 3 days")).toBeInTheDocument();
+    expect(view.getByText("About 2 min a day")).toBeInTheDocument();
+    expect(
+      view.getByText(
+        "Three short daily steps, then we'll bring it back right before you'd forget it.",
+      ),
+    ).toBeInTheDocument();
+    const mastery = formatMasteryDuration(
+      estimateMasteryDays({ mode: "verse", verseCount: 1 }),
+    );
+    expect(view.getByText(`${mastery}.`)).toBeInTheDocument();
+    expect(view.getByText("Learn it in about 3 days")).not.toHaveTextContent(
+      "Mastered",
+    );
+    expect(
+      view.getByText("Also adds Romans 8:28 to your hearts"),
+    ).toBeInTheDocument();
+    expect(view.getByText("How memorizing works")).toBeInTheDocument();
+    expect(
+      view.queryByText(/Longer passages add up to/),
+    ).not.toBeInTheDocument();
+    expect(view.queryByLabelText("Name")).not.toBeInTheDocument();
+    expect(mocks.queryArgs.get("verseMemory.memorizeStatus")).toEqual({
+      spans: [romans828],
+    });
+  });
+
+  it("plans a passage with its verse count and the passage pace", async () => {
+    setStatus({ state: "none", allHearted: true });
+    const dialog = await openSheet(psalm1Target);
+    const view = within(dialog);
+
+    expect(
+      view.getByRole("heading", { name: "Memorize Psalm 1" }),
+    ).toBeInTheDocument();
+    expect(view.getByText("6 verses")).toBeInTheDocument();
+    expect(view.getByText("Learn it in about 4 days")).toBeInTheDocument();
+    expect(view.getByText("About 4 min a day")).toBeInTheDocument();
+    expect(
+      view.getByText(
+        "You'll learn it in order, a few verses a day, then say it all the way through.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      view.getByText(/Longer passages add up to 5 new verses a day\./),
+    ).toBeInTheDocument();
+    expect(view.queryByText(/to your hearts/)).not.toBeInTheDocument();
+    expect(mocks.queryArgs.get("verseMemory.memorizeStatus")).toEqual({
+      spans: [{ book: "Psalms", chapter: 1, startVerse: 1, endVerse: 6 }],
+    });
+  });
+
+  it("plans a pack by card count and starts it with the typed name", async () => {
+    mutation("packs.createAndMemorize").mockResolvedValue({
+      packId: "pack_9",
+    });
+    const dialog = await openSheet({
+      kind: "spans",
+      spans: [
+        { book: "John", chapter: 3, startVerse: 16, endVerse: 17 },
+        romans828,
+      ],
+    });
+    const view = within(dialog);
+
+    expect(
+      view.getByRole("heading", { name: "Memorize 3 verses" }),
+    ).toBeInTheDocument();
+    expect(view.getByText("3 verses")).toBeInTheDocument();
+    expect(view.getByText("Learn it in about 3 days")).toBeInTheDocument();
+    expect(view.getByText("About 4 min a day")).toBeInTheDocument();
+    expect(
+      view.getByText(
+        "Each verse takes three short daily steps. We'll keep them all fresh for you.",
+      ),
+    ).toBeInTheDocument();
+
+    const name = view.getByLabelText("Name");
+    expect(name).toHaveValue("3 verses");
+    expect(name).toHaveAttribute(
+      "placeholder",
+      "e.g. Verses for the Merced team",
+    );
+    await userEvent.clear(name);
+    await userEvent.type(name, "Merced team");
+    await userEvent.click(startButton(dialog));
+
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith(
+        "Merced team is in Today.",
+        expect.anything(),
+      ),
+    );
+    expect(mutation("packs.createAndMemorize")).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Merced team" }),
+    );
+  });
+
+  it("hides the explainer once it has been completed", async () => {
+    const dialog = await openSheet(verseTarget, {
+      hints: [
+        { hintId: FEATURE_HINTS.MEMORIZE_EXPLAINER, completedAt: NOW - 1 },
+      ],
+    });
+
+    expect(
+      within(dialog).queryByText("How memorizing works"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("starts, closes, completes the explainer, and offers Start now", async () => {
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.click(startButton(dialog));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(mutation("verseMemory.memorize")).toHaveBeenCalledWith({
+      spans: [romans828],
+      now: expect.any(Number) as number,
+    });
+    expect(mutation("onboarding.completeHint")).toHaveBeenCalledWith({
+      hintId: FEATURE_HINTS.MEMORIZE_EXPLAINER,
+    });
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+    const [message, options] = mocks.toastSuccess.mock.calls[0] as [
+      string,
+      { id: string; action: { label: string; onClick: () => void } },
+    ];
+    expect(message).toBe("Romans 8:28 is in Today.");
+    expect(options.action.label).toBe("Start now");
+
+    options.action.onClick();
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: memorizeStartHref(
+        { kind: "verse", verseRefId: "vr_1" as never, span: romans828 },
+        "/memory/presets?q=1",
+      ),
+    });
+  });
+
+  it("starts once on a double click", async () => {
+    const pending = deferred<{
+      added: number;
+      alreadyMemorizing: number;
+      verseRefIds: string[];
+    }>();
+    mutation("verseMemory.memorize").mockReturnValue(pending.promise);
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.dblClick(startButton(dialog));
+    pending.resolve({ added: 1, alreadyMemorizing: 0, verseRefIds: ["vr_1"] });
+
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+    expect(mutation("verseMemory.memorize")).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the sheet open with a toast when starting fails", async () => {
+    mutation("verseMemory.memorize").mockRejectedValue(new Error("offline"));
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.click(startButton(dialog));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Couldn't start memorizing. Try again.",
+      ),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(startButton(dialog)).toBeEnabled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("waits for the status before allowing a start", async () => {
+    setStatus(undefined);
+    const dialog = await openSheet(verseTarget);
+
+    expect(startButton(dialog)).toBeDisabled();
+    expect(
+      within(dialog).queryByText(/to your hearts/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows what's next for a verse already being memorized", async () => {
+    setStatus({
+      state: "memorizing",
+      destination: { kind: "verse", verseRefId: "vr_1", span: romans828 },
+      allHearted: true,
+    });
+    mocks.queryResults.set("verseMemory.getInMemory", {
+      verseRefId: "vr_1",
+      ...romans828,
+      memory: {
+        status: "learning",
+        learnStage: 0,
+        ease: 2.5,
+        intervalDays: 0,
+        dueAt: NOW - 1,
+        consecutiveCorrect: 0,
+        lapses: 0,
+      },
+      packIds: [],
+    });
+    const dialog = await openSheet(verseTarget);
+    const view = within(dialog);
+
+    expect(
+      view.getByRole("heading", { name: "You're memorizing Romans 8:28" }),
+    ).toBeInTheDocument();
+    expect(
+      view.getByText("Day 1 of 3: read it, then type it with first letters"),
+    ).toBeInTheDocument();
+    expect(
+      view.queryByRole("button", { name: /Start memorizing/ }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(view.getByRole("button", { name: "Open" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory?panel=verse:vr_1",
+    });
+  });
+
+  it("points a verse inside a memorized passage at that passage", async () => {
+    setStatus({
+      state: "partOf",
+      title: "Psalm 1",
+      destination: { kind: "pack", packId: "pack_1" },
+      allHearted: true,
+    });
+    const dialog = await openSheet({
+      kind: "spans",
+      spans: [{ book: "Psalms", chapter: 1, startVerse: 3, endVerse: 3 }],
+    });
+    const view = within(dialog);
+
+    expect(
+      view.getByText("Psalm 1:3 is part of Psalm 1, which you're memorizing."),
+    ).toBeInTheDocument();
+    await userEvent.click(view.getByRole("button", { name: "Open Psalm 1" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory?panel=pack:pack_1",
+    });
+  });
+
+  it("disables starting a passage longer than 20 chapters", async () => {
+    const dialog = await openSheet({
+      kind: "chapters",
+      book: "Romans",
+      startChapter: 1,
+      endChapter: 21,
+    });
+
+    expect(
+      within(dialog).getByText(
+        "Pick up to 20 chapters to memorize as one passage.",
+      ),
+    ).toBeInTheDocument();
+    expect(startButton(dialog)).toBeDisabled();
+  });
+
+  it("is a bottom sheet on mobile with the start button outside the scroll area", async () => {
+    mocks.isMobile = true;
+    const dialog = await openSheet(verseTarget);
+
+    expect(dialog).toHaveAttribute("data-side", "bottom");
+    const start = startButton(dialog);
+    expect(start.closest('[data-slot="sheet-footer"]')).not.toBeNull();
+    expect(start.closest('[data-slot="sheet-body"]')).toBeNull();
+  });
+
+  it("closes on Escape and returns focus to the opener", async () => {
+    await openSheet(verseTarget);
+
+    await userEvent.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Open sheet" })).toHaveFocus();
+  });
+});

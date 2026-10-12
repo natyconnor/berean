@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { GraduationCap, Loader2, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Brain, Loader2, Search } from "lucide-react";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -17,6 +17,7 @@ import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { LearnVerseDialog } from "./learn-verse-dialog";
+import { useMemorizeSheet } from "./memorize/memorize-context";
 import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
 import { toPracticeVerse } from "./to-practice-verse";
@@ -72,6 +73,12 @@ export function MemoryLibrary({
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Id<"verseRefs"> | null>(null);
   const [learnOpen, setLearnOpen] = useState(false);
+  const learnOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const memorizeSheet = useMemorizeSheet();
+  const openLearnPicker = (opener: HTMLButtonElement) => {
+    learnOpenerRef.current = opener;
+    setLearnOpen(true);
+  };
 
   const { results, status, loadMore } = usePaginatedQuery(
     api.verseMemory.listLibrary,
@@ -152,7 +159,7 @@ export function MemoryLibrary({
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Library
           </h2>
-          <LearnVerseTrigger onClick={() => setLearnOpen(true)} />
+          <LearnVerseTrigger onClick={openLearnPicker} />
         </div>
         <div
           className="flex flex-wrap items-center gap-1"
@@ -195,7 +202,7 @@ export function MemoryLibrary({
           <p className="text-sm text-muted-foreground">{EMPTY_COPY[view]}</p>
           {view === "due" ? (
             <div className="mt-4">
-              <LearnVerseTrigger onClick={() => setLearnOpen(true)} />
+              <LearnVerseTrigger onClick={openLearnPicker} />
             </div>
           ) : null}
         </div>
@@ -275,19 +282,12 @@ export function MemoryLibrary({
       <LearnVerseDialog
         open={learnOpen}
         onOpenChange={setLearnOpen}
-        now={now}
-        onLearnVerse={(verse) => {
-          setLearnOpen(false);
-          onLearnVerse(verse);
-        }}
-        onReviewVerse={(verse) => {
-          setLearnOpen(false);
-          onReviewVerse(verse);
-        }}
-        onPracticeVerse={(verse) => {
-          setLearnOpen(false);
-          onPracticeVerse(verse);
-        }}
+        onPick={(span) =>
+          memorizeSheet.open(
+            { kind: "spans", spans: [span] },
+            { returnFocusTo: learnOpenerRef.current },
+          )
+        }
       />
 
       <Dialog
@@ -324,17 +324,21 @@ export function MemoryLibrary({
   );
 }
 
-function LearnVerseTrigger({ onClick }: { onClick: () => void }) {
+function LearnVerseTrigger({
+  onClick,
+}: {
+  onClick: (opener: HTMLButtonElement) => void;
+}) {
   return (
     <Button
       type="button"
       variant="outline"
       size="sm"
       className="h-7 shrink-0 gap-1 px-2.5 text-xs"
-      onClick={onClick}
+      onClick={(event) => onClick(event.currentTarget)}
     >
-      <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-      Learn a new verse
+      <Brain className="h-3.5 w-3.5" aria-hidden />
+      Memorize a verse
     </Button>
   );
 }

@@ -8,6 +8,7 @@ const NOW = 1_700_000_000_000;
 
 const mocks = vi.hoisted(() => ({
   paginatedArgs: [] as unknown[],
+  openSheet: vi.fn(),
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -22,7 +23,32 @@ vi.mock("../../../convex/_generated/api", () => ({
 }));
 
 vi.mock("./learn-verse-dialog", () => ({
-  LearnVerseDialog: () => null,
+  LearnVerseDialog: ({
+    open,
+    onPick,
+  }: {
+    open: boolean;
+    onPick: (span: {
+      book: string;
+      chapter: number;
+      startVerse: number;
+      endVerse: number;
+    }) => void;
+  }) =>
+    open ? (
+      <button
+        type="button"
+        onClick={() =>
+          onPick({ book: "Romans", chapter: 8, startVerse: 28, endVerse: 28 })
+        }
+      >
+        Pick Romans 8:28
+      </button>
+    ) : null,
+}));
+
+vi.mock("./memorize/memorize-context", () => ({
+  useMemorizeSheet: () => ({ open: mocks.openSheet }),
 }));
 
 vi.mock("./verse-detail", () => ({
@@ -43,6 +69,28 @@ function renderLibrary() {
 describe("MemoryLibrary filters", () => {
   beforeEach(() => {
     mocks.paginatedArgs = [];
+    mocks.openSheet.mockReset();
+  });
+
+  it("memorizes a picked verse through the Memorize sheet", async () => {
+    renderLibrary();
+
+    const trigger = screen.getAllByRole("button", {
+      name: "Memorize a verse",
+    })[0];
+    if (!trigger) throw new Error("missing Memorize a verse");
+    await userEvent.click(trigger);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Pick Romans 8:28" }),
+    );
+
+    expect(mocks.openSheet).toHaveBeenCalledWith(
+      {
+        kind: "spans",
+        spans: [{ book: "Romans", chapter: 8, startVerse: 28, endVerse: 28 }],
+      },
+      { returnFocusTo: trigger },
+    );
   });
 
   it("offers Due today, Learning, Memorized, Mastered, and All", () => {

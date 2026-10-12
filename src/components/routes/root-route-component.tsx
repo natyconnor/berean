@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppRefreshPrompt } from "@/components/app-refresh-prompt";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/components/login-page";
+import { MemorizeProvider } from "@/components/memory/memorize/memorize-provider";
 import { NotFoundPage } from "@/components/routes/not-found-page";
 import { useDismissSplashBackdrop } from "@/hooks/use-dismiss-splash";
 import { StagedOnboardingProvider } from "@/components/tutorial/staged-onboarding-provider";
@@ -207,11 +208,13 @@ function RootRouteShell() {
               hints={onboardingStatus.hints}
               isLoading={false}
             >
-              <TutorialProvider tutorialStatus={tutorialStatus}>
-                <AppShell>
-                  <Outlet />
-                </AppShell>
-              </TutorialProvider>
+              <MemorizeProvider>
+                <TutorialProvider tutorialStatus={tutorialStatus}>
+                  <AppShell>
+                    <Outlet />
+                  </AppShell>
+                </TutorialProvider>
+              </MemorizeProvider>
             </StagedOnboardingProvider>
             <Toaster />
           </TooltipProvider>

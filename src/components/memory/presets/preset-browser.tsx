@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { ArrowLeft, BookOpen } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
+import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MEMORIZE_LABEL } from "@/lib/memory-copy";
 import {
   CHAPTER_PRESET_GROUPS,
   chapterPresetVerseCount,
@@ -18,12 +20,9 @@ import {
 } from "../../../../shared/memory-presets";
 
 export function PresetBrowser() {
-  const navigate = useNavigate();
   const progress = useQuery(api.packs.presetProgress, {});
-  const startPreset = useMutation(api.packs.startPreset);
+  const memorizeSheet = useMemorizeSheet();
   const [query, setQuery] = useState("");
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const needle = query.trim().toLowerCase();
   const collections = collectionPresets().filter((preset) => {
@@ -47,21 +46,14 @@ export function PresetBrowser() {
     chaptersByGroup.get(preset.group)?.push(preset);
   }
 
-  async function memorizeChapter(preset: ChapterPreset) {
-    setError(null);
-    setPendingId(preset.id);
-    try {
-      const result = await startPreset({ presetId: preset.id });
-      await navigate({
-        to: "/memory/$packId",
-        params: { packId: result.packId },
-        search: result.created ? { startPassage: true } : {},
-      });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start");
-    } finally {
-      setPendingId(null);
-    }
+  function memorizeChapter(preset: ChapterPreset) {
+    memorizeSheet.open({
+      kind: "chapters",
+      book: preset.book,
+      startChapter: preset.startChapter,
+      endChapter: preset.endChapter,
+      presetId: preset.id,
+    });
   }
 
   return (
@@ -89,12 +81,6 @@ export function PresetBrowser() {
       </header>
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-3xl space-y-10 px-5 pt-6 pb-24">
-          {error ? (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-
           <section className="space-y-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Collections
@@ -150,12 +136,12 @@ export function PresetBrowser() {
                               params={{ packId: existingPackId }}
                               search={{}}
                             >
-                              Continue
+                              Open
                             </Link>
                           </Button>
                         ) : fullyMemorized ? (
                           <span className="shrink-0 pt-1 text-xs font-medium text-muted-foreground">
-                            Added
+                            Memorizing
                           </span>
                         ) : progress === undefined ? null : (
                           <Button
@@ -222,20 +208,17 @@ export function PresetBrowser() {
                                   params={{ packId: existing }}
                                   search={{}}
                                 >
-                                  Continue
+                                  Open
                                 </Link>
                               </Button>
                             ) : (
                               <Button
                                 size="sm"
                                 className="gap-1.5"
-                                disabled={pendingId !== null}
-                                onClick={() => void memorizeChapter(preset)}
+                                onClick={() => memorizeChapter(preset)}
                               >
                                 <BookOpen className="h-3.5 w-3.5" aria-hidden />
-                                {pendingId === preset.id
-                                  ? "Starting…"
-                                  : "Memorize"}
+                                {MEMORIZE_LABEL}
                               </Button>
                             )}
                           </li>

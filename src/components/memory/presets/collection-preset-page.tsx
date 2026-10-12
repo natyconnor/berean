@@ -1,17 +1,31 @@
 import { useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
+import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { MEMORIZE_LABEL } from "@/lib/memory-copy";
 import {
+  chapterPresetVerseCount,
   formatChapterRange,
   formatPresetPassage,
   getMemoryPreset,
+  type PresetPassage,
 } from "../../../../shared/memory-presets";
+
+function passageSpan(passage: PresetPassage): VerseSpan {
+  return {
+    book: passage.book,
+    chapter: passage.chapter,
+    startVerse: passage.startVerse,
+    endVerse: passage.endVerse,
+  };
+}
 
 export function CollectionPresetPage() {
   const { presetId } = useParams({ from: "/memory/presets/$presetId" });
@@ -50,43 +64,30 @@ function PresetShell({ children }: { children: ReactNode }) {
 
 function ChapterStart({ presetId }: { presetId: string }) {
   const preset = getMemoryPreset(presetId);
-  const navigate = useNavigate();
-  const startPreset = useMutation(api.packs.startPreset);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const memorizeSheet = useMemorizeSheet();
   if (!preset || preset.kind !== "chapter") return null;
-
-  async function start() {
-    setPending(true);
-    setError(null);
-    try {
-      const result = await startPreset({ presetId });
-      await navigate({
-        to: "/memory/$packId",
-        params: { packId: result.packId },
-        search: result.created ? { startPassage: true } : {},
-      });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start");
-      setPending(false);
-    }
-  }
+  const verseCount = chapterPresetVerseCount(preset);
 
   return (
     <PresetShell>
       <h1 className="text-lg font-semibold tracking-tight">{preset.title}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {formatChapterRange(preset)}. Starting this creates a scope pack and
-        begins passage learning. Deleting the pack later keeps any verses you
-        have hearted.
+        {formatChapterRange(preset)} · {verseCount}{" "}
+        {verseCount === 1 ? "verse" : "verses"}
       </p>
-      {error ? (
-        <p className="mt-3 text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <Button className="mt-4" disabled={pending} onClick={() => void start()}>
-        {pending ? "Starting…" : "Memorize"}
+      <Button
+        className="mt-4"
+        onClick={() =>
+          memorizeSheet.open({
+            kind: "chapters",
+            book: preset.book,
+            startChapter: preset.startChapter,
+            endChapter: preset.endChapter,
+            presetId: preset.id,
+          })
+        }
+      >
+        {MEMORIZE_LABEL}
       </Button>
     </PresetShell>
   );
@@ -94,14 +95,10 @@ function ChapterStart({ presetId }: { presetId: string }) {
 
 function CollectionStart({ presetId }: { presetId: string }) {
   const preset = getMemoryPreset(presetId);
-  const navigate = useNavigate();
   const progress = useQuery(api.packs.presetProgress, {});
-  const startPreset = useMutation(api.packs.startPreset);
+  const memorizeSheet = useMemorizeSheet();
   const [query, setQuery] = useState("");
-  const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [pending, setPending] = useState<"all" | "subset" | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const progressRow = progress?.find((item) => item.presetId === presetId);
   const existingPackId = progressRow?.packId ?? null;
@@ -127,25 +124,18 @@ function CollectionStart({ presetId }: { presetId: string }) {
     });
   }
 
-  async function start(mode: "all" | "subset") {
-    setError(null);
-    setPending(mode);
-    try {
-      const result = await startPreset({
-        presetId,
-        name: name.trim() || undefined,
-        passageIds: mode === "subset" ? [...selected] : undefined,
-      });
-      await navigate({
-        to: "/memory/$packId",
-        params: { packId: result.packId },
-        search: {},
-      });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start");
-      setPending(null);
-    }
-  }
+  /** A single passage is titled by its reference, a set by the collection. */
+  const memorize = (mode: "all" | "subset") => {
+    const passages =
+      mode === "all"
+        ? preset.passages
+        : preset.passages.filter((passage) => selected.has(passage.id));
+    memorizeSheet.open({
+      kind: "spans",
+      spans: passages.map(passageSpan),
+      ...(passages.length > 1 ? { title: preset.title } : {}),
+    });
+  };
 
   const selectedCount = selected.size;
 
@@ -164,15 +154,6 @@ function CollectionStart({ presetId }: { presetId: string }) {
           {preset.description} Deleting the pack later keeps the verses hearted.
         </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          {selectedCount > 0 || !existingPackId ? (
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={preset.title}
-              aria-label="Pack name"
-              className="sm:max-w-xs"
-            />
-          ) : null}
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -208,19 +189,9 @@ function CollectionStart({ presetId }: { presetId: string }) {
               : `${selectedCount} selected`}
           </p>
           <div className="flex flex-wrap gap-2">
-            {error ? (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            ) : null}
             {selectedCount > 0 ? (
-              <Button
-                disabled={pending !== null}
-                onClick={() => void start("subset")}
-              >
-                {pending === "subset"
-                  ? "Creating…"
-                  : `Create pack with ${selectedCount}`}
+              <Button onClick={() => memorize("subset")}>
+                {MEMORIZE_LABEL} {selectedCount}
               </Button>
             ) : existingPackId ? (
               <Button asChild>
@@ -229,15 +200,15 @@ function CollectionStart({ presetId }: { presetId: string }) {
                   params={{ packId: existingPackId }}
                   search={{}}
                 >
-                  Continue
+                  Open
                 </Link>
               </Button>
             ) : (
               <Button
-                disabled={pending !== null || progress === undefined}
-                onClick={() => void start("all")}
+                disabled={progress === undefined}
+                onClick={() => memorize("all")}
               >
-                {pending === "all" ? "Starting…" : "Start all"}
+                {MEMORIZE_LABEL} all
               </Button>
             )}
           </div>
