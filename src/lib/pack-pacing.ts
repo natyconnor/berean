@@ -1,3 +1,6 @@
+import { sortByVerseRef } from "../../shared/compare-verse-refs";
+import type { VerseRefKeyInput } from "../../shared/verse-ref-key";
+
 import type { MemoryStatus } from "./memory-scheduler";
 
 /**
@@ -30,4 +33,57 @@ export function packUpNextVerseRefIds<
     if (member.status === "new") upNext.push(member.verseRefId);
   }
   return upNext;
+}
+
+/** A pack member as pacing sees it: its verse and its place on the ladder. */
+export type PacingMember = VerseRefKeyInput & {
+  verseRefId: string;
+  status: MemoryStatus;
+};
+
+/**
+ * One pack's in-Memory members. Custom packs pace in their saved order. Scope
+ * packs have no saved order, so they pace in Bible order.
+ */
+export interface PacingPack<PackId, T extends PacingMember> {
+  packId: PackId;
+  kind: "custom" | "scope";
+  members: readonly T[];
+}
+
+export interface PackUpNext<PackId, T extends PacingMember> {
+  /** Up-next members that join today's learning, each verse once. */
+  members: T[];
+  /** Each pack's own Up-next verse ids, before cross-pack dedupe. */
+  byPackId: Map<PackId, T["verseRefId"][]>;
+}
+
+/**
+ * Up-next verses across every paced pack: {@link packUpNextVerseRefIds} per
+ * pack, then deduped so a verse listed in two packs joins learning once.
+ * `members` keeps pack order, earlier packs first.
+ */
+export function packUpNextAcrossPacks<PackId, T extends PacingMember>(
+  packs: readonly PacingPack<PackId, T>[],
+  cap: number = PACK_ACTIVE_LEARNING_CAP,
+): PackUpNext<PackId, T> {
+  const members: T[] = [];
+  const seen = new Set<T["verseRefId"]>();
+  const byPackId = new Map<PackId, T["verseRefId"][]>();
+
+  for (const pack of packs) {
+    const ordered =
+      pack.kind === "scope" ? sortByVerseRef(pack.members) : pack.members;
+    const upNext = new Set(packUpNextVerseRefIds(ordered, cap));
+    byPackId.set(pack.packId, [...upNext]);
+    for (const member of ordered) {
+      if (!upNext.has(member.verseRefId) || seen.has(member.verseRefId)) {
+        continue;
+      }
+      seen.add(member.verseRefId);
+      members.push(member);
+    }
+  }
+
+  return { members, byPackId };
 }

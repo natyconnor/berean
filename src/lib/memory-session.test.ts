@@ -189,6 +189,19 @@ describe("hasSessionWorkLeft", () => {
     ).toBe(false);
   });
 
+  it("keeps a pack Up-next verse startable in Learning", () => {
+    expect(
+      hasSessionWorkLeft(
+        "learning",
+        { status: "new", dueAt: NOW - 3 * DAY_MS },
+        NOW,
+      ),
+    ).toBe(true);
+    expect(
+      hasSessionWorkLeft("learning", { status: "new", dueAt: NOW + 60 }, NOW),
+    ).toBe(true);
+  });
+
   it("ends Learning when lastReviewedAt is slightly after a 6-hour floor lock", () => {
     expect(
       hasSessionWorkLeft(

@@ -21,6 +21,7 @@ import {
   type PackMember,
 } from "./lib/packs";
 import { loadPassageDueRecords } from "./lib/passageDue";
+import { loadPackUpNext } from "./lib/packUpNext";
 import { memorizeSpan, stopMemorizingVerse } from "./lib/memorize";
 import {
   backfillInMemoryForUser,
@@ -433,10 +434,11 @@ export const dueForVerse = query({
 });
 
 /**
- * Cheap count of verses due *today* — review-phase dues plus in-progress
- * learning verses whose session is available. Up-next (`new`) verses and
- * soft-locked learning are excluded. Drives the dock badge. Bounded scan —
- * not a full collect. Shares the same `now` snapshot as the dashboard.
+ * Cheap count of verses due *today* — review-phase dues, in-progress learning
+ * verses whose session is available, and pack Up-next verses joining learning
+ * today (`loadPackUpNext`). Other `new` verses and soft-locked learning are
+ * excluded. Drives the dock badge. Bounded scan — not a full collect. Shares
+ * the same `now` snapshot as the dashboard.
  *
  * The due-index upper bound is {@link dueIndexUntil} rather than `now`:
  * in-progress learning can stamp `dueAt` with a live clock while this query
@@ -473,8 +475,9 @@ export const dueCount = query({
     );
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
+    const upNext = await loadPackUpNext(ctx, userId);
 
-    let count = 0;
+    let count = upNext.members.length;
     for (const row of dueRows) {
       if (isDueForLearning(row, args.now)) {
         count += 1;
@@ -814,8 +817,21 @@ const inMemoryVerseItemValidator = v.object({
 });
 
 function toInMemoryVerseItem(
-  memory: Doc<"verseMemory">,
-  ref: Doc<"verseRefs">,
+  memory: Pick<
+    Doc<"verseMemory">,
+    | "verseRefId"
+    | "status"
+    | "learnStage"
+    | "stageReps"
+    | "ease"
+    | "intervalDays"
+    | "dueAt"
+    | "consecutiveCorrect"
+    | "lapses"
+    | "earlyReviewApplied"
+    | "lastReviewedAt"
+  >,
+  ref: Pick<Doc<"verseRefs">, "book" | "chapter" | "startVerse" | "endVerse">,
   packIds: Id<"packs">[],
 ) {
   return {
@@ -878,6 +894,70 @@ export const listInMemory = query({
         (item): item is ReturnType<typeof toInMemoryVerseItem> => item !== null,
       ),
     );
+  },
+});
+
+/** Bound on the in-progress `learning` rows one learn queue reads. */
+const MAX_LEARN_QUEUE_LEARNING_ROWS = 500;
+
+/**
+ * Today's verse learning: unlocked `learning` rows, then the pack Up-next
+ * verses that join learning now (`loadPackUpNext`). Each group is in Bible
+ * order. Up-next items keep status `new`; their first attempt moves them to
+ * `learning`. Session pages snapshot this like {@link listInMemory}.
+ */
+export const learnQueue = query({
+  args: { now: v.number(), tzOffsetMinutes: v.optional(v.number()) },
+  returns: v.array(inMemoryVerseItemValidator),
+  handler: async (ctx, args) => {
+    // Cache-key parity with `passageMemory.dueForLearning`; verse learning
+    // availability does not depend on the local day.
+    void args.tzOffsetMinutes;
+
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+
+    const [learningRows, upNext, packIndex] = await Promise.all([
+      ctx.db
+        .query("verseMemory")
+        .withIndex("by_userId_inMemory_status", (q) =>
+          q.eq("userId", userId).eq("inMemory", true).eq("status", "learning"),
+        )
+        .take(MAX_LEARN_QUEUE_LEARNING_ROWS),
+      loadPackUpNext(ctx, userId),
+      loadPackMembershipIndex(ctx, userId),
+    ]);
+
+    const learning = await Promise.all(
+      learningRows
+        .filter((row) => isDueForLearning(row, args.now))
+        .map(async (row) => {
+          const ref = await ctx.db.get(row.verseRefId);
+          if (!ref || ref.userId !== userId) return null;
+          return toInMemoryVerseItem(
+            row,
+            ref,
+            packIndex.packIdsFor(row.verseRefId, ref),
+          );
+        }),
+    );
+    const upNextItems = upNext.members.map((member) =>
+      toInMemoryVerseItem(
+        member,
+        member,
+        packIndex.packIdsFor(member.verseRefId, member),
+      ),
+    );
+
+    return [
+      ...sortByVerseRef(
+        learning.filter(
+          (item): item is ReturnType<typeof toInMemoryVerseItem> =>
+            item !== null,
+        ),
+      ),
+      ...sortByVerseRef(upNextItems),
+    ];
   },
 });
 
@@ -1021,7 +1101,8 @@ export const memoryStatus = query({
  * - `due` — review-phase verses (`reviewing` / `mastered` with `dueAt <= now`)
  *   plus due reviewing/mastered passage packs (1 each)
  * - `learningDue` — in-progress `learning` verses available for today's
- *   session (excludes Up-next `new` verses), plus building
+ *   session, plus pack Up-next verses joining learning today
+ *   (`loadPackUpNext`), plus building
  *   passage packs with a learning session today (1 each). Soft-locked
  *   frontier with no remaining introduces does not inflate this count (rope
  *   practice stays available from the pack). Same {@link dueIndexUntil} bound
@@ -1066,9 +1147,10 @@ export const memoryStats = query({
     );
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
+    const upNext = await loadPackUpNext(ctx, userId);
 
     let due = 0;
-    let learningDue = 0;
+    let learningDue = upNext.members.length;
     for (const row of dueRows) {
       if (isDueForReview(row, args.now)) {
         if (!unifiedReviewVerseRefIds.has(row.verseRefId)) due += 1;

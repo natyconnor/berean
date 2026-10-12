@@ -16,8 +16,6 @@ import {
   readLearnPacksDismissedToday,
 } from "@/lib/learn-dismissed-packs";
 import { hasLearnVerseScope } from "@/lib/memory-learn-search";
-import { isMemorySessionCandidate } from "@/lib/memory-session";
-import { sortSessionVerses } from "@/lib/memory-session-order";
 import { Route } from "@/routes/memory/learn";
 
 import { api } from "../../../convex/_generated/api";
@@ -37,13 +35,16 @@ function GlobalMemoryLearnPage(): JSX.Element {
   const onExitHome = useMemoryBack();
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
-  const inMemory = useFrozenQuery(api.verseMemory.listInMemory, {});
+  const learnQueue = useFrozenQuery(api.verseMemory.learnQueue, {
+    now,
+    tzOffsetMinutes,
+  });
   const duePassages = useFrozenQuery(api.passageMemory.dueForLearning, {
     now,
     tzOffsetMinutes,
   });
 
-  if (inMemory === undefined || duePassages === undefined) {
+  if (learnQueue === undefined || duePassages === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -51,7 +52,16 @@ function GlobalMemoryLearnPage(): JSX.Element {
     );
   }
 
-  const verses = learningVersesFromInMemory(inMemory, now);
+  const verses = learnQueue.map((item) =>
+    toPracticeVerse({
+      verseRefId: item.verseRefId,
+      book: item.book,
+      chapter: item.chapter,
+      startVerse: item.startVerse,
+      endVerse: item.endVerse,
+      ...item.memory,
+    }),
+  );
 
   return (
     <GlobalLearnSession
@@ -210,66 +220,5 @@ function BuildingPassageLearnCard({
       onDoneForToday={onDismissPack}
       exitTooltip="Go back"
     />
-  );
-}
-
-function learningVersesFromInMemory(
-  inMemory: ReadonlyArray<{
-    verseRefId: Id<"verseRefs">;
-    book: string;
-    chapter: number;
-    startVerse: number;
-    endVerse: number;
-    memory?: {
-      learnStage?: number;
-      stageReps?: number;
-      status?: PracticeVerse["status"];
-      dueAt?: number;
-      lastReviewedAt?: number;
-      ease?: number;
-      intervalDays?: number;
-      consecutiveCorrect?: number;
-      lapses?: number;
-      earlyReviewApplied?: boolean;
-    } | null;
-  }>,
-  now: number,
-): PracticeVerse[] {
-  return sortSessionVerses(
-    inMemory.flatMap((verse) => {
-      if (
-        !isMemorySessionCandidate(
-          {
-            status: verse.memory?.status,
-            dueAt: verse.memory?.dueAt,
-            lastReviewedAt: verse.memory?.lastReviewedAt,
-          },
-          "learning",
-          now,
-          false,
-        )
-      ) {
-        return [];
-      }
-      return [
-        toPracticeVerse({
-          verseRefId: verse.verseRefId,
-          book: verse.book,
-          chapter: verse.chapter,
-          startVerse: verse.startVerse,
-          endVerse: verse.endVerse,
-          learnStage: verse.memory?.learnStage ?? 0,
-          stageReps: verse.memory?.stageReps ?? 0,
-          status: verse.memory?.status ?? "new",
-          dueAt: verse.memory?.dueAt,
-          lastReviewedAt: verse.memory?.lastReviewedAt,
-          ease: verse.memory?.ease,
-          intervalDays: verse.memory?.intervalDays,
-          consecutiveCorrect: verse.memory?.consecutiveCorrect,
-          lapses: verse.memory?.lapses,
-          earlyReviewApplied: verse.memory?.earlyReviewApplied,
-        }),
-      ];
-    }),
   );
 }

@@ -91,7 +91,7 @@ vi.mock("../../../convex/_generated/api", () => ({
       acceptRetryHold: "packs.acceptRetryHold",
     },
     verseMemory: {
-      listInMemory: "verseMemory.listInMemory",
+      learnQueue: "verseMemory.learnQueue",
       recordAttempt: "verseMemory.recordAttempt",
       acceptRetryHold: "verseMemory.acceptRetryHold",
     },
@@ -200,11 +200,11 @@ function renderLearn(
   view: PassageView,
   options?: {
     passages?: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
-    inMemory?: unknown[];
+    learnQueue?: unknown[];
     missingPackIds?: ReadonlyArray<Id<"packs">>;
   },
 ) {
-  queryResults.set("verseMemory.listInMemory", options?.inMemory ?? []);
+  queryResults.set("verseMemory.learnQueue", options?.learnQueue ?? []);
   queryResults.set(
     "passageMemory.dueForLearning",
     options?.passages ?? DEFAULT_DUE_PACKS,
@@ -369,9 +369,9 @@ describe("MemoryLearnPage", () => {
   });
 
   it("opens the verse session on a later visit when the only due pack was dismissed", async () => {
-    const inMemory = [inMemoryVerse("John", 3, 16, "learning")];
+    const learnQueue = [inMemoryVerse("John", 3, 16, "learning")];
     const passages = [{ packId: PACK_JUDE, packName: JUDE }];
-    const first = renderLearn(nextVerseView(), { passages, inMemory });
+    const first = renderLearn(nextVerseView(), { passages, learnQueue });
 
     expect(await screen.findByText(JUDE)).toBeInTheDocument();
     await userEvent.click(
@@ -379,33 +379,30 @@ describe("MemoryLearnPage", () => {
     );
     first.unmount();
 
-    renderLearn(nextVerseView(), { passages, inMemory });
+    renderLearn(nextVerseView(), { passages, learnQueue });
 
     expect(await screen.findByText("Today's learning")).toBeInTheDocument();
     expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
     expect(screen.queryByText(DONE_FOR_NOW_LABEL)).not.toBeInTheDocument();
   });
 
-  it("learns in-Memory verses and leaves Up-next pack verses for later", async () => {
+  it("learns in-progress verses and pack Up-next verses from the learn queue", async () => {
     renderLearn(nextVerseView(), {
       passages: [],
-      inMemory: [
-        inMemoryVerse("John", 3, 16, "new"),
+      learnQueue: [
         inMemoryVerse("Romans", 8, 28, "learning"),
+        inMemoryVerse("John", 3, 16, "new"),
       ],
     });
 
     expect(await screen.findByText("Today's learning")).toBeInTheDocument();
+    expect(screen.getByText("Verse 1 of 2")).toBeInTheDocument();
+    expect(screen.getAllByText("John 3:16").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Romans 8:28").length).toBeGreaterThan(0);
-    expect(screen.getByText("Verse 1 of 1")).toBeInTheDocument();
-    expect(screen.queryByText("John 3:16")).not.toBeInTheDocument();
   });
 
-  it("shows the empty state when nothing in Memory is ready to learn", async () => {
-    renderLearn(nextVerseView(), {
-      passages: [],
-      inMemory: [inMemoryVerse("John", 3, 16, "new")],
-    });
+  it("shows the empty state when the learn queue is empty", async () => {
+    renderLearn(nextVerseView(), { passages: [], learnQueue: [] });
 
     expect(
       await screen.findByText("Nothing to learn right now"),
