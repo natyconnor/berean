@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   memorizeTitleLabel,
+  passageStepDayLine,
   statusLabel,
   stepDayLine,
+  stepLadderDay,
   stepShortLabel,
 } from "./memory-copy";
 
@@ -36,6 +38,28 @@ describe("stepDayLine", () => {
   it("frames blanks as day 2 and From memory as day 3", () => {
     expect(stepDayLine(2)).toBe("Day 2 of 3: fill in the blanks");
     expect(stepDayLine(3)).toBe("Day 3 of 3: say it from memory");
+  });
+});
+
+describe("stepLadderDay", () => {
+  it("puts Read and First letters on day 1, then one step a day", () => {
+    expect([0, 1, 2, 3].map(stepLadderDay)).toEqual([1, 1, 2, 3]);
+    expect(stepLadderDay(-2)).toBe(1);
+    expect(stepLadderDay(7)).toBe(3);
+  });
+});
+
+describe("passageStepDayLine", () => {
+  it("names the verses and today's step", () => {
+    expect(passageStepDayLine(0, "verses 5–6", true)).toBe(
+      "Day 1 of 3 for verses 5–6: read them, then type them with first letters",
+    );
+    expect(passageStepDayLine(2, "verse 3", false)).toBe(
+      "Day 2 of 3 for verse 3: fill in the blanks",
+    );
+    expect(passageStepDayLine(3, "verse 7", false)).toBe(
+      "Day 3 of 3 for verse 7: say it from memory",
+    );
   });
 });
 

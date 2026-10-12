@@ -70,6 +70,38 @@ export function stepDayLine(learnStage: number): string {
   );
 }
 
+export type StepLadderDay = 1 | 2 | 3;
+
+/** Which of the three learning days `learnStage` falls on. */
+export function stepLadderDay(learnStage: number): StepLadderDay {
+  const stage = clampLearnStage(learnStage);
+  if (stage <= 1) return 1;
+  return stage === 2 ? 2 : 3;
+}
+
+const STEP_DAY_ACTIONS: Record<StepLadderDay, { one: string; many: string }> = {
+  1: {
+    one: "read it, then type it with first letters",
+    many: "read them, then type them with first letters",
+  },
+  2: { one: "fill in the blanks", many: "fill in the blanks" },
+  3: { one: "say it from memory", many: "say them from memory" },
+};
+
+/**
+ * Today's step for some verses of a passage, e.g. "Day 2 of 3 for verse 3:
+ * fill in the blanks". `verses` names them ("verse 3", "verses 5–6").
+ */
+export function passageStepDayLine(
+  learnStage: number,
+  verses: string,
+  plural: boolean,
+): string {
+  const day = stepLadderDay(learnStage);
+  const action = STEP_DAY_ACTIONS[day];
+  return `Day ${day} of 3 for ${verses}: ${plural ? action.many : action.one}`;
+}
+
 export type StatusLabel = "New" | "Learning" | "Memorized" | "Mastered";
 
 const STATUS_LABELS: Record<MemoryStatus, StatusLabel> = {

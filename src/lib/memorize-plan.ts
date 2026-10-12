@@ -324,10 +324,10 @@ function dateFormatter(
 }
 
 /** Whole local calendar days from `from` to `to` (negative when earlier). */
-function calendarDaysBetween(
+export function calendarDaysBetween(
   from: number,
   to: number,
-  timeZone: string | undefined,
+  timeZone?: string,
 ): number {
   return calendarDayNumber(to, timeZone) - calendarDayNumber(from, timeZone);
 }
