@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.14](https://github.com/natyconnor/berean/compare/v1.17.13...v1.17.14) (2026-10-12)
+
+
+### Bug Fixes
+
+* Wrap long URLs inside Read-mode note cards ([#280](https://github.com/natyconnor/berean/issues/280)) ([8b60914](https://github.com/natyconnor/berean/commit/8b6091455ce5e7e09eaaa1c493e49b0db31f7404))
+
 ## [1.17.13](https://github.com/natyconnor/berean/compare/v1.17.12...v1.17.13) (2026-10-12)
 
 
