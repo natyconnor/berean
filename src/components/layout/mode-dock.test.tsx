@@ -194,7 +194,9 @@ describe("ModeDock route visibility", () => {
 
   it("restores the dock after leaving Settings", () => {
     const { rerender } = render(<ModeDock />);
-    expect(screen.getByRole("navigation", { name: "Mode" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Mode" }),
+    ).toBeInTheDocument();
 
     mocks.useLocation.mockReturnValue({
       pathname: "/settings",
@@ -210,7 +212,9 @@ describe("ModeDock route visibility", () => {
       href: "/passage/John-1",
     });
     rerender(<ModeDock />);
-    expect(screen.getByRole("navigation", { name: "Mode" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Mode" }),
+    ).toBeInTheDocument();
   });
 
   it("does not cycle modes with the dock shortcut on Settings", () => {
