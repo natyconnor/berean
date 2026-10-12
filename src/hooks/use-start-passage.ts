@@ -1,4 +1,5 @@
 import { useAction, useMutation } from "convex/react";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { useCallback, useRef, useState } from "react";
 
 import { api } from "../../convex/_generated/api";
@@ -38,11 +39,14 @@ type ScopeChapterText = {
   verses: EsvChapterData["verses"];
 };
 
-async function loadChaptersForScope(
-  fetchChaptersBatch: (args: {
-    book: string;
-    chapters: number[];
-  }) => Promise<Array<{ chapter: number; data: EsvChapterData }>>,
+type FetchChaptersBatch = (args: {
+  book: string;
+  chapters: number[];
+}) => Promise<Array<{ chapter: number; data: EsvChapterData }>>;
+
+/** ESV text for every chapter of the scope, from the passage cache when warm. */
+export async function loadChaptersForScope(
+  fetchChaptersBatch: FetchChaptersBatch,
   scope: VerseScope,
 ): Promise<ScopeChapterText[]> {
   const chapters = enumerateScopeChapters(scope);
@@ -76,9 +80,37 @@ async function loadChaptersForScope(
   });
 }
 
+export type StartPassageDeps = {
+  fetchChaptersBatch: FetchChaptersBatch;
+  startPassage: (
+    args: FunctionArgs<typeof api.passageMemory.start>,
+  ) => Promise<FunctionReturnType<typeof api.passageMemory.start>>;
+};
+
 /**
- * Opt-in start for passage mode. Fetches chapter text, builds frozen pieces
- * from empty hearts, and calls `passageMemory.start`. Never hearts verses.
+ * Start passage mode for a scope pack: load its chapter text, freeze the
+ * pieces, and call `passageMemory.start`, which writes the passage heart.
+ * Returns the passage (the existing one when it had already started).
+ */
+export async function startPassageForPack(
+  deps: StartPassageDeps,
+  {
+    packId,
+    scope,
+    now,
+  }: { packId: Id<"packs">; scope: VerseScope; now: number },
+): Promise<FunctionReturnType<typeof api.passageMemory.start>> {
+  const chapters = await loadChaptersForScope(deps.fetchChaptersBatch, scope);
+  return await deps.startPassage({
+    packId,
+    pieces: buildPassagePieces(chapters),
+    now,
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+  });
+}
+
+/**
+ * Opt-in start for passage mode (see {@link startPassageForPack}).
  *
  * Call `start` only from an explicit click or the one-shot `startPassage`
  * search flag — not merely because the pack opened.
@@ -108,14 +140,10 @@ export function useStartPassage({
     setPending(true);
     setError(null);
     try {
-      const chapters = await loadChaptersForScope(fetchChaptersBatch, scope);
-      const pieces = buildPassagePieces(chapters);
-      await startPassage({
-        packId,
-        pieces,
-        now,
-        tzOffsetMinutes: new Date(now).getTimezoneOffset(),
-      });
+      await startPassageForPack(
+        { fetchChaptersBatch, startPassage },
+        { packId, scope, now },
+      );
     } catch (caught) {
       setError(
         caught instanceof Error && caught.message.length > 0

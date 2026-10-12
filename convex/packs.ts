@@ -40,6 +40,7 @@ import {
   applyUnifiedGrade,
   canonicalUnifiedSchedule,
 } from "../src/lib/unified-review-schedule";
+import { MEMORIZE_MAX_PACK_SPANS } from "../src/lib/memorize-status";
 import { scopesEqual } from "../src/lib/scope-equality";
 import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
 import { verseMatchesScope } from "../src/lib/verse-scope-match";
@@ -435,7 +436,10 @@ export const addVerse = mutation({
   },
 });
 
-/** Append a verse to a custom pack's ordered membership (idempotent). */
+/**
+ * Append a verse to a custom pack's ordered membership (idempotent). Returns
+ * whether a row was added.
+ */
 async function appendPackVerse(
   ctx: MutationCtx,
   userId: Id<"users">,
@@ -443,14 +447,14 @@ async function appendPackVerse(
   verseRefId: Id<"verseRefs">,
   now: number,
   order?: number,
-): Promise<void> {
+): Promise<boolean> {
   const existingMember = await ctx.db
     .query("packVerses")
     .withIndex("by_userId_packId_verseRefId", (q) =>
       q.eq("userId", userId).eq("packId", packId).eq("verseRefId", verseRefId),
     )
     .unique();
-  if (existingMember) return;
+  if (existingMember) return false;
   await ctx.db.insert("packVerses", {
     userId,
     packId,
@@ -458,7 +462,68 @@ async function appendPackVerse(
     order: order ?? (await nextPackOrder(ctx, userId, packId)),
     createdAt: now,
   });
+  return true;
 }
+
+const MAX_PACK_NAME_LENGTH = 80;
+
+const spanValidator = v.object({
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+});
+
+/**
+ * Create a custom pack and memorize its spans as Up next, in the order given
+ * (a repeated span joins once). Each span gets a heart when none covers it.
+ */
+export const createAndMemorize = mutation({
+  args: {
+    name: v.string(),
+    spans: v.array(spanValidator),
+    now: v.number(),
+  },
+  returns: v.object({ packId: v.id("packs") }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    const name = args.name.trim();
+    if (name.length === 0 || name.length > MAX_PACK_NAME_LENGTH) {
+      throw new Error(
+        `Pack names must be 1 to ${MAX_PACK_NAME_LENGTH} characters.`,
+      );
+    }
+    if (
+      args.spans.length === 0 ||
+      args.spans.length > MEMORIZE_MAX_PACK_SPANS
+    ) {
+      throw new Error(
+        `A pack can start with 1 to ${MEMORIZE_MAX_PACK_SPANS} verses.`,
+      );
+    }
+
+    const packId = await ctx.db.insert("packs", {
+      userId,
+      name,
+      kind: "custom",
+      createdAt: args.now,
+      lastOpenedAt: args.now,
+    });
+    let order = 0;
+    for (const span of args.spans) {
+      const { verseRefId } = await memorizeSpan(ctx, userId, span, args.now, {
+        upNext: true,
+      });
+      if (
+        await appendPackVerse(ctx, userId, packId, verseRefId, args.now, order)
+      ) {
+        order += 1;
+      }
+    }
+    return { packId };
+  },
+});
 
 export const removeVerse = mutation({
   args: { id: v.id("packs"), verseRefId: v.id("verseRefs") },

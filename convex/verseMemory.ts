@@ -22,7 +22,15 @@ import {
 } from "./lib/packs";
 import { loadPassageDueRecords } from "./lib/passageDue";
 import { loadPackUpNext } from "./lib/packUpNext";
-import { memorizeSpan, stopMemorizingVerse } from "./lib/memorize";
+import {
+  loadMemorizeStatus,
+  memorizeSpan,
+  stopMemorizingVerse,
+} from "./lib/memorize";
+import {
+  MEMORIZE_MAX_PACK_SPANS,
+  uniqueSpans,
+} from "../src/lib/memorize-status";
 import {
   backfillInMemoryForUser,
   hasInMemoryBackfill,
@@ -771,6 +779,47 @@ export const memorize = mutation({
     }
 
     return { added, alreadyMemorizing, verseRefIds };
+  },
+});
+
+const memorizeDestinationValidator = v.union(
+  v.object({
+    kind: v.literal("verse"),
+    verseRefId: v.id("verseRefs"),
+    span: memorizeSpanValidator,
+  }),
+  v.object({ kind: v.literal("pack"), packId: v.id("packs") }),
+);
+
+/**
+ * Whether the user already memorizes these spans (alone, as a passage, or as a
+ * custom pack) or a passage they memorize contains them, and whether hearts
+ * already cover every span. See `loadMemorizeStatus`. Signed out, or with no
+ * or too many spans, reads as not memorizing and not hearted.
+ */
+export const memorizeStatus = query({
+  args: { spans: v.array(memorizeSpanValidator) },
+  returns: v.object({
+    state: v.union(
+      v.literal("none"),
+      v.literal("memorizing"),
+      v.literal("partOf"),
+    ),
+    title: v.optional(v.string()),
+    destination: v.optional(memorizeDestinationValidator),
+    allHearted: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    const spans = uniqueSpans(args.spans);
+    if (
+      !userId ||
+      spans.length === 0 ||
+      spans.length > MEMORIZE_MAX_PACK_SPANS
+    ) {
+      return { state: "none" as const, allHearted: false };
+    }
+    return await loadMemorizeStatus(ctx, userId, spans);
   },
 });
 

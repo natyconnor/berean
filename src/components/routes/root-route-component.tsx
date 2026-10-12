@@ -9,6 +9,7 @@ import { NotFoundPage } from "@/components/routes/not-found-page";
 import { useDismissSplashBackdrop } from "@/hooks/use-dismiss-splash";
 import { StagedOnboardingProvider } from "@/components/tutorial/staged-onboarding-provider";
 import { TutorialProvider } from "@/components/tutorial/tutorial-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppVersionMonitor } from "@/hooks/use-app-version-monitor";
 import { usePreviewAutoSignIn } from "@/hooks/use-preview-auto-sign-in";
@@ -212,6 +213,7 @@ function RootRouteShell() {
                 </AppShell>
               </TutorialProvider>
             </StagedOnboardingProvider>
+            <Toaster />
           </TooltipProvider>
         </TabProvider>
       </ThemeProvider>

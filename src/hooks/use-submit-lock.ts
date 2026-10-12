@@ -40,3 +40,50 @@ export function useSubmitLock(): SubmitLock {
 
   return { submit, pending };
 }
+
+interface SingleFlight<Args extends unknown[], Result> {
+  /**
+   * Start `run`, or, while a call is still in flight, return that call's
+   * promise instead of starting another (its arguments win).
+   */
+  call: (...args: Args) => Promise<Result>;
+  pending: boolean;
+}
+
+/**
+ * Promise-returning sibling of {@link useSubmitLock} for callers that need the
+ * task's result or error. The in-flight promise is held in a ref so a double
+ * tap in one event turn runs `run` once.
+ */
+export function useSingleFlight<Args extends unknown[], Result>(
+  run: (...args: Args) => Promise<Result>,
+): SingleFlight<Args, Result> {
+  const inFlightRef = useRef<Promise<Result> | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const call = useCallback(
+    (...args: Args): Promise<Result> => {
+      const current = inFlightRef.current;
+      if (current) return current;
+
+      let started: Promise<Result>;
+      try {
+        started = run(...args);
+      } catch (caught) {
+        started = Promise.reject(
+          caught instanceof Error ? caught : new Error(String(caught)),
+        );
+      }
+      const tracked = started.finally(() => {
+        inFlightRef.current = null;
+        setPending(false);
+      });
+      inFlightRef.current = tracked;
+      setPending(true);
+      return tracked;
+    },
+    [run],
+  );
+
+  return { call, pending };
+}
