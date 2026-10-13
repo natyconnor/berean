@@ -7,10 +7,12 @@ import {
 } from "./memory-scheduler";
 import type { HeartedMemorySpan } from "./passage-frontier";
 import type { PassagePieceBase } from "./passage-pieces";
+import type { PassageRange } from "./passage-range";
 import {
   absorbedVerseItems,
   assertFrozenPieceBases,
   assertPiecesMatchScope,
+  findOverlappingPassage,
   planStart,
 } from "./passage-start";
 import type { VerseScope } from "./verse-scope-match";
@@ -78,6 +80,50 @@ function reviewingSchedule(extra?: Partial<MemorySchedule>): MemorySchedule {
   };
 }
 
+describe("findOverlappingPassage", () => {
+  const piece = (chapter: number, startVerse: number, endVerse: number) => ({
+    book: "Romans",
+    chapter,
+    startVerse,
+    endVerse,
+  });
+  const partial = {
+    id: "8:28-39",
+    pieces: [piece(8, 28, 30), piece(8, 31, 39)],
+  };
+  const crossChapter = {
+    id: "7:24-8:2",
+    pieces: [piece(7, 24, 25), piece(8, 1, 2)],
+  };
+
+  it("finds a passage inside the new one's verses", () => {
+    const romans8 = [piece(8, 1, 11), piece(8, 12, 27), piece(8, 28, 39)];
+    expect(findOverlappingPassage(romans8, [partial])).toBe(partial);
+  });
+
+  it("finds a passage sharing only an edge", () => {
+    expect(
+      findOverlappingPassage([piece(8, 2, 4), piece(8, 5, 8)], [crossChapter]),
+    ).toBe(crossChapter);
+  });
+
+  it("finds a passage that contains the new one", () => {
+    expect(
+      findOverlappingPassage([piece(8, 31, 33), piece(8, 34, 35)], [partial]),
+    ).toBe(partial);
+  });
+
+  it("is null when no verse is shared", () => {
+    expect(
+      findOverlappingPassage(
+        [piece(8, 3, 10), piece(8, 11, 27)],
+        [partial, crossChapter],
+      ),
+    ).toBeNull();
+    expect(findOverlappingPassage([piece(8, 1, 39)], [])).toBeNull();
+  });
+});
+
 describe("assertFrozenPieceBases", () => {
   it("rejects an empty list and out-of-order indexes", () => {
     expect(() => assertFrozenPieceBases([])).toThrow(
@@ -105,7 +151,7 @@ describe("assertPiecesMatchScope", () => {
         ],
         PSALM_1,
       ),
-    ).toThrow(/within the pack scope/);
+    ).toThrow(/within the passage/);
   });
 
   it("rejects overlapping verse spans", () => {
@@ -115,6 +161,162 @@ describe("assertPiecesMatchScope", () => {
         PSALM_1,
       ),
     ).toThrow(/must not overlap/);
+  });
+
+  describe("with a passage range", () => {
+    const PHIL_2: VerseScope = {
+      books: ["Philippians"],
+      chapterRanges: [{ book: "Philippians", startChapter: 2, endChapter: 2 }],
+    };
+    const PHIL_2_1_11: PassageRange = {
+      book: "Philippians",
+      startChapter: 2,
+      startVerse: 1,
+      endChapter: 2,
+      endVerse: 11,
+    };
+    const ROMANS_7_8: VerseScope = {
+      books: ["Romans"],
+      chapterRanges: [{ book: "Romans", startChapter: 7, endChapter: 8 }],
+    };
+    const ROM_7_24_8_2: PassageRange = {
+      book: "Romans",
+      startChapter: 7,
+      startVerse: 24,
+      endChapter: 8,
+      endVerse: 2,
+    };
+    function pieces(
+      book: string,
+      spans: readonly (readonly [
+        chapter: number,
+        startVerse: number,
+        endVerse: number,
+      ])[],
+    ): PassagePieceBase[] {
+      return spans.map(([chapter, startVerse, endVerse], index) => ({
+        index,
+        book,
+        chapter,
+        startVerse,
+        endVerse,
+        sectionIndex: 0,
+      }));
+    }
+
+    it("accepts pieces that cover the range exactly, across chapters too", () => {
+      expect(() =>
+        assertPiecesMatchScope(
+          pieces("Philippians", [
+            [2, 1, 4],
+            [2, 5, 8],
+            [2, 9, 11],
+          ]),
+          PHIL_2,
+          PHIL_2_1_11,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        assertPiecesMatchScope(
+          pieces("Romans", [
+            [7, 24, 25],
+            [8, 1, 2],
+          ]),
+          ROMANS_7_8,
+          ROM_7_24_8_2,
+        ),
+      ).not.toThrow();
+    });
+
+    it("rejects pieces outside the range", () => {
+      expect(() =>
+        assertPiecesMatchScope(
+          pieces("Philippians", [
+            [2, 1, 6],
+            [2, 7, 12],
+          ]),
+          PHIL_2,
+          PHIL_2_1_11,
+        ),
+      ).toThrow(/within the passage/);
+      expect(() =>
+        assertPiecesMatchScope(
+          pieces("Romans", [
+            [7, 23, 25],
+            [8, 1, 2],
+          ]),
+          ROMANS_7_8,
+          ROM_7_24_8_2,
+        ),
+      ).toThrow(/within the passage/);
+    });
+
+    it("rejects pieces missing from either end or the middle", () => {
+      const missing = [
+        [
+          [2, 2, 6],
+          [2, 7, 11],
+        ],
+        [
+          [2, 1, 6],
+          [2, 7, 10],
+        ],
+        [
+          [2, 1, 4],
+          [2, 8, 11],
+        ],
+      ] as const;
+      for (const spans of missing) {
+        expect(() =>
+          assertPiecesMatchScope(
+            pieces("Philippians", spans),
+            PHIL_2,
+            PHIL_2_1_11,
+          ),
+        ).toThrow(/cover the whole passage/);
+      }
+      expect(() =>
+        assertPiecesMatchScope(
+          pieces("Romans", [
+            [7, 24, 25],
+            [8, 2, 2],
+          ]),
+          ROMANS_7_8,
+          ROM_7_24_8_2,
+        ),
+      ).toThrow(/cover the whole passage/);
+      expect(() =>
+        assertPiecesMatchScope(
+          pieces("Romans", [[7, 24, 25]]),
+          ROMANS_7_8,
+          ROM_7_24_8_2,
+        ),
+      ).toThrow(/cover the whole passage/);
+    });
+
+    it("allows the one-verse gap of a verse the ESV omits", () => {
+      expect(() =>
+        assertPiecesMatchScope(
+          pieces("Matthew", [
+            [17, 19, 20],
+            [17, 22, 23],
+          ]),
+          {
+            books: ["Matthew"],
+            chapterRanges: [
+              { book: "Matthew", startChapter: 17, endChapter: 17 },
+            ],
+          },
+          {
+            book: "Matthew",
+            startChapter: 17,
+            startVerse: 19,
+            endChapter: 17,
+            endVerse: 23,
+          },
+        ),
+      ).not.toThrow();
+    });
   });
 });
 
@@ -366,6 +568,24 @@ describe("absorbedVerseItems", () => {
     ];
     expect(absorbedVerseItems(items, pieces).map((i) => i.id)).toEqual([
       "Psalms 1:4-5",
+    ]);
+  });
+
+  it("absorbs only items inside a partial-chapter passage", () => {
+    const pieces: PassagePieceBase[] = [
+      { ...psalmPiece(0, 24, 25), chapter: 7, book: "Romans" },
+      { ...psalmPiece(1, 1, 2), chapter: 8, book: "Romans" },
+    ];
+    const items = [
+      item(24, 24, { book: "Romans", chapter: 7 }),
+      item(23, 24, { book: "Romans", chapter: 7 }),
+      item(1, 2, { book: "Romans", chapter: 8 }),
+      item(2, 3, { book: "Romans", chapter: 8 }),
+      item(28, 28, { book: "Romans", chapter: 8 }),
+    ];
+    expect(absorbedVerseItems(items, pieces).map((i) => i.id)).toEqual([
+      "Romans 7:24-24",
+      "Romans 8:1-2",
     ]);
   });
 

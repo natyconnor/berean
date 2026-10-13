@@ -17,7 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { CardReference } from "@/components/study/study-card-model";
 import { withReturn } from "@/lib/memory-return";
 import { newPackHref } from "@/lib/memory-new-pack";
-import { verseMatchesScope } from "@/lib/verse-scope-match";
+import { spanInPackScope } from "@/lib/passage-range";
 
 type ListedPack = FunctionReturnType<typeof api.packs.listMine>["page"][number];
 
@@ -35,7 +35,8 @@ function packOption(
   reference: CardReference,
 ): PackOption | null {
   if (pack.kind === "custom") return { kind: "add", pack };
-  if (!pack.scope || !verseMatchesScope(reference, pack.scope)) return null;
+  if (!pack.scope || !spanInPackScope(reference, pack.scope, pack.passageRange))
+    return null;
   return {
     kind: "contains",
     pack,

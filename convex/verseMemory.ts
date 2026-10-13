@@ -804,6 +804,7 @@ export const memorizeStatus = query({
       v.literal("none"),
       v.literal("memorizing"),
       v.literal("partOf"),
+      v.literal("overlaps"),
     ),
     title: v.optional(v.string()),
     destination: v.optional(memorizeDestinationValidator),

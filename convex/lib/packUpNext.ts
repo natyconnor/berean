@@ -2,7 +2,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { loadInMemoryMembers, type PackMember } from "./packs";
 import { loadPassagePackIds } from "./passageDue";
-import { verseMatchesScope } from "../../src/lib/verse-scope-match";
+import { spanInPackScope } from "../../src/lib/passage-range";
 import {
   packUpNextAcrossPacks,
   type PackUpNext,
@@ -49,7 +49,7 @@ export async function loadPackUpNext(
             packId: pack._id,
             kind: "scope",
             members: inMemory.filter((member) =>
-              verseMatchesScope(member, scope),
+              spanInPackScope(member, scope, pack.passageRange),
             ),
           };
         }

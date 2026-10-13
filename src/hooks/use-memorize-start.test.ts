@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveMemorizeTarget } from "@/lib/memorize-target";
 import type { EsvChapterData } from "../../shared/esv-api";
 
-import { memorizeStartHref, useMemorizeStart } from "./use-memorize-start";
+import {
+  memorizeStartHref,
+  overlapErrorMessage,
+  useMemorizeStart,
+} from "./use-memorize-start";
 
 const { mutationMocks, fetchChaptersBatchMock, convexQueryMock } = vi.hoisted(
   () => ({
@@ -122,10 +126,13 @@ describe("useMemorizeStart", () => {
       packId: "pack1",
     });
     const { result } = renderHook(() => useMemorizeStart());
-    const resolved = resolveMemorizeTarget({
-      kind: "spans",
-      spans: [{ book: "Philippians", chapter: 2, startVerse: 1, endVerse: 4 }],
-    });
+    const spans = [1, 3, 5, 7].map((verse) => ({
+      book: "Philippians",
+      chapter: 2,
+      startVerse: verse,
+      endVerse: verse,
+    }));
+    const resolved = resolveMemorizeTarget({ kind: "spans", spans });
 
     await act(async () => {
       await expect(
@@ -138,12 +145,7 @@ describe("useMemorizeStart", () => {
     });
     expect(mutationMock("packs.createAndMemorize")).toHaveBeenLastCalledWith({
       name: "Team verses",
-      spans: [1, 2, 3, 4].map((verse) => ({
-        book: "Philippians",
-        chapter: 2,
-        startVerse: verse,
-        endVerse: verse,
-      })),
+      spans,
       now: expect.any(Number) as number,
     });
 
@@ -151,7 +153,7 @@ describe("useMemorizeStart", () => {
       await result.current.start(resolved, { name: "   " });
     });
     expect(mutationMock("packs.createAndMemorize")).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: "Philippians 2:1\u20134" }),
+      expect.objectContaining({ name: "4 verses" }),
     );
   });
 
@@ -200,6 +202,130 @@ describe("useMemorizeStart", () => {
     expect(startArgs.pieces.length).toBeGreaterThan(0);
   });
 
+  it("starts a partial-chapter passage keyed by its range", async () => {
+    mutationMock("packs.create").mockResolvedValue("packPhil");
+    convexQueryMock.mockResolvedValue(null);
+    fetchChaptersBatchMock.mockResolvedValue([
+      { chapter: 2, data: psalmChapter(30) },
+    ]);
+    const { result } = renderHook(() => useMemorizeStart());
+    const resolved = resolveMemorizeTarget({
+      kind: "spans",
+      spans: [{ book: "Philippians", chapter: 2, startVerse: 1, endVerse: 11 }],
+    });
+
+    await act(async () => {
+      await expect(result.current.start(resolved)).resolves.toEqual({
+        mode: "passage",
+        destination: { kind: "pack", packId: "packPhil" },
+        alreadyMemorizing: false,
+      });
+    });
+
+    expect(mutationMock("packs.create")).toHaveBeenCalledWith({
+      name: "Philippians 2:1\u201311",
+      kind: "scope",
+      scope: {
+        books: ["Philippians"],
+        chapterRanges: [
+          { book: "Philippians", startChapter: 2, endChapter: 2 },
+        ],
+        tags: [],
+        tagMatchMode: "any",
+      },
+      passageRange: {
+        book: "Philippians",
+        startChapter: 2,
+        startVerse: 1,
+        endChapter: 2,
+        endVerse: 11,
+      },
+    });
+    const [startArgs] = mutationMock("passageMemory.start").mock.calls[0] as [
+      {
+        packId: string;
+        pieces: { chapter: number; startVerse: number; endVerse: number }[];
+      },
+    ];
+    expect(startArgs.packId).toBe("packPhil");
+    expect(startArgs.pieces[0]?.startVerse).toBe(1);
+    expect(startArgs.pieces.at(-1)?.endVerse).toBe(11);
+    expect(startArgs.pieces.every((piece) => piece.endVerse <= 11)).toBe(true);
+  });
+
+  it("memorizes a passage that groups into one piece as one verse card", async () => {
+    mutationMock("verseMemory.memorize").mockResolvedValue({
+      added: 1,
+      alreadyMemorizing: 0,
+      verseRefIds: ["ref23"],
+    });
+    fetchChaptersBatchMock.mockResolvedValue([
+      {
+        chapter: 23,
+        data: {
+          canonical: "Psalm 23",
+          copyright: "ESV",
+          verses: [1, 2, 3, 4, 5, 6].map((number) => ({
+            number,
+            text: "The Lord is my shepherd,",
+          })),
+        },
+      },
+    ]);
+    const { result } = renderHook(() => useMemorizeStart());
+    const resolved = resolveMemorizeTarget({
+      kind: "spans",
+      spans: [{ book: "Psalms", chapter: 23, startVerse: 1, endVerse: 4 }],
+    });
+    expect(resolved.mode).toBe("passage");
+
+    await act(async () => {
+      await expect(result.current.start(resolved)).resolves.toEqual({
+        mode: "verse",
+        destination: {
+          kind: "verse",
+          verseRefId: "ref23",
+          span: { book: "Psalms", chapter: 23, startVerse: 1, endVerse: 4 },
+        },
+        alreadyMemorizing: false,
+        asOneCard: true,
+      });
+    });
+    expect(mutationMock("packs.create")).not.toHaveBeenCalled();
+    expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
+  });
+
+  it("starts a range preset from its own pack", async () => {
+    mutationMock("packs.startPreset").mockResolvedValue({
+      packId: "packHymn",
+      created: true,
+    });
+    convexQueryMock.mockResolvedValue(null);
+    fetchChaptersBatchMock.mockResolvedValue([
+      { chapter: 2, data: psalmChapter(30) },
+    ]);
+    const { result } = renderHook(() => useMemorizeStart());
+    const resolved = resolveMemorizeTarget({
+      kind: "spans",
+      spans: [{ book: "Philippians", chapter: 2, startVerse: 5, endVerse: 11 }],
+      presetId: "philippians-2-5-11",
+    });
+
+    await act(async () => {
+      await result.current.start(resolved);
+    });
+
+    expect(mutationMock("packs.startPreset")).toHaveBeenCalledWith({
+      presetId: "philippians-2-5-11",
+    });
+    expect(mutationMock("packs.create")).not.toHaveBeenCalled();
+    const [startArgs] = mutationMock("passageMemory.start").mock.calls[0] as [
+      { pieces: { startVerse: number; endVerse: number }[] },
+    ];
+    expect(startArgs.pieces[0]?.startVerse).toBe(5);
+    expect(startArgs.pieces.at(-1)?.endVerse).toBe(11);
+  });
+
   it("reuses a scope pack whose passage already started", async () => {
     mutationMock("packs.create").mockResolvedValue("pack5");
     convexQueryMock.mockResolvedValue({ _id: "passage5" });
@@ -231,6 +357,41 @@ describe("useMemorizeStart", () => {
     });
     expect(fetchChaptersBatchMock).not.toHaveBeenCalled();
     expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
+  });
+
+  it("rejects a passage that overlaps one being memorized before any pack exists", async () => {
+    convexQueryMock.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === "verseMemory.memorizeStatus"
+          ? {
+              state: "overlaps",
+              title: "More than conquerors",
+              destination: { kind: "pack", packId: "pack828" },
+              allHearted: false,
+            }
+          : null,
+      ),
+    );
+    const { result } = renderHook(() => useMemorizeStart());
+    const resolved = resolveMemorizeTarget({
+      kind: "chapters",
+      book: "Romans",
+      startChapter: 8,
+      endChapter: 8,
+    });
+
+    await act(async () => {
+      await expect(result.current.start(resolved)).rejects.toThrow(
+        "This overlaps More than conquerors, which you're memorizing. Stop it first to memorize Romans 8.",
+      );
+    });
+    expect(convexQueryMock).toHaveBeenCalledWith("verseMemory.memorizeStatus", {
+      spans: [{ book: "Romans", chapter: 8, startVerse: 1, endVerse: 39 }],
+    });
+    expect(mutationMock("packs.create")).not.toHaveBeenCalled();
+    expect(mutationMock("packs.startPreset")).not.toHaveBeenCalled();
+    expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
+    expect(fetchChaptersBatchMock).not.toHaveBeenCalled();
   });
 
   it("rejects invalid targets and server errors", async () => {
@@ -283,6 +444,19 @@ describe("useMemorizeStart", () => {
     });
 
     expect(mutationMock("verseMemory.memorize")).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("overlapErrorMessage", () => {
+  it("pulls the overlap sentence out of a Convex error", () => {
+    expect(
+      overlapErrorMessage(
+        new Error(
+          "[CONVEX M(passageMemory:start)] [Request ID: 1] Server Error\nUncaught Error: This overlaps Romans 8, which you're memorizing. Stop it first.\n    at handler (../convex/passageMemory.ts:130:13)",
+        ),
+      ),
+    ).toBe("This overlaps Romans 8, which you're memorizing. Stop it first.");
+    expect(overlapErrorMessage(new Error("down"))).toBeNull();
   });
 });
 

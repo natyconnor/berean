@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { VerseSpan } from "./hearted-verse-coverage";
-import { passageCoverage, sameSpanSet, uniqueSpans } from "./memorize-status";
+import { passageHeartSpans, type VerseSpan } from "./hearted-verse-coverage";
+import {
+  passageCoverage,
+  passageRelation,
+  sameSpanSet,
+  spansOverlapAny,
+  uniqueSpans,
+} from "./memorize-status";
+import { memorizeTargetSpans, resolveMemorizeTarget } from "./memorize-target";
 
 function span(
   book: string,
@@ -45,6 +52,137 @@ describe("passageCoverage", () => {
     ).toBeNull();
     expect(passageCoverage([], matthew5to7)).toBeNull();
     expect(passageCoverage(matthew5to7, [])).toBeNull();
+  });
+});
+
+describe("passageCoverage with partial-chapter passages", () => {
+  // What `loadMemorizeStatus` compares: the target's spans against the heart
+  // spans of an active passage's pieces.
+  const target = (spans: VerseSpan[]) =>
+    memorizeTargetSpans(resolveMemorizeTarget({ kind: "spans", spans }));
+  const passage = (pieces: VerseSpan[]) => passageHeartSpans(pieces);
+  const romans8 = passage([
+    span("Romans", 8, 1, 4),
+    span("Romans", 8, 5, 27),
+    span("Romans", 8, 28, 39),
+  ]);
+  const romans8_28_39 = passage([
+    span("Romans", 8, 28, 30),
+    span("Romans", 8, 31, 39),
+  ]);
+
+  it("is part of a whole-chapter passage that contains the range", () => {
+    expect(passageCoverage(target([span("Romans", 8, 28, 39)]), romans8)).toBe(
+      "contains",
+    );
+  });
+
+  it("is part of a partial passage that contains it", () => {
+    expect(
+      passageCoverage(target([span("Romans", 8, 28)]), romans8_28_39),
+    ).toBe("contains");
+    expect(
+      passageCoverage(
+        target([span("Philippians", 2, 5, 11)]),
+        passage([span("Philippians", 2, 1, 4), span("Philippians", 2, 5, 11)]),
+      ),
+    ).toBe("contains");
+  });
+
+  it("is the same passage when the verses match, across chapters too", () => {
+    expect(
+      passageCoverage(target([span("Romans", 8, 28, 39)]), romans8_28_39),
+    ).toBe("equal");
+    expect(
+      passageCoverage(
+        target([span("Romans", 7, 24, 25), span("Romans", 8, 1, 2)]),
+        passage([span("Romans", 7, 24, 25), span("Romans", 8, 1, 2)]),
+      ),
+    ).toBe("equal");
+  });
+
+  it("is unrelated when the target reaches outside the passage", () => {
+    expect(
+      passageCoverage(target([span("Romans", 8, 1, 39)]), romans8_28_39),
+    ).toBeNull();
+    expect(
+      passageCoverage(
+        target([span("Philippians", 2, 1, 11)]),
+        passage([span("Philippians", 2, 12, 18)]),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("passageRelation", () => {
+  const target = (spans: VerseSpan[]) =>
+    memorizeTargetSpans(resolveMemorizeTarget({ kind: "spans", spans }));
+  const romans8_28_39 = passageHeartSpans([
+    span("Romans", 8, 28, 30),
+    span("Romans", 8, 31, 39),
+  ]);
+  const philippians2_5_11 = passageHeartSpans([
+    span("Philippians", 2, 5, 8),
+    span("Philippians", 2, 9, 11),
+  ]);
+
+  it("overlaps when the target contains the passage", () => {
+    const romans8 = memorizeTargetSpans(
+      resolveMemorizeTarget({
+        kind: "chapters",
+        book: "Romans",
+        startChapter: 8,
+        endChapter: 8,
+      }),
+    );
+    expect(passageRelation(romans8, romans8_28_39)).toBe("overlaps");
+  });
+
+  it("overlaps when the target crosses an edge of the passage", () => {
+    expect(
+      passageRelation(
+        target([span("Philippians", 2, 1, 8)]),
+        philippians2_5_11,
+      ),
+    ).toBe("overlaps");
+  });
+
+  it("is part of a passage that holds the whole target", () => {
+    expect(
+      passageRelation(
+        target([span("Philippians", 2, 6, 9)]),
+        philippians2_5_11,
+      ),
+    ).toBe("contains");
+    expect(
+      passageRelation(target([span("Romans", 8, 28, 39)]), romans8_28_39),
+    ).toBe("equal");
+  });
+
+  it("is unrelated when no verse is shared", () => {
+    expect(
+      passageRelation(
+        target([span("Philippians", 2, 1, 4)]),
+        philippians2_5_11,
+      ),
+    ).toBeNull();
+    expect(
+      passageRelation(target([span("Romans", 7, 1, 25)]), romans8_28_39),
+    ).toBeNull();
+  });
+});
+
+describe("spansOverlapAny", () => {
+  it("needs a shared verse in the same chapter", () => {
+    expect(
+      spansOverlapAny([span("John", 3, 16, 18)], [span("John", 3, 18, 21)]),
+    ).toBe(true);
+    expect(
+      spansOverlapAny([span("John", 3, 16, 17)], [span("John", 3, 18, 21)]),
+    ).toBe(false);
+    expect(spansOverlapAny([span("John", 3, 16)], [span("John", 4, 16)])).toBe(
+      false,
+    );
   });
 });
 

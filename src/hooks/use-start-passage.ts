@@ -10,7 +10,17 @@ import {
   type EsvChapterData,
 } from "../../shared/esv-api";
 import { toEsvQuery } from "../../shared/esv-query";
-import { buildPassagePieces } from "@/lib/passage-pieces";
+import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import {
+  piecesAllowPassageMode,
+  rangeAllowsPassageMode,
+} from "@/lib/passage-eligibility";
+import {
+  buildPassagePieces,
+  type PassageChapterInput,
+  type PassagePieceBase,
+} from "@/lib/passage-pieces";
+import type { PassageRange } from "@/lib/passage-range";
 import { enumerateScopeChapters } from "@/lib/scope-chapter-count";
 import type { VerseScope } from "@/lib/verse-scope-match";
 
@@ -80,6 +90,57 @@ export async function loadChaptersForScope(
   });
 }
 
+export type PassagePiecesPlan =
+  | {
+      kind: "passage";
+      pieces: PassagePieceBase[];
+      /** The range narrowed to the first and last verse the text has. */
+      range: PassageRange | null;
+    }
+  | { kind: "oneCard"; span: VerseSpan };
+
+/**
+ * Freeze a passage's pieces from its chapter text, trimmed to `range` when
+ * set. Text that groups into a single learning piece is memorized as one
+ * verse card instead (`piecesAllowPassageMode`). The ESV omits a few verses
+ * (Matthew 17:21), so a range is narrowed to the verses the text has, and a
+ * range that narrows below a passage is one card too.
+ */
+export function planPassagePieces(
+  chapters: readonly PassageChapterInput[],
+  range: PassageRange | null,
+): PassagePiecesPlan {
+  const pieces = buildPassagePieces(chapters, range);
+  const first = pieces[0];
+  const last = pieces[pieces.length - 1];
+  if (!first || !last) {
+    throw new Error("Could not load the verses for this passage");
+  }
+  const narrowed = range && {
+    book: range.book,
+    startChapter: first.chapter,
+    startVerse: first.startVerse,
+    endChapter: last.chapter,
+    endVerse: last.endVerse,
+  };
+  if (
+    first.chapter === last.chapter &&
+    (!piecesAllowPassageMode(pieces.length) ||
+      (narrowed !== null && !rangeAllowsPassageMode(narrowed)))
+  ) {
+    return {
+      kind: "oneCard",
+      span: {
+        book: first.book,
+        chapter: first.chapter,
+        startVerse: first.startVerse,
+        endVerse: last.endVerse,
+      },
+    };
+  }
+  return { kind: "passage", pieces, range: narrowed };
+}
+
 export type StartPassageDeps = {
   fetchChaptersBatch: FetchChaptersBatch;
   startPassage: (
@@ -89,21 +150,28 @@ export type StartPassageDeps = {
 
 /**
  * Start passage mode for a scope pack: load its chapter text, freeze the
- * pieces, and call `passageMemory.start`, which writes the passage heart.
- * Returns the passage (the existing one when it had already started).
+ * pieces (trimmed to the pack's `range`), and call `passageMemory.start`,
+ * which writes the passage heart. Returns the passage (the existing one when
+ * it had already started).
  */
 export async function startPassageForPack(
   deps: StartPassageDeps,
   {
     packId,
     scope,
+    range,
     now,
-  }: { packId: Id<"packs">; scope: VerseScope; now: number },
+  }: {
+    packId: Id<"packs">;
+    scope: VerseScope;
+    range: PassageRange | null;
+    now: number;
+  },
 ): Promise<FunctionReturnType<typeof api.passageMemory.start>> {
   const chapters = await loadChaptersForScope(deps.fetchChaptersBatch, scope);
   return await deps.startPassage({
     packId,
-    pieces: buildPassagePieces(chapters),
+    pieces: buildPassagePieces(chapters, range),
     now,
     tzOffsetMinutes: new Date(now).getTimezoneOffset(),
   });
@@ -118,10 +186,12 @@ export async function startPassageForPack(
 export function useStartPassage({
   packId,
   scope,
+  range,
   now,
 }: {
   packId: Id<"packs">;
   scope: VerseScope | undefined;
+  range: PassageRange | null;
   now: number;
 }): {
   start: () => Promise<void>;
@@ -142,7 +212,7 @@ export function useStartPassage({
     try {
       await startPassageForPack(
         { fetchChaptersBatch, startPassage },
-        { packId, scope, now },
+        { packId, scope, range, now },
       );
     } catch (caught) {
       setError(
@@ -155,7 +225,7 @@ export function useStartPassage({
       inFlight.current = false;
       setPending(false);
     }
-  }, [fetchChaptersBatch, now, packId, scope, startPassage]);
+  }, [fetchChaptersBatch, now, packId, range, scope, startPassage]);
 
   return { start, pending, error };
 }

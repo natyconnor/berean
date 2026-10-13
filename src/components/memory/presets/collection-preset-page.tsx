@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MEMORIZE_LABEL, SUGGESTIONS_LABEL } from "@/lib/memory-copy";
 import {
+  chapterPresetTarget,
   chapterPresetVerseCount,
   formatChapterRange,
   formatPresetPassage,
@@ -77,15 +78,7 @@ function ChapterStart({ presetId }: { presetId: string }) {
       </p>
       <Button
         className="mt-4"
-        onClick={() =>
-          memorizeSheet.open({
-            kind: "chapters",
-            book: preset.book,
-            startChapter: preset.startChapter,
-            endChapter: preset.endChapter,
-            presetId: preset.id,
-          })
-        }
+        onClick={() => memorizeSheet.open(chapterPresetTarget(preset))}
       >
         {MEMORIZE_LABEL}
       </Button>

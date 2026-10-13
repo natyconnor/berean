@@ -1,18 +1,33 @@
 import { getChapterVerseCount } from "./bible-verse-counts";
 import type { VerseSpan } from "./hearted-verse-coverage";
 import { MEMORIZE_MAX_PACK_SPANS, uniqueSpans } from "./memorize-status";
-import { packAllowsPassageMode } from "./passage-eligibility";
+import {
+  MIN_PASSAGE_VERSES,
+  packAllowsPassageMode,
+  rangeAllowsPassageMode,
+} from "./passage-eligibility";
+import {
+  contiguousRange,
+  formatPassageRange,
+  rangeChapterSpans,
+  rangeVerseCount,
+  type ChapterVerseCount,
+  type PassageRange,
+} from "./passage-range";
 import { AUTO_HEART_MAX_CHAPTERS } from "./scope-chapter-count";
 import type { FullScope } from "./scope-equality";
 import { formatBookChapter, formatVerseRef } from "./verse-ref-utils";
 import { getMemoryPreset } from "../../shared/memory-presets";
 
+export type { PassageRange } from "./passage-range";
+
 /**
  * What a Memorize entry point asks for. The resolver decides how it is
- * memorized; the user never picks a method.
+ * memorized; the user never picks a method. `presetId` links a passage to
+ * the catalog entry it came from.
  */
 export type MemorizeTarget =
-  | { kind: "spans"; spans: VerseSpan[]; title?: string }
+  | { kind: "spans"; spans: VerseSpan[]; presetId?: string; title?: string }
   | {
       kind: "chapters";
       book: string;
@@ -22,15 +37,6 @@ export type MemorizeTarget =
       title?: string;
     };
 
-/** A passage that starts or ends mid-chapter. Always `null` until PR 18. */
-export type PassageRange = {
-  book: string;
-  startChapter: number;
-  startVerse: number;
-  endChapter: number;
-  endVerse: number;
-};
-
 export type ResolvedMemorize =
   | { mode: "verse"; title: string; span: VerseSpan; verseCount: number }
   | {
@@ -39,6 +45,7 @@ export type ResolvedMemorize =
       book: string;
       startChapter: number;
       endChapter: number;
+      /** Verse bounds when it starts or ends mid-chapter; `null` = whole chapters. */
       range: PassageRange | null;
       presetId?: string;
       verseCount: number;
@@ -51,11 +58,11 @@ export type ResolvedMemorize =
     };
 
 export type MemorizeTargetDeps = {
-  chapterVerseCount(book: string, chapter: number): number | null;
+  chapterVerseCount: ChapterVerseCount;
 };
 
 /** Most verses that still become one verse card. */
-export const MAX_VERSE_CARD_VERSES = 3;
+export const MAX_VERSE_CARD_VERSES = MIN_PASSAGE_VERSES - 1;
 
 const DEFAULT_DEPS: MemorizeTargetDeps = {
   chapterVerseCount: getChapterVerseCount,
@@ -93,7 +100,10 @@ export function spanDisplayTitle(
   return formatSpanTitle(span);
 }
 
-/** The scope pack a chapter passage is stored as. */
+/**
+ * The scope pack a passage is stored as: its covering chapters. A
+ * partial-chapter passage also stores its `passageRange`.
+ */
 export function passageScope(
   book: string,
   startChapter: number,
@@ -194,6 +204,19 @@ function resolveChapters(
   if (!packAllowsPassageMode(passageScope(book, startChapter, endChapter))) {
     return { mode: "invalid", title, reason: "empty" };
   }
+  if (startChapter === endChapter && verseCount < MIN_PASSAGE_VERSES) {
+    return {
+      mode: "verse",
+      title,
+      span: {
+        book,
+        chapter: startChapter,
+        startVerse: 1,
+        endVerse: verseCount,
+      },
+      verseCount,
+    };
+  }
 
   return {
     mode: "passage",
@@ -207,8 +230,34 @@ function resolveChapters(
   };
 }
 
+/** A contiguous partial-chapter run of {@link MIN_PASSAGE_VERSES}+ verses. */
+function resolveRange(
+  range: PassageRange,
+  target: { presetId?: string; title?: string },
+  deps: MemorizeTargetDeps,
+): ResolvedMemorize {
+  const preset = target.presetId ? getMemoryPreset(target.presetId) : undefined;
+  const title =
+    target.title ??
+    (preset?.kind === "chapter" ? preset.title : undefined) ??
+    formatPassageRange(range);
+  if (!rangeAllowsPassageMode(range, deps.chapterVerseCount)) {
+    return { mode: "invalid", title, reason: "tooLong" };
+  }
+  return {
+    mode: "passage",
+    title,
+    book: range.book,
+    startChapter: range.startChapter,
+    endChapter: range.endChapter,
+    range,
+    ...(target.presetId ? { presetId: target.presetId } : {}),
+    verseCount: rangeVerseCount(range, deps.chapterVerseCount) ?? 0,
+  };
+}
+
 function resolveSpans(
-  target: { spans: VerseSpan[]; title?: string },
+  target: { spans: VerseSpan[]; presetId?: string; title?: string },
   deps: MemorizeTargetDeps,
 ): ResolvedMemorize {
   const spans = uniqueSpans(target.spans);
@@ -235,28 +284,34 @@ function resolveSpans(
     const endChapter = Math.max(...numbers);
     if (endChapter - startChapter + 1 === chapters.length) {
       return resolveChapters(
-        { book: first.book, startChapter, endChapter, title: target.title },
+        {
+          book: first.book,
+          startChapter,
+          endChapter,
+          presetId: target.presetId,
+          title: target.title,
+        },
         deps,
       );
     }
   }
 
+  const range = contiguousRange(spans, deps.chapterVerseCount);
+  const rangeVerses = range
+    ? (rangeVerseCount(range, deps.chapterVerseCount) ?? 0)
+    : 0;
+  if (range && rangeVerses >= MIN_PASSAGE_VERSES) {
+    return resolveRange(range, target, deps);
+  }
+
   if (spans.length === 1) {
     const verseCount = spanVerseCount(first);
-    const title = target.title ?? formatSpanTitle(first);
-    if (verseCount <= MAX_VERSE_CARD_VERSES) {
-      return { mode: "verse", title, span: first, verseCount };
-    }
-    const verses: VerseSpan[] = [];
-    for (let verse = first.startVerse; verse <= first.endVerse; verse += 1) {
-      verses.push({
-        book: first.book,
-        chapter: first.chapter,
-        startVerse: verse,
-        endVerse: verse,
-      });
-    }
-    return { mode: "pack", title, spans: verses, verseCount };
+    return {
+      mode: "verse",
+      title: target.title ?? formatSpanTitle(first),
+      span: first,
+      verseCount,
+    };
   }
 
   const verseCount = spans.reduce((sum, span) => sum + spanVerseCount(span), 0);
@@ -269,8 +324,8 @@ function resolveSpans(
 
 /**
  * The spans a resolved target memorizes, for `verseMemory.memorizeStatus`:
- * the verse, the pack's spans, or each passage chapter as a whole-chapter
- * span. Empty for an invalid target.
+ * the verse, the pack's spans, or one span per passage chapter (trimmed to
+ * the passage's range). Empty for an invalid target.
  */
 export function memorizeTargetSpans(
   resolved: ResolvedMemorize,
@@ -284,34 +339,29 @@ export function memorizeTargetSpans(
     case "invalid":
       return [];
     case "passage": {
-      const spans: VerseSpan[] = [];
-      for (
-        let chapter = resolved.startChapter;
-        chapter <= resolved.endChapter;
-        chapter += 1
-      ) {
-        const verses = deps.chapterVerseCount(resolved.book, chapter);
-        if (verses === null) return [];
-        spans.push({
-          book: resolved.book,
-          chapter,
-          startVerse: 1,
-          endVerse: verses,
-        });
-      }
-      return spans;
+      const range: PassageRange = resolved.range ?? {
+        book: resolved.book,
+        startChapter: resolved.startChapter,
+        startVerse: 1,
+        endChapter: resolved.endChapter,
+        endVerse:
+          deps.chapterVerseCount(resolved.book, resolved.endChapter) ?? 0,
+      };
+      return rangeChapterSpans(range, deps.chapterVerseCount) ?? [];
     }
   }
 }
 
 /**
- * Decide how a target is memorized (rules before PR 18):
- * - whole contiguous chapters in one book (a `chapters` target, or spans that
- *   cover exactly those chapters) → passage, up to
- *   {@link AUTO_HEART_MAX_CHAPTERS} chapters; more is `tooLong`
- * - one span of 1–{@link MAX_VERSE_CARD_VERSES} verses → one verse card
- * - one partial-chapter span of more verses → a pack of one card per verse
- * - several spans → a pack, one card per span
+ * Decide how a target is memorized (Decisions → One verb, automatic mode):
+ * - one contiguous run in one book (it may cross chapters, whole chapters
+ *   included) of {@link MIN_PASSAGE_VERSES}+ verses → passage, up to
+ *   {@link AUTO_HEART_MAX_CHAPTERS} chapters; more is `tooLong`. A run that
+ *   groups into a single learning piece is still one verse card; that needs
+ *   verse text, so the start path decides it (`planPassagePieces`).
+ * - one span of 1–{@link MAX_VERSE_CARD_VERSES} verses (Psalm 117 too) → one
+ *   verse card
+ * - several separate spans → a pack, one card per span
  * - whole chapters in more than one book → `crossBook` (a passage stays in
  *   one book)
  * - nothing valid to memorize → `empty`

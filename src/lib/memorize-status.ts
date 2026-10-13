@@ -1,4 +1,8 @@
-import { spanContains, type VerseSpan } from "./hearted-verse-coverage";
+import {
+  spanContains,
+  spansOverlap,
+  type VerseSpan,
+} from "./hearted-verse-coverage";
 
 /**
  * Pure helpers behind `verseMemory.memorizeStatus` and
@@ -34,6 +38,28 @@ export function passageCoverage(
     target.some((span) => spanContains(span, passage)),
   );
   return inTarget ? "equal" : "contains";
+}
+
+/** Whether any span in `a` shares a verse with any span in `b`. */
+export function spansOverlapAny(
+  a: readonly VerseSpan[],
+  b: readonly VerseSpan[],
+): boolean {
+  return a.some((left) => b.some((right) => spansOverlap(left, right)));
+}
+
+/**
+ * `passageCoverage`, plus `overlaps` when the target is not inside the
+ * passage but shares verses with it (it contains the passage or crosses one
+ * of its edges).
+ */
+export function passageRelation(
+  target: readonly VerseSpan[],
+  passageSpans: readonly VerseSpan[],
+): "equal" | "contains" | "overlaps" | null {
+  const coverage = passageCoverage(target, passageSpans);
+  if (coverage) return coverage;
+  return spansOverlapAny(target, passageSpans) ? "overlaps" : null;
 }
 
 /** Identity of an exact span ("John|14|27|27"). */

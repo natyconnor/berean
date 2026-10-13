@@ -1,3 +1,4 @@
+import { rangeCoversChapter, type PassageRange } from "./passage-range";
 import { formatBookChapter, formatVerseRef } from "./verse-ref-utils";
 
 type SectionablePiece = {
@@ -85,14 +86,27 @@ export function packLearningSectionGroups(
   return groups;
 }
 
+type Section<T> = { pieces: T[]; chapterPieces: readonly T[] };
+
+/**
+ * "John 3" for a section that is a whole chapter, else its verses
+ * ("Psalm 16:1-5", "Romans 7:24-8:2"). With a `range`, a chapter the range
+ * only partly covers is never labelled as the whole chapter.
+ */
 function sectionLabel(
-  section: readonly SectionablePiece[],
-  chapterPieces: readonly SectionablePiece[],
+  { pieces: section, chapterPieces }: Section<SectionablePiece>,
+  range: PassageRange | null,
 ): string {
   const first = section[0];
   const last = section[section.length - 1];
   if (!first || !last) return "";
-  if (section.length === chapterPieces.length) {
+  if (first.chapter !== last.chapter) {
+    return `${formatBookChapter(first.book, first.chapter)}:${first.startVerse}-${last.chapter}:${last.endVerse}`;
+  }
+  if (
+    section.length === chapterPieces.length &&
+    (range === null || rangeCoversChapter(range, first.chapter))
+  ) {
     return formatBookChapter(first.book, first.chapter);
   }
   return formatVerseRef({
@@ -104,12 +118,63 @@ function sectionLabel(
 }
 
 /**
- * Assign `sectionIndex` / `sectionLabel` from verse-count packing. Chapters
- * never merge. ESV headings are ignored — they are editorial, not a learning
- * boundary.
+ * A range that crosses chapters can leave a stub where it starts or ends
+ * mid-chapter (Romans 7:24–25). A stub shorter than
+ * {@link MIN_SECTION_VERSES} joins the neighboring chapter's section.
+ */
+function joinShortEdgeSections<T extends SectionablePiece>(
+  sections: Section<T>[],
+  range: PassageRange,
+): Section<T>[] {
+  if (range.startChapter === range.endChapter) return sections;
+  const joined = [...sections];
+
+  const head = joined[0];
+  const afterHead = joined[1];
+  if (
+    head &&
+    afterHead &&
+    head.pieces.length === head.chapterPieces.length &&
+    head.pieces[0]?.chapter === range.startChapter &&
+    !rangeCoversChapter(range, range.startChapter) &&
+    sectionVerseCount(head.pieces) < MIN_SECTION_VERSES
+  ) {
+    joined.splice(0, 2, {
+      pieces: [...head.pieces, ...afterHead.pieces],
+      chapterPieces: afterHead.chapterPieces,
+    });
+  }
+
+  const tail = joined[joined.length - 1];
+  const beforeTail = joined[joined.length - 2];
+  const tailChapter = tail?.chapterPieces[0]?.chapter;
+  if (
+    tail &&
+    beforeTail &&
+    tail.pieces.length === tail.chapterPieces.length &&
+    tailChapter === range.endChapter &&
+    !rangeCoversChapter(range, range.endChapter) &&
+    sectionVerseCount(tail.pieces) < MIN_SECTION_VERSES
+  ) {
+    joined.splice(joined.length - 2, 2, {
+      pieces: [...beforeTail.pieces, ...tail.pieces],
+      chapterPieces: beforeTail.chapterPieces,
+    });
+  }
+
+  return joined;
+}
+
+/**
+ * Assign `sectionIndex` / `sectionLabel` from verse-count packing. ESV
+ * headings are ignored — they are editorial, not a learning boundary.
+ * Chapters never merge, except that a passage `range` crossing chapters lets
+ * a short mid-chapter edge join its neighbor. Without a range the pieces are
+ * whole chapters.
  */
 export function applyLearningSections<T extends SectionablePiece>(
   pieces: readonly T[],
+  range: PassageRange | null = null,
 ): T[] {
   if (pieces.length === 0) return [];
 
@@ -119,7 +184,7 @@ export function applyLearningSections<T extends SectionablePiece>(
     return copy;
   });
 
-  let sectionIndex = 0;
+  let sections: Section<T>[] = [];
   let cursor = 0;
   while (cursor < next.length) {
     const head = next[cursor];
@@ -140,21 +205,25 @@ export function applyLearningSections<T extends SectionablePiece>(
     const chapter = next.slice(cursor, end);
     const groups = packLearningSectionGroups(chapter.map(pieceVerseCount));
     for (const group of groups) {
-      const section = group
-        .map((local) => chapter[local])
-        .filter((piece): piece is T => Boolean(piece));
-      const label = sectionLabel(section, chapter);
-      for (let offset = 0; offset < section.length; offset += 1) {
-        const piece = section[offset];
-        if (!piece) continue;
-        piece.sectionIndex = sectionIndex;
-        if (offset === 0 && label) piece.sectionLabel = label;
-        else delete piece.sectionLabel;
-      }
-      sectionIndex += 1;
+      sections.push({
+        pieces: group
+          .map((local) => chapter[local])
+          .filter((piece): piece is T => Boolean(piece)),
+        chapterPieces: chapter,
+      });
     }
     cursor = end;
   }
+  if (range) sections = joinShortEdgeSections(sections, range);
+
+  sections.forEach((section, sectionIndex) => {
+    const label = sectionLabel(section, range);
+    section.pieces.forEach((piece, offset) => {
+      piece.sectionIndex = sectionIndex;
+      if (offset === 0 && label) piece.sectionLabel = label;
+      else delete piece.sectionLabel;
+    });
+  });
 
   return next;
 }

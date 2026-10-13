@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  fetchChapters: vi.fn(),
   isMobile: false,
 }));
 
@@ -40,7 +41,7 @@ function mutation(name: string) {
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutation(name),
-  useAction: () => vi.fn(),
+  useAction: () => mocks.fetchChapters,
   useConvex: () => ({ query: vi.fn() }),
 }));
 
@@ -172,6 +173,7 @@ describe("MemorizeSheet", () => {
     mocks.navigate.mockReset();
     mocks.toastSuccess.mockReset();
     mocks.toastError.mockReset();
+    mocks.fetchChapters.mockReset();
     mocks.isMobile = false;
     setStatus({ state: "none", allHearted: false });
     mutation("verseMemory.memorize").mockResolvedValue({
@@ -433,6 +435,112 @@ describe("MemorizeSheet", () => {
     expect(mocks.navigate).toHaveBeenCalledWith({
       href: "/memory?panel=pack:pack_1",
     });
+  });
+
+  it("says you're memorizing the passage a range sits inside", async () => {
+    setStatus({
+      state: "partOf",
+      title: "Romans 8",
+      destination: { kind: "pack", packId: "pack_8" },
+      allHearted: true,
+    });
+    const dialog = await openSheet({
+      kind: "spans",
+      spans: [{ book: "Romans", chapter: 8, startVerse: 28, endVerse: 39 }],
+    });
+    const view = within(dialog);
+
+    expect(
+      view.getByRole("heading", { name: "You're memorizing Romans 8" }),
+    ).toBeInTheDocument();
+    expect(
+      view.getByText("Romans 8:28\u201339 is part of it."),
+    ).toBeInTheDocument();
+    expect(
+      view.queryByRole("button", { name: /Start memorizing/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(view.getByRole("button", { name: "Open" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory?panel=pack:pack_8",
+    });
+  });
+
+  it("blocks a passage that overlaps one being memorized", async () => {
+    setStatus({
+      state: "overlaps",
+      title: "More than conquerors",
+      destination: { kind: "pack", packId: "pack_828" },
+      allHearted: false,
+    });
+    const dialog = await openSheet({
+      kind: "chapters",
+      book: "Romans",
+      startChapter: 8,
+      endChapter: 8,
+    });
+    const view = within(dialog);
+
+    expect(
+      view.getByText(
+        "This overlaps More than conquerors, which you're memorizing. Stop it first to memorize Romans 8.",
+      ),
+    ).toBeInTheDocument();
+    expect(startButton(dialog)).toBeDisabled();
+    await userEvent.click(
+      view.getByRole("button", { name: "Open More than conquerors" }),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory?panel=pack:pack_828",
+    });
+  });
+
+  it("lets a verse overlap a passage being memorized", async () => {
+    setStatus({
+      state: "overlaps",
+      title: "More than conquerors",
+      destination: { kind: "pack", packId: "pack_828" },
+      allHearted: true,
+    });
+    const dialog = await openSheet({
+      kind: "spans",
+      spans: [{ book: "Romans", chapter: 8, startVerse: 27, endVerse: 28 }],
+    });
+
+    expect(startButton(dialog)).toBeEnabled();
+    expect(within(dialog).queryByText(/This overlaps/)).not.toBeInTheDocument();
+  });
+
+  it("says when a short passage is learned all together", async () => {
+    mocks.fetchChapters.mockResolvedValue([
+      {
+        chapter: 23,
+        data: {
+          canonical: "Psalm 23",
+          copyright: "ESV",
+          verses: [1, 2, 3, 4, 5, 6].map((number) => ({
+            number,
+            text: "The Lord is my shepherd,",
+          })),
+        },
+      },
+    ]);
+    const span = { book: "Psalms", chapter: 23, startVerse: 1, endVerse: 4 };
+    const dialog = await openSheet({ kind: "spans", spans: [span] });
+
+    await userEvent.click(startButton(dialog));
+
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
+    expect(mutation("verseMemory.memorize")).toHaveBeenCalledWith({
+      spans: [span],
+      now: expect.any(Number) as number,
+    });
+    expect(mutation("packs.create")).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Psalm 23:1\u20134 is in Today.",
+      expect.objectContaining({
+        description: "It's short, so you'll learn it all together.",
+      }),
+    );
   });
 
   it("disables starting a passage longer than 20 chapters", async () => {

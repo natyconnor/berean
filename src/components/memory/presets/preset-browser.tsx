@@ -15,6 +15,7 @@ import {
 } from "@/lib/memory-copy";
 import {
   CHAPTER_PRESET_GROUPS,
+  chapterPresetTarget,
   chapterPresetVerseCount,
   chapterPresets,
   collectionPresets,
@@ -51,13 +52,7 @@ export function PresetBrowser() {
   }
 
   function memorizeChapter(preset: ChapterPreset) {
-    memorizeSheet.open({
-      kind: "chapters",
-      book: preset.book,
-      startChapter: preset.startChapter,
-      endChapter: preset.endChapter,
-      presetId: preset.id,
-    });
+    memorizeSheet.open(chapterPresetTarget(preset));
   }
 
   return (

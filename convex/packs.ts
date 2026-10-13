@@ -1,5 +1,5 @@
 import { query, mutation, type MutationCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
@@ -25,7 +25,10 @@ import {
   deletePassageAndReviews,
   findPassageByPackId,
 } from "./lib/passageMemory";
-import { passageStatusValidator } from "./lib/passageValues";
+import {
+  passageRangeValidator,
+  passageStatusValidator,
+} from "./lib/passageValues";
 import { passageGoal } from "../src/lib/memory-goals";
 import {
   packListSummary,
@@ -47,11 +50,18 @@ import {
   MAX_PACK_NAME_LENGTH,
   MEMORIZE_MAX_PACK_SPANS,
 } from "../src/lib/memorize-status";
-import { scopesEqual } from "../src/lib/scope-equality";
+import { scopePackMatches, scopesEqual } from "../src/lib/scope-equality";
 import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
-import { verseMatchesScope } from "../src/lib/verse-scope-match";
+import { rangeAllowsPassageMode } from "../src/lib/passage-eligibility";
+import {
+  rangeCoversWholeChapters,
+  rangeVerseCount,
+  spanInPackScope,
+  type PassageRange,
+} from "../src/lib/passage-range";
 import {
   MEMORY_PRESETS,
+  chapterPresetRange,
   chapterPresetScope,
   getMemoryPreset,
   passagesForCollectionStart,
@@ -96,6 +106,7 @@ const packValidator = v.object({
   name: v.string(),
   kind: kindValidator,
   scope: v.optional(scopeValidator),
+  passageRange: v.optional(passageRangeValidator),
   createdAt: v.number(),
   lastOpenedAt: v.number(),
   unifiedReviewEnabled: v.optional(v.boolean()),
@@ -126,6 +137,7 @@ const packListItem = v.object({
   name: v.string(),
   kind: kindValidator,
   scope: v.optional(scopeValidator),
+  passageRange: v.optional(passageRangeValidator),
   lastOpenedAt: v.number(),
   unifiedReviewEnabled: v.optional(v.boolean()),
   summary: packListSummaryValidator,
@@ -168,11 +180,47 @@ const packMemberValidator = v.object({
   isDue: v.boolean(),
 });
 
+/**
+ * The range a scope pack is keyed by, or `undefined` for whole chapters (a
+ * range that covers them adds nothing). Throws unless the range is a
+ * passage over exactly the scope's chapters.
+ */
+function packPassageRange(
+  scope: Infer<typeof scopeValidator>,
+  range: PassageRange | undefined,
+): PassageRange | undefined {
+  if (!range) return undefined;
+  const chapters = {
+    books: [range.book],
+    chapterRanges: [
+      {
+        book: range.book,
+        startChapter: range.startChapter,
+        endChapter: range.endChapter,
+      },
+    ],
+    tags: [],
+    tagMatchMode: "any" as const,
+  };
+  if (!scopesEqual(scope, chapters) || rangeVerseCount(range) === null) {
+    throw new Error("That passage's verses don't match its chapters.");
+  }
+  if (rangeCoversWholeChapters(range)) return undefined;
+  if (!rangeAllowsPassageMode(range)) {
+    throw new Error(
+      "A passage needs at least 4 verses and at most 20 chapters.",
+    );
+  }
+  return range;
+}
+
 export const create = mutation({
   args: {
     name: v.string(),
     kind: kindValidator,
     scope: v.optional(scopeValidator),
+    /** Verse bounds of a passage that starts or ends mid-chapter. */
+    passageRange: v.optional(passageRangeValidator),
   },
   returns: v.id("packs"),
   handler: async (ctx, args) => {
@@ -181,25 +229,26 @@ export const create = mutation({
     if (args.kind === "scope" && !args.scope) {
       throw new Error("Scope packs require a scope");
     }
-    if (args.kind === "custom" && args.scope) {
+    if (args.kind === "custom" && (args.scope || args.passageRange)) {
       throw new Error("Custom packs cannot have a scope");
     }
+    const passageRange = args.scope
+      ? packPassageRange(args.scope, args.passageRange)
+      : undefined;
 
     const now = Date.now();
 
-    // Scope packs are identified by their filter. Reuse the most recently
-    // opened pack with the same scope so "Memorize this scope" is idempotent.
+    // Scope packs are identified by their filter and passage range. Reuse the
+    // most recently opened match so "Memorize this passage" is idempotent.
     if (args.kind === "scope" && args.scope) {
       const existingPacks = await ctx.db
         .query("packs")
         .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
         .order("desc")
         .collect();
-      const match = existingPacks.find(
-        (pack) =>
-          pack.kind === "scope" &&
-          pack.scope !== undefined &&
-          scopesEqual(pack.scope, args.scope!),
+      const scope = args.scope;
+      const match = existingPacks.find((pack) =>
+        scopePackMatches(pack, scope, passageRange),
       );
       if (match) {
         await ctx.db.patch(match._id, { lastOpenedAt: now });
@@ -212,6 +261,7 @@ export const create = mutation({
       name: args.name,
       kind: args.kind,
       scope: args.kind === "scope" ? args.scope : undefined,
+      ...(passageRange ? { passageRange } : {}),
       createdAt: now,
       lastOpenedAt: now,
     });
@@ -288,7 +338,7 @@ export const listMine = query({
         } else {
           const members =
             pack.kind === "scope" && pack.scope
-              ? filterScopeMembers(inMemory, pack.scope)
+              ? filterScopeMembers(inMemory, pack.scope, pack.passageRange)
               : await loadCustomMembers(ctx, userId, pack._id);
           summary = packListSummary(members, args.now);
         }
@@ -297,6 +347,7 @@ export const listMine = query({
           name: pack.name,
           kind: pack.kind,
           scope: pack.scope,
+          passageRange: pack.passageRange,
           lastOpenedAt: pack.lastOpenedAt,
           unifiedReviewEnabled: pack.unifiedReviewEnabled,
           summary,
@@ -323,6 +374,7 @@ export const get = query({
       name: pack.name,
       kind: pack.kind,
       scope: pack.scope,
+      passageRange: pack.passageRange,
       createdAt: pack.createdAt,
       lastOpenedAt: pack.lastOpenedAt,
       unifiedReviewEnabled: pack.unifiedReviewEnabled,
@@ -425,11 +477,7 @@ export const addVerse = mutation({
 
     if (
       pack.kind === "scope" &&
-      (!pack.scope ||
-        !verseMatchesScope(
-          { book: args.book, chapter: args.chapter },
-          pack.scope,
-        ))
+      (!pack.scope || !spanInPackScope(args, pack.scope, pack.passageRange))
     ) {
       throw new Error("That verse is outside this pack's scope.");
     }
@@ -1022,6 +1070,7 @@ export const startPreset = mutation({
 
     if (preset.kind === "chapter") {
       const scope = chapterPresetScope(preset);
+      const passageRange = chapterPresetRange(preset) ?? undefined;
       const existing = await ctx.db
         .query("packs")
         .withIndex("by_userId_presetId", (q) =>
@@ -1036,11 +1085,8 @@ export const startPreset = mutation({
         .query("packs")
         .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
         .collect();
-      const sameScope = owned.find(
-        (pack) =>
-          pack.kind === "scope" &&
-          pack.scope !== undefined &&
-          scopesEqual(pack.scope, scope),
+      const sameScope = owned.find((pack) =>
+        scopePackMatches(pack, scope, passageRange),
       );
       if (sameScope) {
         await ctx.db.patch(sameScope._id, { lastOpenedAt: now });
@@ -1051,6 +1097,7 @@ export const startPreset = mutation({
         name: presetPackName(preset.title, args.name),
         kind: "scope",
         scope,
+        ...(passageRange ? { passageRange } : {}),
         presetId: preset.id,
         createdAt: now,
         lastOpenedAt: now,
@@ -1125,12 +1172,11 @@ export const presetProgress = query({
     for (const preset of MEMORY_PRESETS) {
       if (preset.kind === "chapter") {
         const scope = chapterPresetScope(preset);
+        const passageRange = chapterPresetRange(preset);
         const match = owned.find(
           (pack) =>
             pack.presetId === preset.id ||
-            (pack.kind === "scope" &&
-              pack.scope !== undefined &&
-              scopesEqual(pack.scope, scope)),
+            scopePackMatches(pack, scope, passageRange),
         );
         items.push({
           presetId: preset.id,

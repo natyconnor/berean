@@ -32,8 +32,9 @@ import {
   remainingIntroduces,
 } from "./passage-frontier";
 import type { PassagePiece } from "./passage-pieces";
+import { spanInPackScope, type PassageRange } from "./passage-range";
 import { formatVerseRef } from "./verse-ref-utils";
-import { verseMatchesScope, type VerseScope } from "./verse-scope-match";
+import type { VerseScope } from "./verse-scope-match";
 
 /**
  * Goal cards for Today: one per thing the user is working toward. That is
@@ -61,8 +62,8 @@ export interface GoalVerseInput<V extends string = string> {
 
 /**
  * One of the user's packs. Members follow `loadPackMembers`: scope packs list
- * the in-Memory verses inside `scope` in Bible order; other packs list the
- * in-Memory verses of `verseRefIds` in saved order.
+ * the in-Memory verses inside `scope` (and `passageRange`) in Bible order;
+ * other packs list the in-Memory verses of `verseRefIds` in saved order.
  */
 export interface GoalPackInput<
   P extends string = string,
@@ -72,6 +73,7 @@ export interface GoalPackInput<
   name: string;
   kind: "custom" | "scope";
   scope?: VerseScope;
+  passageRange?: PassageRange;
   /** `packVerses` rows in saved order, in Memory or not. */
   verseRefIds: readonly V[];
   createdAt: number;
@@ -237,7 +239,9 @@ function packMembers<V extends string>(
   const scope = pack.scope;
   if (pack.kind === "scope" && scope) {
     return sortByVerseRef(
-      verses.filter((verse) => verseMatchesScope(verse, scope)),
+      verses.filter((verse) =>
+        spanInPackScope(verse, scope, pack.passageRange),
+      ),
     );
   }
   return pack.verseRefIds.flatMap((verseRefId) => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { getChapterVerseCount } from "./bible-verse-counts";
 import type { VerseSpan } from "./hearted-verse-coverage";
 import { MEMORIZE_MAX_PACK_SPANS } from "./memorize-status";
 import {
@@ -97,18 +98,164 @@ describe("resolveMemorizeTarget", () => {
     });
   });
 
-  it("makes a partial range of more than three verses a pack of single verses", () => {
-    const resolved = resolveMemorizeTarget({
-      kind: "spans",
-      spans: [span("Philippians", 2, 1, 11)],
+  describe("the auto-passage rule", () => {
+    it.each([
+      ["Philippians 2:1\u201311", [span("Philippians", 2, 1, 11)], 11],
+      ["Matthew 6:9\u201313", [span("Matthew", 6, 9, 13)], 5],
+      ["Romans 8:28\u201339", [span("Romans", 8, 28, 39)], 12],
+      [
+        "Romans 7:24\u20138:2",
+        [span("Romans", 7, 24, 25), span("Romans", 8, 1, 2)],
+        4,
+      ],
+    ])("makes %s a passage", (title, spans, verseCount) => {
+      const resolved = resolveMemorizeTarget({ kind: "spans", spans });
+      expect(resolved).toMatchObject({ mode: "passage", title, verseCount });
     });
-    expect(resolved.mode).toBe("pack");
-    if (resolved.mode !== "pack") return;
-    expect(resolved.title).toBe("Philippians 2:1\u201311");
-    expect(resolved.verseCount).toBe(11);
-    expect(resolved.spans).toHaveLength(11);
-    expect(resolved.spans[0]).toEqual(span("Philippians", 2, 1));
-    expect(resolved.spans[10]).toEqual(span("Philippians", 2, 11));
+
+    it("keeps the passage's verse bounds and covering chapters", () => {
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Romans", 8, 1, 2), span("Romans", 7, 24, 25)],
+        }),
+      ).toEqual({
+        mode: "passage",
+        title: "Romans 7:24\u20138:2",
+        book: "Romans",
+        startChapter: 7,
+        endChapter: 8,
+        range: {
+          book: "Romans",
+          startChapter: 7,
+          startVerse: 24,
+          endChapter: 8,
+          endVerse: 2,
+        },
+        verseCount: 4,
+      });
+    });
+
+    it("keeps John 3:16 one verse card", () => {
+      expect(
+        resolveMemorizeTarget({ kind: "spans", spans: [span("John", 3, 16)] })
+          .mode,
+      ).toBe("verse");
+    });
+
+    it("makes Psalm 117, a whole chapter of two verses, one verse card", () => {
+      const expected = {
+        mode: "verse",
+        title: "Psalm 117",
+        span: span("Psalms", 117, 1, 2),
+        verseCount: 2,
+      };
+      expect(
+        resolveMemorizeTarget({
+          kind: "chapters",
+          book: "Psalms",
+          startChapter: 117,
+          endChapter: 117,
+        }),
+      ).toEqual(expected);
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Psalms", 117, 1, 2)],
+        }),
+      ).toEqual(expected);
+    });
+
+    it("leaves the single-piece check to the start path", () => {
+      // Four short verses may group into one piece; only their text can tell
+      // (see planPassagePieces).
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Psalms", 133, 3), span("Psalms", 134, 1, 3)],
+        }),
+      ).toMatchObject({
+        mode: "passage",
+        title: "Psalm 133:3\u2013134:3",
+        verseCount: 4,
+      });
+    });
+
+    it("joins adjacent spans into one passage", () => {
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Philippians", 2, 5, 11), span("Philippians", 2, 1, 4)],
+        }),
+      ).toMatchObject({
+        mode: "passage",
+        title: "Philippians 2:1\u201311",
+        range: { startChapter: 2, startVerse: 1, endChapter: 2, endVerse: 11 },
+      });
+    });
+
+    it("makes spans with a gap a pack", () => {
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Philippians", 2, 1, 4), span("Philippians", 2, 6, 11)],
+        }).mode,
+      ).toBe("pack");
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Romans", 7, 24, 24), span("Romans", 8, 1, 2)],
+        }).mode,
+      ).toBe("pack");
+    });
+
+    it("makes a run into a whole chapter a passage with a range", () => {
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Romans", 7, 24, 25), span("Romans", 8, 1, 39)],
+        }),
+      ).toMatchObject({
+        mode: "passage",
+        title: "Romans 7:24\u20138:39",
+        range: { startChapter: 7, startVerse: 24, endChapter: 8, endVerse: 39 },
+        verseCount: 41,
+      });
+    });
+
+    it("rejects a run over more than 20 chapters as too long", () => {
+      const spans = [span("Psalms", 1, 3, 6)];
+      for (let chapter = 2; chapter <= 21; chapter += 1) {
+        spans.push(
+          span(
+            "Psalms",
+            chapter,
+            1,
+            getChapterVerseCount("Psalms", chapter) ?? 0,
+          ),
+        );
+      }
+      spans.push(span("Psalms", 22, 1));
+      expect(resolveMemorizeTarget({ kind: "spans", spans })).toMatchObject({
+        mode: "invalid",
+        reason: "tooLong",
+      });
+    });
+
+    it("names a range preset after its preset", () => {
+      expect(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Philippians", 2, 5, 11)],
+          presetId: "philippians-2-5-11",
+        }),
+      ).toMatchObject({
+        mode: "passage",
+        title: "The Christ Hymn",
+        presetId: "philippians-2-5-11",
+        verseCount: 7,
+      });
+    });
   });
 
   it("names a chapter range by reference", () => {
@@ -323,12 +470,23 @@ describe("memorizeTargetSpans", () => {
           spans: [span("Philippians", 2, 1, 4)],
         }),
       ),
-    ).toEqual([
-      span("Philippians", 2, 1),
-      span("Philippians", 2, 2),
-      span("Philippians", 2, 3),
-      span("Philippians", 2, 4),
-    ]);
+    ).toEqual([span("Philippians", 2, 1, 4)]);
+    expect(
+      memorizeTargetSpans(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Romans", 7, 24, 25), span("Romans", 8, 1, 2)],
+        }),
+      ),
+    ).toEqual([span("Romans", 7, 24, 25), span("Romans", 8, 1, 2)]);
+    expect(
+      memorizeTargetSpans(
+        resolveMemorizeTarget({
+          kind: "spans",
+          spans: [span("Romans", 8, 28), span("Romans", 8, 30)],
+        }),
+      ),
+    ).toEqual([span("Romans", 8, 28), span("Romans", 8, 30)]);
     expect(
       memorizeTargetSpans(
         resolveMemorizeTarget({

@@ -48,7 +48,7 @@ describe("memorize suggestions", () => {
     });
     expect(Object.fromEntries(modes)).toEqual({
       "psalm-23": "passage",
-      "lords-prayer": "pack",
+      "lords-prayer": "passage",
       "romans-8-28": "verse",
       "john-3-16": "verse",
       "psalm-1": "passage",
@@ -65,8 +65,10 @@ describe("memorize suggestions", () => {
     expect(lordsPrayer && suggestionTarget(lordsPrayer)).toEqual({
       kind: "spans",
       spans: [{ book: "Matthew", chapter: 6, startVerse: 9, endVerse: 13 }],
+      presetId: "matthew-6-9-13",
       title: "The Lord's Prayer",
     });
+    expect(getMemoryPreset("matthew-6-9-13")?.title).toBe(lordsPrayer?.title);
     expect(suggestionTarget(MEMORIZE_SUGGESTIONS[0])).toMatchObject({
       kind: "chapters",
       presetId: "psalm-23",

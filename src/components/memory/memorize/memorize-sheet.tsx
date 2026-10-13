@@ -30,6 +30,8 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { useIsMobile } from "@/hooks/use-media-query";
 import {
   memorizeStartHref,
+  overlapErrorMessage,
+  overlapsMessage,
   useMemorizeStart,
   type MemorizeDestination,
   type MemorizeStatus,
@@ -76,6 +78,7 @@ const HOW_IT_WORKS: Record<MemorizeMode, string> = {
 };
 
 const START_FAILED = "Couldn't start memorizing. Try again.";
+const AS_ONE_CARD = "It's short, so you'll learn it all together.";
 const TOO_MANY_CHAPTERS = "Pick up to 20 chapters to memorize as one passage.";
 const TOO_MANY_VERSES = `Pick up to ${MEMORIZE_MAX_PACK_SPANS} verses to memorize together.`;
 const NOTHING_TO_MEMORIZE = "There's nothing here to memorize.";
@@ -224,7 +227,12 @@ function MemorizePanel({
     showExplainer: boolean;
   } | null>(null);
   const status = frozen ? frozen.status : liveStatus;
-  const state = status?.state ?? "none";
+  // Only a new passage is blocked by one it overlaps; verses and packs may
+  // share verses with passages.
+  const state =
+    status?.state === "overlaps" && resolved.mode !== "passage"
+      ? "none"
+      : (status?.state ?? "none");
 
   const verseDestination =
     state === "memorizing" && status?.destination?.kind === "verse"
@@ -274,14 +282,15 @@ function MemorizePanel({
         onClose();
         toast.success(`${title} is in Today.`, {
           id: `memorize:${destinationKey(result.destination)}`,
+          ...(result.asOneCard ? { description: AS_ONE_CARD } : {}),
           action: {
             label: "Start now",
             onClick: () => void navigate({ href }),
           },
         });
-      } catch {
+      } catch (caught) {
         setFrozen(null);
-        toast.error(START_FAILED);
+        toast.error(overlapErrorMessage(caught) ?? START_FAILED);
       }
     });
   };
@@ -351,6 +360,49 @@ function MemorizePanel({
   if (state === "partOf" && status?.destination) {
     const destination = status.destination;
     const container = status.title ?? "a passage";
+    // A passage inside one already being memorized would make its verses due twice.
+    const passageInPassage = resolved.mode === "passage";
+    return (
+      <PanelFrame
+        layout={layout}
+        header={
+          <PanelHeading layout={layout}>
+            {passageInPassage ? (
+              <>You&apos;re memorizing {container}</>
+            ) : (
+              memorizeTitleLabel(resolved.title)
+            )}
+          </PanelHeading>
+        }
+        body={
+          <PanelDescription layout={layout}>
+            {passageInPassage ? (
+              <>{resolved.title} is part of it.</>
+            ) : (
+              <>
+                {resolved.title} is part of {container}, which you&apos;re
+                memorizing.
+              </>
+            )}
+          </PanelDescription>
+        }
+        footer={
+          <FooterActions>
+            <Button
+              className="h-11 flex-1 sm:h-9 sm:flex-none"
+              onClick={() => openDestination(destination)}
+            >
+              {passageInPassage ? "Open" : `Open ${container}`}
+            </Button>
+          </FooterActions>
+        }
+      />
+    );
+  }
+
+  if (state === "overlaps" && status?.destination) {
+    const destination = status.destination;
+    const overlapping = status.title ?? "a passage";
     return (
       <PanelFrame
         layout={layout}
@@ -361,18 +413,19 @@ function MemorizePanel({
         }
         body={
           <PanelDescription layout={layout}>
-            {resolved.title} is part of {container}, which you&apos;re
-            memorizing.
+            {overlapsMessage(overlapping, resolved.title)}
           </PanelDescription>
         }
         footer={
           <FooterActions>
             <Button
+              variant="outline"
               className="h-11 flex-1 sm:h-9 sm:flex-none"
               onClick={() => openDestination(destination)}
             >
-              Open {container}
+              Open {overlapping}
             </Button>
+            <StartButton disabled />
           </FooterActions>
         }
       />

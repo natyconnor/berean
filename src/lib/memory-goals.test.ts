@@ -512,6 +512,45 @@ describe("buildGoalCards: packs", () => {
     expect(goal.memberLabels).toEqual(["Romans 8:1", "Romans 12:2"]);
   });
 
+  it("lists only the verses inside a scope pack's passage range", () => {
+    const goal = only(
+      buildGoalCards(
+        input({
+          verses: [
+            verse("r8-27", { chapter: 8, startVerse: 27 }),
+            verse("r8-28", { chapter: 8, startVerse: 28 }),
+            verse("r8-39", { chapter: 8, startVerse: 39 }),
+          ],
+          packs: [
+            {
+              packId: "conquerors",
+              name: "More than conquerors",
+              kind: "scope",
+              scope: {
+                books: ["Romans"],
+                chapterRanges: [
+                  { book: "Romans", startChapter: 8, endChapter: 8 },
+                ],
+              },
+              passageRange: {
+                book: "Romans",
+                startChapter: 8,
+                startVerse: 28,
+                endChapter: 8,
+                endVerse: 39,
+              },
+              verseRefIds: [],
+              createdAt: NOW,
+            },
+          ],
+        }),
+      ),
+      "pack",
+    );
+
+    expect(goal.memberLabels).toEqual(["Romans 8:28", "Romans 8:39"]);
+  });
+
   it("reviews a pack recited together only when the recitation is due", () => {
     const members = [
       verse(

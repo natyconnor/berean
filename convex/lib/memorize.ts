@@ -9,7 +9,7 @@ import {
 import { initialSchedule } from "../../src/lib/memory-scheduler";
 import {
   MEMORIZE_MAX_PACK_SPANS,
-  passageCoverage,
+  passageRelation,
   sameSpanSet,
 } from "../../src/lib/memorize-status";
 import {
@@ -203,7 +203,7 @@ export type MemorizeDestination =
   | { kind: "pack"; packId: Id<"packs"> };
 
 export type MemorizeStatus = {
-  state: "none" | "memorizing" | "partOf";
+  state: "none" | "memorizing" | "partOf" | "overlaps";
   title?: string;
   destination?: MemorizeDestination;
   allHearted: boolean;
@@ -289,6 +289,8 @@ async function findCustomPackWithSpans(
  * - `memorizing` a passage whose verses equal the target, the exact verse, or
  *   (several spans) a custom pack made of exactly those spans
  * - `partOf` a passage that contains the target
+ * - `overlaps` a passage that shares verses with the target without
+ *   containing it
  * `allHearted` is true when a single heart covers each span.
  */
 export async function loadMemorizeStatus(
@@ -315,14 +317,15 @@ export async function loadMemorizeStatus(
   );
 
   let partOf: Doc<"packs"> | null = null;
+  let overlaps: Doc<"packs"> | null = null;
   for (const passageId of passageIds) {
     const passage = await ctx.db.get(passageId);
     if (!passage || passage.userId !== userId) continue;
     const pack = await ctx.db.get(passage.packId);
     if (!pack || pack.userId !== userId) continue;
 
-    const coverage = passageCoverage(spans, passageHeartSpans(passage.pieces));
-    if (coverage === "equal") {
+    const relation = passageRelation(spans, passageHeartSpans(passage.pieces));
+    if (relation === "equal") {
       return {
         state: "memorizing",
         title: pack.name,
@@ -330,7 +333,8 @@ export async function loadMemorizeStatus(
         allHearted,
       };
     }
-    if (coverage === "contains") partOf ??= pack;
+    if (relation === "contains") partOf ??= pack;
+    if (relation === "overlaps") overlaps ??= pack;
   }
 
   if (spans.length === 1) {
@@ -376,6 +380,15 @@ export async function loadMemorizeStatus(
         allHearted,
       };
     }
+  }
+
+  if (overlaps) {
+    return {
+      state: "overlaps",
+      title: overlaps.name,
+      destination: { kind: "pack", packId: overlaps._id },
+      allHearted,
+    };
   }
 
   return { state: "none", allHearted };

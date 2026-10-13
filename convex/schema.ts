@@ -4,6 +4,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { noteBodyValue } from "./lib/noteContent";
 import {
   passagePieceValidator,
+  passageRangeValidator,
   passageStatusValidator,
   qualityValidator,
 } from "./lib/passageValues";
@@ -230,6 +231,12 @@ export default defineSchema({
         tagMatchMode: v.union(v.literal("any"), v.literal("all")),
       }),
     ),
+    /**
+     * Verse bounds of a scope pack's passage when it starts or ends
+     * mid-chapter; `scope` still holds the covering chapters. Absent means
+     * whole chapters.
+     */
+    passageRange: v.optional(passageRangeValidator),
     createdAt: v.number(),
     lastOpenedAt: v.number(),
     /**

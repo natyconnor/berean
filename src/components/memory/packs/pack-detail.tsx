@@ -95,6 +95,7 @@ import {
   formatVerseRef,
   toPassageId,
 } from "@/lib/verse-ref-utils";
+import type { PassageRange } from "@/lib/passage-range";
 import type { VerseScope } from "@/lib/verse-scope-match";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
@@ -202,6 +203,7 @@ function toDetailPack(pack: Pack): PackDetailPack {
     name: pack.name,
     kind: pack.kind,
     scope: pack.scope,
+    passageRange: pack.passageRange,
     createdAt: pack.createdAt,
     unifiedReviewEnabled: pack.unifiedReviewEnabled,
   };
@@ -304,6 +306,7 @@ function PackDetailContent({
           <LearnAsPassageOffer
             packId={pack._id}
             scope={pack.scope}
+            range={pack.passageRange ?? null}
             title={pack.name}
             now={now}
           />
@@ -551,15 +554,22 @@ function SessionIcon({ session }: { session: PackDetailSession }) {
 function LearnAsPassageOffer({
   packId,
   scope,
+  range,
   title,
   now,
 }: {
   packId: Id<"packs">;
   scope: VerseScope;
+  range: PassageRange | null;
   title: string;
   now: number;
 }) {
-  const { start, pending, error } = useStartPassage({ packId, scope, now });
+  const { start, pending, error } = useStartPassage({
+    packId,
+    scope,
+    range,
+    now,
+  });
   return (
     <div className="text-sm text-muted-foreground">
       <p>

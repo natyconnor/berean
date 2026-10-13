@@ -26,6 +26,15 @@ export const passageAttemptKindValidator = v.union(
   v.literal("frontier"),
 );
 
+/** `packs.passageRange`; see `PassageRange` in src/lib/passage-range.ts. */
+export const passageRangeValidator = v.object({
+  book: v.string(),
+  startChapter: v.number(),
+  startVerse: v.number(),
+  endChapter: v.number(),
+  endVerse: v.number(),
+});
+
 export const pieceBaseValidator = v.object({
   index: v.number(),
   book: v.string(),

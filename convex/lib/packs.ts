@@ -2,10 +2,12 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { loadInMemoryVerseMemoryByRef } from "./verseMemory";
 import { loadPassagePackIds } from "./passageDue";
+import type { VerseSpan } from "../../src/lib/hearted-verse-coverage";
 import {
-  verseMatchesScope,
-  type VerseScope,
-} from "../../src/lib/verse-scope-match";
+  spanInPackScope,
+  type PassageRange,
+} from "../../src/lib/passage-range";
+import type { VerseScope } from "../../src/lib/verse-scope-match";
 import { sortByVerseRef } from "../../shared/compare-verse-refs";
 import { isDueForReview, isReviewPhase } from "../../src/lib/memory-scheduler";
 import { planPackReorder, planRestoreAt } from "../../src/lib/pack-order";
@@ -147,20 +149,22 @@ export async function loadPackMembers(
 ): Promise<PackMember[]> {
   if (pack.kind === "scope" && pack.scope) {
     const inMemory = await loadInMemoryMembers(ctx, userId);
-    return filterScopeMembers(inMemory, pack.scope);
+    return filterScopeMembers(inMemory, pack.scope, pack.passageRange);
   }
   return await loadCustomMembers(ctx, userId, pack._id);
 }
 
-/** In-Memory members that fall inside a scope, in canonical Bible order. */
+/**
+ * In-Memory members that fall inside a scope, in canonical Bible order. A
+ * partial-chapter passage's members also lie inside its `passageRange`.
+ */
 export function filterScopeMembers(
   inMemory: PackMember[],
   scope: VerseScope,
+  passageRange?: PassageRange,
 ): PackMember[] {
   return sortByVerseRef(
-    inMemory.filter((m) =>
-      verseMatchesScope({ book: m.book, chapter: m.chapter }, scope),
-    ),
+    inMemory.filter((m) => spanInPackScope(m, scope, passageRange)),
   );
 }
 
@@ -216,10 +220,7 @@ export async function loadPackMembershipIndex(
   onlyVerseRefId?: Id<"verseRefs">,
 ): Promise<{
   customByVerseRef: Map<Id<"verseRefs">, Id<"packs">[]>;
-  packIdsFor: (
-    verseRefId: Id<"verseRefs">,
-    span: { book: string; chapter: number },
-  ) => Id<"packs">[];
+  packIdsFor: (verseRefId: Id<"verseRefs">, span: VerseSpan) => Id<"packs">[];
 }> {
   const [packs, packVerses, passagePackIds] = await Promise.all([
     ctx.db
@@ -260,7 +261,10 @@ export async function loadPackMembershipIndex(
     packIdsFor: (verseRefId, span) => [
       ...(customByVerseRef.get(verseRefId) ?? []),
       ...scopePacks
-        .filter((pack) => pack.scope && verseMatchesScope(span, pack.scope))
+        .filter(
+          (pack) =>
+            pack.scope && spanInPackScope(span, pack.scope, pack.passageRange),
+        )
         .map((pack) => pack._id),
     ],
   };
@@ -303,7 +307,7 @@ export async function loadUnifiedReviewPacks(
   for (const pack of unifiedPacks) {
     const members =
       pack.kind === "scope" && pack.scope && inMemory
-        ? filterScopeMembers(inMemory, pack.scope)
+        ? filterScopeMembers(inMemory, pack.scope, pack.passageRange)
         : await loadCustomMembers(ctx, userId, pack._id);
     unified.push({ pack, members });
   }

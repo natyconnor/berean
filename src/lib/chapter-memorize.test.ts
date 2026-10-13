@@ -86,6 +86,47 @@ describe("chapterMemorizeState", () => {
     ).toMatchObject({ kind: "partOf", title: "Psalm 1" });
   });
 
+  it("is part of a partial-chapter passage that covers only some of it", () => {
+    const christHymn = passage({
+      title: "Philippians 2:1\u201311",
+      packId: "pack_phil",
+      startVerse: 1,
+      endVerse: 11,
+      totalVerses: 11,
+    });
+    expect(
+      chapterMemorizeState("Philippians", 2, [{ passage: christHymn }]),
+    ).toMatchObject({
+      kind: "partOf",
+      title: "Philippians 2:1\u201311",
+      packId: "pack_phil",
+    });
+
+    const acrossChapters = passage({
+      title: "Romans 7:24\u20138:2",
+      chapterCount: 2,
+      isFirstChapter: false,
+      startVerse: 1,
+      endVerse: 2,
+      totalVerses: 4,
+    });
+    const romans8 = chapterMemorizeState("Romans", 8, [
+      { passage: acrossChapters },
+    ]);
+    expect(romans8 && chapterMemorizeCopy(romans8).title).toBe(
+      "Part of Romans 7:24\u20138:2",
+    );
+  });
+
+  it("offers a chapter too short for a passage as one verse card", () => {
+    expect(chapterMemorizeState("Psalms", 117, [{}])).toEqual({
+      kind: "memorize",
+      title: "Psalm 117",
+      verseCount: 2,
+      learnDays: 3,
+    });
+  });
+
   it("is null when the chapter cannot be memorized", () => {
     expect(chapterMemorizeState("Psalms", 151, [])).toBeNull();
   });

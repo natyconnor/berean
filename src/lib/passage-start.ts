@@ -14,7 +14,9 @@ import {
   inferPieceLearningState,
   type HeartedMemorySpan,
 } from "./passage-frontier";
+import { spansOverlapAny } from "./memorize-status";
 import type { PassagePiece, PassagePieceBase } from "./passage-pieces";
+import { spanInRange, type PassageRange } from "./passage-range";
 import { canonicalUnifiedSchedule } from "./unified-review-schedule";
 import { verseMatchesScope, type VerseScope } from "./verse-scope-match";
 
@@ -49,6 +51,22 @@ export function absorbedVerseItems<
   const passageSpans = passageHeartSpans(pieces);
   return items.filter(
     (item) => !item.inCustomPack && spanCoveredBy(item, passageSpans),
+  );
+}
+
+/**
+ * The first passage whose verses (chapter spans, see `passageHeartSpans`)
+ * share any verse with `pieces`, or null. Two passages over the same verses
+ * would be due twice.
+ */
+export function findOverlappingPassage<
+  T extends { pieces: readonly VerseSpan[] },
+>(pieces: readonly VerseSpan[], passages: readonly T[]): T | null {
+  const spans = passageHeartSpans(pieces);
+  return (
+    passages.find((passage) =>
+      spansOverlapAny(spans, passageHeartSpans(passage.pieces)),
+    ) ?? null
   );
 }
 
@@ -109,12 +127,15 @@ export function assertFrozenPieceBases(
 }
 
 /**
- * Ensure client-supplied frozen pieces lie inside the pack scope and form a
- * contiguous Scripture walk (same book, non-overlapping, non-decreasing).
+ * Ensure client-supplied frozen pieces lie inside the pack's chapters and
+ * form a Scripture walk (same book, non-overlapping, non-decreasing). With a
+ * passage `range`, they must also stay inside it and cover it exactly, in
+ * order (see {@link assertPiecesCoverRange}).
  */
 export function assertPiecesMatchScope(
   pieces: readonly PassagePieceBase[],
   scope: VerseScope,
+  range: PassageRange | null = null,
 ): void {
   assertFrozenPieceBases(pieces);
   let previous: PassagePieceBase | undefined;
@@ -122,7 +143,7 @@ export function assertPiecesMatchScope(
     if (
       !verseMatchesScope({ book: piece.book, chapter: piece.chapter }, scope)
     ) {
-      throw new Error("Passage pieces must stay within the pack scope");
+      throw new Error("Passage pieces must stay within the passage");
     }
     if (previous) {
       if (piece.book !== previous.book) {
@@ -137,15 +158,49 @@ export function assertPiecesMatchScope(
       ) {
         throw new Error("Passage pieces must not overlap");
       }
-      if (
-        piece.chapter > previous.chapter + 1 ||
-        (piece.chapter === previous.chapter + 1 && previous.endVerse < 1)
-      ) {
-        // chapter gaps are ok only when scope itself skips; chapter must be in scope
-        // (already checked). Disallow jumping backward only — already handled.
-      }
     }
     previous = piece;
+  }
+  if (range) assertPiecesCoverRange(pieces, range);
+}
+
+/**
+ * Pieces (already in order and non-overlapping) stay inside the range, start
+ * on its first verse, end on its last, and leave no gap. Pieces are built
+ * from fetched text and the ESV omits a few verses (Matthew 17:21), so a gap
+ * of one verse inside a chapter is allowed.
+ */
+function assertPiecesCoverRange(
+  pieces: readonly PassagePieceBase[],
+  range: PassageRange,
+): void {
+  const uncovered = "Passage pieces must cover the whole passage in order";
+  let previous: PassagePieceBase | undefined;
+  for (const piece of pieces) {
+    if (!spanInRange(piece, range)) {
+      throw new Error("Passage pieces must stay within the passage");
+    }
+    if (previous) {
+      const joins =
+        piece.chapter === previous.chapter
+          ? piece.startVerse - previous.endVerse <= 2
+          : piece.chapter === previous.chapter + 1 && piece.startVerse === 1;
+      if (!joins) throw new Error(uncovered);
+    }
+    previous = piece;
+  }
+
+  const first = pieces[0];
+  const last = pieces[pieces.length - 1];
+  if (
+    !first ||
+    !last ||
+    first.chapter !== range.startChapter ||
+    first.startVerse !== range.startVerse ||
+    last.chapter !== range.endChapter ||
+    last.endVerse !== range.endVerse
+  ) {
+    throw new Error(uncovered);
   }
 }
 

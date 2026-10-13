@@ -152,6 +152,7 @@ export async function loadTodayModel(
       name: pack.name,
       kind: pack.kind,
       scope: pack.scope,
+      passageRange: pack.passageRange,
       verseRefIds: packVerseIds.get(pack._id) ?? [],
       createdAt: pack.createdAt,
     })),

@@ -107,7 +107,10 @@ export async function backfillInMemoryForUser(
   );
   const scopes: VerseScope[] = [];
   for (const pack of packs) {
-    if (pack.kind === "scope" && pack.scope) scopes.push(pack.scope);
+    // A partial-chapter pack is a passage; its passage spans already count.
+    if (pack.kind === "scope" && pack.scope && !pack.passageRange) {
+      scopes.push(pack.scope);
+    }
   }
   const membership: InMemoryMembership = {
     customPackVerseRefIds: new Set<string>(

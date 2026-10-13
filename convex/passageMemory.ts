@@ -26,7 +26,11 @@ import {
   pieceBaseValidator,
   qualityValidator,
 } from "./lib/passageValues";
-import { loadCustomPackVerseRefIds, loadPackMembers } from "./lib/packs";
+import {
+  loadCustomPackVerseRefIds,
+  loadPackMembers,
+  loadPassageMemoryByUser,
+} from "./lib/packs";
 import {
   ensurePassageDueBackfill,
   loadPassageDueRecords,
@@ -36,7 +40,10 @@ import {
   holdReviewingInterval,
   SHORT_VERSE_WORDS,
 } from "../src/lib/memory-scheduler";
-import { packAllowsPassageMode } from "../src/lib/passage-eligibility";
+import {
+  packAllowsPassageMode,
+  rangeAllowsPassageMode,
+} from "../src/lib/passage-eligibility";
 import {
   isPassageDueForLearning,
   isProjectedPassageDueForLearning,
@@ -50,6 +57,7 @@ import {
 import {
   absorbedVerseItems,
   assertPiecesMatchScope,
+  findOverlappingPassage,
   freshReviewingSchedule,
   planStart,
 } from "../src/lib/passage-start";
@@ -79,10 +87,12 @@ export const getForPack = query({
 
 /**
  * Explicit opt-in. Idempotent if a passage row already exists. Otherwise
- * freezes client-supplied pieces (seeded from the in-Memory members' progress),
- * writes one passage heart per chapter, absorbs standalone verse items inside
- * the passage, and clears unified recitation. Never unhearts anything. Does
- * not run on pack open alone.
+ * freezes client-supplied pieces (seeded from the in-Memory members' progress;
+ * a pack with `passageRange` has only members inside it, and its pieces must
+ * cover it exactly), writes one passage heart per chapter over the pieces'
+ * verses, absorbs standalone verse items inside the passage, and clears
+ * unified recitation. Never unhearts anything. Does not run on pack open
+ * alone.
  */
 export const start = mutation({
   args: {
@@ -104,18 +114,32 @@ export const start = mutation({
       return toPassageView(existing, args.now, args.tzOffsetMinutes);
     }
 
-    if (pack.kind !== "scope" || !pack.scope) {
-      throw new Error(
-        "Passage mode is only available for eligible scope packs",
-      );
-    }
-    if (!packAllowsPassageMode(pack.scope)) {
-      throw new Error(
-        "Passage mode is only available for eligible scope packs",
-      );
+    const range = pack.passageRange ?? null;
+    if (
+      pack.kind !== "scope" ||
+      !pack.scope ||
+      !packAllowsPassageMode(pack.scope) ||
+      (range !== null && !rangeAllowsPassageMode(range))
+    ) {
+      throw new Error("This pack can't be learned as a passage");
     }
 
-    assertPiecesMatchScope(args.pieces, pack.scope);
+    assertPiecesMatchScope(args.pieces, pack.scope, range);
+
+    const overlapping = findOverlappingPassage(
+      args.pieces,
+      (await loadPassageMemoryByUser(ctx, userId)).filter(
+        (passage) => passage.packId !== pack._id,
+      ),
+    );
+    if (overlapping) {
+      const other = await ctx.db.get(overlapping.packId);
+      throw new Error(
+        other
+          ? `This overlaps ${other.name}, which you're memorizing. Stop it first.`
+          : "This overlaps a passage you're memorizing. Stop it first.",
+      );
+    }
 
     const members = await loadPackMembers(ctx, userId, pack);
     const plan = planStart({

@@ -8,8 +8,8 @@ import {
 
 /**
  * Things to memorize offered on Today under "Start something new". Chapters
- * reuse `memory-presets.ts` ids. The Lord's Prayer, Romans 8:28 and John 3:16
- * are not standalone presets, so they are plain references.
+ * and The Lord's Prayer reuse `memory-presets.ts` ids. Romans 8:28 and John
+ * 3:16 are not standalone presets, so they are plain references.
  */
 
 export type MemorizeSuggestion =
@@ -29,6 +29,8 @@ export type MemorizeSuggestion =
       /** Shown beside a title that is not a reference, e.g. "Matt 6:9–13". */
       detail?: string;
       span: VerseSpan;
+      /** A passage preset these verses are, so its pack links back to it. */
+      presetId?: string;
     }
   | { kind: "collection"; id: string; title: string; presetId: string };
 
@@ -79,6 +81,7 @@ export const MEMORIZE_SUGGESTIONS: readonly MemorizeSuggestion[] = [
     title: "The Lord's Prayer",
     detail: "Matt 6:9–13",
     span: { book: "Matthew", chapter: 6, startVerse: 9, endVerse: 13 },
+    presetId: "matthew-6-9-13",
   },
   {
     kind: "verses",
@@ -124,6 +127,7 @@ export function suggestionTarget(
       return {
         kind: "spans",
         spans: [suggestion.span],
+        ...(suggestion.presetId ? { presetId: suggestion.presetId } : {}),
         title: suggestion.title,
       };
     case "collection":

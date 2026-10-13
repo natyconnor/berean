@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { passageHeartProgress } from "./passage-heart-info";
 import type { PassagePiece, PieceAttachment } from "./passage-pieces";
+import { passageRailSegments } from "./passage-rail";
 
 function piece(
   index: number,
@@ -97,6 +98,47 @@ describe("passageHeartProgress", () => {
     expect(passageHeartProgress(pieces, "Matthew", 1)?.verseStates).toEqual([
       { verse: 1, state: "upNext" },
     ]);
+  });
+
+  it("covers only a partial-chapter passage's own verses", () => {
+    const lordsPrayer = [
+      piece(0, 6, 9, 10, "solid"),
+      piece(1, 6, 11, 13, "unreached"),
+    ];
+    const progress = passageHeartProgress(lordsPrayer, "Matthew", 6);
+    expect(progress).toMatchObject({
+      learnedVerses: 2,
+      totalVerses: 5,
+      startVerse: 9,
+      endVerse: 13,
+    });
+    const rail = progress ? passageRailSegments(progress) : [];
+    expect(rail.map((segment) => segment.verse)).toEqual([9, 10, 11, 12, 13]);
+    expect(rail[0]).toMatchObject({ heart: true, joinsAbove: false });
+    expect(rail.at(-1)).toMatchObject({ foot: true });
+
+    const acrossChapters = [
+      piece(0, 6, 33, 34, "learning"),
+      piece(1, 7, 1, 2, "unreached"),
+    ];
+    const seventh = passageHeartProgress(acrossChapters, "Matthew", 7);
+    expect(seventh).toMatchObject({
+      isFirstChapter: false,
+      isLastChapter: true,
+      startVerse: 1,
+      endVerse: 2,
+    });
+    expect(
+      (seventh ? passageRailSegments(seventh) : []).map((segment) => [
+        segment.verse,
+        segment.heart,
+        segment.foot,
+      ]),
+    ).toEqual([
+      [1, false, false],
+      [2, false, true],
+    ]);
+    expect(passageHeartProgress(acrossChapters, "Matthew", 8)).toBeNull();
   });
 
   it("is null when no piece is in the chapter", () => {

@@ -1,5 +1,16 @@
 import { getChapterVerseCount } from "../src/lib/bible-verse-counts";
-import { packAllowsPassageMode } from "../src/lib/passage-eligibility";
+import type { MemorizeTarget } from "../src/lib/memorize-target";
+import {
+  packAllowsPassageMode,
+  rangeAllowsPassageMode,
+} from "../src/lib/passage-eligibility";
+import {
+  formatPassageRange,
+  rangeChapterSpans,
+  rangeCoversWholeChapters,
+  rangeVerseCount,
+  type PassageRange,
+} from "../src/lib/passage-range";
 import type { FullScope } from "../src/lib/scope-equality";
 
 /**
@@ -33,6 +44,10 @@ export interface CollectionPreset {
   passages: readonly PresetPassage[];
 }
 
+/**
+ * A passage learned in order. Whole chapters, unless `startVerse` (in
+ * `startChapter`) or `endVerse` (in `endChapter`) start or end it mid-chapter.
+ */
 export interface ChapterPreset {
   kind: "chapter";
   id: string;
@@ -40,6 +55,8 @@ export interface ChapterPreset {
   book: string;
   startChapter: number;
   endChapter: number;
+  startVerse?: number;
+  endVerse?: number;
   group: ChapterPresetGroup;
 }
 
@@ -1121,6 +1138,28 @@ function chapter(
   };
 }
 
+function passage(
+  id: string,
+  title: string,
+  book: string,
+  chapterNumber: number,
+  startVerse: number,
+  endVerse: number,
+  group: ChapterPresetGroup,
+): ChapterPreset {
+  return {
+    kind: "chapter",
+    id,
+    title,
+    book,
+    startChapter: chapterNumber,
+    endChapter: chapterNumber,
+    startVerse,
+    endVerse,
+    group,
+  };
+}
+
 const CHAPTER_PRESETS: readonly ChapterPreset[] = [
   chapter("psalm-1", "Psalms", 1, "Psalms"),
   chapter("psalm-8", "Psalms", 8, "Psalms"),
@@ -1140,8 +1179,26 @@ const CHAPTER_PRESETS: readonly ChapterPreset[] = [
     endChapter: 7,
     group: "Gospels",
   },
+  passage(
+    "matthew-6-9-13",
+    "The Lord's Prayer",
+    "Matthew",
+    6,
+    9,
+    13,
+    "Gospels",
+  ),
   chapter("john-15", "John", 15, "Gospels"),
   chapter("romans-8", "Romans", 8, "Letters"),
+  passage(
+    "romans-8-28-39",
+    "More than conquerors",
+    "Romans",
+    8,
+    28,
+    39,
+    "Letters",
+  ),
   chapter("romans-12", "Romans", 12, "Letters"),
   chapter("1-corinthians-13", "1 Corinthians", 13, "Letters"),
   chapter("2-corinthians-4", "2 Corinthians", 4, "Letters"),
@@ -1150,6 +1207,15 @@ const CHAPTER_PRESETS: readonly ChapterPreset[] = [
   chapter("2-timothy-3", "2 Timothy", 3, "Letters"),
   chapter("2-timothy-4", "2 Timothy", 4, "Letters"),
   chapter("philippians-2", "Philippians", 2, "Letters"),
+  passage(
+    "philippians-2-5-11",
+    "The Christ Hymn",
+    "Philippians",
+    2,
+    5,
+    11,
+    "Letters",
+  ),
   chapter("philippians-3", "Philippians", 3, "Letters"),
   chapter("philippians-4", "Philippians", 4, "Letters"),
   chapter("hebrews-11", "Hebrews", 11, "Letters"),
@@ -1184,12 +1250,51 @@ export function formatPresetPassage(passage: PresetPassage): string {
   return `${book} ${passage.chapter}:${passage.startVerse}-${passage.endVerse}`;
 }
 
+/** The preset's verse bounds, or `null` when it is whole chapters. */
+export function chapterPresetRange(preset: ChapterPreset): PassageRange | null {
+  if (preset.startVerse === undefined && preset.endVerse === undefined) {
+    return null;
+  }
+  return {
+    book: preset.book,
+    startChapter: preset.startChapter,
+    startVerse: preset.startVerse ?? 1,
+    endChapter: preset.endChapter,
+    endVerse:
+      preset.endVerse ??
+      getChapterVerseCount(preset.book, preset.endChapter) ??
+      0,
+  };
+}
+
+/** "Psalm 23", "Matthew 5–7", "Matthew 6:9–13". */
 export function formatChapterRange(preset: ChapterPreset): string {
+  const range = chapterPresetRange(preset);
+  if (range) return formatPassageRange(range);
   const book = displayPresetBook(preset.book);
   if (preset.startChapter === preset.endChapter) {
     return `${book} ${preset.startChapter}`;
   }
   return `${book} ${preset.startChapter}\u2013${preset.endChapter}`;
+}
+
+/** What the Memorize sheet opens for a passage preset. */
+export function chapterPresetTarget(preset: ChapterPreset): MemorizeTarget {
+  const range = chapterPresetRange(preset);
+  if (range) {
+    return {
+      kind: "spans",
+      spans: rangeChapterSpans(range) ?? [],
+      presetId: preset.id,
+    };
+  }
+  return {
+    kind: "chapters",
+    book: preset.book,
+    startChapter: preset.startChapter,
+    endChapter: preset.endChapter,
+    presetId: preset.id,
+  };
 }
 
 export function chapterPresetScope(preset: ChapterPreset): FullScope {
@@ -1208,6 +1313,8 @@ export function chapterPresetScope(preset: ChapterPreset): FullScope {
 }
 
 export function chapterPresetVerseCount(preset: ChapterPreset): number {
+  const range = chapterPresetRange(preset);
+  if (range) return rangeVerseCount(range) ?? 0;
   let total = 0;
   for (
     let chapterNumber = preset.startChapter;
@@ -1257,6 +1364,13 @@ export function assertPresetCatalogValid(): void {
       }
       if (chapterPresetVerseCount(preset) < 1) {
         throw new Error(`${preset.id} has no verses`);
+      }
+      const range = chapterPresetRange(preset);
+      if (range && !rangeAllowsPassageMode(range)) {
+        throw new Error(`${preset.id} is not eligible for passage mode`);
+      }
+      if (range && rangeCoversWholeChapters(range)) {
+        throw new Error(`${preset.id} has verses but covers whole chapters`);
       }
     } else {
       const passageIds = new Set<string>();

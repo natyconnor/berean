@@ -8,6 +8,7 @@
  */
 
 import { BOOK_BY_NAME } from "./bible-books";
+import type { PassageRange } from "./passage-range";
 
 export interface FullScope {
   books: string[];
@@ -107,4 +108,43 @@ export function scopesEqual(a: FullScope, b: FullScope): boolean {
   }
 
   return true;
+}
+
+/**
+ * Whether `pack` is the scope pack for `scope` and `passageRange`: the key
+ * idempotent `packs.create` / `startPreset` reuse a pack by.
+ */
+export function scopePackMatches(
+  pack: {
+    kind: "scope" | "custom";
+    scope?: FullScope;
+    passageRange?: PassageRange;
+  },
+  scope: FullScope,
+  passageRange: PassageRange | null | undefined,
+): boolean {
+  return (
+    pack.kind === "scope" &&
+    pack.scope !== undefined &&
+    scopesEqual(pack.scope, scope) &&
+    passageRangesEqual(pack.passageRange, passageRange)
+  );
+}
+
+/**
+ * True when two packs' passage ranges match. Missing means whole chapters, so
+ * Philippians 2, Philippians 2:1–11, and Philippians 2:12–18 are three packs.
+ */
+export function passageRangesEqual(
+  a: PassageRange | null | undefined,
+  b: PassageRange | null | undefined,
+): boolean {
+  if (!a || !b) return !a && !b;
+  return (
+    a.book === b.book &&
+    a.startChapter === b.startChapter &&
+    a.startVerse === b.startVerse &&
+    a.endChapter === b.endChapter &&
+    a.endVerse === b.endVerse
+  );
 }

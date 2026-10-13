@@ -4,12 +4,21 @@ import { useCallback } from "react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { startPassageForPack } from "@/hooks/use-start-passage";
+import {
+  loadChaptersForScope,
+  planPassagePieces,
+  startPassageForPack,
+} from "@/hooks/use-start-passage";
 import { useSingleFlight } from "@/hooks/use-submit-lock";
 import { logInteraction } from "@/lib/dev-log";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import type { MemorizeMode } from "@/lib/memorize-plan";
-import { passageScope, type ResolvedMemorize } from "@/lib/memorize-target";
+import {
+  memorizeTargetSpans,
+  passageScope,
+  type ResolvedMemorize,
+} from "@/lib/memorize-target";
+import { MAX_GROUP_VERSES } from "@/lib/memory-span-group";
 
 /** Where a memorized target lives. A verse carries its span for session URLs. */
 export type MemorizeDestination =
@@ -20,6 +29,8 @@ export type MemorizeResult = {
   mode: MemorizeMode;
   destination: MemorizeDestination;
   alreadyMemorizing: boolean;
+  /** A passage short enough to group into one learning piece became one verse card. */
+  asOneCard?: true;
 };
 
 /** `verseMemory.memorizeStatus` for a target's spans (see `memorizeTargetSpans`). */
@@ -40,6 +51,20 @@ const INVALID_TARGET_MESSAGES: Record<
   empty: "There's nothing here to memorize.",
   crossBook: "A passage has to stay within one book.",
 };
+
+/** Why a passage can't start while `overlapping` (a passage title) is memorized. */
+export function overlapsMessage(overlapping: string, target: string): string {
+  return `This overlaps ${overlapping}, which you're memorizing. Stop it first to memorize ${target}.`;
+}
+
+/**
+ * The overlap sentence from a start error (ours, or `passageMemory.start`'s
+ * inside Convex's wrapper), or null for any other failure.
+ */
+export function overlapErrorMessage(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  return /This overlaps .*?Stop it first[^.]*\./.exec(message)?.[0] ?? null;
+}
 
 /**
  * The learn session that starts a destination, returning to `returnTo`
@@ -69,8 +94,12 @@ export function memorizeStartHref(
 /**
  * Starts memorizing a resolved target (see `resolveMemorizeTarget`):
  * - verse → `verseMemory.memorize`
- * - passage → the preset's pack or the scope pack for its chapters, then
- *   passage mode from ESV pieces (`passageMemory.start` writes the heart)
+ * - passage → rejected when it overlaps a passage already memorized (before
+ *   any pack exists); else the preset's pack or the scope pack for its
+ *   chapters (and range), then passage mode from ESV pieces (`passageMemory.start` writes
+ *   the heart). A passage whose text groups into one learning piece becomes
+ *   one verse card instead (`asOneCard`); that is checked before any pack
+ *   exists.
  * - pack → `packs.createAndMemorize`
  *
  * Every path hearts the target when no heart covers it. Errors reject the
@@ -97,21 +126,23 @@ export function useMemorizeStart(): {
       opts?: MemorizeStartOptions,
     ): Promise<MemorizeResult> => {
       const now = Date.now();
+      const memorizeVerse = async (
+        span: VerseSpan,
+      ): Promise<MemorizeResult> => {
+        const memorized = await memorizeVerses({ spans: [span], now });
+        const verseRefId = memorized.verseRefIds[0];
+        if (!verseRefId) throw new Error("Couldn't memorize this verse.");
+        return {
+          mode: "verse",
+          destination: { kind: "verse", verseRefId, span },
+          alreadyMemorizing: memorized.alreadyMemorizing > 0,
+        };
+      };
       try {
         let result: MemorizeResult;
         switch (resolved.mode) {
           case "verse": {
-            const memorized = await memorizeVerses({
-              spans: [resolved.span],
-              now,
-            });
-            const verseRefId = memorized.verseRefIds[0];
-            if (!verseRefId) throw new Error("Couldn't memorize this verse.");
-            result = {
-              mode: "verse",
-              destination: { kind: "verse", verseRefId, span: resolved.span },
-              alreadyMemorizing: memorized.alreadyMemorizing > 0,
-            };
+            result = await memorizeVerse(resolved.span);
             break;
           }
           case "pack": {
@@ -128,27 +159,62 @@ export function useMemorizeStart(): {
             break;
           }
           case "passage": {
+            const status = await convex.query(api.verseMemory.memorizeStatus, {
+              spans: memorizeTargetSpans(resolved),
+            });
+            if (status?.state === "overlaps") {
+              throw new Error(
+                overlapsMessage(status.title ?? "a passage", resolved.title),
+              );
+            }
             const scope = passageScope(
               resolved.book,
               resolved.startChapter,
               resolved.endChapter,
             );
+            // A piece holds at most MAX_GROUP_VERSES verses, so only a short
+            // passage can be one card. A range also needs its ends checked
+            // against the text before its pack is keyed by them.
+            const planned =
+              resolved.range !== null || resolved.verseCount <= MAX_GROUP_VERSES
+                ? planPassagePieces(
+                    await loadChaptersForScope(fetchChaptersBatch, scope),
+                    resolved.range,
+                  )
+                : null;
+            if (planned?.kind === "oneCard") {
+              result = {
+                ...(await memorizeVerse(planned.span)),
+                asOneCard: true,
+              };
+              break;
+            }
+            const passageRange = planned?.range ?? null;
             const packId = resolved.presetId
               ? (await startPreset({ presetId: resolved.presetId })).packId
               : await createPack({
                   name: resolved.title,
                   kind: "scope",
                   scope,
+                  ...(passageRange ? { passageRange } : {}),
                 });
+            const tzOffsetMinutes = new Date(now).getTimezoneOffset();
             const existing = await convex.query(api.passageMemory.getForPack, {
               packId,
               now,
-              tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+              tzOffsetMinutes,
             });
-            if (!existing) {
+            if (!existing && planned) {
+              await startPassage({
+                packId,
+                pieces: planned.pieces,
+                now,
+                tzOffsetMinutes,
+              });
+            } else if (!existing) {
               await startPassageForPack(
                 { fetchChaptersBatch, startPassage },
-                { packId, scope, now },
+                { packId, scope, range: null, now },
               );
             }
             result = {
@@ -164,6 +230,7 @@ export function useMemorizeStart(): {
         logInteraction("memorize", "started", {
           mode: result.mode,
           alreadyMemorizing: result.alreadyMemorizing,
+          asOneCard: result.asOneCard === true,
         });
         return result;
       } catch (caught) {

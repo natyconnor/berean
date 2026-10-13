@@ -36,12 +36,16 @@ import {
 } from "./memorize-plan";
 import { packUpNextVerseRefIds } from "./pack-pacing";
 import type { PassageDueStatus } from "./passage-due";
-import { packAllowsPassageMode } from "./passage-eligibility";
+import {
+  packAllowsPassageMode,
+  rangeAllowsPassageMode,
+} from "./passage-eligibility";
 import {
   coerceUnstartedLearningPieces,
   isPassagePieceLocked,
 } from "./passage-frontier";
 import type { PassagePiece } from "./passage-pieces";
+import type { PassageRange } from "./passage-range";
 import type { VerseScope } from "./verse-scope-match";
 
 /**
@@ -57,6 +61,7 @@ export interface PackDetailPack {
   name: string;
   kind: "custom" | "scope";
   scope?: VerseScope;
+  passageRange?: PassageRange;
   createdAt: number;
   unifiedReviewEnabled?: boolean;
 }
@@ -135,6 +140,7 @@ export function packDetailGoal({
         name: pack.name,
         kind: pack.kind,
         scope: pack.scope,
+        passageRange: pack.passageRange,
         verseRefIds: members.map((member) => member.verseRefId),
         createdAt: pack.createdAt,
       },
@@ -614,7 +620,9 @@ export function offersLearnAsPassage(
     passage === null &&
     pack.kind === "scope" &&
     pack.scope !== undefined &&
-    packAllowsPassageMode(pack.scope)
+    packAllowsPassageMode(pack.scope) &&
+    (pack.passageRange === undefined ||
+      rangeAllowsPassageMode(pack.passageRange))
   );
 }
 

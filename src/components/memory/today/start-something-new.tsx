@@ -245,7 +245,9 @@ function SuggestionChip({
       : suggestion.detail;
 
   const destination =
-    status && status.state !== "none" ? status.destination : undefined;
+    status && (status.state === "memorizing" || status.state === "partOf")
+      ? status.destination
+      : undefined;
   if (destination) {
     return (
       <InternalLink
