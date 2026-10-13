@@ -321,6 +321,21 @@ describe("TodayPage", () => {
     ).toHaveAttribute("href", "/memory?panel=verses");
   });
 
+  it("names the streak on Your progress once it's 2+ days", () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    mocks.queryResults.set(
+      "verseMemory.reviewActivity",
+      activity({ practicedDaysAgo: [0, 1] }),
+    );
+    renderPage();
+
+    expect(
+      screen.getByRole("link", {
+        name: "Your progress: 2-day streak · 96% accuracy",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("leaves accuracy out until there are five answers", () => {
     mocks.queryResults.set("memoryHome.today", WORK_TODAY);
     mocks.queryResults.set(

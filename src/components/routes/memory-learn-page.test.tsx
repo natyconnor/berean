@@ -156,6 +156,7 @@ function passageView(
     consecutiveCorrect: 0,
     lapses: 0,
     stageReps: 0,
+    needsCelebration: false,
     createdAt: now,
     updatedAt: now,
     remainingIntroduces: 5,

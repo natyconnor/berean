@@ -13,18 +13,24 @@ import {
   type ReviewActivity,
 } from "@/components/memory/progress/use-progress-activity";
 import type { TodayModelResult } from "@/hooks/use-today-model";
-import { overallAccuracy } from "@/lib/dashboard-buckets";
+import { computeStreak, overallAccuracy } from "@/lib/dashboard-buckets";
 import { YOUR_PROGRESS_LABEL, YOUR_VERSES_LABEL } from "@/lib/memory-copy";
 import { memoryPanelDrawerHref } from "@/lib/memory-panel";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { todayWorkCount } from "@/lib/memory-today";
+import {
+  PRACTICE_WINDOW_DAYS,
+  practicedDaysCopy,
+  practicedDaysIn,
+  streakCopy,
+  type StreakCopy,
+} from "@/lib/streak-copy";
 import { cn } from "@/lib/utils";
 
 const PROGRESS_HREF = memoryPanelDrawerHref({ kind: "progress" });
 const VERSES_HREF = memoryPanelDrawerHref({ kind: "verses" });
 
 const STRIP_DAYS = 14;
-const WEEK_DAYS = 7;
 /** Accuracy reads as noise before this many graded answers. */
 const MIN_ACCURACY_ANSWERS = 5;
 
@@ -82,6 +88,8 @@ function DoorwayCard({
 
 interface ProgressSummary {
   practicedDays: number;
+  /** Shown in place of `practicedDays` once it's 2+ days. */
+  streak: StreakCopy | null;
   /** Rounded percent, or `null` until there are enough answers. */
   accuracy: number | null;
   strip: ReviewActivity["heatmap"];
@@ -91,12 +99,13 @@ interface ProgressSummary {
 }
 
 function summarizeProgress(activity: ReviewActivity): ProgressSummary {
-  const week = activity.heatmap.slice(-WEEK_DAYS);
+  const dailyCounts = activity.heatmap.map((day) => day.count);
   const answers = activity.trend.reduce((sum, day) => sum + day.count, 0);
   const accuracy =
     answers >= MIN_ACCURACY_ANSWERS ? overallAccuracy(activity.trend) : null;
   return {
-    practicedDays: week.filter((day) => day.count > 0).length,
+    practicedDays: practicedDaysIn(dailyCounts),
+    streak: streakCopy(computeStreak(dailyCounts).days),
     accuracy: accuracy === null ? null : Math.round(accuracy),
     strip: activity.heatmap.slice(-STRIP_DAYS),
     spark: activity.trend.flatMap((day, index) =>
@@ -110,9 +119,7 @@ function summarizeProgress(activity: ReviewActivity): ProgressSummary {
 
 function progressStatText(summary: ProgressSummary): string {
   const practiced =
-    summary.practicedDays > 0
-      ? `Practiced ${summary.practicedDays} of the last ${WEEK_DAYS} days`
-      : `No practice in the last ${WEEK_DAYS} days`;
+    summary.streak?.sentence ?? practicedDaysCopy(summary.practicedDays);
   return summary.accuracy === null
     ? practiced
     : `${practiced} · ${summary.accuracy}% accuracy`;
@@ -135,15 +142,21 @@ function ProgressDoorway({ now }: { now: number }) {
       {summary ? (
         <>
           <p className="text-[13px] leading-snug">
-            {summary.practicedDays > 0 ? (
+            {summary.streak ? (
+              <>
+                <b className="font-semibold">{summary.streak.label}</b>
+                {summary.streak.note ? `. ${summary.streak.note}` : null}
+              </>
+            ) : summary.practicedDays > 0 ? (
               <>
                 Practiced{" "}
                 <b className="font-semibold">
-                  {summary.practicedDays} of the last {WEEK_DAYS} days
+                  {summary.practicedDays} of the last {PRACTICE_WINDOW_DAYS}{" "}
+                  days
                 </b>
               </>
             ) : (
-              `No practice in the last ${WEEK_DAYS} days`
+              practicedDaysCopy(0)
             )}
             {summary.accuracy !== null ? (
               <>

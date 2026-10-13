@@ -373,6 +373,11 @@ export default defineSchema({
     unheartedCount: v.optional(v.number()),
     keptHeartCount: v.optional(v.number()),
     migrationBannerDismissed: v.optional(v.boolean()),
+    // When the "by heart" moment was shown, so it shows once per passage.
+    celebratedAt: v.optional(v.number()),
+    // When the passage first left building, so the moment survives leaving
+    // before it was shown. Older passages have neither and never celebrate.
+    celebrationPendingAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

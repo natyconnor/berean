@@ -6,12 +6,14 @@ import {
   useState,
   type JSX,
   type MutableRefObject,
+  type ReactNode,
 } from "react";
 
 import { Textarea } from "@/components/ui/textarea";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { MAX_LEARN_STAGE, type MemorySchedule } from "@/lib/memory-scheduler";
+import { READER_VERSE_TEXT_CLASS } from "@/lib/reader-typography";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
@@ -74,11 +76,20 @@ interface VerseAttemptResultProps {
   requireExactToAdvance?: boolean;
   nextSchedule?: MemorySchedule | null;
   now?: number;
+  /**
+   * Leads the result (Memory's accuracy headline). The banner below then
+   * states only what the grade does, and the diff is set in reader type.
+   */
+  headline?: ReactNode;
 }
 
 const PLACEHOLDER = "\u00a0";
 
-function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
+function renderDiffChip(
+  token: DiffToken,
+  idx: number,
+  reader: boolean,
+): JSX.Element {
   if (token.status === "match") {
     return (
       <span
@@ -98,7 +109,10 @@ function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
         ? (token.expectedText ?? PLACEHOLDER)
         : token.text;
 
-  const baseRow = "min-h-5 rounded-md px-1.5 text-center text-[13px] leading-5";
+  const baseRow = cn(
+    "rounded-md px-1.5 text-center",
+    reader ? "min-h-6 text-[15px] leading-6" : "min-h-5 text-[13px] leading-5",
+  );
 
   const typedClassName = cn(
     baseRow,
@@ -148,15 +162,23 @@ function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
 
 function VerseAttemptDiff({
   tokens,
+  reader,
 }: {
   tokens: ReadonlyArray<DiffToken>;
+  /** Reader typography, and no percentage (the headline shows it). */
+  reader: boolean;
 }): JSX.Element {
   const accuracy = verseAttemptAccuracy(tokens);
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        <span>{accuracy}% recalled</span>
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
+          reader ? "justify-end" : "justify-between",
+        )}
+      >
+        {reader ? null : <span>{accuracy}% recalled</span>}
         <span className="flex items-center gap-2 font-medium normal-case tracking-normal">
           <span className="inline-flex items-center gap-1">
             <span className="h-2 w-3 rounded-sm bg-emerald-500/40" />
@@ -172,8 +194,13 @@ function VerseAttemptDiff({
           </span>
         </span>
       </div>
-      <p className="flex flex-wrap gap-x-1.5 gap-y-2 text-[13px] leading-5">
-        {tokens.map((token, idx) => renderDiffChip(token, idx))}
+      <p
+        className={cn(
+          "flex flex-wrap gap-x-1.5 gap-y-2",
+          reader ? READER_VERSE_TEXT_CLASS : "text-[13px] leading-5",
+        )}
+      >
+        {tokens.map((token, idx) => renderDiffChip(token, idx, reader))}
       </p>
     </div>
   );
@@ -187,6 +214,7 @@ export function VerseAttemptResult({
   requireExactToAdvance = false,
   nextSchedule = null,
   now,
+  headline,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -199,9 +227,16 @@ export function VerseAttemptResult({
   // Used as a motion key so the feedback banner re-plays its entrance when
   // the user tries a different attempt, but not on every keystroke.
   const attemptKey = trimmedTyped;
+  const hasHeadline = headline !== undefined;
 
   return (
-    <div className="w-full max-w-xl mx-auto space-y-2">
+    <div
+      className={cn(
+        "w-full max-w-xl mx-auto",
+        hasHeadline ? "space-y-3" : "space-y-2",
+      )}
+    >
+      {headline}
       {attemptQuality && (showScheduleOutcome || attemptQuality !== "off") && (
         <VerseMemoryFeedback
           quality={attemptQuality}
@@ -212,6 +247,7 @@ export function VerseAttemptResult({
           now={now}
           accuracy={attemptAccuracy}
           errors={attemptErrors}
+          consequenceOnly={hasHeadline}
         />
       )}
       <motion.div
@@ -230,7 +266,7 @@ export function VerseAttemptResult({
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           How you did
         </p>
-        <VerseAttemptDiff tokens={diffTokens} />
+        <VerseAttemptDiff tokens={diffTokens} reader={hasHeadline} />
       </motion.div>
     </div>
   );

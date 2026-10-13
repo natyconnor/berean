@@ -22,6 +22,7 @@ import {
   type VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
 import { getHighlightColor } from "@/lib/highlight-colors";
+import { READER_VERSE_TEXT_CLASS } from "@/lib/reader-typography";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import type { HeartMemoryCopy } from "@/lib/heart-memory-copy";
 import { VERSE_EXPAND_TRANSITION } from "./note-animation-config";
@@ -818,7 +819,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                   ? { position: "absolute" as const, top: 0, left: 0, right: 0 }
                   : {}),
               }}
-              className="font-serif w-full whitespace-pre-wrap leading-relaxed"
+              className={READER_VERSE_TEXT_CLASS}
             >
               {renderHighlightedText(false)}
             </span>
@@ -839,7 +840,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                   ? { position: "absolute" as const, top: 0, left: 0, right: 0 }
                   : {}),
               }}
-              className="font-serif w-full whitespace-pre-wrap leading-relaxed"
+              className={READER_VERSE_TEXT_CLASS}
             >
               {renderHighlightedText(isExpanded)}
             </span>

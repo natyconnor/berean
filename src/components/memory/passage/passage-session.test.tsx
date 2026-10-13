@@ -54,6 +54,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     passageMemory: {
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
+      markCelebrated: "passageMemory.markCelebrated",
     },
   },
 }));
@@ -119,6 +120,7 @@ function passageView(
     consecutiveCorrect: 0,
     lapses: 0,
     stageReps: 0,
+    needsCelebration: false,
     createdAt: now,
     updatedAt: now,
     remainingIntroduces: 5,
@@ -414,7 +416,8 @@ describe("PassageSession", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText(/recalled\./)).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("100% recalled")).toBeVisible();
     await waitFor(() => {
       const journeyAfter = screen.getByLabelText(/Learning journey:/);
       const pctAfter = Number(
@@ -451,12 +454,122 @@ describe("PassageSession", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText(/recalled\./)).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     await waitFor(() => {
       expect(
         screen.getByLabelText(/Progress to mastered: Memorized/),
       ).toBeInTheDocument();
     });
+  });
+
+  it("marks a newly finished passage with the by-heart moment once", async () => {
+    const onExit = vi.fn();
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+        needsCelebration: true,
+      }),
+    );
+
+    renderSession(
+      passageView([piece(0, "learning", { learnStage: 3, stageReps: 1 })], {
+        createdAt: getSessionNow() - 2 * DAY_MS,
+      }),
+      onExit,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    // The result that finished it stays up first.
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+    const moment = await screen.findByRole("dialog", {
+      name: "You can say all of Psalm 23 by heart.",
+    });
+    expect(moment).toHaveTextContent("1 verse · 3 days");
+    expect(moment).toHaveTextContent(PASSAGE_ONE);
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledWith({
+      packId: PACK_ID,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("skips the moment for a passage already celebrated", async () => {
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+        celebratedAt: getSessionNow() - DAY_MS,
+      }),
+    );
+
+    renderSession(
+      passageView([piece(0, "learning", { learnStage: 3, stageReps: 1 })]),
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await screen.findByText("Word for word.");
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
+  });
+
+  it("shows a missed by-heart moment when the session reopens", async () => {
+    const onExit = vi.fn();
+    renderSession(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+        needsCelebration: true,
+      }),
+      onExit,
+    );
+
+    const moment = await screen.findByRole("dialog", {
+      name: "You can say all of Psalm 23 by heart.",
+    });
+    expect(moment).toHaveTextContent(PASSAGE_ONE);
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(onExit).not.toHaveBeenCalled();
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("never shows the moment for an older passage without the flag", async () => {
+    renderSession(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+      }),
+    );
+
+    await screen.findByText("Recite the whole passage from memory");
+    await screen.findByRole("textbox");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
   });
 
   it("uses plain language for the remaining session copy", () => {

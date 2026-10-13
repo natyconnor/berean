@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { Sparkles } from "lucide-react";
 
+import { FirstMemorizedBanner } from "@/components/memory/celebrate/first-memorized-banner";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import type { CardReference } from "@/components/study/study-card-model";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ export interface SessionCompleteVerse {
   reference: CardReference;
   learnStage: number;
   status: MemoryStatus;
+  /** Moved from learning into review during this session. */
+  justMemorized?: boolean;
 }
 
 interface SessionCompleteProps {
@@ -63,6 +66,8 @@ export function SessionComplete({
             : SESSION_COMPLETE_FOOTER}
         </p>
       </div>
+
+      <FirstMemorizedBanner verses={verses} className="mt-5" />
 
       <SessionCompleteRows verses={verses} className="mt-6" />
 

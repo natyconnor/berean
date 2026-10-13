@@ -10,6 +10,7 @@ import {
   LAPSE_ACCURACY_LEADS,
   RETRY_ACCURACY_LEADS,
   reviewFeedbackMessage,
+  reviewOutcomeMessage,
   specialMissLead,
 } from "./verse-attempt-feedback";
 
@@ -270,5 +271,44 @@ describe("reviewFeedbackMessage", () => {
         lapsedToLearning: false,
       }),
     ).toMatch(/^Mostly there, but it needs some work — next review /);
+  });
+});
+
+describe("reviewOutcomeMessage", () => {
+  it("states only the schedule consequence, as a sentence", () => {
+    expect(
+      reviewOutcomeMessage({
+        outcome: "exact",
+        nextSchedule: { ...reviewingTomorrow, dueAt: NOW + 3 * DAY_MS },
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe("Next review in 3 days.");
+    expect(
+      reviewOutcomeMessage({
+        outcome: "retry",
+        nextSchedule: { ...reviewingTomorrow, intervalDays: 5, ease: 2.3 },
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe("Try again to extend your review interval from 5 days to 12 days.");
+    expect(
+      reviewOutcomeMessage({
+        outcome: "lapse",
+        now: NOW,
+        lapsedToLearning: true,
+      }),
+    ).toBe("Back to fill in the blanks.");
+  });
+
+  it("says nothing until the next review is known", () => {
+    expect(
+      reviewOutcomeMessage({
+        outcome: "hold",
+        nextSchedule: null,
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBeNull();
   });
 });

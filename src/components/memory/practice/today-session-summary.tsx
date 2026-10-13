@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { Check } from "lucide-react";
 
+import { FirstMemorizedBanner } from "@/components/memory/celebrate/first-memorized-banner";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { ReviewResultRows } from "@/components/memory/review-summary";
 import {
@@ -63,6 +64,8 @@ export function TodaySessionSummary({
           </p>
         </div>
       </div>
+
+      <FirstMemorizedBanner verses={learned} className="mt-5" />
 
       <div className="mt-6 space-y-3">
         {passages.length > 0 ? (

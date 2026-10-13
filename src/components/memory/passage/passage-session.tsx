@@ -9,6 +9,8 @@ import {
 import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { useMutation } from "convex/react";
 
+import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
+import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
 import {
   PassageRecallCard,
   type PassageRecallHint,
@@ -165,6 +167,13 @@ export function PassageSession({
   const [recitingSection, setRecitingSection] = useState(false);
   const [recitingConnect, setRecitingConnect] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
+  // The passage just became known by heart: "pending" holds the moment until
+  // the learner continues past the result that finished it. "owed" is a moment
+  // missed by leaving early, shown once this session opens with its text.
+  const [moment, setMoment] = useState<"pending" | "showing" | "owed" | null>(
+    view.needsCelebration ? "owed" : null,
+  );
+  const celebrateMastered = useFirstMasteredToast();
 
   const pieceRefs = useMemo(
     () => view.pieces.map(pieceReference),
@@ -261,6 +270,12 @@ export function PassageSession({
         addDayKey: nextView.addDayKey,
         todayKey: localDayIndex(attemptedAt, tz),
       });
+      if (status === "building" && nextView.needsCelebration) {
+        setMoment("pending");
+      }
+      if (status !== "mastered" && nextView.status === "mastered") {
+        celebrateMastered(packName);
+      }
       setStatus(nextView.status);
       setState({
         ...next,
@@ -361,6 +376,7 @@ export function PassageSession({
   }
 
   function handleContinueAfterResult() {
+    if (moment === "pending") setMoment("showing");
     setHoldResult(false);
     setHeldRecall(null);
     if (state.phase !== "rope" && state.phase !== "stall-repair") {
@@ -607,6 +623,17 @@ export function PassageSession({
             onContinueAfterResult={handleContinueAfterResult}
           />
         </div>
+      ) : null}
+
+      {moment === "showing" || (moment === "owed" && wordCountsReady) ? (
+        <PassageCompleteMoment
+          packId={packId}
+          title={packName}
+          verseCount={verseCountIn(state.pieces)}
+          createdAt={view.createdAt}
+          segments={composite.segments}
+          onDone={moment === "owed" ? () => setMoment(null) : finishForToday}
+        />
       ) : null}
     </PassageSessionShell>
   );

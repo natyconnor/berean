@@ -206,7 +206,10 @@ describe("PracticeBoard composite recitation", () => {
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    // The headline leads; the percentage is quiet text under it.
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("100% recalled")).toBeVisible();
+    expect(screen.queryByText("100% recalled.")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
     // One summary, one accuracy, labeled with the pack — and no per-verse
@@ -489,7 +492,7 @@ describe("PracticeBoard learning step label", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     await waitFor(() => {
       const pctAfter = Math.max(
         ...screen
@@ -543,7 +546,7 @@ describe("PracticeBoard learning step label", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
     expect(await screen.findByText("That's today's step.")).toBeInTheDocument();
@@ -574,7 +577,7 @@ describe("PracticeBoard learning step label", () => {
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
   }
 
@@ -707,7 +710,7 @@ describe("PracticeBoard recall submit loading", () => {
 
     await userEvent.click(check);
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     const savingButton = screen.getByRole("button", { name: "Saving..." });
     expect(savingButton).toBeDisabled();
     expect(savingButton).toHaveAttribute("aria-busy", "true");

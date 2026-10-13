@@ -6,6 +6,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import type { DashboardKpis } from "@/components/memory/dashboard/kpi-row";
 import { computeStreak, overallAccuracy } from "@/lib/dashboard-buckets";
+import { practicedDaysIn } from "@/lib/streak-copy";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 const HEATMAP_DAYS = 365; // up to a year; the chart clips to available width
@@ -76,6 +77,10 @@ export function progressKpis({
       activity === undefined
         ? undefined
         : computeStreak(activity.heatmap.map((d) => d.count)),
+    practicedLastWeek:
+      activity === undefined
+        ? undefined
+        : practicedDaysIn(activity.heatmap.map((d) => d.count)),
     inMemory:
       status === undefined
         ? undefined

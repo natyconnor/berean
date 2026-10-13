@@ -136,13 +136,11 @@ export function attemptFeedbackLead(input: AttemptFeedbackInput): string {
 /** Decline the extra retry and move on at the current interval. */
 export const REVIEW_RETRY_KEEP_GOING_LABEL = "It's okay — keep going";
 
-function withNextReview(
-  lead: string,
-  schedule: MemorySchedule | null | undefined,
-  now: number,
-): string {
-  const phrase = formatNextReviewPhrase(schedule, now);
-  return phrase ? `${lead} — next review ${phrase}` : lead;
+interface ReviewOutcomeInput {
+  outcome: ReviewGradeOutcome;
+  nextSchedule?: MemorySchedule | null;
+  now: number;
+  lapsedToLearning: boolean;
 }
 
 function reviewRetryScheduleCopy(
@@ -160,23 +158,46 @@ function reviewRetryScheduleCopy(
 }
 
 /**
- * Review-queue banner: lead plus the schedule consequence.
- *
- * Retry stays due, so we invite another attempt and name the current gap
- * plus the interval a perfect recall would land.
+ * What the grade does to the schedule, lowercase, or null when the next
+ * review isn't known yet. Retry stays due, so it invites another attempt and
+ * names the current gap plus the interval a perfect recall would land.
  */
-export function reviewFeedbackMessage(input: {
-  lead: string;
-  outcome: ReviewGradeOutcome;
-  nextSchedule?: MemorySchedule | null;
-  now: number;
-  lapsedToLearning: boolean;
-}): string {
+function reviewOutcomeClause(input: ReviewOutcomeInput): {
+  clause: string;
+  sentence: boolean;
+} | null {
   if (input.outcome === "retry") {
-    return `${input.lead} — ${reviewRetryScheduleCopy(input.nextSchedule)}.`;
+    return {
+      clause: reviewRetryScheduleCopy(input.nextSchedule),
+      sentence: true,
+    };
   }
   if (input.outcome === "lapse" && input.lapsedToLearning) {
-    return `${input.lead} — back to ${stepShortLabel(REVIEW_LAPSE_LEARN_STAGE).toLowerCase()}.`;
+    return {
+      clause: `back to ${stepShortLabel(REVIEW_LAPSE_LEARN_STAGE).toLowerCase()}`,
+      sentence: true,
+    };
   }
-  return withNextReview(input.lead, input.nextSchedule, input.now);
+  const phrase = formatNextReviewPhrase(input.nextSchedule, input.now);
+  return phrase ? { clause: `next review ${phrase}`, sentence: false } : null;
+}
+
+/** Review-queue banner: lead plus the schedule consequence. */
+export function reviewFeedbackMessage(
+  input: ReviewOutcomeInput & { lead: string },
+): string {
+  const outcome = reviewOutcomeClause(input);
+  if (!outcome) return input.lead;
+  return `${input.lead} — ${outcome.clause}${outcome.sentence ? "." : ""}`;
+}
+
+/**
+ * The schedule consequence on its own ("Next review in 3 days."), for result
+ * views whose accuracy headline already carries the encouragement.
+ */
+export function reviewOutcomeMessage(input: ReviewOutcomeInput): string | null {
+  const outcome = reviewOutcomeClause(input);
+  if (!outcome) return null;
+  const { clause } = outcome;
+  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
 }

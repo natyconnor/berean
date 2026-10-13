@@ -67,6 +67,13 @@ import {
 } from "@/lib/memory-session-order";
 import type { PracticeOrder } from "@/lib/practice-order";
 import {
+  READER_MEASURE_CLASS,
+  READER_REFERENCE_CLASS,
+  READER_VERSE_SIZE_CLASS,
+  READER_VERSE_TEXT_CLASS,
+  SESSION_VERSE_TEXT_CLASS,
+} from "@/lib/reader-typography";
+import {
   averageReviewAccuracy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
@@ -100,6 +107,8 @@ import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import { VerseAttemptResult } from "../../study/study-verse-memory-card";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "../../study/verse-attempt-feedback";
+import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
+import { AccuracyHeadline } from "./accuracy-headline";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import {
   currentStageStep,
@@ -381,6 +390,7 @@ export function PracticeBoard({
   const acceptVerseRetryHold = useMutation(api.verseMemory.acceptRetryHold);
   const acceptUnifiedRetryHold = useMutation(api.packs.acceptRetryHold);
   const acceptPassageRetryHold = useMutation(api.passageMemory.acceptRetryHold);
+  const celebrateMastered = useFirstMasteredToast();
   const sessionLabel = sessionLabelFor(kind);
   const isReview = kind === "review";
 
@@ -464,6 +474,24 @@ export function PracticeBoard({
       }),
     [orderedVerses, progressByVerseId, now, kind, scopeLabel],
   );
+
+  // What the summary lists: each verse where it landed, flagged when it
+  // moved from learning into review during this run.
+  const sessionVerses = useMemo<SessionCompleteVerse[]>(() => {
+    const startedInReview = new Set(
+      baseVerses
+        .filter((verse) => isReviewPhase(verse.status))
+        .map((verse) => verse.id),
+    );
+    return railVerses.map((verse) => ({
+      id: verse.id,
+      reference: verse.reference,
+      learnStage: verse.learnStage,
+      status: verse.status,
+      justMemorized:
+        isReviewPhase(verse.status) && !startedInReview.has(verse.id),
+    }));
+  }, [baseVerses, railVerses]);
 
   const boundedIndex =
     orderedVerses.length === 0
@@ -589,16 +617,8 @@ export function PracticeBoard({
   useEffect(() => {
     if (!finished || !onComplete || completionReported.current) return;
     completionReported.current = true;
-    onComplete({
-      verses: railVerses.map((verse) => ({
-        id: verse.id,
-        reference: verse.reference,
-        learnStage: verse.learnStage,
-        status: verse.status,
-      })),
-      attempts: sessionAttempts,
-    });
-  }, [finished, onComplete, railVerses, sessionAttempts]);
+    onComplete({ verses: sessionVerses, attempts: sessionAttempts });
+  }, [finished, onComplete, sessionVerses, sessionAttempts]);
 
   function handleOrderChange(nextOrder: PracticeOrder) {
     setOrder(nextOrder);
@@ -618,6 +638,17 @@ export function PracticeBoard({
   }
 
   function adoptVerseSchedule(verseId: string, next: MemorySchedule) {
+    const before = progressByVerseId[verseId]?.status;
+    if (next.status === "mastered" && before && before !== "mastered") {
+      const verse = baseVerses.find((item) => item.id === verseId);
+      if (verse) {
+        celebrateMastered(
+          verse.composite
+            ? (verse.composite.packName ?? scopeLabel)
+            : formatVerseRef(verse.reference),
+        );
+      }
+    }
     setProgressByVerseId((prev) => ({
       ...prev,
       [verseId]: {
@@ -740,7 +771,7 @@ export function PracticeBoard({
           />
         ) : (
           <SessionComplete
-            verses={railVerses}
+            verses={sessionVerses}
             exitLabel={exitLabel}
             onExit={onExit}
             extraPracticeHref={extraPracticeHref}
@@ -1231,7 +1262,7 @@ function PracticeCard({
               />
               {sessionLabel} · {stageInfo.label}
             </p>
-            <CardTitle className="mt-2 text-3xl tracking-tight">
+            <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {composite ? composite.title : refLabel}
             </CardTitle>
           </div>
@@ -1283,7 +1314,9 @@ function PracticeCard({
                 <>
                   <div
                     className={cn(
-                      "min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
+                      "mx-auto min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left",
+                      SESSION_VERSE_TEXT_CLASS,
+                      READER_MEASURE_CLASS,
                       // A whole passage scrolls inside the card instead of
                       // pushing the answer box off the screen.
                       composite && "max-h-[45vh] overflow-y-auto",
@@ -1297,7 +1330,7 @@ function PracticeCard({
                         <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
                       </div>
                     ) : error ? (
-                      <div className="space-y-3">
+                      <div className="space-y-3 font-sans">
                         <p className="text-sm text-destructive">
                           Could not load verse text.
                         </p>
@@ -1306,7 +1339,7 @@ function PracticeCard({
                         </Button>
                       </div>
                     ) : hintStage === "hidden" ? (
-                      <div className="flex h-full min-h-[140px] items-center justify-center text-center">
+                      <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
                         <p className="max-w-sm text-sm text-muted-foreground">
                           {composite
                             ? "No hint text. Type the passage from memory — verse numbers not needed — then check your answer."
@@ -1330,7 +1363,9 @@ function PracticeCard({
                           : "Type what you remember"
                       }
                       className={cn(
-                        "bg-background/80",
+                        "mx-auto bg-background/80 px-4 py-3",
+                        SESSION_VERSE_TEXT_CLASS,
+                        READER_MEASURE_CLASS,
                         composite
                           ? "min-h-[300px] max-h-[60vh] resize-y"
                           : "min-h-[170px] resize-none",
@@ -1360,14 +1395,19 @@ function PracticeCard({
                     )}
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
+                    headline={
+                      <AccuracyHeadline
+                        accuracy={checkedAccuracy}
+                        exact={checkedQuality === "exact"}
+                      />
+                    }
                   />
-                  <p className="text-center text-sm text-muted-foreground">
-                    {`${checkedAccuracy}% recalled.`}
-                  </p>
                   {checkedQuality !== "exact" && (
                     <div
                       className={cn(
-                        "rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6",
+                        "mx-auto rounded-xl border bg-card/60 px-4 py-3 text-left",
+                        READER_VERSE_SIZE_CLASS,
+                        READER_MEASURE_CLASS,
                         composite && "max-h-[45vh] overflow-y-auto",
                       )}
                     >
@@ -1376,16 +1416,22 @@ function PracticeCard({
                       </p>
                       {composite
                         ? composite.segments.map((segment) => (
-                            <p key={referenceKey(segment.reference)}>
-                              <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
+                            <p
+                              key={referenceKey(segment.reference)}
+                              className={READER_VERSE_TEXT_CLASS}
+                            >
+                              <span className="mr-1 align-top font-sans text-xs font-semibold text-muted-foreground">
                                 {formatVerseRef(segment.reference)}
                               </span>
                               {segment.text}
                             </p>
                           ))
                         : data?.verses.map((verse) => (
-                            <p key={verse.number}>
-                              <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
+                            <p
+                              key={verse.number}
+                              className={READER_VERSE_TEXT_CLASS}
+                            >
+                              <span className="mr-1 align-top font-sans text-xs font-semibold text-muted-foreground">
                                 {verse.number}
                               </span>
                               {verse.text}
@@ -1605,7 +1651,7 @@ function PracticeShuffleCardFace({
           />
           {sessionLabel} · {stage.label}
         </p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+        <h2 className={cn("mt-2 text-foreground", READER_REFERENCE_CLASS)}>
           {refLabel}
         </h2>
       </div>

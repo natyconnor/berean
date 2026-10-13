@@ -7,6 +7,7 @@ import {
   insertPassageMemory,
   insertPassageReview,
   loadPassageForPack,
+  markPassageCelebrated,
   memberToHeart,
   memberToSchedule,
   patchPassageMemory,
@@ -17,6 +18,7 @@ import {
   toPassageView,
   withNormalizedPieces,
 } from "./lib/passageMemory";
+import { celebrationPendingPatch } from "./lib/passageCelebration";
 import {
   dueQueuePackItemValidator,
   passageAttemptKindValidator,
@@ -316,6 +318,7 @@ export const recordAttempt = mutation({
         ...(schedule
           ? {
               status: "reviewing" as const,
+              ...celebrationPendingPatch(row, "reviewing", args.now),
               ease: schedule.ease,
               intervalDays: schedule.intervalDays,
               dueAt: schedule.dueAt,
@@ -416,6 +419,21 @@ export const acceptRetryHold = mutation({
     });
 
     return toPassageView(next, args.now, args.tzOffsetMinutes);
+  },
+});
+
+/**
+ * The "by heart" moment was shown for this passage. It is owed from the first
+ * move out of building until this runs, even across sessions.
+ */
+export const markCelebrated = mutation({
+  args: { packId: v.id("packs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = await requirePassageForPack(ctx, args.packId, userId);
+    await markPassageCelebrated(ctx, row, Date.now());
+    return null;
   },
 });
 

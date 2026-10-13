@@ -32,6 +32,10 @@ export const FEATURE_HINTS = {
   MEMORIZE_EXPLAINER: "memorize-explainer",
   /** Reader popover after a heart offering to memorize it; dismissed = Don't ask again. */
   HEART_MEMORIZE_NUDGE: "heart-memorize-nudge",
+  /** Session summary banner the first time a verse is memorized. */
+  CELEBRATE_FIRST_VERSE: "celebrate-first-verse",
+  /** Toast the first time a verse or passage is mastered. */
+  CELEBRATE_FIRST_MASTERED: "celebrate-first-mastered",
 } as const;
 
 export type FeatureHintId = (typeof FEATURE_HINTS)[keyof typeof FEATURE_HINTS];
@@ -59,4 +63,6 @@ export const FEATURE_HINT_METADATA: Record<FeatureHintId, FeatureHintMetadata> =
     [FEATURE_HINTS.READING_MODE_REVEAL]: { priority: 60 },
     [FEATURE_HINTS.MEMORIZE_EXPLAINER]: { priority: 0 },
     [FEATURE_HINTS.HEART_MEMORIZE_NUDGE]: { priority: 0 },
+    [FEATURE_HINTS.CELEBRATE_FIRST_VERSE]: { priority: 0 },
+    [FEATURE_HINTS.CELEBRATE_FIRST_MASTERED]: { priority: 0 },
   };

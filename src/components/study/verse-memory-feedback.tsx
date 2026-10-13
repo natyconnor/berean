@@ -17,6 +17,7 @@ import type {
 import {
   attemptFeedbackLead,
   reviewFeedbackMessage,
+  reviewOutcomeMessage,
 } from "./verse-attempt-feedback";
 
 interface VerseMemoryFeedbackProps {
@@ -45,6 +46,11 @@ interface VerseMemoryFeedbackProps {
   accuracy?: number;
   /** Diff error tallies — unlocks one-word-off and typo-only copy. */
   errors?: AttemptErrorCounts;
+  /**
+   * An accuracy headline already encourages: show only what the grade does
+   * (the schedule, or why 100% is needed), with no lead and no confetti.
+   */
+  consequenceOnly?: boolean;
 }
 
 const CONFETTI_COUNT = 10;
@@ -69,6 +75,7 @@ export function VerseMemoryFeedback({
   now,
   accuracy,
   errors,
+  consequenceOnly = false,
 }: VerseMemoryFeedbackProps): JSX.Element | null {
   const reduceMotion = useReducedMotion();
   const dueClock = now ?? 0;
@@ -88,13 +95,16 @@ export function VerseMemoryFeedback({
       isLearningPhase(nextSchedule.status);
     const bannerOutcome =
       lapsedToLearning && outcome !== "lapse" ? "lapse" : outcome;
-    const message = reviewFeedbackMessage({
-      lead,
+    const outcomeInput = {
       outcome: bannerOutcome,
       nextSchedule,
       now: dueClock,
       lapsedToLearning,
-    });
+    };
+    const message = consequenceOnly
+      ? reviewOutcomeMessage(outcomeInput)
+      : reviewFeedbackMessage({ lead, ...outcomeInput });
+    if (message === null) return null;
 
     if (bannerOutcome === "lapse") {
       return (
@@ -116,7 +126,7 @@ export function VerseMemoryFeedback({
           tone="exact"
           icon={<PartyPopper className="h-4 w-4 shrink-0" aria-hidden />}
           message={message}
-          sparkle
+          sparkle={!consequenceOnly}
         />
       );
     }
@@ -133,6 +143,9 @@ export function VerseMemoryFeedback({
   }
 
   if (quality === "off") return null;
+  if (consequenceOnly && !(quality === "close" && requireExactToAdvance)) {
+    return null;
+  }
 
   if (quality === "exact") {
     return (

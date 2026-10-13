@@ -22,6 +22,7 @@ import {
   passagePiecesAsMembers,
   type PackMember,
 } from "./packs";
+import { needsCelebration } from "./passageCelebration";
 import { deletePassageMemoryDue, upsertPassageMemoryDue } from "./passageDue";
 import type { PassageHeartInfoValue, PassageView } from "./passageValues";
 
@@ -271,6 +272,22 @@ export async function patchPassageMemory(
 }
 
 /**
+ * Record that the "by heart" moment was shown. Idempotent: the first time
+ * stands. Not progress, so `updatedAt` and the due cache are untouched.
+ */
+export async function markPassageCelebrated(
+  ctx: MutationCtx,
+  row: Doc<"passageMemory">,
+  now: number,
+): Promise<void> {
+  if (row.celebratedAt !== undefined) return;
+  await ctx.db.patch(row._id, {
+    celebratedAt: now,
+    celebrationPendingAt: undefined,
+  });
+}
+
+/**
  * Delete a passage, its reviews, and its due cache. Its passage hearts stay as
  * plain range hearts (`passageMemoryId` cleared).
  */
@@ -362,6 +379,8 @@ export function toPassageView(
     unheartedCount: row.unheartedCount,
     keptHeartCount: row.keptHeartCount,
     migrationBannerDismissed: row.migrationBannerDismissed,
+    celebratedAt: row.celebratedAt,
+    needsCelebration: needsCelebration(row),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     remainingIntroduces: remainingIntroduces({
