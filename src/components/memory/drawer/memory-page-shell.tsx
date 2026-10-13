@@ -13,12 +13,14 @@ import type { MemoryPanelBackLink } from "./memory-panel-context";
 export function MemoryPageShell({
   back,
   title,
+  titleAccessory,
   subtitle,
   actions,
   children,
 }: {
   back: MemoryPanelBackLink;
   title: ReactNode;
+  titleAccessory?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
@@ -37,9 +39,12 @@ export function MemoryPageShell({
               <ChevronLeft className="h-4 w-4" aria-hidden />
               {back.label}
             </InternalLink>
-            <h1 className="truncate text-lg font-semibold tracking-tight">
-              {title}
-            </h1>
+            <div className="flex min-w-0 items-center gap-1">
+              <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
+                {title}
+              </h1>
+              {titleAccessory}
+            </div>
             {subtitle ? (
               <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
             ) : null}

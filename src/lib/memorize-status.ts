@@ -9,6 +9,9 @@ import { spanContains, type VerseSpan } from "./hearted-verse-coverage";
 /** Most spans one Memorize call may turn into a pack. */
 export const MEMORIZE_MAX_PACK_SPANS = 200;
 
+/** Longest pack name `packs.createAndMemorize` and `packs.rename` accept. */
+export const MAX_PACK_NAME_LENGTH = 80;
+
 /**
  * How a passage relates to a target:
  * - `equal`: they cover the same verses (each target span sits inside the
@@ -33,7 +36,8 @@ export function passageCoverage(
   return inTarget ? "equal" : "contains";
 }
 
-function spanKey(span: VerseSpan): string {
+/** Identity of an exact span ("John|14|27|27"). */
+export function spanKey(span: VerseSpan): string {
   return `${span.book}|${span.chapter}|${span.startVerse}|${span.endVerse}`;
 }
 

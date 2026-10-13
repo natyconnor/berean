@@ -71,7 +71,29 @@ function chapterRow(title: string) {
   return within(row);
 }
 
-describe("PresetBrowser collections", () => {
+describe("PresetBrowser", () => {
+  beforeEach(() => {
+    progress = [];
+  });
+
+  it("is titled Suggestions with Passages and Packs sections", () => {
+    render(<PresetBrowser />);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Suggestions" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Popular passages and verse packs to memorize."),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("heading", { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Passages", "Packs"]);
+  });
+});
+
+describe("PresetBrowser packs", () => {
   beforeEach(() => {
     progress = [];
   });
@@ -96,9 +118,7 @@ describe("PresetBrowser collections", () => {
     ];
     render(<PresetBrowser />);
 
-    expect(
-      screen.getByText("This collection is already a pack."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("You already have this pack.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
       "href",
       "/memory/pack_100",
@@ -119,9 +139,7 @@ describe("PresetBrowser collections", () => {
     render(<PresetBrowser />);
 
     expect(
-      screen.getByText(
-        "Every passage in this collection is already in your library.",
-      ),
+      screen.getByText("You're already memorizing every verse in it."),
     ).toBeInTheDocument();
     expect(screen.getByText("Memorizing")).toBeInTheDocument();
     expect(
@@ -130,7 +148,7 @@ describe("PresetBrowser collections", () => {
   });
 });
 
-describe("PresetBrowser chapters", () => {
+describe("PresetBrowser passages", () => {
   beforeEach(() => {
     progress = [];
     mocks.openSheet.mockReset();

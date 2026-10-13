@@ -4,6 +4,16 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
+ * A word as a label ("Scope", "Presets") anywhere, or lowercase in prose
+ * ("in this scope"). Code values in string literals ("scope",
+ * "/memory/presets", "@/lib/verse-scope-match") have no spaces, so they pass.
+ */
+function uiWord(lowercase: string): RegExp {
+  const label = lowercase.charAt(0).toUpperCase() + lowercase.slice(1);
+  return new RegExp(`\\b${label}s?\\b|^(?=.*\\s).*\\b${lowercase}s?\\b`);
+}
+
+/**
  * Words Memory never shows. Later PRs extend this list as more internal terms
  * leave the UI.
  */
@@ -20,6 +30,12 @@ export const BANNED_MEMORY_COPY: readonly {
   { word: "Learn whole passage", pattern: /\bLearn whole passage\b/i },
   { word: "Memorize whole passage", pattern: /\bMemorize whole passage\b/i },
   { word: "Recite as one passage", pattern: /\bRecite as one passage\b/i },
+  { word: "Scope", pattern: uiWord("scope") },
+  { word: "Custom pack", pattern: /\bcustom packs?\b/i },
+  { word: "Scope pack", pattern: /\bscope packs?\b/i },
+  { word: "Preset", pattern: uiWord("preset") },
+  { word: "Collection", pattern: uiWord("collection") },
+  { word: "Browse presets", pattern: /\bbrowse presets\b/i },
 ];
 
 /**
@@ -30,7 +46,14 @@ export const MEMORY_COPY_ALLOWLIST: readonly {
   file: string;
   text: string;
   reason: string;
-}[] = [];
+}[] = [
+  {
+    file: "src/components/memory/preview-memory-seed-card.tsx",
+    text: "Loads hearted verses at every stage, custom packs, and five distinct-scope passage packs (Psalm 1 start, Jude building, 3 John budget used, Psalm 23 maintenance, multi-book collection-only). Replaces this account&apos;s hearted verses and packs.",
+    reason:
+      "Developer seed tool shown only on preview deployments; it names the seeded data shapes.",
+  },
+];
 
 const ROOT = process.cwd();
 
@@ -140,6 +163,35 @@ describe("Memory copy guard", () => {
       '"Learn whole passage" in "Learn whole passage"',
       '"Memorize whole passage" in "Memorize whole passage"',
       '"Recite as one passage" in "Recite as one passage"',
+    ]);
+  });
+
+  it("catches pack type words in copy but not in code values", () => {
+    const sample = [
+      'const a = <h2 title="Scope">Collections</h2>;',
+      'const b = "No hearted verses in this scope yet.";',
+      "const c = <p>Start from a preset chapter.</p>;",
+      'const d = "Custom packs";',
+      "const e = <span>Scope pack</span>;",
+      'const f = <a href="/memory/presets">Browse presets</a>;',
+      'const g = "Every passage in this collection";',
+      'const ok1 = pack.kind === "scope" || preset.kind === "collection";',
+      'const ok2 = "/memory/presets/$presetId";',
+      'import { x } from "@/lib/verse-scope-match";',
+      "const ok3 = <p>Suggestions · Packs</p>;",
+    ].join("\n");
+
+    expect(bannedCopyIn(userVisibleStrings(sample))).toEqual([
+      '"Scope" in "Scope"',
+      '"Collection" in "Collections"',
+      '"Scope" in "No hearted verses in this scope yet."',
+      '"Preset" in "Start from a preset chapter."',
+      '"Custom pack" in "Custom packs"',
+      '"Scope" in "Scope pack"',
+      '"Scope pack" in "Scope pack"',
+      '"Preset" in "Browse presets"',
+      '"Browse presets" in "Browse presets"',
+      '"Collection" in "Every passage in this collection"',
     ]);
   });
 

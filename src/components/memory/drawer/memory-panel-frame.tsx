@@ -14,6 +14,8 @@ import { useMemoryPanelFrame } from "./memory-panel-context";
 export interface MemoryPanelFrameProps {
   /** Drawer title (focused on open and swap) or page heading. */
   title: ReactNode;
+  /** Beside the title, outside the heading (e.g. a Rename button). */
+  titleAccessory?: ReactNode;
   subtitle?: ReactNode;
   /** Header actions: cross-links and a ⋯ menu. */
   actions?: ReactNode;
@@ -28,6 +30,7 @@ export interface MemoryPanelFrameProps {
  */
 export function MemoryPanelFrame({
   title,
+  titleAccessory,
   subtitle,
   actions,
   scrollBody,
@@ -40,6 +43,7 @@ export function MemoryPanelFrame({
       <MemoryDrawerFrame
         back={frame.back}
         title={title}
+        titleAccessory={titleAccessory}
         subtitle={subtitle}
         actions={actions}
         fullPageHref={frame.fullPageHref}
@@ -55,6 +59,7 @@ export function MemoryPanelFrame({
     <MemoryPageShell
       back={frame.back ?? { label: TODAY_LABEL, href: "/memory" }}
       title={title}
+      titleAccessory={titleAccessory}
       subtitle={subtitle}
       actions={actions}
     >

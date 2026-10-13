@@ -1,6 +1,39 @@
 import { describe, expect, it } from "vitest";
 
-import { heartMatchesSearch, memorizeSearch } from "./memorize-search";
+import {
+  heartMatchesSearch,
+  memorizeSearch,
+  parseReferenceSpan,
+} from "./memorize-search";
+
+describe("parseReferenceSpan", () => {
+  it("reads a verse, a range and a whole chapter", () => {
+    expect(parseReferenceSpan("John 14:27")).toEqual({
+      kind: "match",
+      span: { book: "John", chapter: 14, startVerse: 27, endVerse: 27 },
+    });
+    expect(parseReferenceSpan("Rom 8:28–30")).toEqual({
+      kind: "match",
+      span: { book: "Romans", chapter: 8, startVerse: 28, endVerse: 30 },
+    });
+    expect(parseReferenceSpan("Psalm 1")).toEqual({
+      kind: "match",
+      span: { book: "Psalms", chapter: 1, startVerse: 1, endVerse: 6 },
+    });
+  });
+
+  it("does not search words", () => {
+    expect(parseReferenceSpan("  ")).toEqual({ kind: "empty" });
+    expect(parseReferenceSpan("anxious")).toEqual({ kind: "noMatch" });
+  });
+
+  it("explains a verse past the end of the chapter", () => {
+    expect(parseReferenceSpan("John 14:99")).toEqual({
+      kind: "outOfRange",
+      message: "John 14 only has 31 verses.",
+    });
+  });
+});
 
 describe("memorizeSearch", () => {
   it("is empty for blank text", () => {

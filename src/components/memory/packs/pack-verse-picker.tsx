@@ -167,7 +167,7 @@ function HeartedTab({
       <div className="rounded-lg border px-4 py-8 text-center">
         <p className="text-sm text-muted-foreground">
           {isScoped
-            ? "No hearted verses in this scope yet. Browse to add one."
+            ? "No hearted verses here yet. Browse to add one."
             : "No hearted verses yet. Browse to add one."}
         </p>
       </div>

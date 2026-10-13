@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
-import { MEMORIZE_LABEL } from "@/lib/memory-copy";
+import { MEMORIZE_LABEL, SUGGESTIONS_LABEL } from "@/lib/memory-copy";
 import {
   chapterPresetVerseCount,
   formatChapterRange,
@@ -34,7 +34,7 @@ export function CollectionPresetPage() {
     return (
       <PresetShell>
         <p className="text-sm text-muted-foreground">
-          That preset is not in the catalog.
+          That suggestion isn&apos;t available.
         </p>
       </PresetShell>
     );
@@ -54,7 +54,7 @@ function PresetShell({ children }: { children: ReactNode }) {
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          All presets
+          {SUGGESTIONS_LABEL}
         </Link>
       </header>
       <div className="mx-auto w-full max-w-3xl px-5 pt-6">{children}</div>
@@ -147,7 +147,7 @@ function CollectionStart({ presetId }: { presetId: string }) {
           className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          All presets
+          {SUGGESTIONS_LABEL}
         </Link>
         <h1 className="text-lg font-semibold tracking-tight">{preset.title}</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">

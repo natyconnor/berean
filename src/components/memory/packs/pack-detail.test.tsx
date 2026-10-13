@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   mutations: new Map<string, ReturnType<typeof vi.fn>>(),
   navigate: vi.fn(),
   startPassage: vi.fn(),
+  toast: vi.fn(),
   toastSuccess: vi.fn(),
 }));
 
@@ -80,12 +81,19 @@ vi.mock("../../../../convex/_generated/api", () => ({
       setUnifiedReview: "packs.setUnifiedReview",
       listMine: "packs.listMine",
       addVerse: "packs.addVerse",
+      rename: "packs.rename",
+      removeVerse: "packs.removeVerse",
+      restoreVerse: "packs.restoreVerse",
+      reorder: "packs.reorder",
     },
     passageMemory: {
       getForPack: "passageMemory.getForPack",
       ensureDueBackfill: "passageMemory.ensureDueBackfill",
     },
-    savedVerses: { listForChapter: "savedVerses.listForChapter" },
+    savedVerses: {
+      listForChapter: "savedVerses.listForChapter",
+      listHearted: "savedVerses.listHearted",
+    },
     verseMemory: {
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
@@ -133,7 +141,10 @@ vi.mock("@/hooks/use-live-now", () => ({ useLiveNow: () => NOW }));
 vi.mock("@/lib/viewer-timezone", () => ({ getViewerTimeZone: () => "UTC" }));
 
 vi.mock("sonner", () => ({
-  toast: { success: mocks.toastSuccess, error: vi.fn() },
+  toast: Object.assign(mocks.toast, {
+    success: mocks.toastSuccess,
+    error: vi.fn(),
+  }),
 }));
 
 function scopeFor(chapter: number) {
@@ -303,6 +314,7 @@ beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.startPassage.mockReset();
   mocks.startPassage.mockResolvedValue(undefined);
+  mocks.toast.mockReset();
   mocks.toastSuccess.mockReset();
   passages = { psalm16: passageView() };
   membersByPack = {
@@ -636,6 +648,214 @@ describe("PackDetail on its full page", () => {
     );
     expect(
       screen.queryByRole("link", { name: "Open full page" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("PackDetail editing a pack", () => {
+  function rowNames() {
+    return within(screen.getByRole("region", { name: "Verses" }))
+      .getAllByRole("listitem")
+      .map((item) => within(item).getAllByRole("link")[0]?.textContent);
+  }
+
+  it("renames from the pencil: Enter saves, Esc cancels", async () => {
+    renderHost("pack:merced");
+
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "Name" });
+    expect(field).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(
+      screen.getByRole("dialog", { name: "Merced Team" }),
+    ).toBeInTheDocument();
+    expect(mocks.mutations.get("packs.rename")).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await userEvent.clear(screen.getByRole("textbox", { name: "Name" }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Name" }),
+      "Merced Crew{Enter}",
+    );
+    expect(mocks.mutations.get("packs.rename")).toHaveBeenCalledWith({
+      id: "merced",
+      name: "Merced Crew",
+    });
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("Pack renamed"),
+    );
+  });
+
+  it("does not save an empty name", async () => {
+    renderHost("pack:merced");
+
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await userEvent.clear(screen.getByRole("textbox", { name: "Name" }));
+    await userEvent.keyboard("{Enter}");
+
+    expect(mocks.mutations.get("packs.rename")).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("dialog", { name: "Merced Team" }),
+    ).toBeInTheDocument();
+  });
+
+  it("moves verses with Move up / Move down and announces each move", async () => {
+    // Like the server: the saved order is what resolveMembers returns next,
+    // and each save finishes when the test says so.
+    const saves: Array<() => void> = [];
+    mocks.mutations.set(
+      "packs.reorder",
+      vi.fn(({ orderedVerseRefIds }: { orderedVerseRefIds: string[] }) => {
+        membersByPack = {
+          ...membersByPack,
+          merced: orderedVerseRefIds.map((id) =>
+            MERCED_MEMBERS.find((member) => member.verseRefId === id),
+          ),
+        };
+        return new Promise<null>((resolve) => saves.push(() => resolve(null)));
+      }),
+    );
+    const host = () => (
+      <TooltipProvider>
+        <MemoryPanelHost panel="pack:merced" from={undefined} />
+      </TooltipProvider>
+    );
+    const view = render(host());
+    expect(rowNames()).toEqual(["Luke 9:23-24", "Joshua 1:9", "Isaiah 41:10"]);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Options for Luke 9:23-24" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "Move up" }),
+    ).toHaveAttribute("data-disabled");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Move down" }));
+
+    expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23-24", "Isaiah 41:10"]);
+    expect(mocks.mutations.get("packs.reorder")).toHaveBeenCalledWith({
+      id: "merced",
+      orderedVerseRefIds: ["josh", "luke", "isa"],
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Moved Luke 9:23-24 to 2 of 3.",
+    );
+    // The query pushes the saved order, then the save finishes.
+    view.rerender(host());
+    await act(async () => {
+      saves.shift()?.();
+      await Promise.resolve();
+    });
+    expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23-24", "Isaiah 41:10"]);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("New order saved", {
+      id: "pack-order-merced",
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Options for Isaiah 41:10" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Move up" }),
+    );
+    expect(mocks.mutations.get("packs.reorder")).toHaveBeenLastCalledWith({
+      id: "merced",
+      orderedVerseRefIds: ["josh", "isa", "luke"],
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Moved Isaiah 41:10 to 2 of 3.",
+    );
+  });
+
+  it("removes a verse with an Undo that puts it back at its old place", async () => {
+    mutation("packs.removeVerse").mockResolvedValue(1);
+    renderHost("pack:merced");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove Joshua 1:9" }),
+    );
+    expect(mocks.mutations.get("packs.removeVerse")).toHaveBeenCalledWith({
+      id: "merced",
+      verseRefId: "josh",
+    });
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledTimes(1));
+    const [message, options] = mocks.toast.mock.calls[0] as [
+      string,
+      { action: { label: string; onClick: () => void } },
+    ];
+    expect(message).toBe("Removed Joshua 1:9.");
+    expect(options.action.label).toBe("Undo");
+
+    options.action.onClick();
+    expect(mocks.mutations.get("packs.restoreVerse")).toHaveBeenCalledWith({
+      id: "merced",
+      verseRefId: "josh",
+      order: 1,
+    });
+  });
+
+  it("adds a verse by reference from the inline row, and Esc closes only the row", async () => {
+    renderHost("pack:merced");
+
+    await userEvent.click(screen.getByRole("button", { name: "Add verses" }));
+    const search = screen.getByRole("searchbox", {
+      name: "Search by reference",
+    });
+    expect(search).toHaveFocus();
+    expect(search).toHaveAttribute(
+      "placeholder",
+      "A reference like John 14:27",
+    );
+
+    await userEvent.type(search, "John 14:27");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add John 14:27" }),
+    );
+    expect(mocks.mutations.get("packs.addVerse")).toHaveBeenCalledWith({
+      id: "merced",
+      book: "John",
+      chapter: 14,
+      startVerse: 27,
+      endVerse: 27,
+    });
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "Joshua 1:9");
+    expect(screen.getByText("Added")).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("searchbox", { name: "Search by reference" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Merced Team" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add verses" })).toHaveFocus();
+  });
+
+  it("offers Add verses on an empty pack", async () => {
+    membersByPack = { ...membersByPack, merced: [] };
+    renderHost("pack:merced");
+
+    expect(
+      screen.getByText(
+        "No verses yet. Add verses from the reader with Memorize, or tap Add verses.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add verses" }));
+    expect(
+      screen.getByRole("searchbox", { name: "Search by reference" }),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves chapter packs and passages without add, remove or reorder", () => {
+    renderHost("pack:psalm23");
+    expect(
+      screen.queryByRole("button", { name: "Add verses" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Options for/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Remove / }),
     ).not.toBeInTheDocument();
   });
 });

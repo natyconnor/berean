@@ -7,7 +7,9 @@ import {
   GraduationCap,
   Heart,
   MoreHorizontal,
+  Pencil,
   Play,
+  Plus,
   RotateCcw,
 } from "lucide-react";
 import { useMutation } from "convex/react";
@@ -52,6 +54,9 @@ import {
   PRACTICE_ANYTIME_LABEL,
   type StepLadderDay,
 } from "@/lib/memory-copy";
+import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
+import { spanDisplayTitle } from "@/lib/memorize-target";
 import { withReturn } from "@/lib/memory-return";
 import { isDueForReview } from "@/lib/memory-scheduler";
 import {
@@ -82,6 +87,7 @@ import {
   type ProgressBar,
   type ReviewTogetherOption,
 } from "@/lib/pack-detail-model";
+import { moveItem, orderByKeys } from "@/lib/pack-order";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
 import { cn } from "@/lib/utils";
 import {
@@ -93,6 +99,13 @@ import type { VerseScope } from "@/lib/verse-scope-match";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 import { EnableUnifiedReviewDialog } from "./enable-unified-review-dialog";
+import { DragHandle, MoveAnnouncer, RowEditControls } from "./reorder-controls";
+import {
+  dragRowClassName,
+  moveAnnouncement,
+  useDragReorder,
+} from "./use-drag-reorder";
+import { VerseSearchAdd } from "./verse-search-add";
 
 type Pack = NonNullable<FunctionReturnType<typeof api.packs.get>>;
 type Member = FunctionReturnType<typeof api.packs.resolveMembers>[number];
@@ -243,10 +256,12 @@ function PackDetailContent({
         : memoryPackSessionHref(session, pack._id),
       frame.returnTo,
     );
+  const rename = usePackRename(pack);
 
   return (
     <MemoryPanelFrame
-      title={pack.name}
+      title={rename.title}
+      titleAccessory={rename.accessory}
       subtitle={
         <>
           {subtitle.text}
@@ -313,10 +328,112 @@ function PackDetailContent({
             members={members}
             now={now}
             timeZone={timeZone}
+            editable={pack.kind === "custom"}
           />
         )}
       </div>
     </MemoryPanelFrame>
+  );
+}
+
+/**
+ * Inline rename: the pencil turns the title into a field. Enter or leaving
+ * the field saves, Esc cancels, and an empty name keeps the old one.
+ */
+function usePackRename(pack: Pack): {
+  title: ReactNode;
+  accessory: ReactNode;
+} {
+  const rename = useMutation(api.packs.rename);
+  const [editing, setEditing] = useState(false);
+  const [savingName, setSavingName] = useState<string | null>(null);
+  const focusPencilOnMount = useRef(false);
+
+  const finish = (next: string | null) => {
+    setEditing(false);
+    focusPencilOnMount.current = true;
+    const name = next?.trim() ?? "";
+    if (name.length === 0 || name === pack.name) return;
+    setSavingName(name);
+    void rename({ id: pack._id, name })
+      .then(
+        () => {
+          toast.success("Pack renamed");
+        },
+        () => {
+          toast.error("Couldn't rename it. Please try again.");
+        },
+      )
+      .finally(() => setSavingName(null));
+  };
+
+  if (editing) {
+    return {
+      title: <RenameField initial={pack.name} onFinish={finish} />,
+      accessory: null,
+    };
+  }
+  return {
+    title: savingName ?? pack.name,
+    accessory: (
+      <Button
+        ref={(node) => {
+          if (node && focusPencilOnMount.current) {
+            focusPencilOnMount.current = false;
+            node.focus();
+          }
+        }}
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Rename"
+        onClick={() => setEditing(true)}
+        className="size-11 shrink-0 text-muted-foreground sm:size-7"
+      >
+        <Pencil aria-hidden />
+      </Button>
+    ),
+  };
+}
+
+function RenameField({
+  initial,
+  onFinish,
+}: {
+  initial: string;
+  /** The new name, or `null` to cancel. */
+  onFinish: (name: string | null) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const finished = useRef(false);
+  const finish = (name: string | null) => {
+    if (finished.current) return;
+    finished.current = true;
+    onFinish(name);
+  };
+
+  return (
+    <input
+      autoFocus
+      data-keep-drawer-on-escape=""
+      aria-label="Name"
+      value={value}
+      maxLength={MAX_PACK_NAME_LENGTH}
+      size={Math.max(value.length + 2, 12)}
+      onChange={(event) => setValue(event.target.value)}
+      onFocus={(event) => event.currentTarget.select()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          finish(value);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          finish(null);
+        }
+      }}
+      onBlur={() => finish(value)}
+      className="max-w-full rounded-md border border-input bg-background px-1.5 text-base font-semibold tracking-tight outline-none focus:border-ring sm:text-[length:inherit]"
+    />
   );
 }
 
@@ -569,20 +686,137 @@ function ProgressTrack({
 
 function VersesSection({
   note,
+  action,
   children,
 }: {
-  note: string;
+  note: ReactNode;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section aria-label="Verses" className="space-y-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h3 className={sectionHeadingClassName}>Verses</h3>
-        <span className="text-xs text-muted-foreground">{note}</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-xs text-muted-foreground">{note}</span>
+          {action}
+        </div>
       </div>
       {children}
     </section>
   );
+}
+
+/**
+ * Add, remove (with Undo) and reorder for a custom pack. Reorders show at
+ * once and save in the background; the server order takes over once saved.
+ */
+function usePackEditor(pack: Pack, members: Member[]) {
+  const addVerse = useMutation(api.packs.addVerse);
+  const removeVerse = useMutation(api.packs.removeVerse);
+  const restoreVerse = useMutation(api.packs.restoreVerse);
+  const reorder = useMutation(api.packs.reorder);
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+  const [adding, setAdding] = useState<ReadonlySet<string>>(new Set());
+  const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set());
+  const [announcement, setAnnouncement] = useState("");
+  const latestMove = useRef(0);
+
+  const ordered = orderByKeys(members, localOrder, (m) => m.verseRefId);
+
+  const move = (from: number, to: number) => {
+    const member = ordered[from];
+    if (!member || to < 0 || to >= ordered.length || to === from) return;
+    const ids = moveItem(ordered, from, to).map((m) => m.verseRefId);
+    setLocalOrder(ids);
+    setAnnouncement(
+      moveAnnouncement(formatVerseRef(member), to, ordered.length),
+    );
+    latestMove.current += 1;
+    const mine = latestMove.current;
+    void reorder({ id: pack._id, orderedVerseRefIds: ids })
+      .then(
+        () => {
+          toast.success("New order saved", { id: `pack-order-${pack._id}` });
+        },
+        () => {
+          toast.error("Couldn't save the new order. Please try again.");
+        },
+      )
+      .finally(() => {
+        if (latestMove.current === mine) setLocalOrder(null);
+      });
+  };
+
+  const remove = (member: Member) => {
+    const id = member.verseRefId;
+    if (removing.has(id)) return;
+    setRemoving((current) => new Set(current).add(id));
+    const reference = formatVerseRef(member);
+    void removeVerse({ id: pack._id, verseRefId: id })
+      .then(
+        (order) => {
+          if (order === null) return;
+          toast(`Removed ${reference}.`, {
+            action: {
+              label: "Undo",
+              onClick: () => {
+                void restoreVerse({
+                  id: pack._id,
+                  verseRefId: id,
+                  order,
+                }).catch(() => {
+                  toast.error("Couldn't undo. Please try again.");
+                });
+              },
+            },
+          });
+        },
+        () => {
+          toast.error(`Couldn't remove ${reference}. Please try again.`);
+        },
+      )
+      .finally(() =>
+        setRemoving((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        }),
+      );
+  };
+
+  const add = (span: VerseSpan) => {
+    const key = spanKey(span);
+    if (adding.has(key)) return;
+    setAdding((current) => new Set(current).add(key));
+    void addVerse({ id: pack._id, ...span })
+      .then(
+        () => {
+          toast.success(`Added ${spanDisplayTitle(span)} to ${pack.name}.`);
+        },
+        () => {
+          toast.error("Couldn't add that verse. Please try again.");
+        },
+      )
+      .finally(() =>
+        setAdding((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        }),
+      );
+  };
+
+  return {
+    ordered,
+    memberKeys: new Set(members.map((member) => spanKey(member))),
+    adding,
+    removing,
+    announcement,
+    move,
+    remove,
+    add,
+  };
 }
 
 function PackVerses({
@@ -590,31 +824,103 @@ function PackVerses({
   members,
   now,
   timeZone,
+  editable,
 }: {
   pack: Pack;
   members: Member[];
   now: number;
   timeZone: string;
+  /** Custom packs: add, remove and reorder. */
+  editable: boolean;
 }) {
   const frame = useMemoryPanelFrame();
   const reviewTogether = pack.unifiedReviewEnabled === true;
+  const editor = usePackEditor(pack, members);
+  const drag = useDragReorder(editor.move);
+  const [addOpen, setAddOpen] = useState(false);
+  const addButtonRef = useRef<HTMLButtonElement | null>(null);
+  const closeAdd = () => {
+    setAddOpen(false);
+    addButtonRef.current?.focus();
+  };
+  const count = editor.ordered.length;
 
-  if (members.length === 0) {
+  const addButton = (
+    <Button
+      ref={addButtonRef}
+      type="button"
+      size="sm"
+      variant="outline"
+      aria-expanded={addOpen}
+      onClick={() => (addOpen ? closeAdd() : setAddOpen(true))}
+      className="max-sm:h-11"
+    >
+      <Plus aria-hidden />
+      Add verses
+    </Button>
+  );
+  const addRow =
+    editable && addOpen ? (
+      <div className="space-y-2 rounded-xl border bg-card p-3 sm:p-4">
+        <VerseSearchAdd
+          addedKeys={editor.memberKeys}
+          pendingKeys={editor.adding}
+          onAdd={editor.add}
+          onEscape={closeAdd}
+          autoFocus
+        />
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={closeAdd}
+            className="max-sm:h-11"
+          >
+            Done
+          </Button>
+        </div>
+      </div>
+    ) : null;
+
+  if (count === 0) {
     return (
       <VersesSection note="In your order">
-        <p className="rounded-xl border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-          No verses yet. Add verses from the reader with Memorize.
-        </p>
+        {addRow}
+        <div className="space-y-3 rounded-xl border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+          <p>
+            {editable
+              ? "No verses yet. Add verses from the reader with Memorize, or tap Add verses."
+              : "No verses yet. Add verses from the reader with Memorize."}
+          </p>
+          {editable && !addOpen ? addButton : null}
+        </div>
       </VersesSection>
     );
   }
 
   return (
     <VersesSection
-      note={pack.kind === "custom" ? "In your order" : "In Bible order"}
+      note={
+        pack.kind === "custom" ? (
+          <>
+            In your order
+            {editable && count > 1 ? (
+              <span className="hidden pointer-fine:inline">
+                {" "}
+                · drag to reorder
+              </span>
+            ) : null}
+          </>
+        ) : (
+          "In Bible order"
+        )
+      }
+      action={editable ? addButton : undefined}
     >
+      {addRow}
       <ul className="space-y-1.5">
-        {members.map((member) => {
+        {editor.ordered.map((member, index) => {
           const row = packMemberRow(member, { now, timeZone, reviewTogether });
           const reference = formatVerseRef(member);
           const href = (session: MemorySessionKind) =>
@@ -622,8 +928,13 @@ function PackVerses({
           return (
             <li
               key={member.verseRefId}
-              className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"
+              {...(editable ? drag.rowProps(index) : {})}
+              className={cn(
+                "group flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5",
+                editable && dragRowClassName(drag.rowState(index, count)),
+              )}
             >
+              {editable ? <DragHandle {...drag.handleProps(index)} /> : null}
               <span
                 aria-hidden
                 className={cn(
@@ -699,10 +1010,21 @@ function PackVerses({
                   </Button>
                 ) : null}
               </div>
+              {editable ? (
+                <RowEditControls
+                  label={reference}
+                  index={index}
+                  count={count}
+                  removing={editor.removing.has(member.verseRefId)}
+                  onMove={editor.move}
+                  onRemove={() => editor.remove(member)}
+                />
+              ) : null}
             </li>
           );
         })}
       </ul>
+      {editable ? <MoveAnnouncer message={editor.announcement} /> : null}
     </VersesSection>
   );
 }

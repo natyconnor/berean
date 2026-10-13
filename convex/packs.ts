@@ -12,23 +12,26 @@ import {
 import { memorizeSpan, stopMemorizingPack } from "./lib/memorize";
 import {
   filterScopeMembers,
+  insertPackVerseAt,
   loadCustomMembers,
   loadInMemoryMembers,
   loadOwnedPack,
   loadPackMembers,
   nextPackOrder,
+  reorderPackVerses,
   type PackMember,
 } from "./lib/packs";
 import {
   deletePassageAndReviews,
   findPassageByPackId,
 } from "./lib/passageMemory";
-import { loadPassageDueRecords, passageDueByPackId } from "./lib/passageDue";
 import { passageStatusValidator } from "./lib/passageValues";
+import { passageGoal } from "../src/lib/memory-goals";
 import {
-  isPassageDueForReview,
-  isProjectedPassageDueForLearning,
-} from "../src/lib/passage-due";
+  packListSummary,
+  passageListSummary,
+  type PackListSummary,
+} from "../src/lib/pack-list-summary";
 import {
   isDueForReview,
   isLearningPhase,
@@ -40,7 +43,10 @@ import {
   applyUnifiedGrade,
   canonicalUnifiedSchedule,
 } from "../src/lib/unified-review-schedule";
-import { MEMORIZE_MAX_PACK_SPANS } from "../src/lib/memorize-status";
+import {
+  MAX_PACK_NAME_LENGTH,
+  MEMORIZE_MAX_PACK_SPANS,
+} from "../src/lib/memorize-status";
 import { scopesEqual } from "../src/lib/scope-equality";
 import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
 import { verseMatchesScope } from "../src/lib/verse-scope-match";
@@ -95,18 +101,34 @@ const packValidator = v.object({
   unifiedReviewEnabled: v.optional(v.boolean()),
 });
 
+// See `PackListSummary` in src/lib/pack-list-summary.ts.
+const packListSummaryValidator = v.union(
+  v.object({
+    kind: v.literal("passage"),
+    status: passageStatusValidator,
+    verseCount: v.number(),
+    learnedVerses: v.number(),
+    hasWorkToday: v.boolean(),
+    nextDueAt: v.union(v.number(), v.null()),
+    masteryFraction: v.number(),
+  }),
+  v.object({
+    kind: v.literal("pack"),
+    verseCount: v.number(),
+    learned: v.number(),
+    mastered: v.number(),
+    today: v.number(),
+  }),
+);
+
 const packListItem = v.object({
   _id: v.id("packs"),
   name: v.string(),
   kind: kindValidator,
-  verseCount: v.number(),
-  dueCount: v.number(),
+  scope: v.optional(scopeValidator),
   lastOpenedAt: v.number(),
   unifiedReviewEnabled: v.optional(v.boolean()),
-  passageStatus: v.optional(passageStatusValidator),
-  solidCount: v.optional(v.number()),
-  attachedCount: v.optional(v.number()),
-  pieceCount: v.optional(v.number()),
+  summary: packListSummaryValidator,
 });
 
 const qualityValidator = v.union(
@@ -231,84 +253,56 @@ export const listMine = query({
       return { ...paginated, page: [] };
     }
 
-    // Lightweight list counts: one in-Memory member pass for scope packs;
-    // custom packs count membership rows whose verse is in Memory.
+    // One in-Memory member pass for scope packs; custom packs read their
+    // membership rows whose verse is in Memory.
     const needsInMemory = paginated.page.some(
       (pack) => pack.kind === "scope" && pack.scope,
     );
     const inMemory = needsInMemory
       ? await loadInMemoryMembers(ctx, userId)
       : [];
-    const passageByPackId = passageDueByPackId(
-      await loadPassageDueRecords(ctx, userId, args.now),
-    );
 
-    const page = [];
-    for (const pack of paginated.page) {
-      let verseCount = 0;
-      let dueCount = 0;
-
-      if (pack.kind === "scope" && pack.scope) {
-        for (const member of inMemory) {
-          if (
-            !verseMatchesScope(
-              { book: member.book, chapter: member.chapter },
-              pack.scope,
-            )
-          ) {
-            continue;
-          }
-          verseCount += 1;
-          if (isDueForReview(member, args.now)) dueCount += 1;
+    const page = await Promise.all(
+      paginated.page.map(async (pack) => {
+        const passage = await findPassageByPackId(ctx, pack._id);
+        let summary: PackListSummary;
+        if (passage && passage.userId === userId) {
+          summary = passageListSummary(
+            passageGoal(
+              {
+                packId: pack._id,
+                title: pack.name,
+                status: passage.status,
+                pieces: passage.pieces,
+                addsOnDay: passage.addsOnDay,
+                addDayKey: passage.addDayKey,
+                intervalDays: passage.intervalDays,
+                dueAt: passage.dueAt,
+                lastSessionAt: passage.lastSessionAt,
+                createdAt: passage.createdAt,
+              },
+              args.now,
+              args.tzOffsetMinutes,
+            ),
+          );
+        } else {
+          const members =
+            pack.kind === "scope" && pack.scope
+              ? filterScopeMembers(inMemory, pack.scope)
+              : await loadCustomMembers(ctx, userId, pack._id);
+          summary = packListSummary(members, args.now);
         }
-      } else {
-        const members = await loadCustomMembers(ctx, userId, pack._id);
-        verseCount = members.length;
-        for (const m of members) {
-          if (isDueForReview(m, args.now)) dueCount += 1;
-        }
-      }
-
-      if (pack.unifiedReviewEnabled && verseCount > 0) {
-        dueCount = dueCount > 0 ? 1 : 0;
-      }
-
-      const passage = passageByPackId.get(pack._id);
-      if (passage) {
-        page.push({
+        return {
           _id: pack._id,
           name: pack.name,
           kind: pack.kind,
-          verseCount,
-          dueCount:
-            isPassageDueForReview(passage, args.now) ||
-            isProjectedPassageDueForLearning(
-              passage,
-              args.now,
-              args.tzOffsetMinutes,
-            )
-              ? 1
-              : 0,
+          scope: pack.scope,
           lastOpenedAt: pack.lastOpenedAt,
           unifiedReviewEnabled: pack.unifiedReviewEnabled,
-          passageStatus: passage.status,
-          solidCount: passage.solidCount,
-          attachedCount: passage.attachedCount,
-          pieceCount: passage.pieceCount,
-        });
-        continue;
-      }
-
-      page.push({
-        _id: pack._id,
-        name: pack.name,
-        kind: pack.kind,
-        verseCount,
-        dueCount,
-        lastOpenedAt: pack.lastOpenedAt,
-        unifiedReviewEnabled: pack.unifiedReviewEnabled,
-      });
-    }
+          summary,
+        };
+      }),
+    );
 
     return { ...paginated, page };
   },
@@ -336,14 +330,25 @@ export const get = query({
   },
 });
 
+function validPackName(raw: string): string {
+  const name = raw.trim();
+  if (name.length === 0 || name.length > MAX_PACK_NAME_LENGTH) {
+    throw new Error(
+      `Pack names must be 1 to ${MAX_PACK_NAME_LENGTH} characters.`,
+    );
+  }
+  return name;
+}
+
 export const rename = mutation({
   args: { id: v.id("packs"), name: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
+    const name = validPackName(args.name);
     const pack = await loadOwnedPack(ctx, args.id, userId);
     if (!pack) throw new Error("Pack not found");
-    await ctx.db.patch(args.id, { name: args.name });
+    await ctx.db.patch(args.id, { name });
     return null;
   },
 });
@@ -482,8 +487,6 @@ async function appendPackVerse(
   return true;
 }
 
-const MAX_PACK_NAME_LENGTH = 80;
-
 const spanValidator = v.object({
   book: v.string(),
   chapter: v.number(),
@@ -505,12 +508,7 @@ export const createAndMemorize = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
 
-    const name = args.name.trim();
-    if (name.length === 0 || name.length > MAX_PACK_NAME_LENGTH) {
-      throw new Error(
-        `Pack names must be 1 to ${MAX_PACK_NAME_LENGTH} characters.`,
-      );
-    }
+    const name = validPackName(args.name);
     if (
       args.spans.length === 0 ||
       args.spans.length > MEMORIZE_MAX_PACK_SPANS
@@ -542,9 +540,13 @@ export const createAndMemorize = mutation({
   },
 });
 
+/**
+ * Take a verse out of a custom pack. Returns the removed row's `order` (for
+ * Undo via `restoreVerse`), or `null` when the verse was not in the pack.
+ */
 export const removeVerse = mutation({
   args: { id: v.id("packs"), verseRefId: v.id("verseRefs") },
-  returns: v.null(),
+  returns: v.union(v.number(), v.null()),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     const pack = await loadOwnedPack(ctx, args.id, userId);
@@ -563,9 +565,76 @@ export const removeVerse = mutation({
           .eq("verseRefId", args.verseRefId),
       )
       .unique();
-    if (member) {
-      await ctx.db.delete(member._id);
+    if (!member) return null;
+    await ctx.db.delete(member._id);
+    return member.order;
+  },
+});
+
+/**
+ * Save a custom pack's verse order. `orderedVerseRefIds` lists the verses the
+ * pack shows (or every membership row) in their new order.
+ */
+export const reorder = mutation({
+  args: {
+    id: v.id("packs"),
+    orderedVerseRefIds: v.array(v.id("verseRefs")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+    if (pack.kind !== "custom") {
+      throw new Error("Can only reorder custom packs");
     }
+    await reorderPackVerses(ctx, userId, pack._id, args.orderedVerseRefIds);
+    return null;
+  },
+});
+
+/**
+ * Undo `removeVerse`: put the verse back at `order` and make sure it is in
+ * Memory again (as Up next if it had left).
+ */
+export const restoreVerse = mutation({
+  args: {
+    id: v.id("packs"),
+    verseRefId: v.id("verseRefs"),
+    order: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+    if (pack.kind !== "custom") {
+      throw new Error("Can only restore verses to custom packs");
+    }
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) throw new Error("Verse not found");
+
+    const now = Date.now();
+    await memorizeSpan(
+      ctx,
+      userId,
+      {
+        book: ref.book,
+        chapter: ref.chapter,
+        startVerse: ref.startVerse,
+        endVerse: ref.endVerse,
+      },
+      now,
+      { upNext: true },
+    );
+    await insertPackVerseAt(
+      ctx,
+      userId,
+      pack._id,
+      args.verseRefId,
+      args.order,
+      now,
+    );
     return null;
   },
 });

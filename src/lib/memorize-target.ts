@@ -81,6 +81,18 @@ export function formatSpanTitle(span: VerseSpan): string {
   return `${formatBookChapter(span.book, span.chapter)}:${span.startVerse}${EN_DASH}${span.endVerse}`;
 }
 
+/** "Psalm 23" when the span is the whole chapter, else {@link formatSpanTitle}. */
+export function spanDisplayTitle(
+  span: VerseSpan,
+  deps: MemorizeTargetDeps = DEFAULT_DEPS,
+): string {
+  const verses = deps.chapterVerseCount(span.book, span.chapter);
+  if (span.startVerse === 1 && verses !== null && span.endVerse === verses) {
+    return formatBookChapter(span.book, span.chapter);
+  }
+  return formatSpanTitle(span);
+}
+
 /** The scope pack a chapter passage is stored as. */
 export function passageScope(
   book: string,

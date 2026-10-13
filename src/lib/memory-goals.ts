@@ -355,7 +355,7 @@ function nextBuildingSessionAt(
   return next;
 }
 
-function passageGoal<P extends string>(
+export function passageGoal<P extends string>(
   passage: GoalPassageInput<P>,
   now: number,
   tzOffsetMinutes: number,

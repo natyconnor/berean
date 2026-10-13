@@ -1,5 +1,7 @@
 import { chapterPresets } from "../../shared/memory-presets";
+import { getVerseRefBoundsErrorMessage } from "../../shared/verse-ref-validation";
 import { BIBLE_BOOKS } from "./bible-books";
+import { getChapterVerseCount } from "./bible-verse-counts";
 import { heartMatchesBookFilter } from "./heart-list";
 import type { VerseSpan } from "./hearted-verse-coverage";
 import { estimateMemorizeDays, formatLearnDuration } from "./memorize-plan";
@@ -104,6 +106,48 @@ export function memorizeSearch(
     target,
     title: resolved.title,
     planLine: memorizePlanLine(resolved),
+  };
+}
+
+export type ReferenceSpanResult =
+  | { kind: "empty" }
+  | { kind: "noMatch" }
+  | { kind: "outOfRange"; message: string }
+  | { kind: "match"; span: VerseSpan };
+
+/**
+ * A typed reference as one span, for adding verses to a pack: "John 14:27",
+ * "Romans 8:28–30", or a whole chapter ("Psalm 23"). References only; there
+ * is no word search.
+ */
+export function parseReferenceSpan(text: string): ReferenceSpanResult {
+  if (text.trim().length === 0) return { kind: "empty" };
+  const ref = parseSearchRef(text);
+  if (!ref) return { kind: "noMatch" };
+  const message = getVerseRefBoundsErrorMessage(ref);
+  if (message) return { kind: "outOfRange", message };
+
+  if (isChapterScopeRef(ref)) {
+    const verses = getChapterVerseCount(ref.book, ref.chapter);
+    if (!verses) return { kind: "noMatch" };
+    return {
+      kind: "match",
+      span: {
+        book: ref.book,
+        chapter: ref.chapter,
+        startVerse: 1,
+        endVerse: verses,
+      },
+    };
+  }
+  return {
+    kind: "match",
+    span: {
+      book: ref.book,
+      chapter: ref.chapter,
+      startVerse: ref.startVerse,
+      endVerse: ref.endVerse,
+    },
   };
 }
 

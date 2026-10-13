@@ -8,6 +8,7 @@ import {
 } from "../../src/lib/verse-scope-match";
 import { sortByVerseRef } from "../../shared/compare-verse-refs";
 import { isDueForReview, isReviewPhase } from "../../src/lib/memory-scheduler";
+import { planPackReorder, planRestoreAt } from "../../src/lib/pack-order";
 
 /** Every `passageMemory` row for this user (`by_userId`, never `.filter`). */
 export async function loadPassageMemoryByUser(
@@ -383,6 +384,91 @@ export function countDueUnifiedReviewPacks(
     if (dueUnifiedPackDueAt(members, now) !== null) due += 1;
   }
   return due;
+}
+
+/** A custom pack's `packVerses` rows in saved order, in Memory or not. */
+export async function loadPackVerseRows(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  packId: Id<"packs">,
+): Promise<Doc<"packVerses">[]> {
+  return await ctx.db
+    .query("packVerses")
+    .withIndex("by_userId_packId_order", (q) =>
+      q.eq("userId", userId).eq("packId", packId),
+    )
+    .order("asc")
+    .collect();
+}
+
+/**
+ * Save a custom pack's order: `ordered` must be a permutation of its rows (or
+ * of the rows in Memory, see `planPackReorder`). Orders become 0..n-1.
+ */
+export async function reorderPackVerses(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  packId: Id<"packs">,
+  ordered: readonly Id<"verseRefs">[],
+): Promise<void> {
+  const [rows, memoryByRef] = await Promise.all([
+    loadPackVerseRows(ctx, userId, packId),
+    loadInMemoryVerseMemoryByRef(ctx, userId),
+  ]);
+  const plan = planPackReorder(
+    rows.map((row) => ({
+      verseRefId: row.verseRefId,
+      inMemory: memoryByRef.has(row.verseRefId),
+    })),
+    ordered,
+  );
+  if (!plan) {
+    throw new Error("That order doesn't match the verses in this pack.");
+  }
+
+  const rowByRef = new Map(rows.map((row) => [row.verseRefId, row]));
+  for (let index = 0; index < plan.length; index += 1) {
+    const row = rowByRef.get(plan[index]);
+    if (row && row.order !== index) {
+      await ctx.db.patch(row._id, { order: index });
+    }
+  }
+}
+
+/**
+ * Put a removed verse back into a custom pack at `at` (its old `order`),
+ * shifting later rows down when the slot is taken. Idempotent: a verse
+ * already in the pack is left where it is. Returns whether a row was added.
+ */
+export async function insertPackVerseAt(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  packId: Id<"packs">,
+  verseRefId: Id<"verseRefs">,
+  at: number,
+  now: number,
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query("packVerses")
+    .withIndex("by_userId_packId_verseRefId", (q) =>
+      q.eq("userId", userId).eq("packId", packId).eq("verseRefId", verseRefId),
+    )
+    .first();
+  if (existing) return false;
+
+  const rows = await loadPackVerseRows(ctx, userId, packId);
+  const plan = planRestoreAt(rows, at);
+  for (const row of plan.shift) {
+    await ctx.db.patch(row._id, { order: row.order + 1 });
+  }
+  await ctx.db.insert("packVerses", {
+    userId,
+    packId,
+    verseRefId,
+    order: plan.order,
+    createdAt: now,
+  });
+  return true;
 }
 
 /** The next `order` value to append to a custom pack (0 when empty). */

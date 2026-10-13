@@ -18,6 +18,17 @@ import type { MemoryPanelBackLink } from "./memory-panel-context";
 export const MEMORY_PANEL_TITLE_SELECTOR = "[data-memory-panel-title]";
 
 /**
+ * Esc from inside `[data-keep-drawer-on-escape]` is left to that element (a
+ * rename field cancels, an inline search closes) instead of closing the drawer.
+ */
+function escapeHandledLocally(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest("[data-keep-drawer-on-escape]") !== null
+  );
+}
+
+/**
  * The drawer shell: a right-side panel from 640px up, a 92vh bottom sheet
  * below. Esc and the scrim call `onOpenChange(false)`.
  */
@@ -44,6 +55,9 @@ export function MemoryDrawer({
         showCloseButton={false}
         overlayClassName="bg-[rgb(20_14_6/0.36)]"
         onOpenAutoFocus={onOpenAutoFocus}
+        onEscapeKeyDown={(event) => {
+          if (escapeHandledLocally(event.target)) event.preventDefault();
+        }}
         className={cn(
           "gap-0 ease-out",
           isMobile ? "h-[92dvh]" : "w-[min(66vw,880px)] sm:max-w-none",
@@ -68,6 +82,7 @@ export function MemoryDrawer({
 export function MemoryDrawerFrame({
   back,
   title,
+  titleAccessory,
   subtitle,
   actions,
   fullPageHref,
@@ -77,6 +92,7 @@ export function MemoryDrawerFrame({
 }: {
   back?: MemoryPanelBackLink;
   title: ReactNode;
+  titleAccessory?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
   fullPageHref?: string;
@@ -99,13 +115,16 @@ export function MemoryDrawerFrame({
               {back.label}
             </InternalLink>
           ) : null}
-          <SheetTitle
-            tabIndex={-1}
-            data-memory-panel-title=""
-            className="truncate text-xl font-semibold tracking-tight outline-none"
-          >
-            {title}
-          </SheetTitle>
+          <div className="flex min-w-0 items-center gap-1">
+            <SheetTitle
+              tabIndex={-1}
+              data-memory-panel-title=""
+              className="min-w-0 truncate text-xl font-semibold tracking-tight outline-none"
+            >
+              {title}
+            </SheetTitle>
+            {titleAccessory}
+          </div>
           {subtitle ? (
             <SheetDescription className="mt-0.5 text-[13px]">
               {subtitle}

@@ -294,7 +294,7 @@ export function VerseDetailBody({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         {actions}
-        <AddToPack reference={reference} now={now} />
+        <AddToPack reference={reference} now={now} returnTo={returnTo} />
       </div>
 
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
