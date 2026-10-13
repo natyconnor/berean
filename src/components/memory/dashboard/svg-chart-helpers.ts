@@ -12,6 +12,22 @@ export function chartColor(n: number): string {
   return `var(--chart-${index})`;
 }
 
+/** Practice heatmap cell: muted at 0, ramping chart-1 opacity otherwise. */
+export function practiceCellStyle(
+  count: number,
+  max: number,
+): { backgroundColor: string } {
+  if (count <= 0) {
+    return { backgroundColor: "var(--muted)" };
+  }
+  const intensity = max <= 0 ? 1 : 0.25 + 0.75 * (count / max);
+  return {
+    backgroundColor: `color-mix(in oklab, ${chartColor(1)} ${Math.round(
+      intensity * 100,
+    )}%, transparent)`,
+  };
+}
+
 /** Linearly map `value` from `[dMin, dMax]` onto `[rMin, rMax]`. */
 export function scaleLinear(
   value: number,

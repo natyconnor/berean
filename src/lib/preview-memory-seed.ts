@@ -170,7 +170,7 @@ const VERSE_SPECS: readonly VerseSpec[] = [
     id: "joshua-1-9",
     role: "reviewLater",
     label: "Reviewing · in a week",
-    howToTry: "Should not be in Review. Use Practice All.",
+    howToTry: "Should not be in Review. Use Extra practice.",
     dueOffsetDays: 7,
     reference: { book: "Joshua", chapter: 1, startVerse: 9, endVerse: 9 },
   },

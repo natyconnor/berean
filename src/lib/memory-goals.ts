@@ -4,7 +4,13 @@ import {
   stepLadderDay,
   type StepLadderDay,
 } from "./memory-copy";
-import { estimateMemorizeDays, masteryProgress } from "./memorize-plan";
+import {
+  calendarDaysBetween,
+  estimateMemorizeDays,
+  formatLearnDuration,
+  formatShortDate,
+  masteryProgress,
+} from "./memorize-plan";
 import {
   DAY_MS,
   isDueForLearning,
@@ -514,6 +520,35 @@ export function goalLearnDaysLeft(goal: GoalCard): number {
       if (goal.status === "new") return VERSE_LEARN_DAYS;
       return VERSE_LEARN_DAYS - stepLadderDay(goal.learnStage) + 1;
   }
+}
+
+/** "On track for {date}" assumes a daily session; after this many idle days it reads "to go". */
+const ON_TRACK_IDLE_DAYS = 2;
+
+/**
+ * How learning is pacing: "learn it in about 4 days" before the first
+ * session, "about 4 days to go" once practice has paused for 2 or more days,
+ * else "on track for Oct 15". `null` once everything is learned.
+ */
+export function goalLearnPace(
+  goal: GoalCard,
+  now: number,
+  timeZone?: string,
+): string | null {
+  const days = goalLearnDaysLeft(goal);
+  if (days <= 0) return null;
+  if (goal.lastPracticedAt === null) {
+    return formatLearnDuration(days).toLowerCase();
+  }
+  if (
+    calendarDaysBetween(goal.lastPracticedAt, now, timeZone) >=
+    ON_TRACK_IDLE_DAYS
+  ) {
+    return `${formatLearnDuration(days, { short: true })} to go`;
+  }
+  const finish = new Date(now);
+  finish.setDate(finish.getDate() + days - 1);
+  return `on track for ${formatShortDate(finish, timeZone)}`;
 }
 
 /** Work today first, then the soonest projected learn date. */

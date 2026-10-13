@@ -1,14 +1,9 @@
 import { stepLadderDay } from "./memory-copy";
-import { goalLearnDaysLeft, type GoalCard } from "./memory-goals";
+import { goalLearnPace, type GoalCard } from "./memory-goals";
 import {
-  calendarDaysBetween,
   estimateReviewDaysToMastery,
   formatDueDay,
-  formatLearnDuration,
   formatMasteryDuration,
-  formatShortDate,
-  projectedFinishDate,
-  type MemorizeMode,
 } from "./memorize-plan";
 import { isReviewPhase } from "./memory-scheduler";
 
@@ -27,9 +22,6 @@ export interface GoalProgressRow {
   nextIsToday: boolean;
 }
 
-/** "On track for {date}" assumes a daily session; after this many idle days it reads "to go". */
-const ON_TRACK_IDLE_DAYS = 2;
-
 function percent(fraction: number): number {
   return Math.round(Math.max(0, Math.min(1, fraction)) * 100);
 }
@@ -44,28 +36,17 @@ function masteryAfterLearningLabel(): string {
 
 function learnedLabel(
   goal: GoalCard,
-  mode: MemorizeMode,
   learned: number,
   total: number,
   now: number,
   timeZone: string | undefined,
 ): string {
-  if (total > 0 && learned >= total) return `${learned} of ${total} learned`;
-  const days = goalLearnDaysLeft(goal);
-  if (goal.lastPracticedAt === null) {
-    return `${learned} of ${total} · ${formatLearnDuration(days).toLowerCase()}`;
+  const pace = goalLearnPace(goal, now, timeZone);
+  if (pace === null || (total > 0 && learned >= total)) {
+    return `${learned} of ${total} learned`;
   }
-  if (
-    calendarDaysBetween(goal.lastPracticedAt, now, timeZone) >=
-    ON_TRACK_IDLE_DAYS
-  ) {
-    return `${learned} of ${total} learned · ${formatLearnDuration(days, { short: true })} to go`;
-  }
-  const finish = projectedFinishDate(
-    { mode, verseCount: total, learnedCount: learned },
-    now,
-  );
-  return `${learned} of ${total} learned · on track for ${formatShortDate(finish, timeZone)}`;
+  if (goal.lastPracticedAt === null) return `${learned} of ${total} · ${pace}`;
+  return `${learned} of ${total} learned · ${pace}`;
 }
 
 function nextDue(
@@ -92,7 +73,6 @@ export function goalProgressRow(
         kindLabel: "Passage",
         learnedLabel: learnedLabel(
           goal,
-          "passage",
           goal.learnedVerses,
           goal.verseCount,
           now,
@@ -117,7 +97,6 @@ export function goalProgressRow(
         kindLabel: "Pack",
         learnedLabel: learnedLabel(
           goal,
-          "pack",
           goal.learned,
           goal.verseCount,
           now,
