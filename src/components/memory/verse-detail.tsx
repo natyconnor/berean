@@ -1,4 +1,10 @@
-import { useId, useState, type ReactNode } from "react";
+import {
+  useId,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import {
   Brain,
   CircleStop,
@@ -31,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { formatAccuracyPercent, hoverIndexFromX } from "@/lib/accuracy-trend";
 import {
   memorizeTitleLabel,
   statusLabel,
@@ -373,9 +380,8 @@ export function VerseDetailBody({
           </p>
         )}
         <AccuracySparkline
-          accuraciesNewestFirst={detail.attempts.map(
-            (attempt) => attempt.accuracy,
-          )}
+          attemptsNewestFirst={detail.attempts}
+          timeZone={timeZone}
         />
       </section>
     </div>
@@ -413,57 +419,180 @@ function NotMemorizing({
   );
 }
 
+type SparkAttempt = Pick<
+  VerseDetailData["attempts"][number],
+  "accuracy" | "createdAt"
+>;
+
+const sparkY = (pct: number) =>
+  scaleLinear(pct, 0, 100, SPARK_H - SPARK_PAD, SPARK_PAD);
+
+function formatAttemptDay(createdAt: number, timeZone: string): string {
+  return new Date(createdAt).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone,
+  });
+}
+
+/** Keeps the tooltip inside the chart near its edges. */
+function sparkTooltipTranslateX(x: number): string {
+  if (x < 48) return "0%";
+  if (x > SPARK_W - 48) return "-100%";
+  return "-50%";
+}
+
+/**
+ * Accuracy per try, oldest to newest. Hover, or focus and use the arrow
+ * keys, to see one try's accuracy and day.
+ */
 function AccuracySparkline({
-  accuraciesNewestFirst,
+  attemptsNewestFirst,
+  timeZone,
 }: {
-  accuraciesNewestFirst: readonly number[];
+  attemptsNewestFirst: readonly SparkAttempt[];
+  timeZone: string;
 }) {
-  if (accuraciesNewestFirst.length < 2) return null;
-  const chronological = [...accuraciesNewestFirst].reverse();
-  const yFor = (pct: number) =>
-    scaleLinear(pct, 0, 100, SPARK_H - SPARK_PAD, SPARK_PAD);
-  const points = chronological.map((accuracy, i) => ({
-    x: scaleLinear(
-      i,
-      0,
-      chronological.length - 1,
-      SPARK_PAD,
-      SPARK_W - SPARK_PAD,
-    ),
-    y: yFor(accuracy),
+  const [active, setActive] = useState<number | null>(null);
+  const [focused, setFocused] = useState(false);
+  const tooltipId = useId();
+  if (attemptsNewestFirst.length < 2) return null;
+
+  const chronological = [...attemptsNewestFirst].reverse();
+  const last = chronological.length - 1;
+  const points = chronological.map((attempt, i) => ({
+    x: scaleLinear(i, 0, last, SPARK_PAD, SPARK_W - SPARK_PAD),
+    y: sparkY(attempt.accuracy),
   }));
+  const activeAttempt = active === null ? undefined : chronological[active];
+  const activePoint = active === null ? undefined : points[active];
+  const activeCopy = activeAttempt
+    ? {
+        accuracy: formatAccuracyPercent(activeAttempt.accuracy),
+        day: formatAttemptDay(activeAttempt.createdAt, timeZone),
+      }
+    : null;
+
+  const onPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const x = ((event.clientX - rect.left) / rect.width) * SPARK_W;
+    setActive(
+      hoverIndexFromX(
+        x - SPARK_PAD,
+        chronological.length,
+        SPARK_W - 2 * SPARK_PAD,
+      ),
+    );
+  };
+
+  const onKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
+    const current = active ?? last;
+    const next =
+      event.key === "ArrowLeft"
+        ? Math.max(0, current - 1)
+        : event.key === "ArrowRight"
+          ? Math.min(last, current + 1)
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : null;
+    if (next === null) return;
+    event.preventDefault();
+    setActive(next);
+  };
 
   return (
-    <svg
-      role="img"
-      aria-label={`Accuracy across the last ${points.length} tries.`}
-      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
-      preserveAspectRatio="none"
-      className="h-14 w-full"
-    >
-      {[0, 50, 100].map((pct) => (
-        <line
-          key={pct}
-          x1={0}
-          y1={yFor(pct)}
-          x2={SPARK_W}
-          y2={yFor(pct)}
-          stroke="var(--border)"
-          strokeWidth={1}
-          strokeDasharray={pct === 50 ? "3 3" : undefined}
+    <div className="relative">
+      <svg
+        role="img"
+        tabIndex={0}
+        aria-label={`Accuracy across the last ${points.length} tries. Use the arrow keys to step through them.`}
+        aria-describedby={activeCopy ? tooltipId : undefined}
+        viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+        preserveAspectRatio="none"
+        className="block h-14 w-full cursor-crosshair rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => setActive(null)}
+        onFocus={() => {
+          setFocused(true);
+          setActive((current) => current ?? last);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          setActive(null);
+        }}
+        onKeyDown={onKeyDown}
+      >
+        <rect x={0} y={0} width={SPARK_W} height={SPARK_H} fill="transparent" />
+        {[0, 50, 100].map((pct) => (
+          <line
+            key={pct}
+            x1={0}
+            y1={sparkY(pct)}
+            x2={SPARK_W}
+            y2={sparkY(pct)}
+            stroke="var(--border)"
+            strokeWidth={1}
+            strokeDasharray={pct === 50 ? "3 3" : undefined}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        <path
+          d={linePath(points)}
+          fill="none"
+          stroke="var(--chart-1)"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />
-      ))}
-      <path
-        d={linePath(points)}
-        fill="none"
-        stroke="var(--chart-1)"
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+        {activePoint ? (
+          <line
+            x1={activePoint.x}
+            y1={SPARK_PAD}
+            x2={activePoint.x}
+            y2={SPARK_H - SPARK_PAD}
+            stroke="var(--chart-1)"
+            strokeWidth={1}
+            strokeOpacity={0.45}
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+      </svg>
+      {activePoint && activeCopy ? (
+        <>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-chart-1 ring-2 ring-card"
+            style={{
+              left: `${(activePoint.x / SPARK_W) * 100}%`,
+              top: `${(activePoint.y / SPARK_H) * 100}%`,
+            }}
+          />
+          <div
+            id={tooltipId}
+            role="tooltip"
+            className="pointer-events-none absolute z-20 -mt-2 w-max rounded-md bg-foreground px-3 py-1.5 text-xs text-background tabular-nums"
+            style={{
+              left: `${(activePoint.x / SPARK_W) * 100}%`,
+              top: `${(activePoint.y / SPARK_H) * 100}%`,
+              transform: `translateX(${sparkTooltipTranslateX(activePoint.x)}) translateY(-100%)`,
+            }}
+          >
+            <div className="font-medium">{activeCopy.accuracy}</div>
+            <div className="text-background/70">{activeCopy.day}</div>
+          </div>
+        </>
+      ) : null}
+      <p aria-live="polite" className="sr-only">
+        {focused && activeCopy
+          ? `${activeCopy.accuracy}, ${activeCopy.day}`
+          : ""}
+      </p>
+    </div>
   );
 }
 

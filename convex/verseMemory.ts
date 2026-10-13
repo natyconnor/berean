@@ -23,14 +23,13 @@ import {
 import { loadPassageDueRecords } from "./lib/passageDue";
 import { loadPackUpNext } from "./lib/packUpNext";
 import {
-  loadMemorizeStatus,
+  loadMemorizeStartStatus,
+  loadMemorizeStatusForSpans,
   memorizeSpan,
+  memorizeStatusReader,
   stopMemorizingVerse,
 } from "./lib/memorize";
-import {
-  MEMORIZE_MAX_PACK_SPANS,
-  uniqueSpans,
-} from "../src/lib/memorize-status";
+import { MEMORIZE_STATUS_MAX_TARGETS } from "../src/lib/memorize-status";
 import {
   backfillInMemoryForUser,
   hasInMemoryBackfill,
@@ -791,36 +790,77 @@ const memorizeDestinationValidator = v.union(
   v.object({ kind: v.literal("pack"), packId: v.id("packs") }),
 );
 
+const memorizeStatusValidator = v.object({
+  state: v.union(
+    v.literal("none"),
+    v.literal("memorizing"),
+    v.literal("partOf"),
+    v.literal("overlaps"),
+  ),
+  title: v.optional(v.string()),
+  destination: v.optional(memorizeDestinationValidator),
+  allHearted: v.boolean(),
+  carriedOver: v.optional(
+    v.array(
+      v.object({
+        book: v.string(),
+        chapter: v.number(),
+        startVerse: v.number(),
+        endVerse: v.number(),
+        memorized: v.boolean(),
+      }),
+    ),
+  ),
+});
+
 /**
  * Whether the user already memorizes these spans (alone, as a passage, or as a
  * custom pack) or a passage they memorize contains them, and whether hearts
  * already cover every span. See `loadMemorizeStatus`. Signed out, or with no
- * or too many spans, reads as not memorizing and not hearted.
+ * or too many spans, reads as not memorizing and not hearted. A target that
+ * would start fresh also lists the verses inside it whose progress carries
+ * over (`carriedOver`, see `loadMemorizeStartStatus`).
  */
 export const memorizeStatus = query({
   args: { spans: v.array(memorizeSpanValidator) },
-  returns: v.object({
-    state: v.union(
-      v.literal("none"),
-      v.literal("memorizing"),
-      v.literal("partOf"),
-      v.literal("overlaps"),
-    ),
-    title: v.optional(v.string()),
-    destination: v.optional(memorizeDestinationValidator),
-    allHearted: v.boolean(),
-  }),
+  returns: memorizeStatusValidator,
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
-    const spans = uniqueSpans(args.spans);
-    if (
-      !userId ||
-      spans.length === 0 ||
-      spans.length > MEMORIZE_MAX_PACK_SPANS
-    ) {
-      return { state: "none" as const, allHearted: false };
+    if (!userId) return { state: "none" as const, allHearted: false };
+    return await loadMemorizeStartStatus(ctx, userId, args.spans);
+  },
+});
+
+/**
+ * {@link memorizeStatus} for up to `MEMORIZE_STATUS_MAX_TARGETS` targets at
+ * once, in order, sharing hearts and passage reads across them.
+ */
+export const memorizeStatuses = query({
+  args: {
+    targets: v.array(v.object({ spans: v.array(memorizeSpanValidator) })),
+  },
+  returns: v.array(memorizeStatusValidator),
+  handler: async (ctx, args) => {
+    if (args.targets.length > MEMORIZE_STATUS_MAX_TARGETS) {
+      throw new Error(
+        `Check at most ${MEMORIZE_STATUS_MAX_TARGETS} targets at once`,
+      );
     }
-    return await loadMemorizeStatus(ctx, userId, spans);
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return args.targets.map(() => ({
+        state: "none" as const,
+        allHearted: false,
+      }));
+    }
+    const reader = memorizeStatusReader(ctx, userId);
+    const statuses = [];
+    for (const target of args.targets) {
+      statuses.push(
+        await loadMemorizeStatusForSpans(ctx, userId, target.spans, reader),
+      );
+    }
+    return statuses;
   },
 });
 

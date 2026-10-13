@@ -148,7 +148,7 @@ export function PassageChapterView({
         );
       },
       onOpenPack: (packId) => {
-        void navigate({ href: `/memory?panel=pack:${packId}` });
+        void navigate({ to: "/memory/$packId", params: { packId } });
       },
     };
   }, [book, chapter, chapterMemorize, memorizeSheet, navigate]);

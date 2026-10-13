@@ -8,9 +8,9 @@ import type { PassageHeartInfo } from "./passage-heart-info";
 
 /** How memorizing reads on a reader heart, in place of "Heart" / "Unheart". */
 export interface HeartMemoryCopy {
-  /** "Memorizing · Day 2 of 3: fill in the blanks". */
+  /** "Memorizing · Fill in the blanks". */
   tooltip: string;
-  /** Appended to the heart's accessible name: "(memorizing, Day 2 of 3: …)". */
+  /** Appended to the heart's accessible name: "(memorizing, Fill in the blanks)". */
   ariaSuffix: string;
 }
 
@@ -73,8 +73,8 @@ export function passageHeartCopy(
     case "reviewing": {
       const day = formatDueDay(passage.dueAt, now, timeZone);
       return {
-        tooltip: `${title} · memorized · recite again ${day}`,
-        ariaLabel: `${title}, hearted. Memorized: recite again ${day}. Remove heart`,
+        tooltip: `${title} · memorized · next review ${day}`,
+        ariaLabel: `${title}, hearted. Memorized: next review ${day}. Remove heart`,
       };
     }
     case "mastered":

@@ -52,7 +52,7 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import {
   EXTRA_PRACTICE_TOOLTIP,
   PRACTICE_ANYTIME_LABEL,
-  type StepLadderDay,
+  todayStepParts,
 } from "@/lib/memory-copy";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
@@ -75,7 +75,6 @@ import {
   packMemberRow,
   passageDetailActions,
   passageDetailProgress,
-  passageTodayStepParts,
   passageVerseRows,
   reviewTogetherOption,
   type PackDetailActions,
@@ -600,27 +599,24 @@ function ProgressCard({
   todayStep,
 }: {
   progress: PackDetailProgress;
-  todayStep: { label: string; ladderDay: StepLadderDay } | null;
+  todayStep: { label: string } | null;
 }) {
   const bars = [progress.learned, progress.mastery].filter(
     (bar): bar is ProgressBar => bar !== null,
   );
-  const step = todayStep ? passageTodayStepParts(todayStep.label) : null;
+  const step = todayStep ? todayStepParts(todayStep.label) : null;
 
   return (
     <div className="space-y-3 rounded-xl border bg-card px-4 py-3.5">
-      {step && todayStep ? (
+      {step ? (
         <div className="flex gap-2 text-sm">
           <GraduationCap
             aria-hidden
             className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
           />
-          <div className="min-w-0 space-y-1.5">
-            <p>
-              <span className="font-semibold">{step.lead}</span> {step.rest}
-            </p>
-            <StepLadder day={todayStep.ladderDay} />
-          </div>
+          <p className="min-w-0">
+            <span className="font-semibold">{step.lead}</span> {step.rest}
+          </p>
         </div>
       ) : null}
       <div className={cn("grid gap-3", bars.length > 1 && "sm:grid-cols-2")}>
@@ -634,26 +630,6 @@ function ProgressCard({
       {progress.masteryNote ? (
         <p className="text-xs text-muted-foreground">{progress.masteryNote}</p>
       ) : null}
-    </div>
-  );
-}
-
-function StepLadder({ day }: { day: StepLadderDay }) {
-  return (
-    <div className="flex gap-1" aria-label={`Day ${day} of 3`} role="img">
-      {([1, 2, 3] as const).map((step) => (
-        <span
-          key={step}
-          className={cn(
-            "h-1 w-8 rounded-full",
-            step < day
-              ? "bg-amber-500"
-              : step === day
-                ? "bg-amber-500/60"
-                : "bg-muted",
-          )}
-        />
-      ))}
     </div>
   );
 }
@@ -1165,6 +1141,9 @@ function PassageChapterRows({
                 )}
               >
                 {row.chip.label}
+                {row.chip.fromBefore ? (
+                  <span className="font-normal opacity-70"> · from before</span>
+                ) : null}
               </span>
               {hearted ? (
                 <Heart

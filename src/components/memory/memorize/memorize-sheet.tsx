@@ -1,7 +1,14 @@
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
-import { BookOpen, Brain, Clock, GraduationCap, Heart } from "lucide-react";
+import {
+  BookOpen,
+  Brain,
+  Clock,
+  GraduationCap,
+  Heart,
+  Info,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../../../convex/_generated/api";
@@ -37,6 +44,7 @@ import {
   type MemorizeStatus,
 } from "@/hooks/use-memorize-start";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { carriedOverSheetLine } from "@/lib/carried-over-copy";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import {
   estimateMasteryDays,
@@ -60,6 +68,11 @@ import {
   START_MEMORIZING_LABEL,
   memorizeTitleLabel,
 } from "@/lib/memory-copy";
+import {
+  memoryPanelDrawerHref,
+  memoryPanelFullPagePath,
+  type MemoryPanel,
+} from "@/lib/memory-panel";
 import { PACK_ACTIVE_LEARNING_CAP } from "@/lib/pack-pacing";
 import { cn } from "@/lib/utils";
 
@@ -87,20 +100,17 @@ const CROSS_BOOK = "A passage has to stay within one book.";
 /** `packs.createAndMemorize` rejects longer names. */
 const PACK_NAME_MAX_LENGTH = 80;
 
-/**
- * Panels land in PR 11; until then these open Memory home and the `panel`
- * param is ignored.
- */
-function openHref(destination: MemorizeDestination): string {
-  return destination.kind === "verse"
-    ? `/memory?panel=verse:${destination.verseRefId}`
-    : `/memory?panel=pack:${destination.packId}`;
-}
+const TODAY_PATH = "/memory";
 
-function destinationKey(destination: MemorizeDestination): string {
-  return destination.kind === "verse"
-    ? destination.verseRefId
-    : destination.packId;
+/** A drawer only when already on Today; anywhere else, the full page. */
+function openHref(destination: MemorizeDestination, pathname: string): string {
+  const panel: MemoryPanel =
+    destination.kind === "verse"
+      ? { kind: "verse", verseRefId: destination.verseRefId }
+      : { kind: "pack", packId: destination.packId };
+  return pathname === TODAY_PATH
+    ? memoryPanelDrawerHref(panel)
+    : memoryPanelFullPagePath(panel);
 }
 
 function invalidMessage(
@@ -260,6 +270,11 @@ function MemorizePanel({
   const { submit, pending: starting } = useSubmitLock();
   const [started, setStarted] = useState(false);
 
+  const openDestination = (destination: MemorizeDestination) => {
+    onClose();
+    void navigate({ href: openHref(destination, pathname) });
+  };
+
   const handleStart = () => {
     if (resolved.mode === "invalid" || status === undefined) return;
     submit(async () => {
@@ -269,35 +284,25 @@ function MemorizePanel({
           resolved,
           resolved.mode === "pack" ? { name } : undefined,
         );
-        const title =
-          resolved.mode === "pack"
-            ? name.trim() || resolved.title
-            : resolved.title;
-        const href = memorizeStartHref(
-          result.destination,
-          `${pathname}${searchStr}`,
-        );
         explainer.complete();
         setStarted(true);
+        if (result.alreadyMemorizing) {
+          openDestination(result.destination);
+          return;
+        }
+        // The session returns here; from Today, without an open drawer.
+        const returnTo =
+          pathname === TODAY_PATH ? TODAY_PATH : `${pathname}${searchStr}`;
         onClose();
-        toast.success(`${title} is in Today.`, {
-          id: `memorize:${destinationKey(result.destination)}`,
-          ...(result.asOneCard ? { description: AS_ONE_CARD } : {}),
-          action: {
-            label: "Start now",
-            onClick: () => void navigate({ href }),
-          },
+        if (result.asOneCard) toast(AS_ONE_CARD);
+        void navigate({
+          href: memorizeStartHref(result.destination, returnTo),
         });
       } catch (caught) {
         setFrozen(null);
         toast.error(overlapErrorMessage(caught) ?? START_FAILED);
       }
     });
-  };
-
-  const openDestination = (destination: MemorizeDestination) => {
-    onClose();
-    void navigate({ href: openHref(destination) });
   };
 
   if (resolved.mode === "invalid") {
@@ -434,6 +439,10 @@ function MemorizePanel({
 
   const facts = planFacts(resolved);
   const showHeartLine = status !== undefined && !status.allHearted;
+  const carriedOverLine =
+    resolved.mode === "passage"
+      ? carriedOverSheetLine(status?.carriedOver)
+      : null;
 
   return (
     <PanelFrame
@@ -467,6 +476,12 @@ function MemorizePanel({
               </span>
             </p>
           </div>
+          {carriedOverLine ? (
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+              {carriedOverLine}
+            </p>
+          ) : null}
           {showExplainer ? <MemorizeExplainer mode={resolved.mode} /> : null}
           {resolved.mode === "pack" ? (
             <div className="space-y-1.5">

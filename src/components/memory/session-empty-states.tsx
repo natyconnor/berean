@@ -24,6 +24,9 @@ import { cn } from "@/lib/utils";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 const ACTION_CLASS = "max-sm:h-11";
+const TODAY_HREF = "/memory";
+/** `memoryExitLabel` says this only when Back already lands on Today. */
+const BACK_TO_TODAY_LABEL = "Back to Today";
 
 interface ExitProps {
   onExit: () => void;
@@ -78,11 +81,27 @@ function EmptyStateLoading() {
   );
 }
 
-function ExitButton({ onExit, backLabel }: ExitProps) {
+/**
+ * Back to where the session came from. When that is not Today (the reader,
+ * a pack), a link to Today sits beside it so a finished side trip never
+ * strands someone outside the dashboard.
+ */
+function ExitActions({
+  onExit,
+  backLabel,
+  todayLink = true,
+}: ExitProps & { todayLink?: boolean }) {
   return (
-    <Button variant="outline" className={ACTION_CLASS} onClick={onExit}>
-      {backLabel}
-    </Button>
+    <>
+      <Button variant="outline" className={ACTION_CLASS} onClick={onExit}>
+        {backLabel}
+      </Button>
+      {todayLink && backLabel !== BACK_TO_TODAY_LABEL ? (
+        <Button asChild variant="ghost" className={ACTION_CLASS}>
+          <InternalLink href={TODAY_HREF}>Go to Today</InternalLink>
+        </Button>
+      ) : null}
+    </>
   );
 }
 
@@ -107,7 +126,7 @@ export function ReviewEmptyState({
   );
   return (
     <SessionEmptyState icon={Sparkles} copy={copy}>
-      <ExitButton onExit={onExit} backLabel={backLabel} />
+      <ExitActions onExit={onExit} backLabel={backLabel} />
     </SessionEmptyState>
   );
 }
@@ -128,10 +147,14 @@ export function LearnEmptyState({
     <SessionEmptyState icon={Clock3} muted copy={copy}>
       {copy.startSomethingNew ? (
         <Button asChild className={ACTION_CLASS}>
-          <InternalLink href="/memory">Start something new</InternalLink>
+          <InternalLink href={TODAY_HREF}>Start something new</InternalLink>
         </Button>
       ) : null}
-      <ExitButton onExit={onExit} backLabel={backLabel} />
+      <ExitActions
+        onExit={onExit}
+        backLabel={backLabel}
+        todayLink={!copy.startSomethingNew}
+      />
     </SessionEmptyState>
   );
 }
@@ -166,7 +189,7 @@ export function PracticeEmptyState({
       muted
       copy={practiceEmptyCopy(scopeLabel)}
     >
-      <ExitButton onExit={onExit} backLabel={backLabel} />
+      <ExitActions onExit={onExit} backLabel={backLabel} />
     </SessionEmptyState>
   );
 }

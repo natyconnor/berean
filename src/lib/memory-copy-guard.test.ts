@@ -42,6 +42,7 @@ export const BANNED_MEMORY_COPY: readonly {
   },
   { word: "Review verses to master", pattern: /\breview verses to master\b/i },
   { word: "build packs", pattern: /\bbuild packs\b/i },
+  { word: "Day N of 3", pattern: /\bday \d of 3\b/i },
 ];
 
 /**
@@ -220,6 +221,23 @@ describe("Memory copy guard", () => {
       '"Heart verses to see them here" in "Heart verses to see them here."',
       '"Review verses to master" in "Review verses to master them over time."',
       '"build packs" in "Heart verses in the reader, then use Memory to practice, review, and build packs."',
+    ]);
+  });
+
+  it("catches learning framed as a day count", () => {
+    const sample = [
+      'const a = "Day 2 of 3: fill in the blanks";',
+      "const b = <span>Today: day 1 of 3</span>;",
+      'const c = <div aria-label="Learning, day 3 of 3" />;',
+      'const ok1 = "Verse 1 of 3";',
+      'const ok2 = "Moved Psalm 23:1 to 2 of 3.";',
+      'const ok3 = "Step 1";',
+    ].join("\n");
+
+    expect(bannedCopyIn(userVisibleStrings(sample))).toEqual([
+      '"Day N of 3" in "Day 2 of 3: fill in the blanks"',
+      '"Day N of 3" in "Today: day 1 of 3"',
+      '"Day N of 3" in "Learning, day 3 of 3"',
     ]);
   });
 

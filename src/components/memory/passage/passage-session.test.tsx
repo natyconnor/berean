@@ -25,6 +25,7 @@ import {
 } from "./passage-session-model";
 import { PassageSession } from "./passage-session";
 import type { PassageView } from "./passage-session-types";
+import { CARRIED_OVER_SEEN_KEY_PREFIX } from "./use-carried-over-notice";
 
 const { mutationMocks, fetchChaptersBatchMock } = vi.hoisted(() => ({
   mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
@@ -570,6 +571,58 @@ describe("PassageSession", () => {
     await screen.findByRole("textbox");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
+  });
+
+  describe("carried-over notice", () => {
+    const carriedView = () =>
+      passageView([
+        piece(0, "solid", { learnStage: 3, carriedOver: true }),
+        piece(1, "unreached"),
+      ]);
+    const seenKey = `${CARRIED_OVER_SEEN_KEY_PREFIX}passage_1`;
+
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it("says once that a memorized verse is skipped, until dismissed", async () => {
+      renderSession(carriedView());
+
+      const note = screen.getByRole("note");
+      expect(note).toHaveTextContent(
+        "Verse 1 is already memorized, so we'll skip ahead.",
+      );
+      await waitFor(() => expect(localStorage.getItem(seenKey)).toBe("1"));
+
+      await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("stays quiet once this passage has shown it", () => {
+      localStorage.setItem(seenKey, "1");
+      renderSession(carriedView());
+
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("stays quiet without carried-over verses or once reviewing", () => {
+      const { unmount } = renderSession(
+        passageView([
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "unreached"),
+        ]),
+      );
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      unmount();
+
+      renderSession(
+        passageView([piece(0, "solid", { learnStage: 3, carriedOver: true })], {
+          status: "reviewing",
+        }),
+      );
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      expect(localStorage.getItem(seenKey)).toBeNull();
+    });
   });
 
   it("uses plain language for the remaining session copy", () => {

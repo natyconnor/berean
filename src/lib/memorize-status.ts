@@ -3,6 +3,7 @@ import {
   spansOverlap,
   type VerseSpan,
 } from "./hearted-verse-coverage";
+import { isReviewPhase, type MemoryStatus } from "./memory-scheduler";
 
 /**
  * Pure helpers behind `verseMemory.memorizeStatus` and
@@ -12,6 +13,9 @@ import {
 
 /** Most spans one Memorize call may turn into a pack. */
 export const MEMORIZE_MAX_PACK_SPANS = 200;
+
+/** Most targets one `verseMemory.memorizeStatuses` call checks. */
+export const MEMORIZE_STATUS_MAX_TARGETS = 40;
 
 /** Longest pack name `packs.createAndMemorize` and `packs.rename` accept. */
 export const MAX_PACK_NAME_LENGTH = 80;
@@ -83,6 +87,54 @@ export function uniqueSpans(spans: readonly VerseSpan[]): VerseSpan[] {
     });
   }
   return unique;
+}
+
+/** A verse in Memory on its own, with the progress a passage start reads. */
+export type VerseProgressSpan = VerseSpan & {
+  status: MemoryStatus;
+  learnStage: number;
+  stageReps: number;
+};
+
+/** A verse whose progress a new passage over it would keep. */
+export type CarriedOverVerse = VerseSpan & { memorized: boolean };
+
+/**
+ * Verses in Memory that sit fully inside `target` and whose progress a new
+ * passage would keep (as `inferPieceLearningState` reads it): memorized ones
+ * count as learned, started ones resume. Up next and never-practiced verses
+ * carry nothing. In Scripture order, exact repeats dropped.
+ */
+export function carriedOverVerses(
+  target: readonly VerseSpan[],
+  verses: readonly VerseProgressSpan[],
+): CarriedOverVerse[] {
+  const seen = new Set<string>();
+  const carried: CarriedOverVerse[] = [];
+  for (const verse of verses) {
+    const memorized = isReviewPhase(verse.status);
+    const started =
+      verse.status === "learning" &&
+      (verse.learnStage > 0 || verse.stageReps > 0);
+    if (!memorized && !started) continue;
+    if (!target.some((span) => spanContains(span, verse))) continue;
+    const key = spanKey(verse);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    carried.push({
+      book: verse.book,
+      chapter: verse.chapter,
+      startVerse: verse.startVerse,
+      endVerse: verse.endVerse,
+      memorized,
+    });
+  }
+  return carried.sort(
+    (a, b) =>
+      a.chapter - b.chapter ||
+      a.startVerse - b.startVerse ||
+      a.endVerse - b.endVerse,
+  );
 }
 
 /** Same spans regardless of order or repeats. */

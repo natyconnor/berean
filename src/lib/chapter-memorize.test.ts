@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   chapterMemorizeCopy,
+  chapterMemorizeMark,
   chapterMemorizeState,
   type ChapterMemorizeState,
 } from "./chapter-memorize";
@@ -35,8 +36,6 @@ describe("chapterMemorizeState", () => {
     expect(chapterMemorizeState("Psalms", 1, [{}])).toEqual({
       kind: "memorize",
       title: "Psalm 1",
-      verseCount: 6,
-      learnDays: 4,
     });
   });
 
@@ -118,12 +117,10 @@ describe("chapterMemorizeState", () => {
     );
   });
 
-  it("offers a chapter too short for a passage as one verse card", () => {
+  it("offers a chapter too short for a passage", () => {
     expect(chapterMemorizeState("Psalms", 117, [{}])).toEqual({
       kind: "memorize",
       title: "Psalm 117",
-      verseCount: 2,
-      learnDays: 3,
     });
   });
 
@@ -138,36 +135,34 @@ describe("chapterMemorizeCopy", () => {
     ReturnType<typeof chapterMemorizeCopy>,
   ][] = [
     [
-      { kind: "memorize", title: "Psalm 1", verseCount: 6, learnDays: 4 },
+      { kind: "memorize", title: "Psalm 1" },
       {
         title: "Memorize Psalm 1",
-        detail: "6 verses · learn in about 4 days",
         short: "Memorize",
-        label: "Memorize Psalm 1, 6 verses, learn in about 4 days",
+        label: "Memorize Psalm 1",
+        tooltip: "Memorize Psalm 1",
       },
     ],
     [
       {
         kind: "memorizing",
-        title: "Psalm 1",
+        title: "Sample · Psalm 1 (start passage)",
         packId: "p",
-        learnedVerses: 0,
+        learnedVerses: 2,
         totalVerses: 6,
       },
       {
-        title: "Memorizing Psalm 1",
-        detail: "0 of 6 learned",
-        short: "Memorizing",
-        label: "Memorizing Psalm 1, 0 of 6 learned",
+        title: "Memorizing · 2 of 6",
+        label: "Memorizing, 2 of 6 learned, Sample · Psalm 1 (start passage)",
+        tooltip: "Memorizing Sample · Psalm 1 (start passage) · 2 of 6 learned",
       },
     ],
     [
       { kind: "memorized", title: "Psalm 1", packId: "p" },
       {
         title: "Memorized ✓",
-        detail: "Psalm 1",
-        short: "Memorized",
-        label: "Memorized Psalm 1",
+        label: "Memorized, Psalm 1",
+        tooltip: "Memorized Psalm 1",
       },
     ],
     [
@@ -181,14 +176,96 @@ describe("chapterMemorizeCopy", () => {
       },
       {
         title: "Part of Sermon on the Mount",
-        detail: "Memorizing · 4 of 111 learned",
-        short: "Memorizing",
         label: "Part of Sermon on the Mount, memorizing, 4 of 111 learned",
+        tooltip: "Part of Sermon on the Mount · Memorizing · 4 of 111 learned",
+      },
+    ],
+    [
+      {
+        kind: "partOf",
+        title: "Sermon on the Mount",
+        packId: "p",
+        memorized: true,
+        learnedVerses: 111,
+        totalVerses: 111,
+      },
+      {
+        title: "Part of Sermon on the Mount",
+        label: "Part of Sermon on the Mount, memorized",
+        tooltip: "Part of Sermon on the Mount · Memorized ✓",
       },
     ],
   ];
 
   it.each(cases)("words the %o state", (state, copy) => {
     expect(chapterMemorizeCopy(state)).toEqual(copy);
+  });
+
+  it("keeps the pack title off a memorizing line", () => {
+    const copy = chapterMemorizeCopy({
+      kind: "memorizing",
+      title: "A Very Long Pack Title That Would Crowd the Header",
+      packId: "p",
+      learnedVerses: 12,
+      totalVerses: 176,
+    });
+    expect(copy.title).toBe("Memorizing · 12 of 176");
+    expect(copy.label.startsWith("Memorizing, 12 of 176")).toBe(true);
+  });
+
+  it("keeps a one-word fallback only for the start state", () => {
+    expect(
+      chapterMemorizeCopy({ kind: "memorize", title: "Psalm 1" }).short,
+    ).toBe("Memorize");
+    expect(
+      chapterMemorizeCopy({ kind: "memorized", title: "Psalm 1", packId: "p" })
+        .short,
+    ).toBeUndefined();
+  });
+});
+
+describe("chapterMemorizeMark", () => {
+  it("leaves the start icon bare", () => {
+    expect(chapterMemorizeMark({ kind: "memorize", title: "Psalm 1" })).toEqual(
+      { kind: "none" },
+    );
+  });
+
+  it("rings a passage being memorized with its share learned", () => {
+    expect(
+      chapterMemorizeMark({
+        kind: "memorizing",
+        title: "Psalm 1",
+        packId: "p",
+        learnedVerses: 2,
+        totalVerses: 8,
+      }),
+    ).toEqual({ kind: "progress", fraction: 0.25 });
+    expect(
+      chapterMemorizeMark({
+        kind: "partOf",
+        title: "Sermon on the Mount",
+        packId: "p",
+        memorized: false,
+        learnedVerses: 0,
+        totalVerses: 0,
+      }),
+    ).toEqual({ kind: "progress", fraction: 0 });
+  });
+
+  it("checks a memorized passage", () => {
+    expect(
+      chapterMemorizeMark({ kind: "memorized", title: "Psalm 1", packId: "p" }),
+    ).toEqual({ kind: "done" });
+    expect(
+      chapterMemorizeMark({
+        kind: "partOf",
+        title: "Sermon on the Mount",
+        packId: "p",
+        memorized: true,
+        learnedVerses: 111,
+        totalVerses: 111,
+      }),
+    ).toEqual({ kind: "done" });
   });
 });

@@ -1,6 +1,6 @@
 import { sortByVerseRef } from "../../shared/compare-verse-refs";
 import {
-  passageStepDayLine,
+  passageStepLine,
   stepLadderDay,
   type StepLadderDay,
 } from "./memory-copy";
@@ -116,8 +116,9 @@ export interface GoalsInput<
 }
 
 export interface PassageTodayStep {
-  /** "Day 1 of 3 for verses 5–6: read them, then type them with first letters" */
+  /** "Read verses 5–6, then type them with first letters" */
   label: string;
+  /** Which learning session today's step is; never shown as a day count. */
   ladderDay: StepLadderDay;
 }
 
@@ -329,7 +330,7 @@ function passageTodayStep(
   const learnStage = piece.attachment === "unreached" ? 0 : piece.learnStage;
   const chapters = new Set(pieces.map((p) => `${p.book}|${p.chapter}`));
   return {
-    label: passageStepDayLine(
+    label: passageStepLine(
       learnStage,
       stepVersesLabel(piece, chapters.size > 1),
       piece.endVerse > piece.startVerse,

@@ -230,7 +230,7 @@ describe("MemoryLibrary rows", () => {
     expect(within(learning).getByText("Learning")).toBeInTheDocument();
     expect(within(learning).getByText("Today")).toBeInTheDocument();
     expect(
-      within(learning).getByText("Day 2 of 3: fill in the blanks"),
+      within(learning).getByText("Fill in the blanks"),
     ).toBeInTheDocument();
 
     expect(within(due).getByText("Memorized")).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe("MemoryLibrary rows", () => {
     renderLibrary();
 
     expect(
-      screen.getByRole("link", { name: "Do all 2 · about 3 min" }),
+      screen.getByRole("link", { name: "Do all 2 · about 4 min" }),
     ).toHaveAttribute("href", "/memory/today?return=%2Fmemory%2Fverses");
   });
 

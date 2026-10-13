@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { passageHeartSpans, type VerseSpan } from "./hearted-verse-coverage";
 import {
+  carriedOverVerses,
   passageCoverage,
   passageRelation,
   sameSpanSet,
   spansOverlapAny,
   uniqueSpans,
+  type VerseProgressSpan,
 } from "./memorize-status";
 import { memorizeTargetSpans, resolveMemorizeTarget } from "./memorize-target";
 
@@ -200,6 +202,71 @@ describe("uniqueSpans", () => {
       span("Romans", 8, 28),
       span("John", 3, 16, 17),
     ]);
+  });
+});
+
+describe("carriedOverVerses", () => {
+  const psalm1 = [span("Psalms", 1, 1, 6)];
+  const verse = (
+    startVerse: number,
+    status: VerseProgressSpan["status"],
+    learnStage = 0,
+    stageReps = 0,
+  ): VerseProgressSpan => ({
+    ...span("Psalms", 1, startVerse),
+    status,
+    learnStage,
+    stageReps,
+  });
+
+  it("lists memorized and started verses inside the target, in order", () => {
+    expect(
+      carriedOverVerses(psalm1, [
+        verse(5, "learning", 1, 0),
+        verse(3, "reviewing", 3),
+        verse(2, "mastered", 3),
+        verse(4, "learning", 0, 2),
+      ]),
+    ).toEqual([
+      { ...span("Psalms", 1, 2), memorized: true },
+      { ...span("Psalms", 1, 3), memorized: true },
+      { ...span("Psalms", 1, 4), memorized: false },
+      { ...span("Psalms", 1, 5), memorized: false },
+    ]);
+  });
+
+  it("skips Up next and never-practiced verses", () => {
+    expect(
+      carriedOverVerses(psalm1, [verse(1, "new"), verse(2, "learning")]),
+    ).toEqual([]);
+  });
+
+  it("skips verses that reach outside the target", () => {
+    expect(
+      carriedOverVerses(
+        [span("Psalms", 1, 1, 3)],
+        [
+          {
+            ...span("Psalms", 1, 3, 4),
+            status: "reviewing",
+            learnStage: 3,
+            stageReps: 0,
+          },
+          {
+            ...span("Psalms", 2, 1),
+            status: "reviewing",
+            learnStage: 3,
+            stageReps: 0,
+          },
+        ],
+      ),
+    ).toEqual([]);
+  });
+
+  it("drops exact repeats", () => {
+    expect(
+      carriedOverVerses(psalm1, [verse(3, "reviewing"), verse(3, "reviewing")]),
+    ).toHaveLength(1);
   });
 });
 

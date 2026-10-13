@@ -10,6 +10,8 @@ import { TodayPage } from "./today-page";
 /** Monday, Oct 12, 2026. */
 const NOW = Date.UTC(2026, 9, 12, 18);
 
+type Span = { book: string; chapter: number };
+
 const mocks = vi.hoisted(() => ({
   queryResults: new Map<string, unknown>(),
   queryByArgs: new Map<string, (args: unknown) => unknown>(),
@@ -17,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   openSheet: vi.fn(),
   start: vi.fn(),
   toastError: vi.fn(),
+  esvRefs: [] as { book: string; chapter: number }[],
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -45,6 +48,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     seedPreviewMemory: { seedPreviewMemory: "seedPreviewMemory" },
     verseMemory: {
       memorizeStatus: "verseMemory.memorizeStatus",
+      memorizeStatuses: "verseMemory.memorizeStatuses",
       memoryStatus: "verseMemory.memoryStatus",
       reviewActivity: "verseMemory.reviewActivity",
       reviewForecast: "verseMemory.reviewForecast",
@@ -74,17 +78,32 @@ vi.mock("@/components/memory/memorize/memorize-context", () => ({
 }));
 
 vi.mock("@/hooks/use-esv-reference", () => ({
-  useEsvReference: (ref: { book: string } | null) => ({
-    data: ref
-      ? {
-          canonical: ref.book,
-          copyright: "ESV",
-          verses: [{ number: 1, text: `${ref.book} verse text.` }],
-        }
-      : null,
-    loading: false,
-    error: null,
-  }),
+  useEsvReference: (
+    ref: {
+      book: string;
+      chapter: number;
+      startVerse: number;
+      endVerse: number;
+    } | null,
+  ) => {
+    if (ref) mocks.esvRefs.push(ref);
+    return {
+      data: ref
+        ? {
+            canonical: ref.book,
+            copyright: "ESV",
+            verses: [
+              {
+                number: ref.startVerse,
+                text: `${ref.book} ${ref.chapter}:${ref.startVerse}–${ref.endVerse} verse text.`,
+              },
+            ],
+          }
+        : null,
+      loading: false,
+      error: null,
+    };
+  },
 }));
 
 vi.mock("@/hooks/use-live-now", () => ({ useLiveNow: () => NOW }));
@@ -132,8 +151,7 @@ const PASSAGE_GOAL = {
   status: "building",
   hasWorkToday: true,
   todayStep: {
-    label:
-      "Day 1 of 3 for verses 5–6: read them, then type them with first letters",
+    label: "Read verses 5–6, then type them with first letters",
     ladderDay: 1,
   },
   masteryFraction: 0,
@@ -264,6 +282,7 @@ beforeEach(() => {
   mocks.openSheet.mockReset();
   mocks.start.mockReset();
   mocks.toastError.mockReset();
+  mocks.esvRefs.length = 0;
   mocks.queryResults.set("verseMemory.reviewActivity", activity());
   mocks.queryResults.set("savedVerses.listNotMemorizing", []);
   mocks.queryResults.set("verseMemory.memorizeStatus", {
@@ -279,7 +298,7 @@ describe("TodayPage", () => {
 
     const primary = primaryButtons(container);
     expect(primary).toHaveLength(1);
-    expect(primary[0]).toHaveTextContent("Start today · about 15 min");
+    expect(primary[0]).toHaveTextContent("Start today · about 24 min");
     expect(primary[0]).toHaveAttribute(
       "href",
       "/memory/today?return=%2Fmemory",
@@ -371,10 +390,10 @@ describe("TodayPage", () => {
       screen.getByRole("link", { name: /^Your progress/ }),
       screen.getByRole("link", { name: /^Your verses/ }),
       screen.getByRole("link", { name: "Psalm 16" }),
-      screen.getByRole("link", { name: "Continue · 4 min" }),
+      screen.getByRole("link", { name: "Continue · 7 min" }),
       screen.getByRole("link", { name: "Merced Team" }),
-      screen.getByRole("link", { name: "Review 2 · 1 min" }),
-      screen.getByRole("searchbox", { name: "What do you want to memorize?" }),
+      screen.getByRole("link", { name: "Review 2 · 2 min" }),
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
       screen.getByRole("button", { name: /^Psalm 23/ }),
       screen.getByRole("link", { name: /Make your own pack/ }),
     ].map(position);
@@ -419,7 +438,7 @@ describe("TodayPage", () => {
 
     const primary = primaryButtons(container);
     expect(primary).toHaveLength(1);
-    expect(primary[0]).toHaveTextContent("Continue · about 2 min");
+    expect(primary[0]).toHaveTextContent("Continue · about 3 min");
     expect(
       screen.getByText("2 learning steps done today."),
     ).toBeInTheDocument();
@@ -484,7 +503,7 @@ describe("TodayPage", () => {
       screen.queryByRole("link", { name: /^Your verses/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("searchbox", { name: "Or find something to memorize" }),
+      screen.getByRole("combobox", { name: "Or find something to memorize" }),
     ).toBeInTheDocument();
 
     const chips = within(screen.getByRole("list", { name: "Suggestions" }));
@@ -544,7 +563,7 @@ describe("TodayPage", () => {
     renderPage();
 
     await userEvent.type(
-      screen.getByRole("searchbox", { name: "What do you want to memorize?" }),
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
       "Psalm 23",
     );
     await userEvent.click(
@@ -569,7 +588,7 @@ describe("TodayPage", () => {
     renderPage();
 
     await userEvent.type(
-      screen.getByRole("searchbox", { name: "What do you want to memorize?" }),
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
       "Nowhere 99",
     );
 
@@ -616,7 +635,7 @@ describe("TodayPage", () => {
     });
 
     await userEvent.type(
-      screen.getByRole("searchbox", { name: "What do you want to memorize?" }),
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
       "Romans",
     );
     await waitFor(() =>
@@ -628,31 +647,61 @@ describe("TodayPage", () => {
     );
   });
 
-  it("marks a suggestion already being memorized and opens its panel", () => {
+  it("hides suggestions already being memorized and fills in from the presets", () => {
     mocks.queryResults.set("memoryHome.today", WORK_TODAY);
-    mocks.queryByArgs.set("verseMemory.memorizeStatus", (args) => {
-      const [span] = (args as { spans: { book: string; chapter: number }[] })
-        .spans;
-      return span?.book === "Psalms" && span.chapter === 23
-        ? {
+    mocks.queryByArgs.set("verseMemory.memorizeStatuses", (args) =>
+      (args as { targets: { spans: Span[] }[] }).targets.map(({ spans }) => {
+        const [span] = spans;
+        if (span?.book === "Psalms" && span.chapter === 23) {
+          return {
             state: "memorizing",
             title: "Psalm 23",
             destination: { kind: "pack", packId: "p23" },
             allHearted: true,
-          }
-        : { state: "none", allHearted: false };
-    });
+          };
+        }
+        if (span?.book === "John" && span.chapter === 3) {
+          return {
+            state: "partOf",
+            title: "John 3",
+            destination: { kind: "pack", packId: "j3" },
+            allHearted: true,
+          };
+        }
+        if (span?.book === "Matthew" && span.chapter === 6) {
+          return {
+            state: "overlaps",
+            title: "Matthew 6",
+            destination: { kind: "pack", packId: "m6" },
+            allHearted: true,
+          };
+        }
+        return { state: "none", allHearted: false };
+      }),
+    );
     renderPage();
 
-    const chips = within(screen.getByRole("list", { name: "Suggestions" }));
-    expect(
-      chips.getByRole("link", { name: "Psalm 23 Memorizing" }),
-    ).toHaveAttribute("href", "/memory?panel=pack%3Ap23");
+    const list = screen.getByRole("list", { name: "Suggestions" });
+    const chips = within(list);
+    expect(chips.queryByText("Psalm 23")).not.toBeInTheDocument();
+    expect(chips.queryByText("John 3:16")).not.toBeInTheDocument();
+    expect(chips.queryByText("Memorizing")).not.toBeInTheDocument();
     expect(
       chips.getByRole("button", { name: "The Lord's Prayer Matt 6:9–13" }),
     ).toBeInTheDocument();
     expect(
-      chips.getByRole("link", { name: /100 Verses Every Christian/ }),
+      chips.getByRole("button", { name: "Psalm 8 9 verses" }),
+    ).toBeInTheDocument();
+    expect(
+      chips.getByRole("button", { name: "Psalm 16 11 verses" }),
+    ).toBeInTheDocument();
+
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(9);
+    expect(
+      within(items[items.length - 1]).getByRole("link", {
+        name: /100 Verses Every Christian/,
+      }),
     ).toHaveAttribute(
       "href",
       "/memory/presets/100-verses-every-christian-should-know",
@@ -660,5 +709,262 @@ describe("TodayPage", () => {
     expect(
       screen.getByRole("link", { name: /More suggestions/ }),
     ).toHaveAttribute("href", "/memory/presets");
+  });
+
+  it("shows the curated suggestions while their statuses load", () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    renderPage();
+
+    const chips = within(screen.getByRole("list", { name: "Suggestions" }));
+    expect(chips.getAllByRole("listitem")).toHaveLength(9);
+    expect(
+      chips.getByRole("button", { name: "Psalm 23 6 verses" }),
+    ).toBeInTheDocument();
+    expect(chips.queryByText("Memorizing")).not.toBeInTheDocument();
+  });
+
+  it("marks a search already being memorized and opens its drawer", async () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    mocks.queryByArgs.set("verseMemory.memorizeStatus", (args) => {
+      const [span] = (args as { spans: Span[] }).spans;
+      return span?.book === "John" && span.chapter === 1
+        ? {
+            state: "memorizing",
+            destination: {
+              kind: "verse",
+              verseRefId: "john11",
+              span: { book: "John", chapter: 1, startVerse: 1, endVerse: 1 },
+            },
+            allHearted: true,
+          }
+        : { state: "none", allHearted: false };
+    });
+    renderPage();
+
+    const search = screen.getByRole("combobox", {
+      name: "What do you want to memorize?",
+    });
+    await userEvent.type(search, "John 1:1");
+
+    const row = await screen.findByRole("link", {
+      name: "John 1:1 Memorizing Open",
+    });
+    expect(row).toHaveAttribute("href", "/memory?panel=verse%3Ajohn11");
+    expect(
+      screen.queryByRole("button", { name: /^Memorize John 1:1/ }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(row);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory?panel=verse%3Ajohn11",
+    });
+
+    mocks.navigate.mockReset();
+    await userEvent.type(search, "{Enter}");
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory?panel=verse%3Ajohn11",
+    });
+    expect(mocks.openSheet).not.toHaveBeenCalled();
+  });
+
+  it("says when a search is part of a passage and opens that passage", async () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    mocks.queryResults.set("verseMemory.memorizeStatus", {
+      state: "partOf",
+      title: "Romans 8",
+      destination: { kind: "pack", packId: "p8" },
+      allHearted: true,
+    });
+    renderPage();
+
+    await userEvent.type(
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
+      "Romans 8:28",
+    );
+
+    expect(
+      await screen.findByRole("link", {
+        name: "Romans 8:28 Part of Romans 8 Open",
+      }),
+    ).toHaveAttribute("href", "/memory?panel=pack%3Ap8");
+  });
+
+  it("keeps Memorize for a search that only overlaps a passage", async () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    mocks.queryResults.set("verseMemory.memorizeStatus", {
+      state: "overlaps",
+      title: "Psalm 23:1–3",
+      destination: { kind: "pack", packId: "p23" },
+      allHearted: true,
+    });
+    renderPage();
+
+    await userEvent.type(
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
+      "Psalm 23",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Memorize Psalm 23/ }),
+    );
+    expect(mocks.openSheet).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "chapters", startChapter: 23 }),
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("memorizes a range of chapters from the search", async () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    renderPage();
+
+    await userEvent.type(
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
+      "Matthew 5-7",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Memorize Sermon on the Mount/ }),
+    );
+    expect(mocks.openSheet).toHaveBeenCalledWith({
+      kind: "chapters",
+      book: "Matthew",
+      startChapter: 5,
+      endChapter: 7,
+      presetId: "matthew-5-7",
+      title: "Sermon on the Mount",
+    });
+  });
+
+  describe("reference autocomplete", () => {
+    function search() {
+      return screen.getByRole("combobox", {
+        name: "What do you want to memorize?",
+      });
+    }
+
+    function suggestions() {
+      return within(
+        screen.getByRole("listbox", { name: "Reference suggestions" }),
+      );
+    }
+
+    it("suggests books, then chapters, and accepts with the keyboard", async () => {
+      mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+      renderPage();
+
+      const input = search();
+      expect(input).toHaveAttribute("aria-expanded", "false");
+      await userEvent.type(input, "2 pe");
+
+      expect(input).toHaveAttribute("aria-expanded", "true");
+      const peter = suggestions().getByRole("option", {
+        name: "2 Peter, 3 chapters",
+      });
+      expect(peter).toHaveAttribute("aria-selected", "true");
+      expect(input).toHaveAttribute("aria-activedescendant", peter.id);
+      expect(input).toHaveAttribute(
+        "aria-controls",
+        screen.getByRole("listbox").id,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(
+        screen.queryByText(/We couldn't find that reference/),
+      ).not.toBeInTheDocument();
+
+      await userEvent.keyboard("{Enter}");
+      expect(input).toHaveValue("2 Peter ");
+      expect(
+        suggestions()
+          .getAllByRole("option")
+          .map((option) => option.textContent),
+      ).toEqual([
+        "2 Peter 1, 21 verses",
+        "2 Peter 2, 22 verses",
+        "2 Peter 3, 18 verses",
+      ]);
+
+      await userEvent.keyboard("{ArrowDown}");
+      const second = suggestions().getByRole("option", {
+        name: "2 Peter 2, 22 verses",
+      });
+      expect(second).toHaveAttribute("aria-selected", "true");
+      expect(input).toHaveAttribute("aria-activedescendant", second.id);
+
+      await userEvent.keyboard("{Tab}");
+      expect(input).toHaveValue("2 Peter 2");
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^Memorize 2 Peter 2/ }),
+      ).toBeInTheDocument();
+      expect(mocks.openSheet).not.toHaveBeenCalled();
+    });
+
+    it("closes on Escape and reopens with the arrow keys", async () => {
+      mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+      renderPage();
+
+      const input = search();
+      await userEvent.type(input, "2 pe");
+      await userEvent.keyboard("{Escape}");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(input).toHaveAttribute("aria-expanded", "false");
+      expect(input).toHaveValue("2 pe");
+
+      await userEvent.keyboard("{ArrowDown}");
+      expect(
+        suggestions().getByRole("option", { name: "2 Peter, 3 chapters" }),
+      ).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("accepts a clicked suggestion into the search", async () => {
+      mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+      renderPage();
+
+      const input = search();
+      await userEvent.type(input, "John 3:16-");
+      await userEvent.click(
+        suggestions().getByRole("option", { name: "John 3:16–18, 3 verses" }),
+      );
+
+      expect(input).toHaveValue("John 3:16–18");
+      expect(input).toHaveFocus();
+      await userEvent.click(
+        screen.getByRole("button", { name: /^Memorize John 3:16–18/ }),
+      );
+      expect(mocks.openSheet).toHaveBeenCalledWith({
+        kind: "spans",
+        spans: [{ book: "John", chapter: 3, startVerse: 16, endVerse: 18 }],
+      });
+    });
+
+    it("previews the text of a matched verse span", async () => {
+      mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+      renderPage();
+
+      await userEvent.type(search(), "2 peter 2:9-10");
+
+      expect(
+        screen.getByRole("button", { name: /^Memorize 2 Peter 2:9–10/ }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("2 Peter 2:9–10 verse text.")).toHaveClass(
+        "font-serif",
+        "line-clamp-3",
+      );
+    });
+
+    it("shows no preview for a whole chapter", async () => {
+      mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+      renderPage();
+
+      await userEvent.type(search(), "Psalm 23");
+
+      expect(
+        screen.getByRole("button", { name: /^Memorize Psalm 23/ }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/verse text\./)).not.toBeInTheDocument();
+      expect(mocks.esvRefs).toEqual([]);
+    });
   });
 });

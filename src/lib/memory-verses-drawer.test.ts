@@ -30,8 +30,7 @@ function passage(overrides: Partial<PassageGoalCard> = {}): PassageGoalCard {
     status: "building",
     hasWorkToday: true,
     todayStep: {
-      label:
-        "Day 1 of 3 for verses 5–6: read them, then type them with first letters",
+      label: "Read verses 5–6, then type them with first letters",
       ladderDay: 1,
     },
     masteryFraction: 0,
@@ -129,8 +128,7 @@ describe("dueGoalRows", () => {
     ).toEqual([
       {
         title: "Psalm 16",
-        detail:
-          "Day 1 of 3 for verses 5–6: read them, then type them with first letters",
+        detail: "Read verses 5–6, then type them with first letters",
         action: "learn",
         tone: "new",
       },
@@ -142,7 +140,7 @@ describe("dueGoalRows", () => {
       },
       {
         title: "Romans 8:28",
-        detail: "Learning · Day 2 of 3: fill in the blanks",
+        detail: "Learning · today: fill in the blanks",
         action: "learn",
         tone: "learning",
       },
@@ -160,13 +158,13 @@ describe("dueGoalRows", () => {
     expect(learnOnly?.detail).toBe("1 verse to learn today");
   });
 
-  it("recites memorized passages and reviews memorized verses", () => {
+  it("reviews memorized passages and memorized verses", () => {
     const rows = dueGoalRows([
       passage({ status: "reviewing", todayStep: null }),
       verse({ status: "reviewing", learnStage: 3, intervalDays: 4 }),
     ]);
     expect(rows.map((row) => [row.detail, row.action])).toEqual([
-      ["Recite it today", "review"],
+      ["Review today", "review"],
       ["Memorized · review due today", "review"],
     ]);
   });
@@ -253,7 +251,7 @@ describe("goalStatusLine", () => {
       "Pack · 0 of 9 learned",
     );
     expect(goalStatusLine(verse(), NOW, TZ)).toBe(
-      "Verse · Learning · Day 2 of 3: fill in the blanks",
+      "Verse · Learning · Fill in the blanks",
     );
   });
 });

@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -177,9 +177,7 @@ describe("VerseDetailBody", () => {
       "href",
       "/memory/learn?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory%2Fverse%2Fv1",
     );
-    expect(
-      screen.getByText("Day 2 of 3: fill in the blanks"),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText("Fill in the blanks").length).toBeGreaterThan(0);
     expect(
       screen.getByText("This fills in after you practice it."),
     ).toBeInTheDocument();
@@ -200,6 +198,54 @@ describe("VerseDetailBody", () => {
     expect(
       screen.getByText("Nice. Tomorrow you'll try it with blanks."),
     ).toBeInTheDocument();
+  });
+
+  it("shows a try's accuracy and day when hovering the accuracy trend", () => {
+    renderBody(detail());
+
+    const chart = screen.getByRole("img", { name: /^Accuracy across/ });
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      bottom: 56,
+      right: 280,
+      width: 280,
+      height: 56,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerMove(chart, { clientX: 0, clientY: 20 });
+    expect(screen.getByRole("tooltip")).toHaveTextContent("94%");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Wed, Sep 30");
+
+    fireEvent.pointerMove(chart, { clientX: 280, clientY: 20 });
+    expect(screen.getByRole("tooltip")).toHaveTextContent("98%");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Sun, Oct 4");
+
+    fireEvent.pointerLeave(chart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("steps through tries with the arrow keys once the trend has focus", async () => {
+    renderBody(detail());
+
+    const chart = screen.getByRole("img", { name: /^Accuracy across/ });
+    act(() => chart.focus());
+    expect(chart).toHaveFocus();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("98%");
+    expect(chart).toHaveAccessibleDescription(/98%\s*Sun, Oct 4/);
+
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("94%");
+    expect(screen.getByText("94%, Wed, Sep 30")).toBeInTheDocument();
+
+    await userEvent.keyboard("{End}");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("98%");
+
+    act(() => chart.blur());
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("offers Memorize again for a verse no longer in Memory", async () => {

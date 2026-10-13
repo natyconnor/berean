@@ -3,10 +3,12 @@
  *
  * The dock treats Notes, Memory, and Study as independent app states: leaving
  * Memory to write a note should return you to the pack or review you left,
- * not always the Memory dashboard.
+ * not always the Memory dashboard. A session opened from the reader and sent
+ * back there when done is a side trip, so Memory does not remember it.
  */
 
 import { validateMemoryPackSearch } from "@/lib/memory-pack-search";
+import { isMemorySessionPath } from "@/lib/memory-session-path";
 import { validateMemoryVerseSearch } from "@/lib/memory-verse-search";
 
 export type AppMode = "notes" | "memory" | "study";
@@ -14,6 +16,8 @@ export type AppMode = "notes" | "memory" | "study";
 export type ModeLastLocations = Partial<Record<AppMode, string>>;
 
 export const MODE_LAST_LOCATION_STORAGE_KEY = "bible-notes-mode-last-location";
+
+const STATIC_MEMORY_PAGES = new Set(["today", "verses", "progress", "library"]);
 
 export const DEFAULT_MODE_HREFS: Record<AppMode, string> = {
   notes: "/passage/John-1",
@@ -49,14 +53,60 @@ export function isValidModeHref(mode: AppMode, href: string): boolean {
   return modeForPathname(pathname) === mode;
 }
 
+/** Today's drawer params: coming back to Memory shows plain Today. */
+const TODAY_DRAWER_PARAMS = ["panel", "from"] as const;
+
+function withoutTodayDrawer(href: string): string {
+  const hashStart = href.indexOf("#");
+  const base = hashStart === -1 ? href : href.slice(0, hashStart);
+  const hash = hashStart === -1 ? "" : href.slice(hashStart);
+  const queryStart = base.indexOf("?");
+  if (queryStart === -1 || base.slice(0, queryStart) !== "/memory") {
+    return href;
+  }
+  const params = new URLSearchParams(base.slice(queryStart + 1));
+  for (const key of TODAY_DRAWER_PARAMS) params.delete(key);
+  const search = params.toString();
+  return `/memory${search ? `?${search}` : ""}${hash}`;
+}
+
+/** The `return` search param, whatever case the router left its key in. */
+function returnParam(href: string): string | undefined {
+  const base = href.split("#")[0] ?? href;
+  const queryStart = base.indexOf("?");
+  if (queryStart === -1) return undefined;
+  for (const [key, value] of new URLSearchParams(base.slice(queryStart + 1))) {
+    if (key.toLowerCase() === "return" && value) return value;
+  }
+  return undefined;
+}
+
+/**
+ * A session opened from outside Memory (the reader's heart popup) that hands
+ * back there when done. It belongs to that trip, not to Memory's own state.
+ */
+function isSideTripSession(href: string): boolean {
+  if (!isMemorySessionPath(pathnameFromHref(href))) return false;
+  const returnTo = returnParam(href);
+  return (
+    returnTo !== undefined &&
+    modeForPathname(pathnameFromHref(returnTo)) !== "memory"
+  );
+}
+
+function isRememberedHref(mode: AppMode, href: string): boolean {
+  if (!isValidModeHref(mode, href)) return false;
+  return mode !== "memory" || !isSideTripSession(href);
+}
+
 function parseStoredLocations(raw: unknown): ModeLastLocations {
   if (!raw || typeof raw !== "object") return {};
   const value = raw as Record<string, unknown>;
   const next: ModeLastLocations = {};
   for (const mode of ["notes", "memory", "study"] as const) {
     const href = value[mode];
-    if (typeof href === "string" && isValidModeHref(mode, href)) {
-      next[mode] = href;
+    if (typeof href === "string" && isRememberedHref(mode, href)) {
+      next[mode] = withoutTodayDrawer(href);
     }
   }
   return next;
@@ -101,8 +151,10 @@ export function clearModeLastLocations(): void {
 }
 
 /**
- * Record the current page as the last location for its mode. Returns the
- * updated map when something changed, otherwise `null`.
+ * Record the current page as the last location for its mode. An open Today
+ * drawer is not remembered, and neither is a session opened from outside
+ * Memory: Memory keeps whatever it last had. Returns the updated map when
+ * something changed, otherwise `null`.
  */
 export function rememberModeLocation(
   pathname: string,
@@ -110,9 +162,10 @@ export function rememberModeLocation(
   current: ModeLastLocations = readModeLastLocations(),
 ): ModeLastLocations | null {
   const mode = modeForPathname(pathname);
-  if (!mode || !isValidModeHref(mode, href)) return null;
-  if (current[mode] === href) return null;
-  const next: ModeLastLocations = { ...current, [mode]: href };
+  if (!mode || !isRememberedHref(mode, href)) return null;
+  const remembered = withoutTodayDrawer(href);
+  if (current[mode] === remembered) return null;
+  const next: ModeLastLocations = { ...current, [mode]: remembered };
   writeModeLastLocations(next);
   return next;
 }
@@ -123,8 +176,8 @@ export function resolveModeHref(
   fallback?: string,
 ): string {
   const href = stored[mode];
-  if (href && isValidModeHref(mode, href)) return href;
-  if (fallback && isValidModeHref(mode, fallback)) return fallback;
+  if (href && isRememberedHref(mode, href)) return href;
+  if (fallback && isRememberedHref(mode, fallback)) return fallback;
   return DEFAULT_MODE_HREFS[mode];
 }
 
@@ -248,6 +301,11 @@ export function modeNavigateTargetFromHref(
     }
     if (parts.length === 2 && parts[1] === "review") {
       return { to: "/memory/review", search: verseSearch };
+    }
+    // These static pages would otherwise parse as a pack id and lose their
+    // own search params; navigating by href keeps them intact.
+    if (parts.length === 2 && parts[1] && STATIC_MEMORY_PAGES.has(parts[1])) {
+      return null;
     }
     if (parts.length === 2 && parts[1]) {
       return {

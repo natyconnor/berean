@@ -84,6 +84,28 @@ describe("ModeDock last-mode restore", () => {
     });
   });
 
+  it("opens Today after a session that the reader sent into Memory", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/learn",
+      href: "/memory/learn?book=john&chapter=2&startverse=5&endverse=5&return=%2Fpassage%2Fjohn-2",
+    });
+    rerender(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/john-2",
+      href: "/passage/john-2",
+    });
+    rerender(<ModeDock />);
+
+    const memoryLink = screen.getByRole("link", { name: "Memory" });
+    expect(memoryLink).toHaveAttribute("href", "/memory");
+    await user.click(memoryLink);
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory" });
+  });
+
   it("restores the last Notes href, including search, after leaving Memory", async () => {
     const user = userEvent.setup();
     mocks.useLocation.mockReturnValue({

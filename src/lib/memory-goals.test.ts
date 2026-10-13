@@ -168,8 +168,7 @@ describe("buildGoalCards: passages", () => {
       status: "building",
       hasWorkToday: true,
       todayStep: {
-        label:
-          "Day 1 of 3 for verse 4: read it, then type it with first letters",
+        label: "Read verse 4, then type it with first letters",
         ladderDay: 1,
       },
       masteryFraction: 0,
@@ -195,8 +194,7 @@ describe("buildGoalCards: passages", () => {
     expect(goal.learnedVerses).toBe(0);
     expect(goal.hasWorkToday).toBe(true);
     expect(goal.todayStep).toEqual({
-      label:
-        "Day 1 of 3 for verses 1–2: read them, then type them with first letters",
+      label: "Read verses 1–2, then type them with first letters",
       ladderDay: 1,
     });
   });
@@ -217,7 +215,7 @@ describe("buildGoalCards: passages", () => {
     );
 
     expect(goal.todayStep).toEqual({
-      label: "Day 2 of 3 for verse 15:1: fill in the blanks",
+      label: "Fill in the blanks for verse 15:1",
       ladderDay: 2,
     });
   });

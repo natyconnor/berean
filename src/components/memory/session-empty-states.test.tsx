@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DAY_MS } from "@/lib/memory-scheduler";
 
-import { PracticeEmptyState, ReviewEmptyState } from "./session-empty-states";
+import {
+  LearnEmptyState,
+  PracticeEmptyState,
+  ReviewEmptyState,
+} from "./session-empty-states";
 
 // Tue Oct 13 2026, 09:00 in Los Angeles.
 const NOW = Date.UTC(2026, 9, 13, 16, 0);
@@ -54,6 +58,22 @@ describe("ReviewEmptyState", () => {
       screen.getByRole("button", { name: "Back to Today" }),
     );
     expect(onExit).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("link", { name: "Go to Today" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Today beside Back when Back leaves Memory", async () => {
+    mocks.inMemory = [memorized(NOW + 2 * DAY_MS)];
+    const onExit = vi.fn();
+    render(<ReviewEmptyState now={NOW} onExit={onExit} backLabel="Back" />);
+
+    expect(screen.getByRole("link", { name: "Go to Today" })).toHaveAttribute(
+      "href",
+      "/memory",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onExit).toHaveBeenCalledTimes(1);
   });
 
   it("says there is nothing to review before anything is memorized", () => {
@@ -84,5 +104,65 @@ describe("PracticeEmptyState", () => {
     expect(
       screen.getByRole("button", { name: "Back to Today" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Go to Today" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Today beside Back when Back leaves Memory", () => {
+    render(<PracticeEmptyState onExit={vi.fn()} backLabel="Back" />);
+
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Today" })).toHaveAttribute(
+      "href",
+      "/memory",
+    );
+  });
+});
+
+describe("LearnEmptyState", () => {
+  it("offers Today beside Back after a verse opened from the reader", () => {
+    render(
+      <LearnEmptyState
+        verses={[
+          {
+            status: "learning",
+            learnStage: 1,
+            dueAt: NOW + DAY_MS,
+            lastReviewedAt: NOW,
+          },
+        ]}
+        now={NOW}
+        onExit={vi.fn()}
+        backLabel="Back"
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Nothing new today" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Today" })).toHaveAttribute(
+      "href",
+      "/memory",
+    );
+  });
+
+  it("lets Start something new stand in for Today", () => {
+    render(
+      <LearnEmptyState
+        verses={[]}
+        now={NOW}
+        onExit={vi.fn()}
+        backLabel="Back"
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Start something new" }),
+    ).toHaveAttribute("href", "/memory");
+    expect(
+      screen.queryByRole("link", { name: "Go to Today" }),
+    ).not.toBeInTheDocument();
   });
 });

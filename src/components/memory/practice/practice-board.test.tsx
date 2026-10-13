@@ -226,6 +226,29 @@ describe("PracticeBoard composite recitation", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("celebrates a word-for-word recitation in one banner with particles", async () => {
+    renderComposite();
+
+    const answer = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(answer);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    await waitFor(() => {
+      expect(check).toBeEnabled();
+    });
+    await userEvent.click(check);
+
+    expect(await screen.findByText("Nailed it!")).toBeVisible();
+    const banner = screen
+      .getByText("Word for word.")
+      .closest('[role="status"]');
+    expect(banner).toHaveAttribute("data-tone", "exact");
+    expect(banner).toHaveTextContent("🎉");
+    expect(banner).toHaveTextContent("100% recalled");
+    expect(banner).toHaveTextContent(/Next review in \d+ days\./);
+    expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
+  });
+
   it("grades a reviewing passage through passageMemory, not unified review", async () => {
     mutationMock("passageMemory.recordAttempt").mockResolvedValue({
       status: "reviewing",

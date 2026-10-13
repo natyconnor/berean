@@ -24,7 +24,7 @@ import {
   NEW_PACK_CREATE_HINT,
   newPackPlan,
 } from "@/lib/memory-new-pack";
-import { memoryPanelDrawerHref } from "@/lib/memory-panel";
+import { memoryPanelFullPagePath } from "@/lib/memory-panel";
 import { moveItem } from "@/lib/pack-order";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +42,7 @@ const sectionHeadingClassName =
 /**
  * New pack: name it, add verses by reference or from your hearts, order
  * them, and create. Creating memorizes every verse (and hearts it), then
- * opens the pack over Today.
+ * opens the pack's page.
  */
 export function NewPack({
   startSpan,
@@ -109,7 +109,7 @@ export function NewPack({
         });
         toast.success(`${packName} is in Today.`);
         void navigate({
-          href: memoryPanelDrawerHref({ kind: "pack", packId }),
+          href: memoryPanelFullPagePath({ kind: "pack", packId }),
           replace: true,
         });
       } catch {

@@ -57,6 +57,7 @@ export const passagePieceValidator = v.object({
   learnStage: v.number(),
   stageReps: v.number(),
   dueAt: v.optional(v.number()),
+  carriedOver: v.optional(v.boolean()),
 });
 
 /**

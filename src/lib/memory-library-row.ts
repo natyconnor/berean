@@ -19,7 +19,7 @@ import {
 export type LibraryRowAction = "learn" | "review" | "practice";
 
 export interface LibraryRow {
-  /** "Day 2 of 3: fill in the blanks", "Next review Thu". */
+  /** "Fill in the blanks", "Next review Thu". */
   line: string;
   /** A learning step or review is open today. */
   dueToday: boolean;
@@ -51,8 +51,8 @@ export function libraryRow(
 }
 
 /**
- * The Due today filter's one primary button: "Do all 5 · about 6 min", or
- * "Review all 3 · about 2 min" when only reviews are left. `null` when
+ * The Due today filter's one primary button: "Do all 5 · about 9 min", or
+ * "Review all 3 · about 3 min" when only reviews are left. `null` when
  * nothing is left today.
  */
 export function dueTodayBulkLabel(counts: TodayCounts): string | null {

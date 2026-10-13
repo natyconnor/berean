@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
 
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
@@ -56,6 +56,7 @@ import {
   type RopeStartOverride,
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
+import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import {
   SessionHeaderProgress,
@@ -174,6 +175,11 @@ export function PassageSession({
     view.needsCelebration ? "owed" : null,
   );
   const celebrateMastered = useFirstMasteredToast();
+  const carriedOver = useCarriedOverNotice(
+    view._id,
+    state.pieces,
+    !isMaintenance,
+  );
 
   const pieceRefs = useMemo(
     () => view.pieces.map(pieceReference),
@@ -482,6 +488,13 @@ export function PassageSession({
       progress={progress}
       persistError={persistError}
     >
+      {carriedOver.notice ? (
+        <CarriedOverNotice
+          notice={carriedOver.notice}
+          onDismiss={carriedOver.dismiss}
+        />
+      ) : null}
+
       {needsFirstVerse ? (
         persistError ? (
           <NextVersePanel
@@ -636,6 +649,34 @@ export function PassageSession({
         />
       ) : null}
     </PassageSessionShell>
+  );
+}
+
+function CarriedOverNotice({
+  notice,
+  onDismiss,
+}: {
+  notice: string;
+  onDismiss: () => void;
+}): JSX.Element {
+  return (
+    <div
+      role="note"
+      className="mx-auto mb-4 flex max-w-xl items-center gap-2 rounded-lg border bg-muted/40 py-1.5 pr-1.5 pl-3 text-sm text-muted-foreground"
+    >
+      <Info className="size-4 shrink-0" aria-hidden />
+      <p className="min-w-0 flex-1">{notice}</p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="shrink-0"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+      >
+        <X aria-hidden />
+      </Button>
+    </div>
   );
 }
 

@@ -57,7 +57,7 @@ describe("packListSubtitle for passages", () => {
           masteryFraction: 0.22,
         }),
       ),
-    ).toBe("Memorized · recite today");
+    ).toBe("Memorized · review today");
   });
 
   it("names the next recite and mastery when not due", () => {
@@ -71,7 +71,7 @@ describe("packListSubtitle for passages", () => {
           masteryFraction: 0.22,
         }),
       ),
-    ).toBe("Memorized · recite again Thu · mastery 22%");
+    ).toBe("Memorized · next review Thu · mastery 22%");
     expect(
       subtitle(
         passage({
@@ -81,7 +81,7 @@ describe("packListSubtitle for passages", () => {
           masteryFraction: 0.5,
         }),
       ),
-    ).toBe("Memorized · recite again Nov 1 · mastery 50%");
+    ).toBe("Memorized · next review Nov 1 · mastery 50%");
   });
 
   it("reads Mastered when mastered", () => {

@@ -4,10 +4,9 @@ import {
   useEffect,
   useRef,
   useState,
-  type MouseEvent,
   type ReactNode,
 } from "react";
-import { useCanGoBack, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -157,14 +156,16 @@ export function MemoryPanelHost({
     }
   }, [key, focusTitle]);
 
-  const close = () => void navigate({ to: "/memory", search: {} });
+  // Replace, so Back doesn't reopen a drawer that was just closed.
+  const close = () =>
+    void navigate({ to: "/memory", search: {}, replace: true });
 
   const frame: MemoryPanelFrameValue | null = shown
     ? {
         surface: "drawer",
         panel: shown.panel,
         from: shown.from,
-        returnTo: memoryPanelDrawerHref(shown.panel, { from: shown.from }),
+        returnTo: "/memory",
         hrefFor: memoryPanelDrawerHref,
         back:
           shown.from === "verses" && shown.panel.kind !== "verses"
@@ -179,7 +180,10 @@ export function MemoryPanelHost({
         close,
         exit: () => {
           if (shown.from === "verses") {
-            void navigate({ href: memoryPanelDrawerHref(VERSES_PANEL) });
+            void navigate({
+              href: memoryPanelDrawerHref(VERSES_PANEL),
+              replace: true,
+            });
           } else {
             close();
           }
@@ -218,17 +222,11 @@ export function MemoryPanelHost({
   );
 }
 
-function isPlainClick(event: MouseEvent<HTMLAnchorElement>): boolean {
-  return (
-    event.button === 0 &&
-    !event.metaKey &&
-    !event.ctrlKey &&
-    !event.shiftKey &&
-    !event.altKey
-  );
-}
-
-/** A panel as a full page, for deep links and arrivals from other screens. */
+/**
+ * A panel as a full page, for deep links and arrivals from other screens.
+ * Its back link always goes to plain Today (or the Your verses page), never
+ * through history, which may hold another mode's screen.
+ */
 export function MemoryPanelPage({
   panel,
   from,
@@ -237,21 +235,12 @@ export function MemoryPanelPage({
   from: MemoryPanelFrom | undefined;
 }) {
   const navigate = useNavigate();
-  const canGoBack = useCanGoBack();
   const fromVerses = from === "verses" && panel.kind !== "verses";
   const versesHref = memoryPanelFullPagePath(VERSES_PANEL);
 
   const back: MemoryPanelBackLink = fromVerses
     ? { label: YOUR_VERSES_LABEL, href: versesHref }
-    : {
-        label: TODAY_LABEL,
-        href: "/memory",
-        onClick: (event) => {
-          if (!canGoBack || !isPlainClick(event)) return;
-          event.preventDefault();
-          window.history.back();
-        },
-      };
+    : { label: TODAY_LABEL, href: "/memory" };
 
   const frame: MemoryPanelFrameValue = {
     surface: "page",

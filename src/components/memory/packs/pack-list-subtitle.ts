@@ -25,9 +25,9 @@ export function packListSubtitle(
       return "Mastered";
     case "reviewing":
       if (summary.hasWorkToday || summary.nextDueAt === null) {
-        return "Memorized · recite today";
+        return "Memorized · review today";
       }
-      return `Memorized · recite again ${formatDueDay(
+      return `Memorized · next review ${formatDueDay(
         summary.nextDueAt,
         now,
         timeZone,

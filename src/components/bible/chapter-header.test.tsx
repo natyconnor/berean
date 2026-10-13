@@ -8,10 +8,12 @@ import {
   CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS,
   CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
-  CHAPTER_CHROME_MEMORIZE_FULL_CLASS,
-  CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
+  CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS,
+  CHAPTER_CHROME_MEMORIZE_SLOT_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+  chapterMemorizeStageClasses,
 } from "@/components/passage/header-chrome";
 import type { ChapterMemorizeState } from "@/lib/chapter-memorize";
 import { ChapterHeader, type ChapterMemorizeControl } from "./chapter-header";
@@ -241,63 +243,119 @@ describe("ChapterHeader Memorize button", () => {
   const MEMORIZE_PSALM_1: ChapterMemorizeState = {
     kind: "memorize",
     title: "Psalm 1",
-    verseCount: 6,
-    learnDays: 4,
   };
 
-  it("offers Memorize Psalm 1 with its plan and opens the sheet", async () => {
+  it("offers Memorize Psalm 1 on one line and opens the sheet", async () => {
     const user = userEvent.setup();
     const memorize = memorizeControl(MEMORIZE_PSALM_1);
     renderHeader({ book: "Psalms", chapter: 1, memorize });
 
-    const button = screen.getByRole("button", {
-      name: "Memorize Psalm 1, 6 verses, learn in about 4 days",
-    });
+    const button = screen.getByRole("button", { name: "Memorize Psalm 1" });
     expect(button).toHaveAttribute("data-tour-id", "chapter-memorize");
     expect(button).toHaveTextContent("Memorize Psalm 1");
-    expect(button).toHaveTextContent("6 verses · learn in about 4 days");
+    expect(button).not.toHaveTextContent(/verse|learn in/);
 
     await user.click(button);
     expect(memorize.onMemorize).toHaveBeenCalledWith(button);
     expect(memorize.onOpenPack).not.toHaveBeenCalled();
   });
 
-  it("sits beside the chapter-note well and takes over pushing right", () => {
+  it("grows into the space beside the chapter-note well and pushes it right", () => {
     renderHeader({
       book: "Psalms",
       chapter: 1,
       memorize: memorizeControl(MEMORIZE_PSALM_1),
     });
 
-    const button = screen.getByRole("button", { name: /^Memorize Psalm 1/ });
+    const button = screen.getByRole("button", { name: "Memorize Psalm 1" });
+    const slot = button.parentElement;
     const note = screen.getByRole("button", {
       name: "Add a chapter note for Psalm 1",
     });
-    expect(button.nextElementSibling).toBe(note);
-    expect(button).toHaveClass("ml-auto");
+    expect(slot?.className).toBe(CHAPTER_CHROME_MEMORIZE_SLOT_CLASS);
+    expect(slot?.nextElementSibling).toBe(note);
     expect(note).not.toHaveClass("ml-auto");
   });
 
-  it("collapses to icon + Memorize and leaves the tightest column", () => {
+  it("collapses to a word, then the icon, and crowds out Headers first", () => {
     renderHeader({
       book: "Psalms",
       chapter: 1,
       memorize: memorizeControl(MEMORIZE_PSALM_1),
     });
 
-    const button = screen.getByRole("button", { name: /^Memorize Psalm 1/ });
-    expect(button.className).toContain(CHAPTER_CHROME_TIGHT_HIDE_CLASS);
-    expect(
-      screen.getByRole("switch", { name: /Headers/ }).closest("div")?.className,
-    ).toContain(CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS);
-    const full = screen.getByText("Memorize Psalm 1").parentElement;
-    expect(full?.className).toContain(CHAPTER_CHROME_MEMORIZE_FULL_CLASS);
-    const short = screen.getByText("Memorize", { exact: true });
-    expect(short.className).toContain(CHAPTER_CHROME_MEMORIZE_SHORT_CLASS);
-    expect(short).toHaveAttribute("aria-hidden", "true");
+    const button = screen.getByRole("button", { name: "Memorize Psalm 1" });
+    expect(button.className).toContain(CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS);
+    const headersSwitch = screen.getByRole("switch", { name: /Headers/ });
+    expect(headersSwitch.closest("div")?.className).toContain(
+      CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
+    );
+    expect(screen.getByText("Headers").className).toContain(
+      CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS,
+    );
+
+    const stageClasses = chapterMemorizeStageClasses("Memorize Psalm 1", {
+      ellipsize: false,
+      word: true,
+    });
+    expect(button.className).toContain(stageClasses.button);
+    expect(screen.getByText("Memorize Psalm 1").className).toContain(
+      stageClasses.line,
+    );
+    const word = screen.getByText("Memorize", { exact: true });
+    expect(word.className).toContain(stageClasses.word);
+    expect(word).toHaveAttribute("aria-hidden", "true");
+    expect(button.querySelector("[data-memorize-mark]")).toBeNull();
   });
 
-  it("shows memorizing progress and opens the passage's pack", async () => {
+  it("goes straight to a ringed icon while memorizing", () => {
+    renderHeader({
+      book: "Psalms",
+      chapter: 1,
+      memorize: memorizeControl({
+        kind: "memorizing",
+        title: "Psalm 1",
+        packId: "pack_1",
+        learnedVerses: 2,
+        totalVerses: 6,
+      }),
+    });
+
+    const button = screen.getByRole("button", {
+      name: "Memorizing, 2 of 6 learned, Psalm 1",
+    });
+    const stageClasses = chapterMemorizeStageClasses("Memorizing · 2 of 6", {
+      ellipsize: false,
+      word: false,
+    });
+    expect(button.className).toContain(stageClasses.button);
+    expect(
+      screen.queryByText("Memorizing", { exact: true }),
+    ).not.toBeInTheDocument();
+    const mark = button.querySelector('[data-memorize-mark="progress"]');
+    expect(mark?.getAttribute("class")).toContain(stageClasses.mark);
+    expect(mark).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("checks the icon once memorized", () => {
+    renderHeader({
+      book: "Psalms",
+      chapter: 1,
+      memorize: memorizeControl({
+        kind: "memorized",
+        title: "Psalm 1",
+        packId: "pack_1",
+      }),
+    });
+
+    const button = screen.getByRole("button", { name: "Memorized, Psalm 1" });
+    expect(
+      screen.queryByText("Memorized", { exact: true }),
+    ).not.toBeInTheDocument();
+    expect(button.querySelector('[data-memorize-mark="done"]')).not.toBeNull();
+  });
+
+  it("shows memorizing progress without the pack title and opens the pack", async () => {
     const user = userEvent.setup();
     const memorize = memorizeControl({
       kind: "memorizing",
@@ -309,10 +367,17 @@ describe("ChapterHeader Memorize button", () => {
     renderHeader({ book: "Psalms", chapter: 1, memorize });
 
     const button = screen.getByRole("button", {
-      name: "Memorizing Psalm 1, 0 of 6 learned",
+      name: "Memorizing, 0 of 6 learned, Psalm 1",
     });
-    expect(button).toHaveTextContent("Memorizing Psalm 1");
-    expect(button).toHaveTextContent("0 of 6 learned");
+    expect(button).toHaveTextContent("Memorizing · 0 of 6");
+    expect(button).not.toHaveTextContent("Psalm 1");
+
+    await user.hover(button);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Memorizing Psalm 1 · 0 of 6 learned",
+      }),
+    ).toBeInTheDocument();
 
     await user.click(button);
     expect(memorize.onOpenPack).toHaveBeenCalledWith("pack_1");
@@ -327,7 +392,7 @@ describe("ChapterHeader Memorize button", () => {
       packId: "pack_1",
     });
     renderHeader({ book: "Psalms", chapter: 1, memorize: memorized });
-    const done = screen.getByRole("button", { name: "Memorized Psalm 1" });
+    const done = screen.getByRole("button", { name: "Memorized, Psalm 1" });
     expect(done).toHaveTextContent("Memorized ✓");
     await user.click(done);
     expect(memorized.onOpenPack).toHaveBeenCalledWith("pack_1");
@@ -346,6 +411,12 @@ describe("ChapterHeader Memorize button", () => {
       name: /^Part of Sermon on the Mount/,
     });
     expect(part).toHaveTextContent("Part of Sermon on the Mount");
+    expect(screen.getByText("Part of Sermon on the Mount").className).toContain(
+      chapterMemorizeStageClasses("Part of Sermon on the Mount", {
+        ellipsize: true,
+        word: false,
+      }).line,
+    );
     await user.click(part);
     expect(partOf.onOpenPack).toHaveBeenCalledWith("pack_sm");
   });

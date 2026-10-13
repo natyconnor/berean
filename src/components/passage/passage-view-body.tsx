@@ -348,7 +348,6 @@ export function PassageViewBody({
           joinsAbove: segment.joinsAbove,
           mark: {
             stroke: segment.stroke,
-            foot: segment.foot,
             heart: segment.heart
               ? {
                   learnedFraction:

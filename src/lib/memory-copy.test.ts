@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   memorizeTitleLabel,
-  passageStepDayLine,
+  passageStepLine,
   statusLabel,
-  stepDayLine,
+  stepAction,
+  stepActionLine,
   stepLadderDay,
   stepShortLabel,
+  todayStepParts,
 } from "./memory-copy";
 
 describe("stepShortLabel", () => {
@@ -27,17 +29,26 @@ describe("stepShortLabel", () => {
   });
 });
 
-describe("stepDayLine", () => {
-  it("frames Read and First letters as day 1", () => {
-    expect(stepDayLine(0)).toBe(
-      "Day 1 of 3: read it, then type it with first letters",
-    );
-    expect(stepDayLine(1)).toBe(stepDayLine(0));
+describe("stepActionLine", () => {
+  it("puts Read and First letters in one step", () => {
+    expect(stepActionLine(0)).toBe("Read it, then type it with first letters");
+    expect(stepActionLine(1)).toBe(stepActionLine(0));
   });
 
-  it("frames blanks as day 2 and From memory as day 3", () => {
-    expect(stepDayLine(2)).toBe("Day 2 of 3: fill in the blanks");
-    expect(stepDayLine(3)).toBe("Day 3 of 3: say it from memory");
+  it("names blanks and From memory without counting days", () => {
+    expect(stepActionLine(2)).toBe("Fill in the blanks");
+    expect(stepActionLine(3)).toBe("Say it from memory");
+  });
+});
+
+describe("stepAction", () => {
+  it("reads as the end of a sentence", () => {
+    expect([0, 1, 2, 3].map(stepAction)).toEqual([
+      "read it, then type it with first letters",
+      "read it, then type it with first letters",
+      "fill in the blanks",
+      "say it from memory",
+    ]);
   });
 });
 
@@ -49,17 +60,35 @@ describe("stepLadderDay", () => {
   });
 });
 
-describe("passageStepDayLine", () => {
+describe("passageStepLine", () => {
   it("names the verses and today's step", () => {
-    expect(passageStepDayLine(0, "verses 5–6", true)).toBe(
-      "Day 1 of 3 for verses 5–6: read them, then type them with first letters",
+    expect(passageStepLine(0, "verses 5–6", true)).toBe(
+      "Read verses 5–6, then type them with first letters",
     );
-    expect(passageStepDayLine(2, "verse 3", false)).toBe(
-      "Day 2 of 3 for verse 3: fill in the blanks",
+    expect(passageStepLine(1, "verse 3", false)).toBe(
+      "Read verse 3, then type it with first letters",
     );
-    expect(passageStepDayLine(3, "verse 7", false)).toBe(
-      "Day 3 of 3 for verse 7: say it from memory",
+    expect(passageStepLine(2, "verses 1–2", true)).toBe(
+      "Fill in the blanks for verses 1–2",
     );
+    expect(passageStepLine(3, "verse 7", false)).toBe(
+      "Say verse 7 from memory",
+    );
+  });
+});
+
+describe("todayStepParts", () => {
+  it("leads with Today and ends the step as a sentence", () => {
+    expect(todayStepParts("Fill in the blanks for verses 1–2")).toEqual({
+      lead: "Today:",
+      rest: "fill in the blanks for verses 1–2.",
+    });
+    expect(
+      todayStepParts("Read verse 3, then type it with first letters"),
+    ).toEqual({
+      lead: "Today:",
+      rest: "read verse 3, then type it with first letters.",
+    });
   });
 });
 

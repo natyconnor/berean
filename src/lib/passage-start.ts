@@ -222,6 +222,9 @@ function toStoredPiece(
   if (base.sectionLabel !== undefined) {
     piece.sectionLabel = base.sectionLabel;
   }
+  if (state.attachment !== "unreached") {
+    piece.carriedOver = true;
+  }
   return piece;
 }
 
@@ -234,6 +237,7 @@ function allPiecesSolid(pieces: readonly PassagePiece[]): boolean {
 /**
  * Pure start planner. Never touches hearts. The mutation layer is
  * create-once: if a passage row already exists, skip this and return the row.
+ * Pieces seeded from existing verse progress are marked `carriedOver`.
  */
 export function planStart(args: PlanStartArgs): PlanStartResult {
   const { pieces, hearts, memberSchedules, now } = args;

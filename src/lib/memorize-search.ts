@@ -1,6 +1,9 @@
-import { chapterPresets } from "../../shared/memory-presets";
+import {
+  chapterPresetRange,
+  chapterPresets,
+} from "../../shared/memory-presets";
 import { getVerseRefBoundsErrorMessage } from "../../shared/verse-ref-validation";
-import { BIBLE_BOOKS } from "./bible-books";
+import { BIBLE_BOOKS, getBookInfo } from "./bible-books";
 import { getChapterVerseCount } from "./bible-verse-counts";
 import { heartMatchesBookFilter } from "./heart-list";
 import type { VerseSpan } from "./hearted-verse-coverage";
@@ -12,14 +15,22 @@ import {
   type ResolvedMemorize,
 } from "./memorize-target";
 import {
+  formatPassageRange,
+  rangeChapterSpans,
+  type ChapterVerseCount,
+  type PassageRange,
+} from "./passage-range";
+import {
   formatVerseRef,
   isChapterScopeRef,
   parseVerseRef,
+  resolveCanonicalBookName,
   type VerseRef,
 } from "./verse-ref-utils";
 
 /**
- * Today's "What do you want to memorize?" search: a typed reference becomes
+ * Today's "What do you want to memorize?" search: a typed reference (a
+ * verse, a range, a chapter, chapters, or a range across chapters) becomes
  * one Memorize target with its plan line, and the same text filters "From
  * your hearts". Pure.
  */
@@ -39,26 +50,118 @@ const ABBREVIATIONS = new Map(
   BIBLE_BOOKS.map((book) => [book.name, book.abbreviation]),
 );
 
+function normalizeSearchText(text: string): string {
+  return text.trim().replace(/[–—]/g, "-");
+}
+
 function parseSearchRef(text: string): VerseRef | null {
-  const normalized = text.trim().replace(/[–—]/g, "-");
+  const normalized = normalizeSearchText(text);
   if (normalized.length === 0) return null;
   return parseVerseRef(normalized, { allowChapterOnly: true });
 }
 
-function chapterTarget(book: string, chapter: number): MemorizeTarget {
+/** What the Memorize search reads: whole chapters, or a run of verses. */
+type SearchPassage =
+  | { kind: "chapters"; book: string; startChapter: number; endChapter: number }
+  | { kind: "verses"; range: PassageRange };
+
+const CHAPTER_RANGE = /^(.+?)\s+(\d+)\s*-\s*(\d+)$/;
+const CROSS_CHAPTER_RANGE = /^(.+?)\s+(\d+):(\d+)\s*-\s*(\d+):(\d+)$/;
+
+/**
+ * "Psalm 23", "Matthew 5–7", "Romans 8:28–30", "Romans 7:24–8:2". Chapters
+ * must exist in the book and verses in their chapters; `null` otherwise.
+ */
+function parseSearchPassage(
+  text: string,
+  chapterVerseCount: ChapterVerseCount,
+): SearchPassage | null {
+  const normalized = normalizeSearchText(text);
+  if (normalized.length === 0) return null;
+
+  const crossChapter = normalized.match(CROSS_CHAPTER_RANGE);
+  if (crossChapter) {
+    const book = resolveCanonicalBookName(crossChapter[1]);
+    if (!book) return null;
+    const [startChapter, startVerse, endChapter, endVerse] = crossChapter
+      .slice(2)
+      .map((part) => Number.parseInt(part, 10));
+    const range = { book, startChapter, startVerse, endChapter, endVerse };
+    return rangeChapterSpans(range, chapterVerseCount)
+      ? { kind: "verses", range }
+      : null;
+  }
+
+  const chapterRange = normalized.match(CHAPTER_RANGE);
+  if (chapterRange) {
+    const book = resolveCanonicalBookName(chapterRange[1]);
+    const chapters = book ? getBookInfo(book)?.chapters : undefined;
+    const startChapter = Number.parseInt(chapterRange[2], 10);
+    const endChapter = Number.parseInt(chapterRange[3], 10);
+    if (
+      !book ||
+      chapters === undefined ||
+      startChapter < 1 ||
+      endChapter < startChapter ||
+      endChapter > chapters
+    ) {
+      return null;
+    }
+    return { kind: "chapters", book, startChapter, endChapter };
+  }
+
+  const ref = parseVerseRef(normalized, { allowChapterOnly: true });
+  if (!ref) return null;
+  if (isChapterScopeRef(ref)) {
+    return {
+      kind: "chapters",
+      book: ref.book,
+      startChapter: ref.chapter,
+      endChapter: ref.chapter,
+    };
+  }
+  return {
+    kind: "verses",
+    range: {
+      book: ref.book,
+      startChapter: ref.chapter,
+      startVerse: ref.startVerse,
+      endChapter: ref.chapter,
+      endVerse: ref.endVerse,
+    },
+  };
+}
+
+/** Whole chapters, named after their preset when one covers exactly them. */
+function chapterTarget(
+  book: string,
+  startChapter: number,
+  endChapter: number,
+): MemorizeTarget {
   const preset = chapterPresets().find(
     (candidate) =>
       candidate.book === book &&
-      candidate.startChapter === chapter &&
-      candidate.endChapter === chapter,
+      candidate.startChapter === startChapter &&
+      candidate.endChapter === endChapter &&
+      chapterPresetRange(candidate) === null,
   );
   return {
     kind: "chapters",
     book,
-    startChapter: chapter,
-    endChapter: chapter,
+    startChapter,
+    endChapter,
     ...(preset ? { presetId: preset.id, title: preset.title } : {}),
   };
+}
+
+function versesTarget(
+  range: PassageRange,
+  chapterVerseCount: ChapterVerseCount,
+): MemorizeTarget {
+  const spans = rangeChapterSpans(range, chapterVerseCount) ?? [];
+  return range.startChapter === range.endChapter
+    ? { kind: "spans", spans }
+    : { kind: "spans", spans, title: formatPassageRange(range) };
 }
 
 function plural(count: number, noun: string): string {
@@ -83,22 +186,14 @@ export function memorizeSearch(
   deps?: MemorizeTargetDeps,
 ): MemorizeSearchResult {
   if (text.trim().length === 0) return { kind: "empty" };
-  const ref = parseSearchRef(text);
-  if (!ref) return { kind: "noMatch" };
+  const chapterVerseCount = deps?.chapterVerseCount ?? getChapterVerseCount;
+  const passage = parseSearchPassage(text, chapterVerseCount);
+  if (!passage) return { kind: "noMatch" };
 
-  const target = isChapterScopeRef(ref)
-    ? chapterTarget(ref.book, ref.chapter)
-    : ({
-        kind: "spans",
-        spans: [
-          {
-            book: ref.book,
-            chapter: ref.chapter,
-            startVerse: ref.startVerse,
-            endVerse: ref.endVerse,
-          },
-        ],
-      } satisfies MemorizeTarget);
+  const target =
+    passage.kind === "chapters"
+      ? chapterTarget(passage.book, passage.startChapter, passage.endChapter)
+      : versesTarget(passage.range, chapterVerseCount);
   const resolved = resolveMemorizeTarget(target, deps);
   if (resolved.mode === "invalid") return { kind: "noMatch" };
   return {
@@ -151,21 +246,44 @@ export function parseReferenceSpan(text: string): ReferenceSpanResult {
   };
 }
 
+function passageSharesVerses(
+  passage: SearchPassage,
+  heart: VerseSpan,
+): boolean {
+  if (passage.kind === "chapters") {
+    return (
+      heart.book === passage.book &&
+      heart.chapter >= passage.startChapter &&
+      heart.chapter <= passage.endChapter
+    );
+  }
+  const { range } = passage;
+  if (
+    heart.book !== range.book ||
+    heart.chapter < range.startChapter ||
+    heart.chapter > range.endChapter
+  ) {
+    return false;
+  }
+  const first = heart.chapter === range.startChapter ? range.startVerse : 1;
+  const last =
+    heart.chapter === range.endChapter
+      ? range.endVerse
+      : Number.POSITIVE_INFINITY;
+  return heart.startVerse <= last && heart.endVerse >= first;
+}
+
 /**
  * Whether a heart belongs under the search text: inside a typed reference
- * ("Psalm 23", "Romans 8:28–30"), else a book or reference that contains the
- * text ("Rom", "Romans 8"). Empty text matches everything.
+ * ("Psalm 23", "Matthew 5–7", "Romans 8:28–30"), else a book or reference
+ * that contains the text ("Rom", "Romans 8"). Empty text matches everything.
  */
 export function heartMatchesSearch(heart: VerseSpan, text: string): boolean {
   const query = text.trim();
   if (query.length === 0) return true;
 
-  const ref = parseSearchRef(query);
-  if (ref) {
-    if (ref.book !== heart.book || ref.chapter !== heart.chapter) return false;
-    if (isChapterScopeRef(ref)) return true;
-    return heart.startVerse <= ref.endVerse && heart.endVerse >= ref.startVerse;
-  }
+  const passage = parseSearchPassage(query, getChapterVerseCount);
+  if (passage) return passageSharesVerses(passage, heart);
 
   return (
     heartMatchesBookFilter(heart.book, query, ABBREVIATIONS.get(heart.book)) ||

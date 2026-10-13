@@ -149,7 +149,7 @@ describe("goalProgressRow", () => {
     ).toBe(AFTER_LEARNING);
   });
 
-  it("reads a verse's learning day or mastery", () => {
+  it("reads a verse's learning or mastery", () => {
     expect(goalProgressRow(verse(), NOW, TZ)).toMatchObject({
       learnedLabel: "Learned",
       learnedFraction: 1,
@@ -163,7 +163,8 @@ describe("goalProgressRow", () => {
         TZ,
       ),
     ).toMatchObject({
-      learnedLabel: "Day 2 of 3",
+      learnedLabel: "Learning",
+      learnedFraction: 1 / 3,
       masteryLabel: AFTER_LEARNING,
       nextLabel: "Today",
     });

@@ -1,5 +1,5 @@
 import { normalizeTimeZone } from "./dashboard-buckets";
-import { stepDayLine } from "./memory-copy";
+import { stepActionLine } from "./memory-copy";
 import {
   DAY_MS,
   initialSchedule,
@@ -51,9 +51,12 @@ const DAYS_PER_MONTH = 365.25 / 12;
 const SIMULATION_STEP_LIMIT = 500;
 
 // Heuristics, not measurements: rough minutes per item for "about N min".
-export const MINUTES_PER_LEARNING_VERSE = 2;
-export const MINUTES_PER_REVIEW = 0.5;
-export const MINUTES_PER_PASSAGE_SESSION = 4;
+// A learning step types the verse several times (Guided and Challenge take 3–5
+// reps), a review is one full recall plus a possible retry, and a passage
+// session warms up, adds up to five new pieces and joins them.
+export const MINUTES_PER_LEARNING_VERSE = 3;
+export const MINUTES_PER_REVIEW = 1;
+export const MINUTES_PER_PASSAGE_SESSION = 7;
 
 function wholeCount(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
@@ -221,7 +224,7 @@ export function nextStepCopy(
 
   if (schedule.status === "learning") {
     if (!isLearningLocked(schedule, now)) {
-      return stepDayLine(schedule.learnStage);
+      return stepActionLine(schedule.learnStage);
     }
     return schedule.learnStage >= MAX_LEARN_STAGE
       ? "Great. Tomorrow you'll say it from memory."

@@ -19,98 +19,47 @@ describe("passageRailSegments", () => {
         [4, "upNext"],
       ),
       isFirstChapter: true,
-      isLastChapter: true,
     });
 
     expect(segments).toEqual([
-      {
-        verse: 1,
-        stroke: "solid",
-        joinsAbove: false,
-        heart: true,
-        foot: false,
-      },
-      {
-        verse: 2,
-        stroke: "solid",
-        joinsAbove: true,
-        heart: false,
-        foot: false,
-      },
-      {
-        verse: 3,
-        stroke: "dashed",
-        joinsAbove: true,
-        heart: false,
-        foot: false,
-      },
-      { verse: 4, stroke: "faint", joinsAbove: true, heart: false, foot: true },
+      { verse: 1, stroke: "solid", joinsAbove: false, heart: true },
+      { verse: 2, stroke: "solid", joinsAbove: true, heart: false },
+      { verse: 3, stroke: "dashed", joinsAbove: true, heart: false },
+      { verse: 4, stroke: "faint", joinsAbove: true, heart: false },
     ]);
   });
 
-  it("puts the heart and foot on the same verse for a one-verse passage", () => {
+  it("puts the heart on the only verse of a one-verse passage", () => {
     expect(
       passageRailSegments({
         verseStates: states([7, "learning"]),
         isFirstChapter: true,
-        isLastChapter: true,
       }),
-    ).toEqual([
-      {
-        verse: 7,
-        stroke: "dashed",
-        joinsAbove: false,
-        heart: true,
-        foot: true,
-      },
-    ]);
+    ).toEqual([{ verse: 7, stroke: "dashed", joinsAbove: false, heart: true }]);
   });
 
   describe("across a chapter boundary", () => {
     // Matthew 5:47–6:2: 5:47–48 memorized, 6:1 learning, 6:2 up next.
-    it("starts with the heart and runs off the end of the first chapter", () => {
+    it("starts with the heart in the first chapter", () => {
       const fifth = passageRailSegments({
         verseStates: states([47, "memorized"], [48, "memorized"]),
         isFirstChapter: true,
-        isLastChapter: false,
       });
-      expect(fifth.map((s) => [s.verse, s.heart, s.foot])).toEqual([
-        [47, true, false],
-        [48, false, false],
+      expect(fifth.map((s) => [s.verse, s.heart])).toEqual([
+        [47, true],
+        [48, false],
       ]);
     });
 
-    it("continues with no heart and ends in the foot in the last chapter", () => {
+    it("continues with no heart in a later chapter", () => {
       const sixth = passageRailSegments({
         verseStates: states([1, "learning"], [2, "upNext"]),
         isFirstChapter: false,
-        isLastChapter: true,
       });
       expect(sixth).toEqual([
-        {
-          verse: 1,
-          stroke: "dashed",
-          joinsAbove: false,
-          heart: false,
-          foot: false,
-        },
-        {
-          verse: 2,
-          stroke: "faint",
-          joinsAbove: true,
-          heart: false,
-          foot: true,
-        },
+        { verse: 1, stroke: "dashed", joinsAbove: false, heart: false },
+        { verse: 2, stroke: "faint", joinsAbove: true, heart: false },
       ]);
-    });
-
-    it("has neither heart nor foot in a middle chapter", () => {
-      const middle = passageRailSegments({
-        verseStates: states([1, "upNext"], [2, "upNext"]),
-        isFirstChapter: false,
-        isLastChapter: false,
-      });
-      expect(middle.some((s) => s.heart || s.foot)).toBe(false);
     });
   });
 
@@ -118,7 +67,6 @@ describe("passageRailSegments", () => {
     const segments = passageRailSegments({
       verseStates: states([5, "upNext"], [2, "memorized"], [3, "memorized"]),
       isFirstChapter: true,
-      isLastChapter: true,
     });
     expect(segments.map((s) => [s.verse, s.joinsAbove])).toEqual([
       [2, false],
@@ -126,16 +74,11 @@ describe("passageRailSegments", () => {
       [5, false],
     ]);
     expect(segments[0]?.heart).toBe(true);
-    expect(segments[2]?.foot).toBe(true);
   });
 
   it("is empty when the chapter has no verses of the passage", () => {
     expect(
-      passageRailSegments({
-        verseStates: [],
-        isFirstChapter: true,
-        isLastChapter: true,
-      }),
+      passageRailSegments({ verseStates: [], isFirstChapter: true }),
     ).toEqual([]);
   });
 });

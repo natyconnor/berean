@@ -35,7 +35,6 @@ export interface PassageRailMark {
   stroke: RailStroke;
   /** Square top flush with the row, joining a rail drawn past a heading above. */
   flushTop?: boolean;
-  foot: boolean;
   heart: PassageRailHeart | null;
 }
 
@@ -111,8 +110,8 @@ function PassageHeartButton({ heart }: { heart: PassageRailHeart }) {
 
 /**
  * One verse's part of a passage rail, drawn in its row's left gutter so the
- * rail follows layout: the heart on the first verse, a 3px segment per verse,
- * and a foot tick under the last. Rows are `relative`; this fills their height.
+ * rail follows layout: the heart on the first verse and a 3px segment per
+ * verse. Rows are `relative`; this fills their height.
  */
 export function PassageRailGutter({ mark }: { mark: PassageRailMark }) {
   return (
@@ -130,13 +129,6 @@ export function PassageRailGutter({ mark }: { mark: PassageRailMark }) {
               : "top-[3px] rounded-full",
         )}
       />
-      {mark.foot ? (
-        <span
-          aria-hidden
-          data-passage-rail-foot=""
-          className="absolute bottom-[3px] left-[calc(50%-1.5px)] h-[3px] w-[9px] rounded-full bg-foreground/12 max-sm:left-[calc(50%-1px)] max-sm:h-0.5 max-sm:w-[7px]"
-        />
-      ) : null}
       {mark.heart ? <PassageHeartButton heart={mark.heart} /> : null}
     </div>
   );

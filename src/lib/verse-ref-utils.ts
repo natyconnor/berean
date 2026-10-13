@@ -135,6 +135,16 @@ export function resolveCanonicalBookName(input: string): string | null {
   return prefix?.name ?? null;
 }
 
+/** The book a name or alias names exactly ("Psalm", "Rom"); no prefixes. */
+export function resolveExactBookName(input: string): string | null {
+  const normalizedInput = normalizeLookupToken(input);
+  if (!normalizedInput) return null;
+  return (
+    BOOK_ALIAS_ENTRIES.find((entry) => entry.alias === normalizedInput)?.name ??
+    null
+  );
+}
+
 export function searchBibleBooks(input: string, limit = 8): BookMatch[] {
   const normalizedInput = normalizeLookupToken(input);
   if (!normalizedInput) return [];

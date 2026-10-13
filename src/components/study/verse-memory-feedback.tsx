@@ -1,11 +1,12 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { BookOpen, PartyPopper, Sparkles, ThumbsUp } from "lucide-react";
 import type { JSX } from "react";
 
+import { accuracyFeedback, type AccuracyBand } from "@/lib/accuracy-feedback";
 import {
   isLearningPhase,
   reviewGradeOutcome,
   type MemorySchedule,
+  type ReviewGradeOutcome,
 } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
@@ -15,8 +16,7 @@ import type {
   VerseAttemptQuality,
 } from "./study-attempt-quality";
 import {
-  attemptFeedbackLead,
-  reviewFeedbackMessage,
+  attemptPraiseLine,
   reviewOutcomeMessage,
 } from "./verse-attempt-feedback";
 
@@ -28,10 +28,7 @@ interface VerseMemoryFeedbackProps {
    * keystroke.
    */
   attemptKey: string;
-  /**
-   * When true (Memory Review), show schedule-consequence copy instead of the
-   * celebration-only banners used on the deck/practice faces.
-   */
+  /** When true (Memory Review), close with what the grade does to the schedule. */
   showScheduleOutcome?: boolean;
   /**
    * The graduating From Memory recall is the only learning step that requires
@@ -46,12 +43,23 @@ interface VerseMemoryFeedbackProps {
   accuracy?: number;
   /** Diff error tallies — unlocks one-word-off and typo-only copy. */
   errors?: AttemptErrorCounts;
-  /**
-   * An accuracy headline already encourages: show only what the grade does
-   * (the schedule, or why 100% is needed), with no lead and no confetti.
-   */
-  consequenceOnly?: boolean;
+  /** Trails the percentage, e.g. "Pass at 85%". */
+  note?: string;
 }
+
+const BANNER_TONE: Record<AccuracyBand, string> = {
+  exact: "border-emerald-500/40 bg-emerald-500/10",
+  nearly: "border-emerald-500/30 bg-emerald-500/[0.06]",
+  progress: "border-amber-500/40 bg-amber-500/10",
+  again: "border-sky-500/30 bg-sky-500/10",
+};
+
+const LEAD_TONE: Record<AccuracyBand, string> = {
+  exact: "text-emerald-700 dark:text-emerald-300",
+  nearly: "text-emerald-700 dark:text-emerald-300",
+  progress: "text-amber-700 dark:text-amber-300",
+  again: "text-sky-800 dark:text-sky-200",
+};
 
 const CONFETTI_COUNT = 10;
 const CONFETTI_RADIUS = 72;
@@ -66,6 +74,11 @@ const CONFETTI_COLORS = [
   "#ef4444",
 ] as const;
 
+/**
+ * "How you did" in one banner: an emoji, the honest headline, a specific
+ * word of encouragement, the percentage, and (in Review) what happens next.
+ * A word-for-word recall bursts confetti unless motion is reduced.
+ */
 export function VerseMemoryFeedback({
   quality,
   attemptKey,
@@ -75,181 +88,123 @@ export function VerseMemoryFeedback({
   now,
   accuracy,
   errors,
-  consequenceOnly = false,
-}: VerseMemoryFeedbackProps): JSX.Element | null {
-  const reduceMotion = useReducedMotion();
-  const dueClock = now ?? 0;
+  note,
+}: VerseMemoryFeedbackProps): JSX.Element {
+  const reduceMotion = useReducedMotion() ?? false;
   const scored =
     accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
   const outcome = reviewGradeOutcome(quality, scored);
-  const lead = attemptFeedbackLead({
-    accuracy: scored,
-    outcome,
-    errors,
-  });
-
-  if (showScheduleOutcome) {
-    const lapsedToLearning =
-      nextSchedule !== null &&
-      nextSchedule !== undefined &&
-      isLearningPhase(nextSchedule.status);
-    const bannerOutcome =
-      lapsedToLearning && outcome !== "lapse" ? "lapse" : outcome;
-    const outcomeInput = {
-      outcome: bannerOutcome,
-      nextSchedule,
-      now: dueClock,
-      lapsedToLearning,
-    };
-    const message = consequenceOnly
-      ? reviewOutcomeMessage(outcomeInput)
-      : reviewFeedbackMessage({ lead, ...outcomeInput });
-    if (message === null) return null;
-
-    if (bannerOutcome === "lapse") {
-      return (
-        <ScheduleBanner
-          attemptKey={`lapse-${attemptKey}`}
-          reduceMotion={!!reduceMotion}
-          tone="lapse"
-          icon={<BookOpen className="h-4 w-4 shrink-0" aria-hidden />}
-          message={message}
-        />
-      );
-    }
-
-    if (bannerOutcome === "exact") {
-      return (
-        <ScheduleBanner
-          attemptKey={`exact-${attemptKey}`}
-          reduceMotion={!!reduceMotion}
-          tone="exact"
-          icon={<PartyPopper className="h-4 w-4 shrink-0" aria-hidden />}
-          message={message}
-          sparkle={!consequenceOnly}
-        />
-      );
-    }
-
-    return (
-      <ScheduleBanner
-        attemptKey={`${bannerOutcome}-${attemptKey}`}
-        reduceMotion={!!reduceMotion}
-        tone="close"
-        icon={<ThumbsUp className="h-4 w-4 shrink-0" aria-hidden />}
-        message={message}
-      />
-    );
-  }
-
-  if (quality === "off") return null;
-  if (consequenceOnly && !(quality === "close" && requireExactToAdvance)) {
-    return null;
-  }
-
-  if (quality === "exact") {
-    return (
-      <motion.div
-        key={`exact-${attemptKey}`}
-        role="status"
-        aria-live="polite"
-        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
-        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-        transition={
-          reduceMotion
-            ? { duration: 0.2, ease: "easeOut" }
-            : { type: "spring", stiffness: 420, damping: 18 }
-        }
-        className={cn(
-          "relative mx-auto flex w-fit max-w-full items-center gap-2",
-          "rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-1.5",
-          "text-sm font-semibold text-emerald-700 shadow-sm",
-          "dark:text-emerald-300",
-        )}
-      >
-        <PartyPopper className="h-4 w-4 shrink-0" aria-hidden />
-        <span>Exactly right!</span>
-        <Sparkles
-          className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-300"
-          aria-hidden
-        />
-        {!reduceMotion && <ConfettiBurst />}
-      </motion.div>
-    );
-  }
-
-  // quality === "close"
-  const closeMessage = requireExactToAdvance ? FROM_MEMORY_CLOSE_MESSAGE : lead;
+  const feedback = accuracyFeedback(scored, { exact: quality === "exact" });
+  const { band } = feedback;
+  const celebrate = band === "exact";
+  const praise =
+    !showScheduleOutcome && requireExactToAdvance && quality === "close"
+      ? FROM_MEMORY_CLOSE_MESSAGE
+      : attemptPraiseLine({ accuracy: scored, outcome, errors });
+  const consequence = showScheduleOutcome
+    ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
+    : null;
 
   return (
     <motion.div
-      key={`close-${attemptKey}`}
+      key={`${band}-${attemptKey}`}
       role="status"
       aria-live="polite"
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
+      data-tone={band}
+      // A pop, not a fade: the result reads the moment it lands.
+      initial={reduceMotion ? false : { y: -6, scale: celebrate ? 0.94 : 0.98 }}
+      animate={{ y: 0, scale: 1 }}
+      transition={
+        celebrate
+          ? { type: "spring", stiffness: 420, damping: 18 }
+          : { duration: 0.22, ease: "easeOut" }
+      }
       className={cn(
-        "mx-auto flex w-fit items-start gap-2",
-        "border border-amber-500/40 bg-amber-500/10 text-sm font-medium",
-        "text-amber-700 shadow-sm dark:text-amber-300",
-        requireExactToAdvance
-          ? "max-w-md rounded-2xl px-4 py-2 text-left leading-snug"
-          : "max-w-full items-center rounded-full px-4 py-1.5",
+        "relative mx-auto flex w-full max-w-xl flex-col items-center gap-1 overflow-visible rounded-2xl border px-4 py-4 text-center shadow-sm",
+        BANNER_TONE[band],
       )}
     >
-      <ThumbsUp
-        className={cn("h-4 w-4 shrink-0", requireExactToAdvance && "mt-0.5")}
-        aria-hidden
+      <ResultEmoji
+        emoji={feedback.emoji}
+        celebrate={celebrate}
+        reduceMotion={reduceMotion}
       />
-      <span>{closeMessage}</span>
+      <p className="mt-1 text-lg leading-snug text-balance">
+        <span className={cn("font-semibold", LEAD_TONE[band])}>
+          {feedback.lead}
+        </span>
+        {feedback.rest ? (
+          <span className="text-foreground/80"> {feedback.rest}</span>
+        ) : null}
+      </p>
+      <p className="text-sm font-medium leading-snug text-balance text-foreground/90">
+        {praise}
+      </p>
+      <p className="text-xs tabular-nums text-muted-foreground">
+        {`${scored}% recalled`}
+        {note ? ` · ${note}` : null}
+      </p>
+      {consequence ? (
+        <p className="mt-1 text-sm leading-snug text-balance text-foreground/80">
+          {consequence}
+        </p>
+      ) : null}
     </motion.div>
   );
 }
 
-function ScheduleBanner({
-  attemptKey,
+/**
+ * A lapse that drops the verse back into learning reads as a lapse even when
+ * the raw grade was a hold or retry.
+ */
+function scheduleConsequence(
+  outcome: ReviewGradeOutcome,
+  nextSchedule: MemorySchedule | null,
+  now: number,
+): string | null {
+  const lapsedToLearning =
+    nextSchedule !== null && isLearningPhase(nextSchedule.status);
+  return reviewOutcomeMessage({
+    outcome: lapsedToLearning && outcome !== "lapse" ? "lapse" : outcome,
+    nextSchedule,
+    now,
+    lapsedToLearning,
+  });
+}
+
+function ResultEmoji({
+  emoji,
+  celebrate,
   reduceMotion,
-  tone,
-  icon,
-  message,
-  sparkle = false,
 }: {
-  attemptKey: string;
+  emoji: string;
+  celebrate: boolean;
   reduceMotion: boolean;
-  tone: "exact" | "close" | "lapse";
-  icon: JSX.Element;
-  message: string;
-  sparkle?: boolean;
 }): JSX.Element {
   return (
-    <motion.div
-      key={attemptKey}
-      role="status"
-      aria-live="polite"
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
-      className={cn(
-        "relative mx-auto flex w-full max-w-xl items-start gap-2 overflow-visible rounded-xl border px-3.5 py-2.5 text-left text-sm shadow-sm",
-        tone === "exact" &&
-          "border-emerald-500/40 bg-emerald-500/10 font-medium text-emerald-800 dark:text-emerald-200",
-        tone === "close" &&
-          "border-amber-500/40 bg-amber-500/10 font-medium text-amber-800 dark:text-amber-200",
-        tone === "lapse" &&
-          "border-rose-500/35 bg-rose-500/10 font-medium text-rose-800 dark:text-rose-200",
-      )}
-    >
-      <span className="mt-0.5">{icon}</span>
-      <span className="min-w-0 flex-1 leading-snug">{message}</span>
-      {sparkle && (
-        <Sparkles
-          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-300"
-          aria-hidden
-        />
-      )}
-      {sparkle && !reduceMotion && <ConfettiBurst />}
-    </motion.div>
+    <span className="relative inline-flex h-10 w-10 items-center justify-center">
+      <motion.span
+        aria-hidden
+        data-testid="result-emoji"
+        className="text-3xl leading-none select-none"
+        initial={
+          reduceMotion
+            ? false
+            : celebrate
+              ? { opacity: 0, scale: 0.3, rotate: -18 }
+              : { opacity: 0, scale: 0.8 }
+        }
+        animate={{ opacity: 1, scale: 1, rotate: 0 }}
+        transition={
+          celebrate
+            ? { type: "spring", stiffness: 420, damping: 14 }
+            : { duration: 0.25, ease: "easeOut" }
+        }
+      >
+        {emoji}
+      </motion.span>
+      {celebrate && !reduceMotion ? <ConfettiBurst /> : null}
+    </span>
   );
 }
 

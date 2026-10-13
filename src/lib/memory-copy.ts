@@ -6,7 +6,7 @@ import { MAX_LEARN_STAGE, type MemoryStatus } from "./memory-scheduler";
  *
  * The scheduler keeps its own internal band names (`SUPPORT_BANDS`); those are
  * never shown. Map a `learnStage` to display copy with {@link stepShortLabel}
- * and {@link stepDayLine} instead.
+ * and {@link stepActionLine} instead.
  */
 
 export const MEMORIZE_LABEL = "Memorize";
@@ -44,14 +44,6 @@ const STEP_SHORT_LABELS: readonly StepShortLabel[] = [
   "From memory",
 ];
 
-/** Read and First letters share day 1; the scheduler soft-locks after each later step. */
-const STEP_DAY_LINES: readonly string[] = [
-  "Day 1 of 3: read it, then type it with first letters",
-  "Day 1 of 3: read it, then type it with first letters",
-  "Day 2 of 3: fill in the blanks",
-  "Day 3 of 3: say it from memory",
-];
-
 function clampLearnStage(learnStage: number): number {
   if (!Number.isFinite(learnStage)) return 0;
   return Math.max(0, Math.min(MAX_LEARN_STAGE, Math.trunc(learnStage)));
@@ -62,49 +54,61 @@ export function stepShortLabel(learnStage: number): StepShortLabel {
   return STEP_SHORT_LABELS[clampLearnStage(learnStage)] ?? "Read";
 }
 
-/** What today's session asks for at `learnStage`, framed as day N of 3. */
-export function stepDayLine(learnStage: number): string {
-  return (
-    STEP_DAY_LINES[clampLearnStage(learnStage)] ??
-    "Day 1 of 3: read it, then type it with first letters"
-  );
-}
-
 export type StepLadderDay = 1 | 2 | 3;
 
-/** Which of the three learning days `learnStage` falls on. */
+/** Which of the three learning sessions `learnStage` falls in. */
 export function stepLadderDay(learnStage: number): StepLadderDay {
   const stage = clampLearnStage(learnStage);
   if (stage <= 1) return 1;
   return stage === 2 ? 2 : 3;
 }
 
-const STEP_DAY_ACTIONS: Record<StepLadderDay, { one: string; many: string }> = {
-  1: {
-    one: "read it, then type it with first letters",
-    many: "read them, then type them with first letters",
-  },
-  2: { one: "fill in the blanks", many: "fill in the blanks" },
-  3: { one: "say it from memory", many: "say them from memory" },
+/** Read and First letters share one session; the scheduler soft-locks after each later step. */
+const STEP_ACTIONS: Record<StepLadderDay, string> = {
+  1: "read it, then type it with first letters",
+  2: "fill in the blanks",
+  3: "say it from memory",
 };
 
+function capitalize(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
 /** What one verse's step asks for at `learnStage`, e.g. "fill in the blanks". */
-export function stepDayAction(learnStage: number): string {
-  return STEP_DAY_ACTIONS[stepLadderDay(learnStage)].one;
+export function stepAction(learnStage: number): string {
+  return STEP_ACTIONS[stepLadderDay(learnStage)];
+}
+
+/** {@link stepAction} as a line on its own: "Fill in the blanks". */
+export function stepActionLine(learnStage: number): string {
+  return capitalize(stepAction(learnStage));
 }
 
 /**
- * Today's step for some verses of a passage, e.g. "Day 2 of 3 for verse 3:
- * fill in the blanks". `verses` names them ("verse 3", "verses 5–6").
+ * Today's step for some verses of a passage, e.g. "Fill in the blanks for
+ * verses 1–2". `verses` names them ("verse 3", "verses 5–6").
  */
-export function passageStepDayLine(
+export function passageStepLine(
   learnStage: number,
   verses: string,
   plural: boolean,
 ): string {
-  const day = stepLadderDay(learnStage);
-  const action = STEP_DAY_ACTIONS[day];
-  return `Day ${day} of 3 for ${verses}: ${plural ? action.many : action.one}`;
+  switch (stepLadderDay(learnStage)) {
+    case 1:
+      return `Read ${verses}, then type ${plural ? "them" : "it"} with first letters`;
+    case 2:
+      return `Fill in the blanks for ${verses}`;
+    case 3:
+      return `Say ${verses} from memory`;
+  }
+}
+
+/** "Fill in the blanks for verse 3" → "Today:" and "fill in the blanks for verse 3." */
+export function todayStepParts(line: string): { lead: string; rest: string } {
+  return {
+    lead: `${TODAY_LABEL}:`,
+    rest: `${line.charAt(0).toLowerCase()}${line.slice(1)}.`,
+  };
 }
 
 export type StatusLabel = "New" | "Learning" | "Memorized" | "Mastered";

@@ -104,7 +104,7 @@ function segmentWork(segment: TodaySegment): string {
   }
 }
 
-/** Between segments: "Nice. Next: 5 reviews · about 3 min". */
+/** Between segments: "Nice. Next: 5 reviews · about 5 min". */
 export function todayInterstitialCopy(next: TodaySegment): string {
   return `Nice. Next: ${segmentWork(next)} · about ${todaySegmentMinutes(next)} min`;
 }

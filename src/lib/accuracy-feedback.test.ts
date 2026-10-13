@@ -30,7 +30,7 @@ describe("accuracyFeedback", () => {
       "Word for word.",
     );
     expect(accuracyFeedback(92, { exact: false }).headline).toBe(
-      "Nearly there: a couple of small slips.",
+      "Nearly there. Just a little to tidy up.",
     );
     expect(accuracyFeedback(70, { exact: false }).headline).toBe(
       "Good progress. The highlighted words are worth another look.",
@@ -46,8 +46,16 @@ describe("accuracyFeedback", () => {
       lead: "Good progress.",
       rest: "The highlighted words are worth another look.",
       headline: "Good progress. The highlighted words are worth another look.",
+      emoji: "🌱",
     });
     expect(accuracyFeedback(100, { exact: true }).rest).toBe("");
+  });
+
+  it("parties only for word for word, with calmer emoji below", () => {
+    expect(accuracyFeedback(100, { exact: true }).emoji).toBe("🎉");
+    expect(accuracyFeedback(92, { exact: false }).emoji).toBe("🙌");
+    expect(accuracyFeedback(70, { exact: false }).emoji).toBe("🌱");
+    expect(accuracyFeedback(40, { exact: false }).emoji).toBe("📖");
   });
 
   it("never leads with a bare percentage", () => {

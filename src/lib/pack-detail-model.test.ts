@@ -11,7 +11,6 @@ import {
   packMemberRow,
   passageDetailActions,
   passageDetailProgress,
-  passageTodayStepParts,
   passageVerseRows,
   reviewTogetherOption,
   type PackDetailMember,
@@ -159,7 +158,7 @@ describe("primary action", () => {
       main: {
         kind: "session",
         emphasis: "primary",
-        label: "Continue · about 4 min",
+        label: "Continue · about 7 min",
         session: "learn",
       },
       practice: false,
@@ -187,7 +186,7 @@ describe("primary action", () => {
     });
   });
 
-  it("passage memorized and due: Recite {title}", () => {
+  it("passage memorized and due: Review {title}", () => {
     const goal = passageGoal({
       status: "reviewing",
       pieces: [piece(0, 1, 11, "solid")],
@@ -197,7 +196,7 @@ describe("primary action", () => {
     expect(passageDetailActions(goal, NOW, TZ).main).toEqual({
       kind: "session",
       emphasis: "primary",
-      label: "Recite Psalm 16",
+      label: "Review Psalm 16",
       session: "review",
     });
   });
@@ -218,7 +217,7 @@ describe("primary action", () => {
         tooltip: "Go over anything you've memorized, any time.",
       },
       practice: false,
-      note: "Memorized · recite again Thu",
+      note: "Memorized · next review Thu",
     });
   });
 
@@ -433,7 +432,7 @@ describe("packMemberRow", () => {
 });
 
 describe("passageVerseRows", () => {
-  it("chips each verse: Memorized, Today, Up next", () => {
+  it("chips each verse: Memorized, Learning today, Up next", () => {
     const rows = passageVerseRows(passage(), NOW, 0);
     expect(rows).toHaveLength(11);
     expect(rows.map((row) => [row.verse, row.chip.label])).toEqual([
@@ -441,8 +440,8 @@ describe("passageVerseRows", () => {
       [2, "Memorized"],
       [3, "Memorized"],
       [4, "Memorized"],
-      [5, "Today: day 1 of 3"],
-      [6, "Today: day 1 of 3"],
+      [5, "Learning today"],
+      [6, "Learning today"],
       [7, "Up next"],
       [8, "Up next"],
       [9, "Up next"],
@@ -451,7 +450,7 @@ describe("passageVerseRows", () => {
     ]);
   });
 
-  it("shows a piece done for today as tomorrow's day", () => {
+  it("shows a piece done for today as still learning", () => {
     const rows = passageVerseRows(
       passage({
         pieces: [
@@ -468,11 +467,30 @@ describe("passageVerseRows", () => {
       NOW,
       0,
     );
-    expect(rows[4]?.chip).toEqual({
-      kind: "tomorrow",
-      label: "Tomorrow: day 2 of 3",
-    });
+    expect(rows[4]?.chip).toEqual({ kind: "tomorrow", label: "Learning" });
     expect(rows[6]?.chip.kind).toBe("upNext");
+  });
+
+  it("marks memorized verses the passage kept from before", () => {
+    const rows = passageVerseRows(
+      passage({
+        pieces: [
+          piece(0, 1, 4, "solid"),
+          piece(1, 5, 6, "solid", { carriedOver: true }),
+          piece(2, 7, 11, "unreached"),
+        ],
+      }),
+      NOW,
+      0,
+    );
+    expect(rows[0]?.chip).toEqual({ kind: "memorized", label: "Memorized" });
+    expect(rows[4]?.chip).toEqual({
+      kind: "memorized",
+      label: "Memorized",
+      fromBefore: true,
+    });
+    expect(rows[5]?.chip.fromBefore).toBe(true);
+    expect(rows[6]?.chip.fromBefore).toBeUndefined();
   });
 });
 
@@ -518,17 +536,6 @@ describe("progress", () => {
   it("pack with nothing learned shows Learned only", () => {
     const members = [MERCED_MEMBERS[3]];
     expect(packDetailProgress(packGoal(members), NOW, TZ).mastery).toBeNull();
-  });
-
-  it("splits today's step into a lead and the action", () => {
-    expect(
-      passageTodayStepParts(
-        "Day 1 of 3 for verses 5–6: read them, then type them with first letters",
-      ),
-    ).toEqual({
-      lead: "Today, day 1 of 3 for verses 5–6:",
-      rest: "read them, then type them with first letters.",
-    });
   });
 });
 

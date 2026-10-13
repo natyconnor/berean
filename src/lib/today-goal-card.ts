@@ -1,9 +1,8 @@
 import {
   TODAY_LABEL,
-  stepDayAction,
-  stepDayLine,
+  stepAction,
   stepLadderDay,
-  type StepLadderDay,
+  todayStepParts,
 } from "./memory-copy";
 import {
   goalLearnPace,
@@ -51,13 +50,8 @@ export type GoalChip =
   { tone: "today"; label: string } | { tone: "done"; label: string };
 
 export type GoalStep =
-  /** "Day 1 of 3 for verses 5–6:" "read them, then type them with first letters." */
-  | {
-      kind: "learn";
-      lead: string;
-      rest: string;
-      ladderDay: StepLadderDay | null;
-    }
+  /** "Today:" "read verses 5–6, then type them with first letters." */
+  | { kind: "learn"; lead: string; rest: string }
   | { kind: "learnCount"; text: string }
   | { kind: "review"; text: string }
   | { kind: "reviews"; labels: string[]; more: number }
@@ -71,8 +65,6 @@ export interface GoalBar {
   fraction: number;
   /** Spelled out for screen readers, e.g. "Learned 5 of 11 verses". */
   ariaLabel: string;
-  /** A verse still learning: its three learning days. */
-  ladder?: { day: StepLadderDay; active: boolean };
 }
 
 export interface GoalAction {
@@ -119,13 +111,6 @@ function hasStarted(goal: GoalCard): boolean {
     case "verse":
       return goal.learnStage > 0;
   }
-}
-
-/** "Day 2 of 3: fill in the blanks" → "Day 2 of 3:" and "fill in the blanks." */
-function splitStepLine(line: string): { lead: string; rest: string } {
-  const split = line.indexOf(": ");
-  if (split === -1) return { lead: "", rest: `${line}.` };
-  return { lead: line.slice(0, split + 1), rest: `${line.slice(split + 2)}.` };
 }
 
 function nextWhen(
@@ -179,11 +164,7 @@ function passageModel(
     if (!building) {
       steps.push({ kind: "review", text: "Recite it all the way through." });
     } else if (goal.todayStep) {
-      steps.push({
-        kind: "learn",
-        ...splitStepLine(goal.todayStep.label),
-        ladderDay: goal.todayStep.ladderDay,
-      });
+      steps.push({ kind: "learn", ...todayStepParts(goal.todayStep.label) });
     } else {
       steps.push({ kind: "learnCount", text: "Today's session is ready." });
     }
@@ -198,7 +179,7 @@ function passageModel(
       steps.push({ kind: "note", text: next });
     }
   } else if (doneToday) {
-    steps.push({ kind: "done", text: "Recited today." });
+    steps.push({ kind: "done", text: "Reviewed today." });
   }
 
   let bars: GoalBar[];
@@ -215,10 +196,10 @@ function passageModel(
     ];
   } else {
     const recite = goal.hasWorkToday
-      ? "recite today"
+      ? "review today"
       : goal.nextDueAt === null
         ? null
-        : `recite again ${formatDueDay(goal.nextDueAt, now, timeZone)}`;
+        : `next review ${formatDueDay(goal.nextDueAt, now, timeZone)}`;
     bars = [
       goal.status === "mastered"
         ? {
@@ -258,7 +239,7 @@ function passageModel(
         }
       : {
           kind: "review",
-          label: "Recite",
+          label: "Review",
           href: sessionHref(goal.packId, main.session),
         };
   }
@@ -398,17 +379,10 @@ function verseModel(
   }
 
   const day = stepLadderDay(goal.learnStage);
-  const tomorrow = `Tomorrow: ${stepDayAction(goal.learnStage)}.`;
+  const tomorrow = `Tomorrow: ${stepAction(goal.learnStage)}.`;
   let steps: GoalStep[];
   if (goal.hasWorkToday) {
-    steps = [
-      {
-        kind: "learn",
-        lead: `${TODAY_LABEL}:`,
-        rest: splitStepLine(stepDayLine(goal.learnStage)).rest,
-        ladderDay: null,
-      },
-    ];
+    steps = [{ kind: "learn", ...todayStepParts(stepAction(goal.learnStage)) }];
   } else if (goal.status === "new") {
     steps = [{ kind: "note", text: "Up next. Starts when you're ready." }];
   } else {
@@ -424,11 +398,10 @@ function verseModel(
     bars: [
       {
         track: "learned",
-        label: `Day ${day} of 3`,
+        label: "Learning",
         detail: goalLearnPace(goal, now, timeZone),
         fraction: (day - 1) / 3,
-        ariaLabel: `Learning, day ${day} of 3`,
-        ladder: { day, active: goal.hasWorkToday },
+        ariaLabel: "Learning",
       },
     ],
     action: goal.hasWorkToday

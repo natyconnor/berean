@@ -13,18 +13,29 @@ export interface AccuracyFeedback {
   rest: string;
   /** `lead` and `rest` as one sentence. */
   headline: string;
+  /** Leads the result banner; only a word-for-word recall gets the party. */
+  emoji: string;
 }
 
-const COPY: Record<AccuracyBand, { lead: string; rest: string }> = {
-  exact: { lead: "Word for word.", rest: "" },
-  nearly: { lead: "Nearly there:", rest: "a couple of small slips." },
+const COPY: Record<
+  AccuracyBand,
+  { lead: string; rest: string; emoji: string }
+> = {
+  exact: { lead: "Word for word.", rest: "", emoji: "🎉" },
+  nearly: {
+    lead: "Nearly there.",
+    rest: "Just a little to tidy up.",
+    emoji: "🙌",
+  },
   progress: {
     lead: "Good progress.",
     rest: "The highlighted words are worth another look.",
+    emoji: "🌱",
   },
   again: {
     lead: "This one needs another pass.",
     rest: "We'll bring it back sooner.",
+    emoji: "📖",
   },
 };
 
@@ -46,6 +57,12 @@ export function accuracyFeedback(
   { exact }: { exact: boolean },
 ): AccuracyFeedback {
   const band = accuracyBand(accuracy, exact);
-  const { lead, rest } = COPY[band];
-  return { band, lead, rest, headline: rest ? `${lead} ${rest}` : lead };
+  const { lead, rest, emoji } = COPY[band];
+  return {
+    band,
+    lead,
+    rest,
+    headline: rest ? `${lead} ${rest}` : lead,
+    emoji,
+  };
 }

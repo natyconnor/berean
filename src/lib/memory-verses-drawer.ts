@@ -1,4 +1,4 @@
-import { statusLabel, stepDayLine } from "./memory-copy";
+import { statusLabel, stepAction } from "./memory-copy";
 import type { GoalCard } from "./memory-goals";
 import type { MemoryPanel } from "./memory-panel";
 import {
@@ -96,7 +96,7 @@ function dueRow<G extends GoalCard>(goal: G): DueGoalRow<G> | null {
       return {
         goal,
         title: goal.title,
-        detail: "Recite it today",
+        detail: "Review today",
         action: "review",
         tone: goal.status === "mastered" ? "mastered" : "reviewing",
       };
@@ -140,7 +140,7 @@ function dueRow<G extends GoalCard>(goal: G): DueGoalRow<G> | null {
       return {
         goal,
         title: goal.title,
-        detail: `${statusLabel(goal.status)} · ${stepDayLine(goal.learnStage)}`,
+        detail: `${statusLabel(goal.status)} · today: ${stepAction(goal.learnStage)}`,
         action: "learn",
         tone: goal.status,
       };

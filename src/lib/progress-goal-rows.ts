@@ -1,4 +1,4 @@
-import { stepLadderDay } from "./memory-copy";
+import { statusLabel, stepLadderDay } from "./memory-copy";
 import { goalLearnPace, type GoalCard } from "./memory-goals";
 import {
   estimateReviewDaysToMastery,
@@ -128,7 +128,7 @@ export function goalProgressRow(
           ? "Learned"
           : goal.status === "new"
             ? "Up next"
-            : `Day ${ladderDay} of 3`,
+            : statusLabel("learning"),
         learnedFraction: learnedPhase
           ? 1
           : goal.status === "new"

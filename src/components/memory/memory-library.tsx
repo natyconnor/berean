@@ -309,7 +309,7 @@ function StatusChip({ status }: { status: MemoryStatus }) {
   );
 }
 
-/** "Do all 5 · about 6 min": everything left today in one session. */
+/** "Do all 5 · about 9 min": everything left today in one session. */
 function DueTodayBulkAction({
   now,
   returnTo,

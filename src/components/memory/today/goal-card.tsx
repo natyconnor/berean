@@ -9,7 +9,6 @@ import {
 import { InternalLink } from "@/components/memory/internal-link";
 import { Button } from "@/components/ui/button";
 import type { TodayGoal } from "@/hooks/use-today-model";
-import type { StepLadderDay } from "@/lib/memory-copy";
 import { memoryPanelDrawerHref } from "@/lib/memory-panel";
 import { goalPanel } from "@/lib/memory-verses-drawer";
 import {
@@ -106,26 +105,6 @@ function Chip({ chip }: { chip: GoalChip }) {
   );
 }
 
-function Ladder({ day, active }: { day: StepLadderDay; active: boolean }) {
-  return (
-    <span aria-hidden className="mt-1.5 flex max-w-[180px] gap-[3px]">
-      {[1, 2, 3].map((segment) => (
-        <span
-          key={segment}
-          className={cn(
-            "h-1 flex-1 rounded-sm",
-            segment < day
-              ? "bg-amber-500"
-              : segment === day && active
-                ? "bg-amber-500/40"
-                : "bg-muted",
-          )}
-        />
-      ))}
-    </span>
-  );
-}
-
 function Step({ step }: { step: GoalStep }) {
   switch (step.kind) {
     case "learn":
@@ -138,7 +117,6 @@ function Step({ step }: { step: GoalStep }) {
           <div className="min-w-0">
             {step.lead ? <b className="font-semibold">{step.lead}</b> : null}{" "}
             {step.rest}
-            {step.ladderDay ? <Ladder day={step.ladderDay} active /> : null}
           </div>
         </div>
       );
@@ -211,7 +189,6 @@ function Step({ step }: { step: GoalStep }) {
 function Track({ bar }: { bar: GoalBar }) {
   const mastery = bar.track === "mastery";
   const percent = Math.round(Math.min(Math.max(bar.fraction, 0), 1) * 100);
-  const ladder = bar.ladder;
   return (
     <div className="grid gap-1">
       <div
@@ -225,50 +202,25 @@ function Track({ bar }: { bar: GoalBar }) {
           <span className="text-muted-foreground">{bar.detail}</span>
         ) : null}
       </div>
-      {ladder ? (
+      <div
+        role="progressbar"
+        aria-label={bar.ariaLabel}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className={cn(
+          "overflow-hidden rounded-full bg-muted",
+          mastery ? "h-1" : "h-1.5",
+        )}
+      >
         <div
-          role="progressbar"
-          aria-label={bar.ariaLabel}
-          aria-valuemin={0}
-          aria-valuemax={3}
-          aria-valuenow={ladder.day - 1}
-          className="flex gap-[3px]"
-        >
-          {[1, 2, 3].map((segment) => (
-            <span
-              key={segment}
-              className={cn(
-                "h-1.5 flex-1 rounded-full",
-                segment < ladder.day
-                  ? "bg-primary"
-                  : segment === ladder.day && ladder.active
-                    ? "bg-primary/40"
-                    : "bg-muted",
-              )}
-            />
-          ))}
-        </div>
-      ) : (
-        <div
-          role="progressbar"
-          aria-label={bar.ariaLabel}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent}
           className={cn(
-            "overflow-hidden rounded-full bg-muted",
-            mastery ? "h-1" : "h-1.5",
+            "h-full rounded-full",
+            mastery ? "bg-emerald-500/80" : "bg-primary",
           )}
-        >
-          <div
-            className={cn(
-              "h-full rounded-full",
-              mastery ? "bg-emerald-500/80" : "bg-primary",
-            )}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      )}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }

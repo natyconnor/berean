@@ -26,7 +26,7 @@ import { validateVerseRefBounds } from "../../shared/verse-ref-validation";
 export interface NewPackPlan {
   /** "3 verses · learn them in about 3 days" */
   headline: string;
-  /** "About 6 min a day, then short reviews. Mastered in about 2 months." */
+  /** "About 9 min a day, then short reviews. Mastered in about 2 months." */
   detail: string;
 }
 

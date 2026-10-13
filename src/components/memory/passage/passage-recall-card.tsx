@@ -9,7 +9,6 @@ import {
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 
-import { AccuracyHeadline } from "@/components/memory/practice/accuracy-headline";
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
 import {
   currentStageStep,
@@ -147,7 +146,6 @@ export function PassageRecallCard({
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
-  const checkedExact = classifyVerseAttempt(checkedDiffTokens) === "exact";
   const passed = checkedAccuracy >= PASSAGE_PASS_ACCURACY;
   const offerTryAgain = checked && !passed && mode === "frontier";
 
@@ -340,15 +338,7 @@ export function PassageRecallCard({
                 typedAnswer={typedAnswer}
                 versePlainText={versePlainText}
                 diffTokens={checkedDiffTokens}
-                headline={
-                  <AccuracyHeadline
-                    accuracy={checkedAccuracy}
-                    exact={checkedExact}
-                    note={
-                      passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`
-                    }
-                  />
-                }
+                note={passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`}
               />
             </div>
           )}

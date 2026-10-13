@@ -52,8 +52,6 @@ vi.mock("@/components/tutorial/use-feature-hint", () => ({
 const MEMORIZE_PSALM_1: ChapterMemorizeState = {
   kind: "memorize",
   title: "Psalm 1",
-  verseCount: 6,
-  learnDays: 4,
 };
 
 const NEW_COPY = "New: memorize this chapter in a few minutes a day.";

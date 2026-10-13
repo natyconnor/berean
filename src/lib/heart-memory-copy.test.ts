@@ -15,8 +15,8 @@ describe("verseHeartMemoryCopy", () => {
         "UTC",
       ),
     ).toEqual({
-      tooltip: "Memorizing · Day 2 of 3: fill in the blanks",
-      ariaSuffix: "(memorizing, Day 2 of 3: fill in the blanks)",
+      tooltip: "Memorizing · Fill in the blanks",
+      ariaSuffix: "(memorizing, Fill in the blanks)",
     });
   });
 
@@ -83,8 +83,8 @@ describe("passageHeartCopy", () => {
     expect(
       passageHeartCopy({ ...psalm16, status: "reviewing" }, NOW, "UTC"),
     ).toEqual({
-      tooltip: "Psalm 16 · memorized · recite again Thu",
-      ariaLabel: "Psalm 16, hearted. Memorized: recite again Thu. Remove heart",
+      tooltip: "Psalm 16 · memorized · next review Thu",
+      ariaLabel: "Psalm 16, hearted. Memorized: next review Thu. Remove heart",
     });
   });
 

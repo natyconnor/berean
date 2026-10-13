@@ -218,21 +218,19 @@ describe("PassageViewBody – memorized passage heart and rail", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("draws a segment per verse: solid, dashed, then faint, with one foot", () => {
+  it("draws a segment per verse: solid, dashed, then faint", () => {
     const { container } = renderBody([PASSAGE_HEART]);
 
-    const strokes = Array.from(
-      container.querySelectorAll("[data-passage-rail]"),
-      (lane) => lane.getAttribute("data-passage-rail"),
+    const lanes = Array.from(container.querySelectorAll("[data-passage-rail]"));
+    expect(lanes.map((lane) => lane.getAttribute("data-passage-rail"))).toEqual(
+      [
+        ...Array<string>(4).fill("solid"),
+        ...Array<string>(2).fill("dashed"),
+        ...Array<string>(5).fill("faint"),
+      ],
     );
-    expect(strokes).toEqual([
-      ...Array<string>(4).fill("solid"),
-      ...Array<string>(2).fill("dashed"),
-      ...Array<string>(5).fill("faint"),
-    ]);
-    expect(container.querySelectorAll("[data-passage-rail-foot]")).toHaveLength(
-      1,
-    );
+    // The rail just ends under the last verse: its segment and nothing else.
+    expect(lanes.at(-1)?.children).toHaveLength(1);
   });
 
   it("keeps an individually hearted verse's own heart, with no ring", () => {
@@ -325,13 +323,13 @@ describe("PassageViewBody – memorizing verse hearts", () => {
     ]);
 
     const heart = within(verseRow(container, 2)).getByRole("button", {
-      name: "Remove from hearted verses (memorizing, Day 2 of 3: fill in the blanks)",
+      name: "Remove from hearted verses (memorizing, Fill in the blanks)",
     });
     expect(heart.querySelector("[data-ring-progress]")).not.toBeNull();
     await user.hover(heart);
     expect(
       within(verseRow(container, 2)).getByText(
-        "Memorizing · Day 2 of 3: fill in the blanks",
+        "Memorizing · Fill in the blanks",
       ),
     ).toBeInTheDocument();
   });

@@ -331,7 +331,7 @@ describe("todayWorkCount / todaySessionMinutes", () => {
   it("adds up what is left and estimates its minutes", () => {
     const counts = { learningVerses: 4, passageSessions: 0, reviews: 5 };
     expect(todayWorkCount(counts)).toBe(9);
-    expect(todaySessionMinutes(counts)).toBe(11);
+    expect(todaySessionMinutes(counts)).toBe(17);
     expect(
       todaySessionMinutes({
         learningVerses: 0,

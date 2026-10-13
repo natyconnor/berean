@@ -9,6 +9,7 @@ import {
   memorizeStartHref,
   useMemorizeStart,
 } from "@/hooks/use-memorize-start";
+import { estimateSessionMinutes } from "@/lib/memorize-plan";
 import { resolveMemorizeTarget } from "@/lib/memorize-target";
 import { TODAY_RETURN } from "@/lib/today-goal-card";
 import {
@@ -25,8 +26,11 @@ import {
 
 const FIRST_RUN_SUGGESTIONS = firstRunSuggestions();
 
-/** Day 1 of a verse is two short steps: read it, then first letters. */
-const TRY_ONE_VERSE_MINUTES = 3;
+const TRY_ONE_VERSE_MINUTES = estimateSessionMinutes({
+  learningVerses: 1,
+  reviewVerses: 0,
+  passageSessions: 0,
+});
 
 const eyebrowClassName =
   "text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase";
@@ -71,10 +75,7 @@ export function FirstRun({
           onQueryChange={setQuery}
           className="mt-5"
         />
-        <SuggestionChips
-          suggestions={FIRST_RUN_SUGGESTIONS}
-          checkMemorizing={false}
-        />
+        <SuggestionChips suggestions={FIRST_RUN_SUGGESTIONS} />
         <MakeYourOwnPackTile />
       </section>
       <FromYourHearts

@@ -39,7 +39,7 @@ function renderGutter(mark: PassageRailMark) {
 describe("PassageRailGutter", () => {
   it("draws the passage heart with a partial ring and its tooltip", async () => {
     const user = userEvent.setup();
-    renderGutter({ stroke: "solid", foot: false, heart: heart() });
+    renderGutter({ stroke: "solid", heart: heart() });
 
     const button = screen.getByRole("button", {
       name: "Psalm 16, hearted. Memorizing: 4 of 11 verses learned. Remove heart",
@@ -61,7 +61,7 @@ describe("PassageRailGutter", () => {
   it("asks before unhearting, and Keep changes nothing", async () => {
     const user = userEvent.setup();
     const onUnheart = vi.fn();
-    renderGutter({ stroke: "solid", foot: false, heart: heart({ onUnheart }) });
+    renderGutter({ stroke: "solid", heart: heart({ onUnheart }) });
 
     const button = screen.getByRole("button", { name: /Psalm 16, hearted/ });
     await user.click(button);
@@ -80,11 +80,7 @@ describe("PassageRailGutter", () => {
   it("highlights the passage's verses while the heart is hovered", async () => {
     const user = userEvent.setup();
     const onHoverChange = vi.fn();
-    renderGutter({
-      stroke: "solid",
-      foot: false,
-      heart: heart({ onHoverChange }),
-    });
+    renderGutter({ stroke: "solid", heart: heart({ onHoverChange }) });
 
     const button = screen.getByRole("button", { name: /Psalm 16, hearted/ });
     await user.hover(button);
@@ -93,29 +89,12 @@ describe("PassageRailGutter", () => {
     expect(onHoverChange).toHaveBeenLastCalledWith(false);
   });
 
-  it("draws a plain segment, and the foot tick only on the last verse", () => {
-    const { container, rerender } = renderGutter({
-      stroke: "dashed",
-      foot: false,
-      heart: null,
-    });
+  it("draws a plain segment, with nothing across the rail's end", () => {
+    const { container } = renderGutter({ stroke: "dashed", heart: null });
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(container.querySelector("[data-passage-rail]")).toHaveAttribute(
-      "data-passage-rail",
-      "dashed",
-    );
-    expect(container.querySelector("[data-passage-rail-foot]")).toBeNull();
-
-    rerender(
-      <TooltipProvider>
-        <div className="relative">
-          <PassageRailGutter
-            mark={{ stroke: "faint", foot: true, heart: null }}
-          />
-        </div>
-      </TooltipProvider>,
-    );
-    expect(container.querySelector("[data-passage-rail-foot]")).not.toBeNull();
+    const lane = container.querySelector("[data-passage-rail]");
+    expect(lane).toHaveAttribute("data-passage-rail", "dashed");
+    expect(lane?.children).toHaveLength(1);
   });
 });
 

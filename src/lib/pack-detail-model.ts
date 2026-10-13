@@ -4,9 +4,7 @@ import {
   EXTRA_PRACTICE_TOOLTIP,
   UP_NEXT_TOMORROW_LABEL,
   statusLabel,
-  stepDayAction,
-  stepLadderDay,
-  type StepLadderDay,
+  stepAction,
 } from "./memory-copy";
 import {
   buildGoalCards,
@@ -232,7 +230,7 @@ export interface PackDetailActions {
   main: PackDetailMainAction | null;
   /** A ghost "Practice anytime" beside the main action. */
   practice: boolean;
-  /** A muted line beside the actions, e.g. "Memorized · recite again Thu". */
+  /** A muted line beside the actions, e.g. "Memorized · next review Thu". */
   note: string | null;
 }
 
@@ -286,7 +284,7 @@ export function passageDetailActions(
       main: {
         kind: "session",
         emphasis: "primary",
-        label: `Recite ${goal.title}`,
+        label: `Review ${goal.title}`,
         session: "review",
       },
       practice: false,
@@ -301,7 +299,7 @@ export function passageDetailActions(
     note:
       goal.nextDueAt === null
         ? null
-        : `${statusLabel(status)} · recite again ${formatDueDay(
+        : `${statusLabel(status)} · next review ${formatDueDay(
             goal.nextDueAt,
             now,
             timeZone,
@@ -483,21 +481,6 @@ export function passageDetailProgress(
   };
 }
 
-/**
- * Today's passage step split for display: "Today, day 1 of 3 for verses 5–6:"
- * and "read them, then type them with first letters."
- */
-export function passageTodayStepParts(label: string): {
-  lead: string;
-  rest: string;
-} {
-  const split = label.indexOf(": ");
-  const head = split === -1 ? label : label.slice(0, split);
-  const rest = split === -1 ? "" : label.slice(split + 2);
-  const lead = `Today, ${head.charAt(0).toLowerCase()}${head.slice(1)}:`;
-  return { lead, rest: rest.length > 0 ? `${rest}.` : "" };
-}
-
 export type PackRowAction = "learn" | "review" | "practice";
 
 export interface PackMemberRow {
@@ -529,7 +512,7 @@ export function packMemberRow(
     const locked = isLearningLocked(member, now);
     return {
       status,
-      line: `Learning · ${locked ? "tomorrow" : "today"}: ${stepDayAction(
+      line: `Learning · ${locked ? "tomorrow" : "today"}: ${stepAction(
         member.learnStage,
       )}`,
       actions: locked ? [] : ["learn"],
@@ -560,16 +543,24 @@ export interface PassageVerseRow {
   book: string;
   chapter: number;
   verse: number;
-  chip: { kind: PassageVerseChipKind; label: string };
+  chip: {
+    kind: PassageVerseChipKind;
+    label: string;
+    /** Memorized on its own before the passage started ("· from before"). */
+    fromBefore?: true;
+  };
 }
 
-function ladderLabel(when: "Today" | "Tomorrow", day: StepLadderDay): string {
-  return `${when}: day ${day} of 3`;
+function learningChip(when: "today" | "tomorrow"): PassageVerseRow["chip"] {
+  return when === "today"
+    ? { kind: "today", label: `${statusLabel("learning")} today` }
+    : { kind: "tomorrow", label: statusLabel("learning") };
 }
 
 /**
- * One row per verse of a passage: Memorized, Today: day N of 3 (today's
- * piece, or any piece open today), Tomorrow: day N of 3, or Up next.
+ * One row per verse of a passage: Memorized, Learning today (today's piece,
+ * or any piece open today), Learning (its next step is tomorrow), or Up next.
+ * A memorized piece the passage kept from before it started says so.
  */
 export function passageVerseRows(
   passage: Pick<PackDetailPassage, "pieces" | "addsOnDay" | "addDayKey">,
@@ -585,21 +576,19 @@ export function passageVerseRows(
   );
 
   return pieces.flatMap((piece, index) => {
-    const day = stepLadderDay(
-      piece.attachment === "unreached" ? 0 : piece.learnStage,
-    );
     let chip: PassageVerseRow["chip"];
     if (index === todayIndex) {
-      chip = { kind: "today", label: ladderLabel("Today", day) };
+      chip = learningChip("today");
     } else if (
       piece.attachment === "solid" ||
       piece.attachment === "attached"
     ) {
       chip = { kind: "memorized", label: statusLabel("reviewing") };
+      if (piece.carriedOver) chip.fromBefore = true;
     } else if (piece.attachment === "learning") {
-      chip = isPassagePieceLocked(piece, now)
-        ? { kind: "tomorrow", label: ladderLabel("Tomorrow", day) }
-        : { kind: "today", label: ladderLabel("Today", day) };
+      chip = learningChip(
+        isPassagePieceLocked(piece, now) ? "tomorrow" : "today",
+      );
     } else {
       chip = { kind: "upNext", label: "Up next" };
     }

@@ -203,14 +203,14 @@ describe("estimateSessionMinutes", () => {
         reviewVerses: 3,
         passageSessions: 0,
       }),
-    ).toBe(2);
+    ).toBe(3);
     expect(
       estimateSessionMinutes({
         learningVerses: 2,
         reviewVerses: 3,
         passageSessions: 1,
       }),
-    ).toBe(10);
+    ).toBe(16);
   });
 });
 
@@ -222,16 +222,16 @@ describe("nextStepCopy", () => {
   it("names today's step while the session is open", () => {
     expect(
       nextStepCopy({ status: "learning", learnStage: 0, dueAt: NOW }, NOW),
-    ).toBe("Day 1 of 3: read it, then type it with first letters");
+    ).toBe("Read it, then type it with first letters");
     expect(
       nextStepCopy({ status: "learning", learnStage: 1, dueAt: NOW }, NOW),
-    ).toBe("Day 1 of 3: read it, then type it with first letters");
+    ).toBe("Read it, then type it with first letters");
     expect(
       nextStepCopy({ status: "learning", learnStage: 2, dueAt: NOW }, NOW),
-    ).toBe("Day 2 of 3: fill in the blanks");
+    ).toBe("Fill in the blanks");
     expect(
       nextStepCopy({ status: "learning", learnStage: 3, dueAt: NOW }, NOW),
-    ).toBe("Day 3 of 3: say it from memory");
+    ).toBe("Say it from memory");
   });
 
   it("looks ahead to blanks after Read or First letters", () => {
@@ -265,7 +265,7 @@ describe("nextStepCopy", () => {
         },
         NOW,
       ),
-    ).toBe("Day 2 of 3: fill in the blanks");
+    ).toBe("Fill in the blanks");
   });
 
   it("says an up-next verse starts when you're ready", () => {

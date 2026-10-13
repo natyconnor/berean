@@ -47,6 +47,64 @@ describe("PassageRecallCard footer", () => {
   });
 });
 
+describe("PassageRecallCard result banner", () => {
+  const VERSE = "Preserve me, O God, for in you I take refuge.";
+
+  function renderTypingCard() {
+    return render(
+      <PassageRecallCard
+        mode="frontier"
+        phaseLabel="First letters"
+        title="Psalm 16:1"
+        promptLine="Type what you remember"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{
+          type: "tokens",
+          tokens: [{ text: "P", word: true, masked: false }],
+        }}
+        learnStage={1}
+        stageReps={0}
+        status="learning"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+  }
+
+  it("celebrates a word-for-word recall with emoji and praise, and no particles under reduced motion", async () => {
+    const user = userEvent.setup();
+    renderTypingCard();
+
+    await user.click(screen.getByLabelText("Your recalled verse"));
+    await user.paste(VERSE);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveAttribute("data-tone", "exact");
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent("🎉");
+    expect(screen.getByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("Nailed it!")).toBeVisible();
+    expect(screen.getByText("100% recalled")).toBeVisible();
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
+  });
+
+  it("keeps the pass mark in the same banner on a miss", async () => {
+    const user = userEvent.setup();
+    renderTypingCard();
+
+    await user.click(screen.getByLabelText("Your recalled verse"));
+    await user.paste("Preserve me, O God, for in you I hide.");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const banner = await screen.findByRole("status");
+    expect(banner).not.toHaveAttribute("data-tone", "exact");
+    expect(banner).toHaveTextContent(/\d+% recalled · Pass at 85%/);
+    expect(screen.getByTestId("result-emoji")).not.toHaveTextContent("🎉");
+  });
+});
+
 describe("PassageRecallCard step label and focus", () => {
   it("shows the current First letters step, not completed count", () => {
     render(

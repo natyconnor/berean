@@ -5,7 +5,11 @@ import {
   MAX_LEARN_STAGE,
   type MemorySchedule,
 } from "./memory-scheduler";
-import type { HeartedMemorySpan } from "./passage-frontier";
+import {
+  coerceUnstartedLearningPieces,
+  progressPassagePiece,
+  type HeartedMemorySpan,
+} from "./passage-frontier";
 import type { PassagePieceBase } from "./passage-pieces";
 import type { PassageRange } from "./passage-range";
 import {
@@ -424,6 +428,68 @@ describe("planStart", () => {
     expect(plan.pieces[1]?.attachment).toBe("unreached");
     expect(plan.pieces[2]?.attachment).toBe("solid");
     expect(plan.status).toBe("building");
+  });
+
+  it("marks pieces seeded from verse progress as carried over", () => {
+    const hearts: HeartedMemorySpan[] = [
+      psalmHeart(1, 2, { status: "reviewing", learnStage: MAX_LEARN_STAGE }),
+      psalmHeart(3, 4, { status: "learning", learnStage: 1, stageReps: 1 }),
+      psalmHeart(5, 6, { status: "learning", learnStage: 0, stageReps: 0 }),
+    ];
+
+    const plan = planStart({
+      pieces: PSALM_PIECES,
+      hearts,
+      scope: PSALM_1,
+      unifiedEnabled: false,
+      memberSchedules: [],
+      now: NOW,
+    });
+
+    expect(
+      plan.pieces.map((piece) => [piece.attachment, piece.carriedOver]),
+    ).toEqual([
+      ["solid", true],
+      ["learning", true],
+      ["unreached", undefined],
+    ]);
+  });
+
+  it("keeps the carried-over mark as a piece progresses", () => {
+    const plan = planStart({
+      pieces: PSALM_PIECES,
+      hearts: [
+        psalmHeart(1, 2, { status: "learning", learnStage: 2, stageReps: 0 }),
+      ],
+      scope: PSALM_1,
+      unifiedEnabled: false,
+      memberSchedules: [],
+      now: NOW,
+    });
+    const [carried] = coerceUnstartedLearningPieces(plan.pieces);
+    if (!carried) throw new Error("expected a first piece");
+    expect(carried.attachment).toBe("attached");
+
+    const progressed = progressPassagePiece(
+      { ...carried, stageReps: 99 },
+      { accuracy: 100, now: NOW, tzOffsetMinutes: 0, wordCount: 10 },
+    );
+
+    expect(progressed.learnStage).toBe(3);
+    expect(progressed.carriedOver).toBe(true);
+  });
+
+  it("does not mark a passage started from nothing", () => {
+    const plan = planStart({
+      pieces: PSALM_PIECES,
+      hearts: [],
+      scope: PSALM_1,
+      unifiedEnabled: false,
+      memberSchedules: [],
+      now: NOW,
+    });
+
+    expect(plan.pieces.some((piece) => "carriedOver" in piece)).toBe(false);
   });
 
   it("opens reviewing from canonical review-heart schedules when every piece is solid", () => {

@@ -162,7 +162,7 @@ describe("NewPack", () => {
     ).toBeInTheDocument();
   });
 
-  it("creates the pack, then opens it over Today with a toast", async () => {
+  it("creates the pack, then opens its page with a toast", async () => {
     renderNewPack();
 
     await userEvent.type(
@@ -183,7 +183,7 @@ describe("NewPack", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /^About 6 min a day, then short reviews\. Mastered in about \d+ (weeks|months)\.$/,
+        /^About 9 min a day, then short reviews\. Mastered in about \d+ (weeks|months)\.$/,
       ),
     ).toBeInTheDocument();
     expect(
@@ -205,7 +205,7 @@ describe("NewPack", () => {
     });
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenCalledWith({
-        href: "/memory?panel=pack%3Apack1",
+        href: "/memory/pack1",
         replace: true,
       }),
     );

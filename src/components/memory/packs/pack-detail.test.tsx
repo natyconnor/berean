@@ -363,11 +363,8 @@ describe("PackDetail for a passage", () => {
       within(dialog).getByText(/hearted as one passage/),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("link", { name: "Continue · about 4 min" }),
-    ).toHaveAttribute(
-      "href",
-      "/memory/psalm16/learn?return=%2Fmemory%3Fpanel%3Dpack%253Apsalm16",
-    );
+      within(dialog).getByRole("link", { name: "Continue · about 7 min" }),
+    ).toHaveAttribute("href", "/memory/psalm16/learn?return=%2Fmemory");
     expect(
       within(dialog).getByRole("link", { name: "Open in reader" }),
     ).toHaveAttribute("href", "/passage/Psalms-16");
@@ -375,9 +372,13 @@ describe("PackDetail for a passage", () => {
       within(dialog).queryByRole("link", { name: /Practice anytime/ }),
     ).not.toBeInTheDocument();
 
+    expect(within(dialog).getByText("Today:")).toBeInTheDocument();
     expect(
-      within(dialog).getByText("Today, day 1 of 3 for verses 5–6:"),
+      within(dialog).getByText(
+        "read verses 5–6, then type them with first letters.",
+      ),
     ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/day \d of 3/i)).not.toBeInTheDocument();
     expect(
       within(dialog).getByRole("progressbar", {
         name: "4 of 11 verses learned",
@@ -388,7 +389,7 @@ describe("PackDetail for a passage", () => {
     ).toBeInTheDocument();
 
     expect(within(dialog).getAllByText("Memorized")).toHaveLength(4);
-    expect(within(dialog).getAllByText("Today: day 1 of 3")).toHaveLength(2);
+    expect(within(dialog).getAllByText("Learning today")).toHaveLength(2);
     expect(within(dialog).getAllByText("Up next")).toHaveLength(5);
     expect(
       within(dialog).getByText("Preserve me, O God, for in you I take refuge."),
@@ -396,6 +397,27 @@ describe("PackDetail for a passage", () => {
     expect(
       within(dialog).getAllByRole("img", { name: "Also hearted on its own" }),
     ).toHaveLength(1);
+  });
+
+  it("says which memorized verses came from before the passage", () => {
+    passages = {
+      psalm16: passageView({
+        pieces: [
+          piece(0, 1, 4, "solid"),
+          piece(1, 5, 6, "solid", { carriedOver: true }),
+          piece(2, 7, 11, "unreached"),
+        ],
+      }),
+    };
+    renderHost("pack:psalm16");
+    const dialog = screen.getByRole("dialog", { name: "Psalm 16" });
+
+    expect(within(dialog).getAllByText("Memorized")).toHaveLength(6);
+    const suffixes = within(dialog).getAllByText("· from before");
+    expect(suffixes).toHaveLength(2);
+    expect(suffixes[0]?.parentElement).toHaveTextContent(
+      "Memorized · from before",
+    );
   });
 
   it("waits with Up next tomorrow once today's verses are in", () => {
@@ -418,10 +440,10 @@ describe("PackDetail for a passage", () => {
     expect(
       screen.getByRole("button", { name: /^Up next tomorrow/ }),
     ).toBeDisabled();
-    expect(screen.getAllByText("Tomorrow: day 2 of 3")).toHaveLength(2);
+    expect(screen.getAllByText("Learning")).toHaveLength(2);
   });
 
-  it("recites a memorized passage that is due", () => {
+  it("reviews a memorized passage that is due", () => {
     passages = {
       psalm16: passageView({
         status: "reviewing",
@@ -433,11 +455,8 @@ describe("PackDetail for a passage", () => {
     renderHost("pack:psalm16");
 
     expect(
-      screen.getByRole("link", { name: "Recite Psalm 16" }),
-    ).toHaveAttribute(
-      "href",
-      "/memory/psalm16/review?return=%2Fmemory%3Fpanel%3Dpack%253Apsalm16",
-    );
+      screen.getByRole("link", { name: "Review Psalm 16" }),
+    ).toHaveAttribute("href", "/memory/psalm16/review?return=%2Fmemory");
     expect(
       screen.getByRole("progressbar", { name: "Mastery 22%" }),
     ).toBeInTheDocument();
@@ -477,6 +496,7 @@ describe("PackDetail for a passage", () => {
       expect(mocks.navigate).toHaveBeenLastCalledWith({
         to: "/memory",
         search: {},
+        replace: true,
       }),
     );
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
@@ -486,7 +506,7 @@ describe("PackDetail for a passage", () => {
 });
 
 describe("PackDetail for a pack", () => {
-  const RETURN = "return=%2Fmemory%3Fpanel%3Dpack%253Amerced%26from%3Dverses";
+  const RETURN = "return=%2Fmemory";
 
   it("shows both bars and per-verse Review, Practice and Learn", () => {
     renderHost("pack:merced", "verses");
@@ -571,6 +591,7 @@ describe("PackDetail for a pack", () => {
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenLastCalledWith({
         href: "/memory?panel=verses",
+        replace: true,
       }),
     );
   });
@@ -610,7 +631,7 @@ describe("PackDetail for a pack", () => {
     );
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenLastCalledWith({
-        href: "/memory/psalm23/review?return=%2Fmemory%3Fpanel%3Dpack%253Apsalm23",
+        href: "/memory/psalm23/review?return=%2Fmemory",
       }),
     );
   });

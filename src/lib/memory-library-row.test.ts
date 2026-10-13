@@ -16,7 +16,7 @@ describe("libraryRow", () => {
     expect(
       libraryRow({ status: "learning", learnStage: 2, dueAt: NOW }, NOW, TZ),
     ).toEqual({
-      line: "Day 2 of 3: fill in the blanks",
+      line: "Fill in the blanks",
       dueToday: true,
       action: "learn",
     });
@@ -75,13 +75,13 @@ describe("dueTodayBulkLabel", () => {
   it("does everything left today", () => {
     expect(
       dueTodayBulkLabel({ learningVerses: 2, passageSessions: 0, reviews: 3 }),
-    ).toBe("Do all 5 · about 6 min");
+    ).toBe("Do all 5 · about 9 min");
   });
 
   it("says Review all when only reviews are left", () => {
     expect(
       dueTodayBulkLabel({ learningVerses: 0, passageSessions: 0, reviews: 3 }),
-    ).toBe("Review all 3 · about 2 min");
+    ).toBe("Review all 3 · about 3 min");
   });
 
   it("is absent when nothing is left", () => {

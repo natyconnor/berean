@@ -25,8 +25,6 @@ const memorize = {
   state: {
     kind: "memorize" as const,
     title: "Mark 9",
-    verseCount: 50,
-    learnDays: 12,
   },
   onMemorize: vi.fn(),
   onOpenPack: vi.fn(),

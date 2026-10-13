@@ -29,8 +29,7 @@ function passage(overrides: Partial<PassageGoalCard> = {}): TodayGoal {
     status: "building",
     hasWorkToday: true,
     todayStep: {
-      label:
-        "Day 1 of 3 for verses 5–6: read them, then type them with first letters",
+      label: "Read verses 5–6, then type them with first letters",
       ladderDay: 1,
     },
     masteryFraction: 0,
@@ -122,7 +121,7 @@ describe("GoalCard", () => {
     const buttons = buttonsIn(container);
     expect(buttons).toHaveLength(1);
     const [button] = buttons;
-    expect(button).toHaveTextContent("Continue · 4 min");
+    expect(button).toHaveTextContent("Continue · 7 min");
     expect(button).toHaveAttribute(
       "href",
       "/memory/psalm16/learn?return=%2Fmemory",
@@ -137,7 +136,11 @@ describe("GoalCard", () => {
 
     expect(screen.getByText("Today")).toBeInTheDocument();
     expect(screen.getByText("Passage · 11 verses")).toBeInTheDocument();
-    expect(screen.getByText("Day 1 of 3 for verses 5–6:")).toBeInTheDocument();
+    expect(screen.getByText("Today:")).toBeInTheDocument();
+    expect(
+      screen.getByText("read verses 5–6, then type them with first letters."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/day \d of 3/i)).not.toBeInTheDocument();
     expect(screen.getByText("4 of 11 verses learned")).toBeInTheDocument();
     expect(screen.getByText("on track for Oct 15")).toBeInTheDocument();
     expect(
@@ -161,7 +164,7 @@ describe("GoalCard", () => {
     );
 
     expect(screen.getByText("Starts today")).toBeInTheDocument();
-    expect(buttonsIn(container)[0]).toHaveTextContent("Start · 4 min");
+    expect(buttonsIn(container)[0]).toHaveTextContent("Start · 7 min");
     expect(screen.getByText("learn it in about 5 days")).toBeInTheDocument();
   });
 
@@ -182,7 +185,7 @@ describe("GoalCard", () => {
     expect(screen.getByText("8 reviews today")).toBeInTheDocument();
 
     const [button] = buttonsIn(container);
-    expect(button).toHaveTextContent("Review 8 · 4 min");
+    expect(button).toHaveTextContent("Review 8 · 8 min");
     expect(button).toHaveAttribute(
       "href",
       "/memory/merced/review?return=%2Fmemory",
@@ -226,7 +229,7 @@ describe("GoalCard", () => {
     );
 
     const [button] = buttonsIn(container);
-    expect(button).toHaveTextContent("Continue · 5 min");
+    expect(button).toHaveTextContent("Continue · 7 min");
     expect(button).toHaveAttribute(
       "href",
       "/memory/today?packId=merced&return=%2Fmemory",
@@ -252,7 +255,7 @@ describe("GoalCard", () => {
     expect(screen.queryByText("Today")).not.toBeInTheDocument();
   });
 
-  it("recites a memorized passage with only the Mastery bar", () => {
+  it("reviews a memorized passage with only the Mastery bar", () => {
     const { container } = renderCard(
       passage({
         status: "reviewing",
@@ -262,8 +265,11 @@ describe("GoalCard", () => {
       }),
     );
 
+    expect(
+      screen.getByText("Recite it all the way through."),
+    ).toBeInTheDocument();
     const [button] = buttonsIn(container);
-    expect(button).toHaveTextContent("Recite");
+    expect(button).toHaveTextContent(/^Review$/);
     expect(button).toHaveAttribute(
       "href",
       "/memory/psalm16/review?return=%2Fmemory",
@@ -274,6 +280,21 @@ describe("GoalCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("says a memorized passage was reviewed once today's review is done", () => {
+    renderCard(
+      passage({
+        status: "reviewing",
+        learnedVerses: 11,
+        hasWorkToday: false,
+        todayStep: null,
+        lastPracticedAt: NOW - 60_000,
+        nextDueAt: NOW + 3 * DAY_MS,
+      }),
+    );
+
+    expect(screen.getByText("Reviewed today.")).toBeInTheDocument();
+  });
+
   it("starts a new verse with its first step", () => {
     const { container } = renderCard(verse());
 
@@ -282,10 +303,11 @@ describe("GoalCard", () => {
       screen.getByText("read it, then type it with first letters."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("progressbar", { name: "Learning, day 1 of 3" }),
+      screen.getByRole("progressbar", { name: "Learning" }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/day \d of 3/i)).not.toBeInTheDocument();
     const [button] = buttonsIn(container);
-    expect(button).toHaveTextContent("Start · 2 min");
+    expect(button).toHaveTextContent("Start · 3 min");
     expect(button).toHaveAttribute(
       "href",
       "/memory/learn?book=John&chapter=3&startVerse=16&endVerse=16&return=%2Fmemory",

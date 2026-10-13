@@ -29,6 +29,8 @@ import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import {
   chapterMemorizeCopy,
+  chapterMemorizeMark,
+  type ChapterMemorizeMark,
   type ChapterMemorizeState,
 } from "@/lib/chapter-memorize";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
@@ -44,11 +46,12 @@ import {
   CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
-  CHAPTER_CHROME_MEMORIZE_COMPACT_BUTTON_CLASS,
+  CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS,
   CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
-  CHAPTER_CHROME_MEMORIZE_FULL_CLASS,
-  CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
+  CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS,
+  CHAPTER_CHROME_MEMORIZE_SLOT_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+  chapterMemorizeStageClasses,
 } from "@/components/passage/header-chrome";
 import { HeaderShortcutToggle } from "@/components/passage/header-shortcut-toggle";
 import {
@@ -96,6 +99,81 @@ export interface ChapterMemorizeControl {
 const CHAPTER_MEMORIZE_NEW_COPY =
   "New: memorize this chapter in a few minutes a day.";
 
+/** The ring or check on the bare Memorize icon; `className` shows it only there. */
+function ChapterMemorizeMarkIcon({
+  mark,
+  className,
+}: {
+  mark: ChapterMemorizeMark;
+  className: string;
+}) {
+  if (mark.kind === "none") return null;
+  if (mark.kind === "done") {
+    return (
+      <svg
+        aria-hidden
+        viewBox="0 0 14 14"
+        data-memorize-mark="done"
+        className={cn(
+          "pointer-events-none absolute -top-1 -right-1 size-3.5",
+          className,
+        )}
+      >
+        <circle
+          cx="7"
+          cy="7"
+          r="6"
+          strokeWidth="2"
+          className="fill-primary stroke-background"
+        />
+        <path
+          d="M4.5 7.25 6.25 9 9.5 5.5"
+          fill="none"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="stroke-primary-foreground"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      data-memorize-mark="progress"
+      className={cn(
+        "pointer-events-none absolute inset-0 m-auto size-6",
+        className,
+      )}
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10.5"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={0.2}
+        strokeWidth="1.5"
+      />
+      {mark.fraction > 0 ? (
+        <circle
+          cx="12"
+          cy="12"
+          r="10.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray={`${mark.fraction * 100} 100`}
+          transform="rotate(-90 12 12)"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
 function ChapterMemorizeButton({
   control,
 }: {
@@ -103,6 +181,10 @@ function ChapterMemorizeButton({
 }) {
   const { state, onMemorize, onOpenPack } = control;
   const copy = chapterMemorizeCopy(state);
+  const stageClasses = chapterMemorizeStageClasses(copy.title, {
+    ellipsize: state.kind === "partOf",
+    word: copy.short !== undefined,
+  });
   // People who finished the app tour before it taught Memorize.
   const tutorial = useOptionalTutorial();
   const newHint = useFeatureHint(
@@ -120,51 +202,49 @@ function ChapterMemorizeButton({
         if (!open) newHint.dismiss();
       }}
     >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverAnchor asChild>
-            <button
-              type="button"
-              data-tour-id="chapter-memorize"
-              aria-label={copy.label}
-              onClick={(event) => {
-                if (state.kind === "memorize") {
-                  onMemorize(event.currentTarget);
-                } else {
-                  onOpenPack(state.packId);
-                }
-              }}
-              className={cn(
-                "ml-auto inline-flex min-w-0 shrink items-center gap-2.5 rounded-lg border border-primary/35 bg-primary/7 py-1.5 pr-3 pl-2.5 text-left transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
-                CHAPTER_CHROME_MEMORIZE_COMPACT_BUTTON_CLASS,
-                CHAPTER_CHROME_TIGHT_HIDE_CLASS,
-              )}
-            >
-              <Brain aria-hidden className="h-4 w-4 shrink-0 text-primary" />
-              <span
-                className={cn("min-w-0", CHAPTER_CHROME_MEMORIZE_FULL_CLASS)}
-              >
-                <span className="block truncate text-[13px] leading-tight font-semibold text-primary">
-                  {copy.title}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {copy.detail}
-                </span>
-              </span>
-              <span
-                aria-hidden
+      <div className={CHAPTER_CHROME_MEMORIZE_SLOT_CLASS}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverAnchor asChild>
+              <button
+                type="button"
+                data-tour-id="chapter-memorize"
+                aria-label={copy.label}
+                onClick={(event) => {
+                  if (state.kind === "memorize") {
+                    onMemorize(event.currentTarget);
+                  } else {
+                    onOpenPack(state.packId);
+                  }
+                }}
                 className={cn(
-                  "min-w-0 truncate text-[13px] font-semibold text-primary",
-                  CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
+                  "relative inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg border border-primary/35 bg-primary/7 px-2.5 text-[13px] font-semibold whitespace-nowrap text-primary transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
+                  CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS,
+                  stageClasses.button,
                 )}
               >
-                {copy.short}
-              </span>
-            </button>
-          </PopoverAnchor>
-        </TooltipTrigger>
-        <TooltipContent>{`${copy.title} · ${copy.detail}`}</TooltipContent>
-      </Tooltip>
+                <Brain aria-hidden className="size-4 shrink-0" />
+                <span className={cn("min-w-0 truncate", stageClasses.line)}>
+                  {copy.title}
+                </span>
+                {copy.short && stageClasses.word ? (
+                  <span
+                    aria-hidden
+                    className={cn("min-w-0 truncate", stageClasses.word)}
+                  >
+                    {copy.short}
+                  </span>
+                ) : null}
+                <ChapterMemorizeMarkIcon
+                  mark={chapterMemorizeMark(state)}
+                  className={stageClasses.mark}
+                />
+              </button>
+            </PopoverAnchor>
+          </TooltipTrigger>
+          <TooltipContent>{copy.tooltip}</TooltipContent>
+        </Tooltip>
+      </div>
       <PopoverContent
         side="bottom"
         align="end"
@@ -351,7 +431,11 @@ export function ChapterHeader({
         shortcut="H"
         checked={showSectionHeaders}
         onToggle={onToggleSectionHeaders}
-        compactLabelClassName={CHAPTER_CHROME_COMPACT_LABEL_CLASS}
+        compactLabelClassName={
+          memorize
+            ? CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS
+            : CHAPTER_CHROME_COMPACT_LABEL_CLASS
+        }
         tooltip={
           showSectionHeaders
             ? "Hide editorial section headings"

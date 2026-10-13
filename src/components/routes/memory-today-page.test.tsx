@@ -254,7 +254,7 @@ describe("MemoryTodayPage", () => {
     );
 
     expect(
-      screen.getByText("Nice. Next: 2 learning steps · about 4 min"),
+      screen.getByText("Nice. Next: 2 learning steps · about 6 min"),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
 

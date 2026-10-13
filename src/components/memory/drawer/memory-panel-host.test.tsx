@@ -217,23 +217,14 @@ describe("MemoryPanelHost", () => {
       within(dialog).getByRole("heading", { name: "Due today · 4" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("link", { name: /Do all 4 · about 7 min/ }),
-    ).toHaveAttribute(
-      "href",
-      "/memory/today?return=%2Fmemory%3Fpanel%3Dverses",
-    );
+      within(dialog).getByRole("link", { name: /Do all 4 · about 12 min/ }),
+    ).toHaveAttribute("href", "/memory/today?return=%2Fmemory");
     expect(
       within(dialog).getByRole("link", { name: "Learn Psalm 16" }),
-    ).toHaveAttribute(
-      "href",
-      "/memory/psalm16/learn?return=%2Fmemory%3Fpanel%3Dverses",
-    );
+    ).toHaveAttribute("href", "/memory/psalm16/learn?return=%2Fmemory");
     expect(
       within(dialog).getByRole("link", { name: "Review Merced Team" }),
-    ).toHaveAttribute(
-      "href",
-      "/memory/merced/review?return=%2Fmemory%3Fpanel%3Dverses",
-    );
+    ).toHaveAttribute("href", "/memory/merced/review?return=%2Fmemory");
     expect(
       within(dialog).getByRole("link", { name: /All 12 verses, filters/ }),
     ).toHaveAttribute("href", "/memory/verses");
@@ -251,10 +242,7 @@ describe("MemoryPanelHost", () => {
     const dialog = screen.getByRole("dialog", { name: "Your verses" });
     expect(
       within(dialog).getByRole("link", { name: "Continue Merced Team" }),
-    ).toHaveAttribute(
-      "href",
-      "/memory/today?packId=merced&return=%2Fmemory%3Fpanel%3Dverses",
-    );
+    ).toHaveAttribute("href", "/memory/today?packId=merced&return=%2Fmemory");
     expect(
       within(dialog).queryByRole("link", { name: "Learn Merced Team" }),
     ).not.toBeInTheDocument();
@@ -273,7 +261,7 @@ describe("MemoryPanelHost", () => {
     });
   });
 
-  it("closes with × and Esc by removing panel", async () => {
+  it("closes with × and Esc by replacing the entry with plain Today", async () => {
     renderHost("progress");
     expect(
       screen.getByRole("dialog", { name: "Your progress" }),
@@ -283,6 +271,7 @@ describe("MemoryPanelHost", () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith({
       to: "/memory",
       search: {},
+      replace: true,
     });
 
     mocks.navigate.mockClear();
@@ -290,6 +279,7 @@ describe("MemoryPanelHost", () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith({
       to: "/memory",
       search: {},
+      replace: true,
     });
   });
 
@@ -316,7 +306,7 @@ describe("MemoryPanelHost", () => {
       within(dialog).getByRole("link", { name: "Review" }),
     ).toHaveAttribute(
       "href",
-      "/memory/review?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory%3Fpanel%3Dverse%253Av1%26from%3Dverses",
+      "/memory/review?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory",
     );
   });
 
@@ -358,6 +348,7 @@ describe("MemoryPanelHost", () => {
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenLastCalledWith({
         href: "/memory?panel=verses",
+        replace: true,
       }),
     );
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
@@ -399,7 +390,7 @@ describe("MemoryPanelPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("goes back in history for ‹ Today when there is history", async () => {
+  it("goes to plain Today for ‹ Today, even with history", async () => {
     mocks.canGoBack = true;
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     render(
@@ -411,23 +402,31 @@ describe("MemoryPanelPage", () => {
       </TooltipProvider>,
     );
 
-    await userEvent.click(screen.getByRole("link", { name: "Back to Today" }));
-    expect(back).toHaveBeenCalled();
-    expect(mocks.navigate).not.toHaveBeenCalled();
+    const link = screen.getByRole("link", { name: "Back to Today" });
+    expect(link).toHaveAttribute("href", "/memory");
+    await userEvent.click(link);
+    expect(mocks.navigate).toHaveBeenCalledWith({ href: "/memory" });
+    expect(back).not.toHaveBeenCalled();
     back.mockRestore();
   });
 
-  it("falls back to /memory for ‹ Today without history", async () => {
+  it("goes to the Your verses page for ‹ Your verses", async () => {
+    mocks.canGoBack = true;
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     render(
       <TooltipProvider>
         <MemoryPanelPage
           panel={{ kind: "verse", verseRefId: "v1" }}
-          from={undefined}
+          from="verses"
         />
       </TooltipProvider>,
     );
 
-    await userEvent.click(screen.getByRole("link", { name: "Back to Today" }));
-    expect(mocks.navigate).toHaveBeenCalledWith({ href: "/memory" });
+    await userEvent.click(
+      screen.getByRole("link", { name: "Back to Your verses" }),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith({ href: "/memory/verses" });
+    expect(back).not.toHaveBeenCalled();
+    back.mockRestore();
   });
 });

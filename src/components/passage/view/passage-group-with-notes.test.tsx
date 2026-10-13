@@ -188,7 +188,6 @@ describe("PassageGroupWithNotes selection bar", () => {
           15,
           {
             stroke: "solid",
-            foot: false,
             heart: {
               learnedFraction: 0.5,
               tooltip: "John 1 · memorizing · 25 of 51 learned",
@@ -202,7 +201,7 @@ describe("PassageGroupWithNotes selection bar", () => {
             },
           },
         ],
-        [16, { stroke: "dashed", foot: false, heart: null }],
+        [16, { stroke: "dashed", heart: null }],
       ]),
     );
 

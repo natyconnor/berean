@@ -3,16 +3,16 @@ import { useId, type ReactNode } from "react";
 import type { MemorizeMode } from "@/lib/memorize-plan";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
 
-const STEPS: readonly { day: number; name: string; sample: ReactNode }[] = [
+const STEPS: readonly { step: number; name: string; sample: ReactNode }[] = [
   {
-    day: 1,
+    step: 1,
     name: "Read it, then first letters",
     sample: (
       <span aria-hidden>B____ i_ t__ m__ w__ w____ n__ i_ t__ c______…</span>
     ),
   },
   {
-    day: 2,
+    step: 2,
     name: "Fill in the blanks",
     sample: (
       <span aria-hidden>
@@ -21,7 +21,7 @@ const STEPS: readonly { day: number; name: string; sample: ReactNode }[] = [
     ),
   },
   {
-    day: 3,
+    step: 3,
     name: "Say it from memory",
     sample: (
       <span className="text-muted-foreground italic">
@@ -64,11 +64,11 @@ export function MemorizeExplainer({ mode }: { mode: MemorizeMode }) {
       <ol className="mt-2 grid gap-2 sm:grid-cols-3">
         {STEPS.map((step) => (
           <li
-            key={step.day}
+            key={step.step}
             className="rounded-md border border-primary/20 bg-background px-2.5 py-2"
           >
             <span className="block text-[11px] font-semibold tracking-[0.08em] text-primary uppercase">
-              Day {step.day}
+              Step {step.step}
             </span>
             <span className="mt-0.5 block text-[13px] font-medium">
               {step.name}
@@ -80,6 +80,7 @@ export function MemorizeExplainer({ mode }: { mode: MemorizeMode }) {
         ))}
       </ol>
       <p className="mt-2 text-xs text-muted-foreground">
+        One short step a day.{" "}
         {mode === "passage"
           ? `Longer passages add up to ${PASSAGE_MAX_ADDS_PER_DAY} new verses a day. `
           : null}

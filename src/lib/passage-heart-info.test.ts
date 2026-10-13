@@ -115,7 +115,6 @@ describe("passageHeartProgress", () => {
     const rail = progress ? passageRailSegments(progress) : [];
     expect(rail.map((segment) => segment.verse)).toEqual([9, 10, 11, 12, 13]);
     expect(rail[0]).toMatchObject({ heart: true, joinsAbove: false });
-    expect(rail.at(-1)).toMatchObject({ foot: true });
 
     const acrossChapters = [
       piece(0, 6, 33, 34, "learning"),
@@ -132,11 +131,10 @@ describe("passageHeartProgress", () => {
       (seventh ? passageRailSegments(seventh) : []).map((segment) => [
         segment.verse,
         segment.heart,
-        segment.foot,
       ]),
     ).toEqual([
-      [1, false, false],
-      [2, false, true],
+      [1, false],
+      [2, false],
     ]);
     expect(passageHeartProgress(acrossChapters, "Matthew", 8)).toBeNull();
   });

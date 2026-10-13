@@ -9,6 +9,7 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { ChapterMemorizeState } from "@/lib/chapter-memorize";
 import { ChapterHeader, type ChapterMemorizeControl } from "./chapter-header";
 
 vi.mock("@/lib/use-tabs", () => ({
@@ -76,16 +77,9 @@ function findChromeExecutable(): string | undefined {
 
 const chromeExecutablePath = findChromeExecutable();
 
-const MEMORIZE_CONTROL: ChapterMemorizeControl = {
-  state: {
-    kind: "memorize",
-    title: "Psalm 119",
-    verseCount: 176,
-    learnDays: 37,
-  },
-  onMemorize: () => undefined,
-  onOpenPack: () => undefined,
-};
+function memorizeControl(state: ChapterMemorizeState): ChapterMemorizeControl {
+  return { state, onMemorize: () => undefined, onOpenPack: () => undefined };
+}
 
 function headerMarkup(
   book: string,
@@ -234,30 +228,55 @@ async function measureColumn(
   }
 }
 
+/** What the Memorize button shows: its line, one word, the icon, or nothing. */
+type MemorizeStage = "line" | "word" | "icon" | "gone";
+
 interface MemorizeLayoutReport {
+  width: number;
+  stage: MemorizeStage;
   headerScrollWidth: number;
   headerClientWidth: number;
-  memorizeDisplay: string;
-  fullDisplay: string;
-  shortDisplay: string;
+  fullText: string;
   memorize: Rect;
+  memorizeHeight: number;
+  headers: Rect;
   next: Rect;
   note: Rect;
   bookTruncated: boolean;
+  fullTruncated: boolean;
   shortTruncated: boolean;
+  /** The ring or check the bare icon wears. */
+  markShown: boolean;
 }
 
-async function measureMemorize(
-  width: number,
-  chapter = 119,
-): Promise<MemorizeLayoutReport> {
+interface MemorizeLayoutCase {
+  book: string;
+  chapter: number;
+  state: ChapterMemorizeState;
+}
+
+const PSALM_119: MemorizeLayoutCase = {
+  book: "Psalms",
+  chapter: 119,
+  state: { kind: "memorize", title: "Psalm 119" },
+};
+
+/**
+ * Loads the header once and resizes the passage column through `widths`, so
+ * a sweep costs one page load and the container queries re-run in place.
+ */
+async function measureMemorizeWidths(
+  widths: number[],
+  { book, chapter, state }: MemorizeLayoutCase = PSALM_119,
+): Promise<MemorizeLayoutReport[]> {
   if (!browser) throw new Error("Chrome is not running");
+  const [firstWidth = 0] = widths;
   const page: Page = await browser.newPage({
     viewport: { width: 1000, height: 400 },
   });
   try {
     await page.setContent(
-      `<!doctype html><html><head><link rel="stylesheet" href="${origin}/src/index.css"></head><body>${headerMarkup("Psalms", chapter, width, MEMORIZE_CONTROL)}</body></html>`,
+      `<!doctype html><html><head><link rel="stylesheet" href="${origin}/src/index.css"></head><body>${headerMarkup(book, chapter, firstWidth, memorizeControl(state))}</body></html>`,
       { waitUntil: "load" },
     );
     await page.waitForFunction(() => {
@@ -266,91 +285,316 @@ async function measureMemorize(
     });
     await page.evaluate(() => document.fonts.ready);
 
-    return await page.evaluate(() => {
-      function required(selector: string): HTMLElement {
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`missing ${selector}`);
-        }
-        return element;
-      }
-      function rect(element: Element) {
-        const box = element.getBoundingClientRect();
-        return {
-          left: box.left,
-          right: box.right,
-          top: box.top,
-          bottom: box.bottom,
-          width: box.width,
-        };
-      }
+    const reports: MemorizeLayoutReport[] = [];
+    for (const width of widths) {
+      reports.push(
+        await page.evaluate((columnWidth) => {
+          function required(selector: string): HTMLElement {
+            const element = document.querySelector(selector);
+            if (!(element instanceof HTMLElement)) {
+              throw new Error(`missing ${selector}`);
+            }
+            return element;
+          }
+          function rect(element: Element) {
+            const box = element.getBoundingClientRect();
+            return {
+              left: box.left,
+              right: box.right,
+              top: box.top,
+              bottom: box.bottom,
+              width: box.width,
+            };
+          }
 
-      const header = required("#layout-root > div");
-      const memorize = required('[data-tour-id="chapter-memorize"]');
-      const [full, short] = Array.from(memorize.children).slice(1);
-      const next = document
-        .querySelector(".lucide-chevron-right")
-        ?.closest("button");
-      if (!full || !short || !next) throw new Error("missing parts");
-      const bookLabel = required('[aria-label^="Change book"] span.truncate');
-      const truncated = (element: Element) =>
-        element.scrollWidth > element.clientWidth + 1;
-      return {
-        bookTruncated: truncated(bookLabel),
-        shortTruncated: truncated(short),
-        headerScrollWidth: header.scrollWidth,
-        headerClientWidth: header.clientWidth,
-        memorizeDisplay: getComputedStyle(memorize).display,
-        fullDisplay: getComputedStyle(full).display,
-        shortDisplay: getComputedStyle(short).display,
-        memorize: rect(memorize),
-        next: rect(next),
-        note: rect(required('[aria-label^="Add a chapter note"]')),
-      };
-    });
+          required("#layout-root").style.width = `${columnWidth}px`;
+          const header = required("#layout-root > div");
+          const memorize = required('[data-tour-id="chapter-memorize"]');
+          const [full, short] = Array.from(
+            memorize.querySelectorAll(":scope > span"),
+          );
+          const mark = memorize.querySelector("[data-memorize-mark]");
+          const next = document
+            .querySelector(".lucide-chevron-right")
+            ?.closest("button");
+          if (!full || !next) throw new Error("missing parts");
+          const bookLabel = required(
+            '[aria-label^="Change book"] span.truncate',
+          );
+          const headersChip = document.getElementById(
+            "passage-section-headers",
+          )?.parentElement;
+          if (!headersChip) throw new Error("missing headers switch");
+          const truncated = (element: Element) =>
+            element.scrollWidth > element.clientWidth + 1;
+          const shown = (element: Element) =>
+            getComputedStyle(element).display !== "none";
+          const stage = !shown(memorize)
+            ? "gone"
+            : shown(full)
+              ? "line"
+              : short && shown(short)
+                ? "word"
+                : "icon";
+          return {
+            width: columnWidth,
+            stage,
+            bookTruncated: truncated(bookLabel),
+            fullTruncated: truncated(full),
+            shortTruncated: short ? truncated(short) : false,
+            markShown: mark ? shown(mark) : false,
+            headerScrollWidth: header.scrollWidth,
+            headerClientWidth: header.clientWidth,
+            fullText: full.textContent ?? "",
+            memorize: rect(memorize),
+            memorizeHeight: memorize.getBoundingClientRect().height,
+            headers: rect(headersChip),
+            next: rect(next),
+            note: rect(required('[aria-label^="Add a chapter note"]')),
+          } satisfies MemorizeLayoutReport;
+        }, width),
+      );
+    }
+    return reports;
   } finally {
     await page.close();
   }
 }
 
+async function measureMemorize(
+  width: number,
+  layoutCase?: MemorizeLayoutCase,
+): Promise<MemorizeLayoutReport> {
+  const [report] = await measureMemorizeWidths([width], layoutCase);
+  if (!report) throw new Error("no layout report");
+  return report;
+}
+
+function expectTidyRow(report: MemorizeLayoutReport) {
+  const json = JSON.stringify(report);
+  expect(overlaps(report.memorize, report.note), json).toBe(false);
+  expect(overlaps(report.memorize, report.next), json).toBe(false);
+  expect(overlaps(report.memorize, report.headers), json).toBe(false);
+  expect(report.headerScrollWidth, json).toBeLessThanOrEqual(
+    report.headerClientWidth + 1,
+  );
+}
+
+/** Every 8px from `from` down to `to`. */
+function widthsDown(from: number, to: number): number[] {
+  const widths: number[] = [];
+  for (let width = from; width >= to; width -= 8) widths.push(width);
+  return widths;
+}
+
+const STAGE_ORDER: MemorizeStage[] = ["line", "word", "icon", "gone"];
+
+function expectStagesInOrder(reports: MemorizeLayoutReport[]) {
+  const ranks = reports.map((report) => STAGE_ORDER.indexOf(report.stage));
+  expect(
+    ranks.every(
+      (rank, index) => index === 0 || rank >= (ranks[index - 1] ?? 0),
+    ),
+    JSON.stringify(reports.map(({ width, stage }) => [width, stage])),
+  ).toBe(true);
+}
+
+const MEMORIZING_PSALM_1: MemorizeLayoutCase = {
+  book: "Psalms",
+  chapter: 1,
+  state: {
+    kind: "memorizing",
+    title: "Psalm 1",
+    packId: "pack_1",
+    learnedVerses: 2,
+    totalVerses: 6,
+  },
+};
+
+const MEMORIZED_PSALM_1: MemorizeLayoutCase = {
+  book: "Psalms",
+  chapter: 1,
+  state: { kind: "memorized", title: "Psalm 1", packId: "pack_1" },
+};
+
+const PART_OF_SERMON: MemorizeLayoutCase = {
+  book: "Matthew",
+  chapter: 6,
+  state: {
+    kind: "partOf",
+    title: "The Sermon on the Mount",
+    packId: "pack_sm",
+    memorized: false,
+    learnedVerses: 4,
+    totalVerses: 111,
+  },
+};
+
 describe("ChapterHeader Memorize button layout", () => {
-  it("shows the two-line button on a wide passage column", async (ctx) => {
+  it("shows one short line on a wide passage column", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
     const report = await measureMemorize(860);
     const json = JSON.stringify(report);
 
-    expect(report.fullDisplay, json).not.toBe("none");
-    expect(report.shortDisplay, json).toBe("none");
-    expect(overlaps(report.memorize, report.note), json).toBe(false);
-    expect(overlaps(report.memorize, report.next), json).toBe(false);
-    expect(report.headerScrollWidth, json).toBeLessThanOrEqual(
-      report.headerClientWidth + 1,
-    );
+    expect(report.stage, json).toBe("line");
+    expect(report.fullText, json).toBe("Memorize Psalm 119");
+    expect(report.fullTruncated, json).toBe(false);
+    expect(report.memorizeHeight, json).toBeLessThanOrEqual(32);
+    expect(report.bookTruncated, json).toBe(false);
+    expectTidyRow(report);
   }, 30_000);
 
-  it("collapses to icon + Memorize without overflowing a 384px column", async (ctx) => {
+  it("keeps the book name whole beside a passage being memorized", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
-    for (const chapter of [1, 119]) {
-      const report = await measureMemorize(384, chapter);
-      const json = JSON.stringify(report);
+    // The compose passage column at a wide window, where "Psa… 1" used to
+    // give way to a two-line "Memorizing {pack title}" button.
+    const report = await measureMemorize(870, {
+      book: "Psalms",
+      chapter: 1,
+      state: {
+        kind: "memorizing",
+        title: "Sample · Psalm 1 (start passage)",
+        packId: "pack_1",
+        learnedVerses: 2,
+        totalVerses: 6,
+      },
+    });
+    const json = JSON.stringify(report);
 
-      expect(report.memorizeDisplay, json).not.toBe("none");
-      expect(report.fullDisplay, json).toBe("none");
-      expect(report.shortDisplay, json).not.toBe("none");
-      expect(report.shortTruncated, json).toBe(false);
-      expect(overlaps(report.memorize, report.note), json).toBe(false);
-      expect(overlaps(report.memorize, report.next), json).toBe(false);
-      expect(report.headerScrollWidth, json).toBeLessThanOrEqual(
-        report.headerClientWidth + 1,
+    expect(report.bookTruncated, json).toBe(false);
+    expect(report.fullText, json).toBe("Memorizing · 2 of 6");
+    expect(report.fullTruncated, json).toBe(false);
+    expect(report.memorizeHeight, json).toBeLessThanOrEqual(32);
+    expectTidyRow(report);
+  }, 30_000);
+
+  it("truncates a long passage title inside a capped button", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    const report = await measureMemorize(870, {
+      book: "Matthew",
+      chapter: 6,
+      state: {
+        kind: "partOf",
+        title: "The Sermon on the Mount and the Lord's Prayer",
+        packId: "pack_sm",
+        memorized: false,
+        learnedVerses: 4,
+        totalVerses: 111,
+      },
+    });
+    const json = JSON.stringify(report);
+
+    expect(report.stage, json).toBe("line");
+    expect(report.fullTruncated, json).toBe(true);
+    expect(report.memorize.width, json).toBeLessThanOrEqual(240);
+    expect(report.bookTruncated, json).toBe(false);
+    expectTidyRow(report);
+  }, 30_000);
+
+  it("gives up its words before the book name shortens", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    const cases: MemorizeLayoutCase[] = [
+      PSALM_119,
+      {
+        book: "Psalms",
+        chapter: 1,
+        state: { kind: "memorize", title: "Psalm 1" },
+      },
+      {
+        book: "1 Thessalonians",
+        chapter: 5,
+        state: { kind: "memorize", title: "1 Thessalonians 5" },
+      },
+      MEMORIZING_PSALM_1,
+      MEMORIZED_PSALM_1,
+      PART_OF_SERMON,
+    ];
+    for (const layoutCase of cases) {
+      const reports = await measureMemorizeWidths(
+        widthsDown(880, 336),
+        layoutCase,
       );
-      if (chapter === 1) expect(report.bookTruncated, json).toBe(false);
+      for (const report of reports) {
+        const json = JSON.stringify({ ...layoutCase, ...report });
+        if (report.bookTruncated) {
+          expect(["icon", "gone"], json).toContain(report.stage);
+        }
+        // A passage title may ellipsize; every other line shows whole.
+        if (report.stage === "line" && layoutCase !== PART_OF_SERMON) {
+          expect(report.fullTruncated, json).toBe(false);
+        }
+        if (report.stage === "word") {
+          expect(report.shortTruncated, json).toBe(false);
+        }
+        expectTidyRow(report);
+      }
+    }
+  }, 60_000);
+
+  it("collapses to one word, then the icon alone", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    // Below 528px the Headers switch has left, so the slot only narrows.
+    const reports = await measureMemorizeWidths(widthsDown(520, 336), {
+      book: "Psalms",
+      chapter: 1,
+      state: { kind: "memorize", title: "Psalm 1" },
+    });
+    const stages = reports.map((report) => report.stage);
+    const json = JSON.stringify(
+      reports.map(({ width, stage }) => [width, stage]),
+    );
+
+    expectStagesInOrder(reports);
+    expect(stages, json).toContain("line");
+    expect(stages, json).toContain("word");
+    expect(stages, json).toContain("icon");
+    for (const report of reports) {
+      if (report.stage === "icon") {
+        expect(report.memorize.width, JSON.stringify(report)).toBe(32);
+        expect(report.markShown, JSON.stringify(report)).toBe(false);
+      }
     }
   }, 30_000);
+
+  it("goes straight from its line to a marked icon once memorizing", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    for (const layoutCase of [
+      MEMORIZING_PSALM_1,
+      MEMORIZED_PSALM_1,
+      PART_OF_SERMON,
+    ]) {
+      const reports = await measureMemorizeWidths(
+        widthsDown(880, 336),
+        layoutCase,
+      );
+      const stages = reports.map((report) => report.stage);
+      const json = JSON.stringify({
+        state: layoutCase.state,
+        stages: reports.map(({ width, stage }) => [width, stage]),
+      });
+
+      // Below 528px the Headers switch has left, so the slot only narrows.
+      expectStagesInOrder(reports.filter((report) => report.width <= 520));
+      expect(stages, json).toContain("line");
+      expect(stages, json).not.toContain("word");
+      expect(stages, json).toContain("icon");
+      for (const report of reports) {
+        const reportJson = JSON.stringify({ ...layoutCase, ...report });
+        if (report.stage === "icon") {
+          expect(report.memorize.width, reportJson).toBe(32);
+          expect(report.markShown, reportJson).toBe(true);
+        }
+        if (report.stage === "line") {
+          expect(report.markShown, reportJson).toBe(false);
+        }
+      }
+    }
+  }, 60_000);
 
   it("leaves the row with the Headers switch on the tightest column", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
     const report = await measureMemorize(300);
-    expect(report.memorizeDisplay, JSON.stringify(report)).toBe("none");
+    expect(report.stage, JSON.stringify(report)).toBe("gone");
   }, 30_000);
 });
 

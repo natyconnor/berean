@@ -93,13 +93,13 @@ describe("planTodaySession", () => {
 describe("todayInterstitialCopy", () => {
   it("names the next segment and its time", () => {
     expect(todayInterstitialCopy({ kind: "review", reviewCount: 4 })).toBe(
-      "Nice. Next: 4 reviews · about 2 min",
+      "Nice. Next: 4 reviews · about 4 min",
     );
     expect(todayInterstitialCopy({ kind: "review", reviewCount: 1 })).toBe(
       "Nice. Next: 1 review · about 1 min",
     );
     expect(todayInterstitialCopy({ kind: "learning", verseCount: 2 })).toBe(
-      "Nice. Next: 2 learning steps · about 4 min",
+      "Nice. Next: 2 learning steps · about 6 min",
     );
     expect(
       todayInterstitialCopy({
@@ -107,7 +107,7 @@ describe("todayInterstitialCopy", () => {
         packId: "john15",
         title: "John 15",
       }),
-    ).toBe("Nice. Next: John 15 · about 4 min");
+    ).toBe("Nice. Next: John 15 · about 7 min");
   });
 });
 
@@ -140,10 +140,10 @@ describe("todaySessionProgress", () => {
   });
 
   it("weights each finished segment by its minutes", () => {
-    expect(segments.map(todaySegmentMinutes)).toEqual([4, 4, 2]);
+    expect(segments.map(todaySegmentMinutes)).toEqual([7, 6, 4]);
     expect(todaySessionProgress(segments, 0)).toBe(0);
-    expect(todaySessionProgress(segments, 1)).toBeCloseTo(0.4);
-    expect(todaySessionProgress(segments, 2)).toBeCloseTo(0.8);
+    expect(todaySessionProgress(segments, 1)).toBeCloseTo(7 / 17);
+    expect(todaySessionProgress(segments, 2)).toBeCloseTo(13 / 17);
     expect(todaySessionProgress(segments, 3)).toBe(1);
   });
 

@@ -20,6 +20,11 @@ export type PassagePiece = PassagePieceBase & {
   learnStage: number;
   stageReps: number;
   dueAt?: number;
+  /**
+   * Start seeded this piece from verses memorized on their own, so the
+   * passage skipped or resumed it instead of starting it fresh.
+   */
+  carriedOver?: boolean;
 };
 
 export type PassageChapterInput = {

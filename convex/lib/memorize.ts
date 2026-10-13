@@ -8,9 +8,14 @@ import {
 } from "../../src/lib/hearted-verse-coverage";
 import { initialSchedule } from "../../src/lib/memory-scheduler";
 import {
+  carriedOverVerses,
   MEMORIZE_MAX_PACK_SPANS,
   passageRelation,
   sameSpanSet,
+  spanKey,
+  uniqueSpans,
+  type CarriedOverVerse,
+  type VerseProgressSpan,
 } from "../../src/lib/memorize-status";
 import {
   planMemorizeTransition,
@@ -207,10 +212,135 @@ export type MemorizeStatus = {
   title?: string;
   destination?: MemorizeDestination;
   allHearted: boolean;
+  /**
+   * Verses inside the target already in Memory on their own whose progress a
+   * new passage would keep. Only from {@link loadMemorizeStartStatus}, and
+   * only when there are some.
+   */
+  carriedOver?: CarriedOverVerse[];
 };
 
 /** Packs checked when looking for a custom pack made of exactly these spans. */
 const MAX_CANDIDATE_PACKS = 50;
+
+type ChapterHearts = { spans: VerseSpan[]; passageIds: Id<"passageMemory">[] };
+
+/** A passage the user memorizes: its pack and one span per chapter. */
+type MemorizedPassage = { pack: Doc<"packs">; spans: VerseSpan[] };
+
+/**
+ * The reads behind {@link loadMemorizeStatus}, cached so one query can check
+ * many targets without reading a chapter's hearts or a passage twice.
+ */
+export type MemorizeStatusReader = {
+  chapterHearts(book: string, chapter: number): Promise<ChapterHearts>;
+  passage(passageId: Id<"passageMemory">): Promise<MemorizedPassage | null>;
+  /** The verse ref for exactly this span, when that verse is in Memory. */
+  inMemoryVerseRefId(span: VerseSpan): Promise<Id<"verseRefs"> | null>;
+  /** Verses in Memory in one chapter, with their progress. */
+  chapterMemoryVerses(
+    book: string,
+    chapter: number,
+  ): Promise<VerseProgressSpan[]>;
+};
+
+function cached<K, V>(
+  cache: Map<K, Promise<V>>,
+  key: K,
+  load: () => Promise<V>,
+): Promise<V> {
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const value = load();
+  cache.set(key, value);
+  return value;
+}
+
+export function memorizeStatusReader(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+): MemorizeStatusReader {
+  const hearts = new Map<string, Promise<ChapterHearts>>();
+  const passages = new Map<
+    Id<"passageMemory">,
+    Promise<MemorizedPassage | null>
+  >();
+  const verses = new Map<string, Promise<Id<"verseRefs"> | null>>();
+  const memoryVerses = new Map<string, Promise<VerseProgressSpan[]>>();
+  return {
+    chapterHearts: (book, chapter) =>
+      cached(hearts, `${book}|${chapter}`, () =>
+        loadChapterHearts(ctx, userId, book, chapter),
+      ),
+    passage: (passageId) =>
+      cached(passages, passageId, () =>
+        loadMemorizedPassage(ctx, userId, passageId),
+      ),
+    inMemoryVerseRefId: (span) =>
+      cached(verses, spanKey(span), () =>
+        loadInMemoryVerseRefId(ctx, userId, span),
+      ),
+    chapterMemoryVerses: (book, chapter) =>
+      cached(memoryVerses, `${book}|${chapter}`, () =>
+        loadChapterMemoryVerses(ctx, userId, book, chapter),
+      ),
+  };
+}
+
+async function loadChapterMemoryVerses(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  book: string,
+  chapter: number,
+): Promise<VerseProgressSpan[]> {
+  const refs = await ctx.db
+    .query("verseRefs")
+    .withIndex("by_userId_book_chapter", (q) =>
+      q.eq("userId", userId).eq("book", book).eq("chapter", chapter),
+    )
+    .collect();
+  const loaded = await Promise.all(
+    refs
+      .filter((ref) => ref.scope !== "chapter")
+      .map(async (ref): Promise<VerseProgressSpan | null> => {
+        const memory = await findVerseMemory(ctx, userId, ref._id);
+        if (!memory || !isInMemory(memory)) return null;
+        return {
+          book: ref.book,
+          chapter: ref.chapter,
+          startVerse: ref.startVerse,
+          endVerse: ref.endVerse,
+          status: memory.status,
+          learnStage: memory.learnStage,
+          stageReps: memory.stageReps ?? 0,
+        };
+      }),
+  );
+  return loaded.filter((verse): verse is VerseProgressSpan => verse !== null);
+}
+
+async function loadMemorizedPassage(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  passageId: Id<"passageMemory">,
+): Promise<MemorizedPassage | null> {
+  const passage = await ctx.db.get(passageId);
+  if (!passage || passage.userId !== userId) return null;
+  const pack = await ctx.db.get(passage.packId);
+  if (!pack || pack.userId !== userId) return null;
+  return { pack, spans: passageHeartSpans(passage.pieces) };
+}
+
+async function loadInMemoryVerseRefId(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  span: VerseSpan,
+): Promise<Id<"verseRefs"> | null> {
+  const verseRefId = await findVerseRefId(ctx, userId, span);
+  if (!verseRefId) return null;
+  const memory = await findVerseMemory(ctx, userId, verseRefId);
+  return memory && isInMemory(memory) ? verseRefId : null;
+}
 
 /** Heart spans in one chapter and the passages whose hearts are among them. */
 async function loadChapterHearts(
@@ -218,7 +348,7 @@ async function loadChapterHearts(
   userId: Id<"users">,
   book: string,
   chapter: number,
-): Promise<{ spans: VerseSpan[]; passageIds: Id<"passageMemory">[] }> {
+): Promise<ChapterHearts> {
   const rows = await ctx.db
     .query("savedVerses")
     .withIndex("by_userId_book_chapter", (q) =>
@@ -291,12 +421,14 @@ async function findCustomPackWithSpans(
  * - `partOf` a passage that contains the target
  * - `overlaps` a passage that shares verses with the target without
  *   containing it
- * `allHearted` is true when a single heart covers each span.
+ * `allHearted` is true when a single heart covers each span. Pass one
+ * `reader` to check several targets with shared reads.
  */
 export async function loadMemorizeStatus(
   ctx: QueryCtx,
   userId: Id<"users">,
   spans: readonly VerseSpan[],
+  reader: MemorizeStatusReader = memorizeStatusReader(ctx, userId),
 ): Promise<MemorizeStatus> {
   const chapters = new Map<string, { book: string; chapter: number }>();
   for (const span of spans) {
@@ -305,7 +437,7 @@ export async function loadMemorizeStatus(
   const heartsByChapter = new Map<string, VerseSpan[]>();
   const passageIds = new Set<Id<"passageMemory">>();
   for (const [key, { book, chapter }] of chapters) {
-    const hearts = await loadChapterHearts(ctx, userId, book, chapter);
+    const hearts = await reader.chapterHearts(book, chapter);
     heartsByChapter.set(key, hearts.spans);
     for (const id of hearts.passageIds) passageIds.add(id);
   }
@@ -319,12 +451,11 @@ export async function loadMemorizeStatus(
   let partOf: Doc<"packs"> | null = null;
   let overlaps: Doc<"packs"> | null = null;
   for (const passageId of passageIds) {
-    const passage = await ctx.db.get(passageId);
-    if (!passage || passage.userId !== userId) continue;
-    const pack = await ctx.db.get(passage.packId);
-    if (!pack || pack.userId !== userId) continue;
+    const passage = await reader.passage(passageId);
+    if (!passage) continue;
 
-    const relation = passageRelation(spans, passageHeartSpans(passage.pieces));
+    const { pack } = passage;
+    const relation = passageRelation(spans, passage.spans);
     if (relation === "equal") {
       return {
         state: "memorizing",
@@ -339,11 +470,8 @@ export async function loadMemorizeStatus(
 
   if (spans.length === 1) {
     const span = spans[0];
-    const verseRefId = await findVerseRefId(ctx, userId, span);
-    const memory = verseRefId
-      ? await findVerseMemory(ctx, userId, verseRefId)
-      : null;
-    if (verseRefId && memory && isInMemory(memory)) {
+    const verseRefId = await reader.inMemoryVerseRefId(span);
+    if (verseRefId) {
       return {
         state: "memorizing",
         destination: {
@@ -392,4 +520,56 @@ export async function loadMemorizeStatus(
   }
 
   return { state: "none", allHearted };
+}
+
+/**
+ * {@link loadMemorizeStatus} for spans as a client sent them: deduped, and
+ * not memorizing or hearted when there are none or more than one Memorize
+ * call takes.
+ */
+export async function loadMemorizeStatusForSpans(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  spans: readonly VerseSpan[],
+  reader?: MemorizeStatusReader,
+): Promise<MemorizeStatus> {
+  const unique = uniqueSpans(spans);
+  if (unique.length === 0 || unique.length > MEMORIZE_MAX_PACK_SPANS) {
+    return { state: "none", allHearted: false };
+  }
+  return await loadMemorizeStatus(ctx, userId, unique, reader);
+}
+
+/**
+ * {@link loadMemorizeStatusForSpans}, plus `carriedOver` when the target
+ * would start fresh (`none`): the verses inside it already memorized or
+ * started on their own (see `carriedOverVerses`). The Memorize sheet says so
+ * before a passage starts over them.
+ */
+export async function loadMemorizeStartStatus(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  spans: readonly VerseSpan[],
+): Promise<MemorizeStatus> {
+  const reader = memorizeStatusReader(ctx, userId);
+  const status = await loadMemorizeStatusForSpans(ctx, userId, spans, reader);
+  const unique = uniqueSpans(spans);
+  if (
+    status.state !== "none" ||
+    unique.length === 0 ||
+    unique.length > MEMORIZE_MAX_PACK_SPANS
+  ) {
+    return status;
+  }
+
+  const chapters = new Map<string, { book: string; chapter: number }>();
+  for (const span of unique) {
+    chapters.set(`${span.book}|${span.chapter}`, span);
+  }
+  const verses: VerseProgressSpan[] = [];
+  for (const { book, chapter } of chapters.values()) {
+    verses.push(...(await reader.chapterMemoryVerses(book, chapter)));
+  }
+  const carriedOver = carriedOverVerses(unique, verses);
+  return carriedOver.length > 0 ? { ...status, carriedOver } : status;
 }

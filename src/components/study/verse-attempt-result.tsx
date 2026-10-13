@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
 
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import type { MemorySchedule } from "@/lib/memory-scheduler";
@@ -17,7 +17,7 @@ interface VerseAttemptResultProps {
   typedAnswer: string;
   versePlainText: string;
   diffTokens?: ReadonlyArray<DiffToken>;
-  /** Review mode: show schedule-consequence copy above the diff. */
+  /** Review mode: close the result banner with the schedule consequence. */
   showScheduleOutcome?: boolean;
   /**
    * The graduating From Memory recall requires a perfect grade to bank. Passed
@@ -27,20 +27,13 @@ interface VerseAttemptResultProps {
   requireExactToAdvance?: boolean;
   nextSchedule?: MemorySchedule | null;
   now?: number;
-  /**
-   * Leads the result (Memory's accuracy headline). The banner below then
-   * states only what the grade does, and the diff is set in reader type.
-   */
-  headline?: ReactNode;
+  /** Trails the banner's percentage, e.g. "Pass at 85%". */
+  note?: string;
 }
 
 const PLACEHOLDER = "\u00a0";
 
-function renderDiffChip(
-  token: DiffToken,
-  idx: number,
-  reader: boolean,
-): JSX.Element {
+function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
   if (token.status === "match") {
     return (
       <span
@@ -60,10 +53,7 @@ function renderDiffChip(
         ? (token.expectedText ?? PLACEHOLDER)
         : token.text;
 
-  const baseRow = cn(
-    "rounded-md px-1.5 text-center",
-    reader ? "min-h-6 text-[15px] leading-6" : "min-h-5 text-[13px] leading-5",
-  );
+  const baseRow = "min-h-6 rounded-md px-1.5 text-center text-[15px] leading-6";
 
   const typedClassName = cn(
     baseRow,
@@ -111,25 +101,15 @@ function renderDiffChip(
   );
 }
 
+/** The percentage lives in the result banner, so the diff shows only a key. */
 function VerseAttemptDiff({
   tokens,
-  reader,
 }: {
   tokens: ReadonlyArray<DiffToken>;
-  /** Reader typography, and no percentage (the headline shows it). */
-  reader: boolean;
 }): JSX.Element {
-  const accuracy = verseAttemptAccuracy(tokens);
-
   return (
     <div className="space-y-3">
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
-          reader ? "justify-end" : "justify-between",
-        )}
-      >
-        {reader ? null : <span>{accuracy}% recalled</span>}
+      <div className="flex flex-wrap items-center justify-end gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         <span className="flex items-center gap-2 font-medium normal-case tracking-normal">
           <span className="inline-flex items-center gap-1">
             <span className="h-2 w-3 rounded-sm bg-emerald-500/40" />
@@ -148,16 +128,16 @@ function VerseAttemptDiff({
       <p
         className={cn(
           "flex flex-wrap gap-x-1.5 gap-y-2",
-          reader ? READER_VERSE_TEXT_CLASS : "text-[13px] leading-5",
+          READER_VERSE_TEXT_CLASS,
         )}
       >
-        {tokens.map((token, idx) => renderDiffChip(token, idx, reader))}
+        {tokens.map((token, idx) => renderDiffChip(token, idx))}
       </p>
     </div>
   );
 }
 
-/** "How you did": the grade banner and a word-by-word diff of a typed recall. */
+/** "How you did": the result banner and a word-by-word diff of a typed recall. */
 export function VerseAttemptResult({
   typedAnswer,
   versePlainText,
@@ -166,7 +146,7 @@ export function VerseAttemptResult({
   requireExactToAdvance = false,
   nextSchedule = null,
   now,
-  headline,
+  note,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -179,17 +159,10 @@ export function VerseAttemptResult({
   // Used as a motion key so the feedback banner re-plays its entrance when
   // the user tries a different attempt, but not on every keystroke.
   const attemptKey = trimmedTyped;
-  const hasHeadline = headline !== undefined;
 
   return (
-    <div
-      className={cn(
-        "w-full max-w-xl mx-auto",
-        hasHeadline ? "space-y-3" : "space-y-2",
-      )}
-    >
-      {headline}
-      {attemptQuality && (showScheduleOutcome || attemptQuality !== "off") && (
+    <div className="w-full max-w-xl mx-auto space-y-3">
+      {attemptQuality ? (
         <VerseMemoryFeedback
           quality={attemptQuality}
           attemptKey={attemptKey}
@@ -199,9 +172,9 @@ export function VerseAttemptResult({
           now={now}
           accuracy={attemptAccuracy}
           errors={attemptErrors}
-          consequenceOnly={hasHeadline}
+          note={note}
         />
-      )}
+      ) : null}
       <motion.div
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
@@ -218,7 +191,7 @@ export function VerseAttemptResult({
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           How you did
         </p>
-        <VerseAttemptDiff tokens={diffTokens} reader={hasHeadline} />
+        <VerseAttemptDiff tokens={diffTokens} />
       </motion.div>
     </div>
   );
