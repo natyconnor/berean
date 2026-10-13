@@ -120,6 +120,26 @@ describe("memorizeSearch", () => {
     });
     expect(memorizeSearch("Psalm 23-24")).not.toHaveProperty("target.presetId");
     expect(planLine("Psalm 23-24")).toMatch(/^16 verses · /);
+    expect(memorizeSearch("Psalm 23-24")).not.toHaveProperty("alternate");
+  });
+
+  it("reads an ambiguous Book A-B as verse A:B unless a suggested passage covers the chapters", () => {
+    expect(memorizeSearch("John 3-16")).toMatchObject({
+      kind: "match",
+      title: "John 3:16",
+      target: {
+        kind: "spans",
+        spans: [{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }],
+      },
+      alternate: {
+        title: "John 3–16",
+        target: { kind: "chapters", startChapter: 3, endChapter: 16 },
+      },
+    });
+    expect(memorizeSearch("Matthew 5-7")).toMatchObject({
+      title: "Sermon on the Mount",
+      alternate: { title: "Matthew 5:7" },
+    });
   });
 
   it("names a whole chapter after a preset only when the preset is the whole chapter", () => {

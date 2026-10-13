@@ -38,13 +38,20 @@ import {
 export type MemorizeSearchResult =
   | { kind: "empty" }
   | { kind: "noMatch" }
-  | {
-      kind: "match";
-      target: MemorizeTarget;
-      title: string;
-      /** "6 verses · learn it in about 4 days" */
-      planLine: string;
-    };
+  | ({ kind: "match" } & MemorizeSearchMatch & {
+        /**
+         * The other reading of an ambiguous "John 3-16": chapters 3–16 or
+         * verse 3:16. Offered as "Did you mean …?" under the match.
+         */
+        alternate?: MemorizeSearchMatch;
+      });
+
+export type MemorizeSearchMatch = {
+  target: MemorizeTarget;
+  title: string;
+  /** "6 verses · learn it in about 4 days" */
+  planLine: string;
+};
 
 const ABBREVIATIONS = new Map(
   BIBLE_BOOKS.map((book) => [book.name, book.abbreviation]),
@@ -67,6 +74,54 @@ type SearchPassage =
 
 const CHAPTER_RANGE = /^(.+?)\s+(\d+)\s*-\s*(\d+)$/;
 const CROSS_CHAPTER_RANGE = /^(.+?)\s+(\d+):(\d+)\s*-\s*(\d+):(\d+)$/;
+
+function chaptersHavePreset(
+  book: string,
+  startChapter: number,
+  endChapter: number,
+): boolean {
+  return chapterPresets().some(
+    (preset) =>
+      preset.book === book &&
+      preset.startChapter === startChapter &&
+      preset.endChapter === endChapter &&
+      chapterPresetRange(preset) === null,
+  );
+}
+
+/**
+ * Every reading of the search text, most likely first. "Book A-B" is
+ * ambiguous when chapter A has a verse B: it is read as verse A:B unless a
+ * suggested passage covers chapters A–B ("Matthew 5-7").
+ */
+function parseSearchPassages(
+  text: string,
+  chapterVerseCount: ChapterVerseCount,
+): SearchPassage[] {
+  const primary = parseSearchPassage(text, chapterVerseCount);
+  if (!primary || primary.kind !== "chapters") return primary ? [primary] : [];
+  if (primary.startChapter === primary.endChapter) return [primary];
+
+  const verses = chapterVerseCount(primary.book, primary.startChapter);
+  if (verses === null || primary.endChapter > verses) return [primary];
+  const verse: SearchPassage = {
+    kind: "verses",
+    range: {
+      book: primary.book,
+      startChapter: primary.startChapter,
+      startVerse: primary.endChapter,
+      endChapter: primary.startChapter,
+      endVerse: primary.endChapter,
+    },
+  };
+  return chaptersHavePreset(
+    primary.book,
+    primary.startChapter,
+    primary.endChapter,
+  )
+    ? [primary, verse]
+    : [verse, primary];
+}
 
 /**
  * "Psalm 23", "Matthew 5–7", "Romans 8:28–30", "Romans 7:24–8:2". Chapters
@@ -187,17 +242,27 @@ export function memorizeSearch(
 ): MemorizeSearchResult {
   if (text.trim().length === 0) return { kind: "empty" };
   const chapterVerseCount = deps?.chapterVerseCount ?? getChapterVerseCount;
-  const passage = parseSearchPassage(text, chapterVerseCount);
-  if (!passage) return { kind: "noMatch" };
+  const [match, alternate] = parseSearchPassages(text, chapterVerseCount)
+    .map((passage) => searchMatch(passage, chapterVerseCount, deps))
+    .filter((candidate) => candidate !== null);
+  if (!match) return { kind: "noMatch" };
+  return alternate
+    ? { kind: "match", ...match, alternate }
+    : { kind: "match", ...match };
+}
 
+function searchMatch(
+  passage: SearchPassage,
+  chapterVerseCount: ChapterVerseCount,
+  deps: MemorizeTargetDeps | undefined,
+): MemorizeSearchMatch | null {
   const target =
     passage.kind === "chapters"
       ? chapterTarget(passage.book, passage.startChapter, passage.endChapter)
       : versesTarget(passage.range, chapterVerseCount);
   const resolved = resolveMemorizeTarget(target, deps);
-  if (resolved.mode === "invalid") return { kind: "noMatch" };
+  if (resolved.mode === "invalid") return null;
   return {
-    kind: "match",
     target,
     title: resolved.title,
     planLine: memorizePlanLine(resolved),
@@ -282,8 +347,10 @@ export function heartMatchesSearch(heart: VerseSpan, text: string): boolean {
   const query = text.trim();
   if (query.length === 0) return true;
 
-  const passage = parseSearchPassage(query, getChapterVerseCount);
-  if (passage) return passageSharesVerses(passage, heart);
+  const passages = parseSearchPassages(query, getChapterVerseCount);
+  if (passages.length > 0) {
+    return passages.some((passage) => passageSharesVerses(passage, heart));
+  }
 
   return (
     heartMatchesBookFilter(heart.book, query, ABBREVIATIONS.get(heart.book)) ||

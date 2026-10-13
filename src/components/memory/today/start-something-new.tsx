@@ -321,6 +321,21 @@ export function MemorizeSearch({
             />
           </button>
         ) : null}
+        {result.kind === "match" && result.alternate ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Did you mean{" "}
+            <button
+              type="button"
+              onClick={() => {
+                if (result.alternate) sheet.open(result.alternate.target);
+              }}
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {result.alternate.title}
+            </button>{" "}
+            <span className="text-xs">({result.alternate.planLine})</span>?
+          </p>
+        ) : null}
         {showNoMatch ? (
           <p className="mt-2 text-sm text-muted-foreground">
             We couldn&apos;t find that reference. Try a book and chapter, like
