@@ -112,8 +112,8 @@ export async function startPassageForPack(
 /**
  * Opt-in start for passage mode (see {@link startPassageForPack}).
  *
- * Call `start` only from an explicit click or the one-shot `startPassage`
- * search flag — not merely because the pack opened.
+ * Call `start` only from an explicit click, not merely because the pack
+ * opened.
  */
 export function useStartPassage({
   packId,

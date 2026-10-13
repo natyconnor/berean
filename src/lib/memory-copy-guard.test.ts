@@ -16,6 +16,10 @@ export const BANNED_MEMORY_COPY: readonly {
   { word: "Guided", pattern: /\bGuided\b/ },
   { word: "Challenge", pattern: /\bChallenge\b/ },
   { word: "Reviewing", pattern: /\bReviewing\b/ },
+  { word: "Learn as a passage", pattern: /\bLearn as a passage\b/i },
+  { word: "Learn whole passage", pattern: /\bLearn whole passage\b/i },
+  { word: "Memorize whole passage", pattern: /\bMemorize whole passage\b/i },
+  { word: "Recite as one passage", pattern: /\bRecite as one passage\b/i },
 ];
 
 /**
@@ -119,6 +123,23 @@ describe("Memory copy guard", () => {
     const sample = "const e = <p>Come back\n      tomorrow to continue.</p>;";
     expect(bannedCopyIn(userVisibleStrings(sample))).toEqual([
       '"come back tomorrow" in "Come back tomorrow to continue."',
+    ]);
+  });
+
+  it("catches the old passage paths but not the one remaining offer", () => {
+    const sample = [
+      'const a = "Learn as a passage";',
+      "const b = <p>Learn whole passage</p>;",
+      'const c = "Memorize whole passage";',
+      'const d = <label aria-label="Recite as one passage" />;',
+      'const ok = "Learn it as a passage";',
+    ].join("\n");
+
+    expect(bannedCopyIn(userVisibleStrings(sample))).toEqual([
+      '"Learn as a passage" in "Learn as a passage"',
+      '"Learn whole passage" in "Learn whole passage"',
+      '"Memorize whole passage" in "Memorize whole passage"',
+      '"Recite as one passage" in "Recite as one passage"',
     ]);
   });
 

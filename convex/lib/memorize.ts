@@ -16,16 +16,58 @@ import {
   planMemorizeTransition,
   type MemorizeSpanResult,
 } from "../../src/lib/memorize-transition";
+import { loadPackMembers, loadPackMembershipIndex } from "./packs";
+import { deletePassageAndReviews, findPassageByPackId } from "./passageMemory";
 import { loadChapterHeartSpans } from "./savedVerses";
 import {
   adjustUserMemoryStats,
   findSavedVerse,
   findVerseMemory,
   isInMemory,
+  stopMemorizingVerse,
 } from "./verseMemory";
 import { findOrCreateVerseRefId, findVerseRefId } from "./verseRefs";
 
 export { stopMemorizingVerse } from "./verseMemory";
+
+/**
+ * Stop memorizing a pack and delete it. A passage loses its progress and its
+ * hearts stay as plain range hearts. Members of any other pack leave Memory
+ * unless another pack still lists them; their progress and hearts are kept.
+ */
+export async function stopMemorizingPack(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  pack: Doc<"packs">,
+  now: number,
+): Promise<void> {
+  const passage = await findPassageByPackId(ctx, pack._id);
+  if (passage && passage.userId === userId) {
+    await deletePassageAndReviews(ctx, passage);
+  } else {
+    const [members, membership] = await Promise.all([
+      loadPackMembers(ctx, userId, pack),
+      loadPackMembershipIndex(ctx, userId),
+    ]);
+    for (const member of members) {
+      const otherPacks = membership
+        .packIdsFor(member.verseRefId, member)
+        .filter((packId) => packId !== pack._id);
+      if (otherPacks.length === 0) {
+        await stopMemorizingVerse(ctx, userId, member.verseRefId, now);
+      }
+    }
+  }
+
+  const rows = await ctx.db
+    .query("packVerses")
+    .withIndex("by_packId", (q) => q.eq("packId", pack._id))
+    .collect();
+  for (const row of rows) {
+    await ctx.db.delete(row._id);
+  }
+  await ctx.db.delete(pack._id);
+}
 
 /**
  * Heart the exact span unless an existing heart (exact, wider, or a passage

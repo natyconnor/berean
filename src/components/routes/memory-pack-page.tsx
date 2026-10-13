@@ -1,15 +1,8 @@
-import { PackView } from "@/components/memory/packs/pack-view";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { MemoryPanelPage } from "@/components/memory/drawer/memory-panel-host";
 import { Route } from "@/routes/memory/$packId";
 
 export function MemoryPackPage() {
   const { packId } = Route.useParams();
-  const { heartHint, startPassage } = Route.useSearch();
-  return (
-    <PackView
-      packId={packId as Id<"packs">}
-      heartHint={heartHint === true}
-      startPassage={startPassage === true}
-    />
-  );
+  const { from } = Route.useSearch();
+  return <MemoryPanelPage panel={{ kind: "pack", packId }} from={from} />;
 }

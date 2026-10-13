@@ -9,7 +9,7 @@ import {
   PackagePlus,
   type LucideIcon,
 } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -22,15 +22,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { startPassageForPack } from "@/hooks/use-start-passage";
 import { ScopeForm } from "@/components/study/scope-form";
 import { useScopeForm } from "@/components/study/use-scope-form";
 
-import {
-  CREATE_AND_MEMORIZE_WHOLE_TOOLTIP,
-  CREATE_PACK_TOOLTIP,
-  packBuilderStartPassageLabel,
-} from "@/lib/heart-scope-copy";
-import { memoryPackSearchAfterCreate } from "@/lib/memory-pack-search";
 import { packAllowsPassageMode } from "@/lib/passage-eligibility";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +38,12 @@ import {
 
 type PackKind = "scope" | "custom";
 type BuilderStep = "type" | "content" | "name";
+
+const CREATE_AND_START_PASSAGE_LABEL = "Create and memorize as a whole";
+const CREATE_PACK_TOOLTIP =
+  "Creates a normal scoped pack that auto-adds hearted verses within the scope.";
+const CREATE_AND_MEMORIZE_WHOLE_TOOLTIP =
+  "Memorizes this pack as one singular passage.";
 
 const STEPS: { id: BuilderStep; label: string }[] = [
   { id: "type", label: "Type" },
@@ -112,6 +113,8 @@ export function PackBuilder() {
 
   const createPack = useMutation(api.packs.create);
   const addVerse = useMutation(api.packs.addVerse);
+  const fetchChaptersBatch = useAction(api.esv.getChaptersBatch);
+  const startPassage = useMutation(api.passageMemory.start);
 
   const trimmedName = name.trim();
   const effectiveName =
@@ -127,7 +130,6 @@ export function PackBuilder() {
 
   const allowsPassage =
     kind === "scope" && packAllowsPassageMode(scopeForPreview);
-  const startPassageLabel = packBuilderStartPassageLabel(allowsPassage);
 
   const canContinueFromContent =
     kind === "scope" ? isComplete : staged.size > 0;
@@ -185,14 +187,18 @@ export function PackBuilder() {
           }
         }
 
+        // A failed start still lands on the pack, which offers the passage again.
+        if (options?.startPassage && allowsPassage) {
+          await startPassageForPack(
+            { fetchChaptersBatch, startPassage },
+            { packId, scope: scopeForPreview, now },
+          ).catch(() => {});
+        }
+
         void navigate({
           to: "/memory/$packId",
           params: { packId },
-          search: memoryPackSearchAfterCreate({
-            kind,
-            allowsPassage,
-            startPassage: options?.startPassage,
-          }),
+          search: {},
         });
       } catch {
         setError("Couldn't create the pack. Please try again.");
@@ -211,6 +217,9 @@ export function PackBuilder() {
       navigate,
       isComplete,
       allowsPassage,
+      fetchChaptersBatch,
+      startPassage,
+      now,
     ],
   );
 
@@ -416,7 +425,7 @@ export function PackBuilder() {
               ) : null}
               {step === "name" ? (
                 <>
-                  {startPassageLabel ? (
+                  {allowsPassage ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -429,7 +438,7 @@ export function PackBuilder() {
                           className="gap-1.5"
                         >
                           <BookOpen className="h-4 w-4" aria-hidden />
-                          {startPassageLabel}
+                          {CREATE_AND_START_PASSAGE_LABEL}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">

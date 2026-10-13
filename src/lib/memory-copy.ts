@@ -16,6 +16,8 @@ export const START_TODAY_LABEL = "Start today";
 export const EXTRA_PRACTICE_LABEL = "Extra practice";
 export const EXTRA_PRACTICE_TOOLTIP =
   "Go over anything you've memorized, any time.";
+/** Practice for one passage or pack; shares the Extra practice tooltip. */
+export const PRACTICE_ANYTIME_LABEL = "Practice anytime";
 export const YOUR_VERSES_LABEL = "Your verses";
 export const YOUR_PROGRESS_LABEL = "Your progress";
 export const SUGGESTIONS_LABEL = "Suggestions";
@@ -87,6 +89,11 @@ const STEP_DAY_ACTIONS: Record<StepLadderDay, { one: string; many: string }> = {
   2: { one: "fill in the blanks", many: "fill in the blanks" },
   3: { one: "say it from memory", many: "say them from memory" },
 };
+
+/** What one verse's step asks for at `learnStage`, e.g. "fill in the blanks". */
+export function stepDayAction(learnStage: number): string {
+  return STEP_DAY_ACTIONS[stepLadderDay(learnStage)].one;
+}
 
 /**
  * Today's step for some verses of a passage, e.g. "Day 2 of 3 for verse 3:

@@ -79,10 +79,6 @@ vi.mock("../../../../convex/_generated/api", () => ({
   },
 }));
 
-vi.mock("@/components/memory/packs/pack-view", () => ({
-  PackView: () => <div>Pack view stub</div>,
-}));
-
 vi.mock("@/components/memory/memorize/memorize-context", () => ({
   useMemorizeSheet: () => ({ open: vi.fn() }),
 }));

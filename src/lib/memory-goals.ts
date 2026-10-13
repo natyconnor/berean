@@ -281,27 +281,39 @@ function stepVersesLabel(piece: PassagePiece, multiChapter: boolean): string {
 }
 
 /**
- * The verses today's passage session starts on: the first open learning
- * piece, else the next new piece while today's new-verse budget lasts.
+ * Index of the piece today's passage session starts on: the first open
+ * learning piece, else the next new piece while today's new-verse budget
+ * lasts. `null` when there is nothing to do today.
  */
+export function passageTodayPieceIndex(
+  passage: Pick<GoalPassageInput, "addsOnDay" | "addDayKey">,
+  pieces: readonly PassagePiece[],
+  now: number,
+  tzOffsetMinutes: number,
+): number | null {
+  const openIndex = dueFrontierIndex(pieces, now);
+  if (openIndex !== null) return openIndex;
+  const remaining = remainingIntroduces({
+    addsOnDay: passage.addsOnDay,
+    addDayKey: passage.addDayKey,
+    todayKey: localDayIndex(now, tzOffsetMinutes),
+  });
+  if (remaining <= 0) return null;
+  const nextIndex = pieces.findIndex(
+    (candidate) => candidate.attachment === "unreached",
+  );
+  return nextIndex === -1 ? null : nextIndex;
+}
+
+/** The verses today's passage session starts on. */
 function passageTodayStep(
   passage: GoalPassageInput,
   pieces: readonly PassagePiece[],
   now: number,
   tzOffsetMinutes: number,
 ): PassageTodayStep | null {
-  const openIndex = dueFrontierIndex(pieces, now);
-  let piece = openIndex === null ? undefined : pieces[openIndex];
-  if (!piece) {
-    const remaining = remainingIntroduces({
-      addsOnDay: passage.addsOnDay,
-      addDayKey: passage.addDayKey,
-      todayKey: localDayIndex(now, tzOffsetMinutes),
-    });
-    if (remaining > 0) {
-      piece = pieces.find((candidate) => candidate.attachment === "unreached");
-    }
-  }
+  const index = passageTodayPieceIndex(passage, pieces, now, tzOffsetMinutes);
+  const piece = index === null ? undefined : pieces[index];
   if (!piece) return null;
 
   const learnStage = piece.attachment === "unreached" ? 0 : piece.learnStage;

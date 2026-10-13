@@ -9,7 +9,7 @@ import {
   findVerseMemory,
   isInMemory,
 } from "./lib/verseMemory";
-import { memorizeSpan } from "./lib/memorize";
+import { memorizeSpan, stopMemorizingPack } from "./lib/memorize";
 import {
   filterScopeMembers,
   loadCustomMembers,
@@ -371,6 +371,23 @@ export const remove = mutation({
       await ctx.db.delete(member._id);
     }
     await ctx.db.delete(args.id);
+    return null;
+  },
+});
+
+/**
+ * Stop memorizing a passage or pack, then delete the pack. A passage's
+ * progress is cleared and its heart stays. A pack's members that are in no
+ * other pack leave Memory with their progress kept.
+ */
+export const stopMemorizing = mutation({
+  args: { id: v.id("packs"), now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const pack = await loadOwnedPack(ctx, args.id, userId);
+    if (!pack) throw new Error("Pack not found");
+    await stopMemorizingPack(ctx, userId, pack, args.now);
     return null;
   },
 });

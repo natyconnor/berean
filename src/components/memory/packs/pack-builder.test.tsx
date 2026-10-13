@@ -4,11 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { HEART_SCOPE_ACTION_LABEL } from "@/lib/heart-scope-copy";
-import {
-  memoryPackSearchAfterCreate,
-  validateMemoryPackSearch,
-} from "@/lib/memory-pack-search";
 
 import { PackBuilder } from "./pack-builder";
 
@@ -29,23 +24,29 @@ const multiBookScope = {
   tagMatchMode: "any" as const,
 };
 
-const { queryResults, mutationMocks, navigateMock, scopeFormState } =
-  vi.hoisted(() => ({
-    queryResults: new Map<string, unknown>(),
-    mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
-    navigateMock: vi.fn(),
-    scopeFormState: {
-      isComplete: true,
-      scope: {
-        books: ["John"],
-        chapterRanges: [{ book: "John", startChapter: 3, endChapter: 3 }],
-        tags: [] as string[],
-        tagMatchMode: "any" as const,
-      },
-      summaryText: "John 3",
-      selectedBooks: ["John"] as string[],
+const {
+  queryResults,
+  mutationMocks,
+  navigateMock,
+  startPassageForPackMock,
+  scopeFormState,
+} = vi.hoisted(() => ({
+  queryResults: new Map<string, unknown>(),
+  mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
+  navigateMock: vi.fn(),
+  startPassageForPackMock: vi.fn(),
+  scopeFormState: {
+    isComplete: true,
+    scope: {
+      books: ["John"],
+      chapterRanges: [{ book: "John", startChapter: 3, endChapter: 3 }],
+      tags: [] as string[],
+      tagMatchMode: "any" as const,
     },
-  }));
+    summaryText: "John 3",
+    selectedBooks: ["John"] as string[],
+  },
+}));
 
 function mutationMock(name: string) {
   const existing = mutationMocks.get(name);
@@ -78,15 +79,21 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
+    esv: { getChaptersBatch: "esv.getChaptersBatch" },
     packs: {
       addVerse: "packs.addVerse",
       create: "packs.create",
       previewScopeCount: "packs.previewScopeCount",
     },
+    passageMemory: { start: "passageMemory.start" },
     savedVerses: {
       listAll: "savedVerses.listAll",
     },
   },
+}));
+
+vi.mock("@/hooks/use-start-passage", () => ({
+  startPassageForPack: startPassageForPackMock,
 }));
 
 vi.mock("@/components/study/scope-form", () => ({
@@ -137,6 +144,8 @@ describe("PackBuilder", () => {
     queryResults.clear();
     mutationMocks.clear();
     navigateMock.mockReset();
+    startPassageForPackMock.mockReset();
+    startPassageForPackMock.mockResolvedValue(null);
     queryResults.set("packs.previewScopeCount", {
       verseCount: 36,
       dueCount: 0,
@@ -196,9 +205,6 @@ describe("PackBuilder", () => {
     expect(
       screen.getByRole("button", { name: "Create and memorize as a whole" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: HEART_SCOPE_ACTION_LABEL }),
-    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Create pack" }));
 
@@ -214,15 +220,10 @@ describe("PackBuilder", () => {
         search: {},
       });
     });
-    expect(navigateMock.mock.calls[0]?.[0]).not.toMatchObject({
-      search: { startPassage: true },
-    });
-    expect(navigateMock.mock.calls[0]?.[0]).not.toMatchObject({
-      search: { heartHint: true },
-    });
+    expect(startPassageForPackMock).not.toHaveBeenCalled();
   });
 
-  it("offers a shortcut that lands with startPassage", async () => {
+  it("starts the passage before landing for the shortcut", async () => {
     renderBuilder();
     await advanceToNameStep();
 
@@ -231,19 +232,39 @@ describe("PackBuilder", () => {
     );
 
     await waitFor(() => {
-      expect(mutationMock("packs.create")).toHaveBeenCalledTimes(1);
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/memory/$packId",
+        params: { packId: "pack_new" },
+        search: {},
+      });
     });
+    expect(mutationMock("packs.create")).toHaveBeenCalledTimes(1);
+    expect(startPassageForPackMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ packId: "pack_new", scope: john3Scope }),
+    );
     expect(mutationMocks.get("savedVerses.heartMany")).toBeUndefined();
+  });
+
+  it("still lands on the pack when the shortcut's start fails", async () => {
+    startPassageForPackMock.mockRejectedValue(new Error("offline"));
+    renderBuilder();
+    await advanceToNameStep();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create and memorize as a whole" }),
+    );
+
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith({
         to: "/memory/$packId",
         params: { packId: "pack_new" },
-        search: { startPassage: true },
+        search: {},
       });
     });
   });
 
-  it("keeps heartHint auto-heart for an ineligible multi-book scope", async () => {
+  it("offers no passage shortcut for an ineligible multi-book scope", async () => {
     scopeFormState.scope = multiBookScope;
     scopeFormState.summaryText = "John 1, Acts 1";
     scopeFormState.selectedBooks = ["John", "Acts"];
@@ -255,9 +276,6 @@ describe("PackBuilder", () => {
         name: "Create and memorize as a whole",
       }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: HEART_SCOPE_ACTION_LABEL }),
-    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Create pack" }));
 
@@ -265,7 +283,7 @@ describe("PackBuilder", () => {
       expect(navigateMock).toHaveBeenCalledWith({
         to: "/memory/$packId",
         params: { packId: "pack_new" },
-        search: { heartHint: true },
+        search: {},
       });
     });
     expect(mutationMocks.get("savedVerses.heartMany")).toBeUndefined();
@@ -281,53 +299,5 @@ describe("PackBuilder", () => {
     expect(
       screen.queryByRole("button", { name: "Create pack" }),
     ).not.toBeInTheDocument();
-  });
-});
-
-describe("memoryPackSearchAfterCreate", () => {
-  it("omits flags for a default eligible create", () => {
-    expect(
-      memoryPackSearchAfterCreate({ kind: "scope", allowsPassage: true }),
-    ).toEqual({});
-  });
-
-  it("sets startPassage for the eligible shortcut", () => {
-    expect(
-      memoryPackSearchAfterCreate({
-        kind: "scope",
-        allowsPassage: true,
-        startPassage: true,
-      }),
-    ).toEqual({ startPassage: true });
-  });
-
-  it("keeps heartHint for ineligible scopes and ignores startPassage", () => {
-    expect(
-      memoryPackSearchAfterCreate({
-        kind: "scope",
-        allowsPassage: false,
-        startPassage: true,
-      }),
-    ).toEqual({ heartHint: true });
-  });
-
-  it("sends no flags for custom packs", () => {
-    expect(
-      memoryPackSearchAfterCreate({ kind: "custom", allowsPassage: false }),
-    ).toEqual({});
-  });
-});
-
-describe("validateMemoryPackSearch", () => {
-  it("still parses heartHint for old links", () => {
-    expect(validateMemoryPackSearch({ heartHint: "1" })).toEqual({
-      heartHint: true,
-    });
-  });
-
-  it("parses startPassage", () => {
-    expect(validateMemoryPackSearch({ startPassage: true })).toEqual({
-      startPassage: true,
-    });
   });
 });

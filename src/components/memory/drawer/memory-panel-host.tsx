@@ -8,12 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import { useCanGoBack, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "convex-helpers/react/cache";
 import { motion, useReducedMotion } from "framer-motion";
 
-import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { PackView } from "@/components/memory/packs/pack-view";
+import { PackDetail } from "@/components/memory/packs/pack-detail";
 import { ProgressBody } from "@/components/memory/progress/progress-body";
 import { VerseDetailPanel } from "@/components/memory/verse-detail";
 import { VersesDrawerBody } from "@/components/memory/verses/verses-drawer-body";
@@ -61,7 +59,7 @@ function MemoryPanelContent({ panel }: { panel: MemoryPanel }) {
         <VerseDetailPanel verseRefId={panel.verseRefId as Id<"verseRefs">} />
       );
     case "pack":
-      return <PackPanel packId={panel.packId as Id<"packs">} />;
+      return <PackDetail packId={panel.packId as Id<"packs">} />;
   }
 }
 
@@ -93,20 +91,6 @@ function VersesPanel() {
       }
     >
       {surface === "drawer" ? <VersesDrawerBody /> : <VersesPageBody />}
-    </MemoryPanelFrame>
-  );
-}
-
-/** Until the pack detail body lands, the drawer hosts the existing pack view. */
-function PackPanel({ packId }: { packId: Id<"packs"> }) {
-  const pack = useQuery(api.packs.get, { id: packId });
-  return (
-    <MemoryPanelFrame
-      title={pack?.name ?? "Pack"}
-      subtitle={pack === null ? "Pack not found" : "Pack"}
-      scrollBody={false}
-    >
-      <PackView packId={packId} />
     </MemoryPanelFrame>
   );
 }
