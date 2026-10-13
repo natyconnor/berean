@@ -4,12 +4,13 @@
  * Compact in stages as the header gets tighter:
  *
  * 1. Passage column (`@container/chapter-chrome`): `@max-2xl` is 42rem
- *    (672px). Read mode's passage track tops out at 34rem, so Headers and
- *    the chapter-note CTA stay collapsed in Read even at the 1400px cap.
+ *    (672px). Read mode's passage track stays around 33–34rem at the 1400px
+ *    cap (1fr of the 1 / 1.4 split), so Headers and the chapter-note CTA
+ *    stay collapsed in Read even at that cap.
  * 2. Whole header (`@container/passage-header`): notes chrome follows the
- *    header, not the notes track. Compose notes share leftover space
- *    (about 2.5fr passage / 1fr notes) and floor at 17.5rem, so a query
- *    on the notes column would not match the window.
+ *    header, not the notes track. Compose notes cap at 440px on wide
+ *    screens and floor at 17.5rem, so a query on the notes column would
+ *    not match the window.
  *    - `@max-6xl` (72rem / 1152px): shorten long copy (All Verses, empty state).
  *    - `@max-5xl` (64rem / 1024px): hide Focus / Compose / Read words.
  *    These widths are the header's content box, inside the compose gutter

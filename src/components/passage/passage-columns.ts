@@ -3,24 +3,24 @@
  * the chapter-notes overlay must use the same class or the columns drift.
  *
  * Read (`gap-6`, content gutter `pl-16 pr-6`, cap 1400px):
- * the passage track holds 34rem (544px) and the notes track takes the rest,
- * so notes gives width back as the window narrows. Notes floors at 17.5rem
- * (280px); only then does the passage track shrink, and not below 22rem.
- * At the 1400px cap that is about 544 / 744. Around 861px it is about 469 / 280
- * instead of the old 360 / 520 overflow.
+ * the old 1fr / 1.4fr split is the wide default (about 537 / 751 at the
+ * cap, 487 / 681 at 1280). Notes can still drop below the old 520px floor
+ * down to 17.5rem (280px) once the passage track is at 22rem, instead of
+ * overflowing 360 / 520. Around 861px that is about 352 / 397; at 768px
+ * about 352 / 304.
  *
  * Compose and Focus (`gap-5`, gutter `pl-16 pr-5`, cap 1320px):
- * the passage track takes about 2.5 shares and notes takes 1, so notes
- * gives width back before scripture tightens. Notes floors at 17.5rem
- * (280px) while the passage is still above 30rem: around 1024 / 960 / 900
- * that is about 640 / 280, 576 / 280, and 516 / 280. Both floors fit a
- * 768px window (about 384 / 280).
+ * notes prefer the old 440px cap on wide screens (about 776 / 440 at the
+ * cap, 736 / 440 at 1280) while the passage track takes the 1.1fr remainder.
+ * Once scripture would fall below 24rem, notes give width back toward
+ * 17.5rem: around 900 / 861 / 768 that is about 384 / 412, 384 / 373, and
+ * 384 / 280.
  */
 export const READ_PASSAGE_COLUMNS_CLASS =
-  "grid-cols-[minmax(22rem,34rem)_minmax(17.5rem,1fr)] gap-6";
+  "grid-cols-[minmax(22rem,1fr)_minmax(17.5rem,1.4fr)] gap-6";
 
 export const COMPOSE_PASSAGE_COLUMNS_CLASS =
-  "grid-cols-[minmax(24rem,2.5fr)_minmax(17.5rem,1fr)] gap-5";
+  "grid-cols-[minmax(24rem,1.1fr)_minmax(17.5rem,440px)] gap-5";
 
 export function passageColumnsClass(isReadMode: boolean): string {
   return isReadMode

@@ -30,6 +30,27 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.15](https://github.com/natyconnor/berean/compare/v1.17.14...v1.17.15) (2026-10-13)
+
+
+### Bug Fixes
+
+* Always show the Mode Dock; hide it on Settings and legal pages ([#279](https://github.com/natyconnor/berean/issues/279)) ([097980c](https://github.com/natyconnor/berean/commit/097980c3e07e33211b369d89f589d013de13552f))
+
+## [1.17.14](https://github.com/natyconnor/berean/compare/v1.17.13...v1.17.14) (2026-10-12)
+
+
+### Bug Fixes
+
+* Wrap long URLs inside Read-mode note cards ([#280](https://github.com/natyconnor/berean/issues/280)) ([8b60914](https://github.com/natyconnor/berean/commit/8b6091455ce5e7e09eaaa1c493e49b0db31f7404))
+
+## [1.17.13](https://github.com/natyconnor/berean/compare/v1.17.12...v1.17.13) (2026-10-12)
+
+
+### Bug Fixes
+
+* Restore wide notes column defaults after [#255](https://github.com/natyconnor/berean/issues/255) ([#277](https://github.com/natyconnor/berean/issues/277)) ([d8106a9](https://github.com/natyconnor/berean/commit/d8106a90463cb7e97c097a882e06320e226dd3cc))
+
 ## [1.17.12](https://github.com/natyconnor/berean/compare/v1.17.11...v1.17.12) (2026-10-11)
 
 

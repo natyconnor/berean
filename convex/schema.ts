@@ -48,7 +48,8 @@ export default defineSchema({
     advancedSearchOnboardingCompletedAt: v.optional(v.number()),
     focusModeOnboardingCompletedAt: v.optional(v.number()),
     starterTagCategoryColors: v.optional(v.record(v.string(), v.string())),
-    // How the bottom-center Mode Dock behaves. Absent = "auto-hide" default.
+    // Legacy Mode Dock preference. No longer read; kept so existing documents
+    // with "auto-hide" / "always" / "off" continue to validate.
     modeDock: v.optional(
       v.union(v.literal("auto-hide"), v.literal("always"), v.literal("off")),
     ),
