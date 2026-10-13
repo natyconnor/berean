@@ -5,7 +5,7 @@ import {
   type PracticeSessionResult,
   type PracticeVerse,
 } from "@/components/memory/practice/practice-board";
-import type { SessionProgress } from "@/components/memory/practice/session-header-progress";
+import type { SessionProgressSource } from "@/lib/session-progress";
 import type { MemorySessionKind } from "@/lib/memory-session";
 
 interface MemorySessionRunnerProps {
@@ -28,9 +28,11 @@ interface MemorySessionRunnerProps {
   /** Restart the review queue when more verses are still due. */
   onContinueSession?: () => void;
   /** Header text and overall bar when this run is one part of a session. */
-  progress?: SessionProgress;
+  progress?: SessionProgressSource;
   /** One part of a longer session: hand the results up instead of a summary. */
   onComplete?: (result: PracticeSessionResult) => void;
+  /** Shown above the verse rail, e.g. an overview of the whole session. */
+  railHeader?: ReactNode;
   /** Shown when the session had nothing to run in the first place. */
   emptyState: ReactNode;
 }

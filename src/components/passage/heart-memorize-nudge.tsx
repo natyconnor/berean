@@ -1,4 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Heart } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 
@@ -38,19 +45,21 @@ export interface HeartMemorizeNudgeProps {
   offer: HeartNudgeOffer | null;
   onClose: () => void;
   onMemorize: () => void;
-  onDontAskAgain: () => void;
+  /** Unhearts a `hearted` offer's span. */
+  onUnheart: () => void;
 }
 
 /**
- * "Saved to your hearts · Memorize Psalm 1:5?" pointing at the heart that was
- * clicked. It never takes focus, closes after 6 s (paused while hovered or
- * focused), and closes on Esc or a click elsewhere.
+ * "Memorize Psalm 1:5?" pointing at the heart that was clicked. Just hearted:
+ * Memorize or Not now; it never takes focus and closes after 6 s (paused
+ * while hovered or focused). Already hearted: Memorize or Unheart; it takes
+ * focus and stays until used. Both close on Esc or a click elsewhere.
  */
 export function HeartMemorizeNudge({
   offer,
   onClose,
   onMemorize,
-  onDontAskAgain,
+  onUnheart,
 }: HeartMemorizeNudgeProps) {
   const titleId = useId();
   const questionId = useId();
@@ -66,6 +75,10 @@ export function HeartMemorizeNudge({
   const paused =
     offer !== null && (hoveredOffer === offer || focusedOffer === offer);
   const restoreFocusRef = useRef(false);
+  const openOfferRef = useRef(offer);
+  useLayoutEffect(() => {
+    openOfferRef.current = offer;
+  }, [offer]);
 
   const anchorRef = useMemo(
     () => ({ current: shown?.anchor ?? null }),
@@ -85,7 +98,7 @@ export function HeartMemorizeNudge({
   }, [offer, onClose]);
 
   useEffect(() => {
-    if (!offer || paused) return;
+    if (offer?.kind !== "saved" || paused) return;
     const timer = setTimeout(onClose, HEART_NUDGE_AUTO_CLOSE_MS);
     return () => clearTimeout(timer);
   }, [offer, paused, onClose]);
@@ -105,6 +118,9 @@ export function HeartMemorizeNudge({
       <PopoverAnchor virtualRef={anchorRef} />
       {shown ? (
         <PopoverContent
+          // A new offer remounts, so a hearted one takes focus even when it
+          // replaces an offer still on screen.
+          key={shown.id}
           {...{ [HEART_NUDGE_ATTRIBUTE]: "" }}
           data-passage-dismiss-exempt
           side={side}
@@ -115,16 +131,30 @@ export function HeartMemorizeNudge({
           hideWhenDetached
           aria-labelledby={titleId}
           aria-describedby={questionId}
-          onOpenAutoFocus={(event) => event.preventDefault()}
+          onOpenAutoFocus={(event) => {
+            if (shown.kind === "saved") event.preventDefault();
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (restoreFocusRef.current && shown.anchor.isConnected) {
+            const restore = restoreFocusRef.current;
+            restoreFocusRef.current = false;
+            if (
+              restore &&
+              openOfferRef.current === null &&
+              shown.anchor.isConnected
+            ) {
               shown.anchor.focus();
             }
-            restoreFocusRef.current = false;
           }}
           onEscapeKeyDown={() => {
             restoreFocusRef.current = true;
+          }}
+          // Its heart toggles it, so a press there is not a click elsewhere.
+          onInteractOutside={(event) => {
+            const { target } = event;
+            if (target instanceof Node && shown.anchor.contains(target)) {
+              event.preventDefault();
+            }
           }}
           onPointerEnter={() => setHoveredOffer(offer)}
           onPointerLeave={() => setHoveredOffer(null)}
@@ -153,7 +183,7 @@ export function HeartMemorizeNudge({
               aria-hidden
               className="size-3.5 fill-current text-red-500 dark:text-red-400"
             />
-            Saved to your hearts
+            {shown.kind === "saved" ? "Saved to your hearts" : "In your hearts"}
           </p>
           <p
             id={questionId}
@@ -165,22 +195,26 @@ export function HeartMemorizeNudge({
             <Button type="button" size="xs" onClick={onMemorize}>
               {MEMORIZE_LABEL}
             </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              onClick={() => closeKeepingFocus(onClose)}
-            >
-              Not now
-            </Button>
+            {shown.kind === "saved" ? (
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={() => closeKeepingFocus(onClose)}
+              >
+                Not now
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={() => closeKeepingFocus(onUnheart)}
+              >
+                Unheart
+              </Button>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => closeKeepingFocus(onDontAskAgain)}
-            className="mt-1.5 ml-5 rounded-sm text-[11px] text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            Don&apos;t ask again
-          </button>
         </PopoverContent>
       ) : null}
     </Popover>

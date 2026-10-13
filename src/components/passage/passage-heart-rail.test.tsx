@@ -18,9 +18,6 @@ function heart(overrides: Partial<PassageRailHeart> = {}): PassageRailHeart {
     ariaLabel:
       "Psalm 16, hearted. Memorizing: 4 of 11 verses learned. Remove heart",
     title: "Psalm 16",
-    startVerse: 1,
-    endVerse: 11,
-    stopsMemorizing: true,
     onUnheart: vi.fn(),
     ...overrides,
   };

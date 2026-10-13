@@ -313,10 +313,10 @@ describe("TodayPage", () => {
     expect(screen.getByText("Today · Monday, Oct 12")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Only learning · 5" }),
-    ).toHaveAttribute("href", "/memory/learn?return=%2Fmemory");
+    ).toHaveAttribute("href", "/memory/today?only=learning&return=%2Fmemory");
     expect(
       screen.getByRole("link", { name: "Only reviews · 5" }),
-    ).toHaveAttribute("href", "/memory/review?return=%2Fmemory");
+    ).toHaveAttribute("href", "/memory/today?only=review&return=%2Fmemory");
     expect(
       screen.getByRole("link", { name: "Extra practice" }),
     ).toHaveAttribute("href", "/memory/practice?return=%2Fmemory");
@@ -409,10 +409,10 @@ describe("TodayPage", () => {
 
     expect(
       screen.getByRole("link", { name: "Only learning · 2" }),
-    ).toHaveAttribute("href", "/memory/learn?return=%2Fmemory");
+    ).toHaveAttribute("href", "/memory/today?only=learning&return=%2Fmemory");
     expect(
       screen.getByRole("link", { name: "Only reviews · 3" }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute("href", "/memory/today?only=review&return=%2Fmemory");
   });
 
   it("hides Only learning when there are no reviews", () => {

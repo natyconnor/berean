@@ -219,7 +219,7 @@ describe("TutorialProvider", () => {
       "section",
     );
     expect(card).toHaveTextContent(
-      "Use Memorize John 1 here, or select a few verses and tap Memorize. A few minutes a day for about three days, and it's yours. A ring around a verse's heart shows how it's going.",
+      "Use Memorize John 1 here, or heart a few verses and tap Memorize. A few minutes a day for about three days, and it's yours. A ring around a verse's heart shows how it's going.",
     );
     expect(card).toHaveStyle({ top: "40px" });
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();

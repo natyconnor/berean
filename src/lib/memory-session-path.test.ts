@@ -31,6 +31,15 @@ describe("session hrefs", () => {
       "/memory/today?packId=k57abc",
     );
   });
+
+  it("builds Today hrefs for only learning or only reviews", () => {
+    expect(memoryTodaySessionHref({ only: "learning" })).toBe(
+      "/memory/today?only=learning",
+    );
+    expect(memoryTodaySessionHref({ packId: "k57abc", only: "review" })).toBe(
+      "/memory/today?packId=k57abc&only=review",
+    );
+  });
 });
 
 describe("isMemorySessionPath", () => {

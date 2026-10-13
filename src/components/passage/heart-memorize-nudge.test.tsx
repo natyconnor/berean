@@ -1,4 +1,5 @@
-import { act, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,23 +15,22 @@ import {
   type NudgeHeart,
 } from "./hooks/use-heart-memorize-nudge";
 
-const { hint, openSheet } = vi.hoisted(() => {
-  const dismiss = vi.fn();
-  const markShown = vi.fn();
+const { dismissedHint, openSheet } = vi.hoisted(() => {
   const state: FeatureHintState = {
-    pending: true,
+    pending: false,
     completed: false,
-    dismissed: false,
-    shown: false,
-    complete: vi.fn(),
-    dismiss,
-    markShown,
+    dismissed: true,
+    shown: true,
+    complete: () => {},
+    dismiss: () => {},
+    markShown: () => {},
   };
-  return { hint: { ...state, dismiss, markShown }, openSheet: vi.fn() };
+  return { dismissedHint: state, openSheet: vi.fn() };
 });
 
+// Someone who picked the old "Don't ask again" still gets the popover.
 vi.mock("@/components/tutorial/use-feature-hint", () => ({
-  useFeatureHint: () => hint,
+  useFeatureHint: () => dismissedHint,
 }));
 
 vi.mock("@/components/memory/memorize/memorize-context", () => ({
@@ -40,26 +40,42 @@ vi.mock("@/components/memory/memorize/memorize-context", () => ({
 const PSALM_1_5 = { book: "Psalms", chapter: 1, startVerse: 5, endVerse: 5 };
 
 function Harness({
+  hearted: initiallyHearted = false,
   hearts = [],
   suppressed = false,
+  onUnheart = () => {},
 }: {
+  hearted?: boolean;
   hearts?: NudgeHeart[];
   suppressed?: boolean;
+  onUnheart?: () => void;
 }) {
-  const { heartClicked, nudge } = useHeartMemorizeNudge({ suppressed });
+  const [hearted, setHearted] = useState(initiallyHearted);
+  const { heartClicked, heartedClicked, nudge } = useHeartMemorizeNudge({
+    suppressed,
+  });
   return (
     <>
       <button
         type="button"
+        aria-pressed={hearted}
         // jsdom lays nothing out; a zero rect reads as scrolled out of view.
         ref={(button) => {
           if (button) {
             button.getBoundingClientRect = () => new DOMRect(300, 200, 36, 36);
           }
         }}
-        onClick={(event) =>
-          heartClicked(PSALM_1_5, event.currentTarget, hearts)
-        }
+        onClick={(event) => {
+          if (hearted) {
+            heartedClicked(PSALM_1_5, event.currentTarget, () => {
+              setHearted(false);
+              onUnheart();
+            });
+            return;
+          }
+          heartClicked(PSALM_1_5, event.currentTarget, hearts);
+          setHearted(true);
+        }}
       >
         Heart this verse
       </button>
@@ -68,14 +84,20 @@ function Harness({
   );
 }
 
-async function clickHeart() {
-  await userEvent.click(
-    screen.getByRole("button", { name: "Heart this verse" }),
-  );
+function heartButton() {
+  return screen.getByRole("button", { name: "Heart this verse" });
 }
 
-function nudgeDialog() {
+async function clickHeart() {
+  await userEvent.click(heartButton());
+}
+
+function savedDialog() {
   return screen.queryByRole("dialog", { name: "Saved to your hearts" });
+}
+
+function heartedDialog() {
+  return screen.queryByRole("dialog", { name: "In your hearts" });
 }
 
 beforeAll(() => {
@@ -92,25 +114,22 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  hint.pending = true;
-  hint.dismissed = false;
-  hint.dismiss.mockReset();
-  hint.markShown.mockReset();
   openSheet.mockReset();
 });
 
-describe("HeartMemorizeNudge", () => {
+describe("HeartMemorizeNudge after hearting", () => {
   it("offers to memorize a verse just hearted, without taking focus", async () => {
     render(<Harness />);
     await clickHeart();
 
-    const dialog = nudgeDialog();
+    const dialog = savedDialog();
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveAccessibleDescription("Memorize Psalm 1:5?");
+    expect(screen.getByRole("button", { name: "Not now" })).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Heart this verse" }),
-    ).toHaveFocus();
-    expect(hint.markShown).toHaveBeenCalled();
+      screen.queryByRole("button", { name: /Don.t ask again/ }),
+    ).not.toBeInTheDocument();
+    expect(heartButton()).toHaveFocus();
   });
 
   it("opens the Memorize sheet for the span and closes", async () => {
@@ -120,65 +139,57 @@ describe("HeartMemorizeNudge", () => {
 
     expect(openSheet).toHaveBeenCalledWith(
       { kind: "spans", spans: [PSALM_1_5] },
-      {
-        returnFocusTo: screen.getByRole("button", { name: "Heart this verse" }),
-      },
+      { returnFocusTo: heartButton() },
     );
-    expect(nudgeDialog()).not.toBeInTheDocument();
+    expect(savedDialog()).not.toBeInTheDocument();
   });
 
-  it("shows again after Not now, and stops after Don't ask again", async () => {
-    render(<Harness />);
+  it("shows after every heart, Not now included", async () => {
+    const onUnheart = vi.fn();
+    render(<Harness onUnheart={onUnheart} />);
     await clickHeart();
     await userEvent.click(screen.getByRole("button", { name: "Not now" }));
-    expect(nudgeDialog()).not.toBeInTheDocument();
-    expect(hint.dismiss).not.toHaveBeenCalled();
+    expect(savedDialog()).not.toBeInTheDocument();
+    expect(heartButton()).toHaveAttribute("aria-pressed", "true");
 
     await clickHeart();
-    expect(nudgeDialog()).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Don't ask again" }),
-    );
-    expect(hint.dismiss).toHaveBeenCalledOnce();
-    expect(nudgeDialog()).not.toBeInTheDocument();
-  });
+    await userEvent.click(screen.getByRole("button", { name: "Unheart" }));
+    expect(onUnheart).toHaveBeenCalledOnce();
 
-  it("does not show once the hint is dismissed", async () => {
-    hint.pending = false;
-    hint.dismissed = true;
-    render(<Harness />);
     await clickHeart();
-    expect(nudgeDialog()).not.toBeInTheDocument();
+    expect(savedDialog()).toBeInTheDocument();
   });
 
-  it("does not show for unhearting or for something being memorized", async () => {
-    const { rerender } = render(
+  it("does not show when the click unhearts or for something being memorized", async () => {
+    const { unmount } = render(
       <Harness hearts={[{ startVerse: 5, endVerse: 5 }]} />,
     );
     await clickHeart();
-    expect(nudgeDialog()).not.toBeInTheDocument();
+    expect(savedDialog()).not.toBeInTheDocument();
+    unmount();
 
-    rerender(
+    render(
       <Harness
         hearts={[{ startVerse: 1, endVerse: 6, passageMemoryId: "p" }]}
       />,
     );
     await clickHeart();
-    expect(nudgeDialog()).not.toBeInTheDocument();
+    expect(savedDialog()).not.toBeInTheDocument();
   });
 
   it("does not show in Focus mode or a tour, or over another popover", async () => {
-    const { rerender } = render(<Harness suppressed />);
+    const { unmount } = render(<Harness suppressed />);
     await clickHeart();
-    expect(nudgeDialog()).not.toBeInTheDocument();
+    expect(savedDialog()).not.toBeInTheDocument();
+    unmount();
 
-    rerender(<Harness />);
+    render(<Harness />);
     const other = document.createElement("div");
     other.setAttribute("role", "dialog");
     document.body.append(other);
     try {
       await clickHeart();
-      expect(nudgeDialog()).not.toBeInTheDocument();
+      expect(savedDialog()).not.toBeInTheDocument();
     } finally {
       other.remove();
     }
@@ -189,17 +200,17 @@ describe("HeartMemorizeNudge", () => {
     try {
       render(<Harness />);
       await clickHeart();
-      expect(nudgeDialog()).toBeInTheDocument();
+      expect(savedDialog()).toBeInTheDocument();
 
       act(() => {
         vi.advanceTimersByTime(HEART_NUDGE_AUTO_CLOSE_MS - 100);
       });
-      expect(nudgeDialog()).toBeInTheDocument();
+      expect(savedDialog()).toBeInTheDocument();
 
       act(() => {
         vi.advanceTimersByTime(200);
       });
-      expect(nudgeDialog()).not.toBeInTheDocument();
+      expect(savedDialog()).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -209,7 +220,105 @@ describe("HeartMemorizeNudge", () => {
     render(<Harness />);
     await clickHeart();
     await userEvent.keyboard("{Escape}");
-    expect(nudgeDialog()).not.toBeInTheDocument();
+    expect(savedDialog()).not.toBeInTheDocument();
+  });
+
+  it("turns into Memorize or Unheart when its heart is clicked again", async () => {
+    render(<Harness />);
+    await clickHeart();
+    expect(savedDialog()).toBeInTheDocument();
+
+    await clickHeart();
+    expect(savedDialog()).not.toBeInTheDocument();
+    expect(heartedDialog()).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Memorize" })).toHaveFocus();
+  });
+});
+
+describe("HeartMemorizeNudge on a heart already on", () => {
+  it("offers Memorize or Unheart and takes focus", async () => {
+    render(<Harness hearted />);
+    await clickHeart();
+
+    const dialog = heartedDialog();
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription("Memorize Psalm 1:5?");
+    expect(screen.getByRole("button", { name: "Memorize" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Unheart" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Not now" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Don.t ask again/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("unhearts on Unheart and returns focus to the heart", async () => {
+    const onUnheart = vi.fn();
+    render(<Harness hearted onUnheart={onUnheart} />);
+    await clickHeart();
+    await userEvent.click(screen.getByRole("button", { name: "Unheart" }));
+
+    expect(onUnheart).toHaveBeenCalledOnce();
+    expect(heartedDialog()).not.toBeInTheDocument();
+    expect(heartButton()).toHaveAttribute("aria-pressed", "false");
+    await waitFor(() => expect(heartButton()).toHaveFocus());
+  });
+
+  it("opens the Memorize sheet without unhearting", async () => {
+    const onUnheart = vi.fn();
+    render(<Harness hearted onUnheart={onUnheart} />);
+    await clickHeart();
+    await userEvent.click(screen.getByRole("button", { name: "Memorize" }));
+
+    expect(openSheet).toHaveBeenCalledWith(
+      { kind: "spans", spans: [PSALM_1_5] },
+      { returnFocusTo: heartButton() },
+    );
+    expect(onUnheart).not.toHaveBeenCalled();
+    expect(heartedDialog()).not.toBeInTheDocument();
+  });
+
+  it("stays open until used", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<Harness hearted />);
+      await clickHeart();
+      act(() => {
+        vi.advanceTimersByTime(HEART_NUDGE_AUTO_CLOSE_MS * 2);
+      });
+      expect(heartedDialog()).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes on Escape, a click elsewhere, or its heart, keeping the heart", async () => {
+    const onUnheart = vi.fn();
+    render(<Harness hearted onUnheart={onUnheart} />);
+
+    await clickHeart();
+    await userEvent.keyboard("{Escape}");
+    expect(heartedDialog()).not.toBeInTheDocument();
+    await waitFor(() => expect(heartButton()).toHaveFocus());
+
+    await clickHeart();
+    await userEvent.click(document.body);
+    expect(heartedDialog()).not.toBeInTheDocument();
+
+    await clickHeart();
+    expect(heartedDialog()).toBeInTheDocument();
+    await clickHeart();
+    expect(heartedDialog()).not.toBeInTheDocument();
+
+    expect(onUnheart).not.toHaveBeenCalled();
+    expect(heartButton()).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows in Focus mode too, since it was asked for", async () => {
+    render(<Harness hearted suppressed />);
+    await clickHeart();
+    expect(heartedDialog()).toBeInTheDocument();
   });
 });
 

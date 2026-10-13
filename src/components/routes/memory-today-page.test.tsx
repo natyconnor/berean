@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +13,15 @@ import { MemoryTodayPage } from "./memory-today-page";
 
 const NOW = Date.UTC(2026, 9, 12, 18);
 
-type TodaySearch = { packId?: string; return?: string };
+type TodaySearch = {
+  packId?: string;
+  only?: "learning" | "review";
+  return?: string;
+};
+
+type StubProgress =
+  | { label: string }
+  | ((run: { done: number; total: number }) => { label: string });
 
 const { frozenResults, liveResults, search, onExit } = vi.hoisted(() => {
   const initial: TodaySearch = {};
@@ -55,12 +64,14 @@ vi.mock("@/components/memory/passage/passage-session", () => ({
     packName,
     backLabel,
     progress,
+    aside,
     onExit: exit,
     onDoneForToday,
   }: {
     packName: string;
     backLabel: string;
     progress?: { label: string };
+    aside?: ReactNode;
     onExit: () => void;
     onDoneForToday?: () => void;
   }) => (
@@ -73,6 +84,7 @@ vi.mock("@/components/memory/passage/passage-session", () => ({
       <button type="button" onClick={onDoneForToday}>
         That&apos;s enough for today
       </button>
+      {aside}
     </div>
   ),
 }));
@@ -94,15 +106,22 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     kind,
     verses,
     progress,
+    railHeader,
     onComplete,
   }: {
     kind: string;
     verses: StubVerse[];
-    progress?: { label: string };
+    progress?: StubProgress;
+    railHeader?: ReactNode;
     onComplete?: (result: unknown) => void;
   }) => (
     <div data-testid={`${kind}-session`}>
-      <p>{progress?.label}</p>
+      <p>
+        {typeof progress === "function"
+          ? progress({ done: 1, total: verses.length }).label
+          : progress?.label}
+      </p>
+      {railHeader}
       <ul>
         {verses.map((verse) => (
           <li key={verse.verseRefId}>{verse.verseRefId}</li>
@@ -216,6 +235,14 @@ function setToday({
   frozenResults.set("verseMemory.memoryStats", stats);
 }
 
+/** A row in the Today's queue rail inside `container`. */
+function queueRow(container: HTMLElement, label: string): HTMLElement {
+  const rail = within(container).getByRole("region", { name: "Today's queue" });
+  const row = within(rail).getByText(label).closest("li");
+  expect(row).not.toBeNull();
+  return row as HTMLElement;
+}
+
 function renderToday() {
   return render(
     <TooltipProvider delayDuration={0}>
@@ -239,13 +266,25 @@ describe("MemoryTodayPage", () => {
     renderToday();
 
     const passage = screen.getByTestId("passage-session");
-    expect(within(passage).getByText("Psalm 16")).toBeInTheDocument();
     expect(
-      within(passage).getByText("Psalm 16 · new verses"),
+      within(passage).getByRole("heading", { name: "Psalm 16" }),
     ).toBeInTheDocument();
+    expect(within(passage).getByText("Today · 0 of 4")).toBeInTheDocument();
     expect(
       within(passage).getByRole("button", { name: "Back to Today" }),
     ).toBeInTheDocument();
+    expect(queueRow(passage, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(passage, "John 15:1")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+    expect(queueRow(passage, "Luke 9:23")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
     await userEvent.click(
       screen.getByRole("button", { name: "That's enough for today" }),
     );
@@ -254,14 +293,32 @@ describe("MemoryTodayPage", () => {
     );
 
     expect(
-      screen.getByText("Nice. Next: 2 learning steps · about 6 min"),
+      screen.getByRole("heading", { name: "Next up: 2 verses to learn" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("About 6 min")).toBeInTheDocument();
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Session progress: Today · 1 of 4",
+      }),
+    ).toBeInTheDocument();
+    expect(queueRow(document.body, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "done",
+    );
+    expect(queueRow(document.body, "John 15:2")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const learning = screen.getByTestId("learning-session");
+    expect(within(learning).getByText("Today · 2 of 4")).toBeInTheDocument();
+    const overview = within(learning).getByRole("region", { name: "Today" });
     expect(
-      within(learning).getByText("Learning · 2 verses"),
-    ).toBeInTheDocument();
+      within(overview)
+        .getAllByRole("listitem")
+        .map((part) => part.dataset.state),
+    ).toEqual(["done", "current", "upcoming"]);
     expect(within(learning).getByText("jn15_1")).toBeInTheDocument();
     expect(within(learning).getByText("jn15_2")).toBeInTheDocument();
     await userEvent.click(
@@ -269,12 +326,13 @@ describe("MemoryTodayPage", () => {
     );
 
     expect(
-      screen.getByText("Nice. Next: 1 review · about 1 min"),
+      screen.getByRole("heading", { name: "Next up: 1 review" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("About 1 min")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const review = screen.getByTestId("review-session");
-    expect(within(review).getByText("Review · 1")).toBeInTheDocument();
+    expect(within(review).getByText("Today · 4 of 4")).toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Finish review" }),
     );
@@ -322,7 +380,52 @@ describe("MemoryTodayPage", () => {
       screen.getByRole("button", { name: "Finish review" }),
     );
 
-    expect(screen.queryByText(/^Nice\. Next/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Next up/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("1 review done today.", { exact: false }),
+    ).toBeInTheDocument();
+  });
+
+  it("runs only passages and new verses for only learning", async () => {
+    search.current = { only: "learning", return: "/memory" };
+    setToday();
+    renderToday();
+
+    expect(screen.getByTestId("passage-session")).toBeInTheDocument();
+    expect(screen.getByText("Today · 0 of 3")).toBeInTheDocument();
+    const rail = screen.getByRole("region", { name: "Today's queue" });
+    expect(within(rail).queryByText("Reviews")).not.toBeInTheDocument();
+    expect(within(rail).queryByText("Luke 9:23")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+
+    expect(screen.getByText("New learning")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish learning" }),
+    );
+
+    expect(screen.queryByTestId("review-session")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Psalm 16 and 2 learning steps done today\./),
+    ).toBeInTheDocument();
+  });
+
+  it("runs just the reviews for only reviews", async () => {
+    search.current = { only: "review", return: "/memory" };
+    setToday();
+    renderToday();
+
+    expect(screen.queryByTestId("passage-session")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("learning-session")).not.toBeInTheDocument();
+    const review = screen.getByTestId("review-session");
+    expect(within(review).getByText("lk9_23")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish review" }),
+    );
+
+    expect(screen.getByText("Reviews")).toBeInTheDocument();
     expect(
       screen.getByText("1 review done today.", { exact: false }),
     ).toBeInTheDocument();
@@ -415,9 +518,10 @@ describe("MemoryTodayPage", () => {
 
     expect(screen.queryByTestId("passage-session")).not.toBeInTheDocument();
     const learning = screen.getByTestId("learning-session");
+    expect(within(learning).getByText("Today · 1 of 4")).toBeInTheDocument();
     expect(
-      within(learning).getByText("Learning · 3 verses"),
-    ).toBeInTheDocument();
+      within(learning).getByRole("region", { name: "Today" }),
+    ).toHaveTextContent("Verses to learn(now)Reviews1");
     expect(within(learning).queryByText("d")).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Finish learning" }),
@@ -452,6 +556,9 @@ describe("MemoryTodayPage", () => {
     renderToday();
 
     expect(screen.getByTestId("passage-session")).toBeInTheDocument();
-    expect(screen.queryByText(/^Nice\. Next/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Today's queue" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Next up/)).not.toBeInTheDocument();
   });
 });

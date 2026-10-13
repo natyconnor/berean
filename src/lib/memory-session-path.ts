@@ -1,3 +1,5 @@
+import type { TodaySessionOnly } from "./memory-today-session";
+
 /**
  * Memory session routes: Learn / Practice / Review, including pack-scoped
  * sessions. The Mode Dock skips live `dueCount` here so `await mutation()`
@@ -41,12 +43,18 @@ export function memoryVerseSessionHref(
 
 /**
  * The blended session: building passages, then learning, then reviews.
- * With `packId`, only that pack's work today.
+ * With `packId`, only that pack's work today. With `only`, just passages and
+ * new verses, or just reviews.
  */
-export function memoryTodaySessionHref(scope?: { packId: string }): string {
-  if (!scope) return "/memory/today";
-  const params = new URLSearchParams({ packId: scope.packId });
-  return `/memory/today?${params.toString()}`;
+export function memoryTodaySessionHref(scope?: {
+  packId?: string;
+  only?: TodaySessionOnly;
+}): string {
+  const params = new URLSearchParams();
+  if (scope?.packId !== undefined) params.set("packId", scope.packId);
+  if (scope?.only !== undefined) params.set("only", scope.only);
+  const query = params.toString();
+  return query === "" ? "/memory/today" : `/memory/today?${query}`;
 }
 
 /** A pack or passage session, e.g. `/memory/$packId/learn`. */

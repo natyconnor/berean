@@ -9,7 +9,7 @@ import {
 import type { RailStroke } from "@/lib/passage-rail";
 import { cn } from "@/lib/utils";
 
-import { UnheartRangeDialog } from "./unheart-memorizing-dialog";
+import { UnheartMemorizingDialog } from "./unheart-memorizing-dialog";
 import { MasteryRing } from "./verse-row";
 
 /** The one heart of a memorized passage, level with its first verse. */
@@ -22,10 +22,7 @@ export interface PassageRailHeart {
   ariaLabel: string;
   /** Names the passage in the unheart confirm: "Unheart Psalm 16?". */
   title: string;
-  /** The heart row's verses in this chapter, which unhearting removes. */
-  startVerse: number;
-  endVerse: number;
-  stopsMemorizing: boolean;
+  /** Unhearts the passage's heart row, which always stops memorizing it. */
   onUnheart: () => void;
   onHoverChange?: (hovering: boolean) => void;
 }
@@ -95,14 +92,11 @@ function PassageHeartButton({ heart }: { heart: PassageRailHeart }) {
           {heart.tooltip}
         </TooltipContent>
       </Tooltip>
-      <UnheartRangeDialog
+      <UnheartMemorizingDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         onConfirm={heart.onUnheart}
-        stopsMemorizing={heart.stopsMemorizing}
         reference={heart.title}
-        startVerse={heart.startVerse}
-        endVerse={heart.endVerse}
       />
     </>
   );

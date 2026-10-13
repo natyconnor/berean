@@ -55,7 +55,7 @@ import { PassageRailGutter, type PassageRailMark } from "../passage-heart-rail";
 /** What the selection bar shows and does for this group's range. */
 export type GroupSelectionBar = Omit<
   SelectionMemorizeBarProps,
-  "startVerse" | "endVerse" | "pinned" | "className"
+  "pinned" | "className"
 >;
 
 interface PassageGroupWithNotesProps {
@@ -213,7 +213,6 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
   );
   const [isExitingPassageNote, setIsExitingPassageNote] = useState(false);
   const anchorVerse = verses[0]?.verseNumber ?? 0;
-  const lastVerse = verses[verses.length - 1]?.verseNumber ?? anchorVerse;
   const barPinned = useMediaQuery(SELECTION_BAR_PINNED_QUERY);
   const [highlightToolbarVerses, setHighlightToolbarVerses] = useState<
     ReadonlySet<number>
@@ -236,8 +235,6 @@ export const PassageGroupWithNotes = memo(function PassageGroupWithNotes({
     showSelectionBar && selectionBar ? (
       <SelectionMemorizeBar
         {...selectionBar}
-        startVerse={anchorVerse}
-        endVerse={lastVerse}
         pinned={barPinned}
         className={
           barPinned

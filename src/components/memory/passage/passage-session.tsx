@@ -22,7 +22,7 @@ import {
   type StallCueContent,
   CONNECT_COPY,
   CONNECT_RECITE_LABEL,
-  CONNECT_TITLE,
+  connectPairTitle,
   DONE_FOR_NOW_LABEL,
   BUDGET_EXHAUSTED_COPY,
   FRONTIER_LOCKED_COPY,
@@ -58,6 +58,7 @@ import {
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
+import { SessionColumns } from "@/components/memory/practice/session-columns";
 import {
   SessionHeaderProgress,
   type SessionProgress,
@@ -135,6 +136,8 @@ interface PassageSessionProps {
   backLabel?: string;
   /** Header text and overall bar when this passage is one part of a session. */
   progress?: SessionProgress;
+  /** A side column beside the passage, e.g. the rest of today's queue. */
+  aside?: ReactNode;
 }
 
 export function PassageSession({
@@ -146,6 +149,7 @@ export function PassageSession({
   exitTooltip = "Go back to the pack",
   backLabel = "Back",
   progress,
+  aside,
 }: PassageSessionProps): JSX.Element {
   const finishForToday = onDoneForToday ?? onExit;
   const now = useLiveNow();
@@ -487,6 +491,7 @@ export function PassageSession({
       backLabel={backLabel}
       progress={progress}
       persistError={persistError}
+      aside={aside}
     >
       {carriedOver.notice ? (
         <CarriedOverNotice
@@ -541,12 +546,11 @@ export function PassageSession({
 
       {effectivePhase === "connect" && !holdResult && !recitingConnect ? (
         <ConnectPanel
-          verseTitles={(state.rehearsalRopeIndexes ?? [])
-            .map((index) => {
-              const piece = state.pieces[index];
-              return piece ? pieceCardTitle(piece) : null;
-            })
-            .filter((title): title is string => Boolean(title))}
+          title={connectPairTitle(
+            (state.rehearsalRopeIndexes ?? [])
+              .map((index) => state.pieces[index])
+              .filter((piece): piece is PassagePiece => piece !== undefined),
+          )}
           onRecite={() => setRecitingConnect(true)}
           onSkip={handleSkipSection}
         />
@@ -769,20 +773,16 @@ function SectionCompletePanel({
 }
 
 function ConnectPanel({
-  verseTitles,
+  title,
   onRecite,
   onSkip,
 }: {
-  verseTitles: readonly string[];
+  title: string;
   onRecite: () => void;
   onSkip: () => void;
 }): JSX.Element {
-  const pairLabel =
-    verseTitles.length >= 2
-      ? `${verseTitles[0]} · ${verseTitles[1]}`
-      : CONNECT_TITLE;
   return (
-    <CheckpointCard title={pairLabel} description={CONNECT_COPY}>
+    <CheckpointCard title={title} description={CONNECT_COPY}>
       <Button type="button" onClick={onRecite}>
         {CONNECT_RECITE_LABEL}
       </Button>
@@ -1081,6 +1081,7 @@ function PassageSessionShell({
   backLabel,
   progress,
   persistError,
+  aside,
   children,
 }: {
   phaseLabel: string;
@@ -1090,6 +1091,7 @@ function PassageSessionShell({
   backLabel: string;
   progress?: SessionProgress;
   persistError: string | null;
+  aside?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -1137,7 +1139,9 @@ function PassageSessionShell({
         </div>
       ) : null}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">{children}</div>
+        <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">
+          <SessionColumns aside={aside}>{children}</SessionColumns>
+        </div>
       </ScrollArea>
     </div>
   );

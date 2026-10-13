@@ -34,7 +34,7 @@ import { passageColumnsClass } from "../passage-columns";
 import { Heart } from "lucide-react";
 import { formatSpanTitle } from "@/lib/memorize-target";
 import type { PassageHeartControl } from "../verse-row";
-import { UnheartRangeDialog } from "../unheart-memorizing-dialog";
+import { UnheartMemorizingDialog } from "../unheart-memorizing-dialog";
 import { PassageRailGutter, type PassageRailMark } from "../passage-heart-rail";
 
 /** A hearted range in the left gutter, level with its first verse. */
@@ -43,12 +43,15 @@ export interface SavedPassageAtAnchor {
   endVerse: number;
   /** Unhearting would stop memorizing, so the pill asks the memorizing confirm. */
   stopsMemorizing?: boolean;
+  /** Set when clicking the pill offers Memorize or Unheart instead of unhearting. */
+  onOfferChoices?: (anchor: HTMLElement) => void;
 }
 
 const SavedPassagePill = memo(function SavedPassagePill({
   startVerse,
   endVerse,
   stopsMemorizing = false,
+  onOfferChoices,
   reference,
   onHoverEnter,
   onHoverLeave,
@@ -60,6 +63,7 @@ const SavedPassagePill = memo(function SavedPassagePill({
   onToggleSavedPassage: (startVerse: number, endVerse: number) => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const offerChoices = stopsMemorizing ? undefined : onOfferChoices;
 
   return (
     <>
@@ -74,9 +78,13 @@ const SavedPassagePill = memo(function SavedPassagePill({
         onMouseLeave={onHoverLeave}
         onClick={(e) => {
           e.stopPropagation();
-          setConfirmOpen(true);
+          if (stopsMemorizing) setConfirmOpen(true);
+          else if (offerChoices) offerChoices(e.currentTarget);
+          else onToggleSavedPassage(startVerse, endVerse);
         }}
-        aria-label={`Hearted passage: verses ${startVerse}–${endVerse}. Click to remove.`}
+        aria-label={`Hearted passage: verses ${startVerse}–${endVerse}. ${
+          offerChoices ? "Memorize or unheart" : "Click to remove."
+        }`}
       >
         <span
           aria-hidden
@@ -89,15 +97,14 @@ const SavedPassagePill = memo(function SavedPassagePill({
           </span>
         </span>
       </button>
-      <UnheartRangeDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        onConfirm={() => onToggleSavedPassage(startVerse, endVerse)}
-        stopsMemorizing={stopsMemorizing}
-        reference={reference}
-        startVerse={startVerse}
-        endVerse={endVerse}
-      />
+      {stopsMemorizing ? (
+        <UnheartMemorizingDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onConfirm={() => onToggleSavedPassage(startVerse, endVerse)}
+          reference={reference}
+        />
+      ) : null}
     </>
   );
 });
@@ -451,6 +458,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
                   startVerse={span.startVerse}
                   endVerse={span.endVerse}
                   stopsMemorizing={span.stopsMemorizing}
+                  onOfferChoices={span.onOfferChoices}
                   reference={
                     currentChapter
                       ? formatSpanTitle({ ...currentChapter, ...span })

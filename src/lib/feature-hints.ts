@@ -30,7 +30,10 @@ export const FEATURE_HINTS = {
   READING_MODE_REVEAL: "reading-mode-reveal",
   /** "How memorizing works" inside the Memorize sheet until the first start. */
   MEMORIZE_EXPLAINER: "memorize-explainer",
-  /** Reader popover after a heart offering to memorize it; dismissed = Don't ask again. */
+  /**
+   * Legacy "Don't ask again" for the reader's heart popover, which now always
+   * offers Memorize. Retained so persisted rows stay valid; no longer read.
+   */
   HEART_MEMORIZE_NUDGE: "heart-memorize-nudge",
   /** Session summary banner the first time a verse is memorized. */
   CELEBRATE_FIRST_VERSE: "celebrate-first-verse",

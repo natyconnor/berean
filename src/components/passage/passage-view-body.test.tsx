@@ -1,7 +1,7 @@
 import { createRef, type ComponentProps, type ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { PassageHeartInfo } from "@/lib/passage-heart-info";
@@ -12,16 +12,14 @@ import { PassageViewBody } from "./passage-view-body";
 // Monday, October 12, 2026, noon UTC.
 const NOW = Date.UTC(2026, 9, 12, 12);
 
+const { openSheet } = vi.hoisted(() => ({ openSheet: vi.fn() }));
+
 vi.mock("@/hooks/use-live-now", () => ({ useLiveNow: () => NOW }));
 vi.mock("@/hooks/use-drag-auto-scroll", () => ({ useDragAutoScroll: vi.fn() }));
 vi.mock("@/lib/use-theme", () => ({ useTheme: () => ({ darkMode: false }) }));
 vi.mock("@/components/memory/memorize/memorize-context", () => ({
-  useMemorizeSheet: () => ({ open: vi.fn() }),
+  useMemorizeSheet: () => ({ open: openSheet }),
 }));
-vi.mock("./hooks/use-heart-memorize-nudge", () => ({
-  useHeartMemorizeNudge: () => ({ heartClicked: vi.fn(), nudge: {} }),
-}));
-vi.mock("./heart-memorize-nudge", () => ({ HeartMemorizeNudge: () => null }));
 vi.mock("./chapter-notes-chrome", () => ({ ChapterNotesChrome: () => null }));
 vi.mock("@/components/bible/chapter-pager", () => ({
   ChapterPager: () => null,
@@ -136,6 +134,7 @@ function psalm16Passage(): PassageHeartInfo {
 function renderBody(
   savedVersesForChapter: SavedSpan[],
   filteredVerses = Array.from({ length: 11 }, (_, i) => verse(i + 1)),
+  interactionOverrides: Partial<PassageNotesInteraction> = {},
 ) {
   const onToggleSaved = vi.fn();
   const props: BodyProps = {
@@ -149,7 +148,7 @@ function renderBody(
     viewportRef: createRef<HTMLDivElement>(),
     filteredVerses,
     showSectionHeaders: true,
-    passageNotesInteraction: interaction(),
+    passageNotesInteraction: { ...interaction(), ...interactionOverrides },
     effectiveViewMode: "read",
     isFocusMode: false,
     focusGlowAmount: 0,
@@ -180,6 +179,33 @@ function verseRow(container: HTMLElement, verseNumber: number): HTMLElement {
   if (!row) throw new Error(`No row for verse ${verseNumber}`);
   return row;
 }
+
+/** jsdom lays nothing out; a zero rect reads as scrolled out of view. */
+function placeOnScreen(element: HTMLElement): HTMLElement {
+  element.getBoundingClientRect = () => new DOMRect(300, 200, 36, 36);
+  return element;
+}
+
+function heartPopover() {
+  return screen.queryByRole("dialog", { name: "In your hearts" });
+}
+
+beforeAll(() => {
+  // `hideWhenDetached` clips to the viewport, which jsdom sizes 0×0.
+  for (const [key, value] of [
+    ["clientWidth", 1024],
+    ["clientHeight", 768],
+  ] as const) {
+    Object.defineProperty(document.documentElement, key, {
+      configurable: true,
+      value,
+    });
+  }
+});
+
+beforeEach(() => {
+  openSheet.mockReset();
+});
 
 const PASSAGE_HEART: SavedSpan = {
   startVerse: 1,
@@ -369,15 +395,169 @@ describe("PassageViewBody – memorizing verse hearts", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the plain Heart / Unheart wording for a verse not in Memory", () => {
-    const { container } = renderBody([VERSE_8_HEART]);
+  it("asks the memorizing confirm before unhearting a learning verse", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved } = renderBody([
+      {
+        startVerse: 2,
+        endVerse: 2,
+        stopsMemorizing: true,
+        memory: {
+          status: "learning",
+          learnStage: 2,
+          stageReps: 0,
+          intervalDays: 0,
+          dueAt: NOW - 1,
+          inMemory: true,
+        },
+      },
+    ]);
 
-    const heart = within(verseRow(container, 8)).getByRole("button", {
-      name: "Remove from hearted verses",
-    });
+    await user.click(
+      placeOnScreen(
+        within(verseRow(container, 2)).getByRole("button", {
+          name: /Remove from hearted verses/,
+        }),
+      ),
+    );
+    expect(
+      screen.getByRole("alertdialog", { name: "Unheart Psalm 16:2?" }),
+    ).toHaveTextContent("Unhearting also stops memorizing it.");
+    expect(heartPopover()).not.toBeInTheDocument();
+    expect(onToggleSaved).not.toHaveBeenCalled();
+  });
+});
+
+describe("PassageViewBody – hearts not being memorized", () => {
+  it("offers Memorize or Unheart on a hearted verse, and Unheart unhearts", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved } = renderBody([VERSE_8_HEART]);
+
+    const heart = placeOnScreen(
+      within(verseRow(container, 8)).getByRole("button", {
+        name: "Hearted. Memorize or unheart",
+      }),
+    );
     expect(heart.querySelector("[data-mastery-ring]")).toBeNull();
     expect(
-      within(verseRow(container, 8)).getByText("Unheart"),
+      within(verseRow(container, 8)).getByText("Memorize or unheart"),
     ).toBeInTheDocument();
+
+    await user.click(heart);
+    expect(heartPopover()).toHaveAccessibleDescription("Memorize Psalm 16:8?");
+    expect(screen.getByRole("button", { name: "Memorize" })).toHaveFocus();
+    expect(onToggleSaved).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Unheart" }));
+    expect(onToggleSaved).toHaveBeenCalledExactlyOnceWith(8, 8);
+    expect(heartPopover()).not.toBeInTheDocument();
+    expect(heart).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("opens the Memorize sheet for that verse from the popover", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved } = renderBody([VERSE_8_HEART]);
+
+    const heart = placeOnScreen(
+      within(verseRow(container, 8)).getByRole("button", {
+        name: "Hearted. Memorize or unheart",
+      }),
+    );
+    await user.click(heart);
+    await user.click(screen.getByRole("button", { name: "Memorize" }));
+
+    expect(openSheet).toHaveBeenCalledWith(
+      {
+        kind: "spans",
+        spans: [{ book: "Psalms", chapter: 16, startVerse: 8, endVerse: 8 }],
+      },
+      { returnFocusTo: heart },
+    );
+    expect(onToggleSaved).not.toHaveBeenCalled();
+  });
+
+  it("offers the same on a range pill instead of Remove this passage?", async () => {
+    const user = userEvent.setup();
+    const { onToggleSaved } = renderBody([
+      { startVerse: 5, endVerse: 6, stopsMemorizing: false },
+    ]);
+
+    await user.click(
+      placeOnScreen(
+        screen.getByRole("button", {
+          name: "Hearted passage: verses 5–6. Memorize or unheart",
+        }),
+      ),
+    );
+    expect(heartPopover()).toHaveAccessibleDescription(
+      "Memorize Psalm 16:5–6?",
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Remove this passage?" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Unheart" }));
+    expect(onToggleSaved).toHaveBeenCalledExactlyOnceWith(5, 6);
+  });
+
+  it("offers the same from the selection bar, which has no Memorize", async () => {
+    const user = userEvent.setup();
+    const { onToggleSaved } = renderBody(
+      [{ startVerse: 5, endVerse: 6, stopsMemorizing: false }],
+      [
+        verse(4),
+        {
+          kind: "passageGroup",
+          anchorVerse: 5,
+          verses: [5, 6].map((verseNumber) => ({
+            verseNumber,
+            text: `Psalm 16 verse ${verseNumber}`,
+          })),
+          passageNotes: [],
+          singleNotesByVerse: new Map(),
+        },
+        verse(7),
+      ],
+      { selectedVerses: new Set([5, 6]), isPassageSelection: true },
+    );
+
+    const bar = screen.getByRole("toolbar", {
+      name: "Selected verses, Psalm 16:5–6",
+    });
+    expect(
+      within(bar).queryByRole("button", { name: "Memorize" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      placeOnScreen(
+        within(bar).getByRole("button", {
+          name: "Hearted. Memorize or unheart",
+        }),
+      ),
+    );
+    expect(heartPopover()).toHaveAccessibleDescription(
+      "Memorize Psalm 16:5–6?",
+    );
+    await user.click(screen.getByRole("button", { name: "Unheart" }));
+    expect(onToggleSaved).toHaveBeenCalledExactlyOnceWith(5, 6);
+  });
+
+  it("just unhearts a verse its memorized passage already covers", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved } = renderBody([
+      PASSAGE_HEART,
+      VERSE_8_HEART,
+    ]);
+
+    await user.click(
+      placeOnScreen(
+        within(verseRow(container, 8)).getByRole("button", {
+          name: "Remove from hearted verses",
+        }),
+      ),
+    );
+    expect(onToggleSaved).toHaveBeenCalledExactlyOnceWith(8, 8);
+    expect(heartPopover()).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });

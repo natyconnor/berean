@@ -15,7 +15,10 @@ import type { EsvVerseHeading } from "../../../shared/esv-api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChapterPager } from "@/components/bible/chapter-pager";
 import { CopyrightNotice } from "@/components/bible/copyright-notice";
-import { VerseRowWithNotes } from "./view/verse-row-with-notes";
+import {
+  VerseRowWithNotes,
+  type SavedPassageAtAnchor,
+} from "./view/verse-row-with-notes";
 import { PassageGroupWithNotes } from "./view/passage-group-with-notes";
 import { SectionHeading } from "./section-heading";
 import { ChapterNotesChrome } from "./chapter-notes-chrome";
@@ -47,12 +50,13 @@ import {
   passageHeartCopy,
   verseHeartMemoryCopy,
 } from "@/lib/heart-memory-copy";
-import { logInteraction } from "@/lib/dev-log";
-import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import type { PassageHeartControl } from "./verse-row";
 import type { GroupSelectionBar } from "./view/passage-group-with-notes";
 import { HeartMemorizeNudge } from "./heart-memorize-nudge";
-import { useHeartMemorizeNudge } from "./hooks/use-heart-memorize-nudge";
+import {
+  isSpanMemorizing,
+  useHeartMemorizeNudge,
+} from "./hooks/use-heart-memorize-nudge";
 import {
   PassageRailPastHeadings,
   type PassageRailMark,
@@ -268,8 +272,7 @@ export function PassageViewBody({
   const heartNudge = useHeartMemorizeNudge({
     suppressed: isFocusMode || tourActive,
   });
-  const { heartClicked } = heartNudge;
-  const memorizeSheet = useMemorizeSheet();
+  const { heartClicked, heartedClicked } = heartNudge;
 
   const spanTitle = useCallback(
     (startVerse: number, endVerse: number) =>
@@ -296,20 +299,25 @@ export function PassageViewBody({
     [book, chapter, heartClicked, onToggleSaved, savedSpans],
   );
 
-  const openMemorizeForRange = useCallback(
-    (startVerse: number, endVerse: number, opener: HTMLElement) => {
-      logInteraction("reader", "memorize-selection-opened", {
-        book,
-        chapter,
-        startVerse,
-        endVerse,
-      });
-      memorizeSheet.open(
-        { kind: "spans", spans: [{ book, chapter, startVerse, endVerse }] },
-        { returnFocusTo: opener },
-      );
-    },
-    [book, chapter, memorizeSheet],
+  // A heart already on offers Memorize or Unheart when clicked, unless
+  // unhearting stops memorizing (it confirms) or another heart is memorizing
+  // the span (it just unhearts).
+  const offersChoices = useCallback(
+    (startVerse: number, endVerse: number) =>
+      !stopsMemorizingSpan(startVerse, endVerse) &&
+      !isSpanMemorizing(startVerse, endVerse, savedSpans),
+    [savedSpans, stopsMemorizingSpan],
+  );
+
+  const offerChoices = useCallback(
+    (
+      startVerse: number,
+      endVerse: number,
+      anchor: HTMLElement,
+      unheart: () => void,
+    ) =>
+      heartedClicked({ book, chapter, startVerse, endVerse }, anchor, unheart),
+    [book, chapter, heartedClicked],
   );
 
   const [hoveredSavedPassage, setHoveredSavedPassage] = useState<{
@@ -357,9 +365,6 @@ export function PassageViewBody({
                   tooltip: copy.tooltip,
                   ariaLabel: copy.ariaLabel,
                   title: passage.title,
-                  startVerse: span.startVerse,
-                  endVerse: span.endVerse,
-                  stopsMemorizing: span.stopsMemorizing === true,
                   onUnheart: () =>
                     onToggleSaved(span.startVerse, span.endVerse),
                   onHoverChange: (hovering) =>
@@ -396,23 +401,27 @@ export function PassageViewBody({
   };
 
   const savedPassagesByAnchor = useMemo(() => {
-    const map = new Map<
-      number,
-      Array<{ startVerse: number; endVerse: number; stopsMemorizing: boolean }>
-    >();
+    const map = new Map<number, SavedPassageAtAnchor[]>();
     for (const span of savedSpans) {
-      if (span.startVerse === span.endVerse) continue;
+      const { startVerse, endVerse } = span;
+      if (startVerse === endVerse) continue;
       if (passageRail.drawnSpans.has(span)) continue;
-      const arr = map.get(span.startVerse) ?? [];
+      const arr = map.get(startVerse) ?? [];
       arr.push({
-        startVerse: span.startVerse,
-        endVerse: span.endVerse,
+        startVerse,
+        endVerse,
         stopsMemorizing: span.stopsMemorizing === true,
+        onOfferChoices: offersChoices(startVerse, endVerse)
+          ? (anchor) =>
+              offerChoices(startVerse, endVerse, anchor, () =>
+                onToggleSaved(startVerse, endVerse),
+              )
+          : undefined,
       });
-      map.set(span.startVerse, arr);
+      map.set(startVerse, arr);
     }
     return map;
-  }, [passageRail, savedSpans]);
+  }, [offerChoices, offersChoices, onToggleSaved, passageRail, savedSpans]);
 
   const isInHoveredSavedPassage = useCallback(
     (verseNumber: number) =>
@@ -466,6 +475,10 @@ export function PassageViewBody({
         ...spanHeartMemory(passageSelectLo, passageSelectHi),
         stopsMemorizing: stopsMemorizingSpan(passageSelectLo, passageSelectHi),
         reference: spanTitle(passageSelectLo, passageSelectHi),
+        onOfferChoices: offersChoices(passageSelectLo, passageSelectHi)
+          ? (anchor, unheart) =>
+              offerChoices(passageSelectLo, passageSelectHi, anchor, unheart)
+          : undefined,
       };
     }
     return {
@@ -477,6 +490,10 @@ export function PassageViewBody({
         : spanHeartMemory(verseNumber, verseNumber)),
       stopsMemorizing: stopsMemorizingSpan(verseNumber, verseNumber),
       reference: spanTitle(verseNumber, verseNumber),
+      onOfferChoices: offersChoices(verseNumber, verseNumber)
+        ? (anchor, unheart) =>
+            offerChoices(verseNumber, verseNumber, anchor, unheart)
+        : undefined,
     };
   };
 
@@ -651,8 +668,12 @@ export function PassageViewBody({
                           stopsMemorizing: stopsMemorizingSpan(gLo, gHi),
                           onToggleHeart: (anchor) =>
                             toggleHeart(gLo, gHi, anchor),
-                          onMemorize: (opener) =>
-                            openMemorizeForRange(gLo, gHi, opener),
+                          onOfferChoices: offersChoices(gLo, gHi)
+                            ? (anchor) =>
+                                offerChoices(gLo, gHi, anchor, () =>
+                                  onToggleSaved(gLo, gHi),
+                                )
+                            : undefined,
                           onClear: requestClearSelection,
                         }
                       : null;

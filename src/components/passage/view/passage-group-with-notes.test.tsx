@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { VerseRef } from "@/lib/verse-ref-utils";
@@ -80,7 +80,6 @@ const selectionBar = {
   hearted: false,
   stopsMemorizing: false,
   onToggleHeart: vi.fn(),
-  onMemorize: vi.fn(),
   onClear: vi.fn(),
 };
 
@@ -142,8 +141,11 @@ describe("PassageGroupWithNotes selection bar", () => {
     });
     expect(bar).toHaveClass("absolute", "-top-4");
     expect(
-      screen.getByRole("button", { name: "Memorize" }),
+      within(bar).getByRole("button", { name: "Heart" }),
     ).toBeInTheDocument();
+    expect(
+      within(bar).queryByRole("button", { name: "Memorize" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Heart this verse" }),
     ).not.toBeInTheDocument();
@@ -194,9 +196,6 @@ describe("PassageGroupWithNotes selection bar", () => {
               ariaLabel:
                 "John 1, hearted. Memorizing: 25 of 51 verses learned. Remove heart",
               title: "John 1",
-              startVerse: 1,
-              endVerse: 51,
-              stopsMemorizing: true,
               onUnheart: vi.fn(),
             },
           },

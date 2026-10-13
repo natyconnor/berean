@@ -131,10 +131,10 @@ describe("GoalCard", () => {
     expect(button.className).toContain("z-10");
   });
 
-  it("shows a building passage's step, Today chip and only the Learned bar", () => {
+  it("shows a building passage's step and only the Learned bar, with no status chip", () => {
     renderCard(passage());
 
-    expect(screen.getByText("Today")).toBeInTheDocument();
+    expect(screen.queryByText("Today")).not.toBeInTheDocument();
     expect(screen.getByText("Passage · 11 verses")).toBeInTheDocument();
     expect(screen.getByText("Today:")).toBeInTheDocument();
     expect(
@@ -163,7 +163,7 @@ describe("GoalCard", () => {
       passage({ learnedVerses: 0, lastPracticedAt: null }),
     );
 
-    expect(screen.getByText("Starts today")).toBeInTheDocument();
+    expect(screen.queryByText("Starts today")).not.toBeInTheDocument();
     expect(buttonsIn(container)[0]).toHaveTextContent("Start · 7 min");
     expect(screen.getByText("learn it in about 5 days")).toBeInTheDocument();
   });
@@ -182,7 +182,7 @@ describe("GoalCard", () => {
       "Ephesians 2:10",
       "+3 more",
     ]);
-    expect(screen.getByText("8 reviews today")).toBeInTheDocument();
+    expect(screen.queryByText("8 reviews today")).not.toBeInTheDocument();
 
     const [button] = buttonsIn(container);
     expect(button).toHaveTextContent("Review 8 · 8 min");
@@ -298,7 +298,7 @@ describe("GoalCard", () => {
   it("starts a new verse with its first step", () => {
     const { container } = renderCard(verse());
 
-    expect(screen.getByText("Starts today")).toBeInTheDocument();
+    expect(screen.queryByText("Starts today")).not.toBeInTheDocument();
     expect(
       screen.getByText("read it, then type it with first letters."),
     ).toBeInTheDocument();

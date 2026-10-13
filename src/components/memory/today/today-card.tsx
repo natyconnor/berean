@@ -27,8 +27,14 @@ import {
 import { TODAY_RETURN } from "@/lib/today-goal-card";
 
 const START_TODAY_HREF = withReturn(memoryTodaySessionHref(), TODAY_RETURN);
-const ONLY_LEARNING_HREF = withReturn("/memory/learn", TODAY_RETURN);
-const ONLY_REVIEWS_HREF = withReturn("/memory/review", TODAY_RETURN);
+const ONLY_LEARNING_HREF = withReturn(
+  memoryTodaySessionHref({ only: "learning" }),
+  TODAY_RETURN,
+);
+const ONLY_REVIEWS_HREF = withReturn(
+  memoryTodaySessionHref({ only: "review" }),
+  TODAY_RETURN,
+);
 const EXTRA_PRACTICE_HREF = withReturn("/memory/practice", TODAY_RETURN);
 
 const eyebrowClassName =

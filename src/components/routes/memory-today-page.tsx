@@ -13,18 +13,29 @@ import type {
   PracticeSessionResult,
   PracticeVerse,
 } from "@/components/memory/practice/practice-board";
+import { SessionColumns } from "@/components/memory/practice/session-columns";
 import type { SessionCompleteVerse } from "@/components/memory/practice/session-complete";
 import {
   SessionHeaderProgress,
   type SessionProgress,
 } from "@/components/memory/practice/session-header-progress";
+import {
+  TodayQueueOverview,
+  TodayQueueRail,
+} from "@/components/memory/practice/today-queue-rail";
 import { TodaySessionSummary } from "@/components/memory/practice/today-session-summary";
 import {
   dueQueueEntryToPracticeVerse,
   toPracticeVerse,
 } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
-import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
@@ -41,22 +52,36 @@ import { sortSessionVerses } from "@/lib/memory-session-order";
 import {
   planTodaySession,
   todayInterstitialCopy,
-  todaySegmentHeader,
+  todayQueueGroups,
+  todaySessionCountLabel,
+  todaySessionCounts,
   todaySessionProgress,
   type TodayPassageInput,
+  type TodayQueueEntry,
   type TodaySegment,
+  type TodaySessionOnly,
 } from "@/lib/memory-today-session";
 import type { ReviewSessionAttempt } from "@/lib/review-session-attempts";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/today";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { verseRefKey } from "../../../shared/verse-ref-key";
 
 interface TodayChrome {
   onExit: () => void;
   backLabel: string;
   returnTo: string | undefined;
+  /** Header text after the title: what this session covers. */
+  subtitle: string;
 }
+
+const SESSION_SUBTITLES: Record<TodaySessionOnly | "all", string> = {
+  all: "Learn, then review",
+  learning: "New learning",
+  review: "Reviews",
+};
 
 /** Everything the session runs, frozen when the route opened. */
 interface TodaySessionData {
@@ -71,23 +96,39 @@ interface TodaySessionData {
 /**
  * `/memory/today`: building passages, then learning verses, then due reviews,
  * with a short pause between parts and one summary at the end. With
- * `?packId=`, only that pack's work today. Done, Stop for today, and Back go
+ * `?packId=`, only that pack's work today. With `?only=learning` or
+ * `?only=review`, only that half of the day. Done, Stop for today, and Back go
  * to `return`.
  */
 export function MemoryTodayPage(): JSX.Element {
-  const { packId, return: returnTo } = Route.useSearch();
+  const { packId, only, return: returnTo } = Route.useSearch();
   const onExit = useMemoryExit(returnTo);
   const backLabel = useMemoryExitLabel(returnTo);
-  const chrome: TodayChrome = { onExit, backLabel, returnTo };
+  const chrome: TodayChrome = {
+    onExit,
+    backLabel,
+    returnTo,
+    subtitle: SESSION_SUBTITLES[only ?? "all"],
+  };
 
   return packId ? (
-    <PackTodayLoader packId={packId as Id<"packs">} chrome={chrome} />
+    <PackTodayLoader
+      packId={packId as Id<"packs">}
+      only={only}
+      chrome={chrome}
+    />
   ) : (
-    <GlobalTodayLoader chrome={chrome} />
+    <GlobalTodayLoader only={only} chrome={chrome} />
   );
 }
 
-function GlobalTodayLoader({ chrome }: { chrome: TodayChrome }): JSX.Element {
+function GlobalTodayLoader({
+  only,
+  chrome,
+}: {
+  only: TodaySessionOnly | undefined;
+  chrome: TodayChrome;
+}): JSX.Element {
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const passages = useFrozenQuery(api.passageMemory.dueForLearning, {
@@ -132,6 +173,7 @@ function GlobalTodayLoader({ chrome }: { chrome: TodayChrome }): JSX.Element {
   return (
     <TodaySession
       data={data}
+      only={only}
       dayKey={learnDismissDayKey(now)}
       chrome={chrome}
     />
@@ -140,9 +182,11 @@ function GlobalTodayLoader({ chrome }: { chrome: TodayChrome }): JSX.Element {
 
 function PackTodayLoader({
   packId,
+  only,
   chrome,
 }: {
   packId: Id<"packs">;
+  only: TodaySessionOnly | undefined;
   chrome: TodayChrome;
 }): JSX.Element {
   const now = useLiveNow();
@@ -223,6 +267,7 @@ function PackTodayLoader({
   return (
     <TodaySession
       data={data}
+      only={only}
       dayKey={learnDismissDayKey(now)}
       chrome={chrome}
     />
@@ -240,12 +285,32 @@ interface TodayTally {
   attempts: ReviewSessionAttempt[];
 }
 
+/** A verse card's row in today's queue: its reference, or a unified pack's name. */
+function queueEntries(
+  verses: readonly PracticeVerse[],
+  scopeLabel: string,
+): TodayQueueEntry[] {
+  return verses.map((verse) =>
+    verse.composite
+      ? {
+          id: `unified:${verse.composite.packId}`,
+          label: verse.composite.packName ?? scopeLabel,
+        }
+      : {
+          id: verseRefKey(verse.reference),
+          label: formatVerseRef(verse.reference),
+        },
+  );
+}
+
 function TodaySession({
   data,
+  only,
   dayKey,
   chrome,
 }: {
   data: TodaySessionData;
+  only: TodaySessionOnly | undefined;
   dayKey: number;
   chrome: TodayChrome;
 }): JSX.Element {
@@ -257,8 +322,14 @@ function TodaySession({
       passages: data.passages.filter((item) => !dismissed.has(item.packId)),
       learningVerses: data.learning.length,
       reviews: data.reviews.length,
+      only,
     });
   });
+  // Verse boards run in Scripture order by default; the queue lists them so.
+  const [queue] = useState(() => ({
+    learning: queueEntries(sortSessionVerses(data.learning), data.title),
+    reviews: queueEntries(data.reviews, data.title),
+  }));
   const [step, setStep] = useState<TodayStep>(
     segments.length > 0 ? { kind: "segment", index: 0 } : { kind: "summary" },
   );
@@ -344,6 +415,35 @@ function TodaySession({
     );
   }
 
+  /** Header bar for the whole day, so it never reads as one part's progress. */
+  const sessionProgress = (
+    completed: number,
+    doneInSegment = 0,
+  ): SessionProgress => ({
+    label: todaySessionCountLabel(
+      todaySessionCounts(segments, completed, doneInSegment),
+    ),
+    fraction: todaySessionProgress(segments, completed, doneInSegment),
+  });
+  const queueGroups = (completed: number, current: number | null) =>
+    todayQueueGroups({
+      segments,
+      learning: queue.learning,
+      reviews: queue.reviews,
+      completed,
+      current,
+    });
+  // A queue of one is just the thing on screen.
+  const showQueue =
+    segments.length > 1 || queue.learning.length + queue.reviews.length > 1;
+  const queueRail = (completed: number, current: number | null) =>
+    showQueue ? (
+      <TodayQueueRail
+        groups={queueGroups(completed, current)}
+        counts={todaySessionCounts(segments, completed)}
+      />
+    ) : undefined;
+
   if (step.kind === "between") {
     const next = segments[step.next];
     if (!next) return <SessionLoading />;
@@ -351,16 +451,15 @@ function TodaySession({
       <TodayShell
         title={data.title}
         chrome={chrome}
-        progress={{
-          label: todaySegmentHeader(next),
-          fraction: todaySessionProgress(segments, step.next),
-        }}
+        progress={sessionProgress(step.next)}
       >
-        <TodayInterstitial
-          next={next}
-          onContinue={() => setStep({ kind: "segment", index: step.next })}
-          onStop={chrome.onExit}
-        />
+        <SessionColumns aside={queueRail(step.next, null)}>
+          <TodayInterstitial
+            next={next}
+            onContinue={() => setStep({ kind: "segment", index: step.next })}
+            onStop={chrome.onExit}
+          />
+        </SessionColumns>
       </TodayShell>
     );
   }
@@ -368,10 +467,6 @@ function TodaySession({
   const index = step.index;
   const segment = segments[index];
   if (!segment) return <SessionLoading />;
-  const progress: SessionProgress = {
-    label: todaySegmentHeader(segment),
-    fraction: todaySessionProgress(segments, index),
-  };
 
   if (segment.kind === "passage") {
     return (
@@ -379,7 +474,8 @@ function TodaySession({
         key={`passage:${segment.packId}`}
         packId={segment.packId}
         title={segment.title}
-        progress={progress}
+        progress={sessionProgress(index)}
+        aside={queueRail(index, index)}
         chrome={chrome}
         onDone={() => {
           dismissLearnPackForToday(segment.packId, dayKey);
@@ -405,7 +501,12 @@ function TodaySession({
       backLabel={chrome.backLabel}
       returnTo={chrome.returnTo}
       hasMemorized={data.hasMemorized}
-      progress={progress}
+      progress={(run) => sessionProgress(index, run.done)}
+      railHeader={
+        segments.length > 1 ? (
+          <TodayQueueOverview groups={queueGroups(index, index)} />
+        ) : undefined
+      }
       onComplete={(result) => recordRun(index, result)}
       emptyState={<SessionLoading />}
     />
@@ -416,6 +517,7 @@ function TodayPassageSegment({
   packId,
   title,
   progress,
+  aside,
   chrome,
   onDone,
   onSkip,
@@ -423,6 +525,8 @@ function TodayPassageSegment({
   packId: Id<"packs">;
   title: string;
   progress: SessionProgress;
+  /** The rest of today's queue beside the passage. */
+  aside?: ReactNode;
   chrome: TodayChrome;
   /** "That's enough for today": this passage is done for the day. */
   onDone: () => void;
@@ -455,6 +559,7 @@ function TodayPassageSegment({
       exitTooltip="Leave today's session"
       backLabel={chrome.backLabel}
       progress={progress}
+      aside={aside}
     />
   );
 }
@@ -468,14 +573,16 @@ function TodayInterstitial({
   onContinue: () => void;
   onStop: () => void;
 }): JSX.Element {
+  const copy = todayInterstitialCopy(next);
   return (
     <div className="flex min-h-[55vh] items-center justify-center">
       <Card className="mx-auto w-full max-w-xl overflow-hidden">
         <CardHeader className="gap-3 text-center">
           <CheckCircle2 className="mx-auto h-8 w-8 text-primary" aria-hidden />
-          <CardTitle className="text-2xl tracking-tight">
-            {todayInterstitialCopy(next)}
+          <CardTitle className="text-2xl leading-tight tracking-tight text-balance">
+            <h2>{copy.title}</h2>
           </CardTitle>
+          <CardDescription className="text-sm">{copy.time}</CardDescription>
         </CardHeader>
         <CardFooter className="flex flex-wrap items-center justify-center gap-2 border-t">
           <Button type="button" onClick={onContinue} autoFocus>
@@ -523,7 +630,7 @@ function TodayShell({
               ·
             </span>
             <span className="hidden shrink-0 font-medium text-muted-foreground sm:inline">
-              Learn, then review
+              {chrome.subtitle}
             </span>
           </h1>
           {progress ? <SessionHeaderProgress progress={progress} /> : null}

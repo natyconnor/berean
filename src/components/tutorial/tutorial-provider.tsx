@@ -61,7 +61,7 @@ function memorizeStepDescription({ pathname }: TutorialStepContext) {
       <strong className="font-semibold text-foreground">
         {chapter ? memorizeTitleLabel(chapter) : MEMORIZE_LABEL}
       </strong>{" "}
-      here, or select a few verses and tap{" "}
+      here, or heart a few verses and tap{" "}
       <strong className="font-semibold text-foreground">
         {MEMORIZE_LABEL}
       </strong>

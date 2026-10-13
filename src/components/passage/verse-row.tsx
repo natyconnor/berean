@@ -70,6 +70,11 @@ export interface PassageHeartControl {
   stopsMemorizing?: boolean;
   /** Names the verse in that confirm: "Psalm 1:5". */
   reference?: string;
+  /**
+   * Set when clicking the filled heart offers Memorize or Unheart instead of
+   * unhearting; `unheart` unhearts it.
+   */
+  onOfferChoices?: (anchor: HTMLElement, unheart: () => void) => void;
   /** Set while the verse is in Memory: replaces "Heart" / "Unheart". */
   memoryCopy?: HeartMemoryCopy;
 }
@@ -252,9 +257,15 @@ export const PassageHeartAnimatedButton = memo(
     );
     const showMasteryRing = optimisticFilled && masteryFraction > 0;
     const { memoryCopy } = passageHeart;
-    const heartLabel = optimisticFilled
-      ? "Remove from hearted verses"
-      : "Heart this verse";
+    const offerChoices =
+      optimisticFilled && !passageHeart.stopsMemorizing
+        ? passageHeart.onOfferChoices
+        : undefined;
+    const heartLabel = !optimisticFilled
+      ? "Heart this verse"
+      : offerChoices
+        ? "Hearted. Memorize or unheart"
+        : "Remove from hearted verses";
 
     return (
       <div
@@ -334,6 +345,14 @@ export const PassageHeartAnimatedButton = memo(
               setConfirmUnheartOpen(true);
               return;
             }
+            if (offerChoices) {
+              const anchor = e.currentTarget;
+              offerChoices(anchor, () => {
+                setOptimisticFilled(false);
+                passageHeart.onToggle(anchor);
+              });
+              return;
+            }
             const nextFilled = !optimisticFilled;
             setOptimisticFilled(nextFilled);
             if (nextFilled && !reduceMotion) {
@@ -403,7 +422,12 @@ export const PassageHeartAnimatedButton = memo(
             shouldFlipTooltipBelow ? "top-full mt-1.5" : "bottom-full mb-1.5",
           )}
         >
-          {memoryCopy?.tooltip ?? (optimisticFilled ? "Unheart" : "Heart")}
+          {memoryCopy?.tooltip ??
+            (!optimisticFilled
+              ? "Heart"
+              : offerChoices
+                ? "Memorize or unheart"
+                : "Unheart")}
         </span>
         {passageHeart.stopsMemorizing ? (
           <UnheartMemorizingDialog

@@ -1,10 +1,9 @@
 import { useRef, useState } from "react";
-import { Brain, Heart, X } from "lucide-react";
+import { Heart, X } from "lucide-react";
 
-import { MEMORIZE_LABEL } from "@/lib/memory-copy";
 import { cn } from "@/lib/utils";
 
-import { UnheartRangeDialog } from "./unheart-memorizing-dialog";
+import { UnheartMemorizingDialog } from "./unheart-memorizing-dialog";
 
 /** Phones and touch screens pin the bar to the shell's bottom edge. */
 export const SELECTION_BAR_PINNED_QUERY =
@@ -13,15 +12,14 @@ export const SELECTION_BAR_PINNED_QUERY =
 export interface SelectionMemorizeBarProps {
   /** "Psalm 1:5–6". */
   reference: string;
-  startVerse: number;
-  endVerse: number;
   /** An exact heart exists for the selected range. */
   hearted: boolean;
   /** Unhearting the range would stop memorizing it. */
   stopsMemorizing: boolean;
   /** Hearts or (after its confirm) unhearts the range; `anchor` is the Heart button. */
   onToggleHeart: (anchor: HTMLElement) => void;
-  onMemorize: (opener: HTMLElement) => void;
+  /** Set when clicking Hearted offers Memorize or Unheart instead of unhearting. */
+  onOfferChoices?: (anchor: HTMLElement) => void;
   onClear: () => void;
   /** Full width with 44px targets, for touch. */
   pinned?: boolean;
@@ -29,23 +27,23 @@ export interface SelectionMemorizeBarProps {
 }
 
 /**
- * The quiet bar on a 2+ verse selection: range · Heart · Memorize · ×.
- * Unhearting from here asks the same confirm as the range's gutter pill.
+ * The quiet bar on a 2+ verse selection: range · Heart · ×. Hearting offers
+ * Memorize in the heart popover; unhearting asks the same as the range's
+ * gutter pill.
  */
 export function SelectionMemorizeBar({
   reference,
-  startVerse,
-  endVerse,
   hearted,
   stopsMemorizing,
   onToggleHeart,
-  onMemorize,
+  onOfferChoices,
   onClear,
   pinned = false,
   className,
 }: SelectionMemorizeBarProps) {
   const heartRef = useRef<HTMLButtonElement>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const offerChoices = hearted && !stopsMemorizing ? onOfferChoices : undefined;
   const target = pinned ? "h-11 px-4 text-sm" : "h-[26px] px-2.5 text-xs";
   const focusRing =
     "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -74,9 +72,14 @@ export function SelectionMemorizeBar({
         ref={heartRef}
         type="button"
         aria-pressed={hearted}
+        aria-label={offerChoices ? "Hearted. Memorize or unheart" : undefined}
         onClick={(event) => {
-          if (hearted) {
+          if (hearted && stopsMemorizing) {
             setConfirmOpen(true);
+            return;
+          }
+          if (offerChoices) {
+            offerChoices(event.currentTarget);
             return;
           }
           onToggleHeart(event.currentTarget);
@@ -98,18 +101,6 @@ export function SelectionMemorizeBar({
       </button>
       <button
         type="button"
-        onClick={(event) => onMemorize(event.currentTarget)}
-        className={cn(
-          "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary font-medium text-primary-foreground transition-colors hover:bg-primary/90",
-          target,
-          focusRing,
-        )}
-      >
-        <Brain aria-hidden className="size-3.5" />
-        {MEMORIZE_LABEL}
-      </button>
-      <button
-        type="button"
         aria-label="Clear selection"
         onClick={onClear}
         className={cn(
@@ -120,17 +111,16 @@ export function SelectionMemorizeBar({
       >
         <X aria-hidden className="size-3.5" />
       </button>
-      <UnheartRangeDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        onConfirm={() => {
-          if (heartRef.current) onToggleHeart(heartRef.current);
-        }}
-        stopsMemorizing={stopsMemorizing}
-        reference={reference}
-        startVerse={startVerse}
-        endVerse={endVerse}
-      />
+      {stopsMemorizing ? (
+        <UnheartMemorizingDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onConfirm={() => {
+            if (heartRef.current) onToggleHeart(heartRef.current);
+          }}
+          reference={reference}
+        />
+      ) : null}
     </div>
   );
 }

@@ -91,15 +91,8 @@ export function GoalCard({
 
 function Chip({ chip }: { chip: GoalChip }) {
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
-        chip.tone === "today"
-          ? "border-primary/30 bg-primary/10 text-primary"
-          : "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-      )}
-    >
-      {chip.tone === "done" ? <Check aria-hidden className="size-3" /> : null}
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-emerald-700 dark:text-emerald-300">
+      <Check aria-hidden className="size-3" />
       {chip.label}
     </span>
   );

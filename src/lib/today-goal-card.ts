@@ -1,9 +1,4 @@
-import {
-  TODAY_LABEL,
-  stepAction,
-  stepLadderDay,
-  todayStepParts,
-} from "./memory-copy";
+import { stepAction, stepLadderDay, todayStepParts } from "./memory-copy";
 import {
   goalLearnPace,
   type GoalCard,
@@ -46,8 +41,7 @@ export const TODAY_RETURN = "/memory";
 /** Pack reviews show as chips: all of them up to this many, else one fewer plus "+N more". */
 const REVIEW_CHIP_LIMIT = 6;
 
-export type GoalChip =
-  { tone: "today"; label: string } | { tone: "done"; label: string };
+export type GoalChip = { tone: "done"; label: string };
 
 export type GoalStep =
   /** "Today:" "read verses 5–6, then type them with first letters." */
@@ -121,20 +115,14 @@ function nextWhen(
   return formatNextReviewDay(goal.nextDueAt, now, timeZone);
 }
 
+/**
+ * Only "Done today" earns a chip: a card with work today already says so
+ * with its step line and its one button.
+ */
 function chipFor(goal: GoalCard, doneToday: boolean): GoalChip | null {
-  if (goal.hasWorkToday) {
-    if (goal.kind === "pack" && goal.learningToday === 0) {
-      return {
-        tone: "today",
-        label: `${plural(goal.reviewsDue.length, "review")} today`,
-      };
-    }
-    return {
-      tone: "today",
-      label: hasStarted(goal) ? TODAY_LABEL : "Starts today",
-    };
-  }
-  return doneToday ? { tone: "done", label: "Done today" } : null;
+  return !goal.hasWorkToday && doneToday
+    ? { tone: "done", label: "Done today" }
+    : null;
 }
 
 function sessionHref(packId: string, session: PackDetailSession): string {

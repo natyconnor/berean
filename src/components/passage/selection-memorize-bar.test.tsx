@@ -12,12 +12,10 @@ function renderBar(
 ) {
   const props = {
     reference: "Psalm 1:5–6",
-    startVerse: 5,
-    endVerse: 6,
     hearted: false,
     stopsMemorizing: false,
     onToggleHeart: vi.fn(),
-    onMemorize: vi.fn(),
+    onOfferChoices: vi.fn(),
     onClear: vi.fn(),
     ...overrides,
   };
@@ -30,7 +28,7 @@ function renderBar(
 }
 
 describe("SelectionMemorizeBar", () => {
-  it("shows the range with Heart, Memorize and clear", async () => {
+  it("shows the range with Heart and clear, and no Memorize", async () => {
     const user = userEvent.setup();
     const props = renderBar();
 
@@ -38,63 +36,71 @@ describe("SelectionMemorizeBar", () => {
       name: "Selected verses, Psalm 1:5–6",
     });
     expect(toolbar).toHaveTextContent("Psalm 1:5–6");
+    expect(
+      screen.queryByRole("button", { name: "Memorize" }),
+    ).not.toBeInTheDocument();
 
     const heart = screen.getByRole("button", { name: "Heart" });
     expect(heart).toHaveAttribute("aria-pressed", "false");
     await user.click(heart);
     expect(props.onToggleHeart).toHaveBeenCalledWith(heart);
+    expect(props.onOfferChoices).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-
-    const memorize = screen.getByRole("button", { name: "Memorize" });
-    await user.click(memorize);
-    expect(props.onMemorize).toHaveBeenCalledWith(memorize);
 
     await user.click(screen.getByRole("button", { name: "Clear selection" }));
     expect(props.onClear).toHaveBeenCalledOnce();
   });
 
-  it("asks the plain passage confirm before unhearting a hearted range", async () => {
+  it("offers Memorize or Unheart when Hearted is clicked", async () => {
     const user = userEvent.setup();
     const props = renderBar({ hearted: true });
 
-    const heart = screen.getByRole("button", { name: "Hearted" });
+    const heart = screen.getByRole("button", {
+      name: "Hearted. Memorize or unheart",
+    });
     expect(heart).toHaveAttribute("aria-pressed", "true");
+    expect(heart).toHaveTextContent("Hearted");
     await user.click(heart);
 
-    expect(
-      screen.getByRole("dialog", { name: "Remove this passage?" }),
-    ).toBeInTheDocument();
+    expect(props.onOfferChoices).toHaveBeenCalledWith(heart);
     expect(props.onToggleHeart).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Unheart passage" }));
-    expect(props.onToggleHeart).toHaveBeenCalledWith(heart);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("asks the memorizing confirm only when unhearting stops memorizing", async () => {
+  it("unhearts right away when it offers no choices", async () => {
+    const user = userEvent.setup();
+    const props = renderBar({ hearted: true, onOfferChoices: undefined });
+
+    const heart = screen.getByRole("button", { name: "Hearted" });
+    await user.click(heart);
+    expect(props.onToggleHeart).toHaveBeenCalledWith(heart);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("asks the memorizing confirm when unhearting stops memorizing", async () => {
     const user = userEvent.setup();
     const props = renderBar({ hearted: true, stopsMemorizing: true });
 
-    await user.click(screen.getByRole("button", { name: "Hearted" }));
+    const heart = screen.getByRole("button", { name: "Hearted" });
+    await user.click(heart);
     const dialog = screen.getByRole("alertdialog", {
       name: "Unheart Psalm 1:5–6?",
     });
     expect(dialog).toHaveTextContent("Unhearting also stops memorizing it.");
+    expect(props.onOfferChoices).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Keep" }));
     expect(props.onToggleHeart).not.toHaveBeenCalled();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Hearted" }));
+    await user.click(heart);
     await user.click(screen.getByRole("button", { name: "Unheart and stop" }));
-    expect(props.onToggleHeart).toHaveBeenCalledOnce();
+    expect(props.onToggleHeart).toHaveBeenCalledWith(heart);
   });
 
   it("uses 44px targets when pinned for touch", () => {
     renderBar({ pinned: true });
     expect(screen.getByRole("button", { name: "Heart" })).toHaveClass("h-11");
-    expect(screen.getByRole("button", { name: "Memorize" })).toHaveClass(
-      "h-11",
-    );
     expect(screen.getByRole("button", { name: "Clear selection" })).toHaveClass(
       "size-11",
     );

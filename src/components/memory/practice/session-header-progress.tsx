@@ -1,11 +1,8 @@
 import type { JSX } from "react";
 
-export interface SessionProgress {
-  /** Header text for the current stretch, e.g. "Review · 5". */
-  label: string;
-  /** Share of the whole session behind the learner, 0 to 1. */
-  fraction: number;
-}
+import type { SessionProgress } from "@/lib/session-progress";
+
+export type { SessionProgress } from "@/lib/session-progress";
 
 /** Header text plus a thin bar across a multi-part session. */
 export function SessionHeaderProgress({
@@ -16,7 +13,7 @@ export function SessionHeaderProgress({
   const percent = Math.round(Math.min(Math.max(progress.fraction, 0), 1) * 100);
   return (
     <div className="ml-auto flex min-w-0 shrink-0 items-center gap-3">
-      <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+      <span className="hidden truncate text-xs tabular-nums text-muted-foreground sm:inline">
         {progress.label}
       </span>
       <div

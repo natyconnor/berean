@@ -16,6 +16,17 @@ describe("validateMemoryTodaySearch", () => {
     expect(validateMemoryTodaySearch({})).toEqual({});
   });
 
+  it("keeps only learning or only reviews, and drops anything else", () => {
+    expect(
+      validateMemoryTodaySearch({ only: "learning", return: "/memory" }),
+    ).toEqual({ only: "learning", return: "/memory" });
+    expect(validateMemoryTodaySearch({ only: "review" })).toEqual({
+      only: "review",
+    });
+    expect(validateMemoryTodaySearch({ only: "practice" })).toEqual({});
+    expect(validateMemoryTodaySearch({ only: 1 })).toEqual({});
+  });
+
   it("drops a malformed pack id and an unsafe return", () => {
     expect(
       validateMemoryTodaySearch({

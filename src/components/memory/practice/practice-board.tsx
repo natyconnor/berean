@@ -119,9 +119,11 @@ import { ReviewSummary } from "../review-summary";
 import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
 import { SessionComplete, type SessionCompleteVerse } from "./session-complete";
 import {
-  SessionHeaderProgress,
+  resolveSessionProgress,
   type SessionProgress,
-} from "./session-header-progress";
+  type SessionProgressSource,
+} from "@/lib/session-progress";
+import { SessionHeaderProgress } from "./session-header-progress";
 
 export type { MemorySessionLabel } from "@/lib/memory-session";
 
@@ -217,10 +219,15 @@ interface PracticeBoardProps {
   remainingDue?: number;
   /** Restart the review queue when more verses are still due. */
   onContinueSession?: () => void;
-  /** Header text and overall bar when this run is one part of a session. */
-  progress?: SessionProgress;
+  /**
+   * Header text and overall bar when this run is one part of a session. A
+   * function gets how many of this run's verses are done.
+   */
+  progress?: SessionProgressSource;
   /** One part of a longer session: hand the results up instead of a summary. */
   onComplete?: (result: PracticeSessionResult) => void;
+  /** Shown above the verse rail, e.g. an overview of the whole session. */
+  railHeader?: ReactNode;
 }
 
 /** Live learning progress the board tracks per verse this session. */
@@ -363,6 +370,7 @@ export function PracticeBoard({
   onContinueSession,
   progress,
   onComplete,
+  railHeader,
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const now = useLiveNow();
@@ -725,7 +733,10 @@ export function PracticeBoard({
     onExit,
     exitTooltip,
     backLabel,
-    progress,
+    progress: resolveSessionProgress(progress, {
+      done: railVerses.filter((verse) => verse.locked).length,
+      total: railVerses.length,
+    }),
   };
 
   if (orderedVerses.length === 0 || !currentVerse) {
@@ -913,7 +924,8 @@ export function PracticeBoard({
             </AnimatePresence>
           </div>
         </div>
-        <div className="order-1 md:order-2">
+        <div className="order-1 space-y-3 md:order-2">
+          {railHeader}
           <PracticeVerseRail
             sessionLabel={sessionLabel}
             verses={railVerses}
