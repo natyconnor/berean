@@ -105,7 +105,7 @@ import {
 } from "../../study/study-attempt-quality";
 import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
-import { VerseAttemptResult } from "../../study/study-verse-memory-card";
+import { VerseAttemptResult } from "../../study/verse-attempt-result";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "../../study/verse-attempt-feedback";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
 import { AccuracyHeadline } from "./accuracy-headline";

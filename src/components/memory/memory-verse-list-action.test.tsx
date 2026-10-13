@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -29,77 +30,83 @@ function verse(
   };
 }
 
+function renderAction(
+  props: Pick<ComponentProps<typeof MemoryVerseListAction>, "status" | "verse">,
+) {
+  const handlers = {
+    onLearn: vi.fn(),
+    onReview: vi.fn(),
+    onPractice: vi.fn(),
+  };
+  const view = render(
+    <TooltipProvider delayDuration={0}>
+      <MemoryVerseListAction {...props} now={NOW} {...handlers} />
+    </TooltipProvider>,
+  );
+  return { ...view, ...handlers };
+}
+
 describe("MemoryVerseListAction", () => {
-  it("shows a waiting verse as Up next tomorrow with tomorrow's step", async () => {
-    const onLearn = vi.fn();
-    render(
-      <TooltipProvider delayDuration={0}>
-        <MemoryVerseListAction
-          status="learning"
-          verse={{
-            ...verse("learning", NOW + MIN_LEARNING_LOCK_MS, 2),
-            lastReviewedAt: NOW,
-          }}
-          now={NOW}
-          onLearn={onLearn}
-          onReview={vi.fn()}
-          onPractice={vi.fn()}
-        />
-      </TooltipProvider>,
-    );
-
-    const button = screen.getByRole("button", {
-      name: "Up next tomorrow. Nice. Tomorrow you'll try it with blanks.",
+  it("shows no button while today's step is done", () => {
+    const { container } = renderAction({
+      status: "learning",
+      verse: {
+        ...verse("learning", NOW + MIN_LEARNING_LOCK_MS, 2),
+        lastReviewedAt: NOW,
+      },
     });
-    expect(button).toBeDisabled();
-    expect(button).toHaveTextContent("Up next tomorrow");
-    // Narrow rows swap in the short label; CSS decides which one shows.
-    expect(button).toHaveTextContent("Tomorrow");
 
-    await userEvent.hover(button.parentElement!);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Nice. Tomorrow you'll try it with blanks.",
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("learns an open learning step and an Up next verse", async () => {
+    const learning = renderAction({
+      status: "learning",
+      verse: verse("learning", NOW, 2),
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Learn Romans 5:6-8" }),
     );
-    expect(onLearn).not.toHaveBeenCalled();
+    expect(learning.onLearn).toHaveBeenCalledTimes(1);
+    learning.unmount();
+
+    const upNext = renderAction({ status: "new", verse: verse("new", NOW, 0) });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Learn Romans 5:6-8" }),
+    );
+    expect(upNext.onLearn).toHaveBeenCalledTimes(1);
   });
 
   it("reviews a due graduated verse", async () => {
-    const onReview = vi.fn();
-    const onPractice = vi.fn();
-    render(
-      <MemoryVerseListAction
-        status="reviewing"
-        verse={verse("reviewing", NOW)}
-        now={NOW}
-        onLearn={vi.fn()}
-        onReview={onReview}
-        onPractice={onPractice}
-      />,
-    );
+    const { onReview, onPractice } = renderAction({
+      status: "reviewing",
+      verse: verse("reviewing", NOW),
+    });
 
-    await userEvent.click(screen.getByRole("button", { name: "Review" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review Romans 5:6-8" }),
+    );
     expect(onReview).toHaveBeenCalledTimes(1);
     expect(onPractice).not.toHaveBeenCalled();
   });
 
-  it("practices a graduated verse that is not due yet", async () => {
-    const onReview = vi.fn();
-    const onPractice = vi.fn();
-    render(
-      <MemoryVerseListAction
-        status="reviewing"
-        verse={verse("reviewing", NOW + 4 * DAY_MS)}
-        now={NOW}
-        onLearn={vi.fn()}
-        onReview={onReview}
-        onPractice={onPractice}
-      />,
-    );
+  it("practices a graduated verse that is not due yet, with the honest tooltip", async () => {
+    const { onReview, onPractice } = renderAction({
+      status: "reviewing",
+      verse: verse("reviewing", NOW + 4 * DAY_MS),
+    });
 
     expect(
-      screen.queryByRole("button", { name: "Review" }),
+      screen.queryByRole("button", { name: /^Review/ }),
     ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Practice" }));
+    const practice = screen.getByRole("button", {
+      name: "Practice Romans 5:6-8",
+    });
+    await userEvent.hover(practice);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Go over anything you've memorized, any time.",
+    );
+    await userEvent.click(practice);
     expect(onPractice).toHaveBeenCalledTimes(1);
     expect(onReview).not.toHaveBeenCalled();
   });

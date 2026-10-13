@@ -22,6 +22,7 @@ import { withReturn } from "@/lib/memory-return";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { todaySessionMinutes, todayWorkCount } from "@/lib/memory-today";
 import {
+  dueGoalButtonLabel,
   dueGoalRows,
   goalKey,
   goalPanel,
@@ -190,8 +191,9 @@ function DueRowItem({
   row: DueGoalRow<TodayGoal>;
   href: string;
 }) {
-  const label = row.action === "learn" ? "Learn" : "Review";
-  const Icon = row.action === "learn" ? GraduationCap : RotateCcw;
+  const label = dueGoalButtonLabel(row);
+  const Icon =
+    label === "Continue" ? Play : label === "Learn" ? GraduationCap : RotateCcw;
   return (
     <li>
       <MemoryListRow className="flex items-center gap-3 px-3 py-2.5">

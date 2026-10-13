@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { Loader2, Clock3, Sparkles } from "lucide-react";
+import { Loader2, Clock3 } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { ReviewEmptyState } from "@/components/memory/session-empty-states";
 import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
@@ -21,35 +22,11 @@ function dueRowToPracticeVerse(
   return dueQueueEntryToPracticeVerse(row);
 }
 
-function ReviewCaughtUp({
-  onExit,
-  backLabel,
-}: {
-  onExit: () => void;
-  backLabel: string;
-}) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-        <Sparkles className="h-6 w-6 text-primary" aria-hidden />
-      </div>
-      <div className="max-w-sm space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">All caught up</h1>
-        <p className="text-sm text-muted-foreground">
-          No verses are due for review right now. Check back later.
-        </p>
-      </div>
-      <Button variant="outline" onClick={onExit}>
-        {backLabel}
-      </Button>
-    </div>
-  );
-}
-
 function MemoryReviewSessionPage({
   verses,
   scopeLabel,
   remainingDue,
+  now,
   onExit,
   backLabel,
   returnTo,
@@ -58,6 +35,7 @@ function MemoryReviewSessionPage({
   verses: ReadonlyArray<PracticeVerse>;
   scopeLabel: string;
   remainingDue: number;
+  now: number;
   onExit: () => void;
   backLabel: string;
   returnTo?: string;
@@ -73,7 +51,9 @@ function MemoryReviewSessionPage({
       returnTo={returnTo}
       remainingDue={remainingDue}
       onContinueSession={onContinueSession}
-      emptyState={<ReviewCaughtUp onExit={onExit} backLabel={backLabel} />}
+      emptyState={
+        <ReviewEmptyState now={now} onExit={onExit} backLabel={backLabel} />
+      }
     />
   );
 }
@@ -138,6 +118,7 @@ export function MemoryReviewPage() {
         verses={globalVerses}
         scopeLabel="All due today"
         remainingDue={remainingDue}
+        now={now}
         onExit={onExit}
         backLabel={backLabel}
         returnTo={returnTo}
@@ -184,6 +165,7 @@ export function MemoryReviewPage() {
       verses={[dueRowToPracticeVerse(scopedDue)]}
       scopeLabel={formatVerseRef(search)}
       remainingDue={0}
+      now={now}
       onExit={onExit}
       backLabel={backLabel}
       returnTo={returnTo}

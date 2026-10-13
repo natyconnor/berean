@@ -1,4 +1,4 @@
-import { Dumbbell, GraduationCap, Play } from "lucide-react";
+import { Dumbbell, GraduationCap, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -6,29 +6,21 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  TOMORROW_SHORT_LABEL,
-  UP_NEXT_TOMORROW_LABEL,
-} from "@/lib/memory-copy";
-import { nextStepCopy } from "@/lib/memorize-plan";
-import {
-  isLearningLocked,
-  isLearningPhase,
-  type MemoryStatus,
-} from "@/lib/memory-scheduler";
-import { reviewPhaseListAction } from "@/lib/memory-session";
+import { EXTRA_PRACTICE_TOOLTIP } from "@/lib/memory-copy";
+import { libraryRowAction } from "@/lib/memory-library-row";
+import type { MemoryStatus } from "@/lib/memory-scheduler";
+import { cn } from "@/lib/utils";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import type { PracticeVerse } from "./practice/practice-board";
 
+const ROW_BUTTON_CLASS = "shrink-0 max-sm:h-11 max-sm:px-3";
+
 /**
- * Inline Learn / Review / Practice control for hearted-verse list rows so
- * extra recall does not require opening the detail dialog first.
- *
- * Soft-locked learning verses show a disabled "Up next tomorrow" CTA whose
- * tooltip says what tomorrow's step is; the verse stays visible but cannot
- * advance until due again. Graduated verses that are due show Review; ones
- * already reviewed (due later) show Practice, matching pack-level Review vs
- * Practice Pack.
+ * A Library row's one quiet session control so a specific verse can be
+ * picked without opening its detail: an outline Learn or Review, or a ghost
+ * Practice on memorized verses. A verse whose step for today is done shows
+ * nothing; its status line says when it opens.
  */
 export function MemoryVerseListAction({
   status,
@@ -45,81 +37,56 @@ export function MemoryVerseListAction({
   onReview: (verse: PracticeVerse) => void;
   onPractice: (verse: PracticeVerse) => void;
 }) {
-  if (isLearningPhase(status)) {
-    const schedule = {
+  const action = libraryRowAction(
+    {
       status,
       learnStage: verse.learnStage,
       dueAt: verse.dueAt ?? now,
       lastReviewedAt: verse.lastReviewedAt,
-    };
-    if (isLearningLocked(schedule, now)) {
-      const nextStep = nextStepCopy(schedule, now);
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 shrink-0 gap-1 px-2.5"
-                disabled
-                aria-label={`${UP_NEXT_TOMORROW_LABEL}. ${nextStep}`}
-              >
-                <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-                {/* Below 400px the full label crowds the reference; the name and tooltip keep it. */}
-                <span className="hidden min-[400px]:inline">
-                  {UP_NEXT_TOMORROW_LABEL}
-                </span>
-                <span className="min-[400px]:hidden">
-                  {TOMORROW_SHORT_LABEL}
-                </span>
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs">{nextStep}</TooltipContent>
-        </Tooltip>
-      );
-    }
-    const label = status === "learning" ? "Continue Learning" : "Learn";
+    },
+    now,
+  );
+  if (action === null) return null;
+
+  const reference = formatVerseRef(verse.reference);
+
+  if (action === "practice") {
     return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-7 shrink-0 gap-1 px-2.5"
-        onClick={() => onLearn(verse)}
-      >
-        <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-        {label}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className={cn(ROW_BUTTON_CLASS, "text-muted-foreground")}
+            aria-label={`Practice ${reference}`}
+            onClick={() => onPractice(verse)}
+          >
+            <Dumbbell aria-hidden />
+            Practice
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          {EXTRA_PRACTICE_TOOLTIP}
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
-  if (reviewPhaseListAction({ status, dueAt: verse.dueAt }, now) === "review") {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        className="h-7 shrink-0 gap-1 px-2.5"
-        onClick={() => onReview(verse)}
-      >
-        <Play className="h-3.5 w-3.5" aria-hidden />
-        Review
-      </Button>
-    );
-  }
-
+  const isReview = action === "review";
+  const label = isReview ? "Review" : "Learn";
+  const Icon = isReview ? RotateCcw : GraduationCap;
   return (
     <Button
       type="button"
       variant="outline"
-      size="sm"
-      className="h-7 shrink-0 gap-1 px-2.5"
-      onClick={() => onPractice(verse)}
+      size="xs"
+      className={ROW_BUTTON_CLASS}
+      aria-label={`${label} ${reference}`}
+      onClick={() => (isReview ? onReview(verse) : onLearn(verse))}
     >
-      <Dumbbell className="h-3.5 w-3.5" aria-hidden />
-      Practice
+      <Icon aria-hidden />
+      {label}
     </Button>
   );
 }

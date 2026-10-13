@@ -24,8 +24,6 @@ export const SUGGESTIONS_LABEL = "Suggestions";
 
 /** Waiting state for a verse whose step for today is done. */
 export const UP_NEXT_TOMORROW_LABEL = "Up next tomorrow";
-/** Same waiting state where "Up next tomorrow" would not fit. */
-export const TOMORROW_SHORT_LABEL = "Tomorrow";
 
 export const SESSION_COMPLETE_TITLE = "That's today's step.";
 export const SESSION_COMPLETE_FOOTER =

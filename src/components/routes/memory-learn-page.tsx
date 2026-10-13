@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { AllLearnEmptyState } from "@/components/memory/session-empty-states";
 import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { MemoryAllSessionPage } from "@/components/routes/memory-practice-page";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
@@ -77,6 +78,7 @@ function GlobalMemoryLearnPage({
     <GlobalLearnSession
       passages={duePassages}
       verses={verses}
+      now={now}
       dayKey={learnDismissDayKey(now)}
       onExitHome={onExitHome}
       backLabel={backLabel}
@@ -89,6 +91,7 @@ function GlobalMemoryLearnPage({
 function GlobalLearnSession({
   passages,
   verses,
+  now,
   dayKey,
   onExitHome,
   backLabel,
@@ -97,6 +100,7 @@ function GlobalLearnSession({
 }: {
   passages: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
   verses: PracticeVerse[];
+  now: number;
   dayKey: number;
   onExitHome: () => void;
   backLabel: string;
@@ -133,24 +137,7 @@ function GlobalLearnSession({
   }
 
   const emptyState = (
-    <div className="flex h-full items-center justify-center bg-background px-6">
-      <div className="max-w-sm space-y-3 text-center">
-        <h1 className="text-base font-semibold tracking-tight">
-          Nothing to learn right now
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Start a verse from your library, or come back when an in-progress
-          verse or passage is ready.
-        </p>
-        <button
-          type="button"
-          onClick={onExitHome}
-          className="inline-flex text-sm font-medium text-primary hover:underline"
-        >
-          {backLabel}
-        </button>
-      </div>
-    </div>
+    <AllLearnEmptyState now={now} onExit={onExitHome} backLabel={backLabel} />
   );
 
   return (

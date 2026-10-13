@@ -128,7 +128,7 @@ export function MasteryDonut({ data }: { data: MasteryDistribution }) {
 
       {total === 0 ? (
         <p className="mt-3 flex-1 text-sm text-muted-foreground">
-          No verses started. Start learning a hearted verse to see mastery.
+          No verses started. Memorize a verse to see mastery.
         </p>
       ) : (
         <div className="mt-3 flex min-h-0 flex-1 items-center justify-center gap-5">

@@ -93,6 +93,7 @@ vi.mock("../../../convex/_generated/api", () => ({
     },
     verseMemory: {
       learnQueue: "verseMemory.learnQueue",
+      listInMemory: "verseMemory.listInMemory",
       recordAttempt: "verseMemory.recordAttempt",
       acceptRetryHold: "verseMemory.acceptRetryHold",
     },
@@ -203,10 +204,12 @@ function renderLearn(
   options?: {
     passages?: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
     learnQueue?: unknown[];
+    inMemory?: unknown[];
     missingPackIds?: ReadonlyArray<Id<"packs">>;
   },
 ) {
   queryResults.set("verseMemory.learnQueue", options?.learnQueue ?? []);
+  queryResults.set("verseMemory.listInMemory", options?.inMemory ?? []);
   queryResults.set(
     "passageMemory.dueForLearning",
     options?.passages ?? DEFAULT_DUE_PACKS,
@@ -403,12 +406,50 @@ describe("MemoryLearnPage", () => {
     expect(screen.getAllByText("Romans 8:28").length).toBeGreaterThan(0);
   });
 
-  it("shows the empty state when the learn queue is empty", async () => {
+  it("offers something new when the learn queue is empty", async () => {
     renderLearn(nextVerseView(), { passages: [], learnQueue: [] });
 
     expect(
-      await screen.findByText("Nothing to learn right now"),
+      await screen.findByRole("heading", { name: "Nothing new today" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("Pick something new to memorize."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Start something new" }),
+    ).toHaveAttribute("href", "/memory");
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onExitHome).toHaveBeenCalledTimes(1);
+  });
+
+  it("says what unlocks next when today's steps are done", async () => {
+    const waiting = inMemoryVerse("Romans", 8, 28, "learning");
+    renderLearn(nextVerseView(), {
+      passages: [],
+      learnQueue: [],
+      inMemory: [
+        {
+          ...waiting,
+          memory: {
+            ...waiting.memory,
+            learnStage: 1,
+            dueAt: getSessionNow() + DAY_MS,
+            lastReviewedAt: getSessionNow(),
+          },
+        },
+      ],
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Nothing new today" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Nice. Tomorrow you'll try it with blanks."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Start something new" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the same pack again after Back", async () => {

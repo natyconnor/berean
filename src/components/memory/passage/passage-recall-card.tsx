@@ -22,7 +22,7 @@ import {
   verseAttemptAccuracy,
   type VerseAttemptQuality,
 } from "@/components/study/study-attempt-quality";
-import { VerseAttemptResult } from "@/components/study/study-verse-memory-card";
+import { VerseAttemptResult } from "@/components/study/verse-attempt-result";
 import { Button } from "@/components/ui/button";
 import {
   Card,

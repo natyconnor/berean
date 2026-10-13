@@ -6,6 +6,7 @@ import type {
   VerseGoalCard,
 } from "./memory-goals";
 import {
+  dueGoalButtonLabel,
   dueGoalRows,
   goalPanel,
   goalSessionHref,
@@ -192,6 +193,17 @@ describe("goal links", () => {
     expect(goalSessionHref(verse(), "learn")).toBe(
       "/memory/learn?book=Romans&chapter=8&startVerse=28&endVerse=28",
     );
+  });
+
+  it("labels the combined pack session Continue", () => {
+    const labels = dueGoalRows([
+      passage(),
+      pack({ learningToday: 2 }),
+      pack({ packId: "learnOnly", learningToday: 1, reviewsDue: [] }),
+      pack({ packId: "reviewOnly" }),
+      verse(),
+    ]).map(dueGoalButtonLabel);
+    expect(labels).toEqual(["Learn", "Continue", "Learn", "Review", "Learn"]);
   });
 });
 

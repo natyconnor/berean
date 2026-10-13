@@ -3,6 +3,10 @@ import { Loader2 } from "lucide-react";
 
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import {
+  LearnEmptyState,
+  PracticeEmptyState,
+} from "@/components/memory/session-empty-states";
 import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
@@ -78,7 +82,6 @@ export function MemoryAllSessionPage({
     : kind === "learning"
       ? "Today's learning"
       : "All learned verses";
-  const isLearning = kind === "learning";
 
   if (inMemory === undefined) {
     return (
@@ -98,27 +101,20 @@ export function MemoryAllSessionPage({
       returnTo={returnTo}
       hasMemorized={hasMemorized}
       emptyState={
-        <div className="flex h-full items-center justify-center bg-background px-6">
-          <div className="max-w-sm space-y-3 text-center">
-            <h1 className="text-base font-semibold tracking-tight">
-              {isLearning
-                ? "Nothing to learn right now"
-                : "Nothing to practice"}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {isLearning
-                ? "Start a verse from your library, or come back when an in-progress verse is ready."
-                : "Verses become available for extra practice after they finish Learning."}
-            </p>
-            <button
-              type="button"
-              onClick={onExit}
-              className="inline-flex text-sm font-medium text-primary hover:underline"
-            >
-              {backLabel}
-            </button>
-          </div>
-        </div>
+        kind === "learning" ? (
+          <LearnEmptyState
+            verses={inMemory.map((verse) => verse.memory)}
+            now={now}
+            onExit={onExit}
+            backLabel={backLabel}
+          />
+        ) : (
+          <PracticeEmptyState
+            scopeLabel={scoped ? scopeLabel : undefined}
+            onExit={onExit}
+            backLabel={backLabel}
+          />
+        )
       }
     />
   );

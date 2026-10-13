@@ -36,6 +36,12 @@ export const BANNED_MEMORY_COPY: readonly {
   { word: "Preset", pattern: uiWord("preset") },
   { word: "Collection", pattern: uiWord("collection") },
   { word: "Browse presets", pattern: /\bbrowse presets\b/i },
+  {
+    word: "Heart verses to see them here",
+    pattern: /\bheart verses to see them here\b/i,
+  },
+  { word: "Review verses to master", pattern: /\breview verses to master\b/i },
+  { word: "build packs", pattern: /\bbuild packs\b/i },
 ];
 
 /**
@@ -69,6 +75,12 @@ function walk(dir: string): string[] {
   });
 }
 
+/** Onboarding surfaces outside the Memory folders that teach Memory. */
+const ONBOARDING_FILES = [
+  "src/components/layout/mode-dock.tsx",
+  "src/components/tutorial/tutorial-provider.tsx",
+];
+
 function guardedFiles(): string[] {
   const memoryDir = path.join(ROOT, "src/components/memory");
   const routesDir = path.join(ROOT, "src/components/routes");
@@ -76,7 +88,8 @@ function guardedFiles(): string[] {
     .readdirSync(routesDir)
     .filter((name) => /^memory-.*\.tsx$/.test(name) && isGuardedSource(name))
     .map((name) => path.join(routesDir, name));
-  return [...walk(memoryDir), ...routeFiles].sort();
+  const onboardingFiles = ONBOARDING_FILES.map((file) => path.join(ROOT, file));
+  return [...walk(memoryDir), ...routeFiles, ...onboardingFiles].sort();
 }
 
 /**
@@ -192,6 +205,21 @@ describe("Memory copy guard", () => {
       '"Preset" in "Browse presets"',
       '"Browse presets" in "Browse presets"',
       '"Collection" in "Every passage in this collection"',
+    ]);
+  });
+
+  it("catches the old onboarding model", () => {
+    const sample = [
+      "const a = <li>Heart verses to see them here.</li>;",
+      'const b = "Review verses to master them over time.";',
+      'const c = "Heart verses in the reader, then use Memory to practice, review, and build packs.";',
+      'const ok = "Memorize verses and passages, then come back for a few minutes each day.";',
+    ].join("\n");
+
+    expect(bannedCopyIn(userVisibleStrings(sample))).toEqual([
+      '"Heart verses to see them here" in "Heart verses to see them here."',
+      '"Review verses to master" in "Review verses to master them over time."',
+      '"build packs" in "Heart verses in the reader, then use Memory to practice, review, and build packs."',
     ]);
   });
 

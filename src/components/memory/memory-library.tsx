@@ -1,22 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Loader2, Search } from "lucide-react";
+import { Brain, Loader2, Play, Search } from "lucide-react";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTodayModel } from "@/hooks/use-today-model";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
-import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { TODAY_LABEL } from "@/lib/memory-copy";
+import { libraryEmptyCopy, type LibraryView } from "@/lib/memory-empty-states";
+import { dueTodayBulkLabel, libraryRow } from "@/lib/memory-library-row";
+import { withReturn } from "@/lib/memory-return";
+import type { MemoryStatus } from "@/lib/memory-scheduler";
+import { memoryTodaySessionHref } from "@/lib/memory-session-path";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
+import { InternalLink } from "./internal-link";
 import { LearnVerseDialog } from "./learn-verse-dialog";
 import { useMemorizeSheet } from "./memorize/memorize-context";
 import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
 import { toPracticeVerse } from "./to-practice-verse";
-
-type LibraryView = "due" | "learning" | "memorized" | "mastered" | "all";
 
 const VIEWS: Array<{ key: LibraryView; label: string }> = [
   { key: "due", label: "Due today" },
@@ -26,13 +32,8 @@ const VIEWS: Array<{ key: LibraryView; label: string }> = [
   { key: "all", label: "All" },
 ];
 
-const EMPTY_COPY: Record<LibraryView, string> = {
-  due: "Nothing due right now.",
-  learning: "Nothing is being learned right now.",
-  memorized: "Verses show up here once they finish learning.",
-  mastered: "No mastered verses yet.",
-  all: "Memorize a verse to see it here.",
-};
+const CHIP_CLASS =
+  "inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[11px] leading-4 font-medium whitespace-nowrap";
 
 const INITIAL_PAGE_SIZE = 20;
 /** Up-next rows share the dueAt index and are skipped in-page; a larger first
@@ -43,19 +44,23 @@ const LOAD_MORE_PAGE_SIZE = 20;
 /**
  * The Library: verses in Memory in Due today / Learning / Memorized /
  * Mastered / All views, paginated (`usePaginatedQuery` over
- * `verseMemory.listLibrary`). A row opens that verse's detail.
+ * `verseMemory.listLibrary`). A row shows its status and next step and
+ * opens that verse's detail.
  *
  * Search is an in-view filter of already-loaded pages (it does not fetch
  * unloaded pages) — a documented v1 limitation.
  */
 export function MemoryLibrary({
   now,
+  returnTo,
   onOpenVerse,
   onLearnVerse,
   onReviewVerse,
   onPracticeVerse,
 }: {
   now: number;
+  /** Where the Due today session comes back to. */
+  returnTo: string;
   /** Show one verse's detail (its drawer over Today, or its page). */
   onOpenVerse: (verseRefId: Id<"verseRefs">) => void;
   /** Start a Learning session scoped to one library verse. */
@@ -70,6 +75,7 @@ export function MemoryLibrary({
   const [learnOpen, setLearnOpen] = useState(false);
   const learnOpenerRef = useRef<HTMLButtonElement | null>(null);
   const memorizeSheet = useMemorizeSheet();
+  const timeZone = getViewerTimeZone();
   const openLearnPicker = (opener: HTMLButtonElement) => {
     learnOpenerRef.current = opener;
     setLearnOpen(true);
@@ -194,8 +200,10 @@ export function MemoryLibrary({
       ) : !hasResults && !isSwitchingView && isExhausted ? (
         // Genuinely empty: the query is exhausted and no rows loaded anywhere.
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
-          <p className="text-sm text-muted-foreground">{EMPTY_COPY[view]}</p>
-          {view === "due" ? (
+          <p className="text-sm text-muted-foreground">
+            {libraryEmptyCopy(view)}
+          </p>
+          {view === "learning" ? (
             <div className="mt-4">
               <LearnVerseTrigger onClick={openLearnPicker} />
             </div>
@@ -217,6 +225,9 @@ export function MemoryLibrary({
         </>
       ) : (
         <>
+          {view === "due" && !isSwitchingView ? (
+            <DueTodayBulkAction now={now} returnTo={returnTo} />
+          ) : null}
           <ul
             className={cn(
               "space-y-1.5 transition-opacity",
@@ -225,36 +236,36 @@ export function MemoryLibrary({
             aria-busy={isSwitchingView}
           >
             {filtered.map((row) => {
-              const style = MEMORY_STATUS_STYLE[row.status];
               const practiceVerse = toPracticeVerse(row);
+              const { line, dueToday } = libraryRow(row, now, timeZone);
               return (
                 <li key={row.verseMemoryId}>
-                  <MemoryListRow className="flex items-center gap-3 px-3 py-2.5">
+                  <MemoryListRow className="flex items-center gap-3 px-3 py-1.5">
                     <button
                       type="button"
                       onClick={() => onOpenVerse(row.verseRefId)}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      className="flex min-h-12 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left"
                     >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "h-2 w-2 shrink-0 rounded-full",
-                          style.dot,
-                        )}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
+                      <span className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="min-w-0 truncate text-sm font-medium">
                           {formatVerseRef(row)}
                         </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {formatMemoryStatusSubtitle({
-                            status: row.status,
-                            statusLabel: style.label,
-                            dueAt: row.dueAt,
-                            lastReviewedAt: row.lastReviewedAt,
-                            now,
-                          })}
+                        <span className="flex shrink-0 items-center gap-1">
+                          <StatusChip status={row.status} />
+                          {dueToday ? (
+                            <span
+                              className={cn(
+                                CHIP_CLASS,
+                                "border-primary/30 bg-primary/10 text-primary",
+                              )}
+                            >
+                              {TODAY_LABEL}
+                            </span>
+                          ) : null}
                         </span>
+                      </span>
+                      <span className="block max-w-full truncate text-xs text-muted-foreground">
+                        {line}
                       </span>
                     </button>
                     <MemoryVerseListAction
@@ -285,6 +296,37 @@ export function MemoryLibrary({
         }
       />
     </section>
+  );
+}
+
+function StatusChip({ status }: { status: MemoryStatus }) {
+  const style = MEMORY_STATUS_STYLE[status];
+  return (
+    <span className={cn(CHIP_CLASS, style.text)}>
+      <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
+      {style.label}
+    </span>
+  );
+}
+
+/** "Do all 5 · about 6 min": everything left today in one session. */
+function DueTodayBulkAction({
+  now,
+  returnTo,
+}: {
+  now: number;
+  returnTo: string;
+}) {
+  const today = useTodayModel(now);
+  const label = today ? dueTodayBulkLabel(today.counts) : null;
+  if (label === null) return null;
+  return (
+    <Button asChild className="max-sm:h-11 max-sm:w-full">
+      <InternalLink href={withReturn(memoryTodaySessionHref(), returnTo)}>
+        <Play aria-hidden />
+        {label}
+      </InternalLink>
+    </Button>
   );
 }
 

@@ -2,12 +2,6 @@ import { useCallback, useRef } from "react";
 
 import type { DiffToken } from "@/lib/diff-words";
 import type { MemorySchedule } from "@/lib/memory-scheduler";
-import {
-  normalizeVerseProgress,
-  predictLearning,
-  type VerseAttemptQuality,
-  type VersePracticeProgress,
-} from "@/lib/verse-practice-progress";
 
 import type { CardReference } from "./study-card-model";
 import {
@@ -16,8 +10,6 @@ import {
   type VerseAttemptMode,
 } from "./use-record-verse-attempt";
 import type { Id } from "../../../convex/_generated/dataModel";
-
-export type { VersePracticeProgress } from "@/lib/verse-practice-progress";
 
 interface RecordAttemptArgs {
   reference: CardReference;
@@ -28,11 +20,7 @@ interface RecordAttemptArgs {
 }
 
 interface UseVersePracticeAttemptReturn {
-  heartedVersesReady: boolean;
   resolveVerseRefId: (reference: CardReference) => Id<"verseRefs"> | null;
-  normalizeProgress: (
-    raw: MemorySchedule | VersePracticeProgress,
-  ) => VersePracticeProgress;
   /**
    * Bump per-verse seq, record, and adopt only the newest successful schedule.
    * Used by multi-verse Practice.
@@ -42,45 +30,19 @@ interface UseVersePracticeAttemptReturn {
     args: RecordAttemptArgs,
     onAdopt: (next: MemorySchedule) => void,
   ) => Promise<MemorySchedule | null>;
-  /**
-   * Record and adopt immediately (or predictLearning on null). Used by Study
-   * Read-continue.
-   */
-  recordWithImmediateAdopt: (
-    args: RecordAttemptArgs & {
-      current: VersePracticeProgress;
-      quality: VerseAttemptQuality;
-      accuracy: number;
-    },
-    onAdopt: (next: VersePracticeProgress) => void,
-  ) => Promise<void>;
-  /** Record and stash for later commit (Study check-answer). */
-  recordDeferred: (args: RecordAttemptArgs) => Promise<void>;
-  /**
-   * Adopt stashed schedule or the provided fallback (Study continue-after-review).
-   */
-  commitDeferred: (fallback: VersePracticeProgress) => VersePracticeProgress;
 }
 
 /**
- * Shared grade → record → adopt plumbing for Practice and Study learn cards.
- * UI submit locks and card chrome stay in the components.
+ * Shared grade → record → adopt plumbing for Memory sessions. UI submit locks
+ * and card chrome stay in the components.
  */
 export function useVersePracticeAttempt(
   mode: VerseAttemptMode,
   options?: RecordVerseAttemptOptions,
 ): UseVersePracticeAttemptReturn {
-  const { record, heartedVersesReady, resolveVerseRefId } =
-    useRecordVerseAttempt(options);
+  const { record, resolveVerseRefId } = useRecordVerseAttempt(options);
   const attemptSeqByVerseId = useRef<Map<string, number>>(new Map());
   const appliedSeqByVerseId = useRef<Map<string, number>>(new Map());
-  const pendingProgressRef = useRef<VersePracticeProgress | null>(null);
-
-  const normalizeProgress = useCallback(
-    (raw: MemorySchedule | VersePracticeProgress): VersePracticeProgress =>
-      normalizeVerseProgress(raw),
-    [],
-  );
 
   const recordWithSeqAdopt = useCallback(
     async (
@@ -108,74 +70,5 @@ export function useVersePracticeAttempt(
     [mode, record],
   );
 
-  const recordWithImmediateAdopt = useCallback(
-    async (
-      args: RecordAttemptArgs & {
-        current: VersePracticeProgress;
-        quality: VerseAttemptQuality;
-        accuracy: number;
-      },
-      onAdopt: (next: VersePracticeProgress) => void,
-    ): Promise<void> => {
-      const schedule = await record({
-        reference: args.reference,
-        verseRefId: args.verseRefId,
-        tokens: args.tokens,
-        stage: args.stage,
-        mode,
-        wordCount: args.wordCount,
-      });
-      onAdopt(
-        schedule
-          ? normalizeVerseProgress(schedule)
-          : predictLearning(
-              args.current.learnStage,
-              args.current.stageReps,
-              args.quality,
-              args.accuracy,
-              args.wordCount,
-              args.current.status,
-              // Approximate soft-lock dueAt when the mutation returns null.
-              Date.now(),
-            ),
-      );
-    },
-    [mode, record],
-  );
-
-  const recordDeferred = useCallback(
-    async (args: RecordAttemptArgs): Promise<void> => {
-      const schedule = await record({
-        reference: args.reference,
-        verseRefId: args.verseRefId,
-        tokens: args.tokens,
-        stage: args.stage,
-        mode,
-        wordCount: args.wordCount,
-      });
-      pendingProgressRef.current = schedule
-        ? normalizeVerseProgress(schedule)
-        : null;
-    },
-    [mode, record],
-  );
-
-  const commitDeferred = useCallback(
-    (fallback: VersePracticeProgress): VersePracticeProgress => {
-      const next = pendingProgressRef.current ?? fallback;
-      pendingProgressRef.current = null;
-      return normalizeVerseProgress(next);
-    },
-    [],
-  );
-
-  return {
-    heartedVersesReady,
-    resolveVerseRefId,
-    normalizeProgress,
-    recordWithSeqAdopt,
-    recordWithImmediateAdopt,
-    recordDeferred,
-    commitDeferred,
-  };
+  return { resolveVerseRefId, recordWithSeqAdopt };
 }

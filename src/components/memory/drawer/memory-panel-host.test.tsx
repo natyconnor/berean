@@ -250,11 +250,14 @@ describe("MemoryPanelHost", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Your verses" });
     expect(
-      within(dialog).getByRole("link", { name: "Learn Merced Team" }),
+      within(dialog).getByRole("link", { name: "Continue Merced Team" }),
     ).toHaveAttribute(
       "href",
       "/memory/today?packId=merced&return=%2Fmemory%3Fpanel%3Dverses",
     );
+    expect(
+      within(dialog).queryByRole("link", { name: "Learn Merced Team" }),
+    ).not.toBeInTheDocument();
   });
 
   it("swaps to a recently active item with from=verses", async () => {

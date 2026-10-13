@@ -33,6 +33,7 @@ export function VersesPageBody() {
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
       <MemoryLibrary
         now={now}
+        returnTo={frame.returnTo}
         onOpenVerse={(verseRefId) => {
           void navigate({
             href: frame.hrefFor(

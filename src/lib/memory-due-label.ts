@@ -8,7 +8,7 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Human-readable due label for library / detail subtitles.
+ * Human-readable due label, e.g. "Tomorrow" or "In 3 days".
  *
  * Review-phase verses always get a due label. Learning-phase verses only get
  * one when soft-locked (`dueAt` in the future) — e.g. "Tomorrow" after today's
@@ -66,21 +66,4 @@ export function formatReviewIntervalPhrase(
   }
   const days = Math.max(1, Math.round(intervalDays));
   return days === 1 ? "1 day" : `${days} days`;
-}
-
-export function formatMemoryStatusSubtitle({
-  status,
-  statusLabel,
-  dueAt,
-  now,
-  lastReviewedAt,
-}: {
-  status: MemoryStatus;
-  statusLabel: string;
-  dueAt: number;
-  now: number;
-  lastReviewedAt?: number;
-}): string {
-  const dueLabel = formatMemoryDueLabel(status, dueAt, now, lastReviewedAt);
-  return dueLabel === null ? statusLabel : `${statusLabel} · ${dueLabel}`;
 }

@@ -329,7 +329,7 @@ export function ModeDock() {
         <FeatureCallout
           state={memoryHint}
           title="Memory lives here"
-          description="Heart verses in the reader, then use Memory to practice, review, and build packs. A badge appears when reviews are due."
+          description="Memorize verses and passages, then come back for a few minutes each day. A badge shows when something's ready."
           primaryActionLabel="Open Memory"
           onPrimaryAction={() => {
             logInteraction("mode-dock", "memory-opened", {

@@ -1,11 +1,22 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useOptionalTutorial } from "@/components/tutorial/tutorial-context";
+import {
+  useFeatureHint,
+  useMarkHintShownWhenPending,
+} from "@/components/tutorial/use-feature-hint";
 import {
   Brain,
   ChevronDown,
@@ -15,6 +26,7 @@ import {
 } from "lucide-react";
 import { displayBookName } from "@/lib/bible-books";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
+import { FEATURE_HINTS } from "@/lib/feature-hints";
 import {
   chapterMemorizeCopy,
   type ChapterMemorizeState,
@@ -81,6 +93,9 @@ export interface ChapterMemorizeControl {
   onOpenPack: (packId: string) => void;
 }
 
+const CHAPTER_MEMORIZE_NEW_COPY =
+  "New: memorize this chapter in a few minutes a day.";
+
 function ChapterMemorizeButton({
   control,
 }: {
@@ -88,49 +103,92 @@ function ChapterMemorizeButton({
 }) {
   const { state, onMemorize, onOpenPack } = control;
   const copy = chapterMemorizeCopy(state);
+  // People who finished the app tour before it taught Memorize.
+  const tutorial = useOptionalTutorial();
+  const newHint = useFeatureHint(
+    FEATURE_HINTS.CHAPTER_MEMORIZE_NEW,
+    state.kind === "memorize" &&
+      tutorial?.isMainTutorialComplete === true &&
+      tutorial.activeTour === null,
+  );
+  useMarkHintShownWhenPending(newHint);
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          data-tour-id="chapter-memorize"
-          aria-label={copy.label}
-          onClick={(event) => {
-            if (state.kind === "memorize") {
-              onMemorize(event.currentTarget);
-            } else {
-              onOpenPack(state.packId);
-            }
-          }}
-          className={cn(
-            "ml-auto inline-flex min-w-0 shrink items-center gap-2.5 rounded-lg border border-primary/35 bg-primary/7 py-1.5 pr-3 pl-2.5 text-left transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
-            CHAPTER_CHROME_MEMORIZE_COMPACT_BUTTON_CLASS,
-            CHAPTER_CHROME_TIGHT_HIDE_CLASS,
-          )}
-        >
-          <Brain aria-hidden className="h-4 w-4 shrink-0 text-primary" />
-          <span className={cn("min-w-0", CHAPTER_CHROME_MEMORIZE_FULL_CLASS)}>
-            <span className="block truncate text-[13px] leading-tight font-semibold text-primary">
-              {copy.title}
-            </span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {copy.detail}
-            </span>
-          </span>
-          <span
-            aria-hidden
-            className={cn(
-              "min-w-0 truncate text-[13px] font-semibold text-primary",
-              CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
-            )}
+    <Popover
+      open={newHint.pending}
+      onOpenChange={(open) => {
+        if (!open) newHint.dismiss();
+      }}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverAnchor asChild>
+            <button
+              type="button"
+              data-tour-id="chapter-memorize"
+              aria-label={copy.label}
+              onClick={(event) => {
+                if (state.kind === "memorize") {
+                  onMemorize(event.currentTarget);
+                } else {
+                  onOpenPack(state.packId);
+                }
+              }}
+              className={cn(
+                "ml-auto inline-flex min-w-0 shrink items-center gap-2.5 rounded-lg border border-primary/35 bg-primary/7 py-1.5 pr-3 pl-2.5 text-left transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
+                CHAPTER_CHROME_MEMORIZE_COMPACT_BUTTON_CLASS,
+                CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+              )}
+            >
+              <Brain aria-hidden className="h-4 w-4 shrink-0 text-primary" />
+              <span
+                className={cn("min-w-0", CHAPTER_CHROME_MEMORIZE_FULL_CLASS)}
+              >
+                <span className="block truncate text-[13px] leading-tight font-semibold text-primary">
+                  {copy.title}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {copy.detail}
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className={cn(
+                  "min-w-0 truncate text-[13px] font-semibold text-primary",
+                  CHAPTER_CHROME_MEMORIZE_SHORT_CLASS,
+                )}
+              >
+                {copy.short}
+              </span>
+            </button>
+          </PopoverAnchor>
+        </TooltipTrigger>
+        <TooltipContent>{`${copy.title} · ${copy.detail}`}</TooltipContent>
+      </Tooltip>
+      <PopoverContent
+        side="bottom"
+        align="end"
+        sideOffset={8}
+        collisionPadding={8}
+        hideWhenDetached
+        data-passage-dismiss-exempt
+        aria-label={CHAPTER_MEMORIZE_NEW_COPY}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        className="w-60 space-y-2 border-primary/30 p-3"
+      >
+        <p className="text-[13px] leading-snug">{CHAPTER_MEMORIZE_NEW_COPY}</p>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => newHint.dismiss()}
           >
-            {copy.short}
-          </span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{`${copy.title} · ${copy.detail}`}</TooltipContent>
-    </Tooltip>
+            Got it
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

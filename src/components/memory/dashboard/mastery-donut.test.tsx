@@ -24,9 +24,7 @@ describe("MasteryDonut", () => {
 
     expect(screen.getByText("0 started")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "No verses started. Start learning a hearted verse to see mastery.",
-      ),
+      screen.getByText("No verses started. Memorize a verse to see mastery."),
     ).toBeInTheDocument();
     expect(screen.queryByText("New")).not.toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();

@@ -57,16 +57,27 @@ export function goalPanel(goal: GoalCard): MemoryPanel {
     : { kind: "pack", packId: goal.packId };
 }
 
+/** A pack with learning and reviews today runs both in one session. */
+function runsPackToday(goal: GoalCard): boolean {
+  return (
+    goal.kind === "pack" && goal.learningToday > 0 && goal.reviewsDue.length > 0
+  );
+}
+
 export function goalSessionHref(goal: GoalCard, action: DueGoalAction): string {
   if (goal.kind === "verse") return memoryVerseSessionHref(action, goal);
-  if (
-    goal.kind === "pack" &&
-    goal.learningToday > 0 &&
-    goal.reviewsDue.length > 0
-  ) {
+  if (runsPackToday(goal)) {
     return memoryTodaySessionHref({ packId: goal.packId });
   }
   return memoryPackSessionHref(action, goal.packId);
+}
+
+/** The due row's button: "Continue" when it runs a pack's learning and reviews together. */
+export function dueGoalButtonLabel(
+  row: DueGoalRow,
+): "Learn" | "Review" | "Continue" {
+  if (runsPackToday(row.goal)) return "Continue";
+  return row.action === "learn" ? "Learn" : "Review";
 }
 
 function dueRow<G extends GoalCard>(goal: G): DueGoalRow<G> | null {

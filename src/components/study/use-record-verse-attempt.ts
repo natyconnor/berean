@@ -16,7 +16,8 @@ import {
 } from "./study-attempt-quality";
 import type { CardReference } from "./study-card-model";
 
-export type VerseAttemptMode = "learn" | "review" | "deck" | "practice";
+/** Memory session modes; stored `"deck"` attempts are legacy Study rows. */
+export type VerseAttemptMode = "learn" | "review" | "practice";
 
 interface RecordVerseAttemptInput {
   reference: CardReference;
