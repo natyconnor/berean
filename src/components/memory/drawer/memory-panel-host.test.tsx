@@ -239,6 +239,24 @@ describe("MemoryPanelHost", () => {
     ).toHaveAttribute("href", "/memory/verses");
   });
 
+  it("sends a pack with learning and reviews to its scoped Today session", () => {
+    mocks.queryResults.set("memoryHome.today", {
+      ...TODAY,
+      goals: TODAY.goals.map((goal) =>
+        goal.kind === "pack" ? { ...goal, learningToday: 1 } : goal,
+      ),
+    });
+    renderHost("verses");
+
+    const dialog = screen.getByRole("dialog", { name: "Your verses" });
+    expect(
+      within(dialog).getByRole("link", { name: "Learn Merced Team" }),
+    ).toHaveAttribute(
+      "href",
+      "/memory/today?packId=merced&return=%2Fmemory%3Fpanel%3Dverses",
+    );
+  });
+
   it("swaps to a recently active item with from=verses", async () => {
     renderHost("verses");
     const dialog = screen.getByRole("dialog", { name: "Your verses" });

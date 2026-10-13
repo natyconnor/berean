@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MemoryStatus } from "./memory-scheduler";
 import {
   PACK_ACTIVE_LEARNING_CAP,
+  packLearningToday,
   packUpNextAcrossPacks,
   packUpNextVerseRefIds,
   type PacingMember,
@@ -31,7 +32,7 @@ function verse(
   };
 }
 
-function ids(list: readonly PacingMember[]): string[] {
+function ids(list: readonly { verseRefId: string }[]): string[] {
   return list.map((member) => member.verseRefId);
 }
 
@@ -91,6 +92,45 @@ describe("packUpNextVerseRefIds", () => {
     expect(packUpNextVerseRefIds(members("new", "new", "new"), 1)).toEqual([
       "v1",
     ]);
+  });
+});
+
+describe("packLearningToday", () => {
+  const NOW = 1_000_000_000;
+  const HOUR = 60 * 60 * 1000;
+
+  function member(
+    verseRefId: string,
+    status: MemoryStatus,
+    dueAt: number = NOW,
+  ) {
+    return { verseRefId, status, dueAt };
+  }
+
+  it("starts only the paced Up-next verses of a fresh pack", () => {
+    const fresh = ["a", "b", "c", "d", "e"].map((id) => member(id, "new"));
+    expect(ids(packLearningToday(fresh, NOW))).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps open learning verses and fills the remaining slots in pack order", () => {
+    const mixed = [
+      member("open", "learning", NOW - HOUR),
+      member("locked", "learning", NOW + 12 * HOUR),
+      member("memorized", "reviewing", NOW - HOUR),
+      member("next", "new"),
+      member("later", "new"),
+    ];
+    expect(ids(packLearningToday(mixed, NOW))).toEqual(["open", "next"]);
+  });
+
+  it("starts no Up-next verse while the pack is at its cap", () => {
+    const full = [
+      member("one", "learning", NOW + 12 * HOUR),
+      member("two", "learning", NOW - HOUR),
+      member("three", "learning", NOW + 12 * HOUR),
+      member("waiting", "new"),
+    ];
+    expect(ids(packLearningToday(full, NOW))).toEqual(["two"]);
   });
 });
 

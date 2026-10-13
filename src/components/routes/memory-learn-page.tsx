@@ -9,13 +9,14 @@ import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { MemoryAllSessionPage } from "@/components/routes/memory-practice-page";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryBack } from "@/hooks/use-memory-back";
+import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
   readLearnPacksDismissedToday,
 } from "@/lib/learn-dismissed-packs";
 import { hasLearnVerseScope } from "@/lib/memory-learn-search";
+import { hasMemorizedVerses } from "@/lib/memory-session";
 import { Route } from "@/routes/memory/learn";
 
 import { api } from "../../../convex/_generated/api";
@@ -28,11 +29,16 @@ export function MemoryLearnPage() {
     return <MemoryAllSessionPage kind="learning" search={search} />;
   }
 
-  return <GlobalMemoryLearnPage />;
+  return <GlobalMemoryLearnPage returnTo={search.return} />;
 }
 
-function GlobalMemoryLearnPage(): JSX.Element {
-  const onExitHome = useMemoryBack();
+function GlobalMemoryLearnPage({
+  returnTo,
+}: {
+  returnTo: string | undefined;
+}): JSX.Element {
+  const onExitHome = useMemoryExit(returnTo);
+  const backLabel = useMemoryExitLabel(returnTo);
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const learnQueue = useFrozenQuery(api.verseMemory.learnQueue, {
@@ -40,6 +46,10 @@ function GlobalMemoryLearnPage(): JSX.Element {
     tzOffsetMinutes,
   });
   const duePassages = useFrozenQuery(api.passageMemory.dueForLearning, {
+    now,
+    tzOffsetMinutes,
+  });
+  const stats = useFrozenQuery(api.verseMemory.memoryStats, {
     now,
     tzOffsetMinutes,
   });
@@ -69,6 +79,9 @@ function GlobalMemoryLearnPage(): JSX.Element {
       verses={verses}
       dayKey={learnDismissDayKey(now)}
       onExitHome={onExitHome}
+      backLabel={backLabel}
+      returnTo={returnTo}
+      hasMemorized={hasMemorizedVerses(stats)}
     />
   );
 }
@@ -78,11 +91,17 @@ function GlobalLearnSession({
   verses,
   dayKey,
   onExitHome,
+  backLabel,
+  returnTo,
+  hasMemorized,
 }: {
   passages: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
   verses: PracticeVerse[];
   dayKey: number;
   onExitHome: () => void;
+  backLabel: string;
+  returnTo: string | undefined;
+  hasMemorized: boolean;
 }): JSX.Element {
   // Freeze the due list for this visit so a live update cannot swap packs
   // mid-session. Walk every frozen pack: the first one not set aside earlier
@@ -107,33 +126,32 @@ function GlobalLearnSession({
         packId={passage.packId}
         packName={passage.packName}
         onExitHome={onExitHome}
+        backLabel={backLabel}
         onDismissPack={dismissAndLeave}
       />
     );
   }
 
-  if (frozenVerses.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center bg-background px-6">
-        <div className="max-w-sm space-y-3 text-center">
-          <h1 className="text-base font-semibold tracking-tight">
-            Nothing to learn right now
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Start a verse from your library, or come back when an in-progress
-            verse or passage is ready.
-          </p>
-          <button
-            type="button"
-            onClick={onExitHome}
-            className="inline-flex text-sm font-medium text-primary hover:underline"
-          >
-            Back
-          </button>
-        </div>
+  const emptyState = (
+    <div className="flex h-full items-center justify-center bg-background px-6">
+      <div className="max-w-sm space-y-3 text-center">
+        <h1 className="text-base font-semibold tracking-tight">
+          Nothing to learn right now
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Start a verse from your library, or come back when an in-progress
+          verse or passage is ready.
+        </p>
+        <button
+          type="button"
+          onClick={onExitHome}
+          className="inline-flex text-sm font-medium text-primary hover:underline"
+        >
+          {backLabel}
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <MemorySessionRunner
@@ -141,26 +159,10 @@ function GlobalLearnSession({
       verses={frozenVerses}
       scopeLabel="Today's learning"
       onExit={onExitHome}
-      emptyState={
-        <div className="flex h-full items-center justify-center bg-background px-6">
-          <div className="max-w-sm space-y-3 text-center">
-            <h1 className="text-base font-semibold tracking-tight">
-              Nothing to learn right now
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Start a verse from your library, or come back when an in-progress
-              verse is ready.
-            </p>
-            <button
-              type="button"
-              onClick={onExitHome}
-              className="inline-flex text-sm font-medium text-primary hover:underline"
-            >
-              Back
-            </button>
-          </div>
-        </div>
-      }
+      backLabel={backLabel}
+      returnTo={returnTo}
+      hasMemorized={hasMemorized}
+      emptyState={emptyState}
     />
   );
 }
@@ -169,11 +171,13 @@ function BuildingPassageLearnCard({
   packId,
   packName,
   onExitHome,
+  backLabel,
   onDismissPack,
 }: {
   packId: Id<"packs">;
   packName: string;
   onExitHome: () => void;
+  backLabel: string;
   /** "That's enough for today", or Back from a pack this query cannot load. */
   onDismissPack: () => void;
 }): JSX.Element {
@@ -204,7 +208,7 @@ function BuildingPassageLearnCard({
             className="inline-flex text-sm font-medium text-primary hover:underline"
             onClick={onDismissPack}
           >
-            Back
+            {backLabel}
           </button>
         </div>
       </div>
@@ -219,6 +223,7 @@ function BuildingPassageLearnCard({
       onExit={onExitHome}
       onDoneForToday={onDismissPack}
       exitTooltip="Go back"
+      backLabel={backLabel}
     />
   );
 }

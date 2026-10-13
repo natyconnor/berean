@@ -29,6 +29,19 @@ export function parseMemoryReturn(raw: unknown): string | undefined {
   return raw;
 }
 
+export interface MemoryReturnSearch {
+  /** Where Done and the session's back link go. */
+  return?: string;
+}
+
+/** The `return` search param of a session route; dropped when not allowed. */
+export function validateMemoryReturnSearch(
+  search: Record<string, unknown>,
+): MemoryReturnSearch {
+  const returnTo = parseMemoryReturn(search.return);
+  return returnTo === undefined ? {} : { return: returnTo };
+}
+
 /** `href` with `return=<returnTo>` added; unchanged when `returnTo` is not allowed. */
 export function withReturn(href: string, returnTo: string): string {
   const safe = parseMemoryReturn(returnTo);

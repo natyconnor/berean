@@ -222,15 +222,16 @@ describe("primary action", () => {
     });
   });
 
-  it("pack with work today: Continue · N verses today", () => {
+  it("pack with learning and reviews today: Continue · N verses today runs both", () => {
     const goal = packGoal(MERCED_MEMBERS);
     expect(packDetailActions(goal, MERCED_MEMBERS, NOW, TZ)).toEqual({
       main: {
         kind: "session",
         emphasis: "primary",
-        // Two reviews plus Isaiah, the Up-next verse joining today.
+        // Two reviews plus Isaiah, the Up-next verse joining today: the
+        // blended pack session runs all three.
         label: "Continue · 3 verses today",
-        session: "learn",
+        session: "today",
       },
       practice: true,
       note: null,
@@ -242,6 +243,30 @@ describe("primary action", () => {
     expect(
       packDetailActions(packGoal(members), members, NOW, TZ).main,
     ).toMatchObject({ label: "Continue · 1 verse today", session: "review" });
+  });
+
+  it("pack with only learning today goes to the pack's learn session", () => {
+    const members = [
+      member("isa", { status: "new", learnStage: 0, intervalDays: 0 }),
+      member("josh", {
+        status: "learning",
+        learnStage: 2,
+        intervalDays: 0,
+        dueAt: NOW - HOUR_MS,
+      }),
+    ];
+    expect(
+      packDetailActions(packGoal(members), members, NOW, TZ).main,
+    ).toMatchObject({ label: "Continue · 2 verses today", session: "learn" });
+  });
+
+  it("counts only the pack's paced Up-next verses in Continue", () => {
+    const upNext = ["a", "b", "c", "d", "e"].map((id) =>
+      member(id, { status: "new", learnStage: 0, intervalDays: 0 }),
+    );
+    expect(
+      packDetailActions(packGoal(upNext), upNext, NOW, TZ).main,
+    ).toMatchObject({ label: "Continue · 3 verses today", session: "learn" });
   });
 
   it("pack, nothing today: Practice anytime with the next step", () => {

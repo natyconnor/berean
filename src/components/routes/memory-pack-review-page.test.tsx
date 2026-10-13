@@ -47,6 +47,7 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
+  useCanGoBack: () => false,
   Link: ({
     to,
     children,
@@ -62,7 +63,10 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("@/routes/memory_.$packId.review", () => ({
-  Route: { useParams: () => ({ packId: "pack_1" }) },
+  Route: {
+    useParams: () => ({ packId: "pack_1" }),
+    useSearch: () => ({}),
+  },
 }));
 
 vi.mock("../../../convex/_generated/api", () => ({

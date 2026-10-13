@@ -557,6 +557,112 @@ describe("PracticeBoard learning step label", () => {
       screen.queryByLabelText("Your recalled verse"),
     ).not.toBeInTheDocument();
   });
+
+  async function finishLastStep() {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 2,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + MIN_LEARNING_LOCK_MS,
+      consecutiveCorrect: 3,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+  }
+
+  it("ends on Done with a ghost Extra practice that returns where it started", async () => {
+    const onExit = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...guidedVerse, stageReps: 2 }]}
+          scopeLabel="Memory"
+          onExit={onExit}
+          backLabel="Back to Today"
+          returnTo="/memory"
+          hasMemorized
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Back to Today" }),
+    ).toBeInTheDocument();
+    await finishLastStep();
+
+    expect(await screen.findByText("That's today's step.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Extra practice" }),
+    ).toHaveAttribute("href", "/memory/practice?return=%2Fmemory");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves out Extra practice when nothing is memorized yet", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...guidedVerse, stageReps: 2 }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await finishLastStep();
+
+    expect(
+      await screen.findByRole("button", { name: "Done" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Extra practice" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hands the results up instead of a summary inside a longer session", async () => {
+    const onComplete = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...guidedVerse, stageReps: 2 }]}
+          scopeLabel="Today"
+          onExit={() => {}}
+          progress={{ label: "Learning · 1 verse", fraction: 0.4 }}
+          onComplete={onComplete}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Session progress: Learning · 1 verse",
+      }),
+    ).toHaveAttribute("aria-valuenow", "40");
+    await finishLastStep();
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete).toHaveBeenCalledWith({
+      verses: [
+        expect.objectContaining({
+          reference: guidedVerse.reference,
+          learnStage: 2,
+          status: "learning",
+        }),
+      ],
+      attempts: [],
+    });
+    expect(screen.queryByText("That's today's step.")).not.toBeInTheDocument();
+  });
 });
 
 describe("PracticeBoard recall submit loading", () => {

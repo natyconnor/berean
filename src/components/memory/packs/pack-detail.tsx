@@ -56,6 +56,7 @@ import { withReturn } from "@/lib/memory-return";
 import { isDueForReview } from "@/lib/memory-scheduler";
 import {
   memoryPackSessionHref,
+  memoryTodaySessionHref,
   memoryVerseSessionHref,
   type MemorySessionKind,
 } from "@/lib/memory-session-path";
@@ -75,6 +76,7 @@ import {
   type PackDetailActions,
   type PackDetailPack,
   type PackDetailProgress,
+  type PackDetailSession,
   type PassageVerseChipKind,
   type PassageVerseRow,
   type ProgressBar,
@@ -234,8 +236,13 @@ function PackDetailContent({
       ? packDetailProgress(packGoal, now, timeZone)
       : null;
   const firstPiece = passage?.pieces[0];
-  const sessionHref = (session: MemorySessionKind) =>
-    withReturn(memoryPackSessionHref(session, pack._id), frame.returnTo);
+  const sessionHref = (session: PackDetailSession) =>
+    withReturn(
+      session === "today"
+        ? memoryTodaySessionHref({ packId: pack._id })
+        : memoryPackSessionHref(session, pack._id),
+      frame.returnTo,
+    );
 
   return (
     <MemoryPanelFrame
@@ -319,7 +326,7 @@ function PackDetailActionRow({
   readerHref,
 }: {
   actions: PackDetailActions;
-  sessionHref: (session: MemorySessionKind) => string;
+  sessionHref: (session: PackDetailSession) => string;
   readerHref: string | undefined;
 }) {
   const { main } = actions;
@@ -412,8 +419,9 @@ function PackDetailActionRow({
   );
 }
 
-function SessionIcon({ session }: { session: MemorySessionKind }) {
+function SessionIcon({ session }: { session: PackDetailSession }) {
   switch (session) {
+    case "today":
     case "learn":
       return <Play aria-hidden />;
     case "review":

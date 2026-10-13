@@ -22,6 +22,7 @@ import { Route as MemoryNewRouteImport } from './routes/memory/new'
 import { Route as MemoryPracticeRouteImport } from './routes/memory/practice'
 import { Route as MemoryProgressRouteImport } from './routes/memory/progress'
 import { Route as MemoryReviewRouteImport } from './routes/memory/review'
+import { Route as MemoryTodayRouteImport } from './routes/memory/today'
 import { Route as MemoryVersesRouteImport } from './routes/memory/verses'
 import { Route as PassagePassageIdRouteImport } from './routes/passage/$passageId'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
@@ -99,6 +100,11 @@ const MemoryProgressRoute = MemoryProgressRouteImport.update({
 const MemoryReviewRoute = MemoryReviewRouteImport.update({
   id: '/memory/review',
   path: '/memory/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryTodayRoute = MemoryTodayRouteImport.update({
+  id: '/memory/today',
+  path: '/memory/today',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryVersesRoute = MemoryVersesRouteImport.update({
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/memory/practice': typeof MemoryPracticeRoute
   '/memory/progress': typeof MemoryProgressRoute
   '/memory/review': typeof MemoryReviewRoute
+  '/memory/today': typeof MemoryTodayRoute
   '/memory/verses': typeof MemoryVersesRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
@@ -208,6 +215,7 @@ export interface FileRoutesByTo {
   '/memory/practice': typeof MemoryPracticeRoute
   '/memory/progress': typeof MemoryProgressRoute
   '/memory/review': typeof MemoryReviewRoute
+  '/memory/today': typeof MemoryTodayRoute
   '/memory/verses': typeof MemoryVersesRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
@@ -237,6 +245,7 @@ export interface FileRoutesById {
   '/memory/practice': typeof MemoryPracticeRoute
   '/memory/progress': typeof MemoryProgressRoute
   '/memory/review': typeof MemoryReviewRoute
+  '/memory/today': typeof MemoryTodayRoute
   '/memory/verses': typeof MemoryVersesRoute
   '/passage/$passageId': typeof PassagePassageIdRoute
   '/settings/tags': typeof SettingsTagsRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
     | '/memory/practice'
     | '/memory/progress'
     | '/memory/review'
+    | '/memory/today'
     | '/memory/verses'
     | '/passage/$passageId'
     | '/settings/tags'
@@ -295,6 +305,7 @@ export interface FileRouteTypes {
     | '/memory/practice'
     | '/memory/progress'
     | '/memory/review'
+    | '/memory/today'
     | '/memory/verses'
     | '/passage/$passageId'
     | '/settings/tags'
@@ -323,6 +334,7 @@ export interface FileRouteTypes {
     | '/memory/practice'
     | '/memory/progress'
     | '/memory/review'
+    | '/memory/today'
     | '/memory/verses'
     | '/passage/$passageId'
     | '/settings/tags'
@@ -352,6 +364,7 @@ export interface RootRouteChildren {
   MemoryPracticeRoute: typeof MemoryPracticeRoute
   MemoryProgressRoute: typeof MemoryProgressRoute
   MemoryReviewRoute: typeof MemoryReviewRoute
+  MemoryTodayRoute: typeof MemoryTodayRoute
   MemoryVersesRoute: typeof MemoryVersesRoute
   PassagePassageIdRoute: typeof PassagePassageIdRoute
   SettingsTagsRoute: typeof SettingsTagsRoute
@@ -461,6 +474,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/memory/today': {
+      id: '/memory/today'
+      path: '/memory/today'
+      fullPath: '/memory/today'
+      preLoaderRoute: typeof MemoryTodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/memory/verses': {
       id: '/memory/verses'
       path: '/memory/verses'
@@ -568,6 +588,7 @@ const rootRouteChildren: RootRouteChildren = {
   MemoryPracticeRoute: MemoryPracticeRoute,
   MemoryProgressRoute: MemoryProgressRoute,
   MemoryReviewRoute: MemoryReviewRoute,
+  MemoryTodayRoute: MemoryTodayRoute,
   MemoryVersesRoute: MemoryVersesRoute,
   PassagePassageIdRoute: PassagePassageIdRoute,
   SettingsTagsRoute: SettingsTagsRoute,

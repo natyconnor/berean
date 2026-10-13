@@ -8,7 +8,7 @@ import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-ve
 import { Button } from "@/components/ui/button";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryBack } from "@/hooks/use-memory-back";
+import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
 import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
@@ -23,10 +23,10 @@ function dueRowToPracticeVerse(
 
 function ReviewCaughtUp({
   onExit,
-  doneLabel = "Back to memory",
+  backLabel,
 }: {
   onExit: () => void;
-  doneLabel?: string;
+  backLabel: string;
 }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 bg-background px-6 text-center">
@@ -40,7 +40,7 @@ function ReviewCaughtUp({
         </p>
       </div>
       <Button variant="outline" onClick={onExit}>
-        {doneLabel}
+        {backLabel}
       </Button>
     </div>
   );
@@ -51,14 +51,16 @@ function MemoryReviewSessionPage({
   scopeLabel,
   remainingDue,
   onExit,
-  exitLabel = "Back to memory",
+  backLabel,
+  returnTo,
   onContinueSession,
 }: {
   verses: ReadonlyArray<PracticeVerse>;
   scopeLabel: string;
   remainingDue: number;
   onExit: () => void;
-  exitLabel?: string;
+  backLabel: string;
+  returnTo?: string;
   onContinueSession?: () => void;
 }) {
   return (
@@ -67,17 +69,20 @@ function MemoryReviewSessionPage({
       verses={verses}
       scopeLabel={scopeLabel}
       onExit={onExit}
-      exitLabel={exitLabel}
+      backLabel={backLabel}
+      returnTo={returnTo}
       remainingDue={remainingDue}
       onContinueSession={onContinueSession}
-      emptyState={<ReviewCaughtUp onExit={onExit} doneLabel={exitLabel} />}
+      emptyState={<ReviewCaughtUp onExit={onExit} backLabel={backLabel} />}
     />
   );
 }
 
 export function MemoryReviewPage() {
-  const onExit = useMemoryBack();
   const search = Route.useSearch();
+  const returnTo = search.return;
+  const onExit = useMemoryExit(returnTo);
+  const backLabel = useMemoryExitLabel(returnTo);
   const now = useLiveNow();
   const hasScope = hasReviewVerseScope(search);
   const [queueEpoch, setQueueEpoch] = useState(0);
@@ -134,6 +139,8 @@ export function MemoryReviewPage() {
         scopeLabel="All due today"
         remainingDue={remainingDue}
         onExit={onExit}
+        backLabel={backLabel}
+        returnTo={returnTo}
         onContinueSession={() => {
           setDrainedDue((value) => value + globalVerses.length);
           setQueueEpoch((value) => value + 1);
@@ -166,7 +173,7 @@ export function MemoryReviewPage() {
           </p>
         </div>
         <Button variant="outline" onClick={onExit}>
-          Back
+          {backLabel}
         </Button>
       </div>
     );
@@ -178,6 +185,8 @@ export function MemoryReviewPage() {
       scopeLabel={formatVerseRef(search)}
       remainingDue={0}
       onExit={onExit}
+      backLabel={backLabel}
+      returnTo={returnTo}
     />
   );
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isMemorySessionPath,
   memoryPackSessionHref,
+  memoryTodaySessionHref,
   memoryVerseSessionHref,
 } from "./memory-session-path";
 
@@ -23,10 +24,18 @@ describe("session hrefs", () => {
     expect(href).toBe("/memory/k57abc/learn");
     expect(isMemorySessionPath(href)).toBe(true);
   });
+
+  it("builds the blended Today session href, optionally for one pack", () => {
+    expect(memoryTodaySessionHref()).toBe("/memory/today");
+    expect(memoryTodaySessionHref({ packId: "k57abc" })).toBe(
+      "/memory/today?packId=k57abc",
+    );
+  });
 });
 
 describe("isMemorySessionPath", () => {
-  it("treats global Learn, Practice, and Review as sessions", () => {
+  it("treats Today, global Learn, Practice, and Review as sessions", () => {
+    expect(isMemorySessionPath("/memory/today")).toBe(true);
     expect(isMemorySessionPath("/memory/learn")).toBe(true);
     expect(isMemorySessionPath("/memory/practice")).toBe(true);
     expect(isMemorySessionPath("/memory/review")).toBe(true);

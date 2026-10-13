@@ -1,8 +1,12 @@
+import { validateMemoryReturnSearch } from "@/lib/memory-return";
+
 export interface MemoryVerseSearch {
   book?: string;
   chapter?: number;
   startVerse?: number;
   endVerse?: number;
+  /** Where Done and the session's back link go. */
+  return?: string;
 }
 
 export interface MemoryVerseScope {
@@ -34,13 +38,14 @@ function parsePositiveInt(value: unknown): number | undefined {
 export function validateMemoryVerseSearch(
   search: Record<string, unknown>,
 ): MemoryVerseSearch {
+  const returnSearch = validateMemoryReturnSearch(search);
   const book = typeof search.book === "string" ? search.book.trim() : "";
   const chapter = parsePositiveInt(search.chapter);
   const startVerse = parsePositiveInt(search.startVerse);
   const endVerseCandidate = parsePositiveInt(search.endVerse);
 
   if (!book || chapter === undefined || startVerse === undefined) {
-    return {};
+    return returnSearch;
   }
 
   const endVerse =
@@ -48,7 +53,7 @@ export function validateMemoryVerseSearch(
       ? startVerse
       : Math.max(startVerse, endVerseCandidate);
 
-  return { book, chapter, startVerse, endVerse };
+  return { book, chapter, startVerse, endVerse, ...returnSearch };
 }
 
 export function hasMemoryVerseScope(

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import { SessionSummaryActions } from "@/components/memory/practice/session-complete";
 import { Button } from "@/components/ui/button";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
@@ -10,6 +11,7 @@ import {
   recalledCopy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
+import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export type { ReviewSessionAttempt };
@@ -24,8 +26,12 @@ interface ReviewSummaryProps {
   onDone: () => void;
   /** Offered only when there is still due work to keep going on. */
   onContinue?: () => void;
-  /** Label for the primary "done" action. Defaults to "Back to memory". */
+  /** Label for the primary "done" action. Defaults to "Done". */
   doneLabel?: string;
+  /** Shows a ghost Extra practice beside Done. */
+  extraPracticeHref?: string;
+  /** Carried into each verse's Practice session so it returns here too. */
+  returnTo?: string;
 }
 
 /**
@@ -38,9 +44,10 @@ export function ReviewSummary({
   remaining,
   onDone,
   onContinue,
-  doneLabel = "Back to memory",
+  doneLabel = "Done",
+  extraPracticeHref,
+  returnTo,
 }: ReviewSummaryProps): JSX.Element {
-  const navigate = useNavigate();
   const caughtUp = remaining === 0;
   const hasAttempts = attempts.length > 0;
 
@@ -79,40 +86,7 @@ export function ReviewSummary({
         )}
 
         {hasAttempts && (
-          <ul className="divide-y rounded-lg border text-left">
-            {groupReviewSessionAttempts(attempts).map((attempt) => {
-              const label = attempt.label ?? formatVerseRef(attempt.reference);
-              return (
-                <li
-                  key={label}
-                  className="flex items-center justify-between gap-3 px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{label}</p>
-                    <p className="text-xs tabular-nums text-muted-foreground">
-                      {recalledCopy(attempt.accuracies)}
-                    </p>
-                  </div>
-                  {attempt.offerPractice === false ? null : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => {
-                        void navigate({
-                          to: "/memory/practice",
-                          search: memoryPracticeSearch(attempt.reference),
-                        });
-                      }}
-                    >
-                      Practice
-                    </Button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <ReviewResultRows attempts={attempts} returnTo={returnTo} />
         )}
 
         <div className="flex flex-col gap-2">
@@ -122,15 +96,67 @@ export function ReviewSummary({
               Keep reviewing
             </Button>
           )}
-          <Button
-            variant={caughtUp || !onContinue ? "default" : "outline"}
-            onClick={onDone}
-            className="w-full"
-          >
-            {doneLabel}
-          </Button>
+          <SessionSummaryActions
+            exitLabel={doneLabel}
+            onExit={onDone}
+            exitVariant={caughtUp || !onContinue ? "default" : "outline"}
+            extraPracticeHref={extraPracticeHref}
+          />
         </div>
       </div>
     </MemoryDashboardCard>
+  );
+}
+
+/** Each reviewed verse with how well it was recalled, and a Practice shortcut. */
+export function ReviewResultRows({
+  attempts,
+  returnTo,
+  className,
+}: {
+  attempts: ReviewSessionAttempt[];
+  returnTo?: string;
+  className?: string;
+}): JSX.Element {
+  const navigate = useNavigate();
+
+  return (
+    <ul className={cn("divide-y rounded-lg border text-left", className)}>
+      {groupReviewSessionAttempts(attempts).map((attempt) => {
+        const label = attempt.label ?? formatVerseRef(attempt.reference);
+        return (
+          <li
+            key={label}
+            className="flex items-center justify-between gap-3 px-3 py-2.5"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{label}</p>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {recalledCopy(attempt.accuracies)}
+              </p>
+            </div>
+            {attempt.offerPractice === false ? null : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => {
+                  void navigate({
+                    to: "/memory/practice",
+                    search: {
+                      ...memoryPracticeSearch(attempt.reference),
+                      ...(returnTo === undefined ? {} : { return: returnTo }),
+                    },
+                  });
+                }}
+              >
+                Practice
+              </Button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

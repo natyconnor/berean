@@ -2,8 +2,10 @@ import { type JSX, type ReactNode, useState } from "react";
 
 import {
   PracticeBoard,
+  type PracticeSessionResult,
   type PracticeVerse,
 } from "@/components/memory/practice/practice-board";
+import type { SessionProgress } from "@/components/memory/practice/session-header-progress";
 import type { MemorySessionKind } from "@/lib/memory-session";
 
 interface MemorySessionRunnerProps {
@@ -13,11 +15,22 @@ interface MemorySessionRunnerProps {
   scopeLabel: string;
   onExit: () => void;
   exitTooltip?: string;
+  /** Header back button text, e.g. "Back to Today". */
+  backLabel?: string;
+  /** The summary's primary action. */
   exitLabel?: string;
+  /** Where the session returns; Extra practice returns there too. */
+  returnTo?: string;
+  /** Something is memorized, so the summary can offer Extra practice. */
+  hasMemorized?: boolean;
   /** Verses still due after this run (Review summary only). */
   remainingDue?: number;
   /** Restart the review queue when more verses are still due. */
   onContinueSession?: () => void;
+  /** Header text and overall bar when this run is one part of a session. */
+  progress?: SessionProgress;
+  /** One part of a longer session: hand the results up instead of a summary. */
+  onComplete?: (result: PracticeSessionResult) => void;
   /** Shown when the session had nothing to run in the first place. */
   emptyState: ReactNode;
 }

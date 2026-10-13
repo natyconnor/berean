@@ -36,6 +36,7 @@ export const APP_ROUTE_PATTERNS = [
   "/memory/practice",
   "/memory/progress",
   "/memory/review",
+  "/memory/today",
   "/memory/verses",
   "/memory/presets",
   "/settings",

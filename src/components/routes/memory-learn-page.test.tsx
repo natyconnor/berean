@@ -70,7 +70,8 @@ vi.mock("convex-helpers/react/cache", () => ({
 }));
 
 vi.mock("@/hooks/use-memory-back", () => ({
-  useMemoryBack: () => onExitHome,
+  useMemoryExit: () => onExitHome,
+  useMemoryExitLabel: () => "Back",
 }));
 
 vi.mock("@/routes/memory/learn", () => ({

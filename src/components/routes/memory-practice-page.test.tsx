@@ -18,7 +18,8 @@ vi.mock("@/hooks/use-frozen-query", () => ({
 }));
 
 vi.mock("@/hooks/use-memory-back", () => ({
-  useMemoryBack: () => vi.fn(),
+  useMemoryExit: () => vi.fn(),
+  useMemoryExitLabel: () => "Back",
 }));
 
 vi.mock("@/hooks/use-live-now", () => ({

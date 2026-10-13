@@ -55,6 +55,10 @@ import {
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
+import {
+  SessionHeaderProgress,
+  type SessionProgress,
+} from "@/components/memory/practice/session-header-progress";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { Button } from "@/components/ui/button";
 import {
@@ -124,6 +128,10 @@ interface PassageSessionProps {
    */
   onDoneForToday?: () => void;
   exitTooltip?: string;
+  /** Header back button text, e.g. "Back to Today". */
+  backLabel?: string;
+  /** Header text and overall bar when this passage is one part of a session. */
+  progress?: SessionProgress;
 }
 
 export function PassageSession({
@@ -133,6 +141,8 @@ export function PassageSession({
   onExit,
   onDoneForToday,
   exitTooltip = "Go back to the pack",
+  backLabel = "Back",
+  progress,
 }: PassageSessionProps): JSX.Element {
   const finishForToday = onDoneForToday ?? onExit;
   const now = useLiveNow();
@@ -452,6 +462,8 @@ export function PassageSession({
       packName={packName}
       onExit={onExit}
       exitTooltip={exitTooltip}
+      backLabel={backLabel}
+      progress={progress}
       persistError={persistError}
     >
       {needsFirstVerse ? (
@@ -998,6 +1010,8 @@ function PassageSessionShell({
   packName,
   onExit,
   exitTooltip,
+  backLabel,
+  progress,
   persistError,
   children,
 }: {
@@ -1005,6 +1019,8 @@ function PassageSessionShell({
   packName: string;
   onExit: () => void;
   exitTooltip: string;
+  backLabel: string;
+  progress?: SessionProgress;
   persistError: string | null;
   children: ReactNode;
 }): JSX.Element {
@@ -1021,7 +1037,7 @@ function PassageSessionShell({
                 className="-ml-2 shrink-0 gap-1.5"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden />
-                Back
+                {backLabel}
               </Button>
             </TooltipTrigger>
             <TooltipContent>{exitTooltip}</TooltipContent>
@@ -1041,6 +1057,7 @@ function PassageSessionShell({
               {packName}
             </span>
           </h1>
+          {progress ? <SessionHeaderProgress progress={progress} /> : null}
         </div>
       </header>
       {persistError ? (

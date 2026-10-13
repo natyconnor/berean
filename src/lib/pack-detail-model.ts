@@ -208,12 +208,15 @@ export function packDetailSubtitle({
   };
 }
 
+/** A pack session, or `today`: the pack's learning and then its reviews in one run. */
+export type PackDetailSession = MemorySessionKind | "today";
+
 export type PackDetailMainAction =
   | {
       kind: "session";
       emphasis: "primary" | "secondary";
       label: string;
-      session: MemorySessionKind;
+      session: PackDetailSession;
       tooltip?: string;
     }
   /** Disabled "Up next tomorrow"; the detail adds the passage's locked copy. */
@@ -312,7 +315,17 @@ function soonestStarted(
   return soonest;
 }
 
-/** The one main action for a pack: today's verses, else practice. */
+function packTodaySession(goal: PackGoalCard): PackDetailSession {
+  const reviews = goal.reviewsDue.length;
+  if (goal.learningToday > 0) return reviews > 0 ? "today" : "learn";
+  return "review";
+}
+
+/**
+ * The one main action for a pack: today's verses, else practice. "Continue"
+ * counts learning and reviews, so with both it opens the pack's blended
+ * session, which runs exactly those verses.
+ */
 export function packDetailActions(
   goal: PackGoalCard | null,
   members: readonly PackDetailMember[],
@@ -328,7 +341,7 @@ export function packDetailActions(
         kind: "session",
         emphasis: "primary",
         label: `Continue · ${verseCountLabel(count)} today`,
-        session: goal.learningToday > 0 ? "learn" : "review",
+        session: packTodaySession(goal),
       },
       practice: goal.learned > 0,
       note: null,

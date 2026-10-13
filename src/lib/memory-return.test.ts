@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseMemoryReturn, withReturn } from "./memory-return";
+import {
+  parseMemoryReturn,
+  validateMemoryReturnSearch,
+  withReturn,
+} from "./memory-return";
 
 describe("parseMemoryReturn", () => {
   it.each([
@@ -43,6 +47,21 @@ describe("parseMemoryReturn", () => {
     `/memory?x=${"a".repeat(512)}`,
   ])("rejects %o", (raw) => {
     expect(parseMemoryReturn(raw)).toBeUndefined();
+  });
+});
+
+describe("validateMemoryReturnSearch", () => {
+  it("keeps an allowed return", () => {
+    expect(
+      validateMemoryReturnSearch({ return: "/memory?panel=pack:abc" }),
+    ).toEqual({ return: "/memory?panel=pack:abc" });
+  });
+
+  it("drops a missing or unsafe return", () => {
+    expect(validateMemoryReturnSearch({})).toEqual({});
+    expect(
+      validateMemoryReturnSearch({ return: "https://evil.com/memory" }),
+    ).toEqual({});
   });
 });
 

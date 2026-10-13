@@ -13,6 +13,7 @@ import { isReviewPhase, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
+import { ExtraPracticeLink } from "./extra-practice-link";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 
 export interface SessionCompleteVerse {
@@ -25,9 +26,11 @@ export interface SessionCompleteVerse {
 interface SessionCompleteProps {
   /** Every verse the session ran, with the step each one landed on. */
   verses: ReadonlyArray<SessionCompleteVerse>;
-  /** Label for the exit action, e.g. "Back to Memory" or "Back to Pack". */
+  /** Label for the primary exit action, "Done". */
   exitLabel: string;
   onExit: () => void;
+  /** Shows a ghost Extra practice beside Done. */
+  extraPracticeHref?: string;
 }
 
 /**
@@ -38,6 +41,7 @@ export function SessionComplete({
   verses,
   exitLabel,
   onExit,
+  extraPracticeHref,
 }: SessionCompleteProps): JSX.Element {
   const graduated = verses.filter((verse) => isReviewPhase(verse.status));
 
@@ -60,41 +64,93 @@ export function SessionComplete({
         </p>
       </div>
 
-      <ul className="mt-6 divide-y rounded-lg border text-left">
-        {verses.map((verse) => {
-          const stage = PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
-          const chrome = practiceChromeFor(verse.learnStage, verse.status);
-          const reviewing = isReviewPhase(verse.status);
-          return (
-            <li
-              key={verse.id}
-              className="flex items-center justify-between gap-3 px-3 py-2.5"
-            >
-              <p className="min-w-0 truncate text-sm font-medium">
-                {formatVerseRef(verse.reference)}
-              </p>
-              <span
-                className={cn(
-                  "inline-flex shrink-0 items-center gap-1.5 text-xs font-medium",
-                  chrome.text,
-                )}
-              >
-                <span
-                  className={cn("h-1.5 w-1.5 rounded-full", chrome.dot)}
-                  aria-hidden
-                />
-                {reviewing
-                  ? statusLabel("reviewing")
-                  : `Tomorrow: ${stage.label}`}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <SessionCompleteRows verses={verses} className="mt-6" />
 
-      <Button className="mt-6 w-full" onClick={onExit}>
+      <SessionSummaryActions
+        exitLabel={exitLabel}
+        onExit={onExit}
+        extraPracticeHref={extraPracticeHref}
+        className="mt-6"
+      />
+    </MemoryDashboardCard>
+  );
+}
+
+/** Each learned verse and the step it picks up next, or "Memorized". */
+export function SessionCompleteRows({
+  verses,
+  className,
+}: {
+  verses: ReadonlyArray<SessionCompleteVerse>;
+  className?: string;
+}): JSX.Element {
+  return (
+    <ul className={cn("divide-y rounded-lg border text-left", className)}>
+      {verses.map((verse) => {
+        const stage = PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
+        const chrome = practiceChromeFor(verse.learnStage, verse.status);
+        const reviewing = isReviewPhase(verse.status);
+        return (
+          <li
+            key={verse.id}
+            className="flex items-center justify-between gap-3 px-3 py-2.5"
+          >
+            <p className="min-w-0 truncate text-sm font-medium">
+              {formatVerseRef(verse.reference)}
+            </p>
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 text-xs font-medium",
+                chrome.text,
+              )}
+            >
+              <span
+                className={cn("h-1.5 w-1.5 rounded-full", chrome.dot)}
+                aria-hidden
+              />
+              {reviewing
+                ? statusLabel("reviewing")
+                : `Tomorrow: ${stage.label}`}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** A summary's footer: primary Done, with a ghost Extra practice beside it. */
+export function SessionSummaryActions({
+  exitLabel,
+  onExit,
+  exitVariant = "default",
+  extraPracticeHref,
+  className,
+}: {
+  exitLabel: string;
+  onExit: () => void;
+  /** Outline when another action (Keep reviewing) leads. */
+  exitVariant?: "default" | "outline";
+  extraPracticeHref?: string;
+  className?: string;
+}): JSX.Element {
+  return (
+    <div
+      className={cn(
+        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        className,
+      )}
+    >
+      {extraPracticeHref ? (
+        <ExtraPracticeLink href={extraPracticeHref} />
+      ) : null}
+      <Button
+        variant={exitVariant}
+        onClick={onExit}
+        className="max-sm:h-11 sm:min-w-28"
+      >
         {exitLabel}
       </Button>
-    </MemoryDashboardCard>
+    </div>
   );
 }

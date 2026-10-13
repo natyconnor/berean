@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DAY_MS, MIN_LEARNING_LOCK_MS } from "./memory-scheduler";
 import {
+  hasMemorizedVerses,
   hasSessionWorkLeft,
   isLearningSessionCandidate,
   isMemorySessionCandidate,
@@ -12,6 +13,15 @@ import {
 } from "./memory-session";
 
 const NOW = 1_700_000_000_000;
+
+describe("hasMemorizedVerses", () => {
+  it("is true once any verse is memorized or mastered", () => {
+    expect(hasMemorizedVerses(undefined)).toBe(false);
+    expect(hasMemorizedVerses({ reviewing: 0, mastered: 0 })).toBe(false);
+    expect(hasMemorizedVerses({ reviewing: 1, mastered: 0 })).toBe(true);
+    expect(hasMemorizedVerses({ reviewing: 0, mastered: 2 })).toBe(true);
+  });
+});
 
 describe("memory session membership", () => {
   it("keeps Practice limited to graduated verses", () => {

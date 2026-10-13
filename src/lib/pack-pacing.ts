@@ -1,7 +1,11 @@
 import { sortByVerseRef } from "../../shared/compare-verse-refs";
 import type { VerseRefKeyInput } from "../../shared/verse-ref-key";
 
-import type { MemoryStatus } from "./memory-scheduler";
+import {
+  isDueForLearning,
+  type MemoryAvailability,
+  type MemoryStatus,
+} from "./memory-scheduler";
 
 /**
  * Most verses one pack keeps on the learning ladder at once. Without a cap, a
@@ -33,6 +37,24 @@ export function packUpNextVerseRefIds<
     if (member.status === "new") upNext.push(member.verseRefId);
   }
   return upNext;
+}
+
+/**
+ * One pack's learning for today, in pack order: started verses whose step is
+ * open now plus its paced Up-next verses. Other Up-next verses wait their
+ * turn. Matches the pack's `learningToday` count on Today.
+ */
+export function packLearningToday<
+  T extends MemoryAvailability & { verseRefId: string },
+>(
+  orderedMembers: readonly T[],
+  now: number,
+  cap: number = PACK_ACTIVE_LEARNING_CAP,
+): T[] {
+  const upNext = new Set<string>(packUpNextVerseRefIds(orderedMembers, cap));
+  return orderedMembers.filter(
+    (member) => upNext.has(member.verseRefId) || isDueForLearning(member, now),
+  );
 }
 
 /** A pack member as pacing sees it: its verse and its place on the ladder. */

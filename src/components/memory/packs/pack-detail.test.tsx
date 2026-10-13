@@ -483,9 +483,10 @@ describe("PackDetail for a pack", () => {
     expect(
       within(dialog).getByText("Pack · 3 verses · added Sep 12"),
     ).toBeInTheDocument();
+    // One review due and one Up-next verse: the pack's blended session runs both.
     expect(
       within(dialog).getByRole("link", { name: "Continue · 2 verses today" }),
-    ).toHaveAttribute("href", `/memory/merced/learn?${RETURN}`);
+    ).toHaveAttribute("href", `/memory/today?packId=merced&${RETURN}`);
     expect(
       within(dialog).getByRole("link", { name: "Practice anytime" }),
     ).toHaveAttribute("href", `/memory/merced/practice?${RETURN}`);
@@ -631,7 +632,7 @@ describe("PackDetail on its full page", () => {
       screen.getByRole("link", { name: "Continue · 2 verses today" }),
     ).toHaveAttribute(
       "href",
-      "/memory/merced/learn?return=%2Fmemory%2Fmerced%3Ffrom%3Dverses",
+      "/memory/today?packId=merced&return=%2Fmemory%2Fmerced%3Ffrom%3Dverses",
     );
     expect(
       screen.queryByRole("link", { name: "Open full page" }),

@@ -6,12 +6,13 @@ import type { PracticeVerse } from "@/components/memory/practice/practice-board"
 import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryBack } from "@/hooks/use-memory-back";
+import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
 import {
   hasPracticeVerseScope,
   type MemoryPracticeSearch,
 } from "@/lib/memory-practice-search";
 import {
+  hasMemorizedVerses,
   isMemorySessionCandidate,
   type MemorySessionKind,
 } from "@/lib/memory-session";
@@ -35,7 +36,9 @@ export function MemoryAllSessionPage({
   kind: MemorySessionKind;
   search: MemoryPracticeSearch;
 }) {
-  const onExit = useMemoryBack();
+  const returnTo = search.return;
+  const onExit = useMemoryExit(returnTo);
+  const backLabel = useMemoryExitLabel(returnTo);
   const scoped = hasPracticeVerseScope(search);
   const library = useFrozenQuery(
     api.verseMemory.listInMemory,
@@ -58,6 +61,13 @@ export function MemoryAllSessionPage({
     return scopedVerse ? [scopedVerse] : [];
   }, [scoped, library, scopedVerse]);
   const now = useLiveNow();
+  const stats = useFrozenQuery(
+    api.verseMemory.memoryStats,
+    kind === "learning"
+      ? { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() }
+      : "skip",
+  );
+  const hasMemorized = hasMemorizedVerses(stats);
 
   const verses = useMemo(
     () => scopeMemorySessionVerses(inMemory, search, kind, now),
@@ -84,6 +94,9 @@ export function MemoryAllSessionPage({
       verses={verses}
       scopeLabel={scopeLabel}
       onExit={onExit}
+      backLabel={backLabel}
+      returnTo={returnTo}
+      hasMemorized={hasMemorized}
       emptyState={
         <div className="flex h-full items-center justify-center bg-background px-6">
           <div className="max-w-sm space-y-3 text-center">
@@ -102,7 +115,7 @@ export function MemoryAllSessionPage({
               onClick={onExit}
               className="inline-flex text-sm font-medium text-primary hover:underline"
             >
-              Back
+              {backLabel}
             </button>
           </div>
         </div>

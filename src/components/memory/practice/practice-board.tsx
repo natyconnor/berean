@@ -39,10 +39,12 @@ import { devLog } from "@/lib/dev-log";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { SESSION_COMPLETE_FOOTER } from "@/lib/memory-copy";
 import { nextStepCopy } from "@/lib/memorize-plan";
+import { withReturn } from "@/lib/memory-return";
 import {
   holdReviewingInterval,
   isLearningLocked,
   isLearningProgressAttempt,
+  isReviewPhase,
   MAX_LEARN_STAGE,
   requiredRepsFor,
   reviewGradeOutcome,
@@ -107,7 +109,11 @@ import {
 import { PracticeVerseRail } from "./practice-verse-rail";
 import { ReviewSummary } from "../review-summary";
 import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
-import { SessionComplete } from "./session-complete";
+import { SessionComplete, type SessionCompleteVerse } from "./session-complete";
+import {
+  SessionHeaderProgress,
+  type SessionProgress,
+} from "./session-header-progress";
 
 export type { MemorySessionLabel } from "@/lib/memory-session";
 
@@ -172,6 +178,14 @@ export interface PracticeVerse {
   composite?: PracticeCompositeSet;
 }
 
+/** What a run hands up when it is one part of a longer session. */
+export interface PracticeSessionResult {
+  /** Every verse the run held, with the step it landed on. */
+  verses: SessionCompleteVerse[];
+  /** Review grades, in session order. */
+  attempts: ReviewSessionAttempt[];
+}
+
 interface PracticeBoardProps {
   /** Learning advances today's ladder; Practice is optional graduated recall. */
   kind: MemorySessionKind;
@@ -179,16 +193,26 @@ interface PracticeBoardProps {
   verses: ReadonlyArray<PracticeVerse>;
   /** Human-readable name for the set being practiced. */
   scopeLabel: string;
-  /** Return to the memory home or pack. */
+  /** Leave the session for where it started. */
   onExit: () => void;
   /** Describes the back-button destination. */
   exitTooltip?: string;
-  /** Names the back-button destination on the end-of-session card. */
+  /** Header back button text, e.g. "Back to Today". */
+  backLabel?: string;
+  /** The end-of-session card's primary action. */
   exitLabel?: string;
+  /** Where this session returns; Extra practice and per-verse Practice return there too. */
+  returnTo?: string;
+  /** Something is memorized, so the summary can offer Extra practice. */
+  hasMemorized?: boolean;
   /** Verses still due after this run (Review summary only). */
   remainingDue?: number;
   /** Restart the review queue when more verses are still due. */
   onContinueSession?: () => void;
+  /** Header text and overall bar when this run is one part of a session. */
+  progress?: SessionProgress;
+  /** One part of a longer session: hand the results up instead of a summary. */
+  onComplete?: (result: PracticeSessionResult) => void;
 }
 
 /** Live learning progress the board tracks per verse this session. */
@@ -323,9 +347,14 @@ export function PracticeBoard({
   scopeLabel,
   onExit,
   exitTooltip,
-  exitLabel = "Back to Memory",
+  backLabel,
+  exitLabel = "Done",
+  returnTo,
+  hasMemorized = false,
   remainingDue,
   onContinueSession,
+  progress,
+  onComplete,
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const now = useLiveNow();
@@ -554,6 +583,23 @@ export function PracticeBoard({
     return () => window.clearTimeout(timer);
   }, [isShuffling, shuffleNonce]);
 
+  // Reported after the render that marks the run finished, so the last
+  // adopted schedule is in `railVerses`.
+  const completionReported = useRef(false);
+  useEffect(() => {
+    if (!finished || !onComplete || completionReported.current) return;
+    completionReported.current = true;
+    onComplete({
+      verses: railVerses.map((verse) => ({
+        id: verse.id,
+        reference: verse.reference,
+        learnStage: verse.learnStage,
+        status: verse.status,
+      })),
+      attempts: sessionAttempts,
+    });
+  }, [finished, onComplete, railVerses, sessionAttempts]);
+
   function handleOrderChange(nextOrder: PracticeOrder) {
     setOrder(nextOrder);
     if (nextOrder === "shuffle") {
@@ -643,14 +689,18 @@ export function PracticeBoard({
     });
   }
 
+  const shellProps = {
+    sessionLabel,
+    scopeLabel,
+    onExit,
+    exitTooltip,
+    backLabel,
+    progress,
+  };
+
   if (orderedVerses.length === 0 || !currentVerse) {
     return (
-      <PracticeShell
-        sessionLabel={sessionLabel}
-        scopeLabel={scopeLabel}
-        onExit={onExit}
-        exitTooltip={exitTooltip}
-      >
+      <PracticeShell {...shellProps}>
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
           <p className="text-sm text-muted-foreground">
             No verses are available for {sessionLabel.toLowerCase()}.
@@ -661,16 +711,20 @@ export function PracticeBoard({
   }
 
   if (finished) {
+    // The enclosing session shows the next part once the results are up.
+    if (onComplete)
+      return <PracticeShell {...shellProps}>{null}</PracticeShell>;
+
     const averageAccuracy = averageReviewAccuracy(sessionAttempts);
     const remaining = remainingDue ?? 0;
+    const extraPracticeHref =
+      kind !== "practice" &&
+      (hasMemorized || railVerses.some((verse) => isReviewPhase(verse.status)))
+        ? withReturn("/memory/practice", returnTo ?? "/memory")
+        : undefined;
 
     return (
-      <PracticeShell
-        sessionLabel={sessionLabel}
-        scopeLabel={scopeLabel}
-        onExit={onExit}
-        exitTooltip={exitTooltip}
-      >
+      <PracticeShell {...shellProps}>
         {isReview ? (
           <ReviewSummary
             attempts={sessionAttempts}
@@ -681,12 +735,15 @@ export function PracticeBoard({
               remaining > 0 && onContinueSession ? onContinueSession : undefined
             }
             doneLabel={exitLabel}
+            extraPracticeHref={extraPracticeHref}
+            returnTo={returnTo}
           />
         ) : (
           <SessionComplete
             verses={railVerses}
             exitLabel={exitLabel}
             onExit={onExit}
+            extraPracticeHref={extraPracticeHref}
           />
         )}
       </PracticeShell>
@@ -694,12 +751,7 @@ export function PracticeBoard({
   }
 
   return (
-    <PracticeShell
-      sessionLabel={sessionLabel}
-      scopeLabel={scopeLabel}
-      onExit={onExit}
-      exitTooltip={exitTooltip}
-    >
+    <PracticeShell {...shellProps}>
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="order-2 md:order-1">
           <div className="relative">
@@ -1589,12 +1641,16 @@ function PracticeShell({
   scopeLabel,
   onExit,
   exitTooltip = "Go back",
+  backLabel = "Back",
+  progress,
   children,
 }: {
   sessionLabel: MemorySessionLabel;
   scopeLabel: string;
   onExit: () => void;
   exitTooltip?: string;
+  backLabel?: string;
+  progress?: SessionProgress;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -1610,7 +1666,7 @@ function PracticeShell({
                 className="-ml-2 shrink-0 gap-1.5"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden />
-                Back
+                {backLabel}
               </Button>
             </TooltipTrigger>
             <TooltipContent>{exitTooltip}</TooltipContent>
@@ -1624,6 +1680,7 @@ function PracticeShell({
               {scopeLabel}
             </span>
           </h1>
+          {progress ? <SessionHeaderProgress progress={progress} /> : null}
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">

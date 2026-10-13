@@ -3,6 +3,7 @@ import type { GoalCard } from "./memory-goals";
 import type { MemoryPanel } from "./memory-panel";
 import {
   memoryPackSessionHref,
+  memoryTodaySessionHref,
   memoryVerseSessionHref,
 } from "./memory-session-path";
 import { calendarDaysBetween, nextStepCopy } from "./memorize-plan";
@@ -57,9 +58,15 @@ export function goalPanel(goal: GoalCard): MemoryPanel {
 }
 
 export function goalSessionHref(goal: GoalCard, action: DueGoalAction): string {
-  return goal.kind === "verse"
-    ? memoryVerseSessionHref(action, goal)
-    : memoryPackSessionHref(action, goal.packId);
+  if (goal.kind === "verse") return memoryVerseSessionHref(action, goal);
+  if (
+    goal.kind === "pack" &&
+    goal.learningToday > 0 &&
+    goal.reviewsDue.length > 0
+  ) {
+    return memoryTodaySessionHref({ packId: goal.packId });
+  }
+  return memoryPackSessionHref(action, goal.packId);
 }
 
 function dueRow<G extends GoalCard>(goal: G): DueGoalRow<G> | null {

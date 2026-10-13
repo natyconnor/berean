@@ -183,6 +183,12 @@ describe("goal links", () => {
   it("starts the right session", () => {
     expect(goalSessionHref(passage(), "learn")).toBe("/memory/psalm16/learn");
     expect(goalSessionHref(pack(), "review")).toBe("/memory/merced/review");
+    expect(
+      goalSessionHref(pack({ learningToday: 1, reviewsDue: [] }), "learn"),
+    ).toBe("/memory/merced/learn");
+    expect(goalSessionHref(pack({ learningToday: 2 }), "learn")).toBe(
+      "/memory/today?packId=merced",
+    );
     expect(goalSessionHref(verse(), "learn")).toBe(
       "/memory/learn?book=Romans&chapter=8&startVerse=28&endVerse=28",
     );
