@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.15](https://github.com/natyconnor/berean/compare/v1.17.14...v1.17.15) (2026-10-13)
+
+
+### Bug Fixes
+
+* Always show the Mode Dock; hide it on Settings and legal pages ([#279](https://github.com/natyconnor/berean/issues/279)) ([097980c](https://github.com/natyconnor/berean/commit/097980c3e07e33211b369d89f589d013de13552f))
+
 ## [1.17.14](https://github.com/natyconnor/berean/compare/v1.17.13...v1.17.14) (2026-10-12)
 
 
