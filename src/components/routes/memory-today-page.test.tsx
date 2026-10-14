@@ -9,6 +9,7 @@ import {
   learnDismissDayKey,
 } from "@/lib/learn-dismissed-packs";
 
+import { verseRefKey } from "../../../shared/verse-ref-key";
 import { MemoryTodayPage } from "./memory-today-page";
 
 const NOW = Date.UTC(2026, 9, 12, 18);
@@ -108,49 +109,99 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     progress,
     railHeader,
     onComplete,
+    initialVerseId,
+    runState,
+    onRunStateChange,
   }: {
     kind: string;
     verses: StubVerse[];
     progress?: StubProgress;
     railHeader?: ReactNode;
     onComplete?: (result: unknown) => void;
-  }) => (
-    <div data-testid={`${kind}-session`}>
-      <p>
-        {typeof progress === "function"
-          ? progress({ done: 1, total: verses.length }).label
-          : progress?.label}
-      </p>
-      {railHeader}
-      <ul>
-        {verses.map((verse) => (
-          <li key={verse.verseRefId}>{verse.verseRefId}</li>
-        ))}
-      </ul>
-      <button
-        type="button"
-        onClick={() =>
-          onComplete?.({
-            verses: verses.map((verse) => ({
-              id: verse.verseRefId,
-              reference: verse.reference,
-              learnStage: kind === "learning" ? 2 : verse.learnStage,
-              status: verse.status,
-            })),
-            attempts:
-              kind === "review"
-                ? verses.map((verse) => ({
-                    reference: verse.reference,
-                    accuracy: 100,
-                  }))
-                : [],
-          })
-        }
+    initialVerseId?: string;
+    runState?: unknown;
+    onRunStateChange?: (state: unknown, result: unknown) => void;
+  }) => {
+    // Grade the first `count` cards past today's work (graduated, or
+    // rescheduled days out) and report the run, as the board does.
+    const spend = (count: number) => {
+      const graded = verses.slice(0, count);
+      const ids = graded.map((verse) => verseRefKey(verse.reference));
+      onRunStateChange?.(
+        {
+          progress: Object.fromEntries(
+            ids.map((id) => [
+              id,
+              {
+                learnStage: 3,
+                stageReps: 0,
+                status: "reviewing",
+                dueAt: NOW + 3 * 24 * 60 * 60 * 1000,
+              },
+            ]),
+          ),
+          attempts: [],
+          graded: ids,
+        },
+        {
+          verses: graded.map((verse) => ({
+            id: verseRefKey(verse.reference),
+            reference: verse.reference,
+            learnStage: 2,
+            status: "learning",
+          })),
+          attempts: [],
+        },
+      );
+    };
+    return (
+      <div
+        data-testid={`${kind}-session`}
+        data-initial-verse={initialVerseId ?? ""}
+        data-resumed={runState ? "true" : "false"}
       >
-        Finish {kind}
-      </button>
-    </div>
-  ),
+        <p>
+          {typeof progress === "function"
+            ? progress({ done: 1, total: verses.length }).label
+            : progress?.label}
+        </p>
+        {railHeader}
+        <ul>
+          {verses.map((verse) => (
+            <li key={verse.verseRefId}>{verse.verseRefId}</li>
+          ))}
+        </ul>
+        <button type="button" onClick={() => spend(1)}>
+          Spend the first {kind} card
+        </button>
+        <button type="button" onClick={() => spend(verses.length)}>
+          Spend every {kind} card
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onComplete?.({
+              verses: verses.map((verse) => ({
+                id: verse.verseRefId,
+                reference: verse.reference,
+                learnStage: kind === "learning" ? 2 : verse.learnStage,
+                status: verse.status,
+              })),
+              attempts:
+                kind === "review"
+                  ? verses.map((verse) => ({
+                      reference: verse.reference,
+                      accuracy: 100,
+                    }))
+                  : [],
+            })
+          }
+        >
+          Finish {kind}
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock("../../../convex/_generated/api", () => ({
@@ -217,6 +268,7 @@ function dueVerse(id: string, verse: number) {
 }
 
 const PSALM_16 = { packId: "psalm16", packName: "Psalm 16", dueAt: NOW - 10 };
+const PSALM_23 = { packId: "psalm23", packName: "Psalm 23", dueAt: NOW };
 
 function setToday({
   passages = [PSALM_16],
@@ -355,6 +407,232 @@ describe("MemoryTodayPage", () => {
     expect(onExit).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("jumps to another passage from the queue, moving the current marker", async () => {
+    setToday({ passages: [PSALM_16, PSALM_23] });
+    renderToday();
+
+    expect(
+      screen.getByRole("heading", { name: "Psalm 16" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Psalm 23" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Psalm 23" }),
+    ).toBeInTheDocument();
+    expect(queueRow(document.body, "Psalm 23")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(document.body, "Psalm 23")).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+    expect(queueRow(document.body, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+    // On through the plan, coming back to the skipped passage at the end.
+    expect(
+      screen.getByRole("heading", { name: "Next up: 2 verses to learn" }),
+    ).toBeInTheDocument();
+    expect(queueRow(document.body, "Psalm 23")).toHaveAttribute(
+      "data-state",
+      "done",
+    );
+    expect(
+      screen.getByRole("button", { name: "Psalm 23, done for today" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("button", { name: "Go to Psalm 16" }),
+    ).toBeInTheDocument();
+  });
+
+  it("jumps straight to a verse to learn or a review, from a passage or a pause", async () => {
+    setToday();
+    renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to John 15:2" }),
+    );
+    const learning = screen.getByTestId("learning-session");
+    expect(learning).toHaveAttribute(
+      "data-initial-verse",
+      verseRefKey({ book: "John", chapter: 15, startVerse: 2, endVerse: 2 }),
+    );
+    const overview = within(learning).getByRole("region", { name: "Today" });
+    expect(
+      within(overview)
+        .getAllByRole("listitem")
+        .map((part) => part.dataset.state),
+    ).toEqual(["upcoming", "current", "upcoming"]);
+
+    await userEvent.click(
+      within(overview).getByRole("button", { name: "Go to Passages" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Psalm 16" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Next up: 2 verses to learn" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Luke 9:23" }),
+    );
+    expect(screen.getByTestId("review-session")).toHaveAttribute(
+      "data-initial-verse",
+      verseRefKey({ book: "Luke", chapter: 9, startVerse: 23, endVerse: 23 }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish review" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Next up: 2 verses to learn" }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish learning" }),
+    );
+    expect(
+      screen.getByText(/Psalm 16, 2 learning steps and 1 review done today\./),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a verse run's progress when leaving it and coming back", async () => {
+    setToday();
+    renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to John 15:1" }),
+    );
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-resumed",
+      "false",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the first learning card" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Passages" }),
+    );
+
+    expect(screen.getByText("Today · 1 of 4")).toBeInTheDocument();
+    expect(queueRow(document.body, "John 15:1")).toHaveAttribute(
+      "data-state",
+      "done",
+    );
+    expect(
+      screen.getByRole("button", { name: "John 15:1, done for today" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(queueRow(document.body, "John 15:2")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const learning = screen.getByTestId("learning-session");
+    expect(learning).toHaveAttribute("data-resumed", "true");
+    expect(learning).toHaveAttribute(
+      "data-initial-verse",
+      verseRefKey({ book: "John", chapter: 15, startVerse: 2, endVerse: 2 }),
+    );
+  });
+
+  it("counts a verse part as done once every card is spent, even when left mid-result", async () => {
+    setToday();
+    renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to John 15:1" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend every learning card" }),
+    );
+    // Leave before the last result is dismissed, so the run never finishes.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Reviews" }),
+    );
+    const overview = within(screen.getByTestId("review-session")).getByRole(
+      "region",
+      { name: "Today" },
+    );
+    expect(
+      within(overview)
+        .getAllByRole("listitem")
+        .map((part) => part.dataset.state),
+    ).toEqual(["upcoming", "done", "current"]);
+    expect(
+      within(overview).queryByRole("button", { name: "Go to Verses to learn" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish review" }),
+    );
+    // Straight on to the passage that's left, not back into spent learning.
+    expect(
+      screen.getByRole("heading", { name: "Next up: Psalm 16" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "John 15:2, done for today" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+
+    expect(
+      screen.getByText(/Psalm 16, 2 learning steps and 1 review done today\./),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a finished passage closed once its work today is done", async () => {
+    setToday();
+    renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+
+    const finished = screen.getByRole("button", {
+      name: "Psalm 16, done for today",
+    });
+    expect(finished).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(finished);
+    expect(
+      screen.getByRole("heading", { name: "Next up: 2 verses to learn" }),
+    ).toBeInTheDocument();
+  });
+
+  it("reopens a finished passage that still has work today", async () => {
+    liveResults.set("passageMemory.dueForLearning", [PSALM_16]);
+    setToday();
+    renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go back to Psalm 16" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Psalm 16" }),
+    ).toBeInTheDocument();
+    expect(queueRow(document.body, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
   });
 
   it("stops for today from the pause between parts", async () => {

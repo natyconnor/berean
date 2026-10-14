@@ -345,10 +345,7 @@ describe("MemorizeSheet", () => {
 
     const name = view.getByLabelText("Name");
     expect(name).toHaveValue("3 verses");
-    expect(name).toHaveAttribute(
-      "placeholder",
-      "e.g. Verses for the Merced team",
-    );
+    expect(name).toHaveAttribute("placeholder", "e.g. Verses on hope");
     await userEvent.clear(name);
     await userEvent.type(name, "Merced team");
     await userEvent.click(startButton(dialog));

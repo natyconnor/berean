@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   planTodaySession,
   TODAY_QUEUE_REVIEW_LIMIT,
+  todayDoneItems,
+  todayFinishedSegments,
   todayInterstitialCopy,
+  todayNextSegment,
   todayQueueGroups,
   todaySegmentMinutes,
   todaySessionCountLabel,
@@ -164,22 +167,27 @@ describe("todaySessionProgress", () => {
 
   it("weights each finished segment by its minutes", () => {
     expect(segments.map(todaySegmentMinutes)).toEqual([7, 6, 4]);
-    expect(todaySessionProgress(segments, 0)).toBe(0);
-    expect(todaySessionProgress(segments, 1)).toBeCloseTo(7 / 17);
-    expect(todaySessionProgress(segments, 2)).toBeCloseTo(13 / 17);
-    expect(todaySessionProgress(segments, 3)).toBe(1);
+    expect(todaySessionProgress(segments, [0, 0, 0])).toBe(0);
+    expect(todaySessionProgress(segments, [1, 0, 0])).toBeCloseTo(7 / 17);
+    expect(todaySessionProgress(segments, [1, 2, 0])).toBeCloseTo(13 / 17);
+    expect(todaySessionProgress(segments, [1, 2, 4])).toBe(1);
   });
 
-  it("moves through the segment underway item by item", () => {
-    expect(todaySessionProgress(segments, 1, 1)).toBeCloseTo(10 / 17);
-    expect(todaySessionProgress(segments, 2, 1)).toBeCloseTo(14 / 17);
-    expect(todaySessionProgress(segments, 2, 99)).toBeCloseTo(1);
+  it("counts segments taken out of order", () => {
+    expect(todaySessionProgress(segments, [0, 0, 4])).toBeCloseTo(4 / 17);
+    expect(todaySessionProgress(segments, [0, 1, 2])).toBeCloseTo(5 / 17);
+  });
+
+  it("moves through a segment item by item", () => {
+    expect(todaySessionProgress(segments, [1, 1, 0])).toBeCloseTo(10 / 17);
+    expect(todaySessionProgress(segments, [1, 2, 1])).toBeCloseTo(14 / 17);
   });
 
   it("clamps out-of-range counts and treats an empty plan as done", () => {
-    expect(todaySessionProgress(segments, -1)).toBe(0);
-    expect(todaySessionProgress(segments, 9)).toBe(1);
-    expect(todaySessionProgress([], 0)).toBe(1);
+    expect(todaySessionProgress(segments, [-1, 0, 0])).toBe(0);
+    expect(todaySessionProgress(segments, [9, 99, 99])).toBe(1);
+    expect(todaySessionProgress(segments, [])).toBe(0);
+    expect(todaySessionProgress([], [])).toBe(1);
   });
 });
 
@@ -191,11 +199,23 @@ describe("todaySessionCounts", () => {
   });
 
   it("counts a passage as one item and each verse and review as one", () => {
-    expect(todaySessionCounts(segments, 0)).toEqual({ done: 0, total: 12 });
-    expect(todaySessionCounts(segments, 2)).toEqual({ done: 2, total: 12 });
-    expect(todaySessionCounts(segments, 2, 2)).toEqual({ done: 4, total: 12 });
-    expect(todaySessionCounts(segments, 3, 9)).toEqual({ done: 12, total: 12 });
-    expect(todaySessionCounts(segments, 4)).toEqual({ done: 12, total: 12 });
+    expect(todaySessionCounts(segments, [])).toEqual({ done: 0, total: 12 });
+    expect(todaySessionCounts(segments, [1, 1])).toEqual({
+      done: 2,
+      total: 12,
+    });
+    expect(todaySessionCounts(segments, [1, 1, 2])).toEqual({
+      done: 4,
+      total: 12,
+    });
+    expect(todaySessionCounts(segments, [0, 1, 0, 3])).toEqual({
+      done: 4,
+      total: 12,
+    });
+    expect(todaySessionCounts(segments, [9, 9, 9, 9])).toEqual({
+      done: 12,
+      total: 12,
+    });
   });
 
   it("labels the bar as the whole day", () => {
@@ -205,83 +225,186 @@ describe("todaySessionCounts", () => {
   });
 });
 
-describe("todayQueueGroups", () => {
-  const segments = planTodaySession({
-    passages: [PSALM_16, JOHN_15],
-    learningVerses: 2,
-    reviews: 2,
-  });
-  const learning: TodayQueueEntry[] = [
-    { id: "jn1", label: "John 1:1" },
-    { id: "jn2", label: "John 1:2" },
-  ];
-  const reviews: TodayQueueEntry[] = [
-    { id: "lk9", label: "Luke 9:23" },
-    { id: "rm8", label: "Romans 8:28" },
-  ];
+const QUEUE_SEGMENTS = planTodaySession({
+  passages: [PSALM_16, JOHN_15],
+  learningVerses: 2,
+  reviews: 2,
+});
+const QUEUE_LEARNING: TodayQueueEntry[] = [
+  { id: "jn1", label: "John 1:1" },
+  { id: "jn2", label: "John 1:2" },
+];
+const QUEUE_REVIEWS: TodayQueueEntry[] = [
+  { id: "lk9", label: "Luke 9:23" },
+  { id: "rm8", label: "Romans 8:28" },
+];
 
-  function states(completed: number, current: number | null) {
+function progressInput(done: number[], spent: string[] = []) {
+  return {
+    segments: QUEUE_SEGMENTS,
+    learning: QUEUE_LEARNING,
+    reviews: QUEUE_REVIEWS,
+    done: new Set(done),
+    spent: new Set(spent),
+  };
+}
+
+describe("todayDoneItems", () => {
+  it("counts finished segments in full and spent cards one by one", () => {
+    expect(todayDoneItems(progressInput([]))).toEqual([0, 0, 0, 0]);
+    expect(todayDoneItems(progressInput([1, 2]))).toEqual([0, 1, 2, 0]);
+    expect(todayDoneItems(progressInput([0], ["jn2", "lk9"]))).toEqual([
+      1, 0, 1, 1,
+    ]);
+  });
+});
+
+describe("todayFinishedSegments", () => {
+  it("adds a verse segment whose every card is spent", () => {
+    expect([
+      ...todayFinishedSegments(progressInput([0], ["jn1", "jn2", "lk9"])),
+    ]).toEqual([0, 2]);
+  });
+});
+
+describe("todayNextSegment", () => {
+  it("goes to the next unfinished segment, wrapping back to skipped ones", () => {
+    expect(todayNextSegment(4, new Set([0]), 0)).toBe(1);
+    expect(todayNextSegment(4, new Set([1, 2]), 1)).toBe(3);
+    expect(todayNextSegment(4, new Set([2, 3]), 3)).toBe(0);
+    expect(todayNextSegment(4, new Set([0, 1, 2, 3]), 3)).toBeNull();
+    expect(todayNextSegment(1, new Set([0]), 0)).toBeNull();
+  });
+});
+
+describe("todayQueueGroups", () => {
+  function states(
+    done: number[],
+    current: number | null,
+    {
+      spent = [],
+      reopenable = [],
+    }: { spent?: string[]; reopenable?: string[] } = {},
+  ) {
     return todayQueueGroups({
-      segments,
-      learning,
-      reviews,
-      completed,
+      ...progressInput(done, spent),
+      reopenable: new Set(reopenable),
       current,
     }).map((group) => ({
       heading: group.heading,
       state: group.state,
-      items: group.items.map((item) => `${item.label}:${item.state}`),
+      target: group.target,
+      items: group.items.map(
+        (item) =>
+          `${item.label}:${item.state}${item.openable ? ":open" : ""}@${item.segment}`,
+      ),
     }));
   }
 
   it("groups passages, new verses, and reviews in session order", () => {
-    expect(states(0, 0)).toEqual([
+    expect(states([], 0)).toEqual([
       {
         heading: "Passages",
         state: "current",
-        items: ["John 15:current", "Psalm 16:upcoming"],
+        target: null,
+        items: ["John 15:current@0", "Psalm 16:upcoming:open@1"],
       },
       {
         heading: "Verses to learn",
         state: "upcoming",
-        items: ["John 1:1:upcoming", "John 1:2:upcoming"],
+        target: 2,
+        items: ["John 1:1:upcoming:open@2", "John 1:2:upcoming:open@2"],
       },
       {
         heading: "Reviews",
         state: "upcoming",
-        items: ["Luke 9:23:upcoming", "Romans 8:28:upcoming"],
+        target: 3,
+        items: ["Luke 9:23:upcoming:open@3", "Romans 8:28:upcoming:open@3"],
       },
     ]);
   });
 
   it("marks what's done, underway, and still to come", () => {
-    expect(states(2, 2)).toEqual([
+    expect(states([0, 1], 2)).toEqual([
       {
         heading: "Passages",
         state: "done",
-        items: ["John 15:done", "Psalm 16:done"],
+        target: null,
+        items: ["John 15:done@0", "Psalm 16:done@1"],
       },
       {
         heading: "Verses to learn",
         state: "current",
-        items: ["John 1:1:current", "John 1:2:current"],
+        target: null,
+        items: ["John 1:1:current@2", "John 1:2:current@2"],
       },
       {
         heading: "Reviews",
         state: "upcoming",
-        items: ["Luke 9:23:upcoming", "Romans 8:28:upcoming"],
+        target: 3,
+        items: ["Luke 9:23:upcoming:open@3", "Romans 8:28:upcoming:open@3"],
       },
     ]);
   });
 
   it("has nothing underway between segments", () => {
-    const [passages, ...rest] = states(1, null);
+    const [passages, ...rest] = states([0], null);
     expect(passages).toEqual({
       heading: "Passages",
-      state: "current",
-      items: ["John 15:done", "Psalm 16:upcoming"],
+      state: "upcoming",
+      target: 1,
+      items: ["John 15:done@0", "Psalm 16:upcoming:open@1"],
     });
     expect(rest.map((group) => group.state)).toEqual(["upcoming", "upcoming"]);
+  });
+
+  it("follows the segment taken out of order, leaving skipped ones open", () => {
+    const groups = states([], 3, { spent: ["lk9"] });
+    expect(groups.map((group) => group.state)).toEqual([
+      "upcoming",
+      "upcoming",
+      "current",
+    ]);
+    expect(groups[0]?.target).toBe(0);
+    expect(groups[2]?.items).toEqual([
+      "Luke 9:23:done@3",
+      "Romans 8:28:current@3",
+    ]);
+  });
+
+  it("marks a verse segment's spent cards done and keeps the rest open", () => {
+    const [, learning] = states([0], 1, { spent: ["jn1"] });
+    expect(learning).toEqual({
+      heading: "Verses to learn",
+      state: "upcoming",
+      target: 2,
+      items: ["John 1:1:done@2", "John 1:2:upcoming:open@2"],
+    });
+    const [, allSpent] = states([0], 1, { spent: ["jn1", "jn2"] });
+    expect(allSpent?.state).toBe("done");
+    expect(allSpent?.target).toBeNull();
+  });
+
+  it("reopens a finished passage only while it still has work today", () => {
+    expect(states([0], null)[0]?.items[0]).toBe("John 15:done@0");
+    expect(states([0], null, { reopenable: ["john15"] })[0]?.items[0]).toBe(
+      "John 15:done:open@0",
+    );
+    const [passages] = states([0, 1], 2, { reopenable: ["psalm16"] });
+    expect(passages?.state).toBe("done");
+    expect(passages?.target).toBe(1);
+  });
+
+  it("counts each group's items done", () => {
+    const groups = todayQueueGroups({
+      ...progressInput([0], ["lk9"]),
+      current: null,
+    });
+    expect(groups.map((group) => [group.done, group.total])).toEqual([
+      [1, 2],
+      [0, 2],
+      [1, 2],
+    ]);
   });
 
   it("folds a long review list into +N more", () => {
@@ -293,7 +416,7 @@ describe("todayQueueGroups", () => {
       segments: [{ kind: "review", reviewCount: many.length }],
       learning: [],
       reviews: many,
-      completed: 0,
+      done: new Set(),
       current: 0,
     });
     expect(group?.items).toHaveLength(TODAY_QUEUE_REVIEW_LIMIT);
@@ -310,7 +433,7 @@ describe("todayQueueGroups", () => {
       segments: [{ kind: "review", reviewCount: reviewsJustOver.length }],
       learning: [],
       reviews: reviewsJustOver,
-      completed: 0,
+      done: new Set(),
       current: 0,
     });
     expect(group?.items).toHaveLength(TODAY_QUEUE_REVIEW_LIMIT + 1);

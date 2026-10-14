@@ -161,7 +161,7 @@ describe("VerseDetailBody", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers Learn while learning and nothing while today's step is done", () => {
+  it("offers Continue learning while learning and nothing while today's step is done", () => {
     const { unmount } = renderBody(
       detail({
         status: "learning",
@@ -173,7 +173,9 @@ describe("VerseDetailBody", () => {
         difficulty: null,
       }),
     );
-    expect(screen.getByRole("link", { name: "Learn" })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: "Continue learning" }),
+    ).toHaveAttribute(
       "href",
       "/memory/learn?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory%2Fverse%2Fv1",
     );
@@ -193,7 +195,7 @@ describe("VerseDetailBody", () => {
       }),
     );
     expect(
-      screen.queryByRole("link", { name: "Learn" }),
+      screen.queryByRole("link", { name: /learn/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText("Nice. Tomorrow you'll try it with blanks."),

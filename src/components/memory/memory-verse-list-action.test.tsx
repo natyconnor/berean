@@ -59,13 +59,13 @@ describe("MemoryVerseListAction", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("learns an open learning step and an Up next verse", async () => {
+  it("continues an open learning step and learns an Up next verse", async () => {
     const learning = renderAction({
       status: "learning",
       verse: verse("learning", NOW, 2),
     });
     await userEvent.click(
-      screen.getByRole("button", { name: "Learn Romans 5:6-8" }),
+      screen.getByRole("button", { name: "Continue learning Romans 5:6-8" }),
     );
     expect(learning.onLearn).toHaveBeenCalledTimes(1);
     learning.unmount();

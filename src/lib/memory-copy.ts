@@ -25,6 +25,21 @@ export const SUGGESTIONS_LABEL = "Suggestions";
 /** Waiting state for a verse whose step for today is done. */
 export const UP_NEXT_TOMORROW_LABEL = "Up next tomorrow";
 
+export type LearnActionLabel = "Learn" | "Continue learning";
+
+/** "Continue learning" once a verse has any learning progress, else "Learn". */
+export function learnActionLabel(progress: {
+  learnStage: number;
+  stageReps?: number;
+  lastReviewedAt?: number;
+}): LearnActionLabel {
+  const started =
+    progress.learnStage > 0 ||
+    (progress.stageReps ?? 0) > 0 ||
+    progress.lastReviewedAt !== undefined;
+  return started ? "Continue learning" : "Learn";
+}
+
 export const SESSION_COMPLETE_TITLE = "That's today's step.";
 export const SESSION_COMPLETE_FOOTER =
   "Each day builds on the last. See you tomorrow.";

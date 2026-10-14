@@ -131,35 +131,113 @@ export function todayInterstitialCopy(
   };
 }
 
-function clampCompleted(
-  segments: readonly TodaySegment[],
-  completed: number,
-): number {
-  return Math.min(Math.max(Math.trunc(completed), 0), segments.length);
+export interface TodayQueueEntry {
+  id: string;
+  label: string;
 }
 
 /**
- * Share of the whole session behind the learner once `completed` segments
- * are done, weighted by each segment's estimated minutes. `doneInSegment`
- * moves the bar through the segment underway, one item at a time.
+ * What's behind the learner. Segments can be taken in any order from the
+ * queue, so progress is per segment rather than a count from the start.
+ */
+export interface TodayProgressInput {
+  segments: readonly TodaySegment[];
+  /** The learning segment's verses, in the order they run. */
+  learning: readonly TodayQueueEntry[];
+  /** The review segment's verses, in the order they run. */
+  reviews: readonly TodayQueueEntry[];
+  /** Segments finished, by index. */
+  done: ReadonlySet<number>;
+  /** Verse cards with nothing left today, by id. */
+  spent?: ReadonlySet<string>;
+}
+
+const NO_IDS: ReadonlySet<string> = new Set();
+
+function segmentEntries(
+  segment: TodaySegment,
+  { learning, reviews }: Pick<TodayProgressInput, "learning" | "reviews">,
+): readonly TodayQueueEntry[] {
+  if (segment.kind === "passage") return [];
+  return segment.kind === "learning" ? learning : reviews;
+}
+
+/**
+ * Items done in each segment, in plan order: all of a finished segment, and
+ * the spent cards of a verse segment still underway.
+ */
+export function todayDoneItems(input: TodayProgressInput): number[] {
+  const spent = input.spent ?? NO_IDS;
+  return input.segments.map((segment, index) => {
+    if (input.done.has(index)) return todaySegmentItemCount(segment);
+    return segmentEntries(segment, input).filter((entry) => spent.has(entry.id))
+      .length;
+  });
+}
+
+/**
+ * Segments with nothing left: marked finished, or a verse segment whose every
+ * card is spent (left before its last result was dismissed).
+ */
+export function todayFinishedSegments(
+  input: TodayProgressInput,
+): ReadonlySet<number> {
+  const doneItems = todayDoneItems(input);
+  const finished = new Set<number>();
+  input.segments.forEach((segment, index) => {
+    if ((doneItems[index] ?? 0) >= todaySegmentItemCount(segment)) {
+      finished.add(index);
+    }
+  });
+  return finished;
+}
+
+/**
+ * The segment to run after `after` finishes: the next unfinished one in plan
+ * order, wrapping back to any skipped earlier, or null when all are done.
+ */
+export function todayNextSegment(
+  segmentCount: number,
+  finished: ReadonlySet<number>,
+  after: number,
+): number | null {
+  for (let step = 1; step < segmentCount; step += 1) {
+    const index = (after + step) % segmentCount;
+    if (!finished.has(index)) return index;
+  }
+  return null;
+}
+
+function clampDone(done: number | undefined, items: number): number {
+  return Math.min(Math.max(Math.trunc(done ?? 0), 0), items);
+}
+
+function doneShare(done: number | undefined, items: number): number {
+  return items > 0 ? clampDone(done, items) / items : 0;
+}
+
+/**
+ * Share of the whole session behind the learner, weighted by each segment's
+ * estimated minutes. `doneItems` holds each segment's items done
+ * ({@link todayDoneItems}), so the bar moves one item at a time.
  */
 export function todaySessionProgress(
   segments: readonly TodaySegment[],
-  completed: number,
-  doneInSegment = 0,
+  doneItems: readonly number[],
 ): number {
   if (segments.length === 0) return 1;
-  const done = clampCompleted(segments, completed);
   const minutes = segments.map((segment) =>
     Math.max(1, todaySegmentMinutes(segment)),
   );
   const total = minutes.reduce((sum, value) => sum + value, 0);
-  const behind = minutes.slice(0, done).reduce((sum, value) => sum + value, 0);
-  const current = segments[done];
-  const share = current
-    ? Math.min(Math.max(doneInSegment, 0) / todaySegmentItemCount(current), 1)
-    : 0;
-  return (behind + (minutes[done] ?? 0) * share) / total;
+  const behind = segments.reduce(
+    (sum, segment, index) =>
+      sum +
+      (minutes[index] ?? 0) *
+        doneShare(doneItems[index], todaySegmentItemCount(segment)),
+    0,
+  );
+  return behind / total;
 }
 
 export interface TodaySessionCounts {
@@ -170,17 +248,15 @@ export interface TodaySessionCounts {
 /** Items done across every segment, for "Today · 4 of 12". */
 export function todaySessionCounts(
   segments: readonly TodaySegment[],
-  completed: number,
-  doneInSegment = 0,
+  doneItems: readonly number[],
 ): TodaySessionCounts {
-  const done = clampCompleted(segments, completed);
   const items = segments.map(todaySegmentItemCount);
-  const total = items.reduce((sum, value) => sum + value, 0);
-  const behind = items.slice(0, done).reduce((sum, value) => sum + value, 0);
-  const current = items[done] ?? 0;
   return {
-    done: behind + Math.min(Math.max(Math.trunc(doneInSegment), 0), current),
-    total,
+    done: items.reduce(
+      (sum, count, index) => sum + clampDone(doneItems[index], count),
+      0,
+    ),
+    total: items.reduce((sum, value) => sum + value, 0),
   };
 }
 
@@ -191,38 +267,40 @@ export function todaySessionCountLabel(counts: TodaySessionCounts): string {
 
 export type TodayQueueState = "done" | "current" | "upcoming";
 
-export interface TodayQueueEntry {
-  id: string;
-  label: string;
-}
-
 export interface TodayQueueItem extends TodayQueueEntry {
   state: TodayQueueState;
+  /** Index of the segment this item runs in. */
+  segment: number;
+  /**
+   * Choosing it opens it: anything still to come, or a finished passage that
+   * still has work today. The item underway is already open.
+   */
+  openable: boolean;
 }
 
 export interface TodayQueueGroup {
   kind: TodaySegment["kind"];
   heading: string;
+  /** "current" only while one of its segments is underway. */
   state: TodayQueueState;
   /** Every item in the group, so a count can name the whole segment. */
   total: number;
+  /** Items done so far. */
+  done: number;
   /** The items to list; reviews stop at {@link TODAY_QUEUE_REVIEW_LIMIT}. */
   items: TodayQueueItem[];
   /** Items past the list, shown as "+N more". */
   moreCount: number;
+  /** Segment to open when the group itself is chosen, or null for none. */
+  target: number | null;
 }
 
 /** Reviews listed in the queue before the rest fold into "+N more". */
 export const TODAY_QUEUE_REVIEW_LIMIT = 12;
 
-export interface TodayQueueInput {
-  segments: readonly TodaySegment[];
-  /** The learning segment's verses, in the order they run. */
-  learning: readonly TodayQueueEntry[];
-  /** The review segment's verses, in the order they run. */
-  reviews: readonly TodayQueueEntry[];
-  /** Segments finished so far. */
-  completed: number;
+export interface TodayQueueInput extends TodayProgressInput {
+  /** Finished passages that still have work today, by pack id. */
+  reopenable?: ReadonlySet<string>;
   /** The segment underway, or null between segments. */
   current: number | null;
 }
@@ -235,61 +313,85 @@ const QUEUE_HEADINGS: Record<TodaySegment["kind"], string> = {
 
 function segmentState(
   index: number,
-  completed: number,
+  finished: ReadonlySet<number>,
   current: number | null,
 ): TodayQueueState {
   if (index === current) return "current";
-  return index < completed ? "done" : "upcoming";
-}
-
-function groupState(items: readonly TodayQueueItem[]): TodayQueueState {
-  if (items.every((item) => item.state === "done")) return "done";
-  if (items.every((item) => item.state === "upcoming")) return "upcoming";
-  return "current";
+  return finished.has(index) ? "done" : "upcoming";
 }
 
 /**
  * Everything in today's frozen session, grouped like the segments run:
  * Passages, then Verses to learn, then Reviews, each item done, current, or
- * upcoming.
+ * upcoming, and whether choosing it can open it.
  */
-export function todayQueueGroups({
-  segments,
-  learning,
-  reviews,
-  completed,
-  current,
-}: TodayQueueInput): TodayQueueGroup[] {
+export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
+  const { segments, current } = input;
+  const spent = input.spent ?? NO_IDS;
+  const reopenable = input.reopenable ?? NO_IDS;
+  const finished = todayFinishedSegments(input);
   const passages: TodayQueueItem[] = [];
   const groups: TodayQueueGroup[] = [];
   segments.forEach((segment, index) => {
-    const state = segmentState(index, completed, current);
+    const state = segmentState(index, finished, current);
     if (segment.kind === "passage") {
-      passages.push({ id: segment.packId, label: segment.title, state });
+      passages.push({
+        id: segment.packId,
+        label: segment.title,
+        state,
+        segment: index,
+        openable:
+          state === "upcoming" ||
+          (state === "done" && reopenable.has(segment.packId)),
+      });
       return;
     }
-    const entries = segment.kind === "learning" ? learning : reviews;
+    const entries = segmentEntries(segment, input);
     const limit =
       segment.kind === "review" ? TODAY_QUEUE_REVIEW_LIMIT : entries.length;
     const shown = entries.length > limit + 1 ? limit : entries.length;
+    const items = entries.map((entry): TodayQueueItem => {
+      const itemState =
+        state === "done" || spent.has(entry.id) ? "done" : state;
+      return {
+        ...entry,
+        state: itemState,
+        segment: index,
+        openable: itemState === "upcoming",
+      };
+    });
     groups.push({
       kind: segment.kind,
       heading: QUEUE_HEADINGS[segment.kind],
       state,
       total: entries.length,
-      items: entries.slice(0, shown).map((entry) => ({ ...entry, state })),
+      done: items.filter((item) => item.state === "done").length,
+      items: items.slice(0, shown),
       moreCount: entries.length - shown,
+      target: state === "upcoming" ? index : null,
     });
   });
   if (passages.length === 0) return groups;
+  const firstOpen =
+    passages.find((item) => item.openable && item.state === "upcoming") ??
+    passages.find((item) => item.openable);
   return [
     {
       kind: "passage",
       heading: QUEUE_HEADINGS.passage,
-      state: groupState(passages),
+      state: passages.some((item) => item.state === "current")
+        ? "current"
+        : passages.every((item) => item.state === "done")
+          ? "done"
+          : "upcoming",
       total: passages.length,
+      done: passages.filter((item) => item.state === "done").length,
       items: passages,
       moreCount: 0,
+      target:
+        firstOpen && !passages.some((item) => item.state === "current")
+          ? firstOpen.segment
+          : null,
     },
     ...groups,
   ];

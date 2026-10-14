@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { EXTRA_PRACTICE_TOOLTIP } from "@/lib/memory-copy";
+import { EXTRA_PRACTICE_TOOLTIP, learnActionLabel } from "@/lib/memory-copy";
 import { libraryRowAction } from "@/lib/memory-library-row";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
@@ -74,7 +74,7 @@ export function MemoryVerseListAction({
   }
 
   const isReview = action === "review";
-  const label = isReview ? "Review" : "Learn";
+  const label = isReview ? "Review" : learnActionLabel(verse);
   const Icon = isReview ? RotateCcw : GraduationCap;
   return (
     <Button

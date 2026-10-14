@@ -193,7 +193,11 @@ function DueRowItem({
 }) {
   const label = dueGoalButtonLabel(row);
   const Icon =
-    label === "Continue" ? Play : label === "Learn" ? GraduationCap : RotateCcw;
+    label === "Continue"
+      ? Play
+      : label === "Review"
+        ? RotateCcw
+        : GraduationCap;
   return (
     <li>
       <MemoryListRow className="flex items-center gap-3 px-3 py-2.5">

@@ -220,7 +220,7 @@ describe("MemoryPanelHost", () => {
       within(dialog).getByRole("link", { name: /Do all 4 · about 12 min/ }),
     ).toHaveAttribute("href", "/memory/today?return=%2Fmemory");
     expect(
-      within(dialog).getByRole("link", { name: "Learn Psalm 16" }),
+      within(dialog).getByRole("link", { name: "Continue learning Psalm 16" }),
     ).toHaveAttribute("href", "/memory/psalm16/learn?return=%2Fmemory");
     expect(
       within(dialog).getByRole("link", { name: "Review Merced Team" }),

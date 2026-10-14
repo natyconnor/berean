@@ -2,6 +2,7 @@ import { type JSX, type ReactNode, useState } from "react";
 
 import {
   PracticeBoard,
+  type PracticeRunState,
   type PracticeSessionResult,
   type PracticeVerse,
 } from "@/components/memory/practice/practice-board";
@@ -33,6 +34,15 @@ interface MemorySessionRunnerProps {
   onComplete?: (result: PracticeSessionResult) => void;
   /** Shown above the verse rail, e.g. an overview of the whole session. */
   railHeader?: ReactNode;
+  /** Card id to open first; the first card in order when absent. */
+  initialVerseId?: string;
+  /** Pick a run back up where it was left. Read once, at mount. */
+  runState?: PracticeRunState;
+  /** Every change to the run's state, with the results so far. */
+  onRunStateChange?: (
+    state: PracticeRunState,
+    result: PracticeSessionResult,
+  ) => void;
   /** Shown when the session had nothing to run in the first place. */
   emptyState: ReactNode;
 }

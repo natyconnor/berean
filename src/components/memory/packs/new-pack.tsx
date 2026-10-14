@@ -151,7 +151,7 @@ export function NewPack({
                   create();
                 }
               }}
-              placeholder="e.g. Verses for the Merced team"
+              placeholder="e.g. Verses on hope"
               maxLength={MAX_PACK_NAME_LENGTH}
               autoComplete="off"
               className="h-10"

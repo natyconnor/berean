@@ -39,6 +39,7 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { formatAccuracyPercent, hoverIndexFromX } from "@/lib/accuracy-trend";
 import {
+  learnActionLabel,
   memorizeTitleLabel,
   statusLabel,
   stepShortLabel,
@@ -276,7 +277,7 @@ export function VerseDetailBody({
       <Button asChild size="sm" className="max-sm:h-11">
         <InternalLink href={sessionHref("learn")}>
           <GraduationCap aria-hidden />
-          Learn
+          {learnActionLabel(detail)}
         </InternalLink>
       </Button>
     );

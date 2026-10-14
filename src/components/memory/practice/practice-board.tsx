@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -37,8 +38,8 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
-import { SESSION_COMPLETE_FOOTER } from "@/lib/memory-copy";
-import { nextStepCopy } from "@/lib/memorize-plan";
+import { SESSION_COMPLETE_FOOTER, stepShortLabel } from "@/lib/memory-copy";
+import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
   holdReviewingInterval,
@@ -196,6 +197,19 @@ export interface PracticeSessionResult {
   attempts: ReviewSessionAttempt[];
 }
 
+/**
+ * A run's live state, so a longer session can leave the board and open it
+ * again later without the frozen queue undoing what was done in between.
+ */
+export interface PracticeRunState {
+  /** Each card's live schedule, by card id. */
+  progress: Readonly<Record<string, VerseProgress>>;
+  /** Review grades so far, in session order. */
+  attempts: readonly ReviewSessionAttempt[];
+  /** Cards graded during the run, by id. */
+  graded: readonly string[];
+}
+
 interface PracticeBoardProps {
   /** Learning advances today's ladder; Practice is optional graduated recall. */
   kind: MemorySessionKind;
@@ -228,10 +242,19 @@ interface PracticeBoardProps {
   onComplete?: (result: PracticeSessionResult) => void;
   /** Shown above the verse rail, e.g. an overview of the whole session. */
   railHeader?: ReactNode;
+  /** Card id to open first; the first card in order when absent or unknown. */
+  initialVerseId?: string;
+  /** Pick a run back up where it was left. Read once, at mount. */
+  runState?: PracticeRunState;
+  /** Every change to the run's state, with the results so far. */
+  onRunStateChange?: (
+    state: PracticeRunState,
+    result: PracticeSessionResult,
+  ) => void;
 }
 
 /** Live learning progress the board tracks per verse this session. */
-interface VerseProgress {
+export interface VerseProgress {
   learnStage: number;
   stageReps: number;
   status: MemoryStatus;
@@ -313,6 +336,17 @@ function scheduleFieldsFrom(verse: {
   };
 }
 
+/** Where a review spent this session left the card: "Next review Thu". */
+function reviewedOutcomeLine(
+  progress: Pick<VerseProgress, "status" | "learnStage" | "dueAt">,
+  now: number,
+): string {
+  if (!isReviewPhase(progress.status)) {
+    return `Back to ${stepShortLabel(progress.learnStage).toLowerCase()}`;
+  }
+  return `Next review ${formatDueDay(progress.dueAt, now)}`;
+}
+
 function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
   if (kind === "learning") return "Learning";
   if (kind === "review") return "Review";
@@ -371,6 +405,9 @@ export function PracticeBoard({
   progress,
   onComplete,
   railHeader,
+  initialVerseId,
+  runState,
+  onRunStateChange,
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const now = useLiveNow();
@@ -380,13 +417,14 @@ export function PracticeBoard({
   const [seed, setSeed] = useState(0);
   const [shuffleNonce, setShuffleNonce] = useState(0);
   const [isShuffling, setIsShuffling] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  // Set once every verse has spent its turn and the learner dismisses the last
-  // result, so the run ends on a summary instead of a dead card.
-  const [finished, setFinished] = useState(false);
   const [sessionAttempts, setSessionAttempts] = useState<
     ReviewSessionAttempt[]
-  >([]);
+  >(() => [...(runState?.attempts ?? [])]);
+  // A review graded here and no longer due is spent: it opens read-only so a
+  // second same-day recall can't reschedule it again.
+  const [gradedIds, setGradedIds] = useState<ReadonlySet<string>>(
+    () => new Set(runState?.graded),
+  );
 
   const { recordWithSeqAdopt, resolveVerseRefId } = useVersePracticeAttempt(
     recordModeFor(kind),
@@ -432,7 +470,7 @@ export function PracticeBoard({
     Object.fromEntries(
       baseVerses.map((verse) => [
         verse.id,
-        {
+        runState?.progress[verse.id] ?? {
           learnStage: verse.learnStage,
           stageReps: verse.stageReps,
           status: verse.status,
@@ -443,10 +481,27 @@ export function PracticeBoard({
       ]),
     ),
   );
+  // Set once every verse has spent its turn and the learner moves on from the
+  // last one, so the run ends on a summary instead of a dead card. A run
+  // picked back up with nothing left ends straight away.
+  const [finished, setFinished] = useState(
+    () =>
+      runState !== undefined &&
+      baseVerses.every(
+        (verse) =>
+          !hasSessionWorkLeft(kind, progressByVerseId[verse.id] ?? verse, now),
+      ),
+  );
 
   const orderedVerses = useMemo(
     () => orderSessionVerses(baseVerses, order, seed),
     [baseVerses, order, seed],
+  );
+  const [currentIndex, setCurrentIndex] = useState(() =>
+    Math.max(
+      0,
+      orderedVerses.findIndex((verse) => verse.id === initialVerseId),
+    ),
   );
 
   // The rail (and shuffle overlay) need each verse's *live* progress — the
@@ -525,6 +580,13 @@ export function PracticeBoard({
   // navigation, so a verse that graduates mid-session also hands off cleanly.
   const currentLocked = isLearningLocked(currentProgress, now);
   const currentHasWorkLeft = hasSessionWorkLeft(kind, currentProgress, now);
+  // A pending retry is still due, so only a review that rescheduled (or
+  // lapsed) locks; Practice stays repeatable.
+  const currentReviewed =
+    isReview &&
+    currentVerse !== null &&
+    gradedIds.has(currentVerse.id) &&
+    !currentHasWorkLeft;
 
   // The active card's passage: a unified pack is one concatenated recitation,
   // even when it sits next to ordinary verses in the global review queue.
@@ -618,6 +680,22 @@ export function PracticeBoard({
     return () => window.clearTimeout(timer);
   }, [isShuffling, shuffleNonce]);
 
+  const reportRunState = useEffectEvent(
+    (state: PracticeRunState, result: PracticeSessionResult) => {
+      onRunStateChange?.(state, result);
+    },
+  );
+  useEffect(() => {
+    reportRunState(
+      {
+        progress: progressByVerseId,
+        attempts: sessionAttempts,
+        graded: [...gradedIds],
+      },
+      { verses: sessionVerses, attempts: sessionAttempts },
+    );
+  }, [progressByVerseId, sessionAttempts, gradedIds, sessionVerses]);
+
   // Reported after the render that marks the run finished, so the last
   // adopted schedule is in `railVerses`.
   const completionReported = useRef(false);
@@ -679,6 +757,25 @@ export function PracticeBoard({
     );
     if (nextAvailable >= 0) {
       setCurrentIndex(nextAvailable);
+      return;
+    }
+    setFinished(true);
+  }
+
+  // From a spent card opened read-only: the next card after it with work
+  // left, wrapping, or -1 when the run has nothing left.
+  let nextOpenIndex = -1;
+  for (let step = 1; step < railVerses.length; step += 1) {
+    const index = (boundedIndex + step) % railVerses.length;
+    if (railVerses[index]?.locked === false) {
+      nextOpenIndex = index;
+      break;
+    }
+  }
+
+  function leaveSpentVerse() {
+    if (nextOpenIndex >= 0) {
+      setCurrentIndex(nextOpenIndex);
       return;
     }
     setFinished(true);
@@ -806,6 +903,13 @@ export function PracticeBoard({
               scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
               locked={currentLocked}
               nextStep={nextStepCopy(currentProgress, now)}
+              reviewedOutcome={
+                currentReviewed
+                  ? reviewedOutcomeLine(currentProgress, now)
+                  : undefined
+              }
+              onLeaveDone={leaveSpentVerse}
+              leaveDoneLabel={nextOpenIndex >= 0 ? "Next" : "Continue"}
               position={boundedIndex}
               total={orderedVerses.length}
               showScheduleOutcome={isReview}
@@ -831,6 +935,9 @@ export function PracticeBoard({
               onRecord={(tokens, wordCount) => {
                 const verseId = currentVerse.id;
                 const accuracy = verseAttemptAccuracy(tokens);
+                setGradedIds((prev) =>
+                  prev.has(verseId) ? prev : new Set(prev).add(verseId),
+                );
                 if (isReview) {
                   const nextAttempt = {
                     reference: currentVerse.reference,
@@ -975,6 +1082,18 @@ interface PracticeCardProps {
   locked: boolean;
   /** What comes next for this verse, shown while it is soft-locked. */
   nextStep: string;
+  /**
+   * Set once this verse's review is spent for the session: the card is
+   * read-only, with this outcome line ("Next review Thu").
+   */
+  reviewedOutcome?: string;
+  /**
+   * Moves on from the card while it is read-only (soft-locked or reviewed):
+   * to the next card with work left, or to the end of the run.
+   */
+  onLeaveDone?: () => void;
+  /** "Next" while another card has work left, else "Continue". */
+  leaveDoneLabel?: string;
   position: number;
   total: number;
   /** Review mode: show schedule-consequence copy above the diff. */
@@ -1008,6 +1127,9 @@ function PracticeCard({
   scheduleSnapshot,
   locked,
   nextStep,
+  reviewedOutcome,
+  onLeaveDone,
+  leaveDoneLabel = "Continue",
   position,
   total,
   showScheduleOutcome = false,
@@ -1085,30 +1207,36 @@ function PracticeCard({
   // A session-ending clear locks the verse the instant its attempt is adopted.
   // Hold the graded result until the learner continues so the feedback they
   // just earned isn't swapped out from under them.
-  const showLocked = locked && !checked;
+  const reviewed = reviewedOutcome !== undefined;
+  const showReviewed = reviewed && !checked;
+  const showLocked = locked && !checked && !showReviewed;
+  const showDone = showLocked || showReviewed;
 
   const isReadPrime = hintStage === "full";
   const fromMemoryLearn = isFromMemoryLearning(learnStage, status);
-  const promptLine = showLocked
-    ? nextStep
-    : isReadPrime
-      ? "Read it through, then continue"
-      : fromMemoryLearn
-        ? fromMemoryPromptLine(stageReps)
-        : hintStage === "hidden"
-          ? composite
-            ? "Recite the whole passage from memory"
-            : "Recall the verse from memory"
-          : "Type what you remember";
+  const promptLine = showReviewed
+    ? "Done for today"
+    : showLocked
+      ? nextStep
+      : isReadPrime
+        ? "Read it through, then continue"
+        : fromMemoryLearn
+          ? fromMemoryPromptLine(stageReps)
+          : hintStage === "hidden"
+            ? composite
+              ? "Recite the whole passage from memory"
+              : "Recall the verse from memory"
+            : "Type what you remember";
 
   const canCheckAnswer =
     !locked &&
+    !reviewed &&
     !loading &&
     !error &&
     typedAnswer.trim().length > 0 &&
     versePlainText !== "";
   const canContinueRead =
-    !locked && !loading && !error && versePlainText !== "";
+    !locked && !reviewed && !loading && !error && versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
@@ -1218,20 +1346,23 @@ function PracticeCard({
 
   // Read Continue and the result-view Continue / Try again share one control
   // (only one is mounted at a time) so Enter can advance both steps.
-  useEnterToClick(reviewActionRef, !showLocked && (checked || isReadPrime));
+  useEnterToClick(
+    reviewActionRef,
+    showDone ? onLeaveDone !== undefined : checked || isReadPrime,
+  );
 
   useEffect(() => {
-    if (showLocked || (!checked && !isReadPrime)) return;
+    if (showDone || (!checked && !isReadPrime)) return;
     reviewActionRef.current?.focus();
-  }, [checked, isReadPrime, showLocked]);
+  }, [checked, isReadPrime, showDone]);
 
   // After Read advances into a typing band (or when landing mid-ladder), put
   // the caret in the answer box. Continue is unmounted, so without this the
   // document is left unfocused until the learner clicks.
   useEffect(() => {
-    if (showLocked || checked || isReadPrime) return;
+    if (showDone || checked || isReadPrime) return;
     answerInputRef.current?.focus();
-  }, [checked, isReadPrime, showLocked]);
+  }, [checked, isReadPrime, showDone]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -1285,7 +1416,7 @@ function PracticeCard({
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
           </p>
-          {sessionGoalLabel && !locked ? (
+          {sessionGoalLabel && !locked && !showReviewed ? (
             <p className="text-xs tabular-nums text-muted-foreground">
               {sessionGoalLabel}
             </p>
@@ -1305,7 +1436,18 @@ function PracticeCard({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {showLocked ? (
+          {showReviewed ? (
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border bg-background/75 px-5 py-8 text-center">
+              <CheckCircle2
+                className={cn("h-8 w-8", stageColor.text)}
+                aria-hidden
+              />
+              <p className="text-sm font-medium text-foreground">Reviewed</p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                {reviewedOutcome}
+              </p>
+            </div>
+          ) : showLocked ? (
             <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border bg-background/75 px-5 py-8 text-center">
               <CheckCircle2
                 className={cn("h-8 w-8", stageColor.text)}
@@ -1452,14 +1594,27 @@ function PracticeCard({
 
         <CardFooter className="flex justify-end border-t">
           <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-            {!showLocked && !checked && !isReadPrime ? (
+            {!showDone && !checked && !isReadPrime ? (
               <PreviewFillExactAnswerButton
                 versePlainText={versePlainText}
                 onFill={setTypedAnswer}
                 disabled={loading || Boolean(error)}
               />
             ) : null}
-            {showLocked ? null : checked ? (
+            {showDone ? (
+              onLeaveDone ? (
+                <Button
+                  ref={reviewActionRef}
+                  type="button"
+                  variant="default"
+                  className="flex-1 sm:flex-none"
+                  onClick={onLeaveDone}
+                >
+                  {leaveDoneLabel}
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </Button>
+              ) : null
+            ) : checked ? (
               reviewRetryOffer && onKeepWait ? (
                 <>
                   <Button

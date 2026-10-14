@@ -1,4 +1,4 @@
-import { statusLabel, stepAction } from "./memory-copy";
+import { statusLabel, stepAction, type LearnActionLabel } from "./memory-copy";
 import type { GoalCard } from "./memory-goals";
 import type { MemoryPanel } from "./memory-panel";
 import {
@@ -72,12 +72,28 @@ export function goalSessionHref(goal: GoalCard, action: DueGoalAction): string {
   return memoryPackSessionHref(action, goal.packId);
 }
 
-/** The due row's button: "Continue" when it runs a pack's learning and reviews together. */
+function learningStarted(goal: GoalCard): boolean {
+  if (goal.lastPracticedAt !== null) return true;
+  switch (goal.kind) {
+    case "passage":
+      return goal.learnedVerses > 0;
+    case "pack":
+      return goal.learned + goal.learning > 0;
+    case "verse":
+      return goal.learnStage > 0;
+  }
+}
+
+/**
+ * The due row's button: "Continue" when it runs a pack's learning and reviews
+ * together, "Continue learning" once learning has started.
+ */
 export function dueGoalButtonLabel(
   row: DueGoalRow,
-): "Learn" | "Review" | "Continue" {
+): LearnActionLabel | "Review" | "Continue" {
   if (runsPackToday(row.goal)) return "Continue";
-  return row.action === "learn" ? "Learn" : "Review";
+  if (row.action !== "learn") return "Review";
+  return learningStarted(row.goal) ? "Continue learning" : "Learn";
 }
 
 function dueRow<G extends GoalCard>(goal: G): DueGoalRow<G> | null {

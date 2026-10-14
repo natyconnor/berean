@@ -10,11 +10,11 @@ import { PassageSession } from "@/components/memory/passage/passage-session";
 import { ExtraPracticeLink } from "@/components/memory/practice/extra-practice-link";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type {
+  PracticeRunState,
   PracticeSessionResult,
   PracticeVerse,
 } from "@/components/memory/practice/practice-board";
 import { SessionColumns } from "@/components/memory/practice/session-columns";
-import type { SessionCompleteVerse } from "@/components/memory/practice/session-complete";
 import {
   SessionHeaderProgress,
   type SessionProgress,
@@ -47,21 +47,26 @@ import {
 } from "@/lib/learn-dismissed-packs";
 import { withReturn } from "@/lib/memory-return";
 import { isReviewPhase } from "@/lib/memory-scheduler";
-import { hasMemorizedVerses } from "@/lib/memory-session";
+import { hasMemorizedVerses, hasSessionWorkLeft } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
 import {
   planTodaySession,
+  todayDoneItems,
+  todayFinishedSegments,
   todayInterstitialCopy,
+  todayNextSegment,
   todayQueueGroups,
   todaySessionCountLabel,
   todaySessionCounts,
   todaySessionProgress,
   type TodayPassageInput,
+  type TodayProgressInput,
   type TodayQueueEntry,
+  type TodayQueueGroup,
+  type TodayQueueItem,
   type TodaySegment,
   type TodaySessionOnly,
 } from "@/lib/memory-today-session";
-import type { ReviewSessionAttempt } from "@/lib/review-session-attempts";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/today";
 
@@ -275,14 +280,37 @@ function PackTodayLoader({
 }
 
 type TodayStep =
-  | { kind: "segment"; index: number }
+  | {
+      kind: "segment";
+      index: number;
+      /** Verse card a verse segment opens at. */
+      verseId?: string;
+    }
   | { kind: "between"; next: number }
   | { kind: "summary" };
 
 interface TodayTally {
-  passages: string[];
-  learned: SessionCompleteVerse[];
-  attempts: ReviewSessionAttempt[];
+  /** Passages worked on today, by segment index, in the order finished. */
+  passages: readonly number[];
+  /** Each verse segment's results so far, by segment index. */
+  runs: Readonly<Record<number, PracticeSessionResult>>;
+}
+
+/** Verse cards with nothing left today in the runs opened so far. */
+function spentCards(
+  segments: readonly TodaySegment[],
+  runStates: Readonly<Record<number, PracticeRunState>>,
+  now: number,
+): Set<string> {
+  const spent = new Set<string>();
+  segments.forEach((segment, index) => {
+    const run = runStates[index];
+    if (!run || segment.kind === "passage") return;
+    for (const [id, progress] of Object.entries(run.progress)) {
+      if (!hasSessionWorkLeft(segment.kind, progress, now)) spent.add(id);
+    }
+  });
+  return spent;
 }
 
 /** A verse card's row in today's queue: its reference, or a unified pack's name. */
@@ -314,6 +342,7 @@ function TodaySession({
   dayKey: number;
   chrome: TodayChrome;
 }): JSX.Element {
+  const now = useLiveNow();
   // Planned once at mount. A passage set aside earlier today ("That's enough
   // for today") stays set aside, like it does in Learn.
   const [segments] = useState(() => {
@@ -333,36 +362,113 @@ function TodaySession({
   const [step, setStep] = useState<TodayStep>(
     segments.length > 0 ? { kind: "segment", index: 0 } : { kind: "summary" },
   );
-  const [tally, setTally] = useState<TodayTally>({
-    passages: [],
-    learned: [],
-    attempts: [],
-  });
+  // Segments run in plan order, but the queue can jump anywhere, so progress
+  // is what's finished plus each verse run's live state.
+  const [done, setDone] = useState<ReadonlySet<number>>(() => new Set());
+  const [runStates, setRunStates] = useState<
+    Readonly<Record<number, PracticeRunState>>
+  >({});
+  const [tally, setTally] = useState<TodayTally>({ passages: [], runs: {} });
+
+  const hasPassages = segments.some((segment) => segment.kind === "passage");
+  const livePassages = useQuery(
+    api.passageMemory.dueForLearning,
+    hasPassages
+      ? { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() }
+      : "skip",
+  );
+  // A finished passage that still has work today can be opened again.
+  const reopenable = new Set(livePassages?.map((item) => item.packId));
+
+  const spent = spentCards(segments, runStates, now);
+  const progressInput: TodayProgressInput = {
+    segments,
+    learning: queue.learning,
+    reviews: queue.reviews,
+    done,
+    spent,
+  };
+  const doneItems = todayDoneItems(progressInput);
 
   const finishSegment = (index: number) => {
-    setStep(
-      index + 1 < segments.length
-        ? { kind: "between", next: index + 1 }
-        : { kind: "summary" },
+    const nextDone = new Set(done).add(index);
+    setDone(nextDone);
+    const next = todayNextSegment(
+      segments.length,
+      todayFinishedSegments({ ...progressInput, done: nextDone }),
+      index,
     );
+    setStep(next === null ? { kind: "summary" } : { kind: "between", next });
   };
-  const recordRun = (index: number, result: PracticeSessionResult) => {
-    const segment = segments[index];
+  const saveRun = (
+    index: number,
+    state: PracticeRunState,
+    result: PracticeSessionResult,
+  ) => {
+    setRunStates((current) => ({ ...current, [index]: state }));
     setTally((current) => ({
       ...current,
-      learned:
-        segment?.kind === "learning"
-          ? [...current.learned, ...result.verses]
-          : current.learned,
-      attempts: [...current.attempts, ...result.attempts],
+      runs: { ...current.runs, [index]: result },
+    }));
+  };
+  const recordRun = (index: number, result: PracticeSessionResult) => {
+    setTally((current) => ({
+      ...current,
+      runs: { ...current.runs, [index]: result },
     }));
     finishSegment(index);
   };
+  /** Opens a segment; a verse run picked back up starts at its next card. */
+  const openSegment = (index: number, verseId?: string) => {
+    const segment = segments[index];
+    if (!segment) return;
+    // A verse run with every card spent is done, even if its last result was
+    // never dismissed: go on to whatever is left instead.
+    const finished = todayFinishedSegments(progressInput);
+    if (segment.kind !== "passage" && finished.has(index)) {
+      const next = todayNextSegment(segments.length, finished, index);
+      setStep(next === null ? { kind: "summary" } : { kind: "between", next });
+      return;
+    }
+    const entries =
+      segment.kind === "learning"
+        ? queue.learning
+        : segment.kind === "review"
+          ? queue.reviews
+          : [];
+    const resumeAt =
+      runStates[index] === undefined
+        ? undefined
+        : entries.find((entry) => !spent.has(entry.id))?.id;
+    setStep({ kind: "segment", index, verseId: verseId ?? resumeAt });
+  };
+  const openQueueItem = (item: TodayQueueItem) => {
+    openSegment(
+      item.segment,
+      segments[item.segment]?.kind === "passage" ? undefined : item.id,
+    );
+  };
+  const openQueueGroup = (group: TodayQueueGroup) => {
+    if (group.target !== null) openSegment(group.target);
+  };
+
+  const runResults = segments.flatMap((segment, index) => {
+    const result = tally.runs[index];
+    return result ? [{ segment, result }] : [];
+  });
+  const learned = runResults.flatMap(({ segment, result }) =>
+    segment.kind === "learning" ? result.verses : [],
+  );
+  const attempts = runResults.flatMap(({ result }) => result.attempts);
+  const passagesDone = tally.passages.flatMap((index) => {
+    const segment = segments[index];
+    return segment?.kind === "passage" ? [segment.title] : [];
+  });
 
   const showExtraPractice =
     data.hasMemorized ||
-    tally.attempts.length > 0 ||
-    tally.learned.some((verse) => isReviewPhase(verse.status));
+    attempts.length > 0 ||
+    learned.some((verse) => isReviewPhase(verse.status));
   const extraPracticeHref = showExtraPractice
     ? withReturn("/memory/practice", chrome.returnTo ?? "/memory")
     : undefined;
@@ -404,9 +510,9 @@ function TodaySession({
         progress={{ label: "All done", fraction: 1 }}
       >
         <TodaySessionSummary
-          passages={tally.passages}
-          learned={tally.learned}
-          attempts={tally.attempts}
+          passages={passagesDone}
+          learned={learned}
+          attempts={attempts}
           onDone={chrome.onExit}
           extraPracticeHref={extraPracticeHref}
           returnTo={chrome.returnTo}
@@ -416,31 +522,21 @@ function TodaySession({
   }
 
   /** Header bar for the whole day, so it never reads as one part's progress. */
-  const sessionProgress = (
-    completed: number,
-    doneInSegment = 0,
-  ): SessionProgress => ({
-    label: todaySessionCountLabel(
-      todaySessionCounts(segments, completed, doneInSegment),
-    ),
-    fraction: todaySessionProgress(segments, completed, doneInSegment),
+  const sessionProgress = (items: readonly number[]): SessionProgress => ({
+    label: todaySessionCountLabel(todaySessionCounts(segments, items)),
+    fraction: todaySessionProgress(segments, items),
   });
-  const queueGroups = (completed: number, current: number | null) =>
-    todayQueueGroups({
-      segments,
-      learning: queue.learning,
-      reviews: queue.reviews,
-      completed,
-      current,
-    });
+  const queueGroups = (current: number | null) =>
+    todayQueueGroups({ ...progressInput, reopenable, current });
   // A queue of one is just the thing on screen.
   const showQueue =
     segments.length > 1 || queue.learning.length + queue.reviews.length > 1;
-  const queueRail = (completed: number, current: number | null) =>
+  const queueRail = (current: number | null) =>
     showQueue ? (
       <TodayQueueRail
-        groups={queueGroups(completed, current)}
-        counts={todaySessionCounts(segments, completed)}
+        groups={queueGroups(current)}
+        counts={todaySessionCounts(segments, doneItems)}
+        onSelect={openQueueItem}
       />
     ) : undefined;
 
@@ -451,12 +547,12 @@ function TodaySession({
       <TodayShell
         title={data.title}
         chrome={chrome}
-        progress={sessionProgress(step.next)}
+        progress={sessionProgress(doneItems)}
       >
-        <SessionColumns aside={queueRail(step.next, null)}>
+        <SessionColumns aside={queueRail(null)}>
           <TodayInterstitial
             next={next}
-            onContinue={() => setStep({ kind: "segment", index: step.next })}
+            onContinue={() => openSegment(step.next)}
             onStop={chrome.onExit}
           />
         </SessionColumns>
@@ -474,15 +570,16 @@ function TodaySession({
         key={`passage:${segment.packId}`}
         packId={segment.packId}
         title={segment.title}
-        progress={sessionProgress(index)}
-        aside={queueRail(index, index)}
+        progress={sessionProgress(doneItems)}
+        aside={queueRail(index)}
         chrome={chrome}
         onDone={() => {
           dismissLearnPackForToday(segment.packId, dayKey);
-          setTally((current) => ({
-            ...current,
-            passages: [...current.passages, segment.title],
-          }));
+          setTally((current) =>
+            current.passages.includes(index)
+              ? current
+              : { ...current, passages: [...current.passages, index] },
+          );
           finishSegment(index);
         }}
         onSkip={() => finishSegment(index)}
@@ -492,7 +589,7 @@ function TodaySession({
 
   return (
     <MemorySessionRunner
-      key={segment.kind}
+      key={`${segment.kind}:${step.verseId ?? ""}`}
       kind={segment.kind}
       verses={segment.kind === "learning" ? data.learning : data.reviews}
       scopeLabel={data.title}
@@ -501,12 +598,22 @@ function TodaySession({
       backLabel={chrome.backLabel}
       returnTo={chrome.returnTo}
       hasMemorized={data.hasMemorized}
-      progress={(run) => sessionProgress(index, run.done)}
+      progress={(run) =>
+        sessionProgress(
+          doneItems.map((count, item) => (item === index ? run.done : count)),
+        )
+      }
       railHeader={
         segments.length > 1 ? (
-          <TodayQueueOverview groups={queueGroups(index, index)} />
+          <TodayQueueOverview
+            groups={queueGroups(index)}
+            onSelect={openQueueGroup}
+          />
         ) : undefined
       }
+      initialVerseId={step.verseId}
+      runState={runStates[index]}
+      onRunStateChange={(state, result) => saveRun(index, state, result)}
       onComplete={(result) => recordRun(index, result)}
       emptyState={<SessionLoading />}
     />

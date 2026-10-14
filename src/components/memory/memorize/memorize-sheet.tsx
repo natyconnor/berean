@@ -492,7 +492,7 @@ function MemorizePanel({
                 id={nameId}
                 value={name}
                 maxLength={PACK_NAME_MAX_LENGTH}
-                placeholder="e.g. Verses for the Merced team"
+                placeholder="e.g. Verses on hope"
                 className="h-11 sm:h-9"
                 onChange={(event) => setName(event.target.value)}
                 onKeyDown={(event) => {

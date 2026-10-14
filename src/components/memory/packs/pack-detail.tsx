@@ -52,6 +52,7 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import {
   EXTRA_PRACTICE_TOOLTIP,
   PRACTICE_ANYTIME_LABEL,
+  learnActionLabel,
   todayStepParts,
 } from "@/lib/memory-copy";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
@@ -988,10 +989,10 @@ function PackVerses({
                   >
                     <InternalLink
                       href={href("learn")}
-                      aria-label={`Learn ${reference}`}
+                      aria-label={`${learnActionLabel(member)} ${reference}`}
                     >
                       <GraduationCap aria-hidden />
-                      Learn
+                      {learnActionLabel(member)}
                     </InternalLink>
                   </Button>
                 ) : null}

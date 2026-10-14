@@ -193,15 +193,30 @@ describe("goal links", () => {
     );
   });
 
-  it("labels the combined pack session Continue", () => {
+  it("labels the combined pack session Continue and started learning Continue learning", () => {
     const labels = dueGoalRows([
       passage(),
       pack({ learningToday: 2 }),
       pack({ packId: "learnOnly", learningToday: 1, reviewsDue: [] }),
       pack({ packId: "reviewOnly" }),
       verse(),
+      pack({
+        packId: "fresh",
+        learningToday: 1,
+        reviewsDue: [],
+        learned: 0,
+        learning: 0,
+        lastPracticedAt: null,
+      }),
     ]).map(dueGoalButtonLabel);
-    expect(labels).toEqual(["Learn", "Continue", "Learn", "Review", "Learn"]);
+    expect(labels).toEqual([
+      "Continue learning",
+      "Continue",
+      "Continue learning",
+      "Review",
+      "Continue learning",
+      "Learn",
+    ]);
   });
 });
 
