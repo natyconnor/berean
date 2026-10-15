@@ -387,6 +387,7 @@ describe("TodayPage", () => {
       screen.getByRole("link", { name: "Only learning · 5" }),
       screen.getByRole("link", { name: "Only reviews · 5" }),
       screen.getByRole("link", { name: "Extra practice" }),
+      screen.getByRole("button", { name: "Memorize something new" }),
       screen.getByRole("link", { name: /^Your progress/ }),
       screen.getByRole("link", { name: /^Your verses/ }),
       screen.getByRole("link", { name: "Psalm 16" }),
@@ -398,6 +399,23 @@ describe("TodayPage", () => {
       screen.getByRole("link", { name: /Make your own pack/ }),
     ].map(position);
     expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("scrolls to and focuses the search from Memorize something new", async () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderPage();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Memorize something new" }),
+    );
+
+    const search = screen.getByRole("combobox", {
+      name: "What do you want to memorize?",
+    });
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(search).toHaveFocus();
   });
 
   it("counts due passage sessions in Only learning", () => {
@@ -463,7 +481,9 @@ describe("TodayPage", () => {
     expect(
       screen.getByText("4 learning steps and 5 reviews done today."),
     ).toBeInTheDocument();
-    expect(screen.getByText("If you'd like more.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Memorize something new" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Extra practice" }),
     ).toHaveAttribute("data-variant", "outline");

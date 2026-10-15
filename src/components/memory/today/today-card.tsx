@@ -1,5 +1,13 @@
 import { useId } from "react";
-import { Check, Dumbbell, GraduationCap, Play, RotateCcw } from "lucide-react";
+import { useReducedMotion } from "framer-motion";
+import {
+  Check,
+  Dumbbell,
+  GraduationCap,
+  Play,
+  Plus,
+  RotateCcw,
+} from "lucide-react";
 
 import { InternalLink } from "@/components/memory/internal-link";
 import { Button } from "@/components/ui/button";
@@ -16,6 +24,7 @@ import {
   START_TODAY_LABEL,
   TODAY_LABEL,
 } from "@/lib/memory-copy";
+import { MEMORIZE_SEARCH_INPUT_ID } from "@/lib/memorize-search";
 import { withReturn } from "@/lib/memory-return";
 import { memoryTodaySessionHref } from "@/lib/memory-session-path";
 import {
@@ -164,6 +173,10 @@ function WorkBody({
             className="text-muted-foreground max-sm:h-11"
           />
         ) : null}
+        <MemorizeSomethingNewButton
+          variant="ghost"
+          className="text-muted-foreground max-sm:h-11 max-sm:justify-start"
+        />
       </div>
     </>
   );
@@ -204,15 +217,47 @@ function CaughtUpBody({
           ) : null}
         </div>
       </div>
-      {today.hasAnythingMemorized ? (
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {today.hasAnythingMemorized ? (
           <ExtraPracticeLink variant="outline" className="max-sm:h-11" />
-          <span className="text-xs text-muted-foreground">
-            If you&apos;d like more.
-          </span>
-        </div>
-      ) : null}
+        ) : null}
+        <MemorizeSomethingNewButton variant="outline" className="max-sm:h-11" />
+      </div>
     </>
+  );
+}
+
+/**
+ * Scrolls to Today's search and focuses it, so starting something new is
+ * reachable from the top of the page on a small screen.
+ */
+function MemorizeSomethingNewButton({
+  variant,
+  className,
+}: {
+  variant: "ghost" | "outline";
+  className?: string;
+}) {
+  const reducedMotion = useReducedMotion();
+  return (
+    <Button
+      type="button"
+      variant={variant}
+      size="sm"
+      className={className}
+      onClick={() => {
+        const input = document.getElementById(MEMORIZE_SEARCH_INPUT_ID);
+        if (!input) return;
+        input.scrollIntoView({
+          behavior: reducedMotion ? "auto" : "smooth",
+          block: "center",
+        });
+        input.focus({ preventScroll: true });
+      }}
+    >
+      <Plus aria-hidden />
+      Memorize something new
+    </Button>
   );
 }
 

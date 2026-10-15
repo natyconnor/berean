@@ -3,8 +3,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import { AddToPack } from "@/components/memory/packs/add-to-pack";
 import { SessionSummaryActions } from "@/components/memory/practice/session-complete";
 import { Button } from "@/components/ui/button";
+import { useLiveNow } from "@/hooks/use-live-now";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   groupReviewSessionAttempts,
@@ -108,7 +110,10 @@ export function ReviewSummary({
   );
 }
 
-/** Each reviewed verse with how well it was recalled, and a Practice shortcut. */
+/**
+ * Each reviewed verse with how well it was recalled, and Add to pack and
+ * Practice shortcuts. A pack recited as one passage gets neither.
+ */
 export function ReviewResultRows({
   attempts,
   returnTo,
@@ -119,6 +124,7 @@ export function ReviewResultRows({
   className?: string;
 }): JSX.Element {
   const navigate = useNavigate();
+  const now = useLiveNow();
 
   return (
     <ul className={cn("divide-y rounded-lg border text-left", className)}>
@@ -135,25 +141,33 @@ export function ReviewResultRows({
                 {recalledCopy(attempt.accuracies)}
               </p>
             </div>
-            {attempt.offerPractice === false ? null : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() => {
-                  void navigate({
-                    to: "/memory/practice",
-                    search: {
-                      ...memoryPracticeSearch(attempt.reference),
-                      ...(returnTo === undefined ? {} : { return: returnTo }),
-                    },
-                  });
-                }}
-              >
-                Practice
-              </Button>
-            )}
+            <div className="flex shrink-0 items-center gap-1">
+              {attempt.label === undefined ? (
+                <AddToPack
+                  reference={attempt.reference}
+                  now={now}
+                  variant="icon"
+                />
+              ) : null}
+              {attempt.offerPractice === false ? null : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void navigate({
+                      to: "/memory/practice",
+                      search: {
+                        ...memoryPracticeSearch(attempt.reference),
+                        ...(returnTo === undefined ? {} : { return: returnTo }),
+                      },
+                    });
+                  }}
+                >
+                  Practice
+                </Button>
+              )}
+            </div>
           </li>
         );
       })}

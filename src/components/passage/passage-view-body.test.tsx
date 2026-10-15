@@ -1,5 +1,5 @@
 import { createRef, type ComponentProps, type ReactNode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -164,12 +164,15 @@ function renderBody(
     onToggleSaved,
     tourActive: false,
   };
-  const view = render(
+  const body = (saved: SavedSpan[]) => (
     <TooltipProvider delayDuration={0}>
-      <PassageViewBody {...props} />
-    </TooltipProvider>,
+      <PassageViewBody {...props} savedVersesForChapter={saved} />
+    </TooltipProvider>
   );
-  return { ...view, onToggleSaved };
+  const view = render(body(savedVersesForChapter));
+  /** The chapter's hearts as the server now has them. */
+  const setSaved = (saved: SavedSpan[]) => view.rerender(body(saved));
+  return { ...view, onToggleSaved, setSaved };
 }
 
 function verseRow(container: HTMLElement, verseNumber: number): HTMLElement {
@@ -559,5 +562,167 @@ describe("PassageViewBody – hearts not being memorized", () => {
     expect(onToggleSaved).toHaveBeenCalledExactlyOnceWith(8, 8);
     expect(heartPopover()).not.toBeInTheDocument();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("PassageViewBody – clicking a heart again while Saved to your hearts shows", () => {
+  const HEART_5_6: SavedSpan = {
+    startVerse: 5,
+    endVerse: 6,
+    stopsMemorizing: false,
+  };
+  const SELECTING_5_6: Partial<PassageNotesInteraction> = {
+    selectedVerses: new Set([5, 6]),
+    isPassageSelection: true,
+  };
+  const GROUPED_5_6: BodyProps["filteredVerses"] = [
+    verse(4),
+    {
+      kind: "passageGroup",
+      anchorVerse: 5,
+      verses: [5, 6].map((verseNumber) => ({
+        verseNumber,
+        text: `Psalm 16 verse ${verseNumber}`,
+      })),
+      passageNotes: [],
+      singleNotesByVerse: new Map(),
+    },
+    verse(7),
+  ];
+
+  function savedPopover() {
+    return screen.queryByRole("dialog", { name: "Saved to your hearts" });
+  }
+
+  function verseHeart(container: HTMLElement, verseNumber: number) {
+    return placeOnScreen(
+      within(verseRow(container, verseNumber)).getByRole("button", {
+        name: /^(Heart this verse|Hearted\. Memorize or unheart)$/,
+      }),
+    );
+  }
+
+  function barHeart() {
+    const bar = screen.getByRole("toolbar", {
+      name: "Selected verses, Psalm 16:5–6",
+    });
+    return placeOnScreen(within(bar).getByRole("button", { name: "Heart" }));
+  }
+
+  it("just unhearts a verse", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved, setSaved } = renderBody([]);
+    const heart = verseHeart(container, 3);
+
+    await user.click(heart);
+    expect(savedPopover()).toHaveAccessibleDescription("Memorize Psalm 16:3?");
+    setSaved([{ startVerse: 3, endVerse: 3, stopsMemorizing: false }]);
+    // The heart is disabled while its pop plays.
+    await waitFor(() => expect(heart).toBeEnabled());
+
+    await user.click(heart);
+    expect(onToggleSaved.mock.calls).toEqual([
+      [3, 3],
+      [3, 3],
+    ]);
+    expect(heart).toHaveAttribute("aria-pressed", "false");
+    expect(savedPopover()).not.toBeInTheDocument();
+    expect(heartPopover()).not.toBeInTheDocument();
+  });
+
+  it("just unhearts a verse whose heart hasn't reached the server yet", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved } = renderBody([]);
+    const heart = verseHeart(container, 3);
+
+    await user.click(heart);
+    await waitFor(() => expect(heart).toBeEnabled());
+    await user.click(heart);
+
+    expect(onToggleSaved).toHaveBeenCalledTimes(2);
+    expect(heart).toHaveAttribute("aria-pressed", "false");
+    expect(savedPopover()).not.toBeInTheDocument();
+    expect(heartPopover()).not.toBeInTheDocument();
+  });
+
+  it("just unhearts a range from its pill", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved, setSaved } = renderBody(
+      [],
+      undefined,
+      SELECTING_5_6,
+    );
+
+    await user.click(verseHeart(container, 5));
+    expect(savedPopover()).toHaveAccessibleDescription(
+      "Memorize Psalm 16:5–6?",
+    );
+    setSaved([HEART_5_6]);
+
+    await user.click(
+      placeOnScreen(
+        screen.getByRole("button", {
+          name: "Hearted passage: verses 5–6. Memorize or unheart",
+        }),
+      ),
+    );
+    expect(onToggleSaved.mock.calls).toEqual([
+      [5, 6],
+      [5, 6],
+    ]);
+    expect(savedPopover()).not.toBeInTheDocument();
+    expect(heartPopover()).not.toBeInTheDocument();
+  });
+
+  it("just unhearts a range from the selection bar's Hearted", async () => {
+    const user = userEvent.setup();
+    const { onToggleSaved, setSaved } = renderBody(
+      [],
+      GROUPED_5_6,
+      SELECTING_5_6,
+    );
+    const heart = barHeart();
+
+    await user.click(heart);
+    expect(savedPopover()).toHaveAccessibleDescription(
+      "Memorize Psalm 16:5–6?",
+    );
+    setSaved([HEART_5_6]);
+    expect(heart).toHaveAccessibleName("Hearted. Memorize or unheart");
+
+    await user.click(heart);
+    expect(onToggleSaved.mock.calls).toEqual([
+      [5, 6],
+      [5, 6],
+    ]);
+    expect(savedPopover()).not.toBeInTheDocument();
+    expect(heartPopover()).not.toBeInTheDocument();
+  });
+
+  it("just unhearts from the selection bar before the heart reaches the server", async () => {
+    const user = userEvent.setup();
+    const { onToggleSaved } = renderBody([], GROUPED_5_6, SELECTING_5_6);
+    const heart = barHeart();
+
+    await user.click(heart);
+    await user.click(heart);
+
+    expect(onToggleSaved).toHaveBeenCalledTimes(2);
+    expect(savedPopover()).not.toBeInTheDocument();
+    expect(heartPopover()).not.toBeInTheDocument();
+  });
+
+  it("offers Memorize for a different heart", async () => {
+    const user = userEvent.setup();
+    const { container, onToggleSaved } = renderBody([]);
+
+    await user.click(verseHeart(container, 3));
+    await user.click(verseHeart(container, 4));
+
+    expect(onToggleSaved.mock.calls).toEqual([
+      [3, 3],
+      [4, 4],
+    ]);
+    expect(savedPopover()).toHaveAccessibleDescription("Memorize Psalm 16:4?");
   });
 });

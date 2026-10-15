@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 
 import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import { logInteraction } from "@/lib/dev-log";
-import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { exactSpanMatch, type VerseSpan } from "@/lib/hearted-verse-coverage";
 import { formatSpanTitle } from "@/lib/memorize-target";
 
 /** A chapter heart as the nudge needs it (from `savedVerses.listForChapter`). */
@@ -23,7 +23,8 @@ type OfferBase = {
 };
 
 /**
- * `saved`: the heart was just clicked on. `hearted`: a heart already on was
+ * `saved`: the heart was just clicked on, and clicking any of its span's
+ * hearts again while it shows unhearts it. `hearted`: a heart already on was
  * clicked, so the popover offers Unheart in place of Not now.
  */
 export type HeartNudgeOffer =
@@ -83,8 +84,38 @@ export function useHeartMemorizeNudge({
   suppressed: boolean;
 }) {
   const memorizeSheet = useMemorizeSheet();
-  const [offer, setOffer] = useState<HeartNudgeOffer | null>(null);
+  const [offer, setOfferState] = useState<HeartNudgeOffer | null>(null);
+  // For click handlers, which can change the offer twice before a render.
+  const offerRef = useRef<HeartNudgeOffer | null>(null);
   const nextOfferId = useRef(0);
+
+  const setOffer = useCallback((next: HeartNudgeOffer | null) => {
+    offerRef.current = next;
+    setOfferState(next);
+  }, []);
+
+  const showsSavedOffer = useCallback(
+    (span: VerseSpan) => {
+      const current = offerRef.current;
+      return (
+        !suppressed &&
+        current?.kind === "saved" &&
+        exactSpanMatch(span, [current.span]) !== null
+      );
+    },
+    [suppressed],
+  );
+
+  /** Closes the offer for a heart just made, if `span` is its heart. */
+  const closeSavedOffer = useCallback(
+    (span: VerseSpan) => {
+      if (!showsSavedOffer(span)) return false;
+      logInteraction("reader", "heart-nudge-unheart-again", { ...span });
+      setOffer(null);
+      return true;
+    },
+    [setOffer, showsSavedOffer],
+  );
 
   /**
    * Call before toggling the heart on `span` (with the hearts as they are
@@ -93,6 +124,9 @@ export function useHeartMemorizeNudge({
    */
   const heartClicked = useCallback(
     (span: VerseSpan, anchor: HTMLElement, hearts: readonly NudgeHeart[]) => {
+      // Its offer still shows, so this toggle unhearts it, even when `hearts`
+      // doesn't have it yet.
+      if (closeSavedOffer(span)) return;
       const wasHearted = hearts.some(
         (heart) =>
           heart.startVerse === span.startVerse &&
@@ -109,22 +143,30 @@ export function useHeartMemorizeNudge({
         anchor,
       });
     },
-    [suppressed],
+    [closeSavedOffer, setOffer, suppressed],
   );
 
   /**
    * A heart already on was clicked: offer Memorize or Unheart, or close
-   * that offer when its heart is clicked again.
+   * that offer when its heart is clicked again. While the offer for a heart
+   * just made shows, clicking it again just unhearts it.
    */
   const heartedClicked = useCallback(
     (span: VerseSpan, anchor: HTMLElement, unheart: () => void) => {
-      const id = nextOfferId.current++;
-      setOffer((current) =>
+      if (showsSavedOffer(span)) {
+        // Before closing: a verse heart's unheart toggles through
+        // `heartClicked`, which must not take it for a new heart.
+        unheart();
+        closeSavedOffer(span);
+        return;
+      }
+      const current = offerRef.current;
+      setOffer(
         current?.kind === "hearted" && current.anchor === anchor
           ? null
           : {
               kind: "hearted",
-              id,
+              id: nextOfferId.current++,
               span,
               title: formatSpanTitle(span),
               anchor,
@@ -132,10 +174,10 @@ export function useHeartMemorizeNudge({
             },
       );
     },
-    [],
+    [closeSavedOffer, setOffer, showsSavedOffer],
   );
 
-  const close = useCallback(() => setOffer(null), []);
+  const close = useCallback(() => setOffer(null), [setOffer]);
 
   const memorize = useCallback(() => {
     if (!offer) return;
@@ -148,14 +190,14 @@ export function useHeartMemorizeNudge({
       { kind: "spans", spans: [offer.span] },
       { returnFocusTo: offer.anchor },
     );
-  }, [memorizeSheet, offer]);
+  }, [memorizeSheet, offer, setOffer]);
 
   const unheart = useCallback(() => {
     if (offer?.kind !== "hearted") return;
     logInteraction("reader", "heart-nudge-unheart", { ...offer.span });
     setOffer(null);
     offer.unheart();
-  }, [offer]);
+  }, [offer, setOffer]);
 
   return {
     heartClicked,

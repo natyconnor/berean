@@ -7,6 +7,7 @@ import type { SessionCompleteVerse } from "@/components/memory/practice/session-
 import { TodaySessionSummary } from "@/components/memory/practice/today-session-summary";
 import type { FeatureHintRecord } from "@/components/tutorial/staged-onboarding-context";
 import { StagedOnboardingProvider } from "@/components/tutorial/staged-onboarding-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import type { OnboardingMilestones } from "@/lib/staged-onboarding-thresholds";
 
@@ -94,13 +95,15 @@ function Onboarding({
   children: ReactNode;
 }) {
   return (
-    <StagedOnboardingProvider
-      milestones={milestones}
-      hints={hints}
-      isLoading={isLoading}
-    >
-      {children}
-    </StagedOnboardingProvider>
+    <TooltipProvider>
+      <StagedOnboardingProvider
+        milestones={milestones}
+        hints={hints}
+        isLoading={isLoading}
+      >
+        {children}
+      </StagedOnboardingProvider>
+    </TooltipProvider>
   );
 }
 

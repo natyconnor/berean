@@ -223,15 +223,59 @@ describe("HeartMemorizeNudge after hearting", () => {
     expect(savedDialog()).not.toBeInTheDocument();
   });
 
-  it("turns into Memorize or Unheart when its heart is clicked again", async () => {
-    render(<Harness />);
+  it("just unhearts when its heart is clicked again while it shows", async () => {
+    const onUnheart = vi.fn();
+    render(<Harness onUnheart={onUnheart} />);
     await clickHeart();
     expect(savedDialog()).toBeInTheDocument();
 
     await clickHeart();
+    expect(onUnheart).toHaveBeenCalledOnce();
+    expect(heartButton()).toHaveAttribute("aria-pressed", "false");
     expect(savedDialog()).not.toBeInTheDocument();
+    expect(heartedDialog()).not.toBeInTheDocument();
+
+    await clickHeart();
+    expect(savedDialog()).toBeInTheDocument();
+  });
+
+  it("offers Memorize or Unheart on its heart once it closed by itself", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const onUnheart = vi.fn();
+      render(<Harness onUnheart={onUnheart} />);
+      await clickHeart();
+      act(() => {
+        vi.advanceTimersByTime(HEART_NUDGE_AUTO_CLOSE_MS);
+      });
+      expect(savedDialog()).not.toBeInTheDocument();
+
+      await clickHeart();
+      expect(heartedDialog()).toBeInTheDocument();
+      expect(onUnheart).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers Memorize or Unheart on its heart after Escape or a click elsewhere", async () => {
+    const onUnheart = vi.fn();
+    render(<Harness onUnheart={onUnheart} />);
+
+    await clickHeart();
+    await userEvent.keyboard("{Escape}");
+    await clickHeart();
     expect(heartedDialog()).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Memorize" })).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Unheart" }));
+    expect(onUnheart).toHaveBeenCalledOnce();
+
+    await clickHeart();
+    expect(savedDialog()).toBeInTheDocument();
+    await userEvent.click(document.body);
+    expect(savedDialog()).not.toBeInTheDocument();
+    await clickHeart();
+    expect(heartedDialog()).toBeInTheDocument();
+    expect(onUnheart).toHaveBeenCalledOnce();
   });
 });
 

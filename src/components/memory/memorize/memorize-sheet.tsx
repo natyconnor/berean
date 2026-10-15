@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 
 import { api } from "../../../../convex/_generated/api";
+import { AddToPack } from "@/components/memory/packs/add-to-pack";
 import {
   useFeatureHint,
   useMarkHintShownWhenPending,
@@ -34,6 +35,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useLiveNow } from "@/hooks/use-live-now";
+import {
+  useJoinMemorizePack,
+  type MemorizePackChoice,
+} from "@/hooks/use-join-memorize-pack";
 import { useIsMobile } from "@/hooks/use-media-query";
 import {
   memorizeStartHref,
@@ -77,6 +82,7 @@ import { PACK_ACTIVE_LEARNING_CAP } from "@/lib/pack-pacing";
 import { cn } from "@/lib/utils";
 
 import { MemorizeExplainer } from "./memorize-explainer";
+import { MemorizePackChoiceRow } from "./memorize-pack-choice";
 
 type Layout = "sheet" | "dialog";
 
@@ -266,6 +272,8 @@ function MemorizePanel({
       ? resolved.title.slice(0, PACK_NAME_MAX_LENGTH)
       : "",
   );
+  const [packChoice, setPackChoice] = useState<MemorizePackChoice | null>(null);
+  const joinPack = useJoinMemorizePack();
   const { start } = useMemorizeStart();
   const { submit, pending: starting } = useSubmitLock();
   const [started, setStarted] = useState(false);
@@ -286,6 +294,10 @@ function MemorizePanel({
         );
         explainer.complete();
         setStarted(true);
+        // Not awaited: joining the pack never holds up the session.
+        if (resolved.mode === "verse" && packChoice) {
+          void joinPack(resolved.span, packChoice);
+        }
         if (result.alreadyMemorizing) {
           openDestination(result.destination);
           return;
@@ -350,6 +362,13 @@ function MemorizePanel({
         body={<PanelDescription layout={layout}>{line}</PanelDescription>}
         footer={
           <FooterActions>
+            {destination.kind === "verse" ? (
+              <AddToPack
+                reference={destination.span}
+                now={now}
+                className="h-11 flex-1 sm:h-9 sm:flex-none"
+              />
+            ) : null}
             <Button
               className="h-11 flex-1 sm:h-9 sm:flex-none"
               onClick={() => openDestination(destination)}
@@ -503,6 +522,14 @@ function MemorizePanel({
                 }}
               />
             </div>
+          ) : null}
+          {resolved.mode === "verse" ? (
+            <MemorizePackChoiceRow
+              choice={packChoice}
+              onChange={setPackChoice}
+              now={now}
+              onSubmit={handleStart}
+            />
           ) : null}
         </>
       }

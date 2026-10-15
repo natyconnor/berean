@@ -22,6 +22,7 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useReferenceAutocomplete } from "@/hooks/use-reference-autocomplete";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import {
+  MEMORIZE_SEARCH_INPUT_ID,
   memorizeSearch,
   type MemorizeSearchResult,
 } from "@/lib/memorize-search";
@@ -93,6 +94,7 @@ export function StartSomethingNew({
           placeholder="Try Psalm 23 or John 15"
           query={query}
           onQueryChange={setQuery}
+          inputId={MEMORIZE_SEARCH_INPUT_ID}
         />
         <TodaySuggestionChips />
         <MakeYourOwnPackTile />
@@ -178,14 +180,18 @@ export function MemorizeSearch({
   query,
   onQueryChange,
   className,
+  inputId: inputIdProp,
 }: {
   label: string;
   placeholder: string;
   query: string;
   onQueryChange: (query: string) => void;
   className?: string;
+  /** A stable id so other parts of Today can scroll to and focus the search. */
+  inputId?: string;
 }) {
-  const inputId = useId();
+  const generatedInputId = useId();
+  const inputId = inputIdProp ?? generatedInputId;
   const sheet = useMemorizeSheet();
   const navigate = useNavigate();
   const result = useMemo(() => memorizeSearch(query), [query]);

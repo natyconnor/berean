@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   fetchChapters: vi.fn(),
   isMobile: false,
+  packs: [] as unknown[],
 }));
 
 function mutation(name: string) {
@@ -53,6 +54,11 @@ vi.mock("convex-helpers/react/cache", () => ({
     mocks.queryArgs.set(name, args);
     return mocks.queryResults.get(name);
   },
+  usePaginatedQuery: () => ({
+    results: mocks.packs,
+    status: "Exhausted",
+    loadMore: () => {},
+  }),
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -64,8 +70,10 @@ vi.mock("../../../../convex/_generated/api", () => ({
       dismissHint: "onboarding.dismissHint",
     },
     packs: {
+      addVerse: "packs.addVerse",
       create: "packs.create",
       createAndMemorize: "packs.createAndMemorize",
+      listMine: "packs.listMine",
       startPreset: "packs.startPreset",
     },
     passageMemory: {
@@ -122,6 +130,13 @@ const psalm1Target: MemorizeTarget = {
   book: "Psalms",
   startChapter: 1,
   endChapter: 1,
+};
+const HOPE_PACK = {
+  _id: "pack_hope",
+  name: "Verses on hope",
+  kind: "custom",
+  lastOpenedAt: 1,
+  summary: { kind: "pack", verseCount: 2, learned: 0, mastered: 0, today: 0 },
 };
 
 function setStatus(status: unknown) {
@@ -182,6 +197,7 @@ describe("MemorizeSheet", () => {
     mocks.toastError.mockReset();
     mocks.fetchChapters.mockReset();
     mocks.isMobile = false;
+    mocks.packs = [HOPE_PACK];
     setStatus({ state: "none", allHearted: false });
     mutation("verseMemory.memorize").mockResolvedValue({
       added: 1,
@@ -402,6 +418,116 @@ describe("MemorizeSheet", () => {
     expect(mocks.toast).not.toHaveBeenCalled();
   });
 
+  it("adds a started verse to the pack picked under the plan", async () => {
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Add to a pack (optional)",
+      }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitemradio", { name: "Verses on hope" }),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Verses on hope" }),
+    ).toBeInTheDocument();
+    await userEvent.click(startButton(dialog));
+
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        href: memorizeStartHref(
+          { kind: "verse", verseRefId: "vr_1" as never, span: romans828 },
+          "/memory/presets?q=1",
+        ),
+      }),
+    );
+    const memorize = mutation("verseMemory.memorize");
+    const addVerse = mutation("packs.addVerse");
+    expect(addVerse).toHaveBeenCalledWith({ id: "pack_hope", ...romans828 });
+    expect(memorize.mock.invocationCallOrder[0]).toBeLessThan(
+      addVerse.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mutation("packs.createAndMemorize")).not.toHaveBeenCalled();
+  });
+
+  it("makes a new pack with the verse, named right in the sheet", async () => {
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Add to a pack (optional)",
+      }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "New pack…" }),
+    );
+    await userEvent.type(
+      within(dialog).getByRole("textbox", { name: "New pack name" }),
+      "Hope{Enter}",
+    );
+
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(mutation("packs.createAndMemorize")).toHaveBeenCalledWith({
+      name: "Hope",
+      spans: [romans828],
+      now: expect.any(Number) as number,
+    });
+    expect(mutation("packs.addVerse")).not.toHaveBeenCalled();
+  });
+
+  it("drops the pack again with the clear button", async () => {
+    const dialog = await openSheet(verseTarget);
+    const view = within(dialog);
+
+    await userEvent.click(
+      view.getByRole("button", { name: "Add to a pack (optional)" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitemradio", { name: "Verses on hope" }),
+    );
+    await userEvent.click(
+      view.getByRole("button", { name: "Don't add to a pack" }),
+    );
+    await userEvent.click(startButton(dialog));
+
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(mutation("packs.addVerse")).not.toHaveBeenCalled();
+  });
+
+  it("still starts learning when adding to the pack fails", async () => {
+    mutation("packs.addVerse").mockRejectedValue(new Error("offline"));
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Add to a pack (optional)",
+      }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitemradio", { name: "Verses on hope" }),
+    );
+    await userEvent.click(startButton(dialog));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Couldn't add to Verses on hope.",
+      ),
+    );
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.toastError).not.toHaveBeenCalledWith(
+      "Couldn't start memorizing. Try again.",
+    );
+  });
+
+  it("offers a pack only for a single verse", async () => {
+    const dialog = await openSheet(psalm1Target);
+
+    expect(
+      within(dialog).queryByRole("button", { name: /Add to a pack/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("returns a session started on Today to plain Today", async () => {
     mocks.location = { pathname: "/memory", searchStr: "?panel=verses" };
     const dialog = await openSheet(verseTarget);
@@ -508,6 +634,17 @@ describe("MemorizeSheet", () => {
     expect(
       view.queryByRole("button", { name: /Start memorizing/ }),
     ).not.toBeInTheDocument();
+
+    await userEvent.click(view.getByRole("button", { name: "Add to pack" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Verses on hope" }),
+    );
+    expect(mutation("packs.addVerse")).toHaveBeenCalledWith({
+      id: "pack_hope",
+      ...romans828,
+    });
+    await screen.findByRole("button", { name: /Verses on hope\s*Added/ });
+    await userEvent.keyboard("{Escape}");
 
     await userEvent.click(view.getByRole("button", { name: "Open" }));
     expect(mocks.navigate).toHaveBeenCalledWith({

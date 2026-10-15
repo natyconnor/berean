@@ -1,11 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { AddToPack } from "./add-to-pack";
 
 const mocks = vi.hoisted(() => ({
   addVerse: vi.fn(),
+  createAndMemorize: vi.fn(),
   navigate: vi.fn(),
   packs: [] as unknown[],
 }));
@@ -15,7 +19,10 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("convex/react", () => ({
-  useMutation: () => mocks.addVerse,
+  useMutation: (name: string) =>
+    name === "packs.createAndMemorize"
+      ? mocks.createAndMemorize
+      : mocks.addVerse,
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -27,7 +34,13 @@ vi.mock("convex-helpers/react/cache", () => ({
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
-  api: { packs: { listMine: "packs.listMine", addVerse: "packs.addVerse" } },
+  api: {
+    packs: {
+      listMine: "packs.listMine",
+      addVerse: "packs.addVerse",
+      createAndMemorize: "packs.createAndMemorize",
+    },
+  },
 }));
 
 const NOW = Date.UTC(2026, 9, 12, 18);
@@ -63,34 +76,43 @@ const passageSummary = {
   nextDueAt: NOW,
   masteryFraction: 0,
 };
+const MERCED = {
+  _id: "merced",
+  name: "Merced Team",
+  kind: "custom",
+  lastOpenedAt: 1,
+  summary: packSummary,
+};
 
-async function openPopover() {
+function renderPicker(props: Partial<ComponentProps<typeof AddToPack>> = {}) {
   render(
-    <AddToPack
-      reference={ROMANS_8_28}
-      now={NOW}
-      returnTo="/memory?panel=verse%3Av1"
-    />,
+    <TooltipProvider>
+      <AddToPack reference={ROMANS_8_28} now={NOW} {...props} />
+    </TooltipProvider>,
   );
+}
+
+async function openPopover(
+  props: Partial<ComponentProps<typeof AddToPack>> = {
+    returnTo: "/memory?panel=verse%3Av1",
+  },
+) {
+  renderPicker(props);
   await userEvent.click(screen.getByRole("button", { name: "Add to pack" }));
 }
 
 beforeEach(() => {
   mocks.addVerse.mockReset();
   mocks.addVerse.mockResolvedValue(null);
+  mocks.createAndMemorize.mockReset();
+  mocks.createAndMemorize.mockResolvedValue({ packId: "hope" });
   mocks.packs = [];
 });
 
 describe("AddToPack", () => {
   it("lists every pack it can join, and passages that already hold it as disabled", async () => {
     mocks.packs = [
-      {
-        _id: "merced",
-        name: "Merced Team",
-        kind: "custom",
-        lastOpenedAt: 1,
-        summary: packSummary,
-      },
+      MERCED,
       {
         _id: "rom8",
         name: "Romans 8",
@@ -137,5 +159,75 @@ describe("AddToPack", () => {
 
     expect(await screen.findByText("No packs yet.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New pack…" })).toBeInTheDocument();
+  });
+
+  it("names a new pack right in the picker without a return path", async () => {
+    await openPopover({});
+
+    expect(
+      screen.queryByRole("link", { name: "New pack…" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "New pack…" }));
+    const create = screen.getByRole("button", { name: "Create" });
+    expect(create).toBeDisabled();
+
+    const name = screen.getByRole("textbox", { name: "New pack name" });
+    expect(name).toHaveFocus();
+    await userEvent.type(name, "  Verses on hope {Enter}");
+
+    expect(mocks.createAndMemorize).toHaveBeenCalledWith({
+      name: "Verses on hope",
+      spans: [ROMANS_8_28],
+      now: expect.any(Number) as number,
+    });
+    expect(
+      await screen.findByRole("button", { name: "New pack…" }),
+    ).toBeInTheDocument();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the name and says so when making the pack fails", async () => {
+    mocks.createAndMemorize.mockRejectedValue(new Error("offline"));
+    await openPopover({});
+
+    await userEvent.click(screen.getByRole("button", { name: "New pack…" }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "New pack name" }),
+      "Hope",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't make that pack. Please try again.",
+    );
+    expect(screen.getByRole("textbox", { name: "New pack name" })).toHaveValue(
+      "Hope",
+    );
+  });
+
+  it("is an icon button named for the verse, and remembers what it added", async () => {
+    mocks.packs = [MERCED];
+    renderPicker({ variant: "icon" });
+
+    const trigger = screen.getByRole("button", {
+      name: "Add Romans 8:28 to a pack",
+    });
+    await userEvent.click(trigger);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Merced Team" }),
+    );
+    await screen.findByRole("button", { name: /Merced Team\s*Added/ });
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Merced Team/ }),
+      ).not.toBeInTheDocument(),
+    );
+    await userEvent.click(trigger);
+    expect(
+      await screen.findByRole("button", { name: /Merced Team\s*Added/ }),
+    ).toBeDisabled();
+    expect(mocks.addVerse).toHaveBeenCalledTimes(1);
   });
 });

@@ -3,8 +3,10 @@ import { Sparkles } from "lucide-react";
 
 import { FirstMemorizedBanner } from "@/components/memory/celebrate/first-memorized-banner";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import { AddToPack } from "@/components/memory/packs/add-to-pack";
 import type { CardReference } from "@/components/study/study-card-model";
 import { Button } from "@/components/ui/button";
+import { useLiveNow } from "@/hooks/use-live-now";
 import {
   SESSION_COMPLETE_FOOTER,
   SESSION_COMPLETE_TITLE,
@@ -81,7 +83,10 @@ export function SessionComplete({
   );
 }
 
-/** Each learned verse and the step it picks up next, or "Memorized". */
+/**
+ * Each learned verse and the step it picks up next, or "Memorized", with an
+ * Add to pack shortcut.
+ */
 export function SessionCompleteRows({
   verses,
   className,
@@ -89,6 +94,7 @@ export function SessionCompleteRows({
   verses: ReadonlyArray<SessionCompleteVerse>;
   className?: string;
 }): JSX.Element {
+  const now = useLiveNow();
   return (
     <ul className={cn("divide-y rounded-lg border text-left", className)}>
       {verses.map((verse) => {
@@ -103,20 +109,23 @@ export function SessionCompleteRows({
             <p className="min-w-0 truncate text-sm font-medium">
               {formatVerseRef(verse.reference)}
             </p>
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 text-xs font-medium",
-                chrome.text,
-              )}
-            >
+            <div className="-my-1 -mr-1.5 flex shrink-0 items-center gap-1">
               <span
-                className={cn("h-1.5 w-1.5 rounded-full", chrome.dot)}
-                aria-hidden
-              />
-              {reviewing
-                ? statusLabel("reviewing")
-                : `Tomorrow: ${stage.label}`}
-            </span>
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-xs font-medium",
+                  chrome.text,
+                )}
+              >
+                <span
+                  className={cn("h-1.5 w-1.5 rounded-full", chrome.dot)}
+                  aria-hidden
+                />
+                {reviewing
+                  ? statusLabel("reviewing")
+                  : `Tomorrow: ${stage.label}`}
+              </span>
+              <AddToPack reference={verse.reference} now={now} variant="icon" />
+            </div>
           </li>
         );
       })}
