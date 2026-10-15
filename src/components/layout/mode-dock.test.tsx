@@ -361,4 +361,15 @@ describe("ModeDock inMemory backfill", () => {
     rerender(<ModeDock />);
     expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
   });
+
+  it("asks again for the next account after signing out", () => {
+    const { rerender } = render(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
+
+    mocks.isAuthenticated = false;
+    rerender(<ModeDock />);
+    mocks.isAuthenticated = true;
+    rerender(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(2);
+  });
 });

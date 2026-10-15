@@ -200,6 +200,25 @@ describe("MemoryPanelHost", () => {
     mocks.queryResults.set("verseMemory.verseDetail", VERSE_DETAIL);
   });
 
+  it("hands focus back to what opened it when it closes", async () => {
+    const opener = document.createElement("a");
+    opener.href = "/memory?panel=verses";
+    opener.textContent = "Your verses";
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const { rerender } = renderHost("verses");
+    expect(screen.getByRole("heading", { name: "Your verses" })).toHaveFocus();
+    rerender(
+      <TooltipProvider>
+        <MemoryPanelHost panel={undefined} from={undefined} />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => expect(opener).toHaveFocus());
+    opener.remove();
+  });
+
   it("opens Your verses for ?panel=verses with its title focused", () => {
     renderHost("verses");
 

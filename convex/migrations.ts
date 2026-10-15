@@ -11,7 +11,9 @@ import {
 } from "./lib/inMemoryBackfill";
 
 const DEFAULT_BACKFILL_BATCH_SIZE = 200;
-const IN_MEMORY_BACKFILL_BATCH_SIZE = 25;
+// One user per transaction: a user's backfill reads every row they own, so
+// batching users can push a transaction past Convex's read limits.
+const IN_MEMORY_BACKFILL_BATCH_SIZE = 1;
 const IN_MEMORY_CHECK_BATCH_SIZE = 25;
 const MAX_IN_MEMORY_CHECK_SAMPLES = 20;
 

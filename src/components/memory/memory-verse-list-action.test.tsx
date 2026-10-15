@@ -65,14 +65,14 @@ describe("MemoryVerseListAction", () => {
       verse: verse("learning", NOW, 2),
     });
     await userEvent.click(
-      screen.getByRole("button", { name: "Continue learning Romans 5:6-8" }),
+      screen.getByRole("button", { name: "Continue learning Romans 5:6–8" }),
     );
     expect(learning.onLearn).toHaveBeenCalledTimes(1);
     learning.unmount();
 
     const upNext = renderAction({ status: "new", verse: verse("new", NOW, 0) });
     await userEvent.click(
-      screen.getByRole("button", { name: "Learn Romans 5:6-8" }),
+      screen.getByRole("button", { name: "Learn Romans 5:6–8" }),
     );
     expect(upNext.onLearn).toHaveBeenCalledTimes(1);
   });
@@ -84,7 +84,7 @@ describe("MemoryVerseListAction", () => {
     });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Review Romans 5:6-8" }),
+      screen.getByRole("button", { name: "Review Romans 5:6–8" }),
     );
     expect(onReview).toHaveBeenCalledTimes(1);
     expect(onPractice).not.toHaveBeenCalled();
@@ -100,7 +100,7 @@ describe("MemoryVerseListAction", () => {
       screen.queryByRole("button", { name: /^Review/ }),
     ).not.toBeInTheDocument();
     const practice = screen.getByRole("button", {
-      name: "Practice Romans 5:6-8",
+      name: "Practice Romans 5:6–8",
     });
     await userEvent.hover(practice);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(

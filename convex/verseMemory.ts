@@ -800,6 +800,16 @@ const memorizeStatusValidator = v.object({
   title: v.optional(v.string()),
   destination: v.optional(memorizeDestinationValidator),
   allHearted: v.boolean(),
+  progress: v.optional(
+    v.union(
+      v.literal("upNext"),
+      v.literal("notStarted"),
+      v.literal("learning"),
+      v.literal("memorized"),
+      v.literal("mastered"),
+    ),
+  ),
+  upNextPackName: v.optional(v.string()),
   carriedOver: v.optional(
     v.array(
       v.object({
@@ -816,7 +826,8 @@ const memorizeStatusValidator = v.object({
 /**
  * Whether the user already memorizes these spans (alone, as a passage, or as a
  * custom pack) or a passage they memorize contains them, and whether hearts
- * already cover every span. See `loadMemorizeStatus`. Signed out, or with no
+ * already cover every span. See `loadMemorizeStatus`; the exact verse also
+ * says where it stands (`progress`, `upNextPackName`). Signed out, or with no
  * or too many spans, reads as not memorizing and not hearted. A target that
  * would start fresh also lists the verses inside it whose progress carries
  * over (`carriedOver`, see `loadMemorizeStartStatus`).

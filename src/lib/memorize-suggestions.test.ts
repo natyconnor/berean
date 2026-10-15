@@ -29,7 +29,7 @@ describe("memorize suggestions", () => {
       "John 15",
       "1 Corinthians 13",
       "Philippians 4",
-      "100 Verses Every Christian Should Know",
+      "Over 100 Verses Every Christian Should Know",
     ]);
   });
 

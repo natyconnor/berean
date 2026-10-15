@@ -14,7 +14,7 @@ import {
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 export type { ReviewSessionAttempt };
 
@@ -129,7 +129,7 @@ export function ReviewResultRows({
   return (
     <ul className={cn("divide-y rounded-lg border text-left", className)}>
       {groupReviewSessionAttempts(attempts).map((attempt) => {
-        const label = attempt.label ?? formatVerseRef(attempt.reference);
+        const label = attempt.label ?? formatVerseRefTitle(attempt.reference);
         return (
           <li
             key={label}

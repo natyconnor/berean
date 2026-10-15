@@ -10,7 +10,7 @@ import { EXTRA_PRACTICE_TOOLTIP, learnActionLabel } from "@/lib/memory-copy";
 import { libraryRowAction } from "@/lib/memory-library-row";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import type { PracticeVerse } from "./practice/practice-board";
 
@@ -48,7 +48,7 @@ export function MemoryVerseListAction({
   );
   if (action === null) return null;
 
-  const reference = formatVerseRef(verse.reference);
+  const reference = formatVerseRefTitle(verse.reference);
 
   if (action === "practice") {
     return (

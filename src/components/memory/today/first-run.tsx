@@ -87,6 +87,13 @@ export function FirstRun({
   );
 }
 
+/** Curly quotes around a verse, reusing any the ESV text already opens or closes with. */
+function quoted(text: string): string {
+  const open = /^[“"]/.test(text) ? "" : "“";
+  const close = /[”"]$/.test(text) ? "" : "”";
+  return `${open}${text}${close}`;
+}
+
 function StarterStrip() {
   const navigate = useNavigate();
   const { start, pending } = useMemorizeStart();
@@ -113,7 +120,7 @@ function StarterStrip() {
           Not sure where to begin? Start small
         </p>
         {text ? (
-          <p className="font-serif text-base leading-normal">“{text}”</p>
+          <p className="font-serif text-base leading-normal">{quoted(text)}</p>
         ) : (
           <div aria-hidden className="space-y-1.5">
             <div

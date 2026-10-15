@@ -213,13 +213,14 @@ function clampDone(done: number | undefined, items: number): number {
 }
 
 function doneShare(done: number | undefined, items: number): number {
-  return items > 0 ? clampDone(done, items) / items : 0;
+  return items > 0 ? Math.min(Math.max(done ?? 0, 0), items) / items : 0;
 }
 
 /**
  * Share of the whole session behind the learner, weighted by each segment's
  * estimated minutes. `doneItems` holds each segment's items done
- * ({@link todayDoneItems}), so the bar moves one item at a time.
+ * ({@link todayDoneItems}), so the bar moves one item at a time; a passage
+ * underway may pass a fraction so the bar moves within it.
  */
 export function todaySessionProgress(
   segments: readonly TodaySegment[],
@@ -257,6 +258,24 @@ export function todaySessionCounts(
       0,
     ),
     total: items.reduce((sum, value) => sum + value, 0),
+  };
+}
+
+/**
+ * Adds items finished on an earlier visit today to the count and the bar,
+ * so coming back reads "8 of 13", not "0 of 5".
+ */
+export function carryTodayProgress(
+  counts: TodaySessionCounts,
+  fraction: number,
+  carriedItems: number,
+): { counts: TodaySessionCounts; fraction: number } {
+  const earlier = Math.max(0, Math.trunc(carriedItems));
+  if (earlier === 0) return { counts, fraction };
+  const total = counts.total + earlier;
+  return {
+    counts: { done: counts.done + earlier, total },
+    fraction: (earlier + fraction * counts.total) / total,
   };
 }
 

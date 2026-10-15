@@ -176,10 +176,10 @@ describe("MemoryPackReviewPage", () => {
 
     expect(await screen.findByText("Verse 1 of 2")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Psalm 23:1-3 \(/ }),
+      screen.getByRole("button", { name: /^Psalm 23:1–3 \(/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Psalm 23:4-6 \(/ }),
+      screen.getByRole("button", { name: /^Psalm 23:4–6 \(/ }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/one recitation/)).not.toBeInTheDocument();
   });
@@ -199,7 +199,7 @@ describe("MemoryPackReviewPage", () => {
       screen.getByRole("button", { name: /^Psalm 23 \(/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^Psalm 23:1-3 \(/ }),
+      screen.queryByRole("button", { name: /^Psalm 23:1–3 \(/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -221,7 +221,7 @@ describe("MemoryPackReviewPage", () => {
     expect(screen.queryByText(/one recitation/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Verse 1 of/)).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^Psalm 23:1-3 \(/ }),
+      screen.queryByRole("button", { name: /^Psalm 23:1–3 \(/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Your recalled verse"),
@@ -294,7 +294,7 @@ describe("MemoryPackReviewPage", () => {
     expect(screen.queryByText(/one recitation/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Verse 1 of/)).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^Psalm 23:1-3 \(/ }),
+      screen.queryByRole("button", { name: /^Psalm 23:1–3 \(/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Psalm 23 \(/ }),

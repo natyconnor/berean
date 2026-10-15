@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Loader2, Play, Search } from "lucide-react";
+import { Brain, Check, Loader2, Play, Search } from "lucide-react";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTodayModel } from "@/hooks/use-today-model";
 import { cn } from "@/lib/utils";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRef, formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { TODAY_LABEL } from "@/lib/memory-copy";
 import { libraryEmptyCopy, type LibraryView } from "@/lib/memory-empty-states";
 import { dueTodayBulkLabel, libraryRow } from "@/lib/memory-library-row";
+import { formatNextReviewDay, todayDoneLine } from "@/lib/memory-today";
 import { withReturn } from "@/lib/memory-return";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { memoryTodaySessionHref } from "@/lib/memory-session-path";
@@ -197,6 +198,12 @@ export function MemoryLibrary({
         <div className="flex min-h-[16rem] items-center justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
+      ) : !hasResults && !isSwitchingView && isExhausted && view === "due" ? (
+        <DueCaughtUp
+          now={now}
+          timeZone={timeZone}
+          onShowAll={() => setView("all")}
+        />
       ) : !hasResults && !isSwitchingView && isExhausted ? (
         // Genuinely empty: the query is exhausted and no rows loaded anywhere.
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
@@ -248,7 +255,7 @@ export function MemoryLibrary({
                     >
                       <span className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="min-w-0 truncate text-sm font-medium">
-                          {formatVerseRef(row)}
+                          {formatVerseRefTitle(row)}
                         </span>
                         <span className="flex shrink-0 items-center gap-1">
                           <StatusChip status={row.status} />
@@ -327,6 +334,44 @@ function DueTodayBulkAction({
         {label}
       </InternalLink>
     </Button>
+  );
+}
+
+/** Due today with nothing left: celebrate what today's work was. */
+function DueCaughtUp({
+  now,
+  timeZone,
+  onShowAll,
+}: {
+  now: number;
+  timeZone: string;
+  onShowAll: () => void;
+}) {
+  const today = useTodayModel(now);
+  const done = today ? todayDoneLine(today.doneToday) : null;
+  const when = today
+    ? formatNextReviewDay(today.nextReviewAt, now, timeZone)
+    : null;
+  return (
+    <div className="flex flex-col items-center rounded-xl border bg-card px-4 py-10 text-center">
+      <span
+        aria-hidden
+        className="grid size-10 place-items-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+      >
+        <Check className="size-5" />
+      </span>
+      <p className="mt-3 text-sm font-semibold">
+        {done ? "Nice work. You're all caught up." : "You're all caught up."}
+      </p>
+      <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+        {[done, when ? `Next review ${when}.` : null]
+          .filter(Boolean)
+          .join(" ") || libraryEmptyCopy("due")}
+      </p>
+      <Button variant="ghost" size="sm" className="mt-3" onClick={onShowAll}>
+        Show all your verses
+      </Button>
+    </div>
   );
 }
 

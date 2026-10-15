@@ -34,7 +34,7 @@ describe("firstChapterHeart", () => {
 describe("heartListLabel", () => {
   it("names a verse by its reference and a passage by its title", () => {
     const span = { book: "Psalms", chapter: 16, startVerse: 1, endVerse: 11 };
-    expect(heartListLabel(span)).toBe("Psalm 16:1-11");
+    expect(heartListLabel(span)).toBe("Psalm 16:1–11");
     expect(heartListLabel({ ...span, passage: { title: "Psalm 16" } })).toBe(
       "Psalm 16 · passage",
     );

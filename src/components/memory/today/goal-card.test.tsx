@@ -151,6 +151,12 @@ describe("GoalCard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("counts from tomorrow once today's learning is done", () => {
+    renderCard(passage({ hasWorkToday: false, lastPracticedAt: NOW }));
+
+    expect(screen.getByText("on track for Oct 16")).toBeInTheDocument();
+  });
+
   it("says how many days are left instead of a date after 2 idle days", () => {
     renderCard(passage({ lastPracticedAt: NOW - 3 * DAY_MS }));
 
@@ -315,6 +321,25 @@ describe("GoalCard", () => {
     expect(screen.getByRole("link", { name: "John 3:16" })).toHaveAttribute(
       "href",
       "/memory?panel=verse%3Ajohn316",
+    );
+  });
+
+  it("offers Start on an Up next verse that isn't in a pack", () => {
+    const { container } = renderCard(
+      verse({ status: "new", hasWorkToday: false, nextDueAt: null }),
+    );
+
+    expect(
+      screen.getByText("Up next. Starts when you're ready."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("progressbar", { name: "Not started" }),
+    ).toBeInTheDocument();
+    const [button] = buttonsIn(container);
+    expect(button).toHaveTextContent("Start · 3 min");
+    expect(button).toHaveAttribute(
+      "href",
+      "/memory/learn?book=John&chapter=3&startVerse=16&endVerse=16&return=%2Fmemory",
     );
   });
 });

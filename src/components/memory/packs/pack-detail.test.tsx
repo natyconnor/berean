@@ -78,6 +78,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       resolveMembers: "packs.resolveMembers",
       touch: "packs.touch",
       stopMemorizing: "packs.stopMemorizing",
+      remove: "packs.remove",
       setUnifiedReview: "packs.setUnifiedReview",
       listMine: "packs.listMine",
       addVerse: "packs.addVerse",
@@ -539,13 +540,13 @@ describe("PackDetail for a pack", () => {
       within(dialog).getByText("Memorized · review due today · mastery 22%"),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("link", { name: "Review Luke 9:23-24" }),
+      within(dialog).getByRole("link", { name: "Review Luke 9:23–24" }),
     ).toHaveAttribute(
       "href",
       `/memory/review?book=Luke&chapter=9&startVerse=23&endVerse=24&${RETURN}`,
     );
     expect(
-      within(dialog).getByRole("link", { name: "Practice Luke 9:23-24" }),
+      within(dialog).getByRole("link", { name: "Practice Luke 9:23–24" }),
     ).toBeInTheDocument();
 
     expect(
@@ -569,25 +570,34 @@ describe("PackDetail for a pack", () => {
     );
   });
 
-  it("confirms Stop memorizing with the pack copy, then goes back to Your verses", async () => {
+  it("deletes a pack without stopping its verses, then goes back to Your verses", async () => {
     renderHost("pack:merced", "verses");
 
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: "Stop memorizing" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Stop memorizing" }),
+      await screen.findByRole("menuitem", { name: "Delete pack" }),
     );
     const confirm = await screen.findByRole("dialog", {
-      name: "Stop memorizing Merced Team?",
+      name: "Delete Merced Team?",
     });
     expect(
       within(confirm).getByText(
-        "Verses that aren't in another pack leave Today. Your progress is saved if you start again.",
+        "Verses you've started stay in Memory with their progress. Ones you haven't started stay in your hearts.",
       ),
     ).toBeInTheDocument();
     await userEvent.click(
-      within(confirm).getByRole("button", { name: "Stop memorizing" }),
+      within(confirm).getByRole("button", { name: "Delete pack" }),
     );
 
+    await waitFor(() =>
+      expect(mocks.mutations.get("packs.remove")).toHaveBeenCalledWith({
+        id: "merced",
+      }),
+    );
+    expect(mocks.mutations.get("packs.stopMemorizing")).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenLastCalledWith({
         href: "/memory?panel=verses",
@@ -742,23 +752,23 @@ describe("PackDetail editing a pack", () => {
       </TooltipProvider>
     );
     const view = render(host());
-    expect(rowNames()).toEqual(["Luke 9:23-24", "Joshua 1:9", "Isaiah 41:10"]);
+    expect(rowNames()).toEqual(["Luke 9:23–24", "Joshua 1:9", "Isaiah 41:10"]);
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Options for Luke 9:23-24" }),
+      screen.getByRole("button", { name: "Options for Luke 9:23–24" }),
     );
     expect(
       await screen.findByRole("menuitem", { name: "Move up" }),
     ).toHaveAttribute("data-disabled");
     await userEvent.click(screen.getByRole("menuitem", { name: "Move down" }));
 
-    expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23-24", "Isaiah 41:10"]);
+    expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
     expect(mocks.mutations.get("packs.reorder")).toHaveBeenCalledWith({
       id: "merced",
       orderedVerseRefIds: ["josh", "luke", "isa"],
     });
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Moved Luke 9:23-24 to 2 of 3.",
+      "Moved Luke 9:23–24 to 2 of 3.",
     );
     // The query pushes the saved order, then the save finishes.
     view.rerender(host());
@@ -766,7 +776,7 @@ describe("PackDetail editing a pack", () => {
       saves.shift()?.();
       await Promise.resolve();
     });
-    expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23-24", "Isaiah 41:10"]);
+    expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
     expect(mocks.toastSuccess).toHaveBeenCalledWith("New order saved", {
       id: "pack-order-merced",
     });

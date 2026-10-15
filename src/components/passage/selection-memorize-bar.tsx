@@ -52,6 +52,7 @@ export function SelectionMemorizeBar({
     <div
       role="toolbar"
       aria-label={`Selected verses, ${reference}`}
+      data-nudge-above
       className={cn(
         "flex items-center gap-1 border border-amber-400/35 bg-popover text-popover-foreground shadow-[0_1px_2px_rgb(0_0_0/0.06),0_4px_12px_rgb(50_35_15/0.1)] dark:border-[var(--cl-passage-line)]",
         pinned

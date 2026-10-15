@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   fetchChapters: vi.fn(),
   isMobile: false,
   packs: [] as unknown[],
+  verseText: null as string | null,
 }));
 
 function mutation(name: string) {
@@ -86,6 +87,14 @@ vi.mock("../../../../convex/_generated/api", () => ({
       memorizeStatus: "verseMemory.memorizeStatus",
     },
   },
+}));
+
+vi.mock("@/hooks/use-esv-reference", () => ({
+  useEsvReference: (ref: unknown) => ({
+    data:
+      ref && mocks.verseText ? { verses: [{ text: mocks.verseText }] } : null,
+    loading: false,
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -187,6 +196,7 @@ function deferred<T>() {
 
 describe("MemorizeSheet", () => {
   beforeEach(() => {
+    mocks.verseText = null;
     mocks.queryResults.clear();
     mocks.queryArgs.clear();
     mocks.mutations.clear();
@@ -204,6 +214,19 @@ describe("MemorizeSheet", () => {
       alreadyMemorizing: 0,
       verseRefIds: ["vr_1"],
     });
+  });
+
+  it("draws the explainer's samples from the verse being memorized", async () => {
+    mocks.verseText =
+      "And we know that for those who love God all things work together for good,";
+    const dialog = await openSheet(verseTarget);
+    const view = within(dialog);
+
+    expect(
+      view.getByText("A__ w_ k___ t___ f__ t____ w__ l___ G__…"),
+    ).toBeInTheDocument();
+    expect(view.getByText(/^And we/)).toBeInTheDocument();
+    expect(view.queryByText(/^B____ i_ t__ m__/)).not.toBeInTheDocument();
   });
 
   it("plans a verse: three daily steps, no verse-count chip, heart line", async () => {
@@ -232,6 +255,7 @@ describe("MemorizeSheet", () => {
       view.getByText("Also adds Romans 8:28 to your hearts"),
     ).toBeInTheDocument();
     expect(view.getByText("How memorizing works")).toBeInTheDocument();
+    expect(view.getByText(/^B____ i_ t__ m__/)).toBeInTheDocument();
     expect(
       view.queryByText(/Longer passages add up to/),
     ).not.toBeInTheDocument();
@@ -602,18 +626,13 @@ describe("MemorizeSheet", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows what's next for a verse already being memorized", async () => {
-    setStatus({
-      state: "memorizing",
-      destination: { kind: "verse", verseRefId: "vr_1", span: romans828 },
-      allHearted: true,
-    });
+  function setInMemory(status: "new" | "learning", learnStage: number): void {
     mocks.queryResults.set("verseMemory.getInMemory", {
       verseRefId: "vr_1",
       ...romans828,
       memory: {
-        status: "learning",
-        learnStage: 0,
+        status,
+        learnStage,
         ease: 2.5,
         intervalDays: 0,
         dueAt: NOW - 1,
@@ -622,12 +641,109 @@ describe("MemorizeSheet", () => {
       },
       packIds: [],
     });
+  }
+
+  it("says a verse is up next in its pack and starts it now", async () => {
+    setStatus({
+      state: "memorizing",
+      destination: { kind: "verse", verseRefId: "vr_1", span: romans828 },
+      progress: "upNext",
+      upNextPackName: "Sample · Mix",
+      allHearted: true,
+    });
+    setInMemory("new", 0);
+    const dialog = await openSheet(verseTarget);
+    const view = within(dialog);
+
+    expect(
+      view.getByRole("heading", {
+        name: "Romans 8:28 is up next in Sample · Mix",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      view.getByText("It starts when the pack gets to it, or start it now."),
+    ).toBeInTheDocument();
+    expect(view.queryByText(/You're memorizing/)).not.toBeInTheDocument();
+    expect(view.getByRole("button", { name: "Add to pack" })).toBeVisible();
+    expect(view.getByRole("button", { name: "Open" })).toHaveAttribute(
+      "data-variant",
+      "outline",
+    );
+    const startNow = view.getByRole("button", { name: "Start now" });
+    expect(startNow).toHaveAttribute("data-variant", "default");
+
+    await userEvent.click(startNow);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory/learn?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory%2Fpresets%3Fq%3D1",
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(mutation("verseMemory.memorize")).not.toHaveBeenCalled();
+  });
+
+  it("says a verse added but never practiced hasn't started", async () => {
+    mocks.location = { pathname: "/memory", searchStr: "?panel=verses" };
+    setStatus({
+      state: "memorizing",
+      destination: { kind: "verse", verseRefId: "vr_1", span: romans828 },
+      progress: "notStarted",
+      allHearted: true,
+    });
+    setInMemory("learning", 0);
+    const dialog = await openSheet(verseTarget);
+    const view = within(dialog);
+
+    expect(
+      view.getByRole("heading", {
+        name: "You added Romans 8:28 but haven't started",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      view.getByText("Read it, then type it with first letters"),
+    ).toBeInTheDocument();
+
+    await userEvent.click(view.getByRole("button", { name: "Open" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory?panel=verse%3Avr_1",
+    });
+  });
+
+  it("starts a not-started verse from Today back to plain Today", async () => {
+    mocks.location = { pathname: "/memory", searchStr: "?panel=verses" };
+    setStatus({
+      state: "memorizing",
+      destination: { kind: "verse", verseRefId: "vr_1", span: romans828 },
+      progress: "notStarted",
+      allHearted: true,
+    });
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Start" }),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory/learn?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory",
+    });
+  });
+
+  it("shows what's next for a verse already being memorized", async () => {
+    setStatus({
+      state: "memorizing",
+      destination: { kind: "verse", verseRefId: "vr_1", span: romans828 },
+      progress: "learning",
+      allHearted: true,
+    });
+    setInMemory("learning", 1);
     const dialog = await openSheet(verseTarget);
     const view = within(dialog);
 
     expect(
       view.getByRole("heading", { name: "You're memorizing Romans 8:28" }),
     ).toBeInTheDocument();
+    expect(
+      view.queryByRole("button", { name: /^Start/ }),
+    ).not.toBeInTheDocument();
     expect(
       view.getByText("Read it, then type it with first letters"),
     ).toBeInTheDocument();

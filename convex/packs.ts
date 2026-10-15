@@ -9,7 +9,11 @@ import {
   findVerseMemory,
   isInMemory,
 } from "./lib/verseMemory";
-import { memorizeSpan, stopMemorizingPack } from "./lib/memorize";
+import {
+  memorizeSpan,
+  releaseUnstartedVerses,
+  stopMemorizingPack,
+} from "./lib/memorize";
 import {
   filterScopeMembers,
   insertPackVerseAt,
@@ -414,10 +418,20 @@ export const remove = mutation({
     if (!pack) throw new Error("Pack not found");
 
     // Delete membership + passage overlay. Hearts (`savedVerses`) and
-    // spaced-repetition progress (`verseMemory`) are intentionally preserved.
+    // spaced-repetition progress (`verseMemory`) are intentionally preserved;
+    // members that never started go back to being hearts.
     const passage = await findPassageByPackId(ctx, args.id);
     if (passage && passage.userId === userId) {
       await deletePassageAndReviews(ctx, passage);
+    } else {
+      const members = await loadPackMembers(ctx, userId, pack);
+      await releaseUnstartedVerses(
+        ctx,
+        userId,
+        pack._id,
+        members.map((member) => member.verseRefId),
+        Date.now(),
+      );
     }
 
     const members = await ctx.db
@@ -603,7 +617,7 @@ export const removeVerse = mutation({
       throw new Error("Can only remove verses from custom packs");
     }
 
-    // Removes membership only; the verse stays hearted and in Memory.
+    // The verse stays hearted, and stays in Memory once started.
     const member = await ctx.db
       .query("packVerses")
       .withIndex("by_userId_packId_verseRefId", (q) =>
@@ -615,6 +629,13 @@ export const removeVerse = mutation({
       .unique();
     if (!member) return null;
     await ctx.db.delete(member._id);
+    await releaseUnstartedVerses(
+      ctx,
+      userId,
+      pack._id,
+      [args.verseRefId],
+      Date.now(),
+    );
     return member.order;
   },
 });

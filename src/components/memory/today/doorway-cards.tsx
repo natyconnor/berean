@@ -19,7 +19,6 @@ import { memoryPanelDrawerHref } from "@/lib/memory-panel";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { todayWorkCount } from "@/lib/memory-today";
 import {
-  PRACTICE_WINDOW_DAYS,
   practicedDaysCopy,
   practicedDaysIn,
   streakCopy,
@@ -104,7 +103,7 @@ function summarizeProgress(activity: ReviewActivity): ProgressSummary {
   const accuracy =
     answers >= MIN_ACCURACY_ANSWERS ? overallAccuracy(activity.trend) : null;
   return {
-    practicedDays: practicedDaysIn(dailyCounts),
+    practicedDays: practicedDaysIn(dailyCounts, STRIP_DAYS),
     streak: streakCopy(computeStreak(dailyCounts).days),
     accuracy: accuracy === null ? null : Math.round(accuracy),
     strip: activity.heatmap.slice(-STRIP_DAYS),
@@ -119,7 +118,8 @@ function summarizeProgress(activity: ReviewActivity): ProgressSummary {
 
 function progressStatText(summary: ProgressSummary): string {
   const practiced =
-    summary.streak?.sentence ?? practicedDaysCopy(summary.practicedDays);
+    summary.streak?.sentence ??
+    practicedDaysCopy(summary.practicedDays, STRIP_DAYS);
   return summary.accuracy === null
     ? practiced
     : `${practiced} · ${summary.accuracy}% accuracy`;
@@ -151,12 +151,11 @@ function ProgressDoorway({ now }: { now: number }) {
               <>
                 Practiced{" "}
                 <b className="font-semibold">
-                  {summary.practicedDays} of the last {PRACTICE_WINDOW_DAYS}{" "}
-                  days
+                  {summary.practicedDays} of the last {STRIP_DAYS} days
                 </b>
               </>
             ) : (
-              practicedDaysCopy(0)
+              practicedDaysCopy(0, STRIP_DAYS)
             )}
             {summary.accuracy !== null ? (
               <>
@@ -233,7 +232,7 @@ function AccuracySparkline({
       viewBox={`0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}`}
       width={72}
       height={22}
-      className="hidden shrink-0 sm:block"
+      className="hidden min-w-0 shrink sm:block"
     >
       <path
         d={areaPath(coords, SPARK_HEIGHT)}

@@ -58,7 +58,7 @@ import {
 import { nextStepCopy } from "@/lib/memorize-plan";
 import { cn } from "@/lib/utils";
 import { howItsGoing, verseDetailFacts } from "@/lib/verse-detail-copy";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
 import { useMemoryPanelFrame } from "./drawer/memory-panel-context";
@@ -151,7 +151,7 @@ export function VerseDetailPanel({
     );
   }
 
-  const reference = formatVerseRef(detail);
+  const reference = formatVerseRefTitle(detail);
   return (
     <MemoryPanelFrame
       title={reference}
@@ -195,7 +195,7 @@ export function VerseDetail({
     <div className="space-y-5">
       <div className="min-w-0">
         <h3 className="text-base font-semibold tracking-tight">
-          {formatVerseRef(detail)}
+          {formatVerseRefTitle(detail)}
         </h3>
         <p className="mt-0.5 text-sm text-muted-foreground">
           {verseSubtitle(detail)}
@@ -414,7 +414,7 @@ function NotMemorizing({
         }
       >
         <Brain aria-hidden />
-        {memorizeTitleLabel(formatVerseRef(reference))}
+        {memorizeTitleLabel(formatVerseRefTitle(reference))}
       </Button>
     </div>
   );

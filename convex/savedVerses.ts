@@ -346,6 +346,7 @@ const heartListItem = v.object({
   endVerse: v.number(),
   createdAt: v.number(),
   inMemory: v.boolean(),
+  upNext: v.optional(v.literal(true)),
   passage: v.optional(v.object({ packId: v.id("packs"), title: v.string() })),
 });
 

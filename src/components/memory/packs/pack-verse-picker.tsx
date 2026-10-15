@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { verseMatchesScope, type VerseScope } from "@/lib/verse-scope-match";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRef, formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import { heartedSpanConfirmAction } from "@/lib/hearted-span-copy";
 import { sortByVerseRef } from "../../../../shared/compare-verse-refs";
 
@@ -219,7 +219,7 @@ function HeartedTab({
                     aria-pressed={selected}
                   >
                     <span className="min-w-0 flex-1 truncate">
-                      {formatVerseRef(verse)}
+                      {formatVerseRefTitle(verse)}
                     </span>
                     {pending ? (
                       <Loader2

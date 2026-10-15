@@ -56,7 +56,7 @@ let nextId = 0;
 
 function heart(
   span: VerseSpan,
-  extra: Partial<Pick<HeartListItem, "inMemory" | "passage">> = {},
+  extra: Partial<Pick<HeartListItem, "inMemory" | "upNext" | "passage">> = {},
 ): HeartListItem {
   nextId += 1;
   return {
@@ -142,7 +142,7 @@ describe("HeartedList", () => {
     ]);
     expect(linkNames(screen.getByRole("group", { name: "Romans" }))).toEqual([
       "Romans 8:28",
-      "Romans 12:1-2",
+      "Romans 12:1–2",
     ]);
   });
 
@@ -165,6 +165,19 @@ describe("HeartedList", () => {
     ).toEqual(["Memorize Romans 8:28", "Memorize John 3:16"]);
     const romans = screen.getByRole("group", { name: "Romans" });
     expect(within(romans).getAllByText("Memorizing")).toHaveLength(1);
+  });
+
+  it("says Up next for a verse waiting its turn in a pack", () => {
+    const john316UpNext = { ...john316, inMemory: true, upNext: true as const };
+    setPage([romans828, john316UpNext]);
+    renderList();
+
+    const john = screen.getByRole("group", { name: "John" });
+    expect(within(john).getByText("Up next")).toBeInTheDocument();
+    expect(within(john).queryByText("Memorizing")).not.toBeInTheDocument();
+    expect(
+      within(john).queryByRole("button", { name: /^Memorize / }),
+    ).not.toBeInTheDocument();
   });
 
   it("loads one line of verse text in the reader serif", () => {
@@ -208,7 +221,7 @@ describe("HeartedList", () => {
     const filter = screen.getByPlaceholderText("Filter hearts…");
     expect(filter).toHaveFocus();
 
-    // Rendered order: Romans 8:28, Romans 12:1-2, Psalm 16, John 3:16.
+    // Rendered order: Romans 8:28, Romans 12:1–2, Psalm 16, John 3:16.
     await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
     await user.keyboard("{ArrowUp}{Enter}");
     expect(onOpenHeart).toHaveBeenCalledOnce();
@@ -222,7 +235,7 @@ describe("HeartedList", () => {
     const first = screen.getByRole("link", { name: "Romans 8:28" });
     first.focus();
     await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("link", { name: "Romans 12:1-2" })).toHaveFocus();
+    expect(screen.getByRole("link", { name: "Romans 12:1–2" })).toHaveFocus();
     await user.keyboard("{ArrowUp}{ArrowUp}");
     expect(first).toHaveFocus();
 

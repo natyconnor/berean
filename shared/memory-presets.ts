@@ -1113,7 +1113,7 @@ export const HUNDRED_VERSES_PRESET_ID =
 const hundredVerses: CollectionPreset = {
   kind: "collection",
   id: HUNDRED_VERSES_PRESET_ID,
-  title: "100 Verses Every Christian Should Know",
+  title: "Over 100 Verses Every Christian Should Know",
   description:
     "An ordered set of passages to memorize one span at a time. Start the whole list, or pick the ones you want.",
   passages: HUNDRED_VERSES_PASSAGES,

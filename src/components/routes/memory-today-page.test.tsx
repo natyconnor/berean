@@ -71,7 +71,7 @@ vi.mock("@/components/memory/passage/passage-session", () => ({
   }: {
     packName: string;
     backLabel: string;
-    progress?: { label: string };
+    progress?: { label: string } | ((todayShare: number) => { label: string });
     aside?: ReactNode;
     onExit: () => void;
     onDoneForToday?: () => void;
@@ -81,7 +81,9 @@ vi.mock("@/components/memory/passage/passage-session", () => ({
         {backLabel}
       </button>
       <h1>{packName}</h1>
-      <p>{progress?.label}</p>
+      <p>
+        {typeof progress === "function" ? progress(0).label : progress?.label}
+      </p>
       <button type="button" onClick={onDoneForToday}>
         That&apos;s enough for today
       </button>
@@ -817,6 +819,48 @@ describe("MemoryTodayPage", () => {
       "href",
       "/memory/practice?return=%2Fmemory%3Fpanel%3Dpack%3Amerced",
     );
+  });
+
+  it("picks the day's count and summary back up after leaving and coming back", async () => {
+    setToday();
+    const first = renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "That's enough for today" }),
+    );
+    first.unmount();
+
+    setToday({ passages: [] });
+    renderToday();
+    expect(screen.getByText("Today · 2 of 4")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish learning" }),
+    );
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Session progress: Today · 3 of 4",
+      }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish review" }),
+    );
+
+    expect(screen.getByText("Psalm 16")).toBeInTheDocument();
+    expect(screen.getByText("John 15:1")).toBeInTheDocument();
+  });
+
+  it("shows the day's summary when everything was finished on an earlier visit", async () => {
+    setToday({ passages: [], due: [] });
+    const first = renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish learning" }),
+    );
+    first.unmount();
+
+    setToday({ passages: [], learning: [], due: [] });
+    renderToday();
+    expect(screen.queryByText("All caught up")).not.toBeInTheDocument();
+    expect(screen.getByText("John 15:2")).toBeInTheDocument();
   });
 
   it("runs only a passage pack's passage", () => {

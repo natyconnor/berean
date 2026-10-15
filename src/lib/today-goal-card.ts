@@ -291,7 +291,7 @@ function packModel(
 
   let action: GoalAction | null = null;
   const main = goal.hasWorkToday
-    ? packDetailActions(goal, [], now, timeZone).main
+    ? packDetailActions(goal, now, timeZone).main
     : null;
   if (main?.kind === "session") {
     const minutes = estimateSessionMinutes({
@@ -368,10 +368,11 @@ function verseModel(
 
   const day = stepLadderDay(goal.learnStage);
   const tomorrow = `Tomorrow: ${stepAction(goal.learnStage)}.`;
+  const upNext = goal.status === "new";
   let steps: GoalStep[];
   if (goal.hasWorkToday) {
     steps = [{ kind: "learn", ...todayStepParts(stepAction(goal.learnStage)) }];
-  } else if (goal.status === "new") {
+  } else if (upNext) {
     steps = [{ kind: "note", text: "Up next. Starts when you're ready." }];
   } else {
     steps = [
@@ -386,26 +387,27 @@ function verseModel(
     bars: [
       {
         track: "learned",
-        label: "Learning",
+        label: upNext ? "Not started" : "Learning",
         detail: goalLearnPace(goal, now, timeZone),
         fraction: (day - 1) / 3,
-        ariaLabel: "Learning",
+        ariaLabel: upNext ? "Not started" : "Learning",
       },
     ],
-    action: goal.hasWorkToday
-      ? {
-          kind: "learn",
-          label: startOrContinue(
-            goal,
-            estimateSessionMinutes({
-              learningVerses: 1,
-              reviewVerses: 0,
-              passageSessions: 0,
-            }),
-          ),
-          href: href("learn"),
-        }
-      : null,
+    action:
+      goal.hasWorkToday || upNext
+        ? {
+            kind: "learn",
+            label: startOrContinue(
+              goal,
+              estimateSessionMinutes({
+                learningVerses: 1,
+                reviewVerses: 0,
+                passageSessions: 0,
+              }),
+            ),
+            href: href("learn"),
+          }
+        : null,
   };
 }
 

@@ -421,7 +421,7 @@ describe("buildGoalCards: packs", () => {
       reviewTogether: false,
       hasWorkToday: true,
       nextDueAt: NOW - HOUR_MS,
-      memberLabels: ["Romans 8:28", "Romans 12:1-2", "Romans 5:8"],
+      memberLabels: ["Romans 8:28", "Romans 12:1–2", "Romans 5:8"],
     });
   });
 
@@ -473,7 +473,7 @@ describe("buildGoalCards: packs", () => {
       learning: 1,
       upNext: 1,
       mastered: 1,
-      reviewsDue: [{ verseRefId: "luke", label: "Luke 9:23-24" }],
+      reviewsDue: [{ verseRefId: "luke", label: "Luke 9:23–24" }],
       learningToday: 0,
       hasWorkToday: true,
       nextDueAt: NOW - HOUR_MS,

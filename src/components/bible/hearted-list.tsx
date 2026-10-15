@@ -78,7 +78,8 @@ interface HeartedListProps {
 
 /**
  * Go to passage → Hearted: every heart, newest first, grouped by book. Each
- * row opens its passage and offers Memorize, or shows "Memorizing". Up/Down
+ * row opens its passage and offers Memorize, or shows "Memorizing" ("Up next"
+ * while it waits its turn in a pack). Up/Down
  * in the filter (or on a row) moves through rows; Enter opens one.
  */
 export function HeartedList({
@@ -346,7 +347,7 @@ function HeartRow({
       </div>
       {item.inMemory ? (
         <span className="shrink-0 rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground">
-          Memorizing
+          {item.upNext ? "Up next" : "Memorizing"}
         </span>
       ) : (
         <Button

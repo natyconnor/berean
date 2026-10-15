@@ -134,8 +134,11 @@ interface PassageSessionProps {
   exitTooltip?: string;
   /** Header back button text, e.g. "Back to Today". */
   backLabel?: string;
-  /** Header text and overall bar when this passage is one part of a session. */
-  progress?: SessionProgress;
+  /**
+   * Header text and overall bar when this passage is one part of a session.
+   * A function gets the share of today's new verses added so far.
+   */
+  progress?: SessionProgress | ((todayShare: number) => SessionProgress);
   /** A side column beside the passage, e.g. the rest of today's queue. */
   aside?: ReactNode;
 }
@@ -163,6 +166,18 @@ export function PassageSession({
   const [state, setState] = useState<PassageSessionState>(() =>
     sessionFromView(view, now, tzOffsetMinutes),
   );
+  const [addsAtOpen] = useState(() => remainingAddsIn(state));
+  const headerProgress =
+    typeof progress === "function"
+      ? progress(
+          addsAtOpen > 0
+            ? Math.min(
+                Math.max((addsAtOpen - remainingAddsIn(state)) / addsAtOpen, 0),
+                1,
+              )
+            : 0,
+        )
+      : progress;
   const [introduceBusy, setIntroduceBusy] = useState(false);
   const [ropeOverride, setRopeOverride] =
     useState<RopeStartOverride>("rehearsal");
@@ -489,7 +504,7 @@ export function PassageSession({
       onExit={onExit}
       exitTooltip={exitTooltip}
       backLabel={backLabel}
-      progress={progress}
+      progress={headerProgress}
       persistError={persistError}
       aside={aside}
     >

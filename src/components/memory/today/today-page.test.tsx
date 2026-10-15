@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { DAY_MS } from "@/lib/memory-scheduler";
 
 import { TodayPage } from "./today-page";
@@ -330,7 +331,7 @@ describe("TodayPage", () => {
 
     expect(
       screen.getByRole("link", {
-        name: "Your progress: Practiced 2 of the last 7 days · 96% accuracy",
+        name: "Your progress: Practiced 2 of the last 14 days · 96% accuracy",
       }),
     ).toHaveAttribute("href", "/memory?panel=progress");
     expect(
@@ -365,7 +366,7 @@ describe("TodayPage", () => {
 
     expect(
       screen.getByRole("link", {
-        name: "Your progress: Practiced 1 of the last 7 days",
+        name: "Your progress: Practiced 1 of the last 14 days",
       }),
     ).toBeInTheDocument();
   });
@@ -574,7 +575,7 @@ describe("TodayPage", () => {
       screen.getByRole("heading", { name: "Start with a verse you love" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Memorize Philippians 4:6-7" }),
+      screen.getByRole("button", { name: "Memorize Philippians 4:6–7" }),
     ).toBeInTheDocument();
   });
 
@@ -743,6 +744,86 @@ describe("TodayPage", () => {
     expect(chips.queryByText("Memorizing")).not.toBeInTheDocument();
   });
 
+  function verseStatusFor(
+    target: { book: string; chapter: number; startVerse: number },
+    extra: Record<string, unknown>,
+  ) {
+    return (args: unknown) => {
+      const [span] = (args as { spans: VerseSpan[] }).spans;
+      return span?.book === target.book &&
+        span.chapter === target.chapter &&
+        span.startVerse === target.startVerse &&
+        span.endVerse === target.startVerse
+        ? {
+            state: "memorizing",
+            destination: {
+              kind: "verse",
+              verseRefId: `ref-${target.book}`,
+              span: { ...target, endVerse: target.startVerse },
+            },
+            allHearted: true,
+            ...extra,
+          }
+        : { state: "none", allHearted: false };
+    };
+  }
+
+  it("starts a search that is Up next in a pack straight from the row", async () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    mocks.queryByArgs.set(
+      "verseMemory.memorizeStatus",
+      verseStatusFor(
+        { book: "John", chapter: 3, startVerse: 16 },
+        { progress: "upNext", upNextPackName: "Sample · Mix" },
+      ),
+    );
+    renderPage();
+
+    const search = screen.getByRole("combobox", {
+      name: "What do you want to memorize?",
+    });
+    await userEvent.type(search, "John 3:16");
+
+    const row = await screen.findByRole("link", {
+      name: "John 3:16 Up next in Sample · Mix Start now",
+    });
+    const learnHref =
+      "/memory/learn?book=John&chapter=3&startVerse=16&endVerse=16&return=%2Fmemory";
+    expect(row).toHaveAttribute("href", learnHref);
+    expect(screen.queryByText("Memorizing")).not.toBeInTheDocument();
+
+    await userEvent.type(search, "{Enter}");
+    expect(mocks.navigate).toHaveBeenCalledWith({ href: learnHref });
+    expect(mocks.openSheet).not.toHaveBeenCalled();
+  });
+
+  it("offers Start for a verse added but never practiced", async () => {
+    mocks.queryResults.set("memoryHome.today", WORK_TODAY);
+    mocks.queryByArgs.set(
+      "verseMemory.memorizeStatus",
+      verseStatusFor(
+        { book: "Psalms", chapter: 121, startVerse: 1 },
+        { progress: "notStarted" },
+      ),
+    );
+    renderPage();
+
+    await userEvent.type(
+      screen.getByRole("combobox", { name: "What do you want to memorize?" }),
+      "Psalm 121:1",
+    );
+
+    expect(
+      await screen.findByRole("link", {
+        name: "Psalm 121:1 Added · not started yet Start",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/memory/learn?book=Psalms&chapter=121&startVerse=1&endVerse=1&return=%2Fmemory",
+    );
+    expect(screen.queryByText("Memorizing")).not.toBeInTheDocument();
+  });
+
   it("marks a search already being memorized and opens its drawer", async () => {
     mocks.queryResults.set("memoryHome.today", WORK_TODAY);
     mocks.queryByArgs.set("verseMemory.memorizeStatus", (args) => {
@@ -755,6 +836,7 @@ describe("TodayPage", () => {
               verseRefId: "john11",
               span: { book: "John", chapter: 1, startVerse: 1, endVerse: 1 },
             },
+            progress: "learning",
             allHearted: true,
           }
         : { state: "none", allHearted: false };

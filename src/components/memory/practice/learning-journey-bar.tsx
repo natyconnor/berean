@@ -65,6 +65,12 @@ export function LearningJourneyBar({
   );
   const pct = Math.round(fraction * 100);
   const ariaKind = graduated ? "Progress to mastered" : "Learning journey";
+  const goal =
+    status === "mastered"
+      ? `${pct}%`
+      : graduated
+        ? `${pct}% to mastered`
+        : `${pct}% learned`;
 
   return (
     <div
@@ -85,7 +91,7 @@ export function LearningJourneyBar({
           {label}
         </span>
         <span className="text-xs tabular-nums text-muted-foreground">
-          {pct}%
+          {goal}
         </span>
       </div>
       <div

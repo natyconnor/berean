@@ -36,12 +36,14 @@ export function MemoryDrawer({
   open,
   onOpenChange,
   onOpenAutoFocus,
+  onCloseAutoFocus,
   contentRef,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenAutoFocus?: ComponentProps<typeof SheetContent>["onOpenAutoFocus"];
+  onCloseAutoFocus?: ComponentProps<typeof SheetContent>["onCloseAutoFocus"];
   contentRef?: Ref<HTMLDivElement>;
   children: ReactNode;
 }) {
@@ -55,6 +57,7 @@ export function MemoryDrawer({
         showCloseButton={false}
         overlayClassName="bg-[rgb(20_14_6/0.36)]"
         onOpenAutoFocus={onOpenAutoFocus}
+        onCloseAutoFocus={onCloseAutoFocus}
         onEscapeKeyDown={(event) => {
           if (escapeHandledLocally(event.target)) event.preventDefault();
         }}

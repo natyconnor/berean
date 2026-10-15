@@ -33,7 +33,7 @@ import {
 } from "./passage-frontier";
 import type { PassagePiece } from "./passage-pieces";
 import { spanInPackScope, type PassageRange } from "./passage-range";
-import { formatVerseRef } from "./verse-ref-utils";
+import { formatVerseRefTitle } from "./verse-ref-utils";
 import type { VerseScope } from "./verse-scope-match";
 
 /**
@@ -445,7 +445,7 @@ function packGoal<P extends string, V extends string>(
     if (reviewDue) {
       reviewsDue.push({
         verseRefId: member.verseRefId,
-        label: formatVerseRef(member),
+        label: formatVerseRefTitle(member),
       });
     }
   }
@@ -471,7 +471,7 @@ function packGoal<P extends string, V extends string>(
     createdAt: pack.createdAt,
     lastActivityAt: Math.max(pack.createdAt, lastPracticedAt ?? 0),
     lastPracticedAt,
-    memberLabels: members.map((member) => formatVerseRef(member)),
+    memberLabels: members.map((member) => formatVerseRefTitle(member)),
   };
 }
 
@@ -482,7 +482,7 @@ function verseGoal<V extends string>(
   return {
     kind: "verse",
     verseRefId: verse.verseRefId,
-    title: formatVerseRef(verse),
+    title: formatVerseRefTitle(verse),
     book: verse.book,
     chapter: verse.chapter,
     startVerse: verse.startVerse,
@@ -530,6 +530,11 @@ export function goalLearnDaysLeft(goal: GoalCard): number {
 /** "On track for {date}" assumes a daily session; after this many idle days it reads "to go". */
 const ON_TRACK_IDLE_DAYS = 2;
 
+/** Whether learning can still move today, so today counts toward the finish. */
+function learnsToday(goal: GoalCard): boolean {
+  return goal.kind === "pack" ? goal.learningToday > 0 : goal.hasWorkToday;
+}
+
 /**
  * How learning is pacing: "learn it in about 4 days" before the first
  * session, "about 4 days to go" once practice has paused for 2 or more days,
@@ -552,7 +557,7 @@ export function goalLearnPace(
     return `${formatLearnDuration(days, { short: true })} to go`;
   }
   const finish = new Date(now);
-  finish.setDate(finish.getDate() + days - 1);
+  finish.setDate(finish.getDate() + days - (learnsToday(goal) ? 1 : 0));
   return `on track for ${formatShortDate(finish, timeZone)}`;
 }
 

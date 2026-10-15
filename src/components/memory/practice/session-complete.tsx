@@ -14,7 +14,7 @@ import {
 } from "@/lib/memory-copy";
 import { isReviewPhase, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import { ExtraPracticeLink } from "./extra-practice-link";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
@@ -107,7 +107,7 @@ export function SessionCompleteRows({
             className="flex items-center justify-between gap-3 px-3 py-2.5"
           >
             <p className="min-w-0 truncate text-sm font-medium">
-              {formatVerseRef(verse.reference)}
+              {formatVerseRefTitle(verse.reference)}
             </p>
             <div className="-my-1 -mr-1.5 flex shrink-0 items-center gap-1">
               <span

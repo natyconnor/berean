@@ -223,7 +223,7 @@ describe("primary action", () => {
 
   it("pack with learning and reviews today: Continue · N verses today runs both", () => {
     const goal = packGoal(MERCED_MEMBERS);
-    expect(packDetailActions(goal, MERCED_MEMBERS, NOW, TZ)).toEqual({
+    expect(packDetailActions(goal, NOW, TZ)).toEqual({
       main: {
         kind: "session",
         emphasis: "primary",
@@ -239,9 +239,10 @@ describe("primary action", () => {
 
   it("pack with only reviews today goes to review", () => {
     const members = [member("luke")];
-    expect(
-      packDetailActions(packGoal(members), members, NOW, TZ).main,
-    ).toMatchObject({ label: "Continue · 1 verse today", session: "review" });
+    expect(packDetailActions(packGoal(members), NOW, TZ).main).toMatchObject({
+      label: "Continue · 1 verse today",
+      session: "review",
+    });
   });
 
   it("pack with only learning today goes to the pack's learn session", () => {
@@ -254,21 +255,23 @@ describe("primary action", () => {
         dueAt: NOW - HOUR_MS,
       }),
     ];
-    expect(
-      packDetailActions(packGoal(members), members, NOW, TZ).main,
-    ).toMatchObject({ label: "Continue · 2 verses today", session: "learn" });
+    expect(packDetailActions(packGoal(members), NOW, TZ).main).toMatchObject({
+      label: "Continue · 2 verses today",
+      session: "learn",
+    });
   });
 
   it("counts only the pack's paced Up-next verses in Continue", () => {
     const upNext = ["a", "b", "c", "d", "e"].map((id) =>
       member(id, { status: "new", learnStage: 0, intervalDays: 0 }),
     );
-    expect(
-      packDetailActions(packGoal(upNext), upNext, NOW, TZ).main,
-    ).toMatchObject({ label: "Continue · 3 verses today", session: "learn" });
+    expect(packDetailActions(packGoal(upNext), NOW, TZ).main).toMatchObject({
+      label: "Continue · 3 verses today",
+      session: "learn",
+    });
   });
 
-  it("pack, nothing today: Practice anytime with the next step", () => {
+  it("pack, nothing today: Practice anytime with when the pack is next up", () => {
     const members = [
       member("luke", { dueAt: Date.UTC(2026, 9, 15, 12) }),
       member("josh", {
@@ -278,7 +281,7 @@ describe("primary action", () => {
         dueAt: NOW + 12 * HOUR_MS,
       }),
     ];
-    expect(packDetailActions(packGoal(members), members, NOW, TZ)).toEqual({
+    expect(packDetailActions(packGoal(members), NOW, TZ)).toEqual({
       main: {
         kind: "session",
         emphasis: "secondary",
@@ -287,7 +290,7 @@ describe("primary action", () => {
         tooltip: "Go over anything you've memorized, any time.",
       },
       practice: false,
-      note: "Nice. Tomorrow you'll try it with blanks.",
+      note: "Next up tomorrow.",
     });
   });
 
@@ -300,10 +303,10 @@ describe("primary action", () => {
         dueAt: NOW + 12 * HOUR_MS,
       }),
     ];
-    expect(packDetailActions(packGoal(members), members, NOW, TZ)).toEqual({
+    expect(packDetailActions(packGoal(members), NOW, TZ)).toEqual({
       main: null,
       practice: false,
-      note: "Great. Tomorrow you'll say it from memory.",
+      note: "Next up tomorrow.",
     });
   });
 
@@ -317,7 +320,7 @@ describe("primary action", () => {
         tzOffsetMinutes: 0,
       }),
     ).toBeNull();
-    expect(packDetailActions(null, [], NOW, TZ)).toEqual({
+    expect(packDetailActions(null, NOW, TZ)).toEqual({
       main: null,
       practice: false,
       note: null,

@@ -27,17 +27,24 @@ export const UP_NEXT_TOMORROW_LABEL = "Up next tomorrow";
 
 export type LearnActionLabel = "Learn" | "Continue learning";
 
-/** "Continue learning" once a verse has any learning progress, else "Learn". */
-export function learnActionLabel(progress: {
+export type LearningProgress = {
   learnStage: number;
   stageReps?: number;
   lastReviewedAt?: number;
-}): LearnActionLabel {
-  const started =
+};
+
+/** A verse has started: a step passed, a rep banked, or any attempt logged. */
+export function hasLearningProgress(progress: LearningProgress): boolean {
+  return (
     progress.learnStage > 0 ||
     (progress.stageReps ?? 0) > 0 ||
-    progress.lastReviewedAt !== undefined;
-  return started ? "Continue learning" : "Learn";
+    progress.lastReviewedAt !== undefined
+  );
+}
+
+/** "Continue learning" once a verse has any learning progress, else "Learn". */
+export function learnActionLabel(progress: LearningProgress): LearnActionLabel {
+  return hasLearningProgress(progress) ? "Continue learning" : "Learn";
 }
 
 export const SESSION_COMPLETE_TITLE = "That's today's step.";

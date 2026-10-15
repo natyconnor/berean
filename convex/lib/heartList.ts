@@ -16,7 +16,8 @@ import { findVerseMemory, isInMemory } from "./verseMemory";
  * one item however many chapters it spans: `passage` is set and the span is
  * its first chapter's heart. `inMemory` is true while the user is memorizing
  * it: the verse is in Memory, it is a passage heart, or an active passage
- * contains it.
+ * contains it. `upNext` is set when it is in Memory only as a verse waiting
+ * its turn in a pack.
  */
 export type HeartListItem = {
   savedVerseId: Id<"savedVerses">;
@@ -27,6 +28,7 @@ export type HeartListItem = {
   endVerse: number;
   createdAt: number;
   inMemory: boolean;
+  upNext?: true;
   passage?: { packId: Id<"packs">; title: string };
 };
 
@@ -122,7 +124,7 @@ function toItem(
   { row, span }: HeartRow,
   createdAt: number,
   inMemory: boolean,
-  passage?: HeartListItem["passage"],
+  extra: Pick<HeartListItem, "passage" | "upNext"> = {},
 ): HeartListItem {
   return {
     savedVerseId: row._id,
@@ -133,7 +135,7 @@ function toItem(
     endVerse: span.endVerse,
     createdAt,
     inMemory,
-    ...(passage ? { passage } : {}),
+    ...extra,
   };
 }
 
@@ -152,18 +154,22 @@ export async function toHeartListItem(
   if (passage) {
     if (passage.anchorId !== row._id) return null;
     return toItem(passage.first, row.createdAt, true, {
-      packId: passage.packId,
-      title: passage.title,
+      passage: { packId: passage.packId, title: passage.title },
     });
   }
 
   const heart = await toHeartRow(ctx, userId, row);
   if (!heart) return null;
   const memory = await findVerseMemory(ctx, userId, row.verseRefId);
-  const inMemory =
-    (memory !== null && isInMemory(memory)) ||
-    spanCoveredBy(heart.span, passages.spans);
-  return toItem(heart, row.createdAt, inMemory);
+  const verseInMemory = memory !== null && isInMemory(memory);
+  const inPassage = spanCoveredBy(heart.span, passages.spans);
+  const upNext = verseInMemory && memory.status === "new" && !inPassage;
+  return toItem(
+    heart,
+    row.createdAt,
+    verseInMemory || inPassage,
+    upNext ? { upNext: true } : {},
+  );
 }
 
 /**

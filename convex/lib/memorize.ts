@@ -10,18 +10,22 @@ import { initialSchedule } from "../../src/lib/memory-scheduler";
 import {
   carriedOverVerses,
   MEMORIZE_MAX_PACK_SPANS,
+  memorizeProgress,
   passageRelation,
   sameSpanSet,
   spanKey,
   uniqueSpans,
   type CarriedOverVerse,
+  type MemorizeProgress,
   type VerseProgressSpan,
 } from "../../src/lib/memorize-status";
 import {
   planMemorizeTransition,
   type MemorizeSpanResult,
 } from "../../src/lib/memorize-transition";
+import { spanInPackScope } from "../../src/lib/passage-range";
 import { loadPackMembers, loadPackMembershipIndex } from "./packs";
+import { loadPassagePackIds } from "./passageDue";
 import { deletePassageAndReviews, findPassageByPackId } from "./passageMemory";
 import { loadChapterHeartSpans } from "./savedVerses";
 import {
@@ -72,6 +76,40 @@ export async function stopMemorizingPack(
     await ctx.db.delete(row._id);
   }
   await ctx.db.delete(pack._id);
+}
+
+/**
+ * Verses leaving `packId` that never started and that no other pack lists
+ * leave Memory; their hearts stay. Started verses keep their place and
+ * progress. Returns the verses taken out.
+ */
+export async function releaseUnstartedVerses(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  packId: Id<"packs">,
+  verseRefIds: readonly Id<"verseRefs">[],
+  now: number,
+): Promise<Id<"verseRefs">[]> {
+  if (verseRefIds.length === 0) return [];
+  const membership = await loadPackMembershipIndex(
+    ctx,
+    userId,
+    verseRefIds.length === 1 ? verseRefIds[0] : undefined,
+  );
+  const released: Id<"verseRefs">[] = [];
+  for (const verseRefId of verseRefIds) {
+    const memory = await findVerseMemory(ctx, userId, verseRefId);
+    if (!memory || !isInMemory(memory) || memory.status !== "new") continue;
+    const ref = await ctx.db.get(verseRefId);
+    if (!ref || ref.userId !== userId) continue;
+    const otherPacks = membership
+      .packIdsFor(verseRefId, ref)
+      .filter((id) => id !== packId);
+    if (otherPacks.length > 0) continue;
+    await stopMemorizingVerse(ctx, userId, verseRefId, now);
+    released.push(verseRefId);
+  }
+  return released;
 }
 
 /**
@@ -212,6 +250,10 @@ export type MemorizeStatus = {
   title?: string;
   destination?: MemorizeDestination;
   allHearted: boolean;
+  /** Where the verse stands, when `memorizing` is the exact verse. */
+  progress?: MemorizeProgress;
+  /** The pack an `upNext` verse waits in, when one lists it. */
+  upNextPackName?: string;
   /**
    * Verses inside the target already in Memory on their own whose progress a
    * new passage would keep. Only from {@link loadMemorizeStartStatus}, and
@@ -228,6 +270,12 @@ type ChapterHearts = { spans: VerseSpan[]; passageIds: Id<"passageMemory">[] };
 /** A passage the user memorizes: its pack and one span per chapter. */
 type MemorizedPassage = { pack: Doc<"packs">; spans: VerseSpan[] };
 
+/** A verse in Memory on its own, with its schedule. */
+type InMemoryVerse = {
+  verseRefId: Id<"verseRefs">;
+  memory: Doc<"verseMemory">;
+};
+
 /**
  * The reads behind {@link loadMemorizeStatus}, cached so one query can check
  * many targets without reading a chapter's hearts or a passage twice.
@@ -235,13 +283,21 @@ type MemorizedPassage = { pack: Doc<"packs">; spans: VerseSpan[] };
 export type MemorizeStatusReader = {
   chapterHearts(book: string, chapter: number): Promise<ChapterHearts>;
   passage(passageId: Id<"passageMemory">): Promise<MemorizedPassage | null>;
-  /** The verse ref for exactly this span, when that verse is in Memory. */
-  inMemoryVerseRefId(span: VerseSpan): Promise<Id<"verseRefs"> | null>;
+  /** The verse for exactly this span, when it is in Memory. */
+  inMemoryVerse(span: VerseSpan): Promise<InMemoryVerse | null>;
   /** Verses in Memory in one chapter, with their progress. */
   chapterMemoryVerses(
     book: string,
     chapter: number,
   ): Promise<VerseProgressSpan[]>;
+  /**
+   * The first pack that lists this verse: a custom pack by its `packVerses`
+   * row, else a scope pack (not in passage mode) whose scope holds it.
+   */
+  firstPackName(
+    verseRefId: Id<"verseRefs">,
+    span: VerseSpan,
+  ): Promise<string | null>;
 };
 
 function cached<K, V>(
@@ -265,8 +321,10 @@ export function memorizeStatusReader(
     Id<"passageMemory">,
     Promise<MemorizedPassage | null>
   >();
-  const verses = new Map<string, Promise<Id<"verseRefs"> | null>>();
+  const verses = new Map<string, Promise<InMemoryVerse | null>>();
   const memoryVerses = new Map<string, Promise<VerseProgressSpan[]>>();
+  const packNames = new Map<Id<"verseRefs">, Promise<string | null>>();
+  let scopePacks: Promise<Doc<"packs">[]> | undefined;
   return {
     chapterHearts: (book, chapter) =>
       cached(hearts, `${book}|${chapter}`, () =>
@@ -276,15 +334,69 @@ export function memorizeStatusReader(
       cached(passages, passageId, () =>
         loadMemorizedPassage(ctx, userId, passageId),
       ),
-    inMemoryVerseRefId: (span) =>
-      cached(verses, spanKey(span), () =>
-        loadInMemoryVerseRefId(ctx, userId, span),
-      ),
+    inMemoryVerse: (span) =>
+      cached(verses, spanKey(span), () => loadInMemoryVerse(ctx, userId, span)),
     chapterMemoryVerses: (book, chapter) =>
       cached(memoryVerses, `${book}|${chapter}`, () =>
         loadChapterMemoryVerses(ctx, userId, book, chapter),
       ),
+    firstPackName: (verseRefId, span) =>
+      cached(packNames, verseRefId, async () => {
+        const custom = await loadFirstCustomPackName(ctx, userId, verseRefId);
+        if (custom !== null) return custom;
+        scopePacks ??= loadVerseScopePacks(ctx, userId);
+        const scopePack = (await scopePacks).find(
+          (pack) =>
+            pack.scope !== undefined &&
+            spanInPackScope(span, pack.scope, pack.passageRange),
+        );
+        return scopePack?.name ?? null;
+      }),
   };
+}
+
+/** The first custom pack whose `packVerses` rows list this verse. */
+async function loadFirstCustomPackName(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+): Promise<string | null> {
+  const memberships = await ctx.db
+    .query("packVerses")
+    .withIndex("by_userId_verseRefId", (q) =>
+      q.eq("userId", userId).eq("verseRefId", verseRefId),
+    )
+    .take(MAX_CANDIDATE_PACKS);
+  for (const membership of memberships) {
+    const pack = await ctx.db.get(membership.packId);
+    if (pack && pack.userId === userId && pack.kind === "custom") {
+      return pack.name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Scope packs that list in-Memory verses by scope: not in passage mode (see
+ * `loadPackMembershipIndex`).
+ */
+async function loadVerseScopePacks(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+): Promise<Doc<"packs">[]> {
+  const [packs, passagePackIds] = await Promise.all([
+    ctx.db
+      .query("packs")
+      .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
+      .collect(),
+    loadPassagePackIds(ctx, userId),
+  ]);
+  return packs.filter(
+    (pack) =>
+      pack.kind === "scope" &&
+      pack.scope !== undefined &&
+      !passagePackIds.has(pack._id),
+  );
 }
 
 async function loadChapterMemoryVerses(
@@ -331,15 +443,15 @@ async function loadMemorizedPassage(
   return { pack, spans: passageHeartSpans(passage.pieces) };
 }
 
-async function loadInMemoryVerseRefId(
+async function loadInMemoryVerse(
   ctx: QueryCtx,
   userId: Id<"users">,
   span: VerseSpan,
-): Promise<Id<"verseRefs"> | null> {
+): Promise<InMemoryVerse | null> {
   const verseRefId = await findVerseRefId(ctx, userId, span);
   if (!verseRefId) return null;
   const memory = await findVerseMemory(ctx, userId, verseRefId);
-  return memory && isInMemory(memory) ? verseRefId : null;
+  return memory && isInMemory(memory) ? { verseRefId, memory } : null;
 }
 
 /** Heart spans in one chapter and the passages whose hearts are among them. */
@@ -417,7 +529,9 @@ async function findCustomPackWithSpans(
  * Whether the user is already memorizing a target (deduped spans, see
  * `memorizeTargetSpans`):
  * - `memorizing` a passage whose verses equal the target, the exact verse, or
- *   (several spans) a custom pack made of exactly those spans
+ *   (several spans) a custom pack made of exactly those spans. The exact
+ *   verse also says where it stands (`progress`) and, when Up next, which
+ *   pack it waits in (`upNextPackName`).
  * - `partOf` a passage that contains the target
  * - `overlaps` a passage that shares verses with the target without
  *   containing it
@@ -470,13 +584,18 @@ export async function loadMemorizeStatus(
 
   if (spans.length === 1) {
     const span = spans[0];
-    const verseRefId = await reader.inMemoryVerseRefId(span);
-    if (verseRefId) {
+    const verse = await reader.inMemoryVerse(span);
+    if (verse) {
+      const progress = memorizeProgress(verse.memory);
+      const upNextPackName =
+        progress === "upNext"
+          ? await reader.firstPackName(verse.verseRefId, span)
+          : null;
       return {
         state: "memorizing",
         destination: {
           kind: "verse",
-          verseRefId,
+          verseRefId: verse.verseRefId,
           span: {
             book: span.book,
             chapter: span.chapter,
@@ -484,6 +603,8 @@ export async function loadMemorizeStatus(
             endVerse: span.endVerse,
           },
         },
+        progress,
+        ...(upNextPackName !== null ? { upNextPackName } : {}),
         allHearted,
       };
     }

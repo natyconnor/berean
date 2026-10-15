@@ -16,7 +16,7 @@ import {
 } from "./passage-range";
 import { AUTO_HEART_MAX_CHAPTERS } from "./scope-chapter-count";
 import type { FullScope } from "./scope-equality";
-import { formatBookChapter, formatVerseRef } from "./verse-ref-utils";
+import { formatBookChapter, formatVerseRefTitle } from "./verse-ref-utils";
 import { getMemoryPreset } from "../../shared/memory-presets";
 
 export type { PassageRange } from "./passage-range";
@@ -84,8 +84,7 @@ export function formatChapterSpanTitle(
 
 /** "Romans 8:28", "Philippians 2:1–11". */
 export function formatSpanTitle(span: VerseSpan): string {
-  if (span.startVerse === span.endVerse) return formatVerseRef(span);
-  return `${formatBookChapter(span.book, span.chapter)}:${span.startVerse}${EN_DASH}${span.endVerse}`;
+  return formatVerseRefTitle(span);
 }
 
 /** "Psalm 23" when the span is the whole chapter, else {@link formatSpanTitle}. */

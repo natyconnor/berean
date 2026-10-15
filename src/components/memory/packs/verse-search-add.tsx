@@ -65,11 +65,14 @@ export function VerseSearchAdd({
   const heartSpans = hearts.results
     .filter((item) => item.passage === undefined)
     .map(toSpan);
-  const heartCount = `${heartSpans.length}${
-    hearts.status === "CanLoadMore" || hearts.status === "LoadingMore"
-      ? "+"
-      : ""
-  }`;
+  const heartCount =
+    hearts.status === "LoadingFirstPage"
+      ? null
+      : `${heartSpans.length}${
+          hearts.status === "CanLoadMore" || hearts.status === "LoadingMore"
+            ? "+"
+            : ""
+        }`;
 
   const rowProps = (span: VerseSpan) => {
     const key = spanKey(span);
@@ -116,7 +119,9 @@ export function VerseSearchAdd({
             >
               {option === "search"
                 ? "Search"
-                : `From your hearts · ${heartCount}`}
+                : heartCount === null
+                  ? "From your hearts"
+                  : `From your hearts · ${heartCount}`}
             </button>
           ))}
         </div>

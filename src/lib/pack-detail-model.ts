@@ -12,6 +12,7 @@ import {
   type PackGoalCard,
   type PassageGoalCard,
 } from "./memory-goals";
+import { formatNextReviewDay } from "./memory-today";
 import {
   isDueForReview,
   isLearningLocked,
@@ -28,7 +29,6 @@ import {
   formatMonthOrDate,
   formatShortDate,
   masteryProgress,
-  nextStepCopy,
   projectedFinishDate,
   projectedMasteryDate,
 } from "./memorize-plan";
@@ -307,18 +307,6 @@ export function passageDetailActions(
   };
 }
 
-/** The member whose next step comes soonest, among those that have started. */
-function soonestStarted(
-  members: readonly PackDetailMember[],
-): PackDetailMember | null {
-  let soonest: PackDetailMember | null = null;
-  for (const member of members) {
-    if (member.status === "new") continue;
-    if (soonest === null || member.dueAt < soonest.dueAt) soonest = member;
-  }
-  return soonest;
-}
-
 function packTodaySession(goal: PackGoalCard): PackDetailSession {
   const reviews = goal.reviewsDue.length;
   if (goal.learningToday > 0) return reviews > 0 ? "today" : "learn";
@@ -332,7 +320,6 @@ function packTodaySession(goal: PackGoalCard): PackDetailSession {
  */
 export function packDetailActions(
   goal: PackGoalCard | null,
-  members: readonly PackDetailMember[],
   now: number,
   timeZone?: string,
 ): PackDetailActions {
@@ -352,11 +339,11 @@ export function packDetailActions(
     };
   }
 
-  const next = soonestStarted(members);
+  const when = formatNextReviewDay(goal.nextDueAt, now, timeZone);
   return {
     main: goal.learned > 0 ? PRACTICE_ACTION : null,
     practice: false,
-    note: next ? nextStepCopy(next, now, timeZone) : null,
+    note: when ? `Next up ${when}.` : null,
   };
 }
 

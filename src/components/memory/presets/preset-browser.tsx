@@ -57,29 +57,31 @@ export function PresetBrowser() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="shrink-0 border-b px-5 py-4">
-        <Link
-          to="/memory"
-          aria-label={`Back to ${TODAY_LABEL}`}
-          className="-ml-1.5 mb-1 inline-flex min-h-11 items-center gap-0.5 rounded-md pr-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground sm:min-h-7"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden />
-          {TODAY_LABEL}
-        </Link>
-        <h1 className="text-lg font-semibold tracking-tight">
-          {SUGGESTIONS_LABEL}
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Popular passages and verse packs to memorize.
-        </p>
-        <Input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search passages and packs"
-          className="mt-3 max-w-md"
-          aria-label="Search suggestions"
-        />
+      <header className="shrink-0 border-b py-4">
+        <div className="mx-auto max-w-3xl px-5">
+          <Link
+            to="/memory"
+            aria-label={`Back to ${TODAY_LABEL}`}
+            className="-ml-1.5 mb-1 inline-flex min-h-11 items-center gap-0.5 rounded-md pr-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground sm:min-h-7"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+            {TODAY_LABEL}
+          </Link>
+          <h1 className="text-lg font-semibold tracking-tight">
+            {SUGGESTIONS_LABEL}
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Popular passages and verse packs to memorize.
+          </p>
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search passages and packs"
+            className="mt-3 max-w-md"
+            aria-label="Search suggestions"
+          />
+        </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-3xl space-y-10 px-5 pt-6 pb-24">
@@ -105,6 +107,8 @@ export function PresetBrowser() {
                         );
                         const existing = row?.packId;
                         const verseCount = chapterPresetVerseCount(preset);
+                        const range = formatChapterRange(preset);
+                        const verses = `${verseCount} ${verseCount === 1 ? "verse" : "verses"}`;
                         return (
                           <li
                             key={preset.id}
@@ -115,12 +119,13 @@ export function PresetBrowser() {
                                 {preset.title}
                               </span>
                               <span className="block text-xs text-muted-foreground">
-                                {formatChapterRange(preset)} · {verseCount}{" "}
-                                {verseCount === 1 ? "verse" : "verses"}
+                                {range === preset.title
+                                  ? verses
+                                  : `${range} · ${verses}`}
                               </span>
                             </span>
                             {existing ? (
-                              <Button asChild size="sm" variant="outline">
+                              <Button asChild size="sm" variant="ghost">
                                 <Link
                                   to="/memory/$packId"
                                   params={{ packId: existing }}
@@ -132,6 +137,7 @@ export function PresetBrowser() {
                             ) : (
                               <Button
                                 size="sm"
+                                variant="outline"
                                 className="gap-1.5"
                                 onClick={() => memorizeChapter(preset)}
                               >
@@ -215,6 +221,7 @@ export function PresetBrowser() {
                           <Button
                             asChild
                             size="sm"
+                            variant="outline"
                             className="shrink-0 gap-1.5"
                           >
                             <Link

@@ -1,6 +1,6 @@
 import type { VerseSpan } from "./hearted-verse-coverage";
 import { displayBookName } from "./bible-books";
-import { formatVerseRef } from "./verse-ref-utils";
+import { formatVerseRefTitle } from "./verse-ref-utils";
 
 /** Most hearts `savedVerses.listNotMemorizing` returns. */
 export const NOT_MEMORIZING_MAX_LIMIT = 30;
@@ -55,7 +55,7 @@ type ListedHeart = VerseSpan & { passage?: { title: string } };
 export function heartListLabel(item: ListedHeart): string {
   return item.passage
     ? `${item.passage.title} · passage`
-    : formatVerseRef(item);
+    : formatVerseRefTitle(item);
 }
 
 /**

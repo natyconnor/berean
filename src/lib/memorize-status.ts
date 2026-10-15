@@ -3,6 +3,7 @@ import {
   spansOverlap,
   type VerseSpan,
 } from "./hearted-verse-coverage";
+import { hasLearningProgress, type LearningProgress } from "./memory-copy";
 import { isReviewPhase, type MemoryStatus } from "./memory-scheduler";
 
 /**
@@ -64,6 +65,38 @@ export function passageRelation(
   const coverage = passageCoverage(target, passageSpans);
   if (coverage) return coverage;
   return spansOverlapAny(target, passageSpans) ? "overlaps" : null;
+}
+
+/**
+ * Where a verse in Memory stands:
+ * - `upNext`: waiting its turn in a pack (`new`)
+ * - `notStarted`: learning, but no step taken yet (see `hasLearningProgress`)
+ * - `learning`, `memorized` (`reviewing`), `mastered`
+ */
+export type MemorizeProgress =
+  "upNext" | "notStarted" | "learning" | "memorized" | "mastered";
+
+/** {@link MemorizeProgress} for a verse's `verseMemory` row. */
+export function memorizeProgress(
+  memory: LearningProgress & { status: MemoryStatus },
+): MemorizeProgress {
+  switch (memory.status) {
+    case "new":
+      return "upNext";
+    case "learning":
+      return hasLearningProgress(memory) ? "learning" : "notStarted";
+    case "reviewing":
+      return "memorized";
+    case "mastered":
+      return "mastered";
+  }
+}
+
+/** In Memory without a step taken: Up next, or added but never practiced. */
+export function isUnstartedProgress(
+  progress: MemorizeProgress | undefined,
+): progress is "upNext" | "notStarted" {
+  return progress === "upNext" || progress === "notStarted";
 }
 
 /** Identity of an exact span ("John|14|27|27"). */

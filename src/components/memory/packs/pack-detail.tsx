@@ -11,6 +11,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache";
@@ -92,7 +93,7 @@ import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
 import { cn } from "@/lib/utils";
 import {
   formatBookChapter,
-  formatVerseRef,
+  formatVerseRefTitle,
   toPassageId,
 } from "@/lib/verse-ref-utils";
 import type { PassageRange } from "@/lib/passage-range";
@@ -244,7 +245,7 @@ function PackDetailContent({
   });
   const actions = passageGoal
     ? passageDetailActions(passageGoal, now, timeZone)
-    : packDetailActions(packGoal, members, now, timeZone);
+    : packDetailActions(packGoal, now, timeZone);
   const progress: PackDetailProgress | null = passageGoal
     ? passageDetailProgress(passageGoal, now, timeZone)
     : packGoal
@@ -287,7 +288,7 @@ function PackDetailContent({
           members={members}
           now={now}
           reciteHref={sessionHref("review")}
-          onStopped={frame.exit}
+          onRemoved={frame.exit}
         />
       }
     >
@@ -717,7 +718,7 @@ function usePackEditor(pack: Pack, members: Member[]) {
     const ids = moveItem(ordered, from, to).map((m) => m.verseRefId);
     setLocalOrder(ids);
     setAnnouncement(
-      moveAnnouncement(formatVerseRef(member), to, ordered.length),
+      moveAnnouncement(formatVerseRefTitle(member), to, ordered.length),
     );
     latestMove.current += 1;
     const mine = latestMove.current;
@@ -739,7 +740,7 @@ function usePackEditor(pack: Pack, members: Member[]) {
     const id = member.verseRefId;
     if (removing.has(id)) return;
     setRemoving((current) => new Set(current).add(id));
-    const reference = formatVerseRef(member);
+    const reference = formatVerseRefTitle(member);
     void removeVerse({ id: pack._id, verseRefId: id })
       .then(
         (order) => {
@@ -909,7 +910,7 @@ function PackVerses({
       <ul className="space-y-1.5">
         {editor.ordered.map((member, index) => {
           const row = packMemberRow(member, { now, timeZone, reviewTogether });
-          const reference = formatVerseRef(member);
+          const reference = formatVerseRefTitle(member);
           const href = (session: MemorySessionKind) =>
             withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
           return (
@@ -1168,7 +1169,7 @@ function PackDetailMenu({
   members,
   now,
   reciteHref,
-  onStopped,
+  onRemoved,
 }: {
   pack: Pack;
   isPassage: boolean;
@@ -1176,26 +1177,52 @@ function PackDetailMenu({
   members: Member[];
   now: number;
   reciteHref: string;
-  onStopped: () => void;
+  onRemoved: () => void;
 }) {
   const navigate = useNavigate();
   const stopMemorizing = useMutation(api.packs.stopMemorizing);
+  const deletePack = useMutation(api.packs.remove);
   const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [togetherOpen, setTogetherOpen] = useState(false);
   const [togetherError, setTogetherError] = useState<string | null>(null);
-  const stopLock = useSubmitLock();
+  const removeLock = useSubmitLock();
   const togetherLock = useSubmitLock();
 
-  const handleStop = () =>
-    stopLock.submit(async () => {
+  // A passage is one memorized text, so it stops; a pack is only a grouping,
+  // so deleting it leaves its verses' memory alone.
+  const removal = isPassage
+    ? {
+        label: "Stop memorizing",
+        icon: <CircleStop aria-hidden />,
+        title: `Stop memorizing ${pack.name}?`,
+        description: `This clears your progress on ${pack.name}. Your heart stays.`,
+        done: `Stopped memorizing ${pack.name}.`,
+        failed: "Couldn't stop memorizing. Please try again.",
+      }
+    : {
+        label: "Delete pack",
+        icon: <Trash2 aria-hidden />,
+        title: `Delete ${pack.name}?`,
+        description:
+          "Verses you've started stay in Memory with their progress. Ones you haven't started stay in your hearts.",
+        done: `Deleted ${pack.name}.`,
+        failed: "Couldn't delete this pack. Please try again.",
+      };
+
+  const handleRemove = () =>
+    removeLock.submit(async () => {
       try {
-        await stopMemorizing({ id: pack._id, now: Date.now() });
+        if (isPassage) {
+          await stopMemorizing({ id: pack._id, now: Date.now() });
+        } else {
+          await deletePack({ id: pack._id });
+        }
         setConfirmOpen(false);
-        toast.success(`Stopped memorizing ${pack.name}.`);
-        onStopped();
+        toast.success(removal.done);
+        onRemoved();
       } catch {
-        toast.error("Couldn't stop memorizing. Please try again.");
+        toast.error(removal.failed);
       }
     });
 
@@ -1266,8 +1293,8 @@ function PackDetailMenu({
             variant="destructive"
             onSelect={() => setConfirmOpen(true)}
           >
-            <CircleStop aria-hidden />
-            Stop memorizing
+            {removal.icon}
+            {removal.label}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -1275,12 +1302,8 @@ function PackDetailMenu({
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent showCloseButton={false} className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Stop memorizing {pack.name}?</DialogTitle>
-            <DialogDescription>
-              {isPassage
-                ? `This clears your progress on ${pack.name}. Your heart stays.`
-                : "Verses that aren't in another pack leave Today. Your progress is saved if you start again."}
-            </DialogDescription>
+            <DialogTitle>{removal.title}</DialogTitle>
+            <DialogDescription>{removal.description}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
@@ -1293,10 +1316,10 @@ function PackDetailMenu({
             <Button
               type="button"
               variant="destructive"
-              loading={stopLock.pending}
-              onClick={handleStop}
+              loading={removeLock.pending}
+              onClick={handleRemove}
             >
-              Stop memorizing
+              {removal.label}
             </Button>
           </DialogFooter>
         </DialogContent>

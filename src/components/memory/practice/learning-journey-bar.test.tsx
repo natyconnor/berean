@@ -76,4 +76,29 @@ describe("LearningJourneyBar", () => {
       screen.getByLabelText(/Progress to mastered: Memorized · 50%/),
     ).toBeInTheDocument();
   });
+
+  it("says what each bar is working toward", () => {
+    const { rerender } = render(
+      <LearningJourneyBar learnStage={0} stageReps={0} status="learning" />,
+    );
+    expect(screen.getByText("0% learned")).toBeInTheDocument();
+
+    rerender(
+      <LearningJourneyBar
+        learnStage={3}
+        status="reviewing"
+        intervalDays={MASTERED_INTERVAL_DAYS / 2}
+      />,
+    );
+    expect(screen.getByText("50% to mastered")).toBeInTheDocument();
+
+    rerender(
+      <LearningJourneyBar
+        learnStage={3}
+        status="mastered"
+        intervalDays={MASTERED_INTERVAL_DAYS}
+      />,
+    );
+    expect(screen.getByText("100%")).toBeInTheDocument();
+  });
 });

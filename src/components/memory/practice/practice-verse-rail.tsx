@@ -10,7 +10,7 @@ import {
 } from "@/lib/memory-session-order";
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
-import { formatBookChapter, formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatBookChapter, formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import type { CardReference } from "../../study/study-card-model";
 import { LearningJourneyBar } from "./learning-journey-bar";
@@ -205,7 +205,7 @@ export function PracticeVerseRail({
                     );
                     const locked = verse.locked === true;
                     const label =
-                      verse.label ?? formatVerseRef(verse.reference);
+                      verse.label ?? formatVerseRefTitle(verse.reference);
                     return (
                       <motion.button
                         layout

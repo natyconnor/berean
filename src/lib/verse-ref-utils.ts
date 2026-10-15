@@ -32,6 +32,14 @@ export function formatVerseRef(ref: VerseRef): string {
   return `${book} ${ref.chapter}:${ref.startVerse}-${ref.endVerse}`;
 }
 
+/** "Romans 8:28–30": {@link formatVerseRef} with an en dash, for Memory's titles. */
+export function formatVerseRefTitle(ref: VerseRef): string {
+  if (isChapterScopeRef(ref) || ref.startVerse === ref.endVerse) {
+    return formatVerseRef(ref);
+  }
+  return `${displayBookName(ref.book)} ${ref.chapter}:${ref.startVerse}\u2013${ref.endVerse}`;
+}
+
 /** Smallest start through largest end, using the first ref's book and chapter. */
 export function unionVerseRefs(refs: readonly VerseRef[]): VerseRef | null {
   if (refs.length === 0) return null;
@@ -97,8 +105,19 @@ function buildBookAliasEntries(): Array<{ alias: string; name: string }> {
   const entries: Array<{ alias: string; name: string }> = [];
 
   const additionalAliases: Record<string, string[]> = {
+    Judges: ["Jdg"],
     Psalms: ["Psalm", "Psa", "Psm", "Pss"],
     SongOfSolomon: ["Song of Songs", "Songs", "SOS", "Canticles"],
+    Ezekiel: ["Ezk"],
+    Matthew: ["Mt"],
+    Mark: ["Mk", "Mrk"],
+    Luke: ["Lk"],
+    John: ["Jn", "Jhn"],
+    Philippians: ["Php"],
+    Philemon: ["Phm"],
+    "1John": ["1 Jn"],
+    "2John": ["2 Jn"],
+    "3John": ["3 Jn"],
     Revelation: ["Revelations", "Apocalypse"],
   };
 

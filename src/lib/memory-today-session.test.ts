@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  carryTodayProgress,
   planTodaySession,
   TODAY_QUEUE_REVIEW_LIMIT,
   todayDoneItems,
@@ -462,5 +463,33 @@ describe("todaySessionDoneLine", () => {
     expect(
       todaySessionDoneLine({ passages: [], learningSteps: 0, reviews: 0 }),
     ).toBe("Today's session is done.");
+  });
+});
+
+describe("carryTodayProgress", () => {
+  it("leaves the count alone with nothing carried", () => {
+    expect(carryTodayProgress({ done: 1, total: 4 }, 0.25, 0)).toEqual({
+      counts: { done: 1, total: 4 },
+      fraction: 0.25,
+    });
+  });
+
+  it("adds earlier items to the count and the bar", () => {
+    expect(carryTodayProgress({ done: 0, total: 5 }, 0, 8)).toEqual({
+      counts: { done: 8, total: 13 },
+      fraction: 8 / 13,
+    });
+  });
+});
+
+describe("todaySessionProgress", () => {
+  it("moves within a passage given a fractional share", () => {
+    const segments = planTodaySession({
+      passages: [PSALM_16],
+      learningVerses: 0,
+      reviews: 0,
+    });
+    expect(todaySessionProgress(segments, [0.5])).toBe(0.5);
+    expect(todaySessionCounts(segments, [0.5])).toEqual({ done: 0, total: 1 });
   });
 });

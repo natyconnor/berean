@@ -156,10 +156,33 @@ describe("MemoryLibrary filters", () => {
   it("says nothing is due today, with no extra button", () => {
     renderLibrary();
 
+    expect(screen.getByText("You're all caught up.")).toBeInTheDocument();
     expect(screen.getByText("Nothing due today.")).toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: "Memorize a verse" }),
     ).toHaveLength(1);
+  });
+
+  it("celebrates today's work once everything due is done, and can show all", async () => {
+    mocks.today = {
+      counts: { learningVerses: 0, passageSessions: 0, reviews: 0 },
+      doneToday: { learningSteps: 11, reviews: 6 },
+      nextReviewAt: NOW + DAY_MS,
+    };
+    renderLibrary();
+
+    expect(
+      screen.getByText("Nice work. You're all caught up."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "11 learning steps and 6 reviews done today. Next review tomorrow.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show all your verses" }),
+    );
+    expect(mocks.paginatedArgs.at(-1)).toEqual({ view: "all" });
   });
 
   it.each([

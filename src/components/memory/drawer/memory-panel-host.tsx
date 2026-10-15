@@ -2,6 +2,7 @@ import {
   Component,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -107,14 +108,24 @@ class PanelErrorBoundary extends Component<
 
   render() {
     if (!this.state.failed) return this.props.children;
-    return (
+    return <NotFoundPanel />;
+  }
+}
+
+/** Nothing to open, so no Open full page either. */
+function NotFoundPanel() {
+  const frame = useMemoryPanelFrame();
+  return (
+    <MemoryPanelFrameContext.Provider
+      value={{ ...frame, fullPageHref: undefined }}
+    >
       <MemoryPanelFrame title="Not found">
         <p className="py-6 text-sm text-muted-foreground">
           We couldn&apos;t open this. It may have been removed.
         </p>
       </MemoryPanelFrame>
-    );
-  }
+    </MemoryPanelFrameContext.Provider>
+  );
 }
 
 /** The drawer over Today. `panel` and `from` are `/memory`'s search params. */
@@ -146,6 +157,17 @@ export function MemoryPanelHost({
       ?.querySelector<HTMLElement>(MEMORY_PANEL_TITLE_SELECTOR)
       ?.focus({ preventScroll: true });
   }, []);
+
+  // Panels open by navigation, not a Radix trigger, so remember what had
+  // focus to hand it back on close.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const isOpen = panel !== undefined;
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const active = document.activeElement;
+    openerRef.current =
+      active instanceof HTMLElement && active !== document.body ? active : null;
+  }, [isOpen]);
 
   const lastKeyRef = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -200,6 +222,14 @@ export function MemoryPanelHost({
       onOpenAutoFocus={(event) => {
         event.preventDefault();
         focusTitle();
+      }}
+      onCloseAutoFocus={(event) => {
+        const opener = openerRef.current;
+        openerRef.current = null;
+        if (opener?.isConnected) {
+          event.preventDefault();
+          opener.focus({ preventScroll: true });
+        }
       }}
       contentRef={contentRef}
     >

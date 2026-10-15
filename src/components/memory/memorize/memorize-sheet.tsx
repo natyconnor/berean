@@ -51,6 +51,7 @@ import {
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { carriedOverSheetLine } from "@/lib/carried-over-copy";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
+import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import {
   estimateMasteryDays,
   estimateMemorizeDays,
@@ -61,7 +62,10 @@ import {
   type MemorizeMode,
   type MemorizeSize,
 } from "@/lib/memorize-plan";
-import { MEMORIZE_MAX_PACK_SPANS } from "@/lib/memorize-status";
+import {
+  isUnstartedProgress,
+  MEMORIZE_MAX_PACK_SPANS,
+} from "@/lib/memorize-status";
 import {
   memorizeTargetSpans,
   resolveMemorizeTarget,
@@ -78,6 +82,8 @@ import {
   memoryPanelFullPagePath,
   type MemoryPanel,
 } from "@/lib/memory-panel";
+import { withReturn } from "@/lib/memory-return";
+import { memoryVerseSessionHref } from "@/lib/memory-session-path";
 import { PACK_ACTIVE_LEARNING_CAP } from "@/lib/pack-pacing";
 import { cn } from "@/lib/utils";
 
@@ -140,6 +146,25 @@ function invalidMessage(
  * The facts on the plan. Learning time and mastery time stay separate. A pack
  * paces by card, so its learn time counts cards rather than verses.
  */
+/** The first verse of what's being memorized, for the explainer's samples. */
+function explainerSample(resolved: PlannedMemorize) {
+  switch (resolved.mode) {
+    case "verse":
+      return resolved.span;
+    case "pack":
+      return resolved.spans[0];
+    case "passage": {
+      const verse = resolved.range?.startVerse ?? 1;
+      return {
+        book: resolved.book,
+        chapter: resolved.startChapter,
+        startVerse: verse,
+        endVerse: verse,
+      };
+    }
+  }
+}
+
 function planFacts(resolved: PlannedMemorize) {
   const cards =
     resolved.mode === "pack" ? resolved.spans.length : resolved.verseCount;
@@ -278,9 +303,20 @@ function MemorizePanel({
   const { submit, pending: starting } = useSubmitLock();
   const [started, setStarted] = useState(false);
 
+  // A session started here returns here; from Today, without an open drawer.
+  const sessionReturnTo =
+    pathname === TODAY_PATH ? TODAY_PATH : `${pathname}${searchStr}`;
+
   const openDestination = (destination: MemorizeDestination) => {
     onClose();
     void navigate({ href: openHref(destination, pathname) });
+  };
+
+  const learnNow = (span: VerseSpan) => {
+    onClose();
+    void navigate({
+      href: withReturn(memoryVerseSessionHref("learn", span), sessionReturnTo),
+    });
   };
 
   const handleStart = () => {
@@ -302,13 +338,10 @@ function MemorizePanel({
           openDestination(result.destination);
           return;
         }
-        // The session returns here; from Today, without an open drawer.
-        const returnTo =
-          pathname === TODAY_PATH ? TODAY_PATH : `${pathname}${searchStr}`;
         onClose();
         if (result.asOneCard) toast(AS_ONE_CARD);
         void navigate({
-          href: memorizeStartHref(result.destination, returnTo),
+          href: memorizeStartHref(result.destination, sessionReturnTo),
         });
       } catch (caught) {
         setFrozen(null);
@@ -345,6 +378,65 @@ function MemorizePanel({
 
   if (state === "memorizing" && status?.destination) {
     const destination = status.destination;
+    const title = status.title ?? resolved.title;
+    const addToPack =
+      destination.kind === "verse" ? (
+        <AddToPack
+          reference={destination.span}
+          now={now}
+          className="h-11 flex-1 sm:h-9 sm:flex-none"
+        />
+      ) : null;
+
+    if (destination.kind === "verse" && isUnstartedProgress(status.progress)) {
+      const upNext = status.progress === "upNext";
+      const packName = status.upNextPackName;
+      return (
+        <PanelFrame
+          layout={layout}
+          header={
+            <PanelHeading layout={layout}>
+              {upNext
+                ? `${title} is up next${packName ? ` in ${packName}` : ""}`
+                : `You added ${title} but haven't started`}
+            </PanelHeading>
+          }
+          body={
+            <PanelDescription layout={layout}>
+              {upNext
+                ? packName
+                  ? "It starts when the pack gets to it, or start it now."
+                  : "Start it whenever you're ready."
+                : inMemory
+                  ? nextStepCopy(inMemory.memory, now)
+                  : ""}
+            </PanelDescription>
+          }
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <div className="flex gap-2">
+                {addToPack}
+                <Button
+                  variant="outline"
+                  className="h-11 flex-1 sm:h-9 sm:flex-none"
+                  onClick={() => openDestination(destination)}
+                >
+                  Open
+                </Button>
+              </div>
+              <Button
+                className="h-11 sm:h-9"
+                onClick={() => learnNow(destination.span)}
+              >
+                <GraduationCap aria-hidden />
+                {upNext ? "Start now" : "Start"}
+              </Button>
+            </div>
+          }
+        />
+      );
+    }
+
     const line =
       destination.kind === "verse"
         ? inMemory
@@ -356,19 +448,13 @@ function MemorizePanel({
         layout={layout}
         header={
           <PanelHeading layout={layout}>
-            You&apos;re memorizing {status.title ?? resolved.title}
+            You&apos;re memorizing {title}
           </PanelHeading>
         }
         body={<PanelDescription layout={layout}>{line}</PanelDescription>}
         footer={
           <FooterActions>
-            {destination.kind === "verse" ? (
-              <AddToPack
-                reference={destination.span}
-                now={now}
-                className="h-11 flex-1 sm:h-9 sm:flex-none"
-              />
-            ) : null}
+            {addToPack}
             <Button
               className="h-11 flex-1 sm:h-9 sm:flex-none"
               onClick={() => openDestination(destination)}
@@ -501,7 +587,12 @@ function MemorizePanel({
               {carriedOverLine}
             </p>
           ) : null}
-          {showExplainer ? <MemorizeExplainer mode={resolved.mode} /> : null}
+          {showExplainer ? (
+            <MemorizeExplainer
+              mode={resolved.mode}
+              sample={explainerSample(resolved)}
+            />
+          ) : null}
           {resolved.mode === "pack" ? (
             <div className="space-y-1.5">
               <label htmlFor={nameId} className="text-sm font-medium">

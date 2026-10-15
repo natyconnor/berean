@@ -23,7 +23,7 @@ import {
   type PassageSessionPhase,
   type PassageSessionState,
 } from "@/lib/passage-session";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import type { PassageView } from "./passage-session-types";
 
@@ -119,7 +119,7 @@ const PICK_UP_CUE_WORDS = 6;
 export type RopeStartOverride = "rehearsal" | "section" | "beginning";
 
 export function pieceCardTitle(piece: PassagePiece): string {
-  return formatVerseRef({
+  return formatVerseRefTitle({
     book: piece.book,
     chapter: piece.chapter,
     startVerse: piece.startVerse,
@@ -308,7 +308,7 @@ export function windowTitle(
   if (!first) return packName;
   if (!last || first === last) return pieceCardTitle(first);
   if (first.book === last.book && first.chapter === last.chapter) {
-    return formatVerseRef({
+    return formatVerseRefTitle({
       book: first.book,
       chapter: first.chapter,
       startVerse: first.startVerse,

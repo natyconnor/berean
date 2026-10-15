@@ -26,12 +26,16 @@ import {
   memorizeSearch,
   type MemorizeSearchResult,
 } from "@/lib/memorize-search";
+import { isUnstartedProgress } from "@/lib/memorize-status";
 import {
   memorizeTargetSpans,
   resolveMemorizeTarget,
 } from "@/lib/memorize-target";
 import { memorizeTitleLabel } from "@/lib/memory-copy";
 import { memoryPanelDrawerHref } from "@/lib/memory-panel";
+import { withReturn } from "@/lib/memory-return";
+import { memoryVerseSessionHref } from "@/lib/memory-session-path";
+import { TODAY_RETURN } from "@/lib/today-goal-card";
 import { cn } from "@/lib/utils";
 import {
   MEMORIZE_SUGGESTION_POOL,
@@ -118,25 +122,54 @@ function destinationHref(
   );
 }
 
-type OpenableMatch =
+type MatchAction =
   | { state: "memorizing"; href: string }
-  | { state: "partOf"; href: string; container: string };
+  | { state: "partOf"; href: string; container: string }
+  | { state: "upNext"; href: string; packName?: string }
+  | { state: "notStarted"; href: string };
 
 /**
- * The drawer to open for a match already being memorized, or inside a
- * passage that is. `null` keeps Memorize, which opens the sheet; the sheet
- * explains an overlap.
+ * What a match already in Memory does: a verse with no step taken yet
+ * starts its learn session (back to Today); anything else being memorized,
+ * or inside a passage that is, opens its drawer. `null` keeps Memorize,
+ * which opens the sheet; the sheet explains an overlap.
  */
-function openableMatch(
-  status: MemorizeStatus | undefined,
-): OpenableMatch | null {
+function matchAction(status: MemorizeStatus | undefined): MatchAction | null {
   if (!status?.destination) return null;
-  const href = destinationHref(status.destination);
-  if (status.state === "memorizing") return { state: "memorizing", href };
+  const { destination } = status;
+  if (status.state === "memorizing") {
+    if (destination.kind === "verse" && isUnstartedProgress(status.progress)) {
+      const href = withReturn(
+        memoryVerseSessionHref("learn", destination.span),
+        TODAY_RETURN,
+      );
+      return status.progress === "upNext"
+        ? { state: "upNext", href, packName: status.upNextPackName }
+        : { state: "notStarted", href };
+    }
+    return { state: "memorizing", href: destinationHref(destination) };
+  }
   if (status.state === "partOf") {
-    return { state: "partOf", href, container: status.title ?? "a passage" };
+    return {
+      state: "partOf",
+      href: destinationHref(destination),
+      container: status.title ?? "a passage",
+    };
   }
   return null;
+}
+
+function matchDetail(action: MatchAction): string | null {
+  switch (action.state) {
+    case "upNext":
+      return action.packName ? `Up next in ${action.packName}` : "Up next";
+    case "notStarted":
+      return "Added · not started yet";
+    case "partOf":
+      return `Part of ${action.container}`;
+    case "memorizing":
+      return null;
+  }
 }
 
 /** `memorizeStatus` for the match once typing pauses; `undefined` until then. */
@@ -171,8 +204,8 @@ function previewSpans(result: MemorizeSearchResult): VerseSpan[] | null {
 
 /**
  * A labelled reference search. Partial text suggests books, chapters, and
- * verses; a match opens the Memorize sheet, or its drawer when it is already
- * being memorized.
+ * verses; a match opens the Memorize sheet, its drawer when it is already
+ * being memorized, or its first step when it is in Memory but not started.
  */
 export function MemorizeSearch({
   label,
@@ -205,13 +238,13 @@ export function MemorizeSearch({
     result.kind === "noMatch" &&
     settledQuery === query &&
     autocomplete.suggestions.length === 0;
-  const openable = openableMatch(useMatchStatus(query, result));
+  const action = matchAction(useMatchStatus(query, result));
   const spans = previewSpans(result);
 
   const openMatch = () => {
     if (result.kind !== "match") return;
-    if (openable) {
-      void navigate({ href: openable.href });
+    if (action) {
+      void navigate({ href: action.href });
     } else {
       sheet.open(result.target);
     }
@@ -273,36 +306,8 @@ export function MemorizeSearch({
         ) : null}
       </div>
       <div aria-live="polite">
-        {result.kind === "match" && openable ? (
-          <InternalLink
-            href={openable.href}
-            className={cn(matchRowClassName, "bg-card hover:bg-accent")}
-          >
-            <Brain aria-hidden className="size-4 shrink-0 text-primary" />
-            <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold">
-                {result.title}
-                {openable.state === "memorizing" ? (
-                  <>
-                    {" "}
-                    <MemorizingBadge />
-                  </>
-                ) : null}
-              </span>
-              {openable.state === "partOf" ? (
-                <>
-                  {" "}
-                  <span className="block text-xs text-muted-foreground">
-                    Part of {openable.container}
-                  </span>
-                </>
-              ) : null}
-            </span>{" "}
-            <span className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-muted-foreground">
-              Open
-              <ChevronRight aria-hidden className="size-4" />
-            </span>
-          </InternalLink>
+        {result.kind === "match" && action ? (
+          <MatchActionRow title={result.title} action={action} />
         ) : result.kind === "match" ? (
           <button
             type="button"
@@ -379,6 +384,64 @@ function MatchVersePreview({ spans }: { spans: readonly VerseSpan[] }) {
     <p className="mt-2.5 line-clamp-3 px-1 font-serif text-[15px] leading-relaxed text-foreground/85">
       {text}
     </p>
+  );
+}
+
+/**
+ * A match already in Memory, as one link: Start (now) for a verse with no
+ * step taken yet, else Open.
+ */
+function MatchActionRow({
+  title,
+  action,
+}: {
+  title: string;
+  action: MatchAction;
+}) {
+  const starts = action.state === "upNext" || action.state === "notStarted";
+  const detail = matchDetail(action);
+  return (
+    <InternalLink
+      href={action.href}
+      className={cn(
+        matchRowClassName,
+        starts
+          ? "border-primary/30 bg-primary/5 hover:bg-primary/10"
+          : "bg-card hover:bg-accent",
+      )}
+    >
+      <Brain aria-hidden className="size-4 shrink-0 text-primary" />
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold">
+          {title}
+          {action.state === "memorizing" ? (
+            <>
+              {" "}
+              <MemorizingBadge />
+            </>
+          ) : null}
+        </span>
+        {detail ? (
+          <>
+            {" "}
+            <span className="block text-xs text-muted-foreground">
+              {detail}
+            </span>
+          </>
+        ) : null}
+      </span>{" "}
+      {starts ? (
+        <span className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-3 text-xs font-medium text-primary">
+          {action.state === "upNext" ? "Start now" : "Start"}
+          <ArrowRight aria-hidden className="size-3.5" />
+        </span>
+      ) : (
+        <span className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-muted-foreground">
+          Open
+          <ChevronRight aria-hidden className="size-4" />
+        </span>
+      )}
+    </InternalLink>
   );
 }
 

@@ -15,7 +15,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
-import { MEMORIZE_LABEL, memorizeTitleLabel } from "@/lib/memory-copy";
+import { MEMORIZE_LABEL } from "@/lib/memory-copy";
 
 import {
   HEART_NUDGE_ATTRIBUTE,
@@ -23,7 +23,7 @@ import {
 } from "./hooks/use-heart-memorize-nudge";
 
 export const HEART_NUDGE_AUTO_CLOSE_MS = 6000;
-const NUDGE_WIDTH_PX = 184;
+const NUDGE_WIDTH_PX = 216;
 const NUDGE_GAP_PX = 10;
 const VIEWPORT_MARGIN_PX = 8;
 /** How often to check that the heart is still on the page. */
@@ -31,9 +31,12 @@ const ANCHOR_CHECK_MS = 250;
 
 /**
  * Beside the heart when the gutter has room for the whole popover, else above
- * the row. Radix would flip `left` to `right`, never to `top`.
+ * the row. Radix would flip `left` to `right`, never to `top`. A heart inside
+ * `[data-nudge-above]` (the selection bar) has its label to its left, so it
+ * always opens above.
  */
 function nudgeSide(anchor: HTMLElement): "left" | "top" {
+  if (anchor.closest("[data-nudge-above]")) return "top";
   const { left } = anchor.getBoundingClientRect();
   return left - NUDGE_GAP_PX - NUDGE_WIDTH_PX >= VIEWPORT_MARGIN_PX
     ? "left"
@@ -168,7 +171,7 @@ export function HeartMemorizeNudge({
               setFocusedOffer(null);
             }
           }}
-          className="w-46 rounded-[10px] px-3 pt-2.5 pb-3 shadow-[0_2px_5px_rgb(0_0_0/0.1),0_10px_28px_rgb(50_35_15/0.16)]"
+          className="w-54 rounded-[10px] px-3 pt-2.5 pb-3 shadow-[0_2px_5px_rgb(0_0_0/0.1),0_10px_28px_rgb(50_35_15/0.16)]"
         >
           <PopoverPrimitive.Arrow
             className="fill-popover"
@@ -189,7 +192,8 @@ export function HeartMemorizeNudge({
             id={questionId}
             className="mt-0.5 ml-5 text-[12.5px] text-muted-foreground"
           >
-            {memorizeTitleLabel(shown.title)}?
+            {MEMORIZE_LABEL}{" "}
+            <span className="whitespace-nowrap">{shown.title}?</span>
           </p>
           <div className="mt-2.5 ml-4 flex gap-1">
             <Button type="button" size="xs" onClick={onMemorize}>

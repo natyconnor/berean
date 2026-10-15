@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { passageHeartSpans, type VerseSpan } from "./hearted-verse-coverage";
 import {
   carriedOverVerses,
+  isUnstartedProgress,
+  memorizeProgress,
   passageCoverage,
   passageRelation,
   sameSpanSet,
@@ -267,6 +269,58 @@ describe("carriedOverVerses", () => {
     expect(
       carriedOverVerses(psalm1, [verse(3, "reviewing"), verse(3, "reviewing")]),
     ).toHaveLength(1);
+  });
+});
+
+describe("memorizeProgress", () => {
+  it("reads a verse waiting in a pack as Up next", () => {
+    expect(memorizeProgress({ status: "new", learnStage: 0 })).toBe("upNext");
+  });
+
+  it("reads a learning verse with no step taken as not started", () => {
+    expect(
+      memorizeProgress({ status: "learning", learnStage: 0, stageReps: 0 }),
+    ).toBe("notStarted");
+    expect(memorizeProgress({ status: "learning", learnStage: 0 })).toBe(
+      "notStarted",
+    );
+  });
+
+  it("counts any step, rep, or attempt as started", () => {
+    expect(memorizeProgress({ status: "learning", learnStage: 1 })).toBe(
+      "learning",
+    );
+    expect(
+      memorizeProgress({ status: "learning", learnStage: 0, stageReps: 1 }),
+    ).toBe("learning");
+    expect(
+      memorizeProgress({
+        status: "learning",
+        learnStage: 0,
+        stageReps: 0,
+        lastReviewedAt: 1,
+      }),
+    ).toBe("learning");
+  });
+
+  it("reads review-phase verses as memorized or mastered", () => {
+    expect(memorizeProgress({ status: "reviewing", learnStage: 3 })).toBe(
+      "memorized",
+    );
+    expect(memorizeProgress({ status: "mastered", learnStage: 3 })).toBe(
+      "mastered",
+    );
+  });
+});
+
+describe("isUnstartedProgress", () => {
+  it("is true only for Up next and not started", () => {
+    expect(isUnstartedProgress("upNext")).toBe(true);
+    expect(isUnstartedProgress("notStarted")).toBe(true);
+    expect(isUnstartedProgress("learning")).toBe(false);
+    expect(isUnstartedProgress("memorized")).toBe(false);
+    expect(isUnstartedProgress("mastered")).toBe(false);
+    expect(isUnstartedProgress(undefined)).toBe(false);
   });
 });
 

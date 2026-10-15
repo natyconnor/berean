@@ -23,6 +23,13 @@ import {
   TodayQueueOverview,
   TodayQueueRail,
 } from "@/components/memory/practice/today-queue-rail";
+import {
+  hasTodayCarry,
+  mergeTodayCarry,
+  readTodayCarry,
+  writeTodayCarry,
+  type TodaySessionCarry,
+} from "@/components/memory/practice/today-session-carry";
 import { TodaySessionSummary } from "@/components/memory/practice/today-session-summary";
 import {
   dueQueueEntryToPracticeVerse,
@@ -50,6 +57,7 @@ import { isReviewPhase } from "@/lib/memory-scheduler";
 import { hasMemorizedVerses, hasSessionWorkLeft } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
 import {
+  carryTodayProgress,
   planTodaySession,
   todayDoneItems,
   todayFinishedSegments,
@@ -180,6 +188,7 @@ function GlobalTodayLoader({
       data={data}
       only={only}
       dayKey={learnDismissDayKey(now)}
+      carryScope={`all:${only ?? "all"}`}
       chrome={chrome}
     />
   );
@@ -274,6 +283,7 @@ function PackTodayLoader({
       data={data}
       only={only}
       dayKey={learnDismissDayKey(now)}
+      carryScope={`pack:${packId}:${only ?? "all"}`}
       chrome={chrome}
     />
   );
@@ -313,6 +323,30 @@ function spentCards(
   return spent;
 }
 
+/** Earlier visits' work plus this visit's, for the count and the summary. */
+function dayCarry(
+  segments: readonly TodaySegment[],
+  tally: TodayTally,
+  earlier: TodaySessionCarry,
+  doneItems: number,
+): TodaySessionCarry {
+  const runResults = segments.flatMap((segment, index) => {
+    const result = tally.runs[index];
+    return result ? [{ segment, result }] : [];
+  });
+  return mergeTodayCarry(earlier, {
+    doneItems,
+    passages: tally.passages.flatMap((index) => {
+      const segment = segments[index];
+      return segment?.kind === "passage" ? [segment.title] : [];
+    }),
+    learned: runResults.flatMap(({ segment, result }) =>
+      segment.kind === "learning" ? result.verses : [],
+    ),
+    attempts: runResults.flatMap(({ result }) => result.attempts),
+  });
+}
+
 /** A verse card's row in today's queue: its reference, or a unified pack's name. */
 function queueEntries(
   verses: readonly PracticeVerse[],
@@ -335,11 +369,14 @@ function TodaySession({
   data,
   only,
   dayKey,
+  carryScope,
   chrome,
 }: {
   data: TodaySessionData;
   only: TodaySessionOnly | undefined;
   dayKey: number;
+  /** Which of today's sessions this is, for work carried from earlier visits. */
+  carryScope: string;
   chrome: TodayChrome;
 }): JSX.Element {
   const now = useLiveNow();
@@ -369,6 +406,7 @@ function TodaySession({
     Readonly<Record<number, PracticeRunState>>
   >({});
   const [tally, setTally] = useState<TodayTally>({ passages: [], runs: {} });
+  const [earlier] = useState(() => readTodayCarry(carryScope, dayKey));
 
   const hasPassages = segments.some((segment) => segment.kind === "passage");
   const livePassages = useQuery(
@@ -452,18 +490,16 @@ function TodaySession({
     if (group.target !== null) openSegment(group.target);
   };
 
-  const runResults = segments.flatMap((segment, index) => {
-    const result = tally.runs[index];
-    return result ? [{ segment, result }] : [];
-  });
-  const learned = runResults.flatMap(({ segment, result }) =>
-    segment.kind === "learning" ? result.verses : [],
-  );
-  const attempts = runResults.flatMap(({ result }) => result.attempts);
-  const passagesDone = tally.passages.flatMap((index) => {
-    const segment = segments[index];
-    return segment?.kind === "passage" ? [segment.title] : [];
-  });
+  const doneCount = todaySessionCounts(segments, doneItems).done;
+  const day = dayCarry(segments, tally, earlier, doneCount);
+  useEffect(() => {
+    writeTodayCarry(
+      carryScope,
+      dayKey,
+      dayCarry(segments, tally, earlier, doneCount),
+    );
+  }, [carryScope, dayKey, segments, tally, earlier, doneCount]);
+  const { learned, attempts, passages: passagesDone } = day;
 
   const showExtraPractice =
     data.hasMemorized ||
@@ -473,7 +509,7 @@ function TodaySession({
     ? withReturn("/memory/practice", chrome.returnTo ?? "/memory")
     : undefined;
 
-  if (segments.length === 0) {
+  if (segments.length === 0 && !hasTodayCarry(earlier)) {
     return (
       <TodayShell title={data.title} chrome={chrome}>
         <div className="mx-auto max-w-sm space-y-4 py-16 text-center">
@@ -502,7 +538,7 @@ function TodaySession({
     );
   }
 
-  if (step.kind === "summary") {
+  if (step.kind === "summary" || segments.length === 0) {
     return (
       <TodayShell
         title={data.title}
@@ -522,10 +558,14 @@ function TodaySession({
   }
 
   /** Header bar for the whole day, so it never reads as one part's progress. */
-  const sessionProgress = (items: readonly number[]): SessionProgress => ({
-    label: todaySessionCountLabel(todaySessionCounts(segments, items)),
-    fraction: todaySessionProgress(segments, items),
-  });
+  const sessionProgress = (items: readonly number[]): SessionProgress => {
+    const { counts, fraction } = carryTodayProgress(
+      todaySessionCounts(segments, items),
+      todaySessionProgress(segments, items),
+      earlier.doneItems,
+    );
+    return { label: todaySessionCountLabel(counts), fraction };
+  };
   const queueGroups = (current: number | null) =>
     todayQueueGroups({ ...progressInput, reopenable, current });
   // A queue of one is just the thing on screen.
@@ -535,7 +575,13 @@ function TodaySession({
     showQueue ? (
       <TodayQueueRail
         groups={queueGroups(current)}
-        counts={todaySessionCounts(segments, doneItems)}
+        counts={
+          carryTodayProgress(
+            todaySessionCounts(segments, doneItems),
+            0,
+            earlier.doneItems,
+          ).counts
+        }
         onSelect={openQueueItem}
       />
     ) : undefined;
@@ -570,7 +616,13 @@ function TodaySession({
         key={`passage:${segment.packId}`}
         packId={segment.packId}
         title={segment.title}
-        progress={sessionProgress(doneItems)}
+        progress={(todayShare) =>
+          sessionProgress(
+            doneItems.map((count, item) =>
+              item === index ? todayShare : count,
+            ),
+          )
+        }
         aside={queueRail(index)}
         chrome={chrome}
         onDone={() => {
@@ -631,7 +683,8 @@ function TodayPassageSegment({
 }: {
   packId: Id<"packs">;
   title: string;
-  progress: SessionProgress;
+  /** The day's bar, given the share of today's new verses added so far. */
+  progress: (todayShare: number) => SessionProgress;
   /** The rest of today's queue beside the passage. */
   aside?: ReactNode;
   chrome: TodayChrome;

@@ -23,7 +23,7 @@ import { withReturn } from "@/lib/memory-return";
 import { newPackHref } from "@/lib/memory-new-pack";
 import { spanInPackScope } from "@/lib/passage-range";
 import { cn } from "@/lib/utils";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 type ListedPack = FunctionReturnType<typeof api.packs.listMine>["page"][number];
 
@@ -81,7 +81,7 @@ export function AddToPack({
   const [addedIds, setAddedIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const label = `Add ${formatVerseRef(reference)} to a pack`;
+  const label = `Add ${formatVerseRefTitle(reference)} to a pack`;
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>

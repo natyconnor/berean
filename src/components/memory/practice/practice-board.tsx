@@ -90,7 +90,7 @@ import {
   normalizeStageIndex,
   normalizeStatus,
 } from "@/lib/verse-practice-progress";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -730,7 +730,7 @@ export function PracticeBoard({
         celebrateMastered(
           verse.composite
             ? (verse.composite.packName ?? scopeLabel)
-            : formatVerseRef(verse.reference),
+            : formatVerseRefTitle(verse.reference),
         );
       }
     }
@@ -1168,7 +1168,7 @@ function PracticeCard({
   >(null);
   const gradePending = submitPending && submitKind === "grade";
 
-  const refLabel = formatVerseRef(reference);
+  const refLabel = formatVerseRefTitle(reference);
   // A composite card recites many spans, so it takes its text from the pack's
   // concatenated passage instead of a single chapter slice.
   const single = useEsvReference(composite ? null : reference);
@@ -1568,7 +1568,7 @@ function PracticeCard({
                               className={READER_VERSE_TEXT_CLASS}
                             >
                               <span className="mr-1 align-top font-sans text-xs font-semibold text-muted-foreground">
-                                {formatVerseRef(segment.reference)}
+                                {formatVerseRefTitle(segment.reference)}
                               </span>
                               {segment.text}
                             </p>
@@ -1787,7 +1787,7 @@ function PracticeShuffleCardFace({
   sessionLabel: MemorySessionLabel;
   verse: OrderedVerse;
 }): JSX.Element {
-  const refLabel = formatVerseRef(verse.reference);
+  const refLabel = formatVerseRefTitle(verse.reference);
   const stage = PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(verse.learnStage, verse.status);
 

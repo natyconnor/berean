@@ -5,7 +5,7 @@ import type { SessionCompleteVerse } from "@/components/memory/practice/session-
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { firstMemorizedCopy } from "@/lib/memory-milestones";
 import { cn } from "@/lib/utils";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import { useMilestoneHint } from "./use-milestone-hint";
 
@@ -27,7 +27,7 @@ export function FirstMemorizedBanner({
   // Latched so the banner stays up after `complete` clears `pending`.
   const [reference, setReference] = useState<string | null>(null);
   if (reference === null && memorized && pending) {
-    setReference(formatVerseRef(memorized.reference));
+    setReference(formatVerseRefTitle(memorized.reference));
   }
 
   useEffect(() => {

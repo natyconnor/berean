@@ -963,9 +963,9 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     ).toBeVisible();
     expect(verseRailLabels()).toEqual([
       "Psalm 8:2",
-      "Psalm 8:3-4",
+      "Psalm 8:3–4",
       "Psalm 8:5",
-      "Luke 9:23-24",
+      "Luke 9:23–24",
     ]);
 
     await userEvent.click(screen.getByRole("button", { name: "Shuffle" }));
@@ -981,18 +981,18 @@ describe("PracticeBoard in-order Scripture sequence", () => {
         shuffled.indexOf("Psalm 8:2"),
         shuffled.indexOf("Psalm 8:2") + 3,
       ),
-    ).toEqual(["Psalm 8:2", "Psalm 8:3-4", "Psalm 8:5"]);
+    ).toEqual(["Psalm 8:2", "Psalm 8:3–4", "Psalm 8:5"]);
     expect(
-      shuffled.join() === "Luke 9:23-24,Psalm 8:2,Psalm 8:3-4,Psalm 8:5" ||
-        shuffled.join() === "Psalm 8:2,Psalm 8:3-4,Psalm 8:5,Luke 9:23-24",
+      shuffled.join() === "Luke 9:23–24,Psalm 8:2,Psalm 8:3–4,Psalm 8:5" ||
+        shuffled.join() === "Psalm 8:2,Psalm 8:3–4,Psalm 8:5,Luke 9:23–24",
     ).toBe(true);
 
     await userEvent.click(screen.getByRole("button", { name: "In order" }));
     expect(verseRailLabels()).toEqual([
       "Psalm 8:2",
-      "Psalm 8:3-4",
+      "Psalm 8:3–4",
       "Psalm 8:5",
-      "Luke 9:23-24",
+      "Luke 9:23–24",
     ]);
     expect(screen.getByText("Psalm 8")).toBeVisible();
     expect(screen.getByText("Luke 9")).toBeVisible();
@@ -1021,7 +1021,7 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     ).toBeVisible();
     expect(verseRailLabels()).toEqual([
       "Psalm 8:2",
-      "Psalm 8:3-4",
+      "Psalm 8:3–4",
       "Psalm 8:5",
     ]);
     expect(
