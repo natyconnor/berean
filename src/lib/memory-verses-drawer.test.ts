@@ -6,13 +6,9 @@ import type {
   VerseGoalCard,
 } from "./memory-goals";
 import {
-  dueGoalButtonLabel,
-  dueGoalRows,
   goalPanel,
-  goalSessionHref,
   goalStatusLine,
   listLabels,
-  recentGoals,
   searchGoals,
 } from "./memory-verses-drawer";
 import { DAY_MS } from "./memory-scheduler";
@@ -27,6 +23,11 @@ function passage(overrides: Partial<PassageGoalCard> = {}): PassageGoalCard {
     title: "Psalm 16",
     verseCount: 11,
     learnedVerses: 4,
+    pieceStates: [
+      { verses: 4, state: "learned", today: false },
+      { verses: 2, state: "learning", today: true },
+      { verses: 5, state: "upNext", today: false },
+    ],
     status: "building",
     hasWorkToday: true,
     todayStep: {
@@ -109,67 +110,6 @@ describe("listLabels", () => {
   });
 });
 
-describe("dueGoalRows", () => {
-  it("makes one row per goal with work today", () => {
-    const rows = dueGoalRows([
-      passage(),
-      pack(),
-      verse(),
-      verse({ verseRefId: "idle", hasWorkToday: false }),
-    ]);
-
-    expect(
-      rows.map(({ title, detail, action, tone }) => ({
-        title,
-        detail,
-        action,
-        tone,
-      })),
-    ).toEqual([
-      {
-        title: "Psalm 16",
-        detail: "Read verses 5–6, then type them with first letters",
-        action: "learn",
-        tone: "new",
-      },
-      {
-        title: "Merced Team · 5 reviews",
-        detail: "Luke 9:23–24, Matthew 6:33, Deuteronomy 6:4–5 and 2 more",
-        action: "review",
-        tone: "reviewing",
-      },
-      {
-        title: "Romans 8:28",
-        detail: "Learning · today: fill in the blanks",
-        action: "learn",
-        tone: "learning",
-      },
-    ]);
-  });
-
-  it("puts learning first for a pack with both", () => {
-    const [row] = dueGoalRows([pack({ learningToday: 2 })]);
-    expect(row?.title).toBe("Merced Team · 2 to learn · 5 reviews");
-    expect(row?.action).toBe("learn");
-
-    const [learnOnly] = dueGoalRows([
-      pack({ learningToday: 1, reviewsDue: [] }),
-    ]);
-    expect(learnOnly?.detail).toBe("1 verse to learn today");
-  });
-
-  it("reviews memorized passages and memorized verses", () => {
-    const rows = dueGoalRows([
-      passage({ status: "reviewing", todayStep: null }),
-      verse({ status: "reviewing", learnStage: 3, intervalDays: 4 }),
-    ]);
-    expect(rows.map((row) => [row.detail, row.action])).toEqual([
-      ["Review today", "review"],
-      ["Memorized · review due today", "review"],
-    ]);
-  });
-});
-
 describe("goal links", () => {
   it("opens passages and packs as packs, verses as verses", () => {
     expect(goalPanel(passage())).toEqual({ kind: "pack", packId: "psalm16" });
@@ -177,73 +117,6 @@ describe("goal links", () => {
       kind: "verse",
       verseRefId: "rom828",
     });
-  });
-
-  it("starts the right session", () => {
-    expect(goalSessionHref(passage(), "learn")).toBe("/memory/psalm16/learn");
-    expect(goalSessionHref(pack(), "review")).toBe("/memory/merced/review");
-    expect(
-      goalSessionHref(pack({ learningToday: 1, reviewsDue: [] }), "learn"),
-    ).toBe("/memory/merced/learn");
-    expect(goalSessionHref(pack({ learningToday: 2 }), "learn")).toBe(
-      "/memory/today?packId=merced",
-    );
-    expect(goalSessionHref(verse(), "learn")).toBe(
-      "/memory/learn?book=Romans&chapter=8&startVerse=28&endVerse=28",
-    );
-  });
-
-  it("labels the combined pack session Continue and started learning Continue learning", () => {
-    const labels = dueGoalRows([
-      passage(),
-      pack({ learningToday: 2 }),
-      pack({ packId: "learnOnly", learningToday: 1, reviewsDue: [] }),
-      pack({ packId: "reviewOnly" }),
-      verse(),
-      pack({
-        packId: "fresh",
-        learningToday: 1,
-        reviewsDue: [],
-        learned: 0,
-        learning: 0,
-        lastPracticedAt: null,
-      }),
-    ]).map(dueGoalButtonLabel);
-    expect(labels).toEqual([
-      "Continue learning",
-      "Continue",
-      "Continue learning",
-      "Review",
-      "Continue learning",
-      "Learn",
-    ]);
-  });
-});
-
-describe("recentGoals", () => {
-  it("sorts by latest activity and caps the list", () => {
-    const goals = Array.from({ length: 8 }, (_, i) =>
-      verse({ verseRefId: `v${i}`, lastActivityAt: NOW - i * 60_000 }),
-    );
-    const recent = recentGoals([...goals].reverse(), NOW);
-    expect(recent.goals.map((goal) => goal.verseRefId)).toEqual([
-      "v0",
-      "v1",
-      "v2",
-      "v3",
-      "v4",
-      "v5",
-    ]);
-    expect(recent.lastWeek).toBe(true);
-  });
-
-  it("says last week only when every row is from the last 7 days", () => {
-    const recent = recentGoals(
-      [passage(), verse({ lastActivityAt: NOW - 10 * DAY_MS })],
-      NOW,
-    );
-    expect(recent.goals).toHaveLength(2);
-    expect(recent.lastWeek).toBe(false);
   });
 });
 

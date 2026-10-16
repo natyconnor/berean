@@ -23,6 +23,10 @@ function passage(overrides: Partial<PassageGoalCard> = {}): PassageGoalCard {
     title: "Psalm 16",
     verseCount: 11,
     learnedVerses: 4,
+    pieceStates: [
+      { verses: 4, state: "learned", today: false },
+      { verses: 7, state: "upNext", today: false },
+    ],
     status: "building",
     hasWorkToday: true,
     todayStep: null,

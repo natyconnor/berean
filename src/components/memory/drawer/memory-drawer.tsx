@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode, Ref } from "react";
 import { ChevronLeft, Expand, X } from "lucide-react";
 
 import { InternalLink } from "@/components/memory/internal-link";
+import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -10,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-media-query";
+import type { GoalCard } from "@/lib/memory-goals";
 import { cn } from "@/lib/utils";
 
 import type { MemoryPanelBackLink } from "./memory-panel-context";
@@ -86,6 +88,7 @@ export function MemoryDrawerFrame({
   back,
   title,
   titleAccessory,
+  kind,
   subtitle,
   actions,
   fullPageHref,
@@ -96,6 +99,8 @@ export function MemoryDrawerFrame({
   back?: MemoryPanelBackLink;
   title: ReactNode;
   titleAccessory?: ReactNode;
+  /** The thing this panel is, shown as its icon beside the title. */
+  kind?: GoalCard["kind"];
   subtitle?: ReactNode;
   actions?: ReactNode;
   fullPageHref?: string;
@@ -118,7 +123,8 @@ export function MemoryDrawerFrame({
               {back.label}
             </InternalLink>
           ) : null}
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="flex min-w-0 items-center gap-2">
+            {kind ? <GoalKindMark kind={kind} /> : null}
             <SheetTitle
               tabIndex={-1}
               data-memory-panel-title=""

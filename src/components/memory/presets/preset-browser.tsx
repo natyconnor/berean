@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { BookOpen, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
 import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
+import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -114,14 +115,17 @@ export function PresetBrowser() {
                             key={preset.id}
                             className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5"
                           >
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-medium">
-                                {preset.title}
-                              </span>
-                              <span className="block text-xs text-muted-foreground">
-                                {range === preset.title
-                                  ? verses
-                                  : `${range} · ${verses}`}
+                            <span className="flex min-w-0 flex-1 items-center gap-3">
+                              <GoalKindMark kind="passage" />
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-medium">
+                                  {preset.title}
+                                </span>
+                                <span className="block text-xs text-muted-foreground">
+                                  {range === preset.title
+                                    ? verses
+                                    : `${range} · ${verses}`}
+                                </span>
                               </span>
                             </span>
                             {existing ? (
@@ -141,7 +145,6 @@ export function PresetBrowser() {
                                 className="gap-1.5"
                                 onClick={() => memorizeChapter(preset)}
                               >
-                                <BookOpen className="h-3.5 w-3.5" aria-hidden />
                                 {MEMORIZE_LABEL}
                               </Button>
                             )}
@@ -182,21 +185,26 @@ export function PresetBrowser() {
                       className="rounded-xl border bg-card px-4 py-3"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{preset.title}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {alreadyAdded
-                              ? existingPackId
-                                ? "You already have this pack."
-                                : "You're already memorizing every verse in it."
-                              : preset.description}
-                          </p>
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            {preset.passages.length} passages
-                            {!alreadyAdded && memorized > 0
-                              ? ` · ${memorized} already memorizing`
-                              : ""}
-                          </p>
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                          <GoalKindMark kind="pack" className="mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">
+                              {preset.title}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {alreadyAdded
+                                ? existingPackId
+                                  ? "You already have this pack."
+                                  : "You're already memorizing every verse in it."
+                                : preset.description}
+                            </p>
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              {preset.passages.length} passages
+                              {!alreadyAdded && memorized > 0
+                                ? ` · ${memorized} already memorizing`
+                                : ""}
+                            </p>
+                          </div>
                         </div>
                         {existingPackId ? (
                           <Button

@@ -149,6 +149,11 @@ const PASSAGE_GOAL = {
   title: "Psalm 16",
   verseCount: 11,
   learnedVerses: 4,
+  pieceStates: [
+    { verses: 4, state: "learned", today: false },
+    { verses: 2, state: "learning", today: true },
+    { verses: 5, state: "upNext", today: false },
+  ],
   status: "building",
   hasWorkToday: true,
   todayStep: {

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 /** A pack a verse joins once it starts: one of yours, or a new one by name. */
 export type MemorizePackChoice =
@@ -14,7 +15,8 @@ export type MemorizePackChoice =
 /**
  * Put a just-started verse in the chosen pack: `packs.addVerse` for one of
  * yours, `packs.createAndMemorize` for a new one (both keep a learning verse
- * learning). A failure only toasts, and a new pack with no name is skipped.
+ * learning). Toasts either way, so the pack is seen to stick; a new pack with
+ * no name is skipped (the sheet asks for one first).
  */
 export function useJoinMemorizePack(): (
   span: VerseSpan,
@@ -33,11 +35,14 @@ export function useJoinMemorizePack(): (
         startVerse: span.startVerse,
         endVerse: span.endVerse,
       };
+      const title = formatVerseRefTitle(verse);
       try {
         if (choice.kind === "pack") {
           await addVerse({ id: choice.packId, ...verse });
+          toast.success(`Added ${title} to ${name}.`);
         } else {
           await createAndMemorize({ name, spans: [verse], now: Date.now() });
+          toast.success(`Created the pack ${name} with ${title}.`);
         }
       } catch {
         toast.error(`Couldn't add to ${name}.`);

@@ -130,6 +130,35 @@ describe("buildTodayModel: state", () => {
     const model = buildTodayModel(input({ verses: [verse("open", 1)] }));
     expect(model.state).toBe("work");
   });
+
+  it("lists packs with nothing in Memory apart from the goals", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("open", 1)],
+        packs: [
+          {
+            packId: "full",
+            name: "Full",
+            kind: "custom",
+            verseRefIds: ["open"],
+            createdAt: NOW - 5 * DAY_MS,
+          },
+          {
+            packId: "empty",
+            name: "Empty",
+            kind: "custom",
+            verseRefIds: ["gone"],
+            createdAt: NOW - 2 * DAY_MS,
+          },
+        ],
+      }),
+    );
+
+    expect(model.goals.map((goal) => goal.title)).toEqual(["Full"]);
+    expect(model.emptyPacks).toEqual([
+      { packId: "empty", title: "Empty", createdAt: NOW - 2 * DAY_MS },
+    ]);
+  });
 });
 
 describe("buildTodayModel: counts", () => {

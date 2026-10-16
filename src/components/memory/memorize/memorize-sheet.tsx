@@ -1,18 +1,15 @@
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
-import {
-  BookOpen,
-  Brain,
-  Clock,
-  GraduationCap,
-  Heart,
-  Info,
-} from "lucide-react";
+import { Brain, Clock, GraduationCap, Heart, Info } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../../../convex/_generated/api";
 import { AddToPack } from "@/components/memory/packs/add-to-pack";
+import {
+  GoalKindIcon,
+  GoalKindMark,
+} from "@/components/memory/today/goal-kind-icon";
 import {
   useFeatureHint,
   useMarkHintShownWhenPending,
@@ -298,6 +295,8 @@ function MemorizePanel({
       : "",
   );
   const [packChoice, setPackChoice] = useState<MemorizePackChoice | null>(null);
+  const [packError, setPackError] = useState<string | null>(null);
+  const packNameRef = useRef<HTMLInputElement | null>(null);
   const joinPack = useJoinMemorizePack();
   const { start } = useMemorizeStart();
   const { submit, pending: starting } = useSubmitLock();
@@ -321,6 +320,15 @@ function MemorizePanel({
 
   const handleStart = () => {
     if (resolved.mode === "invalid" || status === undefined) return;
+    if (
+      resolved.mode === "verse" &&
+      packChoice?.kind === "new" &&
+      packChoice.name.trim() === ""
+    ) {
+      setPackError("Name the new pack, or remove it to start without one.");
+      packNameRef.current?.focus();
+      return;
+    }
     submit(async () => {
       setFrozen({ status, showExplainer });
       try {
@@ -553,15 +561,22 @@ function MemorizePanel({
     <PanelFrame
       layout={layout}
       header={
-        <PanelHeading layout={layout}>
-          {memorizeTitleLabel(resolved.title)}
-        </PanelHeading>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <GoalKindMark kind={resolved.mode} />
+          <PanelHeading layout={layout}>
+            {memorizeTitleLabel(resolved.title)}
+          </PanelHeading>
+        </div>
       }
       body={
         <>
           <ul className="flex flex-wrap gap-1.5">
             {facts.verses ? (
-              <FactChip icon={<BookOpen aria-hidden />}>
+              <FactChip
+                icon={
+                  <GoalKindIcon kind={resolved.mode} className="size-3.5" />
+                }
+              >
                 {facts.verses}
               </FactChip>
             ) : null}
@@ -617,9 +632,15 @@ function MemorizePanel({
           {resolved.mode === "verse" ? (
             <MemorizePackChoiceRow
               choice={packChoice}
-              onChange={setPackChoice}
+              onChange={(choice) => {
+                setPackChoice(choice);
+                setPackError(null);
+              }}
+              verseTitle={resolved.title}
               now={now}
               onSubmit={handleStart}
+              error={packError}
+              nameInputRef={packNameRef}
             />
           ) : null}
         </>

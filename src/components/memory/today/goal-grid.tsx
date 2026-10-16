@@ -1,48 +1,39 @@
-import { useId, useRef, useState } from "react";
-import { flushSync } from "react-dom";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { useId } from "react";
 
-import { Button } from "@/components/ui/button";
 import type { TodayGoal } from "@/hooks/use-today-model";
 import { goalKey } from "@/lib/memory-verses-drawer";
-import { GOAL_CARD_LIMIT } from "@/lib/today-goal-card";
+import type { GoalLayout } from "@/lib/today-goal-layout";
+import { cn } from "@/lib/utils";
 
 import { GoalCard } from "./goal-card";
+import { GoalRow } from "./goal-row";
 
-/**
- * "What you're memorizing": the first six goals (work today first), two
- * columns from 768px, and "Show all" in place when there are more.
- */
+/** Rows of full cards in the grid before the rest become rows. */
+const GRID_CARD_ROWS = 2;
+
+/** "What you're memorizing", work today first, laid out per `layout`. */
 export function GoalGrid({
   goals,
   now,
   timeZone,
+  layout,
 }: {
   goals: readonly TodayGoal[];
   now: number;
   timeZone?: string;
+  layout: GoalLayout;
 }) {
   const headingId = useId();
-  const listId = useId();
-  const [expanded, setExpanded] = useState(false);
-  const firstHiddenRef = useRef<HTMLLIElement | null>(null);
-  const toggleRef = useRef<HTMLButtonElement | null>(null);
-
   if (goals.length === 0) return null;
-  const hasMore = goals.length > GOAL_CARD_LIMIT;
-  const shown = expanded ? goals : goals.slice(0, GOAL_CARD_LIMIT);
 
-  const toggle = () => {
-    if (!expanded) {
-      flushSync(() => setExpanded(true));
-      firstHiddenRef.current
-        ?.querySelector<HTMLElement>("a[href], button")
-        ?.focus();
-      return;
-    }
-    flushSync(() => setExpanded(false));
-    toggleRef.current?.scrollIntoView?.({ block: "nearest" });
-  };
+  const card = (goal: TodayGoal) => (
+    <GoalCard goal={goal} now={now} timeZone={timeZone} />
+  );
+  const columns = layout.kind === "grid" ? layout.columns : 2;
+  const cardCount =
+    layout.kind === "grid" ? columns * GRID_CARD_ROWS : goals.length;
+  const rows = goals.slice(cardCount);
+  const rowColumns = Math.min(columns, rows.length);
 
   return (
     <section aria-labelledby={headingId} className="space-y-3">
@@ -52,30 +43,56 @@ export function GoalGrid({
           · {goals.length}
         </span>
       </h2>
-      <ul id={listId} className="grid gap-3 md:grid-cols-2">
-        {shown.map((goal, index) => (
-          <li
-            key={goalKey(goal)}
-            ref={index === GOAL_CARD_LIMIT ? firstHiddenRef : undefined}
-            className="flex min-w-0"
-          >
-            <GoalCard goal={goal} now={now} timeZone={timeZone} />
-          </li>
-        ))}
-      </ul>
-      {hasMore ? (
-        <Button
-          ref={toggleRef}
-          type="button"
-          variant="ghost"
-          className="w-full text-muted-foreground max-sm:h-11"
-          aria-expanded={expanded}
-          aria-controls={listId}
-          onClick={toggle}
+      {layout.kind === "shelf" ? (
+        <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 py-1 [scrollbar-width:thin] sm:-mx-5 sm:scroll-px-5 sm:px-5">
+          {goals.map((goal) => (
+            <li
+              key={goalKey(goal)}
+              className="flex w-[min(20rem,calc(100%-2.5rem))] shrink-0 snap-start"
+            >
+              {card(goal)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul
+          className={cn(
+            "grid gap-3",
+            columns === 3 ? "grid-cols-3" : "grid-cols-2",
+          )}
         >
-          {expanded ? "Show fewer" : `Show all ${goals.length}`}
-          {expanded ? <ChevronUp aria-hidden /> : <ChevronDown aria-hidden />}
-        </Button>
+          {goals.slice(0, cardCount).map((goal) => (
+            <li key={goalKey(goal)} className="flex min-w-0">
+              {card(goal)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {layout.kind === "grid" && rows.length > 0 ? (
+        <ul
+          aria-label="More you're memorizing"
+          className={cn(
+            "grid overflow-hidden rounded-xl border bg-card shadow-sm",
+            rowColumns === 3
+              ? "grid-cols-3"
+              : rowColumns === 2
+                ? "grid-cols-2"
+                : "grid-cols-1",
+          )}
+        >
+          {rows.map((goal, index) => (
+            <li
+              key={goalKey(goal)}
+              className={cn(
+                "min-w-0",
+                index >= rowColumns && "border-t",
+                index % rowColumns !== 0 && "border-l",
+              )}
+            >
+              <GoalRow goal={goal} now={now} timeZone={timeZone} />
+            </li>
+          ))}
+        </ul>
       ) : null}
     </section>
   );

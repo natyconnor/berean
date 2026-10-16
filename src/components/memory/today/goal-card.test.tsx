@@ -26,6 +26,12 @@ function passage(overrides: Partial<PassageGoalCard> = {}): TodayGoal {
     title: "Psalm 16",
     verseCount: 11,
     learnedVerses: 4,
+    pieceStates: [
+      { verses: 2, state: "learned", today: false },
+      { verses: 2, state: "learned", today: false },
+      { verses: 2, state: "learning", today: true },
+      { verses: 5, state: "upNext", today: false },
+    ],
     status: "building",
     hasWorkToday: true,
     todayStep: {
@@ -129,6 +135,56 @@ describe("GoalCard", () => {
     expect(link.contains(button)).toBe(false);
     expect(button.contains(link)).toBe(false);
     expect(button.className).toContain("z-10");
+  });
+
+  it("labels each kind above its title", () => {
+    const { unmount } = renderCard(passage());
+    expect(screen.getByText("Passage · 11 verses")).toBeInTheDocument();
+    unmount();
+
+    const packCard = renderCard(pack());
+    expect(screen.getByText("Pack · 12 verses")).toBeInTheDocument();
+    packCard.unmount();
+
+    renderCard(verse());
+    expect(screen.getByText("Verse")).toBeInTheDocument();
+  });
+
+  it("does not preview a verse's words under its title", () => {
+    renderCard(verse());
+
+    expect(screen.getByText("Verse")).toBeInTheDocument();
+    expect(screen.queryByText(/For God so loved/)).not.toBeInTheDocument();
+  });
+
+  it("draws a building passage as one tick per verse, today's raised", () => {
+    renderCard(passage());
+
+    const ruler = screen.getByRole("progressbar", {
+      name: "Learned 4 of 11 verses",
+    });
+    const ticks = Array.from(ruler.children);
+    expect(ticks).toHaveLength(11);
+    expect(ticks.filter((tick) => tick.classList.contains("h-2.5"))).toEqual(
+      ticks.slice(4, 6),
+    );
+    expect(
+      ticks.filter((tick) => tick.classList.contains("bg-primary")),
+    ).toEqual(ticks.slice(0, 4));
+  });
+
+  it("draws a pack as one dot per verse, most learned first", () => {
+    renderCard(pack({ mastered: 1 }));
+
+    const meter = screen.getByRole("progressbar", {
+      name: "Learned 8 of 12 verses",
+    });
+    const dots = Array.from(meter.querySelectorAll("span"));
+    expect(dots).toHaveLength(12);
+    expect(dots[0]).toHaveClass("bg-emerald-500");
+    expect(dots[1]).toHaveClass("bg-sky-500");
+    expect(dots[8]).toHaveClass("bg-amber-500");
+    expect(dots[11]).toHaveClass("border-slate-400");
   });
 
   it("shows a building passage's step and only the Learned bar, with no status chip", () => {
@@ -281,6 +337,7 @@ describe("GoalCard", () => {
       "/memory/psalm16/review?return=%2Fmemory",
     );
     expect(screen.getByText("Mastery 40%")).toBeInTheDocument();
+    expect(screen.getByText("All 11 verses learned")).toBeInTheDocument();
     expect(
       screen.queryByRole("progressbar", { name: /Learned/ }),
     ).not.toBeInTheDocument();
@@ -322,6 +379,22 @@ describe("GoalCard", () => {
       "href",
       "/memory?panel=verse%3Ajohn316",
     );
+  });
+
+  it("says the blanks come tomorrow once a new verse's first step is done", () => {
+    const { container } = renderCard(
+      verse({
+        learnStage: 1,
+        hasWorkToday: false,
+        lastPracticedAt: NOW - 60_000,
+        nextDueAt: NOW + DAY_MS,
+      }),
+    );
+
+    expect(
+      screen.getByText("Today's step done. Tomorrow: fill in the blanks."),
+    ).toBeInTheDocument();
+    expect(buttonsIn(container)).toHaveLength(0);
   });
 
   it("offers Start on an Up next verse that isn't in a pack", () => {

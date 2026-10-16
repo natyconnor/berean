@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
 
 import { InternalLink } from "@/components/memory/internal-link";
+import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { GoalCard } from "@/lib/memory-goals";
 
 import type { MemoryPanelBackLink } from "./memory-panel-context";
 
@@ -14,6 +16,7 @@ export function MemoryPageShell({
   back,
   title,
   titleAccessory,
+  kind,
   subtitle,
   actions,
   children,
@@ -21,6 +24,8 @@ export function MemoryPageShell({
   back: MemoryPanelBackLink;
   title: ReactNode;
   titleAccessory?: ReactNode;
+  /** The thing this page is, shown as its icon beside the title. */
+  kind?: GoalCard["kind"];
   subtitle?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
@@ -39,7 +44,8 @@ export function MemoryPageShell({
               <ChevronLeft className="h-4 w-4" aria-hidden />
               {back.label}
             </InternalLink>
-            <div className="flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-2">
+              {kind ? <GoalKindMark kind={kind} /> : null}
               <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
                 {title}
               </h1>

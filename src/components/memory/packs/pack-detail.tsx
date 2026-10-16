@@ -265,6 +265,7 @@ function PackDetailContent({
     <MemoryPanelFrame
       title={rename.title}
       titleAccessory={rename.accessory}
+      kind={passage !== null ? "passage" : "pack"}
       subtitle={
         <>
           {subtitle.text}
@@ -879,7 +880,7 @@ function PackVerses({
           <p>
             {editable
               ? "No verses yet. Add verses from the reader with Memorize, or tap Add verses."
-              : "No verses yet. Add verses from the reader with Memorize."}
+              : "No verses yet."}
           </p>
           {editable && !addOpen ? addButton : null}
         </div>

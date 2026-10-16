@@ -1,38 +1,16 @@
-import { statusLabel, stepAction, type LearnActionLabel } from "./memory-copy";
+import { statusLabel } from "./memory-copy";
 import type { GoalCard } from "./memory-goals";
 import type { MemoryPanel } from "./memory-panel";
-import {
-  memoryPackSessionHref,
-  memoryTodaySessionHref,
-  memoryVerseSessionHref,
-} from "./memory-session-path";
 import { calendarDaysBetween, nextStepCopy } from "./memorize-plan";
-import { DAY_MS, isReviewPhase, type MemoryStatus } from "./memory-scheduler";
 
 /**
- * The compact Your verses drawer: what is due today grouped by goal, what was
- * active lately, and a search over goal titles and pack members. Pure; the
- * goals come from `memoryHome.today`.
+ * Your verses rows: each goal's key, detail panel, and one status line, and
+ * a search over goal titles and pack members. Pure; the goals come from
+ * `memoryHome.today`.
  */
 
-export type DueGoalAction = "learn" | "review";
-
-export interface DueGoalRow<G extends GoalCard = GoalCard> {
-  goal: G;
-  title: string;
-  detail: string;
-  action: DueGoalAction;
-  /** Status colour for the row's dot. */
-  tone: MemoryStatus;
-}
-
-export const RECENT_GOAL_LIMIT = 6;
 const RECENT_WINDOW_DAYS = 7;
 const LISTED_REVIEW_LABELS = 3;
-
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
 
 /** "Luke 9:23–24, Matthew 6:33, Deuteronomy 6:4–5 and 2 more" */
 export function listLabels(labels: readonly string[]): string {
@@ -55,143 +33,6 @@ export function goalPanel(goal: GoalCard): MemoryPanel {
   return goal.kind === "verse"
     ? { kind: "verse", verseRefId: goal.verseRefId }
     : { kind: "pack", packId: goal.packId };
-}
-
-/** A pack with learning and reviews today runs both in one session. */
-function runsPackToday(goal: GoalCard): boolean {
-  return (
-    goal.kind === "pack" && goal.learningToday > 0 && goal.reviewsDue.length > 0
-  );
-}
-
-export function goalSessionHref(goal: GoalCard, action: DueGoalAction): string {
-  if (goal.kind === "verse") return memoryVerseSessionHref(action, goal);
-  if (runsPackToday(goal)) {
-    return memoryTodaySessionHref({ packId: goal.packId });
-  }
-  return memoryPackSessionHref(action, goal.packId);
-}
-
-function learningStarted(goal: GoalCard): boolean {
-  if (goal.lastPracticedAt !== null) return true;
-  switch (goal.kind) {
-    case "passage":
-      return goal.learnedVerses > 0;
-    case "pack":
-      return goal.learned + goal.learning > 0;
-    case "verse":
-      return goal.learnStage > 0;
-  }
-}
-
-/**
- * The due row's button: "Continue" when it runs a pack's learning and reviews
- * together, "Continue learning" once learning has started.
- */
-export function dueGoalButtonLabel(
-  row: DueGoalRow,
-): LearnActionLabel | "Review" | "Continue" {
-  if (runsPackToday(row.goal)) return "Continue";
-  if (row.action !== "learn") return "Review";
-  return learningStarted(row.goal) ? "Continue learning" : "Learn";
-}
-
-function dueRow<G extends GoalCard>(goal: G): DueGoalRow<G> | null {
-  if (!goal.hasWorkToday) return null;
-  switch (goal.kind) {
-    case "passage":
-      if (goal.status === "building") {
-        return {
-          goal,
-          title: goal.title,
-          detail: goal.todayStep?.label ?? "New verses today",
-          action: "learn",
-          tone: goal.todayStep?.ladderDay === 1 ? "new" : "learning",
-        };
-      }
-      return {
-        goal,
-        title: goal.title,
-        detail: "Review today",
-        action: "review",
-        tone: goal.status === "mastered" ? "mastered" : "reviewing",
-      };
-    case "pack": {
-      const reviews = goal.reviewsDue.length;
-      const labels = listLabels(goal.reviewsDue.map((review) => review.label));
-      if (goal.learningToday > 0) {
-        const parts = [
-          `${goal.learningToday} to learn`,
-          reviews > 0 ? plural(reviews, "review") : null,
-        ].filter((part): part is string => part !== null);
-        return {
-          goal,
-          title: `${goal.title} · ${parts.join(" · ")}`,
-          detail:
-            reviews > 0
-              ? labels
-              : `${plural(goal.learningToday, "verse")} to learn today`,
-          action: "learn",
-          tone: "learning",
-        };
-      }
-      return {
-        goal,
-        title: `${goal.title} · ${plural(reviews, "review")}`,
-        detail: labels,
-        action: "review",
-        tone: "reviewing",
-      };
-    }
-    case "verse":
-      if (isReviewPhase(goal.status)) {
-        return {
-          goal,
-          title: goal.title,
-          detail: `${statusLabel(goal.status)} · review due today`,
-          action: "review",
-          tone: goal.status,
-        };
-      }
-      return {
-        goal,
-        title: goal.title,
-        detail: `${statusLabel(goal.status)} · today: ${stepAction(goal.learnStage)}`,
-        action: "learn",
-        tone: goal.status,
-      };
-  }
-}
-
-/** One row per goal with work today, in Today's goal order. */
-export function dueGoalRows<G extends GoalCard>(
-  goals: readonly G[],
-): DueGoalRow<G>[] {
-  return goals.flatMap((goal) => {
-    const row = dueRow(goal);
-    return row ? [row] : [];
-  });
-}
-
-/**
- * The most recently active goals. `lastWeek` says every one of them was active
- * in the last 7 days, so the section can say so.
- */
-export function recentGoals<G extends GoalCard>(
-  goals: readonly G[],
-  now: number,
-  limit = RECENT_GOAL_LIMIT,
-): { goals: G[]; lastWeek: boolean } {
-  const recent = [...goals]
-    .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
-    .slice(0, limit);
-  const weekAgo = now - RECENT_WINDOW_DAYS * DAY_MS;
-  return {
-    goals: recent,
-    lastWeek:
-      recent.length > 0 &&
-      recent.every((goal) => goal.lastActivityAt >= weekAgo),
-  };
 }
 
 function activityLine(

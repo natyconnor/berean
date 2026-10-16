@@ -1,14 +1,20 @@
 import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { TodayGoal } from "@/hooks/use-today-model";
+import type { GoalLayout } from "@/lib/today-goal-layout";
 
 import { GoalGrid } from "./goal-grid";
 
 vi.mock("./goal-card", () => ({
   GoalCard: ({ goal }: { goal: TodayGoal }) => (
     <a href={`#${goal.title}`}>{goal.title}</a>
+  ),
+}));
+
+vi.mock("./goal-row", () => ({
+  GoalRow: ({ goal }: { goal: TodayGoal }) => (
+    <a href={`#row-${goal.title}`}>{goal.title}</a>
   ),
 }));
 
@@ -26,36 +32,41 @@ function goals(count: number): TodayGoal[] {
   );
 }
 
-function renderGrid(count: number) {
-  return render(<GoalGrid goals={goals(count)} now={NOW} timeZone="UTC" />);
+function renderGrid(count: number, layout: GoalLayout) {
+  return render(
+    <GoalGrid goals={goals(count)} now={NOW} timeZone="UTC" layout={layout} />,
+  );
 }
 
-function cardTitles(): string[] {
-  return within(screen.getByRole("list"))
+function titles(list: HTMLElement): string[] {
+  return within(list)
     .getAllByRole("link")
     .map((link) => link.textContent ?? "");
 }
 
+function rowsList(): HTMLElement | null {
+  return screen.queryByRole("list", { name: "More you're memorizing" });
+}
+
 describe("GoalGrid", () => {
-  it("shows every goal and the count, with no toggle, up to six", () => {
-    renderGrid(6);
+  it("shows every goal as a card beside the rail, with no toggle", () => {
+    renderGrid(9, { kind: "rail" });
 
     expect(
-      screen.getByRole("heading", { name: "What you're memorizing · 6" }),
+      screen.getByRole("heading", { name: "What you're memorizing · 9" }),
     ).toBeInTheDocument();
-    expect(cardTitles()).toHaveLength(6);
+    expect(titles(screen.getByRole("list"))).toHaveLength(9);
+    expect(rowsList()).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Show/ }),
     ).not.toBeInTheDocument();
   });
 
-  it("shows six of nine, then all of them in place, then six again", async () => {
-    renderGrid(9);
+  it("shows two rows of cards in the grid, then the rest as rows", () => {
+    renderGrid(9, { kind: "grid", columns: 3 });
 
-    expect(
-      screen.getByRole("heading", { name: "What you're memorizing · 9" }),
-    ).toBeInTheDocument();
-    expect(cardTitles()).toEqual([
+    const [cards] = screen.getAllByRole("list");
+    expect(titles(cards)).toEqual([
       "Goal 1",
       "Goal 2",
       "Goal 3",
@@ -63,28 +74,35 @@ describe("GoalGrid", () => {
       "Goal 5",
       "Goal 6",
     ]);
+    const rows = rowsList();
+    expect(rows).not.toBeNull();
+    expect(titles(rows as HTMLElement)).toEqual(["Goal 7", "Goal 8", "Goal 9"]);
+    expect(
+      screen.queryByRole("button", { name: /^Show/ }),
+    ).not.toBeInTheDocument();
+  });
 
-    const showAll = screen.getByRole("button", { name: "Show all 9" });
-    expect(showAll).toHaveAttribute("aria-expanded", "false");
-    expect(showAll).toHaveAttribute(
-      "aria-controls",
-      screen.getByRole("list").id,
-    );
+  it("fits four cards in two columns and needs no rows for four goals", () => {
+    const { unmount } = renderGrid(5, { kind: "grid", columns: 2 });
+    expect(titles(screen.getAllByRole("list")[0])).toHaveLength(4);
+    expect(titles(rowsList() as HTMLElement)).toEqual(["Goal 5"]);
+    unmount();
 
-    await userEvent.click(showAll);
-    expect(cardTitles()).toHaveLength(9);
-    expect(screen.getByRole("link", { name: "Goal 7" })).toHaveFocus();
+    renderGrid(4, { kind: "grid", columns: 2 });
+    expect(rowsList()).not.toBeInTheDocument();
+  });
 
-    const showFewer = screen.getByRole("button", { name: "Show fewer" });
-    expect(showFewer).toHaveAttribute("aria-expanded", "true");
+  it("puts every goal in one sideways row on a narrow page", () => {
+    renderGrid(9, { kind: "shelf" });
 
-    await userEvent.click(showFewer);
-    expect(cardTitles()).toHaveLength(6);
-    expect(screen.getByRole("button", { name: "Show all 9" })).toHaveFocus();
+    const list = screen.getByRole("list");
+    expect(titles(list)).toHaveLength(9);
+    expect(list).toHaveClass("overflow-x-auto", "snap-x");
+    expect(rowsList()).not.toBeInTheDocument();
   });
 
   it("renders nothing with no goals", () => {
-    const { container } = renderGrid(0);
+    const { container } = renderGrid(0, { kind: "rail" });
     expect(container).toBeEmptyDOMElement();
   });
 });

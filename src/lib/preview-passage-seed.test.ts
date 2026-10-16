@@ -21,21 +21,16 @@ describe("buildPreviewPassageSeed", () => {
         "buildingDue",
         "budgetExhausted",
         "maintenanceDue",
-        "collectionOnly",
       ]),
     );
   });
 
-  it("keeps start/maintenance packs passage-eligible and multi-book ineligible", () => {
+  it("keeps the ready-to-start pack passage-eligible and unstarted", () => {
     const ready = plan.packs.find((pack) => pack.role === "readyToStart");
-    const multi = plan.packs.find((pack) => pack.role === "collectionOnly");
     expect(ready).toBeDefined();
-    expect(multi).toBeDefined();
-    if (!ready || !multi) return;
+    if (!ready) return;
     expect(packAllowsPassageMode(ready.scope)).toBe(true);
-    expect(packAllowsPassageMode(multi.scope)).toBe(false);
     expect(ready.passage).toBeUndefined();
-    expect(multi.passage).toBeUndefined();
   });
 
   it("seeds a building pack that is learn-due today", () => {

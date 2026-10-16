@@ -60,7 +60,6 @@ import { rangeAllowsPassageMode } from "../src/lib/passage-eligibility";
 import {
   rangeCoversWholeChapters,
   rangeVerseCount,
-  spanInPackScope,
   type PassageRange,
 } from "../src/lib/passage-range";
 import {
@@ -307,15 +306,6 @@ export const listMine = query({
       return { ...paginated, page: [] };
     }
 
-    // One in-Memory member pass for scope packs; custom packs read their
-    // membership rows whose verse is in Memory.
-    const needsInMemory = paginated.page.some(
-      (pack) => pack.kind === "scope" && pack.scope,
-    );
-    const inMemory = needsInMemory
-      ? await loadInMemoryMembers(ctx, userId)
-      : [];
-
     const page = await Promise.all(
       paginated.page.map(async (pack) => {
         const passage = await findPassageByPackId(ctx, pack._id);
@@ -340,11 +330,10 @@ export const listMine = query({
             ),
           );
         } else {
-          const members =
-            pack.kind === "scope" && pack.scope
-              ? filterScopeMembers(inMemory, pack.scope, pack.passageRange)
-              : await loadCustomMembers(ctx, userId, pack._id);
-          summary = packListSummary(members, args.now);
+          summary = packListSummary(
+            await loadCustomMembers(ctx, userId, pack._id),
+            args.now,
+          );
         }
         return {
           _id: pack._id,
@@ -488,12 +477,8 @@ export const addVerse = mutation({
     const userId = await getCurrentUserId(ctx);
     const pack = await loadOwnedPack(ctx, args.id, userId);
     if (!pack) throw new Error("Pack not found");
-
-    if (
-      pack.kind === "scope" &&
-      (!pack.scope || !spanInPackScope(args, pack.scope, pack.passageRange))
-    ) {
-      throw new Error("That verse is outside this pack's scope.");
+    if (pack.kind !== "custom") {
+      throw new Error("Only custom packs take added verses.");
     }
 
     const now = Date.now();
@@ -510,11 +495,7 @@ export const addVerse = mutation({
       now,
       { upNext: true },
     );
-
-    // Scope packs resolve members live, so they need no membership row.
-    if (pack.kind === "custom") {
-      await appendPackVerse(ctx, userId, pack._id, verseRefId, now);
-    }
+    await appendPackVerse(ctx, userId, pack._id, verseRefId, now);
 
     return null;
   },

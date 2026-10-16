@@ -121,9 +121,9 @@ async function memberForVerseRef(
 /**
  * Every verse the user has in Memory, joined to its schedule.
  *
- * This is the member set scope packs filter by scope. In-Memory rows are
- * collected once; verse refs are `db.get` in parallel so a 100-verse pack is
- * one index scan plus N point reads.
+ * Starting a passage filters this by its range to carry over progress.
+ * In-Memory rows are collected once; verse refs are `db.get` in parallel so a
+ * 100-verse set is one index scan plus N point reads.
  */
 export async function loadInMemoryMembers(
   ctx: QueryCtx | MutationCtx,
@@ -139,18 +139,15 @@ export async function loadInMemoryMembers(
 }
 
 /**
- * A pack's current members: scope packs resolve live from the in-Memory set,
- * custom packs from their explicit membership rows.
+ * A pack's current members: its `packVerses` rows whose verse is in Memory.
+ * A scope pack's scope only bounds the passage it can become; verses inside
+ * it never join on their own.
  */
 export async function loadPackMembers(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   pack: Doc<"packs">,
 ): Promise<PackMember[]> {
-  if (pack.kind === "scope" && pack.scope) {
-    const inMemory = await loadInMemoryMembers(ctx, userId);
-    return filterScopeMembers(inMemory, pack.scope, pack.passageRange);
-  }
   return await loadCustomMembers(ctx, userId, pack._id);
 }
 
@@ -209,18 +206,20 @@ export async function loadCustomPackVerseRefIds(
 }
 
 /**
- * Which packs list each verse, for `InMemoryVerseItem.packIds`: custom packs
- * by their `packVerses` rows, and scope packs not in passage mode by scope.
- * Membership of an in-Memory verse is exactly these packs. Pass
- * `onlyVerseRefId` to read just that verse's `packVerses` rows.
+ * Which packs list each verse, for `InMemoryVerseItem.packIds`: the custom
+ * packs whose `packVerses` rows hold it. Membership of an in-Memory verse is
+ * exactly these packs. Pass `onlyVerseRefId` to read just that verse's
+ * `packVerses` rows.
  */
 export async function loadPackMembershipIndex(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   onlyVerseRefId?: Id<"verseRefs">,
 ): Promise<{
+  packs: Doc<"packs">[];
+  passagePackIds: Set<Id<"packs">>;
   customByVerseRef: Map<Id<"verseRefs">, Id<"packs">[]>;
-  packIdsFor: (verseRefId: Id<"verseRefs">, span: VerseSpan) => Id<"packs">[];
+  packIdsFor: (verseRefId: Id<"verseRefs">) => Id<"packs">[];
 }> {
   const [packs, packVerses, passagePackIds] = await Promise.all([
     ctx.db
@@ -249,29 +248,54 @@ export async function loadPackMembershipIndex(
     customByVerseRef.set(row.verseRefId, ids);
   }
 
-  const scopePacks = packs.filter(
-    (pack) =>
-      pack.kind === "scope" &&
-      pack.scope !== undefined &&
-      !passagePackIds.has(pack._id),
-  );
-
   return {
+    packs,
+    passagePackIds,
     customByVerseRef,
-    packIdsFor: (verseRefId, span) => [
-      ...(customByVerseRef.get(verseRefId) ?? []),
-      ...scopePacks
-        .filter(
-          (pack) =>
-            pack.scope && spanInPackScope(span, pack.scope, pack.passageRange),
-        )
-        .map((pack) => pack._id),
-    ],
+    packIdsFor: (verseRefId) => customByVerseRef.get(verseRefId) ?? [],
   };
 }
 
+export interface VersePackLabel {
+  packId: Id<"packs">;
+  name: string;
+  kind: "pack" | "passage";
+}
+
 /**
- * Scope packs with unified recitation on, joined to their live members.
+ * Every pack and passage a verse is in, by name: its packs (as
+ * {@link loadPackMembershipIndex} lists them), then passages whose range
+ * holds it.
+ */
+export async function loadVersePackLabels(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<(verseRefId: Id<"verseRefs">, span: VerseSpan) => VersePackLabel[]> {
+  const index = await loadPackMembershipIndex(ctx, userId);
+  const packById = new Map(index.packs.map((pack) => [pack._id, pack]));
+  const passages = index.packs.filter((pack) =>
+    index.passagePackIds.has(pack._id),
+  );
+  return (verseRefId, span) => [
+    ...index.packIdsFor(verseRefId).flatMap((packId) => {
+      const pack = packById.get(packId);
+      return pack ? [{ packId, name: pack.name, kind: "pack" as const }] : [];
+    }),
+    ...passages
+      .filter(
+        (pack) =>
+          pack.scope && spanInPackScope(span, pack.scope, pack.passageRange),
+      )
+      .map((pack) => ({
+        packId: pack._id,
+        name: pack.name,
+        kind: "passage" as const,
+      })),
+  ];
+}
+
+/**
+ * Scope packs with unified recitation on, joined to their members.
  * Used to hide those verses from the global due queue and count each pack
  * as a single due item. Packs that already have a `passageMemory` row are
  * excluded: leftover hearts stay in the verse due scan, and review goes
@@ -294,24 +318,12 @@ export async function loadUnifiedReviewPacks(
   const unifiedPacks = flagged.filter((pack) => !passageIds.has(pack._id));
   if (unifiedPacks.length === 0) return [];
 
-  // Scope packs all share the same in-Memory set — load it once instead of
-  // collecting it again per pack on dueCount / dueQueue.
-  const needsInMemory = unifiedPacks.some(
-    (pack) => pack.kind === "scope" && pack.scope,
+  return await Promise.all(
+    unifiedPacks.map(async (pack) => ({
+      pack,
+      members: await loadCustomMembers(ctx, userId, pack._id),
+    })),
   );
-  const inMemory = needsInMemory
-    ? await loadInMemoryMembers(ctx, userId)
-    : null;
-
-  const unified: Array<{ pack: Doc<"packs">; members: PackMember[] }> = [];
-  for (const pack of unifiedPacks) {
-    const members =
-      pack.kind === "scope" && pack.scope && inMemory
-        ? filterScopeMembers(inMemory, pack.scope, pack.passageRange)
-        : await loadCustomMembers(ctx, userId, pack._id);
-    unified.push({ pack, members });
-  }
-  return unified;
 }
 
 /** Review-phase members of unified packs (hidden from the global review due). */

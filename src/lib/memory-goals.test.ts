@@ -174,6 +174,35 @@ describe("buildGoalCards: passages", () => {
       masteryFraction: 0,
       nextDueAt: NOW - HOUR_MS,
     });
+    expect(goal.pieceStates).toEqual([
+      { verses: 2, state: "learned", today: false },
+      { verses: 1, state: "learned", today: false },
+      { verses: 1, state: "learning", today: true },
+      { verses: 2, state: "upNext", today: false },
+    ]);
+  });
+
+  it("keeps a verse memorized on its own as learned out of order", () => {
+    const goal = only(
+      buildGoalCards(
+        input({
+          passages: [
+            passage("psalm23", [
+              piece(0, 23, 1, 2, "unreached"),
+              piece(1, 23, 3, 3, "solid", { carriedOver: true }),
+              piece(2, 23, 4, 4, "unreached"),
+            ]),
+          ],
+        }),
+      ),
+      "passage",
+    );
+
+    expect(goal.pieceStates).toEqual([
+      { verses: 2, state: "upNext", today: true },
+      { verses: 1, state: "learned", today: false },
+      { verses: 1, state: "upNext", today: false },
+    ]);
   });
 
   it("starts a new passage on its first verses while today's budget lasts", () => {
@@ -483,70 +512,25 @@ describe("buildGoalCards: packs", () => {
     expect(goal.masteryFraction).toBeCloseTo((6 / 30 + 1) / 4);
   });
 
-  it("lists a scope pack's members in Bible order", () => {
-    const goal = only(
-      buildGoalCards(
-        input({
-          verses: [
-            verse("r12", { chapter: 12, startVerse: 2 }),
-            verse("r8", { chapter: 8, startVerse: 1 }),
-            verse("john", { book: "John", chapter: 1, startVerse: 1 }),
-          ],
-          packs: [
-            {
-              packId: "romans",
-              name: "Romans",
-              kind: "scope",
-              scope: { books: ["Romans"] },
-              verseRefIds: [],
-              createdAt: NOW,
-            },
-          ],
-        }),
-      ),
-      "pack",
+  it("gives a scope pack only the verses listed in it, not every verse its scope holds", () => {
+    const goals = buildGoalCards(
+      input({
+        verses: [verse("r8", { chapter: 8, startVerse: 1 })],
+        packs: [
+          {
+            packId: "romans",
+            name: "Romans",
+            kind: "scope",
+            verseRefIds: [],
+            createdAt: NOW,
+          },
+        ],
+      }),
     );
 
-    expect(goal.memberLabels).toEqual(["Romans 8:1", "Romans 12:2"]);
-  });
-
-  it("lists only the verses inside a scope pack's passage range", () => {
-    const goal = only(
-      buildGoalCards(
-        input({
-          verses: [
-            verse("r8-27", { chapter: 8, startVerse: 27 }),
-            verse("r8-28", { chapter: 8, startVerse: 28 }),
-            verse("r8-39", { chapter: 8, startVerse: 39 }),
-          ],
-          packs: [
-            {
-              packId: "conquerors",
-              name: "More than conquerors",
-              kind: "scope",
-              scope: {
-                books: ["Romans"],
-                chapterRanges: [
-                  { book: "Romans", startChapter: 8, endChapter: 8 },
-                ],
-              },
-              passageRange: {
-                book: "Romans",
-                startChapter: 8,
-                startVerse: 28,
-                endChapter: 8,
-                endVerse: 39,
-              },
-              verseRefIds: [],
-              createdAt: NOW,
-            },
-          ],
-        }),
-      ),
-      "pack",
-    );
-
-    expect(goal.memberLabels).toEqual(["Romans 8:28", "Romans 8:39"]);
+    expect(goals.map((goal) => `${goal.kind}:${goal.title}`)).toEqual([
+      "verse:Romans 8:1",
+    ]);
   });
 
   it("reviews a pack recited together only when the recitation is due", () => {
@@ -607,7 +591,6 @@ describe("buildGoalCards: packs", () => {
             packId: "psalm16",
             name: "Psalm 16",
             kind: "scope",
-            scope: { books: ["Psalms"] },
             verseRefIds: [],
             createdAt: NOW,
           },

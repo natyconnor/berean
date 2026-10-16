@@ -23,9 +23,7 @@ import {
   planMemorizeTransition,
   type MemorizeSpanResult,
 } from "../../src/lib/memorize-transition";
-import { spanInPackScope } from "../../src/lib/passage-range";
 import { loadPackMembers, loadPackMembershipIndex } from "./packs";
-import { loadPassagePackIds } from "./passageDue";
 import { deletePassageAndReviews, findPassageByPackId } from "./passageMemory";
 import { loadChapterHeartSpans } from "./savedVerses";
 import {
@@ -60,7 +58,7 @@ export async function stopMemorizingPack(
     ]);
     for (const member of members) {
       const otherPacks = membership
-        .packIdsFor(member.verseRefId, member)
+        .packIdsFor(member.verseRefId)
         .filter((packId) => packId !== pack._id);
       if (otherPacks.length === 0) {
         await stopMemorizingVerse(ctx, userId, member.verseRefId, now);
@@ -103,7 +101,7 @@ export async function releaseUnstartedVerses(
     const ref = await ctx.db.get(verseRefId);
     if (!ref || ref.userId !== userId) continue;
     const otherPacks = membership
-      .packIdsFor(verseRefId, ref)
+      .packIdsFor(verseRefId)
       .filter((id) => id !== packId);
     if (otherPacks.length > 0) continue;
     await stopMemorizingVerse(ctx, userId, verseRefId, now);
@@ -290,14 +288,8 @@ export type MemorizeStatusReader = {
     book: string,
     chapter: number,
   ): Promise<VerseProgressSpan[]>;
-  /**
-   * The first pack that lists this verse: a custom pack by its `packVerses`
-   * row, else a scope pack (not in passage mode) whose scope holds it.
-   */
-  firstPackName(
-    verseRefId: Id<"verseRefs">,
-    span: VerseSpan,
-  ): Promise<string | null>;
+  /** The first custom pack whose `packVerses` rows list this verse. */
+  firstPackName(verseRefId: Id<"verseRefs">): Promise<string | null>;
 };
 
 function cached<K, V>(
@@ -324,7 +316,6 @@ export function memorizeStatusReader(
   const verses = new Map<string, Promise<InMemoryVerse | null>>();
   const memoryVerses = new Map<string, Promise<VerseProgressSpan[]>>();
   const packNames = new Map<Id<"verseRefs">, Promise<string | null>>();
-  let scopePacks: Promise<Doc<"packs">[]> | undefined;
   return {
     chapterHearts: (book, chapter) =>
       cached(hearts, `${book}|${chapter}`, () =>
@@ -340,18 +331,10 @@ export function memorizeStatusReader(
       cached(memoryVerses, `${book}|${chapter}`, () =>
         loadChapterMemoryVerses(ctx, userId, book, chapter),
       ),
-    firstPackName: (verseRefId, span) =>
-      cached(packNames, verseRefId, async () => {
-        const custom = await loadFirstCustomPackName(ctx, userId, verseRefId);
-        if (custom !== null) return custom;
-        scopePacks ??= loadVerseScopePacks(ctx, userId);
-        const scopePack = (await scopePacks).find(
-          (pack) =>
-            pack.scope !== undefined &&
-            spanInPackScope(span, pack.scope, pack.passageRange),
-        );
-        return scopePack?.name ?? null;
-      }),
+    firstPackName: (verseRefId) =>
+      cached(packNames, verseRefId, () =>
+        loadFirstCustomPackName(ctx, userId, verseRefId),
+      ),
   };
 }
 
@@ -374,29 +357,6 @@ async function loadFirstCustomPackName(
     }
   }
   return null;
-}
-
-/**
- * Scope packs that list in-Memory verses by scope: not in passage mode (see
- * `loadPackMembershipIndex`).
- */
-async function loadVerseScopePacks(
-  ctx: QueryCtx,
-  userId: Id<"users">,
-): Promise<Doc<"packs">[]> {
-  const [packs, passagePackIds] = await Promise.all([
-    ctx.db
-      .query("packs")
-      .withIndex("by_userId_lastOpenedAt", (q) => q.eq("userId", userId))
-      .collect(),
-    loadPassagePackIds(ctx, userId),
-  ]);
-  return packs.filter(
-    (pack) =>
-      pack.kind === "scope" &&
-      pack.scope !== undefined &&
-      !passagePackIds.has(pack._id),
-  );
 }
 
 async function loadChapterMemoryVerses(
@@ -589,7 +549,7 @@ export async function loadMemorizeStatus(
       const progress = memorizeProgress(verse.memory);
       const upNextPackName =
         progress === "upNext"
-          ? await reader.firstPackName(verse.verseRefId, span)
+          ? await reader.firstPackName(verse.verseRefId)
           : null;
       return {
         state: "memorizing",

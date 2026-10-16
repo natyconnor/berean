@@ -49,6 +49,7 @@ import {
 } from "../../../../shared/memorize-suggestions";
 
 import { FromYourHearts } from "./from-your-hearts";
+import { GoalKindMark } from "./goal-kind-icon";
 
 type MemorizeStatus = FunctionReturnType<typeof api.verseMemory.memorizeStatus>;
 
@@ -64,20 +65,65 @@ const chipClassName =
 
 /**
  * "Start something new": search a reference, pick a suggestion, make a pack,
- * or memorize one of your hearts.
+ * or memorize one of your hearts. As the `rail` beside the goals it is one
+ * tinted panel, scrolling on its own when it is taller than its pinned space.
  */
 export function StartSomethingNew({
   scrollRootRef,
+  variant = "page",
 }: {
   scrollRootRef: RefObject<HTMLElement | null>;
+  variant?: "page" | "rail";
 }) {
   const headingId = useId();
   const [query, setQuery] = useState("");
+  const rail = variant === "rail";
+
+  const body = (
+    <>
+      <MemorizeSearch
+        label="What do you want to memorize?"
+        placeholder="Try Psalm 23 or John 15"
+        query={query}
+        onQueryChange={setQuery}
+        inputId={MEMORIZE_SEARCH_INPUT_ID}
+        showHint={!rail}
+      />
+      <TodaySuggestionChips />
+      <MakeYourOwnPackTile
+        className={rail ? "bg-card hover:bg-accent" : undefined}
+      />
+      <FromYourHearts
+        variant="today"
+        layout={rail ? "column" : "grid"}
+        query={query}
+        scrollRootRef={scrollRootRef}
+      />
+    </>
+  );
 
   return (
-    <section aria-labelledby={headingId} className="space-y-3">
+    <section
+      aria-labelledby={headingId}
+      className={cn(
+        "space-y-3",
+        rail &&
+          "min-h-0 overflow-y-auto overscroll-contain rounded-2xl border border-primary/25 bg-primary/[0.06] p-4 shadow-sm",
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
-        <h2 id={headingId} className="text-[15px] font-semibold tracking-tight">
+        <h2
+          id={headingId}
+          className="flex items-center gap-2 text-[15px] font-semibold tracking-tight"
+        >
+          {rail ? (
+            <span
+              aria-hidden
+              className="grid size-6 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground"
+            >
+              <Plus className="size-3.5" />
+            </span>
+          ) : null}
           Start something new
         </h2>
         <Button
@@ -86,28 +132,20 @@ export function StartSomethingNew({
           size="sm"
           className="text-muted-foreground max-sm:h-11"
         >
-          <InternalLink href="/memory/presets">
-            More suggestions
+          <InternalLink
+            href="/memory/presets"
+            aria-label={rail ? "More suggestions" : undefined}
+          >
+            {rail ? "More" : "More suggestions"}
             <ArrowRight aria-hidden />
           </InternalLink>
         </Button>
       </div>
-      <div className="rounded-xl border bg-card p-4 shadow-sm">
-        <MemorizeSearch
-          label="What do you want to memorize?"
-          placeholder="Try Psalm 23 or John 15"
-          query={query}
-          onQueryChange={setQuery}
-          inputId={MEMORIZE_SEARCH_INPUT_ID}
-        />
-        <TodaySuggestionChips />
-        <MakeYourOwnPackTile />
-        <FromYourHearts
-          variant="today"
-          query={query}
-          scrollRootRef={scrollRootRef}
-        />
-      </div>
+      {rail ? (
+        body
+      ) : (
+        <div className="rounded-xl border bg-card p-4 shadow-sm">{body}</div>
+      )}
     </section>
   );
 }
@@ -214,6 +252,7 @@ export function MemorizeSearch({
   onQueryChange,
   className,
   inputId: inputIdProp,
+  showHint = true,
 }: {
   label: string;
   placeholder: string;
@@ -222,6 +261,8 @@ export function MemorizeSearch({
   className?: string;
   /** A stable id so other parts of Today can scroll to and focus the search. */
   inputId?: string;
+  /** The in-field "A verse, a passage, or a whole chapter" from `sm` up. */
+  showHint?: boolean;
 }) {
   const generatedInputId = useId();
   const inputId = inputIdProp ?? generatedInputId;
@@ -281,10 +322,10 @@ export function MemorizeSearch({
           }}
           className={cn(
             "h-12 bg-card pl-10 text-base md:text-[15px]",
-            query.length === 0 && "sm:pr-64",
+            showHint && query.length === 0 && "sm:pr-64",
           )}
         />
-        {query.length === 0 ? (
+        {showHint && query.length === 0 ? (
           <span
             aria-hidden
             className="pointer-events-none absolute top-1/2 right-3.5 hidden -translate-y-1/2 text-xs text-muted-foreground sm:block"
@@ -533,18 +574,16 @@ function SuggestionChip({ suggestion }: { suggestion: MemorizableSuggestion }) {
   );
 }
 
-export function MakeYourOwnPackTile() {
+export function MakeYourOwnPackTile({ className }: { className?: string }) {
   return (
     <InternalLink
       href="/memory/new"
-      className="mt-3.5 flex max-w-[460px] items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-2.5 transition-colors outline-none hover:bg-primary/10 focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:max-w-none"
+      className={cn(
+        "mt-3.5 flex max-w-[460px] items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3.5 py-2.5 transition-colors outline-none hover:bg-primary/10 focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:max-w-none",
+        className,
+      )}
     >
-      <span
-        aria-hidden
-        className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"
-      >
-        <Plus className="size-4" />
-      </span>
+      <GoalKindMark kind="pack" />
       <span className="min-w-0">
         <span className="block text-sm font-semibold">Make your own pack</span>{" "}
         <span className="block text-xs text-muted-foreground">

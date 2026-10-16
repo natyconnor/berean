@@ -5,6 +5,7 @@ import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../../convex/_generated/api";
 import { KpiRow } from "@/components/memory/dashboard/kpi-row";
 import { InternalLink } from "@/components/memory/internal-link";
+import { GoalKindIcon } from "@/components/memory/today/goal-kind-icon";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useTodayModel, type TodayGoal } from "@/hooks/use-today-model";
@@ -116,9 +117,10 @@ function GoalProgressTable({
                 <div className="flex min-w-0 items-baseline justify-between gap-2 sm:block">
                   <p className="min-w-0 truncate text-sm">
                     <span className="font-semibold">{goal.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {" "}
-                      · {row.kindLabel}
+                    <span className="ml-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <span aria-hidden>·</span>
+                      <GoalKindIcon kind={goal.kind} className="size-3" />
+                      {row.kindLabel}
                     </span>
                   </p>
                   {row.nextLabel ? (

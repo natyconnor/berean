@@ -20,6 +20,17 @@ const passageGoalValidator = v.object({
   title: v.string(),
   verseCount: v.number(),
   learnedVerses: v.number(),
+  pieceStates: v.array(
+    v.object({
+      verses: v.number(),
+      state: v.union(
+        v.literal("learned"),
+        v.literal("learning"),
+        v.literal("upNext"),
+      ),
+      today: v.boolean(),
+    }),
+  ),
   status: passageStatusValidator,
   hasWorkToday: v.boolean(),
   todayStep: v.union(
@@ -101,6 +112,13 @@ const todayModelValidator = v.object({
   }),
   goals: v.array(
     v.union(passageGoalValidator, packGoalValidator, verseGoalValidator),
+  ),
+  emptyPacks: v.array(
+    v.object({
+      packId: v.id("packs"),
+      title: v.string(),
+      createdAt: v.number(),
+    }),
   ),
 });
 

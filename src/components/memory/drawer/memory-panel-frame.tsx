@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { InternalLink } from "@/components/memory/internal-link";
 import { Button } from "@/components/ui/button";
 import { TODAY_LABEL } from "@/lib/memory-copy";
+import type { GoalCard } from "@/lib/memory-goals";
 import type { MemoryPanel } from "@/lib/memory-panel";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,8 @@ export interface MemoryPanelFrameProps {
   title: ReactNode;
   /** Beside the title, outside the heading (e.g. a Rename button). */
   titleAccessory?: ReactNode;
+  /** The thing this panel is, shown as its icon beside the title. */
+  kind?: GoalCard["kind"];
   subtitle?: ReactNode;
   /** Header actions: cross-links and a ⋯ menu. */
   actions?: ReactNode;
@@ -31,6 +34,7 @@ export interface MemoryPanelFrameProps {
 export function MemoryPanelFrame({
   title,
   titleAccessory,
+  kind,
   subtitle,
   actions,
   scrollBody,
@@ -44,6 +48,7 @@ export function MemoryPanelFrame({
         back={frame.back}
         title={title}
         titleAccessory={titleAccessory}
+        kind={kind}
         subtitle={subtitle}
         actions={actions}
         fullPageHref={frame.fullPageHref}
@@ -60,6 +65,7 @@ export function MemoryPanelFrame({
       back={frame.back ?? { label: TODAY_LABEL, href: "/memory" }}
       title={title}
       titleAccessory={titleAccessory}
+      kind={kind}
       subtitle={subtitle}
       actions={actions}
     >

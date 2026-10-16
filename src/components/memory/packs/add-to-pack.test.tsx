@@ -129,6 +129,14 @@ describe("AddToPack", () => {
         lastOpenedAt: 1,
         summary: passageSummary,
       },
+      {
+        _id: "rom8-pack",
+        name: "Romans 8 unstarted",
+        kind: "scope",
+        scope: chapterScope("Romans", 8),
+        lastOpenedAt: 1,
+        summary: packSummary,
+      },
     ];
     await openPopover();
 
@@ -143,6 +151,7 @@ describe("AddToPack", () => {
       }),
     ).toBeDisabled();
     expect(screen.queryByText("Psalm 23")).not.toBeInTheDocument();
+    expect(screen.queryByText("Romans 8 unstarted")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Merced Team" }));
     expect(mocks.addVerse).toHaveBeenCalledWith({

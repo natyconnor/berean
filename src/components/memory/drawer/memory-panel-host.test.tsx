@@ -67,7 +67,9 @@ vi.mock("../../../../convex/_generated/api", () => ({
       addVerse: "packs.addVerse",
     },
     passageMemory: { ensureDueBackfill: "passageMemory.ensureDueBackfill" },
+    savedVerses: { listAll: "savedVerses.listAll" },
     verseMemory: {
+      listLibrary: "verseMemory.listLibrary",
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
       memoryStatus: "verseMemory.memoryStatus",
@@ -111,6 +113,11 @@ const TODAY = {
       title: "Psalm 16",
       verseCount: 11,
       learnedVerses: 4,
+      pieceStates: [
+        { verses: 4, state: "learned", today: false },
+        { verses: 2, state: "learning", today: true },
+        { verses: 5, state: "upNext", today: false },
+      ],
       status: "building",
       hasWorkToday: true,
       todayStep: {
@@ -148,6 +155,7 @@ const TODAY = {
       memberLabels: ["Luke 9:23–24", "Matthew 6:33", "Romans 12:2"],
     },
   ],
+  emptyPacks: [],
 };
 
 const VERSE_DETAIL = {
@@ -232,21 +240,22 @@ describe("MemoryPanelHost", () => {
       within(dialog).getByRole("link", { name: /Your progress/ }),
     ).toHaveAttribute("href", "/memory?panel=progress");
 
+    const overview = within(dialog).getByRole("region", { name: "Overview" });
+    expect(overview).toHaveTextContent(
+      "12 verses · 1 passage · 1 pack4 due today",
+    );
     expect(
-      within(dialog).getByRole("heading", { name: "Due today · 4" }),
+      within(dialog).getByRole("heading", { name: "Passages and packs · 2" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("link", { name: /Do all 4 · about 12 min/ }),
-    ).toHaveAttribute("href", "/memory/today?return=%2Fmemory");
-    expect(
-      within(dialog).getByRole("link", { name: "Continue learning Psalm 16" }),
+      within(dialog).getByRole("link", { name: "Continue Psalm 16" }),
     ).toHaveAttribute("href", "/memory/psalm16/learn?return=%2Fmemory");
     expect(
       within(dialog).getByRole("link", { name: "Review Merced Team" }),
     ).toHaveAttribute("href", "/memory/merced/review?return=%2Fmemory");
     expect(
-      within(dialog).getByRole("link", { name: /All 12 verses, filters/ }),
-    ).toHaveAttribute("href", "/memory/verses");
+      within(dialog).queryByRole("button", { name: /^Sort/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("sends a pack with learning and reviews to its scoped Today session", () => {
@@ -262,12 +271,26 @@ describe("MemoryPanelHost", () => {
     expect(
       within(dialog).getByRole("link", { name: "Continue Merced Team" }),
     ).toHaveAttribute("href", "/memory/today?packId=merced&return=%2Fmemory");
-    expect(
-      within(dialog).queryByRole("link", { name: "Learn Merced Team" }),
-    ).not.toBeInTheDocument();
   });
 
-  it("swaps to a recently active item with from=verses", async () => {
+  it("offers Practice on a pack with nothing due", () => {
+    mocks.queryResults.set("memoryHome.today", {
+      ...TODAY,
+      goals: TODAY.goals.map((goal) =>
+        goal.kind === "pack"
+          ? { ...goal, hasWorkToday: false, reviewsDue: [] }
+          : goal,
+      ),
+    });
+    renderHost("verses");
+
+    const dialog = screen.getByRole("dialog", { name: "Your verses" });
+    expect(
+      within(dialog).getByRole("link", { name: "Practice Merced Team" }),
+    ).toHaveAttribute("href", "/memory/merced/practice?return=%2Fmemory");
+  });
+
+  it("swaps to a goal's detail with from=verses", async () => {
     renderHost("verses");
     const dialog = screen.getByRole("dialog", { name: "Your verses" });
 

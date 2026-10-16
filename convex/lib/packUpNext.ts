@@ -2,7 +2,6 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { loadInMemoryMembers, type PackMember } from "./packs";
 import { loadPassagePackIds } from "./passageDue";
-import { spanInPackScope } from "../../src/lib/passage-range";
 import {
   packUpNextAcrossPacks,
   type PackUpNext,
@@ -12,9 +11,9 @@ import {
 export type PackUpNextResult = PackUpNext<Id<"packs">, PackMember>;
 
 /**
- * Pack Up-next verses that join today's learning (pack pacing). Every pack
- * except passages paces its in-Memory members: custom packs in `packVerses`
- * order, scope packs in Bible order. A verse in two packs is listed once.
+ * Pack Up-next verses that join today's learning (pack pacing). Every custom
+ * pack paces its in-Memory members in `packVerses` order; passages pace their
+ * own pieces. A verse in two packs is listed once.
  */
 export async function loadPackUpNext(
   ctx: QueryCtx | MutationCtx,
@@ -29,9 +28,7 @@ export async function loadPackUpNext(
   ]);
 
   const pacedPacks = packs.filter(
-    (pack) =>
-      !passagePackIds.has(pack._id) &&
-      (pack.kind === "custom" || pack.scope !== undefined),
+    (pack) => pack.kind === "custom" && !passagePackIds.has(pack._id),
   );
   if (pacedPacks.length === 0) return { members: [], byPackId: new Map() };
 
@@ -43,17 +40,6 @@ export async function loadPackUpNext(
   const pacing = await Promise.all(
     pacedPacks.map(
       async (pack): Promise<PacingPack<Id<"packs">, PackMember>> => {
-        const scope = pack.scope;
-        if (pack.kind === "scope" && scope) {
-          return {
-            packId: pack._id,
-            kind: "scope",
-            members: inMemory.filter((member) =>
-              spanInPackScope(member, scope, pack.passageRange),
-            ),
-          };
-        }
-
         const rows = await ctx.db
           .query("packVerses")
           .withIndex("by_userId_packId_order", (q) =>

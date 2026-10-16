@@ -63,6 +63,7 @@ import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
 import { useMemoryPanelFrame } from "./drawer/memory-panel-context";
 import { MemoryPanelFrame } from "./drawer/memory-panel-frame";
+import { GoalKindMark } from "./today/goal-kind-icon";
 import { InternalLink } from "./internal-link";
 import { useMemorizeSheet } from "./memorize/memorize-context";
 import { AddToPack } from "./packs/add-to-pack";
@@ -126,6 +127,7 @@ export function VerseDetailPanel({
   if (detail === undefined) {
     return (
       <MemoryPanelFrame
+        kind="verse"
         title={
           <>
             <span
@@ -143,7 +145,7 @@ export function VerseDetailPanel({
 
   if (detail === null) {
     return (
-      <MemoryPanelFrame title="Verse not found">
+      <MemoryPanelFrame kind="verse" title="Verse not found">
         <p className="py-6 text-sm text-muted-foreground">
           This verse isn&apos;t in your Memory. It may have been removed.
         </p>
@@ -155,6 +157,7 @@ export function VerseDetailPanel({
   return (
     <MemoryPanelFrame
       title={reference}
+      kind="verse"
       subtitle={verseSubtitle(detail)}
       actions={
         detail.inMemory ? (
@@ -194,9 +197,12 @@ export function VerseDetail({
   return (
     <div className="space-y-5">
       <div className="min-w-0">
-        <h3 className="text-base font-semibold tracking-tight">
-          {formatVerseRefTitle(detail)}
-        </h3>
+        <div className="flex min-w-0 items-center gap-2">
+          <GoalKindMark kind="verse" />
+          <h3 className="min-w-0 truncate text-base font-semibold tracking-tight">
+            {formatVerseRefTitle(detail)}
+          </h3>
+        </div>
         <p className="mt-0.5 text-sm text-muted-foreground">
           {verseSubtitle(detail)}
         </p>

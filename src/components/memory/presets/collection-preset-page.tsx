@@ -12,6 +12,7 @@ import { useQuery } from "convex/react";
 
 import { api } from "../../../../convex/_generated/api";
 import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
+import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -85,7 +86,12 @@ function ChapterStart({ presetId }: { presetId: string }) {
 
   return (
     <PresetShell>
-      <h1 className="text-lg font-semibold tracking-tight">{preset.title}</h1>
+      <div className="flex min-w-0 items-center gap-2">
+        <GoalKindMark kind="passage" />
+        <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
+          {preset.title}
+        </h1>
+      </div>
       <p className="mt-1 text-sm text-muted-foreground">
         {formatChapterRange(preset)} · {verseCount}{" "}
         {verseCount === 1 ? "verse" : "verses"}
@@ -211,9 +217,12 @@ function CollectionStart({ presetId }: { presetId: string }) {
               memorizeButton
             )}
           </div>
-          <h1 className="mt-1 text-lg font-semibold tracking-tight">
-            {preset.title}
-          </h1>
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            <GoalKindMark kind="pack" />
+            <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
+              {preset.title}
+            </h1>
+          </div>
           <p className="mt-0.5 hidden max-w-3xl text-sm text-muted-foreground sm:block">
             {description}
           </p>

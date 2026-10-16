@@ -18,6 +18,7 @@ import { withReturn } from "@/lib/memory-return";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { memoryTodaySessionHref } from "@/lib/memory-session-path";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
+import { GoalKindIcon } from "./today/goal-kind-icon";
 import { InternalLink } from "./internal-link";
 import { LearnVerseDialog } from "./learn-verse-dialog";
 import { useMemorizeSheet } from "./memorize/memorize-context";
@@ -26,11 +27,11 @@ import type { PracticeVerse } from "./practice/practice-board";
 import { toPracticeVerse } from "./to-practice-verse";
 
 const VIEWS: Array<{ key: LibraryView; label: string }> = [
+  { key: "all", label: "All" },
   { key: "due", label: "Due today" },
   { key: "learning", label: "Learning" },
   { key: "memorized", label: "Memorized" },
   { key: "mastered", label: "Mastered" },
-  { key: "all", label: "All" },
 ];
 
 const CHIP_CLASS =
@@ -43,10 +44,10 @@ const DUE_INITIAL_PAGE_SIZE = 40;
 const LOAD_MORE_PAGE_SIZE = 20;
 
 /**
- * The Library: verses in Memory in Due today / Learning / Memorized /
- * Mastered / All views, paginated (`usePaginatedQuery` over
- * `verseMemory.listLibrary`). A row shows its status and next step and
- * opens that verse's detail.
+ * The Library: verses in Memory in All / Due today / Learning / Memorized /
+ * Mastered views, paginated (`usePaginatedQuery` over
+ * `verseMemory.listLibrary`). A row shows its status, next step and packs,
+ * and opens that verse's detail. Rows go two across in a wide `@container`.
  *
  * Search is an in-view filter of already-loaded pages (it does not fetch
  * unloaded pages) — a documented v1 limitation.
@@ -54,6 +55,7 @@ const LOAD_MORE_PAGE_SIZE = 20;
 export function MemoryLibrary({
   now,
   returnTo,
+  search: searchProp,
   onOpenVerse,
   onLearnVerse,
   onReviewVerse,
@@ -62,6 +64,8 @@ export function MemoryLibrary({
   now: number;
   /** Where the Due today session comes back to. */
   returnTo: string;
+  /** A search kept outside the Library; it then shows no filter of its own. */
+  search?: string;
   /** Show one verse's detail (its drawer over Today, or its page). */
   onOpenVerse: (verseRefId: Id<"verseRefs">) => void;
   /** Start a Learning session scoped to one library verse. */
@@ -71,8 +75,9 @@ export function MemoryLibrary({
   /** Extra recall for a graduated verse that is not due yet. */
   onPracticeVerse: (verse: PracticeVerse) => void;
 }) {
-  const [view, setView] = useState<LibraryView>("due");
-  const [search, setSearch] = useState("");
+  const [view, setView] = useState<LibraryView>("all");
+  const [ownSearch, setSearch] = useState("");
+  const search = searchProp ?? ownSearch;
   const [learnOpen, setLearnOpen] = useState(false);
   const learnOpenerRef = useRef<HTMLButtonElement | null>(null);
   const memorizeSheet = useMemorizeSheet();
@@ -155,7 +160,7 @@ export function MemoryLibrary({
     ) : null;
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -183,16 +188,18 @@ export function MemoryLibrary({
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filter this list…"
-          className="h-9 pl-8"
-          aria-label="Filter this list by reference"
-        />
-      </div>
+      {searchProp === undefined ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter this list…"
+            className="h-9 pl-8"
+            aria-label="Filter this list by reference"
+          />
+        </div>
+      ) : null}
 
       {isLoadingFirstPage && !isSwitchingView ? (
         <div className="flex min-h-[16rem] items-center justify-center py-16">
@@ -237,7 +244,7 @@ export function MemoryLibrary({
           ) : null}
           <ul
             className={cn(
-              "space-y-1.5 transition-opacity",
+              "grid gap-1.5 transition-opacity @3xl:grid-cols-2",
               isSwitchingView && "pointer-events-none opacity-50",
             )}
             aria-busy={isSwitchingView}
@@ -245,8 +252,9 @@ export function MemoryLibrary({
             {filtered.map((row) => {
               const practiceVerse = toPracticeVerse(row);
               const { line, dueToday } = libraryRow(row, now, timeZone);
+              const [firstPack, ...morePacks] = row.packs;
               return (
-                <li key={row.verseMemoryId}>
+                <li key={row.verseMemoryId} className="min-w-0">
                   <MemoryListRow className="flex items-center gap-3 px-3 py-1.5">
                     <button
                       type="button"
@@ -271,8 +279,27 @@ export function MemoryLibrary({
                           ) : null}
                         </span>
                       </span>
-                      <span className="block max-w-full truncate text-xs text-muted-foreground">
-                        {line}
+                      <span className="flex min-w-0 max-w-full items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="truncate">{line}</span>
+                        {firstPack ? (
+                          <span className="inline-flex min-w-0 shrink items-center gap-1">
+                            <span aria-hidden>·</span>
+                            <GoalKindIcon
+                              kind={firstPack.kind}
+                              className="size-3 shrink-0"
+                            />
+                            <span className="sr-only">In</span>{" "}
+                            <span className="truncate">{firstPack.name}</span>
+                            {morePacks.length > 0 ? (
+                              <>
+                                {" "}
+                                <span className="shrink-0">
+                                  +{morePacks.length}
+                                </span>
+                              </>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                     <MemoryVerseListAction

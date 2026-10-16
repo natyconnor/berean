@@ -60,9 +60,7 @@ export function PackVersePicker({
   return (
     <div className="space-y-4">
       {scope ? (
-        // Scope packs auto-include every hearted verse inside their scope, so
-        // there's nothing to "pick" from a hearted list — the only meaningful
-        // action is discovering and hearting *new* verses within the scope.
+        // A scoped picker only browses verses inside its scope.
         <VerseBrowsePicker
           scope={scope}
           heartedVerses={heartedVerses}

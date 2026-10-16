@@ -16,9 +16,11 @@ import {
   loadPackMembershipIndex,
   loadUnifiedReviewPacks,
   loadUnifiedReviewVerseRefIds,
+  loadVersePackLabels,
   unifiedPackForecastDueAt,
   unifiedReviewPhaseVerseRefIds,
   type PackMember,
+  type VersePackLabel,
 } from "./lib/packs";
 import { loadPassageDueRecords } from "./lib/passageDue";
 import { loadPackUpNext } from "./lib/packUpNext";
@@ -986,7 +988,7 @@ export const listInMemory = query({
         return toInMemoryVerseItem(
           memory,
           ref,
-          packIndex.packIdsFor(memory.verseRefId, ref),
+          packIndex.packIdsFor(memory.verseRefId),
         );
       }),
     );
@@ -1038,7 +1040,7 @@ export const learnQueue = query({
           return toInMemoryVerseItem(
             row,
             ref,
-            packIndex.packIdsFor(row.verseRefId, ref),
+            packIndex.packIdsFor(row.verseRefId),
           );
         }),
     );
@@ -1046,7 +1048,7 @@ export const learnQueue = query({
       toInMemoryVerseItem(
         member,
         member,
-        packIndex.packIdsFor(member.verseRefId, member),
+        packIndex.packIdsFor(member.verseRefId),
       ),
     );
 
@@ -1085,11 +1087,7 @@ export const getInMemory = query({
     if (!ref || ref.userId !== userId) return null;
 
     const packIndex = await loadPackMembershipIndex(ctx, userId, verseRefId);
-    return toInMemoryVerseItem(
-      memory,
-      ref,
-      packIndex.packIdsFor(verseRefId, ref),
-    );
+    return toInMemoryVerseItem(memory, ref, packIndex.packIdsFor(verseRefId));
   },
 });
 
@@ -1476,6 +1474,13 @@ const libraryItemValidator = v.object({
   lapses: v.number(),
   lastReviewedAt: v.optional(v.number()),
   heartedAt: v.optional(v.number()),
+  packs: v.array(
+    v.object({
+      packId: v.id("packs"),
+      name: v.string(),
+      kind: v.union(v.literal("pack"), v.literal("passage")),
+    }),
+  ),
 });
 
 type LibraryItem = {
@@ -1494,12 +1499,14 @@ type LibraryItem = {
   lapses: number;
   lastReviewedAt?: number;
   heartedAt?: number;
+  packs: VersePackLabel[];
 };
 
 function toLibraryItem(
   memory: Doc<"verseMemory">,
   ref: Doc<"verseRefs">,
   saved: Doc<"savedVerses"> | null,
+  packs: VersePackLabel[],
 ): LibraryItem {
   return {
     verseMemoryId: memory._id,
@@ -1517,6 +1524,7 @@ function toLibraryItem(
     lapses: memory.lapses,
     lastReviewedAt: memory.lastReviewedAt,
     heartedAt: saved?.createdAt,
+    packs,
   };
 }
 
@@ -1526,14 +1534,17 @@ async function toLibraryItems(
   memories: readonly Doc<"verseMemory">[],
   keep: (memory: Doc<"verseMemory">) => boolean,
 ): Promise<LibraryItem[]> {
+  const kept = memories.filter((memory) => isInMemory(memory) && keep(memory));
+  if (kept.length === 0) return [];
+  const packsFor = await loadVersePackLabels(ctx, userId);
   const items: LibraryItem[] = [];
-  for (const memory of memories) {
-    if (!isInMemory(memory)) continue;
-    if (!keep(memory)) continue;
+  for (const memory of kept) {
     const ref = await ctx.db.get(memory.verseRefId);
     if (!ref || ref.userId !== userId) continue;
     const saved = await findSavedVerse(ctx, userId, memory.verseRefId);
-    items.push(toLibraryItem(memory, ref, saved));
+    items.push(
+      toLibraryItem(memory, ref, saved, packsFor(memory.verseRefId, ref)),
+    );
   }
   return items;
 }

@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { v, type Infer } from "convex/values";
 import { ensurePassageDueBackfill } from "./lib/passageDue";
+import { freezeScopePacksForUser } from "./lib/freezeScopePacks";
 import {
   backfillInMemoryForUser,
   checkInMemoryInvariantForUser,
@@ -16,6 +17,8 @@ const DEFAULT_BACKFILL_BATCH_SIZE = 200;
 const IN_MEMORY_BACKFILL_BATCH_SIZE = 1;
 const IN_MEMORY_CHECK_BATCH_SIZE = 25;
 const MAX_IN_MEMORY_CHECK_SAMPLES = 20;
+// One user per transaction: freezing reads every in-Memory verse they own.
+const FREEZE_SCOPE_PACKS_BATCH_SIZE = 1;
 
 /**
  * Backfill the denormalized `verseMemory.isHearted` flag from the canonical
@@ -228,6 +231,73 @@ export const backfillPassageMemoryDue = internalMutation({
     return {
       batchScanned: page.length,
       totalScanned,
+      isDone,
+      continueCursor: isDone ? null : continueCursor,
+    };
+  },
+});
+
+const freezeScopePacksTotalsValidator = v.object({
+  usersScanned: v.number(),
+  packsFrozen: v.number(),
+  packsKept: v.number(),
+  versesListed: v.number(),
+});
+
+/**
+ * Stop scope packs from collecting verses by range: every scope pack that
+ * isn't a passage becomes a custom pack listing the in-Memory verses its
+ * scope holds now (see `freezeScopePacksForUser`). Self-schedules through
+ * the users table; safe to run twice.
+ */
+export const freezeScopePacks = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+    totals: v.optional(freezeScopePacksTotalsValidator),
+  },
+  returns: v.object({
+    totals: freezeScopePacksTotalsValidator,
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("users")
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: args.batchSize ?? FREEZE_SCOPE_PACKS_BATCH_SIZE,
+      });
+
+    const totals = {
+      ...(args.totals ?? {
+        usersScanned: 0,
+        packsFrozen: 0,
+        packsKept: 0,
+        versesListed: 0,
+      }),
+    };
+    for (const user of page) {
+      const counts = await freezeScopePacksForUser(ctx, user._id, now);
+      totals.usersScanned += 1;
+      totals.packsFrozen += counts.packsFrozen;
+      totals.packsKept += counts.packsKept;
+      totals.versesListed += counts.versesListed;
+    }
+
+    if (isDone) {
+      console.log("freezeScopePacks done", totals);
+    } else {
+      await ctx.scheduler.runAfter(0, internal.migrations.freezeScopePacks, {
+        cursor: continueCursor,
+        batchSize: args.batchSize,
+        totals,
+      });
+    }
+
+    return {
+      totals,
       isDone,
       continueCursor: isDone ? null : continueCursor,
     };

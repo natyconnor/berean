@@ -21,8 +21,8 @@ type HeartItem = FunctionReturnType<
   typeof api.savedVerses.listNotMemorizing
 >[number];
 
-/** Cards shown before "Show all". */
-const VISIBLE_HEARTS = 4;
+/** Cards shown before "Show all": one row of four, or three in a column. */
+const VISIBLE_HEARTS = { grid: 4, column: 3 } as const;
 
 function heartSpan(item: HeartItem): VerseSpan {
   return {
@@ -49,10 +49,13 @@ function heartHref(item: HeartItem): string {
 export function FromYourHearts({
   query,
   variant,
+  layout = "grid",
   scrollRootRef,
 }: {
   query: string;
   variant: "today" | "firstRun";
+  /** `column` stacks the cards for a narrow rail. */
+  layout?: "grid" | "column";
   scrollRootRef: RefObject<HTMLElement | null>;
 }) {
   const hearts = useQuery(api.savedVerses.listNotMemorizing, {
@@ -68,10 +71,11 @@ export function FromYourHearts({
     heartMatchesSearch(heartSpan(item), query),
   );
   if (matches.length === 0) return null;
-  const shown = expanded ? matches : matches.slice(0, VISIBLE_HEARTS);
+  const visible = VISIBLE_HEARTS[layout];
+  const shown = expanded ? matches : matches.slice(0, visible);
 
   const toggle =
-    matches.length > VISIBLE_HEARTS ? (
+    matches.length > visible ? (
       <Button
         variant="ghost"
         size="xs"
@@ -129,7 +133,12 @@ export function FromYourHearts({
       className={cn(variant === "today" && "mt-4 border-t pt-4")}
     >
       {heading}
-      <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+      <ul
+        className={cn(
+          "grid gap-2.5",
+          layout === "grid" && "sm:grid-cols-2 lg:grid-cols-4",
+        )}
+      >
         <AnimatePresence initial={false}>
           {shown.map((item) => (
             <HeartCard

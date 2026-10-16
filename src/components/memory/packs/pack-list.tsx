@@ -8,6 +8,7 @@ import { InternalLink } from "@/components/memory/internal-link";
 import { Button } from "@/components/ui/button";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { packListSubtitle } from "@/components/memory/packs/pack-list-subtitle";
+import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { SUGGESTIONS_LABEL } from "@/lib/memory-copy";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
@@ -107,9 +108,7 @@ export function PackList({
                     )}
                     className="flex items-center gap-3 px-3 py-2.5"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <Layers className="h-4 w-4" aria-hidden />
-                    </span>
+                    <GoalKindMark kind={pack.summary.kind} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
                         {pack.name}

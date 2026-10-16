@@ -4,9 +4,11 @@ import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../../convex/_generated/api";
 import { PreviewMemorySeedCard } from "@/components/memory/preview-memory-seed-card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useElementSize } from "@/hooks/use-element-size";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useTodayModel } from "@/hooks/use-today-model";
 import { isPreviewTestToolsEnabled } from "@/lib/preview-test-tools";
+import { goalLayoutFor } from "@/lib/today-goal-layout";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 import { DoorwayCards } from "./doorway-cards";
@@ -15,11 +17,15 @@ import { GoalGrid } from "./goal-grid";
 import { StartSomethingNew } from "./start-something-new";
 import { TodayCard } from "./today-card";
 
+/** The pinned rail's gap from the top and bottom of the scroll area (`top-6`). */
+const RAIL_INSET_PX = 24;
+
 /**
  * `/memory`: Today, the one Memory home. The Today card with its one primary
  * button, the Your progress / Your verses doorways, what you're memorizing,
- * and ways to start something new. Someone with nothing in Memory gets the
- * first-run invitation instead.
+ * and ways to start something new. On a wide page, Start something new is a
+ * rail pinned beside the goals; narrower, it follows them. Someone with
+ * nothing in Memory gets the first-run invitation instead.
  */
 export function TodayPage() {
   // Shared session clock with the dock badge; passed to Convex as an arg.
@@ -27,6 +33,7 @@ export function TodayPage() {
   const timeZone = getViewerTimeZone();
   const today = useTodayModel(now);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const viewport = useElementSize(scrollRootRef);
   const previewTools = isPreviewTestToolsEnabled();
   const status = useQuery(
     api.verseMemory.memoryStatus,
@@ -39,14 +46,42 @@ export function TodayPage() {
   } else if (today.state === "firstRun") {
     body = <FirstRun scrollRootRef={scrollRootRef} />;
   } else {
+    const layout = goalLayoutFor(viewport.width);
+    const goals = (
+      <GoalGrid
+        goals={today.goals}
+        now={now}
+        timeZone={timeZone}
+        layout={layout}
+      />
+    );
     body = (
       <>
         <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)] md:gap-3">
           <TodayCard today={today} now={now} timeZone={timeZone} />
           <DoorwayCards today={today} now={now} />
         </div>
-        <GoalGrid goals={today.goals} now={now} timeZone={timeZone} />
-        <StartSomethingNew scrollRootRef={scrollRootRef} />
+        {layout.kind === "rail" && today.goals.length > 0 ? (
+          <div className="grid grid-cols-[minmax(0,1fr)_22rem] items-start gap-6">
+            {goals}
+            <div
+              className="sticky top-6 flex flex-col"
+              style={{
+                maxHeight:
+                  viewport.height > 0
+                    ? viewport.height - 2 * RAIL_INSET_PX
+                    : undefined,
+              }}
+            >
+              <StartSomethingNew variant="rail" scrollRootRef={scrollRootRef} />
+            </div>
+          </div>
+        ) : (
+          <>
+            {goals}
+            <StartSomethingNew scrollRootRef={scrollRootRef} />
+          </>
+        )}
       </>
     );
   }

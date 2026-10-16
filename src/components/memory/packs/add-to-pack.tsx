@@ -32,25 +32,23 @@ type PackOption =
   | { kind: "contains"; pack: ListedPack; hint: string };
 
 /**
- * Where this verse can go. Custom packs take it; a passage or chapter pack
- * already holds every verse in its chapters, so one that covers this verse is
- * shown but disabled, and one that doesn't is left out.
+ * Where this verse can go. Custom packs take it; a passage already holds every
+ * verse in its range, so one that covers this verse is shown but disabled.
+ * Other packs are left out.
  */
 function packOption(
   pack: ListedPack,
   reference: CardReference,
 ): PackOption | null {
   if (pack.kind === "custom") return { kind: "add", pack };
-  if (!pack.scope || !spanInPackScope(reference, pack.scope, pack.passageRange))
+  if (
+    pack.summary.kind !== "passage" ||
+    !pack.scope ||
+    !spanInPackScope(reference, pack.scope, pack.passageRange)
+  ) {
     return null;
-  return {
-    kind: "contains",
-    pack,
-    hint:
-      pack.summary.kind === "passage"
-        ? "Already part of this passage"
-        : "Already part of this pack",
-  };
+  }
+  return { kind: "contains", pack, hint: "Already part of this passage" };
 }
 
 /**

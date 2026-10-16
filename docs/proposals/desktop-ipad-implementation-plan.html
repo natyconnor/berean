@@ -1,0 +1,1638 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>
+      Berean · Desktop (Electron) + iPad PWA — Implementation Plan (for an LLM
+      agent)
+    </title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      pre {
+        background: #2b2416;
+        color: #ede4d0;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+      }
+      pre .c {
+        color: #9d9077;
+      }
+      pre .k {
+        color: #d3ab5e;
+      }
+      pre .s {
+        color: #a8c49a;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      .callout.urgent {
+        border-left-color: var(--bad);
+        background: #fbf3f0;
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      .pr {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .pr > .pr-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .pr .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pr .pr-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .pr .pr-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .pr-body {
+        padding: 8px 20px 20px;
+      }
+      .dep {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin: 6px 0 0;
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+      ol.manual {
+        margin: 8px 0;
+        padding-left: 22px;
+      }
+      ol.manual li {
+        margin: 10px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow"
+          >Implementation Plan · for an LLM coding agent</span
+        >
+        <h1>Desktop Electron + iPad PWA</h1>
+        <p class="lede">
+          Ship a Mac Electron thin shell that loads production web, plus an
+          installable iPad PWA — same React app, same Convex backend, automatic
+          web updates on desktop.
+        </p>
+        <div class="meta">
+          <span class="chip">7 pull requests</span>
+          <span class="chip ghost">Electron + electron-builder (Mac)</span>
+          <span class="chip ghost">no Capacitor in this plan</span>
+        </div>
+        <div class="callout">
+          <strong>How to use this document.</strong> Each numbered block below
+          is <em>one pull request</em>. Do them in order. Do not start the next
+          PR until the current one is green: implement only what that PR lists,
+          run <code>pnpm run agent:check</code>, satisfy the PR's acceptance
+          criteria, then stop. The <code>run-implementation-plan</code> skill
+          orchestrates this.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <!-- ============ MANUAL STEPS (human) ============ -->
+      <section id="manual">
+        <div class="eyebrow">Human only</div>
+        <h2>Manual steps you must do (agents cannot)</h2>
+        <div class="callout urgent">
+          <strong>Read this first.</strong> Agents implement code and CI wiring.
+          Signing, Apple Developer setup, and secret injection require you. Do
+          items 1–4 before or during the build; item 5 after PR 6 merges; items
+          6–7 are optional polish.
+        </div>
+        <div class="card">
+          <ol class="manual small">
+            <li>
+              <b>Apple Developer account</b> — Enroll (if needed). Create an App
+              ID with bundle id <code>dev.nathanconnor.berean</code> and enable
+              <b>Associated Domains</b>.
+            </li>
+            <li>
+              <b>Developer ID Application certificate</b> — Create/download a
+              Developer ID Application cert for notarized distribution outside
+              the Mac App Store. Export as <code>.p12</code> for CI.
+            </li>
+            <li>
+              <b>Notarization credentials</b> — Create an App Store Connect API
+              key (Issuer ID + Key ID + <code>.p8</code>) <em>or</em> an
+              app-specific password for your Apple ID. Prefer API key.
+            </li>
+            <li>
+              <b>GitHub Actions secrets</b> (repo
+              <code>natyconnor/berean</code>) — add before the first signed
+              release workflow run:
+              <ul class="clean">
+                <li>
+                  <code>CSC_LINK</code> — base64 of the Developer ID
+                  <code>.p12</code>
+                </li>
+                <li><code>CSC_KEY_PASSWORD</code> — password for that p12</li>
+                <li>
+                  <code>APPLE_API_KEY</code> — contents of the <code>.p8</code>
+                </li>
+                <li><code>APPLE_API_KEY_ID</code></li>
+                <li><code>APPLE_API_ISSUER</code></li>
+                <li>
+                  <code>APPLE_TEAM_ID</code> — 10-character Team ID (also used
+                  in AASA)
+                </li>
+              </ul>
+              Until secrets exist, CI must still produce an
+              <b>unsigned</b> <code>.dmg</code> artifact so agents can verify
+              the pipeline.
+            </li>
+            <li>
+              <b>Patch AASA Team ID</b> — After PR 4, replace the placeholder
+              <code>APPLE_TEAM_ID</code> in
+              <code>public/.well-known/apple-app-site-association</code> with
+              your real Team ID (or set it via the secret-driven check in PR 6
+              docs). Confirm
+              <code
+                >https://berean.nathanconnor.dev/.well-known/apple-app-site-association</code
+              >
+              returns JSON (not the SPA HTML).
+            </li>
+            <li>
+              <b>Smoke-test on a Mac</b> — After the branch is ready: install
+              the <code>.dmg</code>, sign in with Google, open a second window,
+              kill network to see the offline screen, click an
+              <code>https://berean.nathanconnor.dev/passage/…</code> link and
+              confirm it can open in the app (Universal Links / protocol).
+            </li>
+            <li>
+              <b>Out of scope for you this round</b> — Windows signing cert,
+              Linux packages, Capacitor / App Store, offline Bible, touch/pen
+              iPad redesign, full marketing homepage.
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="decisions">
+        <div class="eyebrow">Settled decisions</div>
+        <h2>Decisions locked before implementation</h2>
+        <p>
+          Fixed constraints resolved with the product owner. Treat as
+          non-negotiable.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Desktop shell</b></td>
+                <td>
+                  Electron thin shell loads
+                  <code>https://berean.nathanconnor.dev</code> (override via
+                  <code>BEREAN_DESKTOP_URL</code> for local/dev). Does
+                  <b>not</b> bundle the Vite <code>dist/</code>. Web deploys
+                  update desktop automatically.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Platform order</b></td>
+                <td>
+                  Mac first (this plan). Windows/Linux only after Mac is proven
+                  — not in these PRs.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Distribution</b></td>
+                <td>
+                  Signed + notarized <code>.dmg</code> via GitHub Releases +
+                  download link on the website (login footer). No Mac App Store.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Desktop auth</b></td>
+                <td>
+                  Complete Google OAuth <b>inside</b> Electron
+                  <code>BrowserWindow</code>s on the production origin (same
+                  Convex Auth flow as web). True system-browser OAuth cannot
+                  share Convex Auth session storage with the shell without a
+                  custom token bridge — deferred. Use a persistent session
+                  partition so File → New Window shares login.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Offline</b></td>
+                <td>
+                  No offline app data / Bible. Shell shows a local offline error
+                  page if the production URL cannot load. Network required for
+                  UI.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Deep links</b></td>
+                <td>
+                  Normal <code>https://berean.nathanconnor.dev/…</code> URLs
+                  (passages, memory, study, search, settings — whatever the web
+                  route already is). Optionally open in the Mac app via
+                  Associated Domains + custom scheme <code>berean://</code>.
+                  Signed-out deep links keep the path, show login, then continue
+                  to that route after auth.
+                </td>
+              </tr>
+              <tr>
+                <td><b>iPad v1</b></td>
+                <td>
+                  PWA + “Add to Home Screen” guidance. Mouse/keyboard OK. No
+                  touch/pen redesign. Capacitor / App Store deferred (no
+                  <code>capacitor/</code> code in this plan).
+                </td>
+              </tr>
+              <tr>
+                <td><b>UI parity</b></td>
+                <td>
+                  Desktop ≈ web. Hide PWA install UI in Electron. Native title
+                  bar. Window title “Berean”. Min size 1024×700; default
+                  ~1280×800.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Versioning</b></td>
+                <td>
+                  One semver from root <code>package.json</code>. Desktop
+                  reports the web app version (already via
+                  <code>/version.json</code> on the loaded site). Electron
+                  binary version may match package.json at build time.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Accounts</b></td>
+                <td>
+                  Google only. One Convex account everywhere (web + desktop +
+                  future iPad).
+                </td>
+              </tr>
+              <tr>
+                <td><b>Tooling</b></td>
+                <td>
+                  Plain Electron + electron-builder (not electron-vite). Reuse
+                  existing Vite web app unchanged as the content source.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Marketing / about page</b></td>
+                <td>
+                  Deferred. This plan only adds a Mac download link on the login
+                  footer (and GitHub Releases).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="grounding">
+        <div class="eyebrow">What already exists</div>
+        <h2>Assets to reuse (verified in the codebase)</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 42%">Existing asset</th>
+                <th>Role in the new system</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fileref">
+                  package.json → version 1.11.0, scripts, pnpm
+                </td>
+                <td>
+                  Single semver; add <code>desktop:*</code> scripts and Electron
+                  deps here.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/main.tsx → ConvexAuthProvider + ConvexReactClient
+                </td>
+                <td>
+                  Unchanged auth client; desktop inherits session via same
+                  origin + partition.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/login-page.tsx → handleGoogleSignIn /
+                  signIn("google")
+                </td>
+                <td>
+                  Same Google button; footer gets Mac download link (PR 7).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/routes/root-route-component.tsx →
+                  PUBLIC_LEGAL_PATHS, LoginPage gate
+                </td>
+                <td>
+                  Unauthenticated users see LoginPage while URL path is
+                  preserved — basis for post-login deep-link continue.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/routes/passage/$passageId.tsx, memory/*, study/*,
+                  search.tsx
+                </td>
+                <td>
+                  Canonical deep-link path shapes for AASA and protocol handler.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/app-version.ts + use-app-version-monitor.ts +
+                  vite.config.ts version.json plugin
+                </td>
+                <td>
+                  Desktop automatically picks up web updates via existing
+                  refresh prompt (same origin).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">vercel.json</td>
+                <td>
+                  Add headers for AASA / webmanifest; keep SPA rewrite for app
+                  routes.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">.github/workflows/ci.yml</td>
+                <td>
+                  Leave verify job as-is; add a separate desktop-release
+                  workflow (PR 6).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  public/berean-logo.png, public/berean-hero.webp
+                </td>
+                <td>PWA icons / splash source; Electron dock icon source.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/keyboard-shortcuts.ts → formatCommandOrControlShortcut
+                </td>
+                <td>
+                  Do not steal Cmd/Ctrl+K/G/,/J/Enter in Electron menus — leave
+                  accelerators unset for those keys.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">convex/auth.ts + convex/http.ts</td>
+                <td>
+                  No Convex Auth changes required for thin-shell same-origin
+                  OAuth.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout small">
+          <strong>Gaps this plan adds.</strong>
+          <code>electron/</code> main+preload+offline HTML (PR 2–3);
+          <code>src/lib/desktop-platform.ts</code> detection helpers (PR 1);
+          AASA + <code>berean://</code> protocol (PR 4); PWA manifest + A2HS UI
+          (PR 5); electron-builder + release workflow (PR 6); login download
+          link (PR 7). No Capacitor. No Windows target yet.
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="architecture">
+        <div class="eyebrow">Shared architecture</div>
+        <h2>Data model &amp; core contracts (referenced by every PR)</h2>
+
+        <h3>Production URL &amp; identity</h3>
+        <pre><code><span class="c">// Canonical production origin (Electron default load URL)</span>
+<span class="k">export const</span> BEREAN_PRODUCTION_ORIGIN = <span class="s">"https://berean.nathanconnor.dev"</span>;
+
+<span class="c">// Bundle / protocol</span>
+<span class="c">// appId:           dev.nathanconnor.berean</span>
+<span class="c">// productName:     Berean</span>
+<span class="c">// custom scheme:   berean:</span>
+<span class="c">// associated host: berean.nathanconnor.dev</span>
+
+<span class="c">// Session: all BrowserWindows use partition "persist:berean"</span>
+<span class="c">// so auth tokens/cookies/localStorage are shared across File→New Window.</span></code></pre>
+
+        <h3>Platform detection (renderer)</h3>
+        <pre><code><span class="c">// src/lib/desktop-platform.ts</span>
+<span class="k">export type</span> BereanDesktopBridge = {
+  isDesktop: <span class="k">true</span>;
+  platform: <span class="s">"darwin"</span> | <span class="s">"win32"</span> | <span class="s">"linux"</span>;
+  openExternal?: (url: string) =&gt; Promise&lt;void&gt;;
+};
+
+<span class="k">declare global</span> {
+  <span class="k">interface</span> Window {
+    bereanDesktop?: BereanDesktopBridge;
+  }
+}
+
+<span class="k">export function</span> isBereanDesktop(): boolean;
+<span class="k">export function</span> isPwaStandalone(): boolean;
+<span class="c">// isPwaStandalone: matchMedia(display-mode: standalone) or navigator.standalone</span></code></pre>
+
+        <h3>Deep-link path helpers</h3>
+        <pre><code><span class="c">// src/lib/desktop-deep-link.ts</span>
+<span class="k">export function</span> isBereanAppPath(pathname: string): boolean;
+<span class="c">// true for /, /passage/*, /memory/*, /study/*, /search, /settings/*,</span>
+<span class="c">// /privacy, /terms — reject javascript:, file:, and unknown hosts when parsing URLs</span>
+
+<span class="k">export function</span> parseBereanOpenUrl(raw: string): {
+  origin: string;
+  pathname: string;
+  search: string;
+  hash: string;
+} | <span class="k">null</span>;
+<span class="c">// Accepts:</span>
+<span class="c">//   https://berean.nathanconnor.dev/passage/John-1?mode=read</span>
+<span class="c">//   berean://passage/John-1?mode=read</span>
+<span class="c">//   berean:///passage/John-1  (some OS normalize with extra slash)</span>
+<span class="c">// Returns null for non-Berean hosts / dangerous schemes.</span>
+
+<span class="k">export function</span> toProductionAppUrl(parsed: {
+  pathname: string;
+  search: string;
+  hash: string;
+}): string;
+<span class="c">// → https://berean.nathanconnor.dev{pathname}{search}{hash}</span></code></pre>
+
+        <h3>Electron main process responsibilities</h3>
+        <pre><code><span class="c">// electron/main.ts (or .mjs compiled from TS)</span>
+<span class="c">// 1. app.setName("Berean")</span>
+<span class="c">// 2. Register berean:// via app.setAsDefaultProtocolClient("berean")</span>
+<span class="c">// 3. createWindow(initialUrl?): BrowserWindow</span>
+<span class="c">//      - partition: "persist:berean"</span>
+<span class="c">//      - title: "Berean"</span>
+<span class="c">//      - minWidth: 1024, minHeight: 700</span>
+<span class="c">//      - width: 1280, height: 800</span>
+<span class="c">//      - titleBarStyle: default (native)</span>
+<span class="c">//      - loadURL(BEREAN_DESKTOP_URL || BEREAN_PRODUCTION_ORIGIN + path)</span>
+<span class="c">//      - on did-fail-load / offline → loadFile(electron/offline.html)</span>
+<span class="c">// 4. setWindowOpenHandler: allow OAuth/Google popups as child BrowserWindows</span>
+<span class="c">//      with the same partition; deny unrelated targets or openExternal</span>
+<span class="c">// 5. Menu: File → New Window (Cmd+N), standard Edit/View/Window; do NOT</span>
+<span class="c">//      bind Cmd+K, Cmd+G, Cmd+,, Cmd+J, Cmd+Enter</span>
+<span class="c">// 6. open-url / second-instance: parseBereanOpenUrl → focus or create window</span>
+<span class="c">//      navigating to toProductionAppUrl(...)</span></code></pre>
+
+        <h3>Preload bridge</h3>
+        <pre><code><span class="c">// electron/preload.ts — contextIsolation: true, nodeIntegration: false</span>
+contextBridge.exposeInMainWorld(<span class="s">"bereanDesktop"</span>, {
+  isDesktop: <span class="k">true</span>,
+  platform: process.platform,
+});</code></pre>
+
+        <h3>AASA (Associated Domains)</h3>
+        <pre><code><span class="c">// public/.well-known/apple-app-site-association</span>
+{
+  <span class="s">"applinks"</span>: {
+    <span class="s">"apps"</span>: [],
+    <span class="s">"details"</span>: [{
+      <span class="s">"appID"</span>: <span class="s">"APPLE_TEAM_ID.dev.nathanconnor.berean"</span>,
+      <span class="s">"paths"</span>: [
+        <span class="s">"/"</span>, <span class="s">"/passage/*"</span>, <span class="s">"/memory/*"</span>,
+        <span class="s">"/study/*"</span>, <span class="s">"/search"</span>, <span class="s">"/search/*"</span>,
+        <span class="s">"/settings/*"</span>
+      ]
+    }]
+  }
+}</code></pre>
+
+        <h3>PWA</h3>
+        <pre><code><span class="c">// public/manifest.webmanifest — name/short_name "Berean",</span>
+<span class="c">// display: "standalone", start_url: "/", background/theme dark-friendly,</span>
+<span class="c">// icons from public/icons/* generated from berean-logo.png</span>
+<span class="c">// index.html links rel="manifest" + apple-mobile-web-app meta</span>
+<span class="c">// A2HS banner: show only on iPad Safari-like UA when !isPwaStandalone()</span>
+<span class="c">// and !isBereanDesktop(); never on Electron.</span></code></pre>
+
+        <h3>Data flow</h3>
+        <p class="muted">
+          User launches Mac app → Electron creates a
+          <code>persist:berean</code> window → loads
+          <code>https://berean.nathanconnor.dev</code> (or deep-link path) →
+          existing Vite React SPA + Convex Auth run exactly as in Chrome. Google
+          sign-in completes in-app (popup/child window). Web deploys change
+          Vercel assets; desktop users get the existing
+          <code>/version.json</code> refresh prompt. Share links use https;
+          macOS may hand the URL to Electron via Associated Domains /
+          <code>berean://</code>; main process navigates a window to that path.
+          If signed out, <code>RootRouteComponent</code> shows
+          <code>LoginPage</code> while the router URL stays on the deep link;
+          after auth, <code>AppShell</code> + <code>Outlet</code> render that
+          route. iPad users install via PWA (Add to Home Screen); no separate
+          binary in this plan.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="conventions">
+        <div class="eyebrow">Rules for the agent</div>
+        <h2>Conventions every PR must follow</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Workflow</h4>
+            <ul class="clean small">
+              <li>One PR at a time, in order. Read files before editing.</li>
+              <li>
+                After code changes run
+                <code>pnpm run agent:check</code> (format → lint → typecheck).
+              </li>
+              <li>
+                Run <code>pnpm test</code> for any PR that adds/edits a
+                <code>*.test.ts</code>.
+              </li>
+              <li>
+                Regenerate Convex types with
+                <code>pnpm run codegen</code> only if Convex files change (this
+                plan should not need Convex changes).
+              </li>
+              <li>
+                Never commit or push unless the orchestrator checkpoint step
+                asks.
+              </li>
+              <li>
+                Do not implement Windows/Linux targets, Capacitor, offline sync,
+                or a marketing homepage unless a PR explicitly lists it.
+              </li>
+              <li>
+                Prefer exact versions (<code>pnpm</code> /
+                <code>save-exact=true</code>) when adding dependencies.
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Desktop / web rules</h4>
+            <ul class="clean small">
+              <li>
+                Electron: <code>contextIsolation: true</code>,
+                <code>nodeIntegration: false</code>, no remote module.
+              </li>
+              <li>
+                Never load arbitrary URLs — only
+                <code>berean.nathanconnor.dev</code> (or
+                <code>BEREAN_DESKTOP_URL</code> override) and local
+                <code>offline.html</code>.
+              </li>
+              <li>
+                Do not register Electron menu accelerators that collide with
+                Cmd/Ctrl+K, G, ,, J, or Enter.
+              </li>
+              <li>Keep the React app a SPA: no Next.js, no SSR requirement.</li>
+              <li>
+                No <code>any</code>; type the preload bridge and pure helpers.
+              </li>
+              <li>
+                If a public Convex function is touched (should be rare):
+                <code>args</code> + <code>returns</code>, auth, indexes, no
+                <code>Date.now()</code> in queries, await every promise.
+              </li>
+              <li>
+                Static files for AASA/manifest go under <code>public/</code>;
+                ensure <code>vercel.json</code> Content-Type headers where
+                needed.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="prs">
+        <div class="eyebrow">The build</div>
+        <h2>7 pull requests</h2>
+        <div class="card toc">
+          <a href="#pr1"
+            ><b>PR 1</b> — Platform + deep-link helpers
+            <span class="chip ghost">foundation</span></a
+          >
+          <a href="#pr2"
+            ><b>PR 2</b> — Electron thin shell
+            <span class="chip ghost">desktop</span></a
+          >
+          <a href="#pr3"
+            ><b>PR 3</b> — Session partition + OAuth windows
+            <span class="chip ghost">auth</span></a
+          >
+          <a href="#pr4"
+            ><b>PR 4</b> — HTTPS / berean:// deep links + AASA
+            <span class="chip ghost">deep links</span></a
+          >
+          <a href="#pr5"
+            ><b>PR 5</b> — PWA manifest + Add to Home Screen
+            <span class="chip ghost">iPad PWA</span></a
+          >
+          <a href="#pr6"
+            ><b>PR 6</b> — Mac DMG packaging + CI release
+            <span class="chip ghost">distribution</span></a
+          >
+          <a href="#pr7"
+            ><b>PR 7</b> — Website download link + README
+            <span class="chip ghost">web polish</span></a
+          >
+        </div>
+      </section>
+
+      <!-- PR 1 -->
+      <div class="pr" id="pr1">
+        <div class="pr-head">
+          <div class="num">1</div>
+          <div>
+            <div class="pr-sub">ships silently · foundation</div>
+            <h3 class="pr-title">Platform detection and deep-link helpers</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> PR 2, PR 4, PR 5, PR 7.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add pure TypeScript helpers and unit tests for desktop/PWA detection
+            and safe Berean URL parsing. No Electron runtime yet; no UI change.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/desktop-platform.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>BereanDesktopBridge</code>, <code>isBereanDesktop</code>,
+              <code>isPwaStandalone</code>,
+              <code>BEREAN_PRODUCTION_ORIGIN</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/desktop-platform.test.ts</span>
+              <span class="tag-new">(new)</span> — unit tests with jsdom stubs
+              for <code>window.bereanDesktop</code> and matchMedia / standalone.
+            </li>
+            <li>
+              <span class="fileref">src/lib/desktop-deep-link.ts</span>
+              <span class="tag-new">(new)</span> — <code>isBereanAppPath</code>,
+              <code>parseBereanOpenUrl</code>,
+              <code>toProductionAppUrl</code> per Architecture.
+            </li>
+            <li>
+              <span class="fileref">src/lib/desktop-deep-link.test.ts</span>
+              <span class="tag-new">(new)</span> — cover https, berean://,
+              berean:///, query strings, reject evil schemes/hosts.
+            </li>
+            <li>
+              <span class="fileref">src/vite-env.d.ts</span> — augment
+              <code>Window</code> with optional <code>bereanDesktop</code>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Implement helpers exactly as specified in Architecture; keep them
+              free of Electron imports so Vitest can run them.
+            </li>
+            <li>
+              <code>isBereanAppPath</code> should accept the route prefixes
+              listed in Architecture (including legal paths).
+            </li>
+            <li>Write thorough tests; do not change login/root UI yet.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes;
+              <code>pnpm test</code> passes including new desktop-*.test.ts.
+            </li>
+            <li>
+              Tests prove rejection of non-Berean hosts and
+              <code>javascript:</code> / <code>file:</code> URLs.
+            </li>
+            <li>
+              Behavioral: no visible product change (manual: app still looks
+              identical).
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 2 -->
+      <div class="pr" id="pr2">
+        <div class="pr-head">
+          <div class="num">2</div>
+          <div>
+            <div class="pr-sub">desktop · thin shell</div>
+            <h3 class="pr-title">Electron thin shell (load production URL)</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1. <b>Unblocks:</b> PR 3, PR 4, PR 6.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add an <code>electron/</code> app that opens a native window to
+            production (or <code>BEREAN_DESKTOP_URL</code>), shows a local
+            offline page on load failure, supports File → New Window, and
+            exposes the preload bridge. Packaging/signing comes later.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">electron/main.ts</span>
+              <span class="tag-new">(new)</span> — window factory, menu, load
+              URL, offline fallback (see Architecture).
+            </li>
+            <li>
+              <span class="fileref">electron/preload.ts</span>
+              <span class="tag-new">(new)</span> — expose
+              <code>window.bereanDesktop</code>.
+            </li>
+            <li>
+              <span class="fileref">electron/offline.html</span>
+              <span class="tag-new">(new)</span> — simple “Berean needs an
+              internet connection” + Retry button that reloads production URL.
+            </li>
+            <li>
+              <span class="fileref">electron/tsconfig.json</span>
+              <span class="tag-new">(new)</span> — Node/Electron TS config
+              isolated from the Vite app if needed.
+            </li>
+            <li>
+              <span class="fileref">package.json</span> — add
+              <code>electron</code> dependency; scripts
+              <code>desktop:dev</code> (and compile step if using TS); do not
+              break existing web scripts.
+            </li>
+            <li>
+              <span class="fileref">.gitignore</span> — ignore Electron build
+              output dirs (<code>dist-electron/</code>, <code>release/</code>,
+              or whatever electron-builder will use) if not already ignored.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Add Electron with exact version via pnpm. Prefer compiling
+              <code>electron/*.ts</code> to <code>electron-dist/</code> with
+              <code>tsc</code>, or use a minimal loader — pick one approach and
+              wire <code>desktop:dev</code> to it.
+            </li>
+            <li>
+              Default load URL:
+              <code
+                >process.env.BEREAN_DESKTOP_URL ??
+                BEREAN_PRODUCTION_ORIGIN</code
+              >
+              (import constant from a tiny shared file under
+              <code>electron/</code> or duplicate the string constant in
+              electron to avoid bundling Vite path aliases — either is fine;
+              keep values identical).
+            </li>
+            <li>
+              Implement native menu with File → New Window. Leave app shortcuts
+              for K/G/,/J/Enter unbound.
+            </li>
+            <li>
+              On <code>did-fail-load</code> (and optionally
+              <code>offline</code> event), load <code>offline.html</code>. Retry
+              button uses <code>ipc</code> or <code>location</code> guidance to
+              call back into main to <code>loadURL</code> again.
+            </li>
+            <li>
+              Dock icon: use <code>public/berean-logo.png</code> via
+              <code>BrowserWindow</code> / app dock icon APIs where
+              straightforward on darwin.
+            </li>
+            <li>
+              Ensure <code>pnpm run agent:check</code> still typechecks the web
+              app; include electron types in a way that does not break
+              <code>tsc -b</code> (separate project reference or exclude
+              electron from root if compiled separately — document the choice in
+              a short <code>electron/README.md</code>).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes; existing tests pass.
+            </li>
+            <li>
+              <code>pnpm run desktop:dev</code> (or documented equivalent)
+              starts Electron without crash when run manually.
+            </li>
+            <li>
+              Behavioral (manual): window title Berean; min size respected; New
+              Window works; with network disabled / bad URL, offline page
+              appears and Retry works.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 3 -->
+      <div class="pr" id="pr3">
+        <div class="pr-head">
+          <div class="num">3</div>
+          <div>
+            <div class="pr-sub">auth · session</div>
+            <h3 class="pr-title">
+              Persistent session partition and OAuth child windows
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 2. <b>Unblocks:</b> PR 4 (usable signed-in
+            deep links).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Make Google sign-in reliable inside Electron and share the session
+            across windows via <code>persist:berean</code>. Document the
+            in-window OAuth decision in <code>electron/README.md</code>.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">electron/main.ts</span> — enforce
+              <code>partition: "persist:berean"</code> on all windows; implement
+              <code>setWindowOpenHandler</code> for OAuth/Google/Convex auth
+              popups as child windows with the same partition; deny or
+              <code>shell.openExternal</code> only for clearly external http(s)
+              links the user clicks that are not auth-related (optional: open
+              external in system browser for non-Berean http links).
+            </li>
+            <li>
+              <span class="fileref">electron/README.md</span>
+              <span class="tag-new">(new)</span> or update — explain why OAuth
+              runs in-app, how to set <code>BEREAN_DESKTOP_URL</code>, and how
+              sessions persist.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Centralize window creation so every window (main, New Window, auth
+              popup) uses the same partition and preload.
+            </li>
+            <li>
+              Allow popup URLs for Google accounts and the Convex auth HTTP
+              routes (pattern-match <code>accounts.google.com</code>,
+              <code>*.google.com</code>, Convex <code>.convex.site</code> /
+              deployment auth hosts, and <code>berean.nathanconnor.dev</code>).
+            </li>
+            <li>
+              Do not change <code>convex/auth.ts</code> unless absolutely
+              required (preferred: zero Convex changes).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li><code>pnpm run agent:check</code> passes.</li>
+            <li>
+              Behavioral (manual): Sign in with Google inside Electron succeeds;
+              File → New Window is already signed in; quitting and relaunching
+              keeps the session (persist partition).
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 4 -->
+      <div class="pr" id="pr4">
+        <div class="pr-head">
+          <div class="num">4</div>
+          <div>
+            <div class="pr-sub">deep links · AASA</div>
+            <h3 class="pr-title">
+              HTTPS / berean:// deep links and Apple App Site Association
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1, PR 2, PR 3. <b>Unblocks:</b> PR 6
+            (entitlements), sharing UX.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Register <code>berean://</code>, handle OS open-url /
+            second-instance events with <code>parseBereanOpenUrl</code>, ship
+            AASA for <code>berean.nathanconnor.dev</code>, and ensure signed-out
+            deep links continue to the target route after login (verify root
+            gate; fix only if broken).
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">electron/main.ts</span> —
+              <code>setAsDefaultProtocolClient("berean")</code>;
+              <code>open-url</code> (darwin); Windows-style
+              <code>second-instance</code> argv parsing prepared but Mac is
+              primary; navigate/focus window.
+            </li>
+            <li>
+              <span class="fileref"
+                >public/.well-known/apple-app-site-association</span
+              >
+              <span class="tag-new">(new)</span> — JSON per Architecture;
+              placeholder Team ID <code>APPLE_TEAM_ID</code> clearly commented
+              in electron README for human replacement.
+            </li>
+            <li>
+              <span class="fileref">vercel.json</span> — Content-Type
+              <code>application/json</code> for the AASA path; ensure it is not
+              broken by SPA rewrite (static file in public should win; add
+              explicit header entry).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/root-route-component.tsx</span
+              >
+              — only if needed: guarantee that after auth, the current location
+              (deep link) renders via Outlet rather than forcing
+              <code>/</code>. Prefer minimal change.
+            </li>
+            <li>
+              <span class="fileref">src/lib/desktop-deep-link.test.ts</span>
+              — extend tests if parsing edge cases appear during implementation.
+            </li>
+            <li>
+              <span class="fileref">electron/README.md</span> — document deep
+              link testing (<code>open berean://passage/John-1</code>).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              On cold start with a deep link, create the first window with that
+              production URL (not just home).
+            </li>
+            <li>
+              On warm open-url, focus an existing window and
+              <code>loadURL</code> / send an ipc navigate event — prefer
+              <code>win.loadURL(toProductionAppUrl(...))</code> for simplicity
+              in the thin shell.
+            </li>
+            <li>
+              Manually verify (document in README) that visiting
+              <code>/passage/John-1</code> while signed out shows login, then
+              after Google auth the passage appears — if the app currently
+              redirects away, fix with the smallest root/index change.
+            </li>
+            <li>
+              Do not implement a custom “Open in Berean” web banner in this PR.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              AASA file exists under <code>public/.well-known/</code> and
+              <code>vercel.json</code> sets JSON content-type for it.
+            </li>
+            <li>
+              Behavioral (manual): <code>berean://passage/John-1</code> opens
+              the app to that passage; signed-out https path continues after
+              login.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 5 -->
+      <div class="pr" id="pr5">
+        <div class="pr-head">
+          <div class="num">5</div>
+          <div>
+            <div class="pr-sub">iPad PWA</div>
+            <h3 class="pr-title">
+              PWA manifest and Add to Home Screen guidance
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 1. <b>Unblocks:</b> iPad install testing
+            (human).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Make the web app installable as a PWA and show dismissible “Add to
+            Home Screen” guidance on iPad Safari when not already standalone.
+            Hide that UI entirely in Electron.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">public/manifest.webmanifest</span>
+              <span class="tag-new">(new)</span> — Berean name, icons,
+              standalone, start_url <code>/</code>.
+            </li>
+            <li>
+              <span class="fileref">public/icons/</span>
+              <span class="tag-new">(new)</span> — at least 192 and 512 PNG
+              derived from <code>public/berean-logo.png</code> (generate with a
+              small script or checked-in resized assets).
+            </li>
+            <li>
+              <span class="fileref">index.html</span> — link manifest;
+              <code>apple-mobile-web-app-capable</code>, title, theme-color meta
+              as appropriate.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/pwa/add-to-home-screen-hint.tsx</span
+              >
+              <span class="tag-new">(new)</span> — UI copy for Safari iPad share
+              → Add to Home Screen; localStorage dismiss key.
+            </li>
+            <li>
+              <span class="fileref">src/lib/pwa-install-hint.ts</span>
+              <span class="tag-new">(new)</span> — pure helpers:
+              shouldShowAddToHomeScreenHint(ua, standalone, isDesktop).
+            </li>
+            <li>
+              <span class="fileref">src/lib/pwa-install-hint.test.ts</span>
+              <span class="tag-new">(new)</span> — unit tests for show/hide
+              rules.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/root-route-component.tsx</span
+              >
+              — mount hint when authenticated shell or login (prefer login +
+              shell once); never when <code>isBereanDesktop()</code>.
+            </li>
+            <li>
+              <span class="fileref">vercel.json</span> — optional cache header
+              for manifest.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Detect iPad-ish Safari conservatively (userAgent / platform); when
+              unsure, fail toward not showing the banner on desktop browsers.
+            </li>
+            <li>
+              Keep visual design consistent with existing Berean UI (no new
+              purple/gradient marketing chrome); small dismissible callout is
+              enough.
+            </li>
+            <li>No service worker / offline cache in this PR.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass
+              (including pwa-install-hint tests).
+            </li>
+            <li>
+              Manifest is linked from <code>index.html</code> and icons exist
+              under <code>public/icons/</code>.
+            </li>
+            <li>
+              Behavioral (manual): hint hidden in Electron
+              (<code>window.bereanDesktop</code>); on iPad Safari (or UA spoof),
+              hint appears once and can be dismissed.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 6 -->
+      <div class="pr" id="pr6">
+        <div class="pr-head">
+          <div class="num">6</div>
+          <div>
+            <div class="pr-sub">distribution · Mac CI</div>
+            <h3 class="pr-title">
+              electron-builder Mac DMG and GitHub release workflow
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 2–4. <b>Unblocks:</b> PR 7 (download URL),
+            human notarized releases.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Package Berean as a Mac <code>.dmg</code> with electron-builder,
+            wire a GitHub Actions workflow that uploads artifacts to GitHub
+            Releases, and support signed+notarized builds when secrets exist
+            (unsigned fallback when they do not).
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">electron-builder.yml</span>
+              <span class="tag-new">(new)</span> — appId
+              <code>dev.nathanconnor.berean</code>, productName Berean, mac
+              target dmg, category reference/education-appropriate, protocol
+              <code>berean</code>, icon from logo, hardenedRuntime /
+              gatekeeperAssess settings suitable for notarization.
+            </li>
+            <li>
+              <span class="fileref">electron/entitlements.mac.plist</span>
+              <span class="tag-new">(new)</span> — entitlements needed for
+              hardened runtime + associated domains if required by builder.
+            </li>
+            <li>
+              <span class="fileref">package.json</span> — scripts
+              <code>desktop:pack</code> / <code>desktop:dist</code>;
+              electron-builder devDependency; version already drives artifact
+              naming.
+            </li>
+            <li>
+              <span class="fileref">.github/workflows/desktop-release.yml</span>
+              <span class="tag-new">(new)</span> —
+              <code>macos-latest</code> runner; triggers:
+              <code>workflow_dispatch</code> and
+              <code>release: published</code> (and/or tags <code>v*</code>);
+              build dmg; upload to the GitHub Release; use signing env vars when
+              present.
+            </li>
+            <li>
+              <span class="fileref">electron/README.md</span> — list required
+              secrets (mirror Manual steps); how to run unsigned local pack.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Thin shell packaging: electron-builder should package
+              <code>electron/</code> compiled output + Electron runtime only —
+              <b>not</b> the Vite <code>dist/</code> as the web content (content
+              is remote).
+            </li>
+            <li>
+              Workflow must not fail the whole repo CI on PRs — keep it separate
+              from <code>ci.yml</code> verify job.
+            </li>
+            <li>
+              If signing secrets are missing, build unsigned and still upload
+              artifact (document Gatekeeper caveat).
+            </li>
+            <li>Do not add Windows targets in this PR.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes on the web/electron TS
+              surface.
+            </li>
+            <li>
+              <code>desktop-release.yml</code> exists and is valid YAML; scripts
+              to pack are documented.
+            </li>
+            <li>
+              Behavioral (manual / when workflow run): a
+              <code>.dmg</code> artifact is produced; with secrets, notarized
+              install does not Gatekeeper-block.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- PR 7 -->
+      <div class="pr" id="pr7">
+        <div class="pr-head">
+          <div class="num">7</div>
+          <div>
+            <div class="pr-sub">web polish · download</div>
+            <h3 class="pr-title">
+              Login download link and README desktop docs
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 5 (PWA bits stable), PR 6 (release URL shape).
+            <b>Unblocks:</b> user testing of the full loop.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add a Mac download affordance on the web login footer (hidden in
+            Electron), pointing at GitHub Releases latest, and document desktop
+            + PWA in the root README. No full marketing page.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/components/login-page.tsx</span> — add
+              “Download for Mac” link beside existing footer links; hide when
+              <code>isBereanDesktop()</code>; href
+              <code>https://github.com/natyconnor/berean/releases/latest</code>
+              (or direct latest dmg URL if stable — prefer releases/latest page
+              for resilience).
+            </li>
+            <li>
+              <span class="fileref">README.md</span> — Desktop (Electron thin
+              shell), PWA install, env note that
+              <code>CONVEX_SITE_URL</code> for production remains the Vercel
+              origin, link to <code>electron/README.md</code> and Manual signing
+              secrets.
+            </li>
+            <li>
+              <span class="fileref">src/components/login-page.test.tsx</span>
+              <span class="tag-new">(new)</span> — optional small test that
+              download link renders when not desktop; skip if login page is hard
+              to mount — prefer a tiny pure wrapper test over brittle UI tests.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Match existing footer typography/link styling; do not redesign the
+              login hero.
+            </li>
+            <li>
+              Confirm the link is not shown when
+              <code>window.bereanDesktop</code> is present (unit test the
+              condition via helper if easier).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> passes;
+              <code>pnpm test</code> passes.
+            </li>
+            <li>README documents desktop + PWA at a glance.</li>
+            <li>
+              Behavioral (manual): web login shows Mac download; Electron login
+              does not.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <section id="out-of-scope">
+        <div class="eyebrow">Later</div>
+        <h2>Explicitly out of scope (do not build in these PRs)</h2>
+        <div class="card">
+          <ul class="clean small">
+            <li>Windows / Linux Electron targets and signing</li>
+            <li>Capacitor / App Store iPad binary</li>
+            <li>Touch / Apple Pencil optimization</li>
+            <li>Offline Bible or notes sync</li>
+            <li>System-browser OAuth token bridge</li>
+            <li>Full marketing / about homepage</li>
+            <li>Push notifications, file associations, custom menu-heavy UX</li>
+            <li>Service worker precaching</li>
+          </ul>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <section id="risks">
+        <div class="eyebrow">Eyes open</div>
+        <h2>Risks &amp; how the plan answers them</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Risk</th>
+                <th>Mitigation (baked into the PR sequence)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>System-browser OAuth cannot share session with shell</td>
+                <td>
+                  PR 3 uses in-window OAuth + <code>persist:berean</code>;
+                  documented decision.
+                </td>
+              </tr>
+              <tr>
+                <td>Universal Links flaky for non–App Store Electron</td>
+                <td>
+                  PR 4 also registers <code>berean://</code>; https association
+                  is best-effort with AASA + Team ID (manual).
+                </td>
+              </tr>
+              <tr>
+                <td>Signing secrets block CI</td>
+                <td>
+                  PR 6 unsigned fallback; Manual steps list secrets for you.
+                </td>
+              </tr>
+              <tr>
+                <td>Agents cannot smoke-test Mac UI</td>
+                <td>
+                  Acceptance criteria split mechanical vs behavioral; you run
+                  Manual step 6.
+                </td>
+              </tr>
+              <tr>
+                <td>SPA rewrite serves HTML for AASA</td>
+                <td>
+                  PR 4 puts file in <code>public/</code> + explicit Content-Type
+                  in <code>vercel.json</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>Menu accelerators steal app shortcuts</td>
+                <td>
+                  Architecture + PR 2 forbid Cmd+K/G/,/J/Enter menu bindings.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        Berean · Desktop Electron + iPad PWA implementation plan · grounded in
+        the current codebase.
+      </footer>
+    </div>
+  </body>
+</html>

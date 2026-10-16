@@ -1,4 +1,3 @@
-import { sortByVerseRef } from "../../shared/compare-verse-refs";
 import {
   passageStepLine,
   stepLadderDay,
@@ -31,10 +30,8 @@ import {
   localDayIndex,
   remainingIntroduces,
 } from "./passage-frontier";
-import type { PassagePiece } from "./passage-pieces";
-import { spanInPackScope, type PassageRange } from "./passage-range";
+import type { PassagePiece, PieceAttachment } from "./passage-pieces";
 import { formatVerseRefTitle } from "./verse-ref-utils";
-import type { VerseScope } from "./verse-scope-match";
 
 /**
  * Goal cards for Today: one per thing the user is working toward. That is
@@ -61,9 +58,8 @@ export interface GoalVerseInput<V extends string = string> {
 }
 
 /**
- * One of the user's packs. Members follow `loadPackMembers`: scope packs list
- * the in-Memory verses inside `scope` (and `passageRange`) in Bible order;
- * other packs list the in-Memory verses of `verseRefIds` in saved order.
+ * One of the user's packs. Members follow `loadPackMembers`: the in-Memory
+ * verses of `verseRefIds` in saved order.
  */
 export interface GoalPackInput<
   P extends string = string,
@@ -72,8 +68,6 @@ export interface GoalPackInput<
   packId: P;
   name: string;
   kind: "custom" | "scope";
-  scope?: VerseScope;
-  passageRange?: PassageRange;
   /** `packVerses` rows in saved order, in Memory or not. */
   verseRefIds: readonly V[];
   createdAt: number;
@@ -122,6 +116,17 @@ export interface PassageTodayStep {
   ladderDay: StepLadderDay;
 }
 
+export type PassagePieceState = "learned" | "learning" | "upNext";
+
+/** One piece of a passage, in order, for Today's verse ruler. */
+export interface PassageGoalPiece {
+  /** Verses in the piece; the ruler draws one tick per verse. */
+  verses: number;
+  state: PassagePieceState;
+  /** Today's session starts on this piece. */
+  today: boolean;
+}
+
 export interface PassageGoalCard<P extends string = string> {
   kind: "passage";
   packId: P;
@@ -129,6 +134,7 @@ export interface PassageGoalCard<P extends string = string> {
   verseCount: number;
   /** Verses joined into the passage (attached or solid). */
   learnedVerses: number;
+  pieceStates: PassageGoalPiece[];
   status: PassageDueStatus;
   hasWorkToday: boolean;
   /** While building with a session today: the verses that session starts on. */
@@ -234,17 +240,8 @@ function minOrNull(
 
 function packMembers<V extends string>(
   pack: GoalPackInput<string, V>,
-  verses: readonly GoalVerseInput<V>[],
   verseByRef: ReadonlyMap<V, GoalVerseInput<V>>,
 ): GoalVerseInput<V>[] {
-  const scope = pack.scope;
-  if (pack.kind === "scope" && scope) {
-    return sortByVerseRef(
-      verses.filter((verse) =>
-        spanInPackScope(verse, scope, pack.passageRange),
-      ),
-    );
-  }
   return pack.verseRefIds.flatMap((verseRefId) => {
     const verse = verseByRef.get(verseRefId);
     return verse ? [verse] : [];
@@ -316,15 +313,12 @@ export function passageTodayPieceIndex(
   return nextIndex === -1 ? null : nextIndex;
 }
 
-/** The verses today's passage session starts on. */
+/** The verses today's passage session starts on: `pieces[index]`. */
 function passageTodayStep(
-  passage: GoalPassageInput,
   pieces: readonly PassagePiece[],
-  now: number,
-  tzOffsetMinutes: number,
+  index: number,
 ): PassageTodayStep | null {
-  const index = passageTodayPieceIndex(passage, pieces, now, tzOffsetMinutes);
-  const piece = index === null ? undefined : pieces[index];
+  const piece = pieces[index];
   if (!piece) return null;
 
   const learnStage = piece.attachment === "unreached" ? 0 : piece.learnStage;
@@ -360,6 +354,13 @@ function nextBuildingSessionAt(
   return next;
 }
 
+const PIECE_STATE: Record<PieceAttachment, PassagePieceState> = {
+  unreached: "upNext",
+  learning: "learning",
+  attached: "learned",
+  solid: "learned",
+};
+
 export function passageGoal<P extends string>(
   passage: GoalPassageInput<P>,
   now: number,
@@ -381,6 +382,10 @@ export function passageGoal<P extends string>(
     ? isPassageDueForLearning({ ...passage, pieces }, now, tzOffsetMinutes)
     : isPassageDueForReview(passage, now);
   const tomorrowStart = localDayStart(now, tzOffsetMinutes) + DAY_MS;
+  const todayIndex =
+    building && hasWorkToday
+      ? passageTodayPieceIndex(passage, pieces, now, tzOffsetMinutes)
+      : null;
 
   return {
     kind: "passage",
@@ -388,12 +393,15 @@ export function passageGoal<P extends string>(
     title: passage.title,
     verseCount,
     learnedVerses,
+    pieceStates: pieces.map((piece, index) => ({
+      verses: piece.endVerse - piece.startVerse + 1,
+      state: PIECE_STATE[piece.attachment],
+      today: index === todayIndex,
+    })),
     status: passage.status,
     hasWorkToday,
     todayStep:
-      building && hasWorkToday
-        ? passageTodayStep(passage, pieces, now, tzOffsetMinutes)
-        : null,
+      todayIndex === null ? null : passageTodayStep(pieces, todayIndex),
     masteryFraction: masteryFor(passage.status, passage.intervalDays),
     nextDueAt: !building
       ? passage.dueAt
@@ -595,7 +603,7 @@ export function buildGoalCards<P extends string, V extends string>(
     const isPassage = passagePackIds.has(pack.packId);
     // A passage's own scope does not make its verses pack members.
     if (isPassage && pack.kind === "scope") continue;
-    const members = packMembers(pack, input.verses, verseByRef);
+    const members = packMembers(pack, verseByRef);
     for (const member of members) inPack.add(member.verseRefId);
     if (!isPassage && members.length > 0) {
       goals.push(packGoal(pack, members, input));

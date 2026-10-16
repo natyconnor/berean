@@ -1,13 +1,15 @@
+import type { VerseSpan } from "./hearted-verse-coverage";
 import { stepAction, stepLadderDay, todayStepParts } from "./memory-copy";
 import {
   goalLearnPace,
   type GoalCard,
   type PackGoalCard,
   type PassageGoalCard,
+  type PassagePieceState,
   type VerseGoalCard,
 } from "./memory-goals";
 import { withReturn } from "./memory-return";
-import { isReviewPhase } from "./memory-scheduler";
+import { isReviewPhase, type MemoryStatus } from "./memory-scheduler";
 import {
   memoryPackSessionHref,
   memoryTodaySessionHref,
@@ -25,15 +27,14 @@ import {
   passageDetailActions,
   type PackDetailSession,
 } from "./pack-detail-model";
+import type { PassageDueStatus } from "./passage-due";
 
 /**
- * One goal card on Today: its chip, today's step (or what is done), the bars
- * for its phase, and its one action. Learned and Mastery stay separate bars.
- * Pure; `now` is passed in.
+ * One goal card on Today: what it is (its signature), its chip, today's step
+ * (or what is done), the bars for its phase, and its one action. A passage's
+ * or pack's Learned progress is its signature; Mastery stays a bar. Pure;
+ * `now` is passed in.
  */
-
-/** Today shows at most this many goal cards; Your verses has the rest. */
-export const GOAL_CARD_LIMIT = 6;
 
 /** Sessions started from Today come back to Today. */
 export const TODAY_RETURN = "/memory";
@@ -64,17 +65,64 @@ export interface GoalBar {
 export interface GoalAction {
   kind: "learn" | "review";
   label: string;
+  /** The label in a compact row: "8 min", or `label` with no estimate. */
+  shortLabel: string;
   href: string;
 }
+
+/** One verse on a passage's ruler. */
+export interface GoalRulerTick {
+  state: PassagePieceState;
+  /** Today's session works on this verse. */
+  today: boolean;
+}
+
+/** A pack's members in one status. */
+export interface GoalMemberGroup {
+  status: MemoryStatus;
+  count: number;
+}
+
+interface GoalProgress {
+  label: string;
+  detail: string | null;
+  fraction: number;
+  ariaLabel: string;
+}
+
+/**
+ * What sits under the title for a passage or a pack: a passage's verses as a
+ * ruler, or a pack's verses as dots (most learned first). A verse carries its
+ * span here; its card does not preview the words.
+ */
+export type GoalSignature =
+  | { kind: "verse"; span: VerseSpan }
+  | (GoalProgress & {
+      kind: "passage";
+      phase: PassageDueStatus;
+      ticks: GoalRulerTick[];
+    })
+  | (GoalProgress & { kind: "pack"; members: GoalMemberGroup[] });
+
+export const GOAL_KIND_NAME: Record<GoalCard["kind"], string> = {
+  passage: "Passage",
+  pack: "Pack",
+  verse: "Verse",
+};
 
 export interface TodayGoalCardModel {
   /** "Passage · 11 verses" */
   kindLabel: string;
+  signature: GoalSignature;
   chip: GoalChip | null;
   steps: GoalStep[];
   bars: GoalBar[];
   action: GoalAction | null;
+  /** Today's step, or what is done, on one line for a compact row. */
+  summary: string;
 }
+
+type GoalBody = Omit<TodayGoalCardModel, "kindLabel" | "chip" | "summary">;
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -138,12 +186,48 @@ function startOrContinue(goal: GoalCard, minutes: number): string {
   return `${hasStarted(goal) ? "Continue" : "Start"} · ${minutes} min`;
 }
 
+function passageSignature(
+  goal: PassageGoalCard,
+  now: number,
+  timeZone: string | undefined,
+): GoalSignature {
+  const building = goal.status === "building";
+  return {
+    kind: "passage",
+    phase: goal.status,
+    ticks: goal.pieceStates.flatMap((piece) =>
+      Array.from({ length: piece.verses }, () => ({
+        state: piece.state,
+        today: piece.today,
+      })),
+    ),
+    label: building
+      ? `${goal.learnedVerses} of ${plural(goal.verseCount, "verse")} learned`
+      : goal.verseCount === 1
+        ? "1 verse learned"
+        : `All ${goal.verseCount} verses learned`,
+    detail: building ? goalLearnPace(goal, now, timeZone) : null,
+    fraction: goal.verseCount === 0 ? 0 : goal.learnedVerses / goal.verseCount,
+    ariaLabel: `Learned ${goal.learnedVerses} of ${plural(goal.verseCount, "verse")}`,
+  };
+}
+
+function packMemberGroups(goal: PackGoalCard): GoalMemberGroup[] {
+  const groups: GoalMemberGroup[] = [
+    { status: "mastered", count: goal.mastered },
+    { status: "reviewing", count: goal.learned - goal.mastered },
+    { status: "learning", count: goal.learning },
+    { status: "new", count: goal.upNext },
+  ];
+  return groups.filter((group) => group.count > 0);
+}
+
 function passageModel(
   goal: PassageGoalCard,
   now: number,
   timeZone: string | undefined,
   doneToday: boolean,
-): Omit<TodayGoalCardModel, "kindLabel" | "chip"> {
+): GoalBody {
   const building = goal.status === "building";
   const when = nextWhen(goal, now, timeZone);
 
@@ -170,69 +254,62 @@ function passageModel(
     steps.push({ kind: "done", text: "Reviewed today." });
   }
 
-  let bars: GoalBar[];
-  if (building) {
-    bars = [
-      {
-        track: "learned",
-        label: `${goal.learnedVerses} of ${plural(goal.verseCount, "verse")} learned`,
-        detail: goalLearnPace(goal, now, timeZone),
-        fraction:
-          goal.verseCount === 0 ? 0 : goal.learnedVerses / goal.verseCount,
-        ariaLabel: `Learned ${goal.learnedVerses} of ${plural(goal.verseCount, "verse")}`,
-      },
-    ];
-  } else {
-    const recite = goal.hasWorkToday
-      ? "review today"
-      : goal.nextDueAt === null
-        ? null
-        : `next review ${formatDueDay(goal.nextDueAt, now, timeZone)}`;
-    bars = [
-      goal.status === "mastered"
-        ? {
-            track: "mastery",
-            label: "Mastered",
-            detail: recite,
-            fraction: 1,
-            ariaLabel: "Mastered",
-          }
-        : {
-            track: "mastery",
-            label: `Mastery ${percent(goal.masteryFraction)}%`,
-            detail: recite,
-            fraction: goal.masteryFraction,
-            ariaLabel: `Mastery ${percent(goal.masteryFraction)} percent`,
-          },
-    ];
-  }
+  const recite = goal.hasWorkToday
+    ? "review today"
+    : goal.nextDueAt === null
+      ? null
+      : `next review ${formatDueDay(goal.nextDueAt, now, timeZone)}`;
+  const bars: GoalBar[] = building
+    ? []
+    : [
+        goal.status === "mastered"
+          ? {
+              track: "mastery",
+              label: "Mastered",
+              detail: recite,
+              fraction: 1,
+              ariaLabel: "Mastered",
+            }
+          : {
+              track: "mastery",
+              label: `Mastery ${percent(goal.masteryFraction)}%`,
+              detail: recite,
+              fraction: goal.masteryFraction,
+              ariaLabel: `Mastery ${percent(goal.masteryFraction)} percent`,
+            },
+      ];
 
   let action: GoalAction | null = null;
   const main = goal.hasWorkToday
     ? passageDetailActions(goal, now, timeZone).main
     : null;
   if (main?.kind === "session") {
+    const minutes = estimateSessionMinutes({
+      learningVerses: 0,
+      reviewVerses: 0,
+      passageSessions: 1,
+    });
     action = building
       ? {
           kind: "learn",
-          label: startOrContinue(
-            goal,
-            estimateSessionMinutes({
-              learningVerses: 0,
-              reviewVerses: 0,
-              passageSessions: 1,
-            }),
-          ),
+          label: startOrContinue(goal, minutes),
+          shortLabel: `${minutes} min`,
           href: sessionHref(goal.packId, main.session),
         }
       : {
           kind: "review",
           label: "Review",
+          shortLabel: "Review",
           href: sessionHref(goal.packId, main.session),
         };
   }
 
-  return { steps, bars, action };
+  return {
+    signature: passageSignature(goal, now, timeZone),
+    steps,
+    bars,
+    action,
+  };
 }
 
 function packModel(
@@ -240,7 +317,7 @@ function packModel(
   now: number,
   timeZone: string | undefined,
   doneToday: boolean,
-): Omit<TodayGoalCardModel, "kindLabel" | "chip"> {
+): GoalBody {
   const reviews = goal.reviewsDue.length;
   const steps: GoalStep[] = [];
   if (goal.hasWorkToday) {
@@ -273,21 +350,21 @@ function packModel(
   }
 
   const progress = packDetailProgress(goal, now, timeZone);
-  const bars: GoalBar[] = [];
-  if (progress.learned) {
-    bars.push({
-      track: "learned",
-      ...progress.learned,
-      ariaLabel: `Learned ${goal.learned} of ${plural(goal.verseCount, "verse")}`,
-    });
-  }
-  if (progress.mastery) {
-    bars.push({
-      track: "mastery",
-      ...progress.mastery,
-      ariaLabel: `Mastery ${percent(goal.masteryFraction)} percent`,
-    });
-  }
+  const signature: GoalSignature = {
+    kind: "pack",
+    ...progress.learned,
+    ariaLabel: `Learned ${goal.learned} of ${plural(goal.verseCount, "verse")}`,
+    members: packMemberGroups(goal),
+  };
+  const bars: GoalBar[] = progress.mastery
+    ? [
+        {
+          track: "mastery",
+          ...progress.mastery,
+          ariaLabel: `Mastery ${percent(goal.masteryFraction)} percent`,
+        },
+      ]
+    : [];
 
   let action: GoalAction | null = null;
   const main = goal.hasWorkToday
@@ -304,16 +381,18 @@ function packModel(
         ? {
             kind: "review",
             label: `Review ${reviews} · ${minutes} min`,
+            shortLabel: `${minutes} min`,
             href: sessionHref(goal.packId, main.session),
           }
         : {
             kind: "learn",
             label: startOrContinue(goal, minutes),
+            shortLabel: `${minutes} min`,
             href: sessionHref(goal.packId, main.session),
           };
   }
 
-  return { steps, bars, action };
+  return { signature, steps, bars, action };
 }
 
 function verseModel(
@@ -321,16 +400,31 @@ function verseModel(
   now: number,
   timeZone: string | undefined,
   doneToday: boolean,
-): Omit<TodayGoalCardModel, "kindLabel" | "chip"> {
+): GoalBody {
   const href = (kind: "learn" | "review") =>
     withReturn(memoryVerseSessionHref(kind, goal), TODAY_RETURN);
+  const signature: GoalSignature = {
+    kind: "verse",
+    span: {
+      book: goal.book,
+      chapter: goal.chapter,
+      startVerse: goal.startVerse,
+      endVerse: goal.endVerse,
+    },
+  };
 
   if (isReviewPhase(goal.status)) {
     const label =
       goal.status === "mastered"
         ? "Mastered"
         : `Mastery ${percent(goal.masteryFraction)}%`;
+    const minutes = estimateSessionMinutes({
+      learningVerses: 0,
+      reviewVerses: 1,
+      passageSessions: 0,
+    });
     return {
+      signature,
       steps: goal.hasWorkToday
         ? [{ kind: "review", text: "Review due today." }]
         : doneToday
@@ -355,11 +449,8 @@ function verseModel(
       action: goal.hasWorkToday
         ? {
             kind: "review",
-            label: `Review · ${estimateSessionMinutes({
-              learningVerses: 0,
-              reviewVerses: 1,
-              passageSessions: 0,
-            })} min`,
+            label: `Review · ${minutes} min`,
+            shortLabel: `${minutes} min`,
             href: href("review"),
           }
         : null,
@@ -367,7 +458,9 @@ function verseModel(
   }
 
   const day = stepLadderDay(goal.learnStage);
-  const tomorrow = `Tomorrow: ${stepAction(goal.learnStage)}.`;
+  // Read and First letters are day one's one session, so the next session
+  // after a step is never day one (`nextStepCopy` says the same).
+  const tomorrow = `Tomorrow: ${stepAction(Math.max(goal.learnStage, 2))}.`;
   const upNext = goal.status === "new";
   let steps: GoalStep[];
   if (goal.hasWorkToday) {
@@ -382,7 +475,13 @@ function verseModel(
     ];
   }
 
+  const minutes = estimateSessionMinutes({
+    learningVerses: 1,
+    reviewVerses: 0,
+    passageSessions: 0,
+  });
   return {
+    signature,
     steps,
     bars: [
       {
@@ -397,14 +496,8 @@ function verseModel(
       goal.hasWorkToday || upNext
         ? {
             kind: "learn",
-            label: startOrContinue(
-              goal,
-              estimateSessionMinutes({
-                learningVerses: 1,
-                reviewVerses: 0,
-                passageSessions: 0,
-              }),
-            ),
+            label: startOrContinue(goal, minutes),
+            shortLabel: `${minutes} min`,
             href: href("learn"),
           }
         : null,
@@ -412,14 +505,40 @@ function verseModel(
 }
 
 function kindLabel(goal: GoalCard): string {
-  switch (goal.kind) {
-    case "passage":
-      return `Passage · ${plural(goal.verseCount, "verse")}`;
-    case "pack":
-      return `Pack · ${plural(goal.verseCount, "verse")}`;
-    case "verse":
-      return "Verse";
+  const name = GOAL_KIND_NAME[goal.kind];
+  return goal.kind === "verse"
+    ? name
+    : `${name} · ${plural(goal.verseCount, "verse")}`;
+}
+
+/** "fill in the blanks for verse 4." → "Fill in the blanks for verse 4" */
+function asPhrase(text: string): string {
+  const trimmed = text.replace(/\.$/, "");
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
+}
+
+function stepSummary(step: GoalStep): string {
+  switch (step.kind) {
+    case "learn":
+      return asPhrase(step.rest);
+    case "reviews":
+      return `${plural(step.labels.length + step.more, "review")} due`;
+    case "learnCount":
+    case "review":
+    case "done":
+    case "note":
+      return asPhrase(step.text);
   }
+}
+
+function summaryFor(body: GoalBody): string {
+  if (body.steps.length > 0) return body.steps.map(stepSummary).join(" · ");
+  const progress =
+    body.bars[0] ?? (body.signature.kind === "verse" ? null : body.signature);
+  if (!progress) return "";
+  return progress.detail
+    ? `${progress.label} · ${progress.detail}`
+    : progress.label;
 }
 
 export function todayGoalCardModel(
@@ -438,5 +557,6 @@ export function todayGoalCardModel(
     kindLabel: kindLabel(goal),
     chip: chipFor(goal, doneToday),
     ...body,
+    summary: summaryFor(body),
   };
 }

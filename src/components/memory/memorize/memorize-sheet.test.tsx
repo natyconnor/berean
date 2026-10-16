@@ -456,6 +456,9 @@ describe("MemorizeSheet", () => {
     expect(
       within(dialog).getByRole("button", { name: "Verses on hope" }),
     ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/^Starting adds Romans 8:28 to/),
+    ).toHaveTextContent("Starting adds Romans 8:28 to Verses on hope.");
     await userEvent.click(startButton(dialog));
 
     await waitFor(() =>
@@ -473,6 +476,11 @@ describe("MemorizeSheet", () => {
       addVerse.mock.invocationCallOrder[0] ?? 0,
     );
     expect(mutation("packs.createAndMemorize")).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith(
+        "Added Romans 8:28 to Verses on hope.",
+      ),
+    );
   });
 
   it("makes a new pack with the verse, named right in the sheet", async () => {
@@ -486,10 +494,19 @@ describe("MemorizeSheet", () => {
     await userEvent.click(
       await screen.findByRole("menuitem", { name: "New pack…" }),
     );
-    await userEvent.type(
-      within(dialog).getByRole("textbox", { name: "New pack name" }),
-      "Hope{Enter}",
-    );
+    const nameInput = within(dialog).getByRole("textbox", {
+      name: "New pack name",
+    });
+    expect(
+      within(dialog).getByText(
+        "Name it, and starting creates the pack with Romans 8:28.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.type(nameInput, "Hope");
+    expect(
+      within(dialog).getByText(/^Starting creates the pack/),
+    ).toHaveTextContent("Starting creates the pack “Hope” with Romans 8:28.");
+    await userEvent.type(nameInput, "{Enter}");
 
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
     expect(mutation("packs.createAndMemorize")).toHaveBeenCalledWith({
@@ -498,6 +515,42 @@ describe("MemorizeSheet", () => {
       now: expect.any(Number) as number,
     });
     expect(mutation("packs.addVerse")).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith(
+        "Created the pack Hope with Romans 8:28.",
+      ),
+    );
+  });
+
+  it("asks for a new pack's name instead of starting without it", async () => {
+    const dialog = await openSheet(verseTarget);
+
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Add to a pack (optional)",
+      }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "New pack…" }),
+    );
+    await userEvent.click(startButton(dialog));
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Name the new pack, or remove it to start without one.",
+    );
+    expect(
+      within(dialog).getByRole("textbox", { name: "New pack name" }),
+    ).toHaveFocus();
+    expect(mutation("verseMemory.memorize")).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Don't add to a pack" }),
+    );
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    await userEvent.click(startButton(dialog));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(mutation("packs.createAndMemorize")).not.toHaveBeenCalled();
   });
 
   it("drops the pack again with the clear button", async () => {

@@ -27,8 +27,9 @@ import {
   qualityValidator,
 } from "./lib/passageValues";
 import {
+  filterScopeMembers,
   loadCustomPackVerseRefIds,
-  loadPackMembers,
+  loadInMemoryMembers,
   loadPassageMemoryByUser,
 } from "./lib/packs";
 import {
@@ -141,7 +142,12 @@ export const start = mutation({
       );
     }
 
-    const members = await loadPackMembers(ctx, userId, pack);
+    // In-Memory verses already inside the range carry their progress over.
+    const members = filterScopeMembers(
+      await loadInMemoryMembers(ctx, userId),
+      pack.scope,
+      pack.passageRange,
+    );
     const plan = planStart({
       pieces: args.pieces,
       hearts: members.map(memberToHeart),

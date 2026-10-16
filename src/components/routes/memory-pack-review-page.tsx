@@ -149,7 +149,7 @@ export function MemoryPackReviewPage() {
               <p className="text-sm text-muted-foreground">
                 {learningCount > 0
                   ? `${pack.name} recites as one passage, so every unit has to graduate before it comes back. ${learningCount} ${learningCount === 1 ? "unit is" : "units are"} still learning.`
-                  : `${pack.name} has no verses being memorized right now. Memorize verses in its chapters and they join the recitation.`}
+                  : `${pack.name} has no verses being memorized right now.`}
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">

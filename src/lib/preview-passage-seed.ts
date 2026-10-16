@@ -12,11 +12,7 @@ import { scopesEqual } from "./scope-equality";
 import type { VerseScope } from "./verse-scope-match";
 
 export type PreviewPassageSeedRole =
-  | "readyToStart"
-  | "buildingDue"
-  | "budgetExhausted"
-  | "maintenanceDue"
-  | "collectionOnly";
+  "readyToStart" | "buildingDue" | "budgetExhausted" | "maintenanceDue";
 
 /** Pack scope as stored on `packs.scope` (tags are unused for verse matching). */
 export type PreviewPassagePackScope = VerseScope & {
@@ -31,7 +27,7 @@ export type PreviewPassageSeedPack = {
   description: string;
   howToTry: string;
   scope: PreviewPassagePackScope;
-  /** Absent for readyToStart / collectionOnly — user opts in from the pack. */
+  /** Absent for readyToStart — user opts in from the pack. */
   passage?: {
     status: PassageRowStatus;
     pieces: PassagePiece[];
@@ -62,16 +58,6 @@ function scopeChapter(
   return withPackMeta({
     books: [book],
     chapterRanges: [{ book, startChapter, endChapter }],
-  });
-}
-
-function multiBookScope(): PreviewPassagePackScope {
-  return withPackMeta({
-    books: ["Genesis", "John"],
-    chapterRanges: [
-      { book: "Genesis", startChapter: 1, endChapter: 1 },
-      { book: "John", startChapter: 1, endChapter: 1 },
-    ],
   });
 }
 
@@ -464,15 +450,6 @@ export function buildPreviewPassageSeed(
           })),
         ),
       },
-    },
-    {
-      id: "passage-collection-multi",
-      role: "collectionOnly",
-      name: "Sample · Multi-book (collection only)",
-      description: "Multi-book scope — passage mode must stay unavailable.",
-      howToTry:
-        "Open the pack. Learn as a passage should be hidden; collection behavior only.",
-      scope: multiBookScope(),
     },
   ];
 

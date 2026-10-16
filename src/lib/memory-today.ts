@@ -44,6 +44,13 @@ export interface TodayStatusCounts {
   mastered: number;
 }
 
+/** A pack with nothing in Memory: no goal card, but still on Your verses. */
+export interface TodayEmptyPack<P extends string = string> {
+  packId: P;
+  title: string;
+  createdAt: number;
+}
+
 export interface TodayModel<
   P extends string = string,
   V extends string = string,
@@ -62,6 +69,7 @@ export interface TodayModel<
   totalInMemory: number;
   statusCounts: TodayStatusCounts;
   goals: GoalCard<P, V>[];
+  emptyPacks: TodayEmptyPack<P>[];
 }
 
 export interface TodayVerseLog {
@@ -103,6 +111,7 @@ export function emptyTodayModel<
     totalInMemory: 0,
     statusCounts: { learning: 0, memorized: 0, mastered: 0 },
     goals: [],
+    emptyPacks: [],
   };
 }
 
@@ -211,6 +220,9 @@ export function buildTodayModel<P extends string, V extends string>(
     localDayStart(now, input.tzOffsetMinutes),
   );
   const hasMemory = verses.length > 0 || input.passages.length > 0;
+  const goalPackIds = new Set<string>(
+    goals.flatMap((goal) => (goal.kind === "verse" ? [] : [goal.packId])),
+  );
 
   return {
     state: !hasMemory
@@ -226,6 +238,13 @@ export function buildTodayModel<P extends string, V extends string>(
     totalInMemory: verses.length,
     statusCounts,
     goals,
+    emptyPacks: input.packs
+      .filter((pack) => !goalPackIds.has(pack.packId))
+      .map((pack) => ({
+        packId: pack.packId,
+        title: pack.name,
+        createdAt: pack.createdAt,
+      })),
   };
 }
 

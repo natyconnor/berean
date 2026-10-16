@@ -71,7 +71,12 @@ vi.mock("./memorize/memorize-context", () => ({
 function row(
   verse: number,
   status: "new" | "learning" | "reviewing" | "mastered",
-  extra: { learnStage?: number; dueAt?: number; lastReviewedAt?: number } = {},
+  extra: {
+    learnStage?: number;
+    dueAt?: number;
+    lastReviewedAt?: number;
+    packs?: { packId: string; name: string; kind: "pack" | "passage" }[];
+  } = {},
 ) {
   return {
     verseMemoryId: `vm_${verse}`,
@@ -87,6 +92,7 @@ function row(
     dueAt: extra.dueAt ?? NOW,
     lapses: 0,
     lastReviewedAt: extra.lastReviewedAt,
+    packs: extra.packs ?? [],
   };
 }
 
@@ -142,19 +148,27 @@ describe("MemoryLibrary filters", () => {
     );
   });
 
-  it("offers Due today, Learning, Memorized, Mastered, and All", () => {
+  it("opens on All, then offers Due today, Learning, Memorized, and Mastered", () => {
     renderLibrary();
 
     const filters = screen.getByRole("group", { name: "Filter verses" });
     expect(
       [...filters.querySelectorAll("button")].map((b) => b.textContent),
-    ).toEqual(["Due today", "Learning", "Memorized", "Mastered", "All"]);
+    ).toEqual(["All", "Due today", "Learning", "Memorized", "Mastered"]);
     expect(screen.queryByText("Not started")).not.toBeInTheDocument();
+    expect(mocks.paginatedArgs.at(-1)).toEqual({ view: "all" });
+  });
+
+  it("reads the Due today view with today's clock", async () => {
+    renderLibrary();
+
+    await userEvent.click(screen.getByRole("button", { name: "Due today" }));
     expect(mocks.paginatedArgs.at(-1)).toEqual({ view: "due", now: NOW });
   });
 
-  it("says nothing is due today, with no extra button", () => {
+  it("says nothing is due today, with no extra button", async () => {
     renderLibrary();
+    await userEvent.click(screen.getByRole("button", { name: "Due today" }));
 
     expect(screen.getByText("You're all caught up.")).toBeInTheDocument();
     expect(screen.getByText("Nothing due today.")).toBeInTheDocument();
@@ -170,6 +184,7 @@ describe("MemoryLibrary filters", () => {
       nextReviewAt: NOW + DAY_MS,
     };
     renderLibrary();
+    await userEvent.click(screen.getByRole("button", { name: "Due today" }));
 
     expect(
       screen.getByText("Nice work. You're all caught up."),
@@ -196,7 +211,6 @@ describe("MemoryLibrary filters", () => {
       "mastered",
       "Nothing mastered yet. Mastery comes after about 2 months of short reviews.",
     ],
-    ["All", "all", "Memorize a verse to see it here."],
   ])("reads the %s view", async (label, view, emptyCopy) => {
     renderLibrary();
 
@@ -290,23 +304,25 @@ describe("MemoryLibrary rows", () => {
     expect(handlers.onOpenVerse).toHaveBeenCalledWith("vr_2");
   });
 
-  it("does everything due today in one session", () => {
+  it("does everything due today in one session", async () => {
     mocks.results = [
       row(1, "learning", { learnStage: 2 }),
       row(2, "reviewing"),
     ];
     mocks.today = today({ learningVerses: 1, passageSessions: 0, reviews: 1 });
     renderLibrary();
+    await userEvent.click(screen.getByRole("button", { name: "Due today" }));
 
     expect(
       screen.getByRole("link", { name: "Do all 2 · about 4 min" }),
     ).toHaveAttribute("href", "/memory/today?return=%2Fmemory%2Fverses");
   });
 
-  it("says Review all when only reviews are due", () => {
+  it("says Review all when only reviews are due", async () => {
     mocks.results = [row(2, "reviewing"), row(5, "reviewing")];
     mocks.today = today({ learningVerses: 0, passageSessions: 0, reviews: 2 });
     renderLibrary();
+    await userEvent.click(screen.getByRole("button", { name: "Due today" }));
 
     expect(
       screen.getByRole("link", { name: /^Review all 2 · about \d+ min$/ }),
@@ -318,9 +334,31 @@ describe("MemoryLibrary rows", () => {
     mocks.today = today({ learningVerses: 0, passageSessions: 0, reviews: 1 });
     renderLibrary();
 
+    await userEvent.click(screen.getByRole("button", { name: "Due today" }));
+    expect(
+      screen.getByRole("link", { name: /Review all/ }),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "All" }));
     expect(
       screen.queryByRole("link", { name: /Review all/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("names the first pack a verse is in and counts the rest", () => {
+    mocks.results = [
+      row(1, "reviewing", {
+        packs: [
+          { packId: "mix", name: "Sample · Mix", kind: "pack" },
+          { packId: "psalm23", name: "Psalm 23", kind: "passage" },
+        ],
+      }),
+      row(2, "reviewing"),
+    ];
+    renderLibrary();
+
+    const [inPacks, onItsOwn] = screen.getAllByRole("listitem");
+    if (!inPacks || !onItsOwn) throw new Error("missing rows");
+    expect(inPacks).toHaveTextContent("In Sample · Mix +1");
+    expect(onItsOwn).not.toHaveTextContent(/\bIn\b/);
   });
 });

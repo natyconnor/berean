@@ -137,8 +137,6 @@ export function packDetailGoal({
         packId: pack.packId,
         name: pack.name,
         kind: pack.kind,
-        scope: pack.scope,
-        passageRange: pack.passageRange,
         verseRefIds: members.map((member) => member.verseRefId),
         createdAt: pack.createdAt,
       },
@@ -374,7 +372,7 @@ export function packDetailProgress(
   goal: PackGoalCard,
   now: number,
   timeZone?: string,
-): PackDetailProgress {
+): PackDetailProgress & { learned: ProgressBar } {
   const pending = [
     goal.learning > 0 ? `${goal.learning} learning` : null,
     goal.upNext > 0 ? `${goal.upNext} up next` : null,

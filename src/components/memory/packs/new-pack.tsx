@@ -133,6 +133,7 @@ export function NewPack({
     <MemoryPageShell
       back={{ label: TODAY_LABEL, href: "/memory" }}
       title="New pack"
+      kind="pack"
       subtitle="Pick verses for a theme, a group, or a season"
     >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-6 lg:gap-y-0">
