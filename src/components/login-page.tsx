@@ -320,6 +320,13 @@ export function LoginPage({
               >
                 Terms of Service
               </Link>
+              <span className="mx-1.5 text-white/20">·</span>
+              <Link
+                to="/license"
+                className="underline decoration-white/20 underline-offset-2 transition-colors hover:text-white/45 hover:decoration-white/35"
+              >
+                License
+              </Link>
             </p>
           </div>
         </>

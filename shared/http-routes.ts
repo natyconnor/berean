@@ -20,13 +20,17 @@ import {
 
 export const CANONICAL_ORIGIN = "https://berean.nathanconnor.dev";
 
+/** Public legal pages that skip the authenticated app shell. */
+export const PUBLIC_LEGAL_PATHS = ["/privacy", "/terms", "/license"] as const;
+
 /** Signed-out pages that belong in the public sitemap. */
-export const PUBLIC_SITEMAP_PATHS = ["/", "/privacy", "/terms"] as const;
+export const PUBLIC_SITEMAP_PATHS = ["/", ...PUBLIC_LEGAL_PATHS] as const;
 
 export const APP_ROUTE_PATTERNS = [
   "/",
   "/privacy",
   "/terms",
+  "/license",
   "/search",
   "/theme-test",
   "/memory",
