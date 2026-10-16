@@ -53,9 +53,6 @@ export type MemorizeSearchMatch = {
   planLine: string;
 };
 
-/** Today's search input, so the Today card can scroll to it and focus it. */
-export const MEMORIZE_SEARCH_INPUT_ID = "memorize-search";
-
 const ABBREVIATIONS = new Map(
   BIBLE_BOOKS.map((book) => [book.name, book.abbreviation]),
 );

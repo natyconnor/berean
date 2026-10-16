@@ -1,13 +1,5 @@
 import { useId } from "react";
-import { useReducedMotion } from "framer-motion";
-import {
-  Check,
-  Dumbbell,
-  GraduationCap,
-  Play,
-  Plus,
-  RotateCcw,
-} from "lucide-react";
+import { Check, Dumbbell, GraduationCap, Play, RotateCcw } from "lucide-react";
 
 import { InternalLink } from "@/components/memory/internal-link";
 import { Button } from "@/components/ui/button";
@@ -24,7 +16,6 @@ import {
   START_TODAY_LABEL,
   TODAY_LABEL,
 } from "@/lib/memory-copy";
-import { MEMORIZE_SEARCH_INPUT_ID } from "@/lib/memorize-search";
 import { withReturn } from "@/lib/memory-return";
 import { memoryTodaySessionHref } from "@/lib/memory-session-path";
 import {
@@ -115,9 +106,10 @@ function WorkBody({
   const learning = counts.learningVerses + counts.passageSessions;
   const minutes = todaySessionMinutes(counts);
   const continuing = today.startedToday;
+  const showSplit = learning > 0 && counts.reviews > 0;
   const subline = continuing
     ? todayDoneLine(today.doneToday)
-    : learning > 0 && counts.reviews > 0
+    : showSplit
       ? "New learning first, then reviews."
       : null;
 
@@ -140,44 +132,42 @@ function WorkBody({
           </InternalLink>
         </Button>
       </div>
-      <div className="mt-2 flex flex-wrap gap-1.5 max-sm:flex-col">
-        {learning > 0 && counts.reviews > 0 ? (
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="max-sm:h-11 max-sm:justify-start"
-          >
-            <InternalLink href={ONLY_LEARNING_HREF}>
-              <GraduationCap aria-hidden />
-              Only learning · {learning}
-            </InternalLink>
-          </Button>
-        ) : null}
-        {counts.reviews > 0 && learning > 0 ? (
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="max-sm:h-11 max-sm:justify-start"
-          >
-            <InternalLink href={ONLY_REVIEWS_HREF}>
-              <RotateCcw aria-hidden />
-              Only reviews · {counts.reviews}
-            </InternalLink>
-          </Button>
-        ) : null}
-        {today.hasAnythingMemorized ? (
-          <ExtraPracticeLink
-            variant="ghost"
-            className="text-muted-foreground max-sm:h-11"
-          />
-        ) : null}
-        <MemorizeSomethingNewButton
-          variant="ghost"
-          className="text-muted-foreground max-sm:h-11 max-sm:justify-start"
-        />
-      </div>
+      {showSplit || today.hasAnythingMemorized ? (
+        <div className="mt-2 flex flex-wrap gap-1.5 max-sm:flex-col">
+          {showSplit ? (
+            <>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="max-sm:h-11 max-sm:justify-start"
+              >
+                <InternalLink href={ONLY_LEARNING_HREF}>
+                  <GraduationCap aria-hidden />
+                  Only learning · {learning}
+                </InternalLink>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="max-sm:h-11 max-sm:justify-start"
+              >
+                <InternalLink href={ONLY_REVIEWS_HREF}>
+                  <RotateCcw aria-hidden />
+                  Only reviews · {counts.reviews}
+                </InternalLink>
+              </Button>
+            </>
+          ) : null}
+          {today.hasAnythingMemorized ? (
+            <ExtraPracticeLink
+              variant="ghost"
+              className="text-muted-foreground max-sm:h-11"
+            />
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -217,47 +207,12 @@ function CaughtUpBody({
           ) : null}
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        {today.hasAnythingMemorized ? (
+      {today.hasAnythingMemorized ? (
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <ExtraPracticeLink variant="outline" className="max-sm:h-11" />
-        ) : null}
-        <MemorizeSomethingNewButton variant="outline" className="max-sm:h-11" />
-      </div>
+        </div>
+      ) : null}
     </>
-  );
-}
-
-/**
- * Scrolls to Today's search and focuses it, so starting something new is
- * reachable from the top of the page on a small screen.
- */
-function MemorizeSomethingNewButton({
-  variant,
-  className,
-}: {
-  variant: "ghost" | "outline";
-  className?: string;
-}) {
-  const reducedMotion = useReducedMotion();
-  return (
-    <Button
-      type="button"
-      variant={variant}
-      size="sm"
-      className={className}
-      onClick={() => {
-        const input = document.getElementById(MEMORIZE_SEARCH_INPUT_ID);
-        if (!input) return;
-        input.scrollIntoView({
-          behavior: reducedMotion ? "auto" : "smooth",
-          block: "center",
-        });
-        input.focus({ preventScroll: true });
-      }}
-    >
-      <Plus aria-hidden />
-      Memorize something new
-    </Button>
   );
 }
 
