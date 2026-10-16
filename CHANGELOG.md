@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.16](https://github.com/natyconnor/berean/compare/v1.17.15...v1.17.16) (2026-10-16)
+
+
+### Bug Fixes
+
+* Unstick splash after legal pages and serve /license ([#287](https://github.com/natyconnor/berean/issues/287)) ([c82aa0a](https://github.com/natyconnor/berean/commit/c82aa0ab460cc944e02cb914d2912b2fee75647b)), closes [#283](https://github.com/natyconnor/berean/issues/283)
+
 ## [1.17.15](https://github.com/natyconnor/berean/compare/v1.17.14...v1.17.15) (2026-10-13)
 
 
