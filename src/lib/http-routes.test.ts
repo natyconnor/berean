@@ -33,11 +33,17 @@ describe("resolveAppPath", () => {
       pathname: "/privacy",
     });
     expect(resolveAppPath("/privacy")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/license")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/LICENSE")).toEqual({
+      type: "redirect",
+      pathname: "/license",
+    });
   });
 
   it("serves known routes and redirects case or trailing-slash variants", () => {
     expect(resolveAppPath("/")).toEqual({ type: "serve" });
     expect(resolveAppPath("/terms")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/license")).toEqual({ type: "serve" });
     expect(resolveAppPath("/Terms/")).toEqual({
       type: "redirect",
       pathname: "/terms",
@@ -257,6 +263,20 @@ describe("route table parity", () => {
     );
     expect(robots).toContain("Allow: /privacy$");
     expect(robots).toContain("Allow: /terms$");
+    expect(robots).toContain("Allow: /license$");
     expect(robots.startsWith("User-agent:")).toBe(true);
+  });
+
+  it("keeps the in-app license page in sync with the repo LICENSE", () => {
+    const repoLicense = fs.readFileSync(
+      path.join(process.cwd(), "LICENSE"),
+      "utf8",
+    );
+    const pageLicense = fs.readFileSync(
+      path.join(process.cwd(), "src/content/legal/license.md"),
+      "utf8",
+    );
+    expect(pageLicense.startsWith("# License\n")).toBe(true);
+    expect(pageLicense).toContain(repoLicense.trim());
   });
 });
