@@ -119,16 +119,32 @@ function readReferenceDraft(
   }
 
   const match = value.match(/^(.+?)\s+(\d*)(?::(\d*)(?:-(\d*))?)?$/);
-  if (!match) return null;
+  if (match) {
+    const canonicalBook = resolveCanonicalBookName(match[1]);
+    if (!canonicalBook) return null;
 
-  const canonicalBook = resolveCanonicalBookName(match[1]);
+    return {
+      book: canonicalBook,
+      chapterText: match[2] ?? "",
+      startVerseText: match[3] ?? "",
+      endVerseText: match[4] ?? null,
+    };
+  }
+
+  const verseRangeMatch = value.match(/^(.+?)\s+(\d+)-(\d*)$/);
+  if (!verseRangeMatch) return null;
+
+  const canonicalBook = resolveCanonicalBookName(verseRangeMatch[1]);
   if (!canonicalBook) return null;
+
+  const bookInfo = getBookInfo(canonicalBook);
+  if (!bookInfo || bookInfo.chapters !== 1) return null;
 
   return {
     book: canonicalBook,
-    chapterText: match[2] ?? "",
-    startVerseText: match[3] ?? "",
-    endVerseText: match[4] ?? null,
+    chapterText: "1",
+    startVerseText: verseRangeMatch[2],
+    endVerseText: verseRangeMatch[3],
   };
 }
 
