@@ -207,6 +207,10 @@ function buildDraftStatus(draft: ReferenceDraft): QueryStatusState {
   };
 }
 
+function isSingleChapterBareNumber(draft: ReferenceDraft): boolean {
+  return !draft.startVerseText && getBookInfo(draft.book)?.chapters === 1;
+}
+
 function getDraftChapterErrorMessage(
   draft: ReferenceDraft | null,
 ): string | null {
@@ -225,6 +229,15 @@ function getDraftChapterErrorMessage(
   }
 
   if (chapter < 1 || chapter > bookInfo.chapters) {
+    if (isSingleChapterBareNumber(draft)) {
+      const maxVerse = getChapterVerseCount(draft.book, 1);
+      if (maxVerse) {
+        return `${displayBookName(draft.book)} 1 only has ${maxVerse} verse${
+          maxVerse === 1 ? "" : "s"
+        }.`;
+      }
+    }
+
     return `${draft.book} has ${bookInfo.chapters} chapter${
       bookInfo.chapters === 1 ? "" : "s"
     }.`;
@@ -843,15 +856,22 @@ export function InlineVerseEditor({
       return {
         tone: "error",
         label: draftChapterErrorMessage,
-        description: "Choose a valid chapter to keep creating the link.",
+        description:
+          draft && isSingleChapterBareNumber(draft)
+            ? "Keep typing to correct the reference."
+            : "Choose a valid chapter to keep creating the link.",
       };
     }
 
     if (parsedRef) {
       const label = formatVerseRef(parsedRef);
-      const readyLabel = isChapterScopeRef(parsedRef)
-        ? `${label} is ready to insert. Keep typing :verse for a specific verse.`
-        : `${label} is ready to insert.`;
+      let readyLabel = `${label} is ready to insert.`;
+      if (isChapterScopeRef(parsedRef)) {
+        readyLabel =
+          getBookInfo(parsedRef.book)?.chapters === 1
+            ? `${readyLabel} Keep typing a verse number, like ${displayBookName(parsedRef.book)} 5.`
+            : `${readyLabel} Keep typing :verse for a specific verse.`;
+      }
       switch (validation.status) {
         case "debouncing":
         case "checking":
