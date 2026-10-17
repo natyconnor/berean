@@ -1,5 +1,6 @@
 import { createContext } from "react";
 
+import { createTab } from "./tab-state";
 import type { Tab } from "./tab-types";
 
 export interface PassageNavigationSearch {
@@ -49,17 +50,12 @@ function toTab(raw: unknown, index: number): Tab | null {
       : null;
   if (!passageId) return null;
 
-  return {
-    id:
-      typeof entry.id === "string" && entry.id.trim().length > 0
-        ? entry.id
-        : `legacy-tab-${index}`,
+  return createTab(
+    typeof entry.id === "string" && entry.id.trim().length > 0
+      ? entry.id
+      : `legacy-tab-${index}`,
     passageId,
-    label:
-      typeof entry.label === "string" && entry.label.trim().length > 0
-        ? entry.label
-        : passageId,
-  };
+  );
 }
 
 export function loadTabs(): Tab[] {
