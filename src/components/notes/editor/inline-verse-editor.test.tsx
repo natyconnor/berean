@@ -545,6 +545,12 @@ describe("InlineVerseEditor", () => {
     "@Obadiah 0",
     "@2 John 0",
     "@3 John 0",
+    "@Jude 0-3",
+    "@Jude 3-0",
+    "@Jude 1:0",
+    "@John 3:0",
+    "@John 3:0-4",
+    "@John 3:4-0",
   ])("says verses start at 1 for %s", (query) => {
     render(
       <InlineVerseEditor
@@ -560,10 +566,56 @@ describe("InlineVerseEditor", () => {
     expect(
       screen.getByText("Keep typing to correct the reference."),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Keep refining/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /ready to insert/i }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/only has \d+ verses/)).not.toBeInTheDocument();
     expect(
       screen.queryByText("Choose a valid chapter to keep creating the link."),
     ).not.toBeInTheDocument();
+  });
+
+  it.each(["@Jude 5-3", "@John 3:5-3"])(
+    "says the range is backwards for %s",
+    (query) => {
+      render(
+        <InlineVerseEditor
+          initialBody={EMPTY_NOTE_BODY}
+          verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+          onChange={() => {}}
+        />,
+      );
+
+      const editor = screen.getByRole("textbox");
+      typeAtQuery(editor, query);
+      expect(screen.getByText("That range is backwards.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Keep typing to correct the reference."),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Keep refining/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /ready to insert/i }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["@Jude 1", /Jude 1:1 is ready to insert/i],
+    ["@Jude 2-3", /Jude 1:2-3 is ready to insert/i],
+    ["@John 3:16", /John 3:16 is ready to insert/i],
+  ])("keeps a ready insert for %s", (query, readyName) => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, query);
+    expect(screen.getByRole("button", { name: readyName })).toBeInTheDocument();
   });
 
   it("describes an invalid single-chapter Book N as a missing verse", () => {
