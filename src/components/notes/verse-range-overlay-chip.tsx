@@ -9,7 +9,8 @@ import {
   type VerseRangeEnd,
   type VerseRangeNudge,
 } from "@/lib/verse-range-nudge";
-import { formatBookChapter, type VerseRef } from "@/lib/verse-ref-utils";
+import { displayBookName } from "@/lib/bible-books";
+import { formatVerseRef, type VerseRef } from "@/lib/verse-ref-utils";
 
 function nudgeLabel(end: VerseRangeEnd, nudge: VerseRangeNudge): string {
   if (end === "start" && nudge === "grow") return "Add previous verse";
@@ -41,6 +42,7 @@ export function VerseRangeOverlayChip({
   const [focusWithin, setFocusWithin] = useState(false);
   const isRange = verseRef.startVerse !== verseRef.endVerse;
   const overlayVisible = hovered || pinned || focusWithin;
+  const bookChapter = `${displayBookName(verseRef.book)} ${verseRef.chapter}`;
 
   useEffect(() => {
     if (!pinned) return;
@@ -61,11 +63,7 @@ export function VerseRangeOverlayChip({
       tabIndex={0}
       data-verse-range-chip=""
       data-overlay-visible={overlayVisible ? "true" : "false"}
-      aria-label={
-        isRange
-          ? `${formatBookChapter(verseRef.book, verseRef.chapter)}:${verseRef.startVerse}-${verseRef.endVerse}`
-          : `${formatBookChapter(verseRef.book, verseRef.chapter)}:${verseRef.startVerse}`
-      }
+      aria-label={formatVerseRef(verseRef)}
       className={cn(
         badgeVariants({ variant: "secondary" }),
         "relative overflow-visible text-xs outline-none",
@@ -86,7 +84,7 @@ export function VerseRangeOverlayChip({
     >
       {isRange ? <BookOpen className="h-3 w-3 shrink-0" /> : null}
       <span className="inline-flex items-center">
-        {formatBookChapter(verseRef.book, verseRef.chapter)}:
+        {bookChapter}:
         <NumberStepper
           verseNumber={verseRef.startVerse}
           top={{ end: "start", nudge: "grow" }}

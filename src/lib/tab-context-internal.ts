@@ -1,6 +1,9 @@
 import { createContext } from "react";
 
+import { getBookInfo } from "./bible-books";
+import { createTab } from "./tab-state";
 import type { Tab } from "./tab-types";
+import { parsePassageId } from "./verse-ref-utils";
 
 export interface PassageNavigationSearch {
   startVerse?: number;
@@ -49,17 +52,18 @@ function toTab(raw: unknown, index: number): Tab | null {
       : null;
   if (!passageId) return null;
 
-  return {
-    id:
-      typeof entry.id === "string" && entry.id.trim().length > 0
-        ? entry.id
-        : `legacy-tab-${index}`,
-    passageId,
-    label:
-      typeof entry.label === "string" && entry.label.trim().length > 0
-        ? entry.label
-        : passageId,
-  };
+  const id =
+    typeof entry.id === "string" && entry.id.trim().length > 0
+      ? entry.id
+      : `legacy-tab-${index}`;
+  const { book, chapter } = parsePassageId(passageId);
+  if (getBookInfo(book) && Number.isFinite(chapter)) {
+    return createTab(id, passageId);
+  }
+  if (typeof entry.label !== "string" || entry.label.trim().length === 0) {
+    return null;
+  }
+  return createTab(id, passageId, entry.label);
 }
 
 export function loadTabs(): Tab[] {

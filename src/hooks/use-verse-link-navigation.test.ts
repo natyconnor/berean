@@ -54,4 +54,22 @@ describe("useVerseLinkNavigation", () => {
 
     expect(openTab).toHaveBeenCalledWith("John-3", "John 3", {});
   });
+
+  it("opens a one-chapter book tab with the book name and the chapter slug", () => {
+    const { result } = renderHook(() =>
+      useVerseLinkNavigation({ book: "John", chapter: 3 }),
+    );
+
+    act(() => {
+      result.current({
+        book: "Jude",
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 1,
+        scope: "chapter",
+      });
+    });
+
+    expect(openTab).toHaveBeenCalledWith("Jude-1", "Jude", {});
+  });
 });

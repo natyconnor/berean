@@ -130,4 +130,8 @@ describe("tab-state", () => {
   it("labels a psalm tab as Psalm rather than Psalms", () => {
     expect(createTab("psalms-1", "Psalms-1").label).toBe("Psalm 1");
   });
+
+  it("labels a one-chapter book tab with the book name only", () => {
+    expect(createTab("jude-1", "Jude-1").label).toBe("Jude");
+  });
 });

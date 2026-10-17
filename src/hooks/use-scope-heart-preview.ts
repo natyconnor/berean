@@ -7,8 +7,7 @@ import {
   setCachedPassage,
   type EsvChapterData,
 } from "../../shared/esv-api";
-import { isSingleChapterBook, toEsvQuery } from "../../shared/esv-query";
-import { displayBookName } from "@/lib/bible-books";
+import { toEsvQuery } from "../../shared/esv-query";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import {
   groupChapterForHearting,
@@ -72,12 +71,6 @@ const EMPTY_LOAD: LoadedChapters = {
 
 function chapterKey(book: string, chapter: number): string {
   return `${book}|${chapter}`;
-}
-
-function chapterLabel(book: string, chapter: number): string {
-  return isSingleChapterBook(book)
-    ? displayBookName(book)
-    : formatBookChapter(book, chapter);
 }
 
 function chaptersByBook(
@@ -191,7 +184,7 @@ export function useScopeHeartPreview({
       previews.push({
         book,
         chapter,
-        label: chapterLabel(book, chapter),
+        label: formatBookChapter(book, chapter),
         verseCount: data.verses.length,
         groups: groupChapterForHearting(book, chapter, data.verses, hearts),
       });

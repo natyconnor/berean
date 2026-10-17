@@ -115,3 +115,9 @@ export function getBookInfo(name: string): BookInfo | undefined {
 export function displayBookName(book: string): string {
   return book === "Psalms" ? "Psalm" : book;
 }
+
+export function formatBookChapter(book: string, chapter: number): string {
+  const name = displayBookName(book);
+  if (getBookInfo(book)?.chapters === 1) return name;
+  return `${name} ${chapter}`;
+}

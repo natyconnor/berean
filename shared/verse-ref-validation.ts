@@ -1,4 +1,4 @@
-import { displayBookName, getBookInfo } from "../src/lib/bible-books";
+import { formatBookChapter, getBookInfo } from "../src/lib/bible-books";
 import { getChapterVerseCount } from "../src/lib/bible-verse-counts";
 
 export interface VerseRefLike {
@@ -74,7 +74,7 @@ export function getVerseRefBoundsErrorMessage(
       return "That range is backwards.";
     case "verse_out_of_range":
       return validation.maxVerse
-        ? `${displayBookName(ref.book)} ${ref.chapter} only has ${validation.maxVerse} verse${validation.maxVerse === 1 ? "" : "s"}.`
+        ? `${formatBookChapter(ref.book, ref.chapter)} only has ${validation.maxVerse} verse${validation.maxVerse === 1 ? "" : "s"}.`
         : "That verse does not exist.";
     default:
       return "That verse reference is invalid.";
