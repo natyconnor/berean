@@ -25,4 +25,15 @@ describe("loadTabs", () => {
 
     expect(loadTabs()[0]?.label).toBe("John 3");
   });
+
+  it("keeps the stored label when the passage id does not parse", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([{ id: "bad", passageId: "garbage", label: "My Tab" }]),
+    );
+
+    expect(loadTabs()).toEqual([
+      { id: "bad", passageId: "garbage", label: "My Tab" },
+    ]);
+  });
 });
