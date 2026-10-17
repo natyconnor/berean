@@ -277,7 +277,6 @@ describe("buildVerseSuggestions", () => {
       scope: "chapter",
     });
   });
-
   it.each([
     "Jude 0-3",
     "Jude 3-0",
