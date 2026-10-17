@@ -264,11 +264,11 @@ describe("buildVerseSuggestions", () => {
     });
   });
 
-  it("offers a chapter-link suggestion for exact Jude", () => {
+  it("labels an exact Jude chapter suggestion with the book name", () => {
     const suggestion = buildVerseSuggestions("Jude", {
       allowChapterOnly: true,
     }).find((item) => item.kind === "reference");
-    expect(suggestion?.label).toBe("Jude 1");
+    expect(suggestion?.label).toBe("Jude");
     expect(suggestion?.ref).toEqual({
       book: "Jude",
       chapter: 1,
@@ -290,6 +290,24 @@ describe("formatVerseRef", () => {
         scope: "chapter",
       }),
     ).toBe("John 3");
+  });
+
+  it.each([
+    ["Jude", "Jude"],
+    ["Philemon", "Philemon"],
+    ["Obadiah", "Obadiah"],
+    ["2 John", "2 John"],
+    ["3 John", "3 John"],
+  ])("labels a chapter-scope %s link with the book name", (book, label) => {
+    expect(
+      formatVerseRef({
+        book,
+        chapter: 1,
+        startVerse: 1,
+        endVerse: 1,
+        scope: "chapter",
+      }),
+    ).toBe(label);
   });
 
   it("formats verse and range refs unchanged", () => {
