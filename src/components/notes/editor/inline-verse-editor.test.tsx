@@ -538,6 +538,34 @@ describe("InlineVerseEditor", () => {
     ).toBeInTheDocument();
   });
 
+  it.each([
+    "@Jude 0",
+    "@Philemon 0",
+    "@Phlm 0",
+    "@Obadiah 0",
+    "@2 John 0",
+    "@3 John 0",
+  ])("says verses start at 1 for %s", (query) => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, query);
+    expect(screen.getByText("Verses start at 1.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Keep typing to correct the reference."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/only has \d+ verses/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Choose a valid chapter to keep creating the link."),
+    ).not.toBeInTheDocument();
+  });
+
   it("describes an invalid single-chapter Book N as a missing verse", () => {
     render(
       <InlineVerseEditor
@@ -548,13 +576,19 @@ describe("InlineVerseEditor", () => {
     );
 
     const editor = screen.getByRole("textbox");
-    typeAtQuery(editor, "@Jude 0");
+    typeAtQuery(editor, "@Jude 26");
     expect(screen.getByText("Jude 1 only has 25 verses.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Keep typing to correct the reference."),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("Choose a valid chapter to keep creating the link."),
     ).not.toBeInTheDocument();
 
-    typeAtQuery(editor, "@Philemon 0");
+    typeAtQuery(editor, "@Jude 1-26");
+    expect(screen.getByText("Jude 1 only has 25 verses.")).toBeInTheDocument();
+
+    typeAtQuery(editor, "@Philemon 26");
     expect(
       screen.getByText("Philemon 1 only has 25 verses."),
     ).toBeInTheDocument();
