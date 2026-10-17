@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.18](https://github.com/natyconnor/berean/compare/v1.17.17...v1.17.18) (2026-10-17)
+
+
+### Bug Fixes
+
+* **verse-ref:** show verse-0 and reversed-range errors ([#294](https://github.com/natyconnor/berean/issues/294)) ([9872626](https://github.com/natyconnor/berean/commit/98726266f83882d66446938b8dcfd8690c0b583b))
+
 ## [1.17.17](https://github.com/natyconnor/berean/compare/v1.17.16...v1.17.17) (2026-10-17)
 
 
