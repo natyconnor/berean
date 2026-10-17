@@ -278,8 +278,7 @@ const PSALM_119: MemorizeLayoutCase = {
 
 /**
  * Loads the header once and resizes the passage column through `widths` in
- * one Chrome evaluate. A Vite CSS request or Playwright round-trip per width
- * leaked enough heap in this worker to OOM a 4GB CI job.
+ * one Chrome evaluate so the container queries re-run in place.
  */
 async function measureMemorizeWidths(
   widths: number[],

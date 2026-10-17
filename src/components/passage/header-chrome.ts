@@ -129,6 +129,10 @@ const MEMORIZE_LINE_WIDEST = {
 const MEMORIZE_WORD_FLOOR = MEMORIZE_SLOT_STAGES[0];
 /** A passage title may ellipsize once "Part of" and a few letters fit. */
 const MEMORIZE_ELLIPSIZE_REM = 10;
+const MEMORIZE_LINE_ICON_PAD_REM = 2.75;
+const MEMORIZE_LINE_CHAR_REM = 0.45;
+/** `@max-[Nrem]` is exclusive at N, and the character estimate runs short. */
+const MEMORIZE_LINE_SLACK_REM = 1;
 
 export interface ChapterMemorizeStageClasses {
   /** The full line. */
@@ -145,8 +149,7 @@ export interface ChapterMemorizeStageClasses {
  * Container-query classes for the Memorize button's stages. The line shows
  * only while the slot holds it whole, so "Memorize Psalm 119" never
  * ellipsizes into "Memorize Psalm 1…". At 13px semibold a line runs about
- * 0.45rem a character plus 2.75rem of icon and padding, plus 1rem so the line
- * hides before it ellipsizes at the `@max-[Nrem]` edge. `ellipsize` lines (a
+ * 0.45rem a character plus 2.75rem of icon and padding. `ellipsize` lines (a
  * passage title) show from 10rem and truncate. With `word`, the word takes
  * over from the line down to 9rem; without it, the line gives way to the icon.
  */
@@ -154,7 +157,10 @@ export function chapterMemorizeStageClasses(
   line: string,
   { ellipsize, word }: { ellipsize: boolean; word: boolean },
 ): ChapterMemorizeStageClasses {
-  const needed = Math.ceil(2.75 + 0.45 * line.length) + 1;
+  const needed =
+    Math.ceil(
+      MEMORIZE_LINE_ICON_PAD_REM + MEMORIZE_LINE_CHAR_REM * line.length,
+    ) + MEMORIZE_LINE_SLACK_REM;
   const rem = ellipsize ? Math.min(needed, MEMORIZE_ELLIPSIZE_REM) : needed;
   const lineStage =
     MEMORIZE_SLOT_STAGES.find((candidate) => candidate.rem >= rem) ??
