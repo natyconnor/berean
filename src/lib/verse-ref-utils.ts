@@ -1,4 +1,5 @@
 import { BIBLE_BOOKS, displayBookName, getBookInfo } from "@/lib/bible-books";
+import { getVerseRefBoundsErrorMessage } from "../../shared/verse-ref-validation";
 
 export type VerseRefScope = "chapter";
 
@@ -193,7 +194,7 @@ export function parseVerseRef(
       ? Number.parseInt(compactReferenceMatch[3], 10)
       : startVerse;
 
-    if (!chapter || startVerse < 1 || endVerse < startVerse) {
+    if (!chapter) {
       return null;
     }
 
@@ -220,9 +221,6 @@ export function parseVerseRef(
     if (!bookInfo || chapter < 1 || chapter > bookInfo.chapters) {
       return null;
     }
-    if (startVerse < 1 || endVerse < startVerse) {
-      return null;
-    }
 
     return {
       book: canonicalBook,
@@ -247,9 +245,6 @@ export function parseVerseRef(
     const isRange = bareNumberMatch[3] !== undefined;
 
     if (bookInfo.chapters === 1) {
-      if (start < 1 || end < start) {
-        return null;
-      }
       return {
         book: canonicalBook,
         chapter: 1,
@@ -299,7 +294,7 @@ export function buildVerseSuggestions(
 
   const results: VerseSuggestionItem[] = [];
   const parsedRef = parseVerseRef(query, options);
-  if (parsedRef) {
+  if (parsedRef && !getVerseRefBoundsErrorMessage(parsedRef)) {
     results.push({
       kind: "reference",
       key: `ref:${formatVerseRef(parsedRef)}`,
