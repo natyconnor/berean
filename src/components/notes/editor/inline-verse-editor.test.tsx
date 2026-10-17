@@ -629,7 +629,7 @@ describe("InlineVerseEditor", () => {
 
     const editor = screen.getByRole("textbox");
     typeAtQuery(editor, "@Jude 26");
-    expect(screen.getByText("Jude 1 only has 25 verses.")).toBeInTheDocument();
+    expect(screen.getByText("Jude only has 25 verses.")).toBeInTheDocument();
     expect(
       screen.getByText("Keep typing to correct the reference."),
     ).toBeInTheDocument();
@@ -638,12 +638,26 @@ describe("InlineVerseEditor", () => {
     ).not.toBeInTheDocument();
 
     typeAtQuery(editor, "@Jude 1-26");
-    expect(screen.getByText("Jude 1 only has 25 verses.")).toBeInTheDocument();
+    expect(screen.getByText("Jude only has 25 verses.")).toBeInTheDocument();
 
     typeAtQuery(editor, "@Philemon 26");
     expect(
-      screen.getByText("Philemon 1 only has 25 verses."),
+      screen.getByText("Philemon only has 25 verses."),
     ).toBeInTheDocument();
+  });
+
+  it("keeps book plus chapter when a multi-chapter verse is out of range", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@John 3:37");
+    expect(screen.getByText("John 3 only has 36 verses.")).toBeInTheDocument();
   });
 
   it("keeps chapter errors for John 0 and an explicit Jude chapter", () => {

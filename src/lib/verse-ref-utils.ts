@@ -1,5 +1,12 @@
-import { BIBLE_BOOKS, displayBookName, getBookInfo } from "@/lib/bible-books";
+import {
+  BIBLE_BOOKS,
+  displayBookName,
+  formatBookChapter,
+  getBookInfo,
+} from "@/lib/bible-books";
 import { getVerseRefBoundsErrorMessage } from "../../shared/verse-ref-validation";
+
+export { formatBookChapter };
 
 export type VerseRefScope = "chapter";
 
@@ -16,12 +23,6 @@ export function isChapterScopeRef(
   ref: Pick<VerseRef, "scope"> | VerseRef,
 ): boolean {
   return ref.scope === "chapter";
-}
-
-export function formatBookChapter(book: string, chapter: number): string {
-  const name = displayBookName(book);
-  if (getBookInfo(book)?.chapters === 1) return name;
-  return `${name} ${chapter}`;
 }
 
 export function formatVerseRef(ref: VerseRef): string {
