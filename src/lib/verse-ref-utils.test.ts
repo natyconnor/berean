@@ -277,6 +277,21 @@ describe("buildVerseSuggestions", () => {
       scope: "chapter",
     });
   });
+  it.each([
+    "Jude 0-3",
+    "Jude 3-0",
+    "Jude 1:0",
+    "John 3:0",
+    "John 3:0-4",
+    "John 3:4-0",
+    "Jude 5-3",
+    "John 3:5-3",
+  ])("does not offer a verse-link suggestion for %s", (query) => {
+    const suggestion = buildVerseSuggestions(query, {
+      allowChapterOnly: true,
+    }).find((item) => item.kind === "reference");
+    expect(suggestion).toBeUndefined();
+  });
 });
 
 describe("formatVerseRef", () => {
