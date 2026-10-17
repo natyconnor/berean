@@ -70,6 +70,64 @@ describe("normalizeNoteBody", () => {
     ]);
     expect(noteBodyToPlainText(body)).toBe("John 3");
   });
+
+  it("relabels a stored one-chapter book pill from the reference", () => {
+    const body = normalizeNoteBody({
+      version: 1,
+      segments: [
+        {
+          type: "verseRef",
+          label: "Jude 1",
+          ref: {
+            book: "Jude",
+            chapter: 1,
+            startVerse: 1,
+            endVerse: 1,
+            scope: "chapter",
+          },
+        },
+      ],
+    });
+
+    expect(body.segments).toEqual([
+      {
+        type: "verseRef",
+        label: "Jude",
+        ref: {
+          book: "Jude",
+          chapter: 1,
+          startVerse: 1,
+          endVerse: 1,
+          scope: "chapter",
+        },
+      },
+    ]);
+    expect(noteBodyToPlainText(body)).toBe("Jude");
+  });
+
+  it("keeps a stored one-chapter verse pill as a verse label", () => {
+    const body = normalizeNoteBody({
+      version: 1,
+      segments: [
+        {
+          type: "verseRef",
+          label: "Jude 1:2",
+          ref: {
+            book: "Jude",
+            chapter: 1,
+            startVerse: 2,
+            endVerse: 2,
+          },
+        },
+      ],
+    });
+
+    expect(body.segments[0]).toMatchObject({
+      type: "verseRef",
+      label: "Jude 1:2",
+    });
+    expect(noteBodyToPlainText(body)).toBe("Jude 1:2");
+  });
 });
 
 describe("extractVerseRefsFromNoteBody", () => {

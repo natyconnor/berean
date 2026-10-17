@@ -1,4 +1,4 @@
-import type { VerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRef, type VerseRef } from "@/lib/verse-ref-utils";
 import { verseRefKey } from "../../shared/verse-ref-key";
 
 export interface NoteTextSegment {
@@ -120,16 +120,17 @@ export function normalizeNoteBody(
     ) {
       const scope =
         segment.ref.scope === "chapter" ? ("chapter" as const) : undefined;
+      const ref = {
+        book: segment.ref.book,
+        chapter: segment.ref.chapter,
+        startVerse: segment.ref.startVerse,
+        endVerse: segment.ref.endVerse,
+        ...(scope ? { scope } : {}),
+      };
       normalizedSegments.push({
         type: "verseRef",
-        label: segment.label,
-        ref: {
-          book: segment.ref.book,
-          chapter: segment.ref.chapter,
-          startVerse: segment.ref.startVerse,
-          endVerse: segment.ref.endVerse,
-          ...(scope ? { scope } : {}),
-        },
+        label: formatVerseRef(ref),
+        ref,
       });
     }
 
