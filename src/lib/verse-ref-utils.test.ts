@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildVerseSuggestions,
   formatBookChapter,
   formatVerseRef,
   isChapterScopeRef,
@@ -40,8 +41,175 @@ describe("parseVerseRef", () => {
   });
 
   it("rejects invalid chapters even with allowChapterOnly", () => {
-    expect(parseVerseRef("Jude 2", { allowChapterOnly: true })).toBeNull();
     expect(parseVerseRef("John 99", { allowChapterOnly: true })).toBeNull();
+  });
+
+  it("reads Book N as a verse in chapter 1 for single-chapter books", () => {
+    expect(parseVerseRef("Jude 2")).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    expect(parseVerseRef("3 John 2")).toEqual({
+      book: "3 John",
+      chapter: 1,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    expect(parseVerseRef("Philemon 4")).toEqual({
+      book: "Philemon",
+      chapter: 1,
+      startVerse: 4,
+      endVerse: 4,
+    });
+    expect(parseVerseRef("Obadiah 3")).toEqual({
+      book: "Obadiah",
+      chapter: 1,
+      startVerse: 3,
+      endVerse: 3,
+    });
+    expect(parseVerseRef("2 John 5")).toEqual({
+      book: "2 John",
+      chapter: 1,
+      startVerse: 5,
+      endVerse: 5,
+    });
+  });
+
+  it("reads Book N-M as a verse range in chapter 1 for single-chapter books", () => {
+    expect(parseVerseRef("Jude 1-3")).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 3,
+    });
+    expect(parseVerseRef("Jude 2-3")).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 2,
+      endVerse: 3,
+    });
+    expect(parseVerseRef("Jude 3-5")).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 3,
+      endVerse: 5,
+    });
+    expect(parseVerseRef("Jude 10-12")).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 10,
+      endVerse: 12,
+    });
+    expect(parseVerseRef("2 John 2-4")).toEqual({
+      book: "2 John",
+      chapter: 1,
+      startVerse: 2,
+      endVerse: 4,
+    });
+  });
+
+  it("still parses explicit chapter:verse form in single-chapter books", () => {
+    expect(parseVerseRef("Jude 1:2")).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    expect(parseVerseRef("3 John 1:2")).toEqual({
+      book: "3 John",
+      chapter: 1,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    expect(parseVerseRef("Philemon 1:4")).toEqual({
+      book: "Philemon",
+      chapter: 1,
+      startVerse: 4,
+      endVerse: 4,
+    });
+  });
+
+  it("reads Book 1 as verse 1 in single-chapter books", () => {
+    expect(parseVerseRef("Jude 1")).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    });
+    expect(parseVerseRef("Jude 1", { allowChapterOnly: true })).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    });
+    expect(parseVerseRef("2 John 1", { allowChapterOnly: true })).toEqual({
+      book: "2 John",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    });
+  });
+
+  it("reads an exact single-chapter book name as a chapter link when allowChapterOnly is set", () => {
+    expect(parseVerseRef("Jude")).toBeNull();
+    expect(parseVerseRef("Jude", { allowChapterOnly: true })).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+    expect(parseVerseRef("Phlm", { allowChapterOnly: true })).toEqual({
+      book: "Philemon",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+    expect(parseVerseRef("2 John", { allowChapterOnly: true })).toEqual({
+      book: "2 John",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+    expect(parseVerseRef("3 John", { allowChapterOnly: true })).toEqual({
+      book: "3 John",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+    expect(parseVerseRef("Obadiah", { allowChapterOnly: true })).toEqual({
+      book: "Obadiah",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+    expect(parseVerseRef("Ju", { allowChapterOnly: true })).toBeNull();
+    expect(parseVerseRef("John", { allowChapterOnly: true })).toBeNull();
+  });
+
+  it("leaves multi-chapter Book N and Book N-M behavior unchanged", () => {
+    expect(parseVerseRef("John 3:16")).toEqual({
+      book: "John",
+      chapter: 3,
+      startVerse: 16,
+      endVerse: 16,
+    });
+    expect(parseVerseRef("John 3")).toBeNull();
+    expect(parseVerseRef("John 3", { allowChapterOnly: true })).toEqual({
+      book: "John",
+      chapter: 3,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+    expect(parseVerseRef("John 3-5")).toBeNull();
+    expect(parseVerseRef("John 3-5", { allowChapterOnly: true })).toBeNull();
   });
 
   it("keeps compact @3 as a verse in the current chapter", () => {
@@ -66,6 +234,64 @@ describe("parseVerseRef", () => {
       startVerse: 16,
       endVerse: 16,
     });
+  });
+});
+
+describe("buildVerseSuggestions", () => {
+  it("offers a verse-link suggestion for Jude 2", () => {
+    const suggestion = buildVerseSuggestions("Jude 2").find(
+      (item) => item.kind === "reference",
+    );
+    expect(suggestion?.label).toBe("Jude 1:2");
+    expect(suggestion?.ref).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 2,
+      endVerse: 2,
+    });
+  });
+
+  it("offers a verse-link suggestion for Jude 1", () => {
+    const suggestion = buildVerseSuggestions("Jude 1", {
+      allowChapterOnly: true,
+    }).find((item) => item.kind === "reference");
+    expect(suggestion?.label).toBe("Jude 1:1");
+    expect(suggestion?.ref).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+    });
+  });
+
+  it("offers a chapter-link suggestion for exact Jude", () => {
+    const suggestion = buildVerseSuggestions("Jude", {
+      allowChapterOnly: true,
+    }).find((item) => item.kind === "reference");
+    expect(suggestion?.label).toBe("Jude 1");
+    expect(suggestion?.ref).toEqual({
+      book: "Jude",
+      chapter: 1,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+  });
+
+  it.each([
+    "Jude 0-3",
+    "Jude 3-0",
+    "Jude 1:0",
+    "John 3:0",
+    "John 3:0-4",
+    "John 3:4-0",
+    "Jude 5-3",
+    "John 3:5-3",
+  ])("does not offer a verse-link suggestion for %s", (query) => {
+    const suggestion = buildVerseSuggestions(query, {
+      allowChapterOnly: true,
+    }).find((item) => item.kind === "reference");
+    expect(suggestion).toBeUndefined();
   });
 });
 
