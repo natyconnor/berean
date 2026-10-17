@@ -1,10 +1,13 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { BIBLE_BOOKS, displayBookName } from "@/lib/bible-books";
+import { getChapterVerseCount } from "@/lib/bible-verse-counts";
 import {
   EMPTY_NOTE_BODY,
   type NoteBody,
   noteBodyToPlainText,
 } from "@/lib/note-inline-content";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { InlineVerseEditor } from "./inline-verse-editor";
 
 vi.mock("@/hooks/use-esv-reference", () => ({
@@ -29,6 +32,79 @@ function placeCaretAtEnd(node: Text) {
   range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
+}
+
+function typeAtQuery(editor: HTMLElement, html: string) {
+  editor.innerHTML = html;
+  const textNode = editor.firstChild;
+  if (!(textNode instanceof Text)) {
+    throw new Error("Expected text node");
+  }
+  placeCaretAtEnd(textNode);
+  act(() => {
+    fireEvent.input(editor);
+  });
+}
+
+const SINGLE_CHAPTER_BOOKS = BIBLE_BOOKS.filter((book) => book.chapters === 1);
+
+function singleChapterReadyQueries(): Array<[string, RegExp]> {
+  const queries: Array<[string, RegExp]> = [];
+  for (const book of SINGLE_CHAPTER_BOOKS) {
+    const maxVerse = getChapterVerseCount(book.name, 1) ?? 0;
+    const verses = [2, 9, 10].filter((verse) => verse <= maxVerse);
+    const ranges = [
+      [2, 3],
+      [1, 3],
+      [1, 1],
+      [3, 5],
+      [10, 12],
+      [9, 10],
+    ].filter(([, end]) => end <= maxVerse);
+    for (const verse of verses) {
+      queries.push([
+        `@${book.name} ${verse}`,
+        new RegExp(
+          `${formatVerseRef({
+            book: book.name,
+            chapter: 1,
+            startVerse: verse,
+            endVerse: verse,
+          })} is ready to insert`,
+          "i",
+        ),
+      ]);
+    }
+    for (const [start, end] of ranges) {
+      queries.push([
+        `@${book.name} ${start}-${end}`,
+        new RegExp(
+          `${formatVerseRef({
+            book: book.name,
+            chapter: 1,
+            startVerse: start,
+            endVerse: end,
+          })} is ready to insert`,
+          "i",
+        ),
+      ]);
+    }
+  }
+  return queries;
+}
+
+function singleChapterPartialRangeQueries(): Array<[string, string]> {
+  const queries: Array<[string, string]> = [];
+  for (const book of SINGLE_CHAPTER_BOOKS) {
+    const maxVerse = getChapterVerseCount(book.name, 1) ?? 0;
+    for (const verse of [2, 3, 10, 12].filter((value) => value <= maxVerse)) {
+      queries.push([
+        `@${book.name} ${verse}-`,
+        `Keep typing the end of the range for ${displayBookName(book.name)} 1:${verse}.`,
+      ]);
+    }
+  }
+  return queries;
 }
 
 describe("InlineVerseEditor", () => {
@@ -312,11 +388,133 @@ describe("InlineVerseEditor", () => {
     expect(noteBodyToPlainText(latestBody)).toBe("Jude 1:2 ");
   });
 
-  it.each([
-    ["@Jude 3-5", /Jude 1:3-5 is ready to insert/i],
-    ["@Jude 1-3", /Jude 1:1-3 is ready to insert/i],
-    ["@Jude 1-1", /Jude 1:1 is ready to insert/i],
-  ])(
+  it("inserts a verse link when Enter is pressed on @Jude 1", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@Jude 1");
+
+    expect(
+      screen.getByRole("button", { name: /Jude 1:1 is ready to insert/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(editor, { key: "Enter" });
+    });
+
+    expect(latestBody.segments).toEqual([
+      {
+        type: "verseRef",
+        label: "Jude 1:1",
+        ref: {
+          book: "Jude",
+          chapter: 1,
+          startVerse: 1,
+          endVerse: 1,
+        },
+      },
+      {
+        type: "text",
+        text: " ",
+      },
+    ]);
+    expect(noteBodyToPlainText(latestBody)).toBe("Jude 1:1 ");
+  });
+
+  it("inserts a chapter link when Enter is pressed on exact @Jude", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@Jude");
+
+    expect(
+      screen.getByRole("button", { name: /Jude 1 is ready to insert/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(editor, { key: "Enter" });
+    });
+
+    expect(latestBody.segments).toEqual([
+      {
+        type: "verseRef",
+        label: "Jude 1",
+        ref: {
+          book: "Jude",
+          chapter: 1,
+          startVerse: 1,
+          endVerse: 1,
+          scope: "chapter",
+        },
+      },
+      {
+        type: "text",
+        text: " ",
+      },
+    ]);
+    expect(noteBodyToPlainText(latestBody)).toBe("Jude 1 ");
+  });
+
+  it("does not turn exact @John into a chapter link", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@John");
+
+    expect(screen.getAllByText("Complete book name").length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: /John 1 is ready to insert/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps book-name completion for an inexact Jude prefix", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@Jud");
+
+    expect(screen.getByText("Jude")).toBeInTheDocument();
+    expect(screen.getByText("Judges")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /ready to insert/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each(singleChapterReadyQueries())(
     "hides book suggestions once %s is a ready verse range",
     (html, readyName) => {
       render(
@@ -328,15 +526,7 @@ describe("InlineVerseEditor", () => {
       );
 
       const editor = screen.getByRole("textbox");
-      editor.innerHTML = html;
-      const textNode = editor.firstChild;
-      if (!(textNode instanceof Text)) {
-        throw new Error("Expected text node");
-      }
-      placeCaretAtEnd(textNode);
-      act(() => {
-        fireEvent.input(editor);
-      });
+      typeAtQuery(editor, html);
 
       expect(
         screen.getByRole("button", { name: readyName }),
@@ -345,31 +535,47 @@ describe("InlineVerseEditor", () => {
     },
   );
 
-  it("keeps the verse popover open while typing a single-chapter Book N- range", () => {
+  it("hides book suggestions after typing @Jude 2-3 one character at a time", () => {
     render(
       <InlineVerseEditor
         initialBody={EMPTY_NOTE_BODY}
-        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        verseRef={{ book: "John", chapter: 1, startVerse: 1, endVerse: 1 }}
         onChange={() => {}}
       />,
     );
 
     const editor = screen.getByRole("textbox");
-    editor.innerHTML = "@Jude 3-";
-    const textNode = editor.firstChild;
-    if (!(textNode instanceof Text)) {
-      throw new Error("Expected text node");
+    const typed = "@Jude 2-3";
+    let soFar = "";
+    for (const character of typed) {
+      soFar += character;
+      typeAtQuery(editor, soFar);
     }
-    placeCaretAtEnd(textNode);
-    act(() => {
-      fireEvent.input(editor);
-    });
 
     expect(
-      screen.getByText("Keep typing the end of the range for Jude 1:3."),
+      screen.getByRole("button", { name: /Jude 1:2-3 is ready to insert/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
   });
+
+  it.each(singleChapterPartialRangeQueries())(
+    "keeps the verse popover open for %s without a book suggestion",
+    (html, status) => {
+      render(
+        <InlineVerseEditor
+          initialBody={EMPTY_NOTE_BODY}
+          verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+          onChange={() => {}}
+        />,
+      );
+
+      const editor = screen.getByRole("textbox");
+      typeAtQuery(editor, html);
+
+      expect(screen.getByText(status)).toBeInTheDocument();
+      expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
+    },
+  );
 
   it("still hides the popover for a multi-chapter Book N-M query", () => {
     render(
