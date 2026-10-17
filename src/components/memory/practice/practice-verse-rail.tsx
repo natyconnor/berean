@@ -1,6 +1,7 @@
 import { ListOrdered, Shuffle } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { UP_NEXT_TOMORROW_LABEL } from "@/lib/memory-copy";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
 import type { MemorySessionLabel } from "@/lib/memory-session";
 import {
@@ -9,7 +10,7 @@ import {
 } from "@/lib/memory-session-order";
 import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
-import { formatBookChapter, formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatBookChapter, formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import type { CardReference } from "../../study/study-card-model";
 import { LearningJourneyBar } from "./learning-journey-bar";
@@ -172,7 +173,7 @@ export function PracticeVerseRail({
             />
             {currentLocked ? (
               <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Next session tomorrow
+                {UP_NEXT_TOMORROW_LABEL}
               </p>
             ) : null}
           </div>
@@ -204,7 +205,7 @@ export function PracticeVerseRail({
                     );
                     const locked = verse.locked === true;
                     const label =
-                      verse.label ?? formatVerseRef(verse.reference);
+                      verse.label ?? formatVerseRefTitle(verse.reference);
                     return (
                       <motion.button
                         layout
@@ -219,8 +220,8 @@ export function PracticeVerseRail({
                         )}
                         onClick={() => onSelectVerse(verse.id)}
                         aria-current={active ? "true" : undefined}
-                        aria-label={`${label} (${stage.label} band${locked ? ", done for today" : ""})`}
-                        title={`${label} · ${stage.label}${locked ? " · Tomorrow" : ""}`}
+                        aria-label={`${label} (${stage.label} step${locked ? ", up next tomorrow" : ""})`}
+                        title={`${label} · ${stage.label}${locked ? ` · ${UP_NEXT_TOMORROW_LABEL}` : ""}`}
                         transition={{
                           layout: { duration: 0.28, ease: "easeOut" },
                         }}

@@ -6,10 +6,11 @@ import { DAY_MS } from "@/lib/memory-scheduler";
 import { countAttemptErrors } from "./study-attempt-quality";
 import {
   attemptFeedbackLead,
+  attemptPraiseLine,
   HOLD_ACCURACY_LEADS,
   LAPSE_ACCURACY_LEADS,
   RETRY_ACCURACY_LEADS,
-  reviewFeedbackMessage,
+  reviewOutcomeMessage,
   specialMissLead,
 } from "./verse-attempt-feedback";
 
@@ -193,11 +194,28 @@ describe("attemptFeedbackLead", () => {
   });
 });
 
-describe("reviewFeedbackMessage", () => {
+describe("attemptPraiseLine", () => {
+  it("exclaims an exact recall and ends the rest as a sentence", () => {
+    expect(attemptPraiseLine({ accuracy: 100, outcome: "exact" })).toBe(
+      "Nailed it!",
+    );
+    expect(
+      attemptPraiseLine({
+        accuracy: 91,
+        outcome: "retry",
+        errors: { matches: 10, typos: 0, mismatches: 1, missing: 0, extra: 0 },
+      }),
+    ).toBe("Oh so close! Just one word off.");
+    expect(attemptPraiseLine({ accuracy: 40, outcome: "lapse" })).toBe(
+      "A handful of words came back.",
+    );
+  });
+});
+
+describe("reviewOutcomeMessage", () => {
   it("names current and next interval when a perfect recall would stretch", () => {
     expect(
-      reviewFeedbackMessage({
-        lead: "Oh so close! Just one word off",
+      reviewOutcomeMessage({
         outcome: "retry",
         nextSchedule: {
           ...reviewingTomorrow,
@@ -207,68 +225,75 @@ describe("reviewFeedbackMessage", () => {
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toBe(
-      "Oh so close! Just one word off — try again to extend your review interval from 1 day to 2 days.",
-    );
-  });
-
-  it("names a growing interval and the ease-stretched next gap", () => {
-    expect(
-      reviewFeedbackMessage({
-        lead: "Almost there",
-        outcome: "retry",
-        nextSchedule: { ...reviewingTomorrow, intervalDays: 5, ease: 2.3 },
-        now: NOW,
-        lapsedToLearning: false,
-      }),
-    ).toBe(
-      "Almost there — try again to extend your review interval from 5 days to 12 days.",
-    );
+    ).toBe("Try again to extend your review interval from 1 day to 2 days.");
   });
 
   it("names the current interval when a perfect recall would not stretch yet", () => {
     expect(
-      reviewFeedbackMessage({
-        lead: "Almost there",
+      reviewOutcomeMessage({
         outcome: "retry",
         nextSchedule: reviewingTomorrow,
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toBe("Almost there — try again to keep your review interval at 1 day.");
+    ).toBe("Try again to keep your review interval at 1 day.");
   });
 
   it("still invites a retry when the current interval is unknown", () => {
     expect(
-      reviewFeedbackMessage({
-        lead: "Almost there",
+      reviewOutcomeMessage({
         outcome: "retry",
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toBe("Almost there — try again to extend your review interval.");
-  });
-
-  it("names Challenge when a daily review lapses into learning", () => {
-    expect(
-      reviewFeedbackMessage({
-        lead: "A handful of words came back",
-        outcome: "lapse",
-        now: NOW,
-        lapsedToLearning: true,
-      }),
-    ).toBe("A handful of words came back — back to Challenge.");
+    ).toBe("Try again to extend your review interval.");
   });
 
   it("keeps the next-review clause on hold and later-ladder lapses", () => {
     expect(
-      reviewFeedbackMessage({
-        lead: "Mostly there, but it needs some work",
+      reviewOutcomeMessage({
         outcome: "hold",
         nextSchedule: reviewingTomorrow,
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toMatch(/^Mostly there, but it needs some work — next review /);
+    ).toMatch(/^Next review /);
+  });
+
+  it("states only the schedule consequence, as a sentence", () => {
+    expect(
+      reviewOutcomeMessage({
+        outcome: "exact",
+        nextSchedule: { ...reviewingTomorrow, dueAt: NOW + 3 * DAY_MS },
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe("Next review in 3 days.");
+    expect(
+      reviewOutcomeMessage({
+        outcome: "retry",
+        nextSchedule: { ...reviewingTomorrow, intervalDays: 5, ease: 2.3 },
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBe("Try again to extend your review interval from 5 days to 12 days.");
+    expect(
+      reviewOutcomeMessage({
+        outcome: "lapse",
+        now: NOW,
+        lapsedToLearning: true,
+      }),
+    ).toBe("Back to fill in the blanks.");
+  });
+
+  it("says nothing until the next review is known", () => {
+    expect(
+      reviewOutcomeMessage({
+        outcome: "hold",
+        nextSchedule: null,
+        now: NOW,
+        lapsedToLearning: false,
+      }),
+    ).toBeNull();
   });
 });

@@ -4,7 +4,8 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { getCurrentUserId } from "./lib/auth";
 import { findOrCreateVerseRefId } from "./lib/verseRefs";
-import { adjustUserMemoryStats, seedVerseMemory } from "./lib/verseMemory";
+import { adjustUserMemoryStats } from "./lib/verseMemory";
+import { ensurePassageHearts } from "./lib/memorize";
 import {
   ensurePassageDueBackfill,
   upsertPassageMemoryDue,
@@ -137,6 +138,32 @@ async function clearUserMemory(ctx: MutationCtx, userId: Id<"users">) {
   if (stats) await ctx.db.delete(stats._id);
 }
 
+/** Seeded rows already set `inMemory`; mark the lazy backfill as done. */
+async function stampInMemoryBackfill(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  now: number,
+) {
+  const stats = await ctx.db
+    .query("userMemoryStats")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+  if (stats) {
+    await ctx.db.patch(stats._id, { inMemoryBackfilledAt: now });
+  } else {
+    await ctx.db.insert("userMemoryStats", {
+      userId,
+      new: 0,
+      learning: 0,
+      reviewing: 0,
+      mastered: 0,
+      total: 0,
+      updatedAt: now,
+      inMemoryBackfilledAt: now,
+    });
+  }
+}
+
 const seedSummaryValidator = v.object({
   verseCount: v.number(),
   packCount: v.number(),
@@ -204,21 +231,9 @@ export const seedPreviewMemory = mutation({
         createdAt: args.now,
       });
 
-      const memoryId = await seedVerseMemory(ctx, userId, verseRefId, args.now);
-      const created = await ctx.db.get(memoryId);
-      if (!created) throw new Error("Failed to seed verse memory");
-
-      if (created.status !== verse.schedule.status) {
-        await adjustUserMemoryStats(
-          ctx,
-          userId,
-          args.now,
-          created.status,
-          verse.schedule.status,
-        );
-      }
-
-      await ctx.db.patch(memoryId, {
+      const memoryId = await ctx.db.insert("verseMemory", {
+        userId,
+        verseRefId,
         status: verse.schedule.status,
         learnStage: verse.schedule.learnStage,
         stageReps: verse.schedule.stageReps,
@@ -230,7 +245,18 @@ export const seedPreviewMemory = mutation({
         earlyReviewApplied: verse.schedule.earlyReviewApplied,
         lastReviewedAt: verse.lastReviewedAt,
         isHearted: true,
+        inMemory: verse.inMemory,
+        createdAt: args.now,
       });
+      if (verse.inMemory) {
+        await adjustUserMemoryStats(
+          ctx,
+          userId,
+          args.now,
+          null,
+          verse.schedule.status,
+        );
+      }
 
       memoryIdByVerseId.set(verse.id, memoryId);
       verseRefIdByVerseId.set(verse.id, verseRefId);
@@ -305,10 +331,12 @@ export const seedPreviewMemory = mutation({
       const passageRow = await ctx.db.get(passageId);
       if (passageRow) {
         await upsertPassageMemoryDue(ctx, passageRow, args.now);
+        await ensurePassageHearts(ctx, userId, passageRow, args.now);
       }
     }
 
     await ensurePassageDueBackfill(ctx, userId, args.now);
+    await stampInMemoryBackfill(ctx, userId, args.now);
 
     const dueReviewCount = plan.verses.filter((verse) =>
       isDueForReview(verse.schedule, args.now),

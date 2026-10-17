@@ -93,6 +93,13 @@ export function isMemorySessionCandidate(
   return isPracticeSessionCandidate(candidate);
 }
 
+/** Something is memorized (`memoryStats`), so Extra practice has verses. */
+export function hasMemorizedVerses(
+  stats: { reviewing: number; mastered: number } | undefined,
+): boolean {
+  return stats !== undefined && stats.reviewing + stats.mastered > 0;
+}
+
 /**
  * Due items still waiting after this frozen queue is finished.
  *

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { verseMatchesScope, type VerseScope } from "@/lib/verse-scope-match";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRef, formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import { heartedSpanConfirmAction } from "@/lib/hearted-span-copy";
 import { sortByVerseRef } from "../../../../shared/compare-verse-refs";
 
@@ -60,9 +60,7 @@ export function PackVersePicker({
   return (
     <div className="space-y-4">
       {scope ? (
-        // Scope packs auto-include every hearted verse inside their scope, so
-        // there's nothing to "pick" from a hearted list — the only meaningful
-        // action is discovering and hearting *new* verses within the scope.
+        // A scoped picker only browses verses inside its scope.
         <VerseBrowsePicker
           scope={scope}
           heartedVerses={heartedVerses}
@@ -167,7 +165,7 @@ function HeartedTab({
       <div className="rounded-lg border px-4 py-8 text-center">
         <p className="text-sm text-muted-foreground">
           {isScoped
-            ? "No hearted verses in this scope yet. Browse to add one."
+            ? "No hearted verses here yet. Browse to add one."
             : "No hearted verses yet. Browse to add one."}
         </p>
       </div>
@@ -219,7 +217,7 @@ function HeartedTab({
                     aria-pressed={selected}
                   >
                     <span className="min-w-0 flex-1 truncate">
-                      {formatVerseRef(verse)}
+                      {formatVerseRefTitle(verse)}
                     </span>
                     {pending ? (
                       <Loader2

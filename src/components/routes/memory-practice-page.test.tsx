@@ -18,7 +18,8 @@ vi.mock("@/hooks/use-frozen-query", () => ({
 }));
 
 vi.mock("@/hooks/use-memory-back", () => ({
-  useMemoryBack: () => vi.fn(),
+  useMemoryExit: () => vi.fn(),
+  useMemoryExitLabel: () => "Back",
 }));
 
 vi.mock("@/hooks/use-live-now", () => ({
@@ -49,33 +50,34 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
 
 vi.mock("../../../convex/_generated/api", () => ({
   api: {
-    savedVerses: {
-      listAll: "savedVerses.listAll",
-      getHearted: "savedVerses.getHearted",
+    verseMemory: {
+      listInMemory: "verseMemory.listInMemory",
+      getInMemory: "verseMemory.getInMemory",
     },
   },
 }));
 
 const psalm46 = {
-  _id: "sv_ps46" as Id<"savedVerses">,
   verseRefId: "vr_ps46" as Id<"verseRefs">,
   book: "Psalms",
   chapter: 46,
   startVerse: 10,
   endVerse: 10,
-  createdAt: 1,
   memory: {
     status: "reviewing" as const,
     learnStage: 3,
     stageReps: 0,
+    ease: 2.3,
     intervalDays: 1,
     dueAt: 1,
+    consecutiveCorrect: 2,
+    lapses: 0,
   },
+  packIds: [],
 };
 
 const john316 = {
   ...psalm46,
-  _id: "sv_jn316" as Id<"savedVerses">,
   verseRefId: "vr_jn316" as Id<"verseRefs">,
   book: "John",
   chapter: 3,
@@ -83,20 +85,28 @@ const john316 = {
   endVerse: 16,
 };
 
+const romans828 = {
+  ...psalm46,
+  verseRefId: "vr_ro828" as Id<"verseRefs">,
+  book: "Romans",
+  chapter: 8,
+  startVerse: 28,
+  endVerse: 28,
+  memory: { ...psalm46.memory, status: "learning" as const, learnStage: 1 },
+};
+
 const exodus19 = {
   ...psalm46,
-  _id: "sv_ex19" as Id<"savedVerses">,
   verseRefId: "vr_ex19" as Id<"verseRefs">,
   book: "Exodus",
   chapter: 19,
   startVerse: 4,
   endVerse: 6,
   memory: {
+    ...psalm46.memory,
     status: "new" as const,
     learnStage: 0,
-    stageReps: 0,
     intervalDays: 0,
-    dueAt: 1,
   },
 };
 
@@ -104,11 +114,11 @@ describe("MemoryAllSessionPage", () => {
   beforeEach(() => {
     frozenArgs.clear();
     frozenResults.clear();
-    frozenResults.set("savedVerses.listAll", [psalm46, john316]);
-    frozenResults.set("savedVerses.getHearted", psalm46);
+    frozenResults.set("verseMemory.listInMemory", [psalm46, john316]);
+    frozenResults.set("verseMemory.getInMemory", psalm46);
   });
 
-  it("loads one hearted verse for a scoped practice URL", () => {
+  it("loads one in-Memory verse for a scoped practice URL", () => {
     render(
       <MemoryAllSessionPage
         kind="practice"
@@ -121,8 +131,8 @@ describe("MemoryAllSessionPage", () => {
       />,
     );
 
-    expect(frozenArgs.get("savedVerses.listAll")).toBe("skip");
-    expect(frozenArgs.get("savedVerses.getHearted")).toEqual({
+    expect(frozenArgs.get("verseMemory.listInMemory")).toBe("skip");
+    expect(frozenArgs.get("verseMemory.getInMemory")).toEqual({
       book: "Psalms",
       chapter: 46,
       startVerse: 10,
@@ -132,8 +142,8 @@ describe("MemoryAllSessionPage", () => {
     expect(screen.getByText("1 verses")).toBeInTheDocument();
   });
 
-  it("loads one hearted verse for a scoped learn URL", () => {
-    frozenResults.set("savedVerses.getHearted", exodus19);
+  it("starts an Up-next verse from a scoped learn URL", () => {
+    frozenResults.set("verseMemory.getInMemory", exodus19);
 
     render(
       <MemoryAllSessionPage
@@ -147,8 +157,8 @@ describe("MemoryAllSessionPage", () => {
       />,
     );
 
-    expect(frozenArgs.get("savedVerses.listAll")).toBe("skip");
-    expect(frozenArgs.get("savedVerses.getHearted")).toEqual({
+    expect(frozenArgs.get("verseMemory.listInMemory")).toBe("skip");
+    expect(frozenArgs.get("verseMemory.getInMemory")).toEqual({
       book: "Exodus",
       chapter: 19,
       startVerse: 4,
@@ -158,11 +168,34 @@ describe("MemoryAllSessionPage", () => {
     expect(screen.getByText("1 verses")).toBeInTheDocument();
   });
 
-  it("snapshots the hearted library for unscoped practice", () => {
+  it("shows nothing for a scoped URL whose verse is not in Memory", () => {
+    frozenResults.set("verseMemory.getInMemory", null);
+
+    render(
+      <MemoryAllSessionPage
+        kind="practice"
+        search={{
+          book: "Psalms",
+          chapter: 46,
+          startVerse: 10,
+          endVerse: 10,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("0 verses")).toBeInTheDocument();
+  });
+
+  it("snapshots the in-Memory verses for unscoped practice", () => {
+    frozenResults.set("verseMemory.listInMemory", [
+      psalm46,
+      john316,
+      romans828,
+    ]);
     render(<MemoryAllSessionPage kind="practice" search={{}} />);
 
-    expect(frozenArgs.get("savedVerses.getHearted")).toBe("skip");
-    expect(frozenArgs.get("savedVerses.listAll")).toEqual({});
+    expect(frozenArgs.get("verseMemory.getInMemory")).toBe("skip");
+    expect(frozenArgs.get("verseMemory.listInMemory")).toEqual({});
     expect(screen.getByText("All learned verses")).toBeInTheDocument();
     expect(screen.getByText("2 verses")).toBeInTheDocument();
   });

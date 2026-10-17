@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
 import type { EsvVerse, EsvVerseHeading } from "../../../shared/esv-api";
+import type { ChapterMemorizeControl } from "@/components/bible/chapter-header";
+import { useMemorizeSheet } from "@/components/memory/memorize/memorize-context";
 import {
   collectPassageNotesStartingInRange,
   type NoteWithRef,
@@ -12,6 +15,7 @@ import {
 import { useTutorial } from "@/components/tutorial/tutorial-context";
 import { Button } from "@/components/ui/button";
 import { useEsvPassage } from "@/hooks/use-esv-passage";
+import { chapterMemorizeState } from "@/lib/chapter-memorize";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { logInteraction } from "@/lib/dev-log";
 import type { HighlightRange } from "@/lib/highlight-utils";
@@ -121,6 +125,33 @@ export function PassageChapterView({
     },
     [book, chapter, toggleSavedMutation],
   );
+  const memorizeSheet = useMemorizeSheet();
+  const navigate = useNavigate();
+  const chapterMemorize = useMemo(
+    () => chapterMemorizeState(book, chapter, savedVersesForChapter),
+    [book, chapter, savedVersesForChapter],
+  );
+  const memorizeControl = useMemo((): ChapterMemorizeControl | null => {
+    if (!chapterMemorize) return null;
+    return {
+      state: chapterMemorize,
+      onMemorize: (opener) => {
+        logInteraction("reader", "memorize-chapter-opened", { book, chapter });
+        memorizeSheet.open(
+          {
+            kind: "chapters",
+            book,
+            startChapter: chapter,
+            endChapter: chapter,
+          },
+          { returnFocusTo: opener },
+        );
+      },
+      onOpenPack: (packId) => {
+        void navigate({ to: "/memory/$packId", params: { packId } });
+      },
+    };
+  }, [book, chapter, chapterMemorize, memorizeSheet, navigate]);
   const viewportRef = useRef<HTMLDivElement>(null);
   const { navigateActiveTab } = useTabs();
   const { previous, next } = getAdjacentChapterDestinations(book, chapter);
@@ -670,6 +701,7 @@ export function PassageChapterView({
         chapterScopedNoteCount={chapterScopedNotes.length}
         chapterNotesOpen={chapterNotesPanel.overlayOpen}
         onChapterNotesClick={chapterNotesPanel.handleHeaderToggle}
+        memorize={memorizeControl}
       />
 
       <PassageViewBody
@@ -697,6 +729,7 @@ export function PassageChapterView({
         onRecolorHighlight={handleRecolorHighlight}
         savedVersesForChapter={savedVersesForChapter}
         onToggleSaved={handleToggleSaved}
+        tourActive={activeTour !== null}
       />
 
       <PassageViewDialogs

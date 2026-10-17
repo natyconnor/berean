@@ -1,5 +1,6 @@
 import type { EsvVerse } from "../../shared/esv-api";
 import { groupChapterForHearting } from "./memory-span-group";
+import { trimChapterVerses, type PassageRange } from "./passage-range";
 import { applyLearningSections } from "./passage-sections";
 
 export type PassagePieceBase = {
@@ -19,6 +20,11 @@ export type PassagePiece = PassagePieceBase & {
   learnStage: number;
   stageReps: number;
   dueAt?: number;
+  /**
+   * Start seeded this piece from verses memorized on their own, so the
+   * passage skipped or resumed it instead of starting it fresh.
+   */
+  carriedOver?: boolean;
 };
 
 export type PassageChapterInput = {
@@ -29,19 +35,24 @@ export type PassageChapterInput = {
 
 /**
  * Derive frozen piece spans from chapter text. Always groups with empty
- * existing hearts so user hearts never fragment the list.
+ * existing hearts so user hearts never fragment the list. With a `range`,
+ * verses outside it are dropped first, so the pieces cover exactly the
+ * range's verses that the text has.
  *
  * Learning sections are packed to about 5–8 verses (see
- * {@link applyLearningSections}). Chapter changes always start a new section;
- * ESV headings do not.
+ * {@link applyLearningSections}). Chapter changes start a new section
+ * (except a short mid-chapter edge of a range); ESV headings do not.
  */
 export function buildPassagePieces(
   chapters: readonly PassageChapterInput[],
+  range: PassageRange | null = null,
 ): PassagePieceBase[] {
   const pieces: PassagePieceBase[] = [];
   let index = 0;
 
-  for (const chapter of chapters) {
+  for (const chapter of range
+    ? chapters.map((input) => trimChapterVerses(input, range))
+    : chapters) {
     const groups = groupChapterForHearting(
       chapter.book,
       chapter.chapter,
@@ -62,5 +73,5 @@ export function buildPassagePieces(
     }
   }
 
-  return applyLearningSections(pieces);
+  return applyLearningSections(pieces, range);
 }

@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import { PassageGroupWithNotes } from "./passage-group-with-notes";
+import type { PassageRailMark } from "../passage-heart-rail";
 
 vi.mock("@/components/notes/note-editor", () => ({
   NoteEditor: ({
@@ -69,11 +70,150 @@ function renderGroup(
         onPassageBubbleMouseEnter={vi.fn()}
         onPassageBubbleMouseLeave={vi.fn()}
         onCollapse={vi.fn()}
-        groupPassageHeart={null}
       />
     </TooltipProvider>,
   );
 }
+
+const selectionBar = {
+  reference: "John 1:15–17",
+  hearted: false,
+  stopsMemorizing: false,
+  onToggleHeart: vi.fn(),
+  onClear: vi.fn(),
+};
+
+function renderSelectedGroup(
+  verses: Array<{ verseNumber: number; text: string }>,
+  bar: typeof selectionBar | null = selectionBar,
+  passageRailByVerse?: ReadonlyMap<number, PassageRailMark>,
+) {
+  return render(
+    <TooltipProvider>
+      <PassageGroupWithNotes
+        verses={verses}
+        passageNotes={[]}
+        singleNotesByVerse={new Map()}
+        viewMode="compose"
+        currentChapter={{ book: "John", chapter: 1 }}
+        highlightsByVerse={new Map()}
+        isPassageOpen={false}
+        editingNoteIds={new Set()}
+        draftsForAnchor={[]}
+        onOpenPassageNotes={vi.fn()}
+        onClosePassageNotes={vi.fn()}
+        onOpenVerseNotes={vi.fn()}
+        onEditNote={vi.fn()}
+        onDelete={vi.fn().mockResolvedValue(undefined)}
+        onSaveEdit={vi.fn().mockResolvedValue(undefined)}
+        onSaveNew={vi.fn().mockResolvedValue(undefined)}
+        onCancelEditor={vi.fn()}
+        onEditorDirtyChange={vi.fn()}
+        onEditorFocus={vi.fn()}
+        onStartCreatingPassageNote={vi.fn()}
+        onNoteDeleteCleanup={vi.fn()}
+        onPassageBubbleMouseEnter={vi.fn()}
+        onPassageBubbleMouseLeave={vi.fn()}
+        onCollapse={vi.fn()}
+        selectionBar={bar}
+        passageRailByVerse={passageRailByVerse}
+      />
+    </TooltipProvider>,
+  );
+}
+
+const THREE_VERSES = [
+  { verseNumber: 15, text: "John bore witness" },
+  { verseNumber: 16, text: "And from his fullness" },
+  { verseNumber: 17, text: "For the law" },
+];
+
+describe("PassageGroupWithNotes selection bar", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("puts the bar on a 2+ verse selection with no heart column", () => {
+    renderSelectedGroup(THREE_VERSES);
+
+    const bar = screen.getByRole("toolbar", {
+      name: "Selected verses, John 1:15–17",
+    });
+    expect(bar).toHaveClass("absolute", "-top-4");
+    expect(
+      within(bar).getByRole("button", { name: "Heart" }),
+    ).toBeInTheDocument();
+    expect(
+      within(bar).queryByRole("button", { name: "Memorize" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Heart this verse" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove from hearted verses" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no bar for a single verse or when the group is not selected", () => {
+    const { unmount } = renderSelectedGroup(THREE_VERSES.slice(0, 1));
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+    unmount();
+
+    renderSelectedGroup(THREE_VERSES, null);
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+  });
+
+  it("pins the bar to the shell's bottom edge on touch screens", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    renderSelectedGroup(THREE_VERSES);
+
+    const bar = screen.getByRole("toolbar");
+    expect(bar).not.toHaveClass("absolute");
+    expect(bar.parentElement?.lastElementChild).toBe(bar);
+    expect(screen.getByRole("button", { name: "Heart" })).toHaveClass("h-11");
+  });
+
+  it("keeps a memorized passage's rail and heart beside the selected verses", () => {
+    const { container } = renderSelectedGroup(
+      THREE_VERSES,
+      selectionBar,
+      new Map<number, PassageRailMark>([
+        [
+          15,
+          {
+            stroke: "solid",
+            heart: {
+              learnedFraction: 0.5,
+              tooltip: "John 1 · memorizing · 25 of 51 learned",
+              ariaLabel:
+                "John 1, hearted. Memorizing: 25 of 51 verses learned. Remove heart",
+              title: "John 1",
+              onUnheart: vi.fn(),
+            },
+          },
+        ],
+        [16, { stroke: "dashed", heart: null }],
+      ]),
+    );
+
+    expect(
+      screen.getByRole("button", { name: /John 1, hearted/ }),
+    ).toBeInTheDocument();
+    expect(
+      Array.from(container.querySelectorAll("[data-passage-rail]"), (lane) =>
+        lane.getAttribute("data-passage-rail"),
+      ),
+    ).toEqual(["solid", "dashed"]);
+  });
+});
 
 describe("PassageGroupWithNotes retarget scope", () => {
   it("wires the overlay and composer layout id for the docked draft", () => {
@@ -135,7 +275,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );
@@ -201,7 +340,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );
@@ -254,7 +392,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );
@@ -353,7 +490,6 @@ describe("PassageGroupWithNotes retarget scope", () => {
           onPassageBubbleMouseEnter={vi.fn()}
           onPassageBubbleMouseLeave={vi.fn()}
           onCollapse={vi.fn()}
-          groupPassageHeart={null}
         />
       </TooltipProvider>,
     );

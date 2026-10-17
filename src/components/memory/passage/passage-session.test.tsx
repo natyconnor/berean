@@ -25,6 +25,7 @@ import {
 } from "./passage-session-model";
 import { PassageSession } from "./passage-session";
 import type { PassageView } from "./passage-session-types";
+import { CARRIED_OVER_SEEN_KEY_PREFIX } from "./use-carried-over-notice";
 
 const { mutationMocks, fetchChaptersBatchMock } = vi.hoisted(() => ({
   mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
@@ -54,6 +55,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     passageMemory: {
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
+      markCelebrated: "passageMemory.markCelebrated",
     },
   },
 }));
@@ -119,6 +121,7 @@ function passageView(
     consecutiveCorrect: 0,
     lapses: 0,
     stageReps: 0,
+    needsCelebration: false,
     createdAt: now,
     updatedAt: now,
     remainingIntroduces: 5,
@@ -171,7 +174,9 @@ describe("PassageSession", () => {
     );
 
     expect(
-      screen.getByRole("status", { name: "Session phase: Challenge" }),
+      screen.getByRole("status", {
+        name: "Session phase: Fill in the blanks",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Session phase: Rope" }),
@@ -403,14 +408,17 @@ describe("PassageSession", () => {
     const pctBefore = Number(
       (journeyBefore.getAttribute("aria-label") ?? "").match(/(\d+)%/)?.[1],
     );
-    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/First letters · 1 of \d+ today/),
+    ).toBeInTheDocument();
 
     const answer = await screen.findByLabelText("Your recalled verse");
     await userEvent.click(answer);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText(/recalled\./)).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("100% recalled")).toBeVisible();
     await waitFor(() => {
       const journeyAfter = screen.getByLabelText(/Learning journey:/);
       const pctAfter = Number(
@@ -419,7 +427,9 @@ describe("PassageSession", () => {
       expect(pctAfter).toBeGreaterThan(pctBefore);
     });
     // Step label stays on the graded step; only the journey bar moves early.
-    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/First letters · 1 of \d+ today/),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Continue|Try again/ }),
     ).toBeInTheDocument();
@@ -445,27 +455,194 @@ describe("PassageSession", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText(/recalled\./)).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     await waitFor(() => {
       expect(
-        screen.getByLabelText(/Progress to mastered: Reviewing/),
+        screen.getByLabelText(/Progress to mastered: Memorized/),
       ).toBeInTheDocument();
+    });
+  });
+
+  it("marks a newly finished passage with the by-heart moment once", async () => {
+    const onExit = vi.fn();
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+        needsCelebration: true,
+      }),
+    );
+
+    renderSession(
+      passageView([piece(0, "learning", { learnStage: 3, stageReps: 1 })], {
+        createdAt: getSessionNow() - 2 * DAY_MS,
+      }),
+      onExit,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    // The result that finished it stays up first.
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+    const moment = await screen.findByRole("dialog", {
+      name: "You can say all of Psalm 23 by heart.",
+    });
+    expect(moment).toHaveTextContent("1 verse · 3 days");
+    expect(moment).toHaveTextContent(PASSAGE_ONE);
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledWith({
+      packId: PACK_ID,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("skips the moment for a passage already celebrated", async () => {
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+        celebratedAt: getSessionNow() - DAY_MS,
+      }),
+    );
+
+    renderSession(
+      passageView([piece(0, "learning", { learnStage: 3, stageReps: 1 })]),
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await screen.findByText("Word for word.");
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
+  });
+
+  it("shows a missed by-heart moment when the session reopens", async () => {
+    const onExit = vi.fn();
+    renderSession(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+        needsCelebration: true,
+      }),
+      onExit,
+    );
+
+    const moment = await screen.findByRole("dialog", {
+      name: "You can say all of Psalm 23 by heart.",
+    });
+    expect(moment).toHaveTextContent(PASSAGE_ONE);
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(onExit).not.toHaveBeenCalled();
+    expect(mutationMock("passageMemory.markCelebrated")).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("never shows the moment for an older passage without the flag", async () => {
+    renderSession(
+      passageView([piece(0, "solid", { learnStage: 3 })], {
+        status: "reviewing",
+      }),
+    );
+
+    await screen.findByText("Recite the whole passage from memory");
+    await screen.findByRole("textbox");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.markCelebrated")).not.toHaveBeenCalled();
+  });
+
+  describe("carried-over notice", () => {
+    const carriedView = () =>
+      passageView([
+        piece(0, "solid", { learnStage: 3, carriedOver: true }),
+        piece(1, "unreached"),
+      ]);
+    const seenKey = `${CARRIED_OVER_SEEN_KEY_PREFIX}passage_1`;
+
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it("says once that a memorized verse is skipped, until dismissed", async () => {
+      renderSession(carriedView());
+
+      const note = screen.getByRole("note");
+      expect(note).toHaveTextContent(
+        "Verse 1 is already memorized, so we'll skip ahead.",
+      );
+      await waitFor(() => expect(localStorage.getItem(seenKey)).toBe("1"));
+
+      await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("stays quiet once this passage has shown it", () => {
+      localStorage.setItem(seenKey, "1");
+      renderSession(carriedView());
+
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("stays quiet without carried-over verses or once reviewing", () => {
+      const { unmount } = renderSession(
+        passageView([
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "unreached"),
+        ]),
+      );
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      unmount();
+
+      renderSession(
+        passageView([piece(0, "solid", { learnStage: 3, carriedOver: true })], {
+          status: "reviewing",
+        }),
+      );
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      expect(localStorage.getItem(seenKey)).toBeNull();
     });
   });
 
   it("uses plain language for the remaining session copy", () => {
     expect(DONE_FOR_NOW_LABEL).toBe("That's enough for today");
-    expect(FRONTIER_LOCKED_COPY).toMatch(/down for the day/);
+    expect(FRONTIER_LOCKED_COPY).toBe(
+      "Today's new verses are in. Tomorrow we'll start with a quick recite, then add more.",
+    );
     expect(FRONTIER_LOCKED_COPY).not.toMatch(/rope|set for today/i);
+    expect(BUDGET_EXHAUSTED_COPY).toBe(
+      "That's 5 new verses today, a good day's work. Tomorrow you'll add the next ones.",
+    );
     expect(NEXT_VERSE_PROMPT_COPY).toMatch(/down for the day/);
     expect(NEXT_VERSE_PROMPT_COPY).not.toMatch(/rope|frontier|introduce/i);
     expect(CONNECT_TITLE).toBe("Connect these verses");
-    expect(CONNECT_COPY).toMatch(/Link this verse to its neighbor/);
-    expect(CONNECT_RECITE_LABEL).toBe("Recite together");
+    expect(CONNECT_COPY).toBe("Say them together so they stay linked.");
+    expect(CONNECT_RECITE_LABEL).toBe("Join verses");
     expect(WARMUP_PROMPT_COPY).toMatch(/Warm up/i);
     expect(WARMUP_PROMPT_COPY).not.toMatch(/rope/i);
     expect(WARMUP_SKIP_LABEL).toBe("Skip warm-up");
-    expect(PRACTICE_WHAT_YOU_KNOW_LABEL).toBe("Practice what you know");
+    expect(PRACTICE_WHAT_YOU_KNOW_LABEL).toBe("Go over what you know");
     expect(SECTION_COMPLETE_COPY).toMatch(/finished this section/);
     expect(SECTION_RECITE_LABEL).toBe("Recite this section");
   });

@@ -11,6 +11,8 @@ export interface HighlightToolbarHandle {
 interface HighlightToolbarProps {
   verseTextRef: React.RefObject<HTMLSpanElement | null>;
   onHighlight: (startOffset: number, endOffset: number, color: string) => void;
+  /** Told when the toolbar appears and disappears (including on unmount). */
+  onVisibleChange?: (visible: boolean) => void;
 }
 
 interface ToolbarPosition {
@@ -22,6 +24,7 @@ interface ToolbarPosition {
 export function HighlightToolbar({
   verseTextRef,
   onHighlight,
+  onVisibleChange,
 }: HighlightToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   /** Avoid portaling/updating toolbar DOM while extending selection (see docs/fix-verse-text-selection-glitch.md Phase A). */
@@ -107,6 +110,13 @@ export function HighlightToolbar({
       document.removeEventListener("pointercancel", onPointerCancel, opts);
     };
   }, [updatePosition]);
+
+  const visible = position !== null && selectionOffsets !== null;
+  useEffect(() => {
+    if (!visible || !onVisibleChange) return;
+    onVisibleChange(true);
+    return () => onVisibleChange(false);
+  }, [visible, onVisibleChange]);
 
   const handleColorClick = useCallback(
     (colorId: string) => {

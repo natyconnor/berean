@@ -1,23 +1,34 @@
 import { useState } from "react";
 import { Layers, Loader2, Plus } from "lucide-react";
-import { Link } from "@tanstack/react-router";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
 
 import { api } from "../../../../convex/_generated/api";
+import { useMemoryPanelFrame } from "@/components/memory/drawer/memory-panel-context";
+import { InternalLink } from "@/components/memory/internal-link";
 import { Button } from "@/components/ui/button";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { packListSubtitle } from "@/components/memory/packs/pack-list-subtitle";
+import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
+import { SUGGESTIONS_LABEL } from "@/lib/memory-copy";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 const INITIAL_PAGE_SIZE = 10;
 const LOAD_MORE_PAGE_SIZE = 10;
 
 /**
- * The Packs section on the Memory home: the user's named verse sets, each row
- * linking to its pack view with live verse + due counts. Scope packs resolve
- * their membership from hearted verses, so counts stay live as verses are
- * hearted/reviewed.
+ * "Passages and packs" on Your verses: every passage and pack with where it
+ * stands, plus Suggestions and New pack. Rows open the detail with a way back
+ * to Your verses.
  */
-export function PackList({ now }: { now: number }) {
+export function PackList({
+  now,
+  title = "Passages and packs",
+}: {
+  now: number;
+  title?: string;
+}) {
+  const frame = useMemoryPanelFrame();
+  const timeZone = getViewerTimeZone();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const { results, status, loadMore } = usePaginatedQuery(
     api.packs.listMine,
@@ -42,17 +53,29 @@ export function PackList({ now }: { now: number }) {
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Packs
+          {title}
         </h2>
         <div className="flex items-center gap-1.5">
-          <Button asChild size="sm" variant="outline" className="h-7">
-            <Link to="/memory/presets">Browse presets</Link>
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="h-7 max-sm:h-11"
+          >
+            <InternalLink href="/memory/presets">
+              {SUGGESTIONS_LABEL}
+            </InternalLink>
           </Button>
-          <Button asChild size="sm" variant="outline" className="h-7 gap-1.5">
-            <Link to="/memory/new">
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 max-sm:h-11"
+          >
+            <InternalLink href="/memory/new">
               <Plus className="h-3.5 w-3.5" aria-hidden />
               New pack
-            </Link>
+            </InternalLink>
           </Button>
         </div>
       </div>
@@ -68,19 +91,9 @@ export function PackList({ now }: { now: number }) {
             aria-hidden
           />
           <p className="text-sm text-muted-foreground">
-            Start from a preset chapter or verse list, or build your own pack.
+            Memorize a chapter from the reader, or make a pack of verses you
+            want to keep together.
           </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-            <Button asChild size="sm">
-              <Link to="/memory/presets">Browse presets</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="gap-1.5">
-              <Link to="/memory/new">
-                <Plus className="h-4 w-4" aria-hidden />
-                New pack
-              </Link>
-            </Button>
-          </div>
         </div>
       ) : (
         <>
@@ -88,23 +101,23 @@ export function PackList({ now }: { now: number }) {
             {displayResults.map((pack) => (
               <li key={pack._id}>
                 <MemoryListRow>
-                  <Link
-                    to="/memory/$packId"
-                    params={{ packId: pack._id }}
+                  <InternalLink
+                    href={frame.hrefFor(
+                      { kind: "pack", packId: pack._id },
+                      { from: "verses" },
+                    )}
                     className="flex items-center gap-3 px-3 py-2.5"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <Layers className="h-4 w-4" aria-hidden />
-                    </span>
+                    <GoalKindMark kind={pack.summary.kind} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
                         {pack.name}
                       </span>
                       <span className="block text-xs text-muted-foreground">
-                        {packListSubtitle(pack)}
+                        {packListSubtitle(pack.summary, now, timeZone)}
                       </span>
                     </span>
-                  </Link>
+                  </InternalLink>
                 </MemoryListRow>
               </li>
             ))}

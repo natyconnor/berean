@@ -1,4 +1,8 @@
-import type { VerseSpan } from "./hearted-verse-coverage";
+import {
+  passageHeartSpans,
+  spanCoveredBy,
+  type VerseSpan,
+} from "./hearted-verse-coverage";
 import {
   dueAtInCalendarDays,
   initialSchedule,
@@ -8,11 +12,11 @@ import {
 } from "./memory-scheduler";
 import {
   inferPieceLearningState,
-  looksLikeAutoHeartedPassage,
-  matchingAutoHeartSpans,
   type HeartedMemorySpan,
 } from "./passage-frontier";
+import { spansOverlapAny } from "./memorize-status";
 import type { PassagePiece, PassagePieceBase } from "./passage-pieces";
+import { spanInRange, type PassageRange } from "./passage-range";
 import { canonicalUnifiedSchedule } from "./unified-review-schedule";
 import { verseMatchesScope, type VerseScope } from "./verse-scope-match";
 
@@ -32,11 +36,39 @@ export type PlanStartArgs = {
 export type PlanStartResult = {
   pieces: PassagePiece[];
   status: PassageRowStatus;
-  unheartSpans: VerseSpan[];
-  unheartedCount: number;
-  keptHeartCount: number;
   schedule: MemorySchedule;
 };
+
+/**
+ * Verse items a newly started passage absorbs: in Memory on their own (no
+ * custom pack keeps them separate) and fully inside the passage's chapter
+ * spans. Their progress has already seeded the pieces, so they stop being
+ * separate items and nothing is due twice.
+ */
+export function absorbedVerseItems<
+  T extends VerseSpan & { inCustomPack: boolean },
+>(items: readonly T[], pieces: readonly VerseSpan[]): T[] {
+  const passageSpans = passageHeartSpans(pieces);
+  return items.filter(
+    (item) => !item.inCustomPack && spanCoveredBy(item, passageSpans),
+  );
+}
+
+/**
+ * The first passage whose verses (chapter spans, see `passageHeartSpans`)
+ * share any verse with `pieces`, or null. Two passages over the same verses
+ * would be due twice.
+ */
+export function findOverlappingPassage<
+  T extends { pieces: readonly VerseSpan[] },
+>(pieces: readonly VerseSpan[], passages: readonly T[]): T | null {
+  const spans = passageHeartSpans(pieces);
+  return (
+    passages.find((passage) =>
+      spansOverlapAny(spans, passageHeartSpans(passage.pieces)),
+    ) ?? null
+  );
+}
 
 /**
  * Fresh finished-passage maintenance: reviewing, 1-day interval, due tomorrow.
@@ -95,12 +127,15 @@ export function assertFrozenPieceBases(
 }
 
 /**
- * Ensure client-supplied frozen pieces lie inside the pack scope and form a
- * contiguous Scripture walk (same book, non-overlapping, non-decreasing).
+ * Ensure client-supplied frozen pieces lie inside the pack's chapters and
+ * form a Scripture walk (same book, non-overlapping, non-decreasing). With a
+ * passage `range`, they must also stay inside it and cover it exactly, in
+ * order (see {@link assertPiecesCoverRange}).
  */
 export function assertPiecesMatchScope(
   pieces: readonly PassagePieceBase[],
   scope: VerseScope,
+  range: PassageRange | null = null,
 ): void {
   assertFrozenPieceBases(pieces);
   let previous: PassagePieceBase | undefined;
@@ -108,7 +143,7 @@ export function assertPiecesMatchScope(
     if (
       !verseMatchesScope({ book: piece.book, chapter: piece.chapter }, scope)
     ) {
-      throw new Error("Passage pieces must stay within the pack scope");
+      throw new Error("Passage pieces must stay within the passage");
     }
     if (previous) {
       if (piece.book !== previous.book) {
@@ -123,15 +158,49 @@ export function assertPiecesMatchScope(
       ) {
         throw new Error("Passage pieces must not overlap");
       }
-      if (
-        piece.chapter > previous.chapter + 1 ||
-        (piece.chapter === previous.chapter + 1 && previous.endVerse < 1)
-      ) {
-        // chapter gaps are ok only when scope itself skips; chapter must be in scope
-        // (already checked). Disallow jumping backward only — already handled.
-      }
     }
     previous = piece;
+  }
+  if (range) assertPiecesCoverRange(pieces, range);
+}
+
+/**
+ * Pieces (already in order and non-overlapping) stay inside the range, start
+ * on its first verse, end on its last, and leave no gap. Pieces are built
+ * from fetched text and the ESV omits a few verses (Matthew 17:21), so a gap
+ * of one verse inside a chapter is allowed.
+ */
+function assertPiecesCoverRange(
+  pieces: readonly PassagePieceBase[],
+  range: PassageRange,
+): void {
+  const uncovered = "Passage pieces must cover the whole passage in order";
+  let previous: PassagePieceBase | undefined;
+  for (const piece of pieces) {
+    if (!spanInRange(piece, range)) {
+      throw new Error("Passage pieces must stay within the passage");
+    }
+    if (previous) {
+      const joins =
+        piece.chapter === previous.chapter
+          ? piece.startVerse - previous.endVerse <= 2
+          : piece.chapter === previous.chapter + 1 && piece.startVerse === 1;
+      if (!joins) throw new Error(uncovered);
+    }
+    previous = piece;
+  }
+
+  const first = pieces[0];
+  const last = pieces[pieces.length - 1];
+  if (
+    !first ||
+    !last ||
+    first.chapter !== range.startChapter ||
+    first.startVerse !== range.startVerse ||
+    last.chapter !== range.endChapter ||
+    last.endVerse !== range.endVerse
+  ) {
+    throw new Error(uncovered);
   }
 }
 
@@ -153,6 +222,9 @@ function toStoredPiece(
   if (base.sectionLabel !== undefined) {
     piece.sectionLabel = base.sectionLabel;
   }
+  if (state.attachment !== "unreached") {
+    piece.carriedOver = true;
+  }
   return piece;
 }
 
@@ -163,15 +235,16 @@ function allPiecesSolid(pieces: readonly PassagePiece[]): boolean {
 }
 
 /**
- * Pure start planner. Does not mutate hearts. The mutation layer is
+ * Pure start planner. Never touches hearts. The mutation layer is
  * create-once: if a passage row already exists, skip this and return the row.
+ * Pieces seeded from existing verse progress are marked `carriedOver`.
  */
 export function planStart(args: PlanStartArgs): PlanStartResult {
-  const { pieces, hearts, scope, memberSchedules, now } = args;
+  const { pieces, hearts, memberSchedules, now } = args;
 
-  // `new` hearts were seeded on heart and never practiced — do not treat
-  // them as learning-phase coverage when freezing pieces. Enrolled
-  // `learning` hearts still at Read with no reps are also unreached
+  // `new` members are Up next and were never practiced — do not treat them
+  // as learning-phase coverage when freezing pieces. `learning` members
+  // still at Read with no reps are also unreached
   // ({@link inferPieceLearningState}).
   const progressHearts = hearts.filter((heart) => heart.status !== "new");
   const inferred = inferPieceLearningState(pieces, progressHearts);
@@ -183,18 +256,6 @@ export function planStart(args: PlanStartArgs): PlanStartResult {
     };
     return toStoredPiece(piece, state);
   });
-
-  const autoHearted = looksLikeAutoHeartedPassage(pieces, hearts, scope);
-  const unheartSpans = autoHearted
-    ? matchingAutoHeartSpans(pieces, hearts).map((span) => ({
-        book: span.book,
-        chapter: span.chapter,
-        startVerse: span.startVerse,
-        endVerse: span.endVerse,
-      }))
-    : [];
-  const unheartedCount = unheartSpans.length;
-  const keptHeartCount = Math.max(0, hearts.length - unheartedCount);
 
   const finished = allPiecesSolid(nextPieces);
   const schedule = finished
@@ -210,9 +271,6 @@ export function planStart(args: PlanStartArgs): PlanStartResult {
   return {
     pieces: nextPieces,
     status,
-    unheartSpans,
-    unheartedCount,
-    keptHeartCount,
     schedule,
   };
 }

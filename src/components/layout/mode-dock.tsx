@@ -10,6 +10,7 @@ import { Brain, BookOpen, NotebookPen } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { api } from "../../../convex/_generated/api";
+import { useEnsureInMemoryBackfill } from "@/hooks/use-ensure-in-memory-backfill";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { cn } from "@/lib/utils";
 import { logInteraction } from "@/lib/dev-log";
@@ -63,6 +64,7 @@ export function ModeDock() {
   // review or learn still updates the count (same args, reactive data). The
   // clock catches up on a new local day so overnight locks can expire.
   const now = useLiveNow();
+  useEnsureInMemoryBackfill(now);
   const skipDueCount = isMemorySessionPath(location.pathname);
   const dueCountResult = useQuery(
     api.verseMemory.dueCount,
@@ -214,7 +216,7 @@ export function ModeDock() {
         <FeatureCallout
           state={memoryHint}
           title="Memory lives here"
-          description="Heart verses in the reader, then use Memory to practice, review, and build packs. A badge appears when reviews are due."
+          description="Memorize verses and passages, then come back for a few minutes each day. A badge shows when something's ready."
           primaryActionLabel="Open Memory"
           onPrimaryAction={() => {
             logInteraction("mode-dock", "memory-opened", {

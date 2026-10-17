@@ -1,4 +1,3 @@
-import type { HTMLAttributes, ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,23 +8,12 @@ const { useReducedMotion } = vi.hoisted(() => ({
   useReducedMotion: vi.fn(() => true),
 }));
 
-vi.mock("framer-motion", () => ({
-  useReducedMotion: () => useReducedMotion(),
-  motion: {
-    div: ({
-      children,
-      ...props
-    }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) => (
-      <div {...props}>{children}</div>
-    ),
-    span: ({
-      children,
-      ...props
-    }: HTMLAttributes<HTMLSpanElement> & { children?: ReactNode }) => (
-      <span {...props}>{children}</span>
-    ),
-  },
-}));
+vi.mock("framer-motion", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("framer-motion")>();
+  return { ...actual, useReducedMotion: () => useReducedMotion() };
+});
+
+const NOW = 1_700_000_000_000;
 
 const reviewingSchedule = {
   status: "reviewing" as const,
@@ -33,7 +21,7 @@ const reviewingSchedule = {
   stageReps: 3,
   ease: 2.3,
   intervalDays: 2,
-  dueAt: 1_700_000_000_000 + 2 * 24 * 60 * 60 * 1000,
+  dueAt: NOW + 3 * 24 * 60 * 60 * 1000,
   consecutiveCorrect: 4,
   lapses: 0,
   earlyReviewApplied: false,
@@ -44,7 +32,62 @@ describe("VerseMemoryFeedback", () => {
     useReducedMotion.mockReturnValue(true);
   });
 
-  it("celebrates a one-word miss on bands that still accept close recalls", () => {
+  it("celebrates an exact recall in one banner: emoji, headline, praise, percentage, and schedule", () => {
+    useReducedMotion.mockReturnValue(false);
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={100}
+        attemptKey="review-exact"
+        showScheduleOutcome
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveAttribute("data-tone", "exact");
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent("🎉");
+    expect(screen.getByText("Word for word.")).toBeInTheDocument();
+    expect(screen.getByText("Nailed it!")).toBeInTheDocument();
+    expect(screen.getByText("100% recalled")).toBeInTheDocument();
+    expect(screen.getByText("Next review in 3 days.")).toBeInTheDocument();
+    expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
+  });
+
+  it("keeps the emoji but skips the particle burst when motion is reduced", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={100}
+        attemptKey="review-exact-reduced"
+        showScheduleOutcome
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Word for word.");
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent("🎉");
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
+  });
+
+  it("celebrates an exact learning recall too", () => {
+    useReducedMotion.mockReturnValue(false);
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={100}
+        attemptKey="learn-exact"
+        requireExactToAdvance
+      />,
+    );
+    expect(screen.getByText("Word for word.")).toBeInTheDocument();
+    expect(screen.getByText("Nailed it!")).toBeInTheDocument();
+    expect(screen.getByText("100% recalled")).toBeInTheDocument();
+    expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
+  });
+
+  it("saves the confetti for word-for-word recalls", () => {
+    useReducedMotion.mockReturnValue(false);
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -56,12 +99,53 @@ describe("VerseMemoryFeedback", () => {
           missing: 0,
           extra: 0,
         }}
-        attemptKey="guided-close"
+        attemptKey="learn-close"
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Oh so close! Just one word off",
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveAttribute("data-tone", "nearly");
+    expect(banner).toHaveTextContent("Nearly there.");
+    expect(banner).toHaveTextContent("Oh so close! Just one word off.");
+    expect(banner).toHaveTextContent("91% recalled");
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent("🙌");
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
+  });
+
+  it("stays encouraging, with calmer emoji, on lower recalls", () => {
+    const { unmount } = render(
+      <VerseMemoryFeedback quality="close" accuracy={70} attemptKey="mid" />,
     );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Good progress. The highlighted words are worth another look.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Mostly there, but it needs some work.",
+    );
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent("🌱");
+    unmount();
+
+    render(
+      <VerseMemoryFeedback quality="off" accuracy={40} attemptKey="low" />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This one needs another pass.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "A handful of words came back.",
+    );
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent("📖");
+  });
+
+  it("trails the percentage with a note", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={72}
+        attemptKey="passage-miss"
+        note="Pass at 85%"
+      />,
+    );
+    expect(screen.getByText("72% recalled · Pass at 85%")).toBeInTheDocument();
   });
 
   it("explains that the last From Memory recall needs 100% to graduate", () => {
@@ -75,19 +159,6 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       FROM_MEMORY_CLOSE_MESSAGE,
     );
-    expect(screen.getByRole("status")).not.toHaveTextContent("really close");
-  });
-
-  it("keeps the exact celebration unchanged on From Memory", () => {
-    render(
-      <VerseMemoryFeedback
-        quality="exact"
-        attemptKey="memory-exact"
-        requireExactToAdvance
-      />,
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("Exactly right!");
-    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
   });
 
   it("tells Review to retry at 80%+ so the interval can still stretch", () => {
@@ -99,8 +170,9 @@ describe("VerseMemoryFeedback", () => {
         showScheduleOutcome
       />,
     );
+    expect(screen.getByRole("status")).toHaveTextContent("Almost there.");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Almost there — try again to extend your review interval.",
+      "Try again to extend your review interval.",
     );
   });
 
@@ -119,20 +191,18 @@ describe("VerseMemoryFeedback", () => {
         attemptKey="review-one-word"
         showScheduleOutcome
         nextSchedule={{
-          status: "reviewing",
-          learnStage: 3,
-          stageReps: 3,
-          ease: 2.3,
+          ...reviewingSchedule,
           intervalDays: 1,
-          dueAt: 1_700_000_000_000,
+          dueAt: NOW,
           consecutiveCorrect: 3,
-          lapses: 0,
-          earlyReviewApplied: false,
         }}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Oh so close! Just one word off — try again to extend your review interval from 1 day to 2 days.",
+      "Oh so close! Just one word off.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Try again to extend your review interval from 1 day to 2 days.",
     );
   });
 
@@ -144,25 +214,21 @@ describe("VerseMemoryFeedback", () => {
         attemptKey="review-hold"
         showScheduleOutcome
         nextSchedule={{
-          status: "reviewing",
-          learnStage: 3,
+          ...reviewingSchedule,
           stageReps: 0,
-          ease: 2.3,
-          intervalDays: 2,
-          dueAt: 1_700_000_000_000 + 2 * 24 * 60 * 60 * 1000,
+          dueAt: NOW + 2 * 24 * 60 * 60 * 1000,
           consecutiveCorrect: 3,
-          lapses: 0,
-          earlyReviewApplied: false,
         }}
-        now={1_700_000_000_000}
+        now={NOW}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      /Mostly there, but it needs some work — next review/,
+      "Mostly there, but it needs some work.",
     );
+    expect(screen.getByRole("status")).toHaveTextContent(/Next review in/);
   });
 
-  it("explains a daily-review lapse back to Challenge", () => {
+  it("explains a daily-review lapse back to the blanks step", () => {
     render(
       <VerseMemoryFeedback
         quality="off"
@@ -175,16 +241,19 @@ describe("VerseMemoryFeedback", () => {
           stageReps: 0,
           ease: 2.1,
           intervalDays: 0,
-          dueAt: 1_700_000_000_000,
+          dueAt: NOW,
           consecutiveCorrect: 0,
           lapses: 1,
           earlyReviewApplied: false,
         }}
-        now={1_700_000_000_000}
+        now={NOW}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "A handful of words came back — back to Challenge.",
+      "A handful of words came back.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Back to fill in the blanks.",
     );
   });
 
@@ -196,52 +265,30 @@ describe("VerseMemoryFeedback", () => {
         attemptKey="review-lapse-daily"
         showScheduleOutcome
         nextSchedule={{
-          status: "reviewing",
-          learnStage: 3,
+          ...reviewingSchedule,
           stageReps: 0,
           ease: 2.1,
           intervalDays: 1,
-          dueAt: 1_700_000_000_000 + 24 * 60 * 60 * 1000,
+          dueAt: NOW + 24 * 60 * 60 * 1000,
           consecutiveCorrect: 0,
           lapses: 1,
-          earlyReviewApplied: false,
         }}
-        now={1_700_000_000_000}
+        now={NOW}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      /A handful of words came back — next review/,
-    );
+    expect(screen.getByRole("status")).toHaveTextContent(/Next review/);
   });
 
-  it("bursts particles on a 100% Review recall", () => {
-    useReducedMotion.mockReturnValue(false);
+  it("leaves the schedule line off until the next review is known", () => {
     render(
       <VerseMemoryFeedback
         quality="exact"
         accuracy={100}
-        attemptKey="review-exact"
+        attemptKey="review-pending"
         showScheduleOutcome
-        nextSchedule={reviewingSchedule}
-        now={1_700_000_000_000}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Nailed it");
-    expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
-  });
-
-  it("skips the particle burst on a 100% Review recall when motion is reduced", () => {
-    render(
-      <VerseMemoryFeedback
-        quality="exact"
-        accuracy={100}
-        attemptKey="review-exact-reduced"
-        showScheduleOutcome
-        nextSchedule={reviewingSchedule}
-        now={1_700_000_000_000}
-      />,
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("Nailed it");
-    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
+    expect(screen.getByText("Nailed it!")).toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent(/review/i);
   });
 });

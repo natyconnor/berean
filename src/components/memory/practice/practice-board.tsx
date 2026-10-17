@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -37,10 +38,14 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
+import { SESSION_COMPLETE_FOOTER, stepShortLabel } from "@/lib/memory-copy";
+import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
+import { withReturn } from "@/lib/memory-return";
 import {
   holdReviewingInterval,
   isLearningLocked,
   isLearningProgressAttempt,
+  isReviewPhase,
   MAX_LEARN_STAGE,
   requiredRepsFor,
   reviewGradeOutcome,
@@ -63,6 +68,13 @@ import {
 } from "@/lib/memory-session-order";
 import type { PracticeOrder } from "@/lib/practice-order";
 import {
+  READER_MEASURE_CLASS,
+  READER_REFERENCE_CLASS,
+  READER_VERSE_SIZE_CLASS,
+  READER_VERSE_TEXT_CLASS,
+  SESSION_VERSE_TEXT_CLASS,
+} from "@/lib/reader-typography";
+import {
   averageReviewAccuracy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
@@ -78,7 +90,7 @@ import {
   normalizeStageIndex,
   normalizeStatus,
 } from "@/lib/verse-practice-progress";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -94,8 +106,9 @@ import {
 } from "../../study/study-attempt-quality";
 import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
-import { VerseAttemptResult } from "../../study/study-verse-memory-card";
+import { VerseAttemptResult } from "../../study/verse-attempt-result";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "../../study/verse-attempt-feedback";
+import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import {
   currentStageStep,
@@ -105,7 +118,13 @@ import {
 import { PracticeVerseRail } from "./practice-verse-rail";
 import { ReviewSummary } from "../review-summary";
 import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
-import { SessionComplete } from "./session-complete";
+import { SessionComplete, type SessionCompleteVerse } from "./session-complete";
+import {
+  resolveSessionProgress,
+  type SessionProgress,
+  type SessionProgressSource,
+} from "@/lib/session-progress";
+import { SessionHeaderProgress } from "./session-header-progress";
 
 export type { MemorySessionLabel } from "@/lib/memory-session";
 
@@ -170,6 +189,27 @@ export interface PracticeVerse {
   composite?: PracticeCompositeSet;
 }
 
+/** What a run hands up when it is one part of a longer session. */
+export interface PracticeSessionResult {
+  /** Every verse the run held, with the step it landed on. */
+  verses: SessionCompleteVerse[];
+  /** Review grades, in session order. */
+  attempts: ReviewSessionAttempt[];
+}
+
+/**
+ * A run's live state, so a longer session can leave the board and open it
+ * again later without the frozen queue undoing what was done in between.
+ */
+export interface PracticeRunState {
+  /** Each card's live schedule, by card id. */
+  progress: Readonly<Record<string, VerseProgress>>;
+  /** Review grades so far, in session order. */
+  attempts: readonly ReviewSessionAttempt[];
+  /** Cards graded during the run, by id. */
+  graded: readonly string[];
+}
+
 interface PracticeBoardProps {
   /** Learning advances today's ladder; Practice is optional graduated recall. */
   kind: MemorySessionKind;
@@ -177,20 +217,44 @@ interface PracticeBoardProps {
   verses: ReadonlyArray<PracticeVerse>;
   /** Human-readable name for the set being practiced. */
   scopeLabel: string;
-  /** Return to the memory home or pack. */
+  /** Leave the session for where it started. */
   onExit: () => void;
   /** Describes the back-button destination. */
   exitTooltip?: string;
-  /** Names the back-button destination on the end-of-session card. */
+  /** Header back button text, e.g. "Back to Today". */
+  backLabel?: string;
+  /** The end-of-session card's primary action. */
   exitLabel?: string;
+  /** Where this session returns; Extra practice and per-verse Practice return there too. */
+  returnTo?: string;
+  /** Something is memorized, so the summary can offer Extra practice. */
+  hasMemorized?: boolean;
   /** Verses still due after this run (Review summary only). */
   remainingDue?: number;
   /** Restart the review queue when more verses are still due. */
   onContinueSession?: () => void;
+  /**
+   * Header text and overall bar when this run is one part of a session. A
+   * function gets how many of this run's verses are done.
+   */
+  progress?: SessionProgressSource;
+  /** One part of a longer session: hand the results up instead of a summary. */
+  onComplete?: (result: PracticeSessionResult) => void;
+  /** Shown above the verse rail, e.g. an overview of the whole session. */
+  railHeader?: ReactNode;
+  /** Card id to open first; the first card in order when absent or unknown. */
+  initialVerseId?: string;
+  /** Pick a run back up where it was left. Read once, at mount. */
+  runState?: PracticeRunState;
+  /** Every change to the run's state, with the results so far. */
+  onRunStateChange?: (
+    state: PracticeRunState,
+    result: PracticeSessionResult,
+  ) => void;
 }
 
 /** Live learning progress the board tracks per verse this session. */
-interface VerseProgress {
+export interface VerseProgress {
   learnStage: number;
   stageReps: number;
   status: MemoryStatus;
@@ -272,6 +336,17 @@ function scheduleFieldsFrom(verse: {
   };
 }
 
+/** Where a review spent this session left the card: "Next review Thu". */
+function reviewedOutcomeLine(
+  progress: Pick<VerseProgress, "status" | "learnStage" | "dueAt">,
+  now: number,
+): string {
+  if (!isReviewPhase(progress.status)) {
+    return `Back to ${stepShortLabel(progress.learnStage).toLowerCase()}`;
+  }
+  return `Next review ${formatDueDay(progress.dueAt, now)}`;
+}
+
 function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
   if (kind === "learning") return "Learning";
   if (kind === "review") return "Review";
@@ -321,9 +396,18 @@ export function PracticeBoard({
   scopeLabel,
   onExit,
   exitTooltip,
-  exitLabel = "Back to Memory",
+  backLabel,
+  exitLabel = "Done",
+  returnTo,
+  hasMemorized = false,
   remainingDue,
   onContinueSession,
+  progress,
+  onComplete,
+  railHeader,
+  initialVerseId,
+  runState,
+  onRunStateChange,
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const now = useLiveNow();
@@ -333,13 +417,14 @@ export function PracticeBoard({
   const [seed, setSeed] = useState(0);
   const [shuffleNonce, setShuffleNonce] = useState(0);
   const [isShuffling, setIsShuffling] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  // Set once every verse has spent its turn and the learner dismisses the last
-  // result, so the run ends on a summary instead of a dead card.
-  const [finished, setFinished] = useState(false);
   const [sessionAttempts, setSessionAttempts] = useState<
     ReviewSessionAttempt[]
-  >([]);
+  >(() => [...(runState?.attempts ?? [])]);
+  // A review graded here and no longer due is spent: it opens read-only so a
+  // second same-day recall can't reschedule it again.
+  const [gradedIds, setGradedIds] = useState<ReadonlySet<string>>(
+    () => new Set(runState?.graded),
+  );
 
   const { recordWithSeqAdopt, resolveVerseRefId } = useVersePracticeAttempt(
     recordModeFor(kind),
@@ -350,6 +435,7 @@ export function PracticeBoard({
   const acceptVerseRetryHold = useMutation(api.verseMemory.acceptRetryHold);
   const acceptUnifiedRetryHold = useMutation(api.packs.acceptRetryHold);
   const acceptPassageRetryHold = useMutation(api.passageMemory.acceptRetryHold);
+  const celebrateMastered = useFirstMasteredToast();
   const sessionLabel = sessionLabelFor(kind);
   const isReview = kind === "review";
 
@@ -384,7 +470,7 @@ export function PracticeBoard({
     Object.fromEntries(
       baseVerses.map((verse) => [
         verse.id,
-        {
+        runState?.progress[verse.id] ?? {
           learnStage: verse.learnStage,
           stageReps: verse.stageReps,
           status: verse.status,
@@ -395,10 +481,27 @@ export function PracticeBoard({
       ]),
     ),
   );
+  // Set once every verse has spent its turn and the learner moves on from the
+  // last one, so the run ends on a summary instead of a dead card. A run
+  // picked back up with nothing left ends straight away.
+  const [finished, setFinished] = useState(
+    () =>
+      runState !== undefined &&
+      baseVerses.every(
+        (verse) =>
+          !hasSessionWorkLeft(kind, progressByVerseId[verse.id] ?? verse, now),
+      ),
+  );
 
   const orderedVerses = useMemo(
     () => orderSessionVerses(baseVerses, order, seed),
     [baseVerses, order, seed],
+  );
+  const [currentIndex, setCurrentIndex] = useState(() =>
+    Math.max(
+      0,
+      orderedVerses.findIndex((verse) => verse.id === initialVerseId),
+    ),
   );
 
   // The rail (and shuffle overlay) need each verse's *live* progress — the
@@ -434,6 +537,24 @@ export function PracticeBoard({
     [orderedVerses, progressByVerseId, now, kind, scopeLabel],
   );
 
+  // What the summary lists: each verse where it landed, flagged when it
+  // moved from learning into review during this run.
+  const sessionVerses = useMemo<SessionCompleteVerse[]>(() => {
+    const startedInReview = new Set(
+      baseVerses
+        .filter((verse) => isReviewPhase(verse.status))
+        .map((verse) => verse.id),
+    );
+    return railVerses.map((verse) => ({
+      id: verse.id,
+      reference: verse.reference,
+      learnStage: verse.learnStage,
+      status: verse.status,
+      justMemorized:
+        isReviewPhase(verse.status) && !startedInReview.has(verse.id),
+    }));
+  }, [baseVerses, railVerses]);
+
   const boundedIndex =
     orderedVerses.length === 0
       ? 0
@@ -455,10 +576,17 @@ export function PracticeBoard({
         dueAt: now,
       };
 
-  // Soft lock drives the card's "come back tomorrow" chrome; work-left drives
+  // Soft lock drives the card's "up next tomorrow" chrome; work-left drives
   // navigation, so a verse that graduates mid-session also hands off cleanly.
   const currentLocked = isLearningLocked(currentProgress, now);
   const currentHasWorkLeft = hasSessionWorkLeft(kind, currentProgress, now);
+  // A pending retry is still due, so only a review that rescheduled (or
+  // lapsed) locks; Practice stays repeatable.
+  const currentReviewed =
+    isReview &&
+    currentVerse !== null &&
+    gradedIds.has(currentVerse.id) &&
+    !currentHasWorkLeft;
 
   // The active card's passage: a unified pack is one concatenated recitation,
   // even when it sits next to ordinary verses in the global review queue.
@@ -552,6 +680,31 @@ export function PracticeBoard({
     return () => window.clearTimeout(timer);
   }, [isShuffling, shuffleNonce]);
 
+  const reportRunState = useEffectEvent(
+    (state: PracticeRunState, result: PracticeSessionResult) => {
+      onRunStateChange?.(state, result);
+    },
+  );
+  useEffect(() => {
+    reportRunState(
+      {
+        progress: progressByVerseId,
+        attempts: sessionAttempts,
+        graded: [...gradedIds],
+      },
+      { verses: sessionVerses, attempts: sessionAttempts },
+    );
+  }, [progressByVerseId, sessionAttempts, gradedIds, sessionVerses]);
+
+  // Reported after the render that marks the run finished, so the last
+  // adopted schedule is in `railVerses`.
+  const completionReported = useRef(false);
+  useEffect(() => {
+    if (!finished || !onComplete || completionReported.current) return;
+    completionReported.current = true;
+    onComplete({ verses: sessionVerses, attempts: sessionAttempts });
+  }, [finished, onComplete, sessionVerses, sessionAttempts]);
+
   function handleOrderChange(nextOrder: PracticeOrder) {
     setOrder(nextOrder);
     if (nextOrder === "shuffle") {
@@ -570,6 +723,17 @@ export function PracticeBoard({
   }
 
   function adoptVerseSchedule(verseId: string, next: MemorySchedule) {
+    const before = progressByVerseId[verseId]?.status;
+    if (next.status === "mastered" && before && before !== "mastered") {
+      const verse = baseVerses.find((item) => item.id === verseId);
+      if (verse) {
+        celebrateMastered(
+          verse.composite
+            ? (verse.composite.packName ?? scopeLabel)
+            : formatVerseRefTitle(verse.reference),
+        );
+      }
+    }
     setProgressByVerseId((prev) => ({
       ...prev,
       [verseId]: {
@@ -593,6 +757,25 @@ export function PracticeBoard({
     );
     if (nextAvailable >= 0) {
       setCurrentIndex(nextAvailable);
+      return;
+    }
+    setFinished(true);
+  }
+
+  // From a spent card opened read-only: the next card after it with work
+  // left, wrapping, or -1 when the run has nothing left.
+  let nextOpenIndex = -1;
+  for (let step = 1; step < railVerses.length; step += 1) {
+    const index = (boundedIndex + step) % railVerses.length;
+    if (railVerses[index]?.locked === false) {
+      nextOpenIndex = index;
+      break;
+    }
+  }
+
+  function leaveSpentVerse() {
+    if (nextOpenIndex >= 0) {
+      setCurrentIndex(nextOpenIndex);
       return;
     }
     setFinished(true);
@@ -641,14 +824,21 @@ export function PracticeBoard({
     });
   }
 
+  const shellProps = {
+    sessionLabel,
+    scopeLabel,
+    onExit,
+    exitTooltip,
+    backLabel,
+    progress: resolveSessionProgress(progress, {
+      done: railVerses.filter((verse) => verse.locked).length,
+      total: railVerses.length,
+    }),
+  };
+
   if (orderedVerses.length === 0 || !currentVerse) {
     return (
-      <PracticeShell
-        sessionLabel={sessionLabel}
-        scopeLabel={scopeLabel}
-        onExit={onExit}
-        exitTooltip={exitTooltip}
-      >
+      <PracticeShell {...shellProps}>
         <div className="rounded-xl border bg-card px-4 py-12 text-center">
           <p className="text-sm text-muted-foreground">
             No verses are available for {sessionLabel.toLowerCase()}.
@@ -659,16 +849,20 @@ export function PracticeBoard({
   }
 
   if (finished) {
+    // The enclosing session shows the next part once the results are up.
+    if (onComplete)
+      return <PracticeShell {...shellProps}>{null}</PracticeShell>;
+
     const averageAccuracy = averageReviewAccuracy(sessionAttempts);
     const remaining = remainingDue ?? 0;
+    const extraPracticeHref =
+      kind !== "practice" &&
+      (hasMemorized || railVerses.some((verse) => isReviewPhase(verse.status)))
+        ? withReturn("/memory/practice", returnTo ?? "/memory")
+        : undefined;
 
     return (
-      <PracticeShell
-        sessionLabel={sessionLabel}
-        scopeLabel={scopeLabel}
-        onExit={onExit}
-        exitTooltip={exitTooltip}
-      >
+      <PracticeShell {...shellProps}>
         {isReview ? (
           <ReviewSummary
             attempts={sessionAttempts}
@@ -679,12 +873,15 @@ export function PracticeBoard({
               remaining > 0 && onContinueSession ? onContinueSession : undefined
             }
             doneLabel={exitLabel}
+            extraPracticeHref={extraPracticeHref}
+            returnTo={returnTo}
           />
         ) : (
           <SessionComplete
-            verses={railVerses}
+            verses={sessionVerses}
             exitLabel={exitLabel}
             onExit={onExit}
+            extraPracticeHref={extraPracticeHref}
           />
         )}
       </PracticeShell>
@@ -692,12 +889,7 @@ export function PracticeBoard({
   }
 
   return (
-    <PracticeShell
-      sessionLabel={sessionLabel}
-      scopeLabel={scopeLabel}
-      onExit={onExit}
-      exitTooltip={exitTooltip}
-    >
+    <PracticeShell {...shellProps}>
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="order-2 md:order-1">
           <div className="relative">
@@ -710,6 +902,14 @@ export function PracticeBoard({
               status={currentProgress.status}
               scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
               locked={currentLocked}
+              nextStep={nextStepCopy(currentProgress, now)}
+              reviewedOutcome={
+                currentReviewed
+                  ? reviewedOutcomeLine(currentProgress, now)
+                  : undefined
+              }
+              onLeaveDone={leaveSpentVerse}
+              leaveDoneLabel={nextOpenIndex >= 0 ? "Next" : "Continue"}
               position={boundedIndex}
               total={orderedVerses.length}
               showScheduleOutcome={isReview}
@@ -735,6 +935,9 @@ export function PracticeBoard({
               onRecord={(tokens, wordCount) => {
                 const verseId = currentVerse.id;
                 const accuracy = verseAttemptAccuracy(tokens);
+                setGradedIds((prev) =>
+                  prev.has(verseId) ? prev : new Set(prev).add(verseId),
+                );
                 if (isReview) {
                   const nextAttempt = {
                     reference: currentVerse.reference,
@@ -828,7 +1031,8 @@ export function PracticeBoard({
             </AnimatePresence>
           </div>
         </div>
-        <div className="order-1 md:order-2">
+        <div className="order-1 space-y-3 md:order-2">
+          {railHeader}
           <PracticeVerseRail
             sessionLabel={sessionLabel}
             verses={railVerses}
@@ -876,6 +1080,20 @@ interface PracticeCardProps {
   scheduleSnapshot: MemoryScheduleSnapshot;
   /** Soft-locked: today's learning session is done. */
   locked: boolean;
+  /** What comes next for this verse, shown while it is soft-locked. */
+  nextStep: string;
+  /**
+   * Set once this verse's review is spent for the session: the card is
+   * read-only, with this outcome line ("Next review Thu").
+   */
+  reviewedOutcome?: string;
+  /**
+   * Moves on from the card while it is read-only (soft-locked or reviewed):
+   * to the next card with work left, or to the end of the run.
+   */
+  onLeaveDone?: () => void;
+  /** "Next" while another card has work left, else "Continue". */
+  leaveDoneLabel?: string;
   position: number;
   total: number;
   /** Review mode: show schedule-consequence copy above the diff. */
@@ -908,6 +1126,10 @@ function PracticeCard({
   status,
   scheduleSnapshot,
   locked,
+  nextStep,
+  reviewedOutcome,
+  onLeaveDone,
+  leaveDoneLabel = "Continue",
   position,
   total,
   showScheduleOutcome = false,
@@ -923,8 +1145,8 @@ function PracticeCard({
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
   const [checked, setChecked] = useState(false);
-  // Snapshot of "Guided · N of M today" at Check so the step label stays on the
-  // step just finished while the journey bar adopts banked progress early.
+  // Snapshot of "First letters · N of M today" at Check so the step label stays
+  // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [nextSchedule, setNextSchedule] = useState<MemorySchedule | null>(null);
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
@@ -946,7 +1168,7 @@ function PracticeCard({
   >(null);
   const gradePending = submitPending && submitKind === "grade";
 
-  const refLabel = formatVerseRef(reference);
+  const refLabel = formatVerseRefTitle(reference);
   // A composite card recites many spans, so it takes its text from the pack's
   // concatenated passage instead of a single chapter slice.
   const single = useEsvReference(composite ? null : reference);
@@ -985,30 +1207,36 @@ function PracticeCard({
   // A session-ending clear locks the verse the instant its attempt is adopted.
   // Hold the graded result until the learner continues so the feedback they
   // just earned isn't swapped out from under them.
-  const showLocked = locked && !checked;
+  const reviewed = reviewedOutcome !== undefined;
+  const showReviewed = reviewed && !checked;
+  const showLocked = locked && !checked && !showReviewed;
+  const showDone = showLocked || showReviewed;
 
   const isReadPrime = hintStage === "full";
   const fromMemoryLearn = isFromMemoryLearning(learnStage, status);
-  const promptLine = showLocked
-    ? "Done for today — come back tomorrow"
-    : isReadPrime
-      ? "Read it through, then continue"
-      : fromMemoryLearn
-        ? fromMemoryPromptLine(stageReps)
-        : hintStage === "hidden"
-          ? composite
-            ? "Recite the whole passage from memory"
-            : "Recall the verse from memory"
-          : "Type what you remember";
+  const promptLine = showReviewed
+    ? "Done for today"
+    : showLocked
+      ? nextStep
+      : isReadPrime
+        ? "Read it through, then continue"
+        : fromMemoryLearn
+          ? fromMemoryPromptLine(stageReps)
+          : hintStage === "hidden"
+            ? composite
+              ? "Recite the whole passage from memory"
+              : "Recall the verse from memory"
+            : "Type what you remember";
 
   const canCheckAnswer =
     !locked &&
+    !reviewed &&
     !loading &&
     !error &&
     typedAnswer.trim().length > 0 &&
     versePlainText !== "";
   const canContinueRead =
-    !locked && !loading && !error && versePlainText !== "";
+    !locked && !reviewed && !loading && !error && versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
@@ -1118,20 +1346,23 @@ function PracticeCard({
 
   // Read Continue and the result-view Continue / Try again share one control
   // (only one is mounted at a time) so Enter can advance both steps.
-  useEnterToClick(reviewActionRef, !showLocked && (checked || isReadPrime));
+  useEnterToClick(
+    reviewActionRef,
+    showDone ? onLeaveDone !== undefined : checked || isReadPrime,
+  );
 
   useEffect(() => {
-    if (showLocked || (!checked && !isReadPrime)) return;
+    if (showDone || (!checked && !isReadPrime)) return;
     reviewActionRef.current?.focus();
-  }, [checked, isReadPrime, showLocked]);
+  }, [checked, isReadPrime, showDone]);
 
   // After Read advances into a typing band (or when landing mid-ladder), put
   // the caret in the answer box. Continue is unmounted, so without this the
   // document is left unfocused until the learner clicks.
   useEffect(() => {
-    if (showLocked || checked || isReadPrime) return;
+    if (showDone || checked || isReadPrime) return;
     answerInputRef.current?.focus();
-  }, [checked, isReadPrime, showLocked]);
+  }, [checked, isReadPrime, showDone]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -1173,7 +1404,7 @@ function PracticeCard({
               />
               {sessionLabel} · {stageInfo.label}
             </p>
-            <CardTitle className="mt-2 text-3xl tracking-tight">
+            <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {composite ? composite.title : refLabel}
             </CardTitle>
           </div>
@@ -1185,7 +1416,7 @@ function PracticeCard({
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
           </p>
-          {sessionGoalLabel && !locked ? (
+          {sessionGoalLabel && !locked && !showReviewed ? (
             <p className="text-xs tabular-nums text-muted-foreground">
               {sessionGoalLabel}
             </p>
@@ -1199,13 +1430,24 @@ function PracticeCard({
           />
           {locked ? (
             <p className="text-xs text-muted-foreground">
-              Next session tomorrow · {stageInfo.label} waiting
+              Tomorrow: {stageInfo.label}
             </p>
           ) : null}
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {showLocked ? (
+          {showReviewed ? (
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border bg-background/75 px-5 py-8 text-center">
+              <CheckCircle2
+                className={cn("h-8 w-8", stageColor.text)}
+                aria-hidden
+              />
+              <p className="text-sm font-medium text-foreground">Reviewed</p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                {reviewedOutcome}
+              </p>
+            </div>
+          ) : showLocked ? (
             <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border bg-background/75 px-5 py-8 text-center">
               <CheckCircle2
                 className={cn("h-8 w-8", stageColor.text)}
@@ -1215,8 +1457,8 @@ function PracticeCard({
                 Done for today
               </p>
               <p className="max-w-sm text-sm text-muted-foreground">
-                You finished this verse&apos;s learning session. Come back
-                tomorrow to continue with {stageInfo.label}.
+                You&apos;ve done today&apos;s step for this verse.{" "}
+                {SESSION_COMPLETE_FOOTER}
               </p>
             </div>
           ) : (
@@ -1225,7 +1467,9 @@ function PracticeCard({
                 <>
                   <div
                     className={cn(
-                      "min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
+                      "mx-auto min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left",
+                      SESSION_VERSE_TEXT_CLASS,
+                      READER_MEASURE_CLASS,
                       // A whole passage scrolls inside the card instead of
                       // pushing the answer box off the screen.
                       composite && "max-h-[45vh] overflow-y-auto",
@@ -1239,7 +1483,7 @@ function PracticeCard({
                         <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
                       </div>
                     ) : error ? (
-                      <div className="space-y-3">
+                      <div className="space-y-3 font-sans">
                         <p className="text-sm text-destructive">
                           Could not load verse text.
                         </p>
@@ -1248,7 +1492,7 @@ function PracticeCard({
                         </Button>
                       </div>
                     ) : hintStage === "hidden" ? (
-                      <div className="flex h-full min-h-[140px] items-center justify-center text-center">
+                      <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
                         <p className="max-w-sm text-sm text-muted-foreground">
                           {composite
                             ? "No hint text. Type the passage from memory — verse numbers not needed — then check your answer."
@@ -1272,7 +1516,9 @@ function PracticeCard({
                           : "Type what you remember"
                       }
                       className={cn(
-                        "bg-background/80",
+                        "mx-auto bg-background/80 px-4 py-3",
+                        SESSION_VERSE_TEXT_CLASS,
+                        READER_MEASURE_CLASS,
                         composite
                           ? "min-h-[300px] max-h-[60vh] resize-y"
                           : "min-h-[170px] resize-none",
@@ -1303,13 +1549,12 @@ function PracticeCard({
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
                   />
-                  <p className="text-center text-sm text-muted-foreground">
-                    {`${checkedAccuracy}% recalled.`}
-                  </p>
                   {checkedQuality !== "exact" && (
                     <div
                       className={cn(
-                        "rounded-xl border bg-card/60 px-4 py-3 text-left text-sm leading-6",
+                        "mx-auto rounded-xl border bg-card/60 px-4 py-3 text-left",
+                        READER_VERSE_SIZE_CLASS,
+                        READER_MEASURE_CLASS,
                         composite && "max-h-[45vh] overflow-y-auto",
                       )}
                     >
@@ -1318,16 +1563,22 @@ function PracticeCard({
                       </p>
                       {composite
                         ? composite.segments.map((segment) => (
-                            <p key={referenceKey(segment.reference)}>
-                              <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
-                                {formatVerseRef(segment.reference)}
+                            <p
+                              key={referenceKey(segment.reference)}
+                              className={READER_VERSE_TEXT_CLASS}
+                            >
+                              <span className="mr-1 align-top font-sans text-xs font-semibold text-muted-foreground">
+                                {formatVerseRefTitle(segment.reference)}
                               </span>
                               {segment.text}
                             </p>
                           ))
                         : data?.verses.map((verse) => (
-                            <p key={verse.number}>
-                              <span className="mr-1 align-top text-xs font-semibold text-muted-foreground">
+                            <p
+                              key={verse.number}
+                              className={READER_VERSE_TEXT_CLASS}
+                            >
+                              <span className="mr-1 align-top font-sans text-xs font-semibold text-muted-foreground">
                                 {verse.number}
                               </span>
                               {verse.text}
@@ -1343,14 +1594,27 @@ function PracticeCard({
 
         <CardFooter className="flex justify-end border-t">
           <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-            {!showLocked && !checked && !isReadPrime ? (
+            {!showDone && !checked && !isReadPrime ? (
               <PreviewFillExactAnswerButton
                 versePlainText={versePlainText}
                 onFill={setTypedAnswer}
                 disabled={loading || Boolean(error)}
               />
             ) : null}
-            {showLocked ? null : checked ? (
+            {showDone ? (
+              onLeaveDone ? (
+                <Button
+                  ref={reviewActionRef}
+                  type="button"
+                  variant="default"
+                  className="flex-1 sm:flex-none"
+                  onClick={onLeaveDone}
+                >
+                  {leaveDoneLabel}
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </Button>
+              ) : null
+            ) : checked ? (
               reviewRetryOffer && onKeepWait ? (
                 <>
                   <Button
@@ -1523,7 +1787,7 @@ function PracticeShuffleCardFace({
   sessionLabel: MemorySessionLabel;
   verse: OrderedVerse;
 }): JSX.Element {
-  const refLabel = formatVerseRef(verse.reference);
+  const refLabel = formatVerseRefTitle(verse.reference);
   const stage = PRACTICE_STAGES[verse.learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(verse.learnStage, verse.status);
 
@@ -1547,7 +1811,7 @@ function PracticeShuffleCardFace({
           />
           {sessionLabel} · {stage.label}
         </p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+        <h2 className={cn("mt-2 text-foreground", READER_REFERENCE_CLASS)}>
           {refLabel}
         </h2>
       </div>
@@ -1583,12 +1847,16 @@ function PracticeShell({
   scopeLabel,
   onExit,
   exitTooltip = "Go back",
+  backLabel = "Back",
+  progress,
   children,
 }: {
   sessionLabel: MemorySessionLabel;
   scopeLabel: string;
   onExit: () => void;
   exitTooltip?: string;
+  backLabel?: string;
+  progress?: SessionProgress;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -1604,7 +1872,7 @@ function PracticeShell({
                 className="-ml-2 shrink-0 gap-1.5"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden />
-                Back
+                {backLabel}
               </Button>
             </TooltipTrigger>
             <TooltipContent>{exitTooltip}</TooltipContent>
@@ -1618,6 +1886,7 @@ function PracticeShell({
               {scopeLabel}
             </span>
           </h1>
+          {progress ? <SessionHeaderProgress progress={progress} /> : null}
         </div>
       </header>
       <ScrollArea className="min-h-0 flex-1">

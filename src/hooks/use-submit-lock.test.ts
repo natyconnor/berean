@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useSubmitLock } from "./use-submit-lock";
+import { useSingleFlight, useSubmitLock } from "./use-submit-lock";
 
 /** A promise whose settlement we control from the test. */
 function deferred() {
@@ -118,5 +118,76 @@ describe("useSubmitLock", () => {
       result.current.submit(task);
     });
     expect(task).toHaveBeenCalledTimes(2);
+  });
+});
+
+function deferredValue<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("useSingleFlight", () => {
+  it("joins a second call made while the first is in flight", async () => {
+    const first = deferredValue<string>();
+    const run = vi.fn((label: string) => {
+      void label;
+      return first.promise;
+    });
+    const { result } = renderHook(() => useSingleFlight(run));
+
+    let a!: Promise<string>;
+    let b!: Promise<string>;
+    act(() => {
+      a = result.current.call("first");
+      b = result.current.call("second");
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith("first");
+    expect(b).toBe(a);
+    expect(result.current.pending).toBe(true);
+
+    await act(async () => {
+      first.resolve("done");
+      await a;
+    });
+
+    await expect(b).resolves.toBe("done");
+    expect(result.current.pending).toBe(false);
+  });
+
+  it("surfaces errors and allows a fresh call afterwards", async () => {
+    const run = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce("ok");
+    const { result } = renderHook(() => useSingleFlight(run));
+
+    await act(async () => {
+      await expect(result.current.call()).rejects.toThrow("boom");
+    });
+    expect(result.current.pending).toBe(false);
+
+    await act(async () => {
+      await expect(result.current.call()).resolves.toBe("ok");
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("turns a synchronous throw into a rejection", async () => {
+    const run = vi.fn((): Promise<string> => {
+      throw new Error("sync");
+    });
+    const { result } = renderHook(() => useSingleFlight(run));
+
+    await act(async () => {
+      await expect(result.current.call()).rejects.toThrow("sync");
+    });
+    expect(result.current.pending).toBe(false);
   });
 });

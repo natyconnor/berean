@@ -62,11 +62,16 @@ vi.mock("../../../convex/_generated/api", () => ({
   },
 }));
 
-function TutorialTargets() {
+function TutorialTargets({ withMemorize = true }: { withMemorize?: boolean }) {
   return (
     <>
       <div data-tour-id="passage-verse-1">verse</div>
       <div data-tour-id="passage-add-note">add note</div>
+      {withMemorize ? (
+        <button type="button" data-tour-id="chapter-memorize">
+          Memorize John 1
+        </button>
+      ) : null}
       <div data-tour-id="note-editor-body">note body</div>
     </>
   );
@@ -152,17 +157,22 @@ describe("TutorialProvider", () => {
     renderProvider();
 
     expect(await screen.findByText("Welcome to Berean")).toBeInTheDocument();
-    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(screen.getByText("1 / 4")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(await screen.findByText("Add your first note")).toBeInTheDocument();
-    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    expect(screen.getByText("2 / 4")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Memorize any passage")).toBeInTheDocument();
+    expect(screen.getByText("3 / 4")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(await screen.findByText("Write what stood out")).toBeInTheDocument();
-    expect(screen.getByText("3 / 3")).toBeInTheDocument();
+    expect(screen.getByText("4 / 4")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Done" }));
 
@@ -193,6 +203,51 @@ describe("TutorialProvider", () => {
         ([args]) => (args as { to?: string }).to === "/settings",
       ),
     ).toBe(false);
+  });
+
+  it("spotlights the chapter Memorize button with the chapter's name", async () => {
+    const user = userEvent.setup();
+
+    renderProvider();
+
+    await screen.findByText("Welcome to Berean");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText("Add your first note");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    const card = (await screen.findByText("Memorize any passage")).closest(
+      "section",
+    );
+    expect(card).toHaveTextContent(
+      "Use Memorize John 1 here, or heart a few verses and tap Memorize. A few minutes a day for about three days, and it's yours. A ring around a verse's heart shows how it's going.",
+    );
+    expect(card).toHaveStyle({ top: "40px" });
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByText("Add your first note")).toBeInTheDocument();
+  });
+
+  it("centers the Memorize step when the header button is hidden", async () => {
+    const user = userEvent.setup();
+
+    renderProvider(<TutorialTargets withMemorize={false} />);
+
+    await screen.findByText("Welcome to Berean");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText("Add your first note");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    const card = (await screen.findByText("Memorize any passage")).closest(
+      "section",
+    );
+    expect(card).toHaveStyle({ top: "50%", left: "50%" });
+    expect(
+      screen.queryByText("Preparing this step..."),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Write what stood out")).toBeInTheDocument();
   });
 
   it("waits for passage targets before showing the first-run tour", async () => {

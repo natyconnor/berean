@@ -51,6 +51,13 @@ describe("validateMemoryPracticeSearch", () => {
     });
   });
 
+  it("keeps an allowed return for unscoped practice", () => {
+    expect(validateMemoryPracticeSearch({ return: "/memory" })).toEqual({
+      return: "/memory",
+    });
+    expect(validateMemoryPracticeSearch({ return: "//evil.com" })).toEqual({});
+  });
+
   it("clamps endVerse below startVerse up to startVerse", () => {
     expect(
       validateMemoryPracticeSearch({

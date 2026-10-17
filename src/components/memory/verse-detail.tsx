@@ -1,328 +1,355 @@
-import { Dumbbell, GraduationCap, Play } from "lucide-react";
+import {
+  useId,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+import {
+  Brain,
+  CircleStop,
+  Dumbbell,
+  GraduationCap,
+  MoreHorizontal,
+  Play,
+} from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
+import { useMutation } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { toast } from "sonner";
+
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
-import { formatRelativeTime } from "@/lib/format-relative-time";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useLiveNow } from "@/hooks/use-live-now";
+import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { formatAccuracyPercent, hoverIndexFromX } from "@/lib/accuracy-trend";
+import {
+  learnActionLabel,
+  memorizeTitleLabel,
+  statusLabel,
+  stepShortLabel,
+} from "@/lib/memory-copy";
+import { withReturn } from "@/lib/memory-return";
 import {
   isDueForReview,
   isLearningLocked,
   isReviewPhase,
   MAX_LEARN_STAGE,
-  type MemoryStatus,
 } from "@/lib/memory-scheduler";
-import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
+import {
+  memoryVerseSessionHref,
+  type MemorySessionKind,
+} from "@/lib/memory-session-path";
+import { nextStepCopy } from "@/lib/memorize-plan";
+import { cn } from "@/lib/utils";
+import { howItsGoing, verseDetailFacts } from "@/lib/verse-detail-copy";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
+import { useMemoryPanelFrame } from "./drawer/memory-panel-context";
+import { MemoryPanelFrame } from "./drawer/memory-panel-frame";
+import { GoalKindMark } from "./today/goal-kind-icon";
+import { InternalLink } from "./internal-link";
+import { useMemorizeSheet } from "./memorize/memorize-context";
 import { AddToPack } from "./packs/add-to-pack";
 import { LearningJourneyBar } from "./practice/learning-journey-bar";
-import type { PracticeVerse } from "./practice/practice-board";
-import { PRACTICE_STAGES } from "./practice/practice-stages";
 
-/**
- * Learn-band labels, sourced from the shared support bands (Read / Guided /
- * Challenge / From Memory) so the drill-down never drifts from the scheduler's
- * naming.
- */
-const STAGE_LABELS = PRACTICE_STAGES.map((s) => s.label);
+export type VerseDetailData = NonNullable<
+  FunctionReturnType<typeof api.verseMemory.verseDetail>
+>;
 
-const STATUS_LABELS: Record<MemoryStatus, string> = {
-  new: "New",
-  learning: "Learning",
-  reviewing: "Reviewing",
-  mastered: "Mastered",
-};
-
-const QUALITY_LABELS: Record<VerseAttemptQuality, string> = {
-  exact: "Exact",
-  close: "Close",
-  off: "Off",
-};
+const STEP_LABELS = Array.from({ length: MAX_LEARN_STAGE + 1 }, (_, stage) =>
+  stepShortLabel(stage),
+);
 
 const SPARK_W = 280;
-const SPARK_H = 64;
+const SPARK_H = 56;
 const SPARK_PAD = 6;
 
-/**
- * Layout-stable placeholder that mirrors the loaded verse-detail body so the
- * dialog does not resize when the query resolves.
- */
+const sectionHeadingClassName =
+  "text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground";
+
+function verseSubtitle(detail: VerseDetailData): string {
+  return detail.inMemory
+    ? `Verse · ${statusLabel(detail.status)}`
+    : "Verse · Not memorizing";
+}
+
 function VerseDetailSkeleton() {
   return (
-    <div
-      className="space-y-5"
-      aria-busy="true"
-      aria-label="Loading verse detail"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1.5">
-          <div className="h-5 w-36 animate-pulse rounded bg-muted" />
-          <div className="h-4 w-48 animate-pulse rounded bg-muted" />
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="h-8 w-[5.25rem] animate-pulse rounded-md bg-muted" />
-          <div className="h-8 w-[7.25rem] animate-pulse rounded-md bg-muted" />
-        </div>
+    <div className="space-y-6" aria-busy="true" aria-label="Loading verse">
+      <div className="flex gap-2" aria-hidden>
+        <div className="h-8 w-24 animate-pulse rounded-md bg-muted" />
+        <div className="h-8 w-28 animate-pulse rounded-md bg-muted" />
       </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {(["Interval", "Ease", "Lapses"] as const).map((label) => (
-          <div key={label} className="rounded-lg border bg-card px-2 py-2">
-            <div className="mx-auto h-5 w-10 animate-pulse rounded bg-muted" />
-            <p className="mt-1 text-center text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-              {label}
-            </p>
-          </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-hidden>
+        {[0, 1].map((key) => (
+          <div key={key} className="h-14 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
-
-      <section className="space-y-2">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Stage journey
-        </h4>
-        <ol className="flex items-center gap-1.5">
-          {STAGE_LABELS.map((label) => (
-            <li key={label} className="flex flex-1 flex-col items-center gap-1">
-              <span
-                aria-hidden
-                className="h-1.5 w-full animate-pulse rounded-full bg-muted"
-              />
-              <span className="text-[10px] text-muted-foreground">{label}</span>
-            </li>
-          ))}
-        </ol>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
-            <div className="h-4 w-8 animate-pulse rounded bg-muted" />
-          </div>
-          <div className="h-1.5 w-full animate-pulse rounded-full bg-muted" />
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h4 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Recent accuracy
-          </h4>
-          <div className="h-3 w-16 animate-pulse rounded bg-muted" />
-        </div>
-        <div className="flex gap-1.5">
-          <div className="relative w-7 shrink-0" aria-hidden>
-            {[100, 50, 0].map((pct) => (
-              <span
-                key={pct}
-                className="absolute right-0 -translate-y-1/2 text-[9px] leading-none text-muted-foreground tabular-nums"
-                style={{
-                  top: scaleLinear(pct, 0, 100, SPARK_H - SPARK_PAD, SPARK_PAD),
-                }}
-              >
-                {pct}%
-              </span>
-            ))}
-          </div>
-          <div className="h-16 w-full animate-pulse rounded bg-muted" />
-        </div>
-      </section>
-
-      <section className="space-y-1.5">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Difficulty
-        </h4>
-        <div className="space-y-1.5">
-          <div className="h-4 w-full max-w-[16rem] animate-pulse rounded bg-muted" />
-          <div className="h-4 w-40 animate-pulse rounded bg-muted" />
-          <div className="h-3 w-full animate-pulse rounded bg-muted" />
-          <div className="h-3 w-5/6 animate-pulse rounded bg-muted" />
-        </div>
-      </section>
+      <div className="space-y-2" aria-hidden>
+        <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+        <div className="h-1.5 w-full animate-pulse rounded-full bg-muted" />
+        <div className="h-4 w-56 max-w-full animate-pulse rounded bg-muted" />
+      </div>
     </div>
   );
 }
 
 /**
- * Per-verse drill-down: the live schedule, a stage journey, an attempt
- * sparkline (accuracy over time), and a derived difficulty signal. Fetches its
- * own data via `verseMemory.verseDetail`.
+ * One verse in a drawer or on its full page: the reference as the title, a ⋯
+ * menu with Stop memorizing, and {@link VerseDetailBody}.
  */
-export function VerseDetail({
+export function VerseDetailPanel({
   verseRefId,
-  now,
-  onLearn,
-  onReview,
-  onPractice,
 }: {
   verseRefId: Id<"verseRefs">;
-  now: number;
-  /** Start Learning for this verse (closes the detail dialog upstream). */
-  onLearn: (verse: PracticeVerse) => void;
-  /** Start review for this verse when it is due. */
-  onReview?: (verse: PracticeVerse) => void;
-  /** Extra recall when the next scheduled review is still ahead. */
-  onPractice?: (verse: PracticeVerse) => void;
 }) {
-  const detail = useQuery(api.verseMemory.verseDetail, {
-    verseRefId,
-    now,
-  });
+  const now = useLiveNow();
+  const frame = useMemoryPanelFrame();
+  const detail = useQuery(api.verseMemory.verseDetail, { verseRefId, now });
 
   if (detail === undefined) {
-    return <VerseDetailSkeleton />;
+    return (
+      <MemoryPanelFrame
+        kind="verse"
+        title={
+          <>
+            <span
+              aria-hidden
+              className="inline-block h-6 w-36 animate-pulse rounded bg-muted align-middle"
+            />
+            <span className="sr-only">Loading verse</span>
+          </>
+        }
+      >
+        <VerseDetailSkeleton />
+      </MemoryPanelFrame>
+    );
   }
 
   if (detail === null) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        No memory record for this verse yet.
-      </p>
+      <MemoryPanelFrame kind="verse" title="Verse not found">
+        <p className="py-6 text-sm text-muted-foreground">
+          This verse isn&apos;t in your Memory. It may have been removed.
+        </p>
+      </MemoryPanelFrame>
     );
   }
 
-  const cardReference = {
+  const reference = formatVerseRefTitle(detail);
+  return (
+    <MemoryPanelFrame
+      title={reference}
+      kind="verse"
+      subtitle={verseSubtitle(detail)}
+      actions={
+        detail.inMemory ? (
+          <StopMemorizingMenu
+            verseRefId={verseRefId}
+            reference={reference}
+            onStopped={frame.exit}
+          />
+        ) : undefined
+      }
+    >
+      <VerseDetailBody detail={detail} now={now} returnTo={frame.returnTo} />
+    </MemoryPanelFrame>
+  );
+}
+
+/** The verse body without a frame, for dialogs. */
+export function VerseDetail({
+  verseRefId,
+  returnTo,
+}: {
+  verseRefId: Id<"verseRefs">;
+  /** Where sessions started here return. */
+  returnTo: string;
+}) {
+  const now = useLiveNow();
+  const detail = useQuery(api.verseMemory.verseDetail, { verseRefId, now });
+
+  if (detail === undefined) return <VerseDetailSkeleton />;
+  if (detail === null) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        This verse isn&apos;t in your Memory.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-5">
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <GoalKindMark kind="verse" />
+          <h3 className="min-w-0 truncate text-base font-semibold tracking-tight">
+            {formatVerseRefTitle(detail)}
+          </h3>
+        </div>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {verseSubtitle(detail)}
+        </p>
+      </div>
+      <VerseDetailBody detail={detail} now={now} returnTo={returnTo} />
+    </div>
+  );
+}
+
+/**
+ * Plain facts about one verse: Learn / Review / Practice and Add to pack,
+ * when it is next up, its steps, and how recent practice has gone.
+ */
+export function VerseDetailBody({
+  detail,
+  now,
+  returnTo,
+  timeZone = getViewerTimeZone(),
+}: {
+  detail: VerseDetailData;
+  now: number;
+  returnTo: string;
+  timeZone?: string;
+}) {
+  const stepsId = useId();
+  const goingId = useId();
+  const reference = {
     book: detail.book,
     chapter: detail.chapter,
     startVerse: detail.startVerse,
     endVerse: detail.endVerse,
   };
-  const reference = formatVerseRef(cardReference);
-  const actionVerse: PracticeVerse = {
-    reference: cardReference,
-    learnStage: detail.learnStage,
-    stageReps: detail.stageReps,
-    status: detail.status,
-    dueAt: detail.dueAt,
-    lastReviewedAt: detail.lastReviewedAt,
-  };
-  // Review-phase verses that are due start Review. Already-reviewed verses
-  // (due later) start Practice instead, matching pack-level Review vs Practice.
-  const dueForReview = isDueForReview(
-    { status: detail.status, dueAt: detail.dueAt },
-    now,
-  );
-  const showReviewAction =
-    onReview !== undefined && isReviewPhase(detail.status) && dueForReview;
-  const showPracticeAction =
-    onPractice !== undefined && isReviewPhase(detail.status) && !dueForReview;
-  const learningLocked = isLearningLocked(
-    {
-      status: detail.status,
-      dueAt: detail.dueAt,
-      lastReviewedAt: detail.lastReviewedAt,
-    },
-    now,
-  );
 
-  // Attempts arrive newest-first; reverse for a left-to-right time axis.
-  const chronological = [...detail.attempts].reverse();
-  const latestAttempt = detail.attempts[0];
-  const yFor = (pct: number) =>
-    scaleLinear(pct, 0, 100, SPARK_H - SPARK_PAD, SPARK_PAD);
-  const sparkPoints = chronological.map((a, i) => ({
-    x: scaleLinear(
-      i,
-      0,
-      chronological.length - 1,
-      SPARK_PAD,
-      SPARK_W - SPARK_PAD,
-    ),
-    y: yFor(a.accuracy),
-  }));
+  if (!detail.inMemory) {
+    return <NotMemorizing reference={reference} />;
+  }
+
+  const reviewPhase = isReviewPhase(detail.status);
+  const facts = verseDetailFacts(detail, now, timeZone);
+  const going = howItsGoing(detail.attempts.map((attempt) => attempt.accuracy));
+  const sessionHref = (kind: MemorySessionKind) =>
+    withReturn(memoryVerseSessionHref(kind, reference), returnTo);
+
+  let actions: ReactNode = null;
+  if (reviewPhase && isDueForReview(detail, now)) {
+    actions = (
+      <>
+        <Button asChild size="sm" className="max-sm:h-11">
+          <InternalLink href={sessionHref("review")}>
+            <Play aria-hidden />
+            Review
+          </InternalLink>
+        </Button>
+        <Button
+          asChild
+          size="sm"
+          variant="ghost"
+          className="text-muted-foreground max-sm:h-11"
+        >
+          <InternalLink href={sessionHref("practice")}>
+            <Dumbbell aria-hidden />
+            Practice
+          </InternalLink>
+        </Button>
+      </>
+    );
+  } else if (reviewPhase) {
+    actions = (
+      <Button asChild size="sm" variant="outline" className="max-sm:h-11">
+        <InternalLink href={sessionHref("practice")}>
+          <Dumbbell aria-hidden />
+          Practice
+        </InternalLink>
+      </Button>
+    );
+  } else if (!isLearningLocked(detail, now)) {
+    actions = (
+      <Button asChild size="sm" className="max-sm:h-11">
+        <InternalLink href={sessionHref("learn")}>
+          <GraduationCap aria-hidden />
+          {learnActionLabel(detail)}
+        </InternalLink>
+      </Button>
+    );
+  }
+
+  const stepsLine = !reviewPhase
+    ? nextStepCopy(
+        {
+          status: detail.status,
+          learnStage: detail.learnStage,
+          dueAt: detail.dueAt,
+          lastReviewedAt: detail.lastReviewedAt,
+        },
+        now,
+        timeZone,
+      )
+    : detail.status === "mastered"
+      ? "All steps done, and it's mastered."
+      : "All steps done. Short reviews keep it fresh.";
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-base font-semibold tracking-tight">
-            {reference}
-          </h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {formatMemoryStatusSubtitle({
-              status: detail.status,
-              statusLabel: STATUS_LABELS[detail.status],
-              dueAt: detail.dueAt,
-              lastReviewedAt: detail.lastReviewedAt,
-              now,
-            })}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {showReviewAction ? (
-            <Button
-              size="sm"
-              className="gap-1.5"
-              onClick={() => onReview?.(actionVerse)}
-            >
-              <Play className="h-4 w-4" aria-hidden />
-              Review
-            </Button>
-          ) : showPracticeAction ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => onPractice?.(actionVerse)}
-            >
-              <Dumbbell className="h-4 w-4" aria-hidden />
-              Practice
-            </Button>
-          ) : isReviewPhase(detail.status) ? null : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              disabled={learningLocked}
-              onClick={() => {
-                if (!learningLocked) onLearn(actionVerse);
-              }}
-            >
-              <GraduationCap className="h-4 w-4" aria-hidden />
-              {learningLocked
-                ? "Tomorrow"
-                : detail.status === "learning"
-                  ? "Continue Learning"
-                  : "Learn"}
-            </Button>
-          )}
-          <AddToPack reference={cardReference} now={now} />
-        </div>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
+        {actions}
+        <AddToPack reference={reference} now={now} returnTo={returnTo} />
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <Stat label="Interval" value={formatInterval(detail.intervalDays)} />
-        <Stat label="Ease" value={detail.ease.toFixed(2)} />
-        <Stat label="Lapses" value={String(detail.lapses)} />
-      </div>
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {facts.map((fact) => (
+          <div key={fact.label} className="rounded-lg border bg-card px-3 py-2">
+            <dt className="text-xs text-muted-foreground">{fact.label}</dt>
+            <dd className="mt-0.5 text-sm font-semibold tabular-nums">
+              {fact.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
 
-      <section className="space-y-2">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Stage journey
-        </h4>
-        <ol className="flex items-center gap-1.5">
-          {STAGE_LABELS.map((label, stage) => {
-            const reached = detail.learnStage >= stage;
-            const current =
-              detail.learnStage === stage &&
-              (detail.status === "new" || detail.status === "learning");
+      <section aria-labelledby={stepsId} className="space-y-2">
+        <h3 id={stepsId} className={sectionHeadingClassName}>
+          Your steps
+        </h3>
+        <ol className="grid grid-cols-4 gap-1.5">
+          {STEP_LABELS.map((label, stage) => {
+            const reached = reviewPhase || detail.learnStage >= stage;
+            const current = !reviewPhase && detail.learnStage === stage;
             return (
               <li
                 key={label}
-                className="flex flex-1 flex-col items-center gap-1"
+                aria-current={current ? "step" : undefined}
+                className="flex min-w-0 flex-col gap-1"
               >
                 <span
                   aria-hidden
-                  className={
-                    "h-1.5 w-full rounded-full " +
-                    (reached ? "bg-primary" : "bg-muted")
-                  }
+                  className={cn(
+                    "h-1.5 w-full rounded-full",
+                    reached ? "bg-primary" : "bg-muted",
+                  )}
                 />
                 <span
-                  className={
-                    "text-[10px] " +
-                    (current
+                  className={cn(
+                    "text-[11px] leading-tight",
+                    current
                       ? "font-semibold text-foreground"
-                      : "text-muted-foreground")
-                  }
+                      : "text-muted-foreground",
+                  )}
                 >
                   {label}
                 </span>
@@ -330,210 +357,328 @@ export function VerseDetail({
             );
           })}
         </ol>
-        {detail.status === "reviewing" || detail.status === "mastered" ? (
-          <>
-            <LearningJourneyBar
-              learnStage={detail.learnStage}
-              stageReps={detail.stageReps}
-              status={detail.status}
-              intervalDays={detail.intervalDays}
-            />
-            <p className="text-xs text-muted-foreground">
-              {detail.status === "mastered"
-                ? "Mastered — recalled from memory."
-                : "Graduated to review — recalled from memory. The bar grows toward mastered as the wait between reviews lengthens."}
-            </p>
-          </>
-        ) : (
-          <>
-            <LearningJourneyBar
-              learnStage={detail.learnStage}
-              stageReps={detail.stageReps}
-              status={detail.status}
-              intervalDays={detail.intervalDays}
-            />
-            {learningLocked ? (
-              <p className="text-xs text-muted-foreground">
-                Session done for today — next session tomorrow.
-              </p>
-            ) : null}
-          </>
-        )}
+        {reviewPhase ? (
+          <LearningJourneyBar
+            learnStage={detail.learnStage}
+            stageReps={detail.stageReps}
+            status={detail.status}
+            intervalDays={detail.intervalDays}
+          />
+        ) : null}
+        <p className="text-sm text-muted-foreground">{stepsLine}</p>
       </section>
 
-      <section className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h4 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Recent accuracy
-          </h4>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {detail.attempts.length}{" "}
-            {detail.attempts.length === 1 ? "attempt" : "attempts"}
-          </span>
-        </div>
-        {sparkPoints.length === 0 ? (
+      <section aria-labelledby={goingId} className="space-y-2">
+        <h3 id={goingId} className={sectionHeadingClassName}>
+          How it&apos;s going
+        </h3>
+        {going === null ? (
           <p className="text-sm text-muted-foreground">
-            No attempts yet. Review this verse to see its history here.
-          </p>
-        ) : sparkPoints.length === 1 && latestAttempt !== undefined ? (
-          <SingleAttemptAccuracy attempt={latestAttempt} />
-        ) : (
-          <div className="flex gap-1.5">
-            <div className="relative w-7 shrink-0" aria-hidden>
-              {[100, 50, 0].map((pct) => (
-                <span
-                  key={pct}
-                  className="absolute right-0 -translate-y-1/2 text-[9px] leading-none text-muted-foreground tabular-nums"
-                  style={{ top: yFor(pct) }}
-                >
-                  {pct}%
-                </span>
-              ))}
-            </div>
-            <svg
-              role="img"
-              aria-label={`Accuracy across the last ${sparkPoints.length} attempts.`}
-              viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
-              preserveAspectRatio="none"
-              className="h-16 w-full"
-            >
-              {[0, 50, 100].map((pct) => {
-                const y = yFor(pct);
-                return (
-                  <line
-                    key={pct}
-                    x1={0}
-                    y1={y}
-                    x2={SPARK_W}
-                    y2={y}
-                    stroke="var(--border)"
-                    strokeWidth={1}
-                    strokeDasharray={pct === 50 ? "3 3" : undefined}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                );
-              })}
-              <path
-                d={linePath(sparkPoints)}
-                fill="none"
-                stroke="var(--chart-1)"
-                strokeWidth={2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            </svg>
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-1.5">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Difficulty
-        </h4>
-        {detail.difficulty === null ? (
-          <p className="text-sm text-muted-foreground">
-            Not enough attempts to gauge difficulty yet.
+            This fills in after you practice it.
           </p>
         ) : (
-          <div className="space-y-1 text-sm">
-            <p className="text-muted-foreground">
-              Average accuracy{" "}
-              <span className="font-medium tabular-nums text-foreground">
-                {Math.round(detail.difficulty.averageAccuracy)}%
-              </span>{" "}
-              · worst{" "}
-              <span className="font-medium tabular-nums text-foreground">
-                {Math.round(detail.difficulty.worstAccuracy)}%
-              </span>
-            </p>
-            {detail.difficulty.hardestStage !== null ? (
-              <p className="text-muted-foreground">
-                Hardest stage:{" "}
-                <span className="font-medium text-foreground">
-                  {STAGE_LABELS[
-                    Math.min(detail.difficulty.hardestStage, MAX_LEARN_STAGE)
-                  ] ?? `Stage ${detail.difficulty.hardestStage}`}
-                </span>
-              </p>
-            ) : null}
-            <p className="text-[11px] text-muted-foreground/80">
-              Derived from stored accuracy per attempt; the app doesn&apos;t
-              persist per-word diffs, so an exact hardest phrase isn&apos;t
-              available.
-            </p>
-          </div>
+          <p className="text-sm">
+            <span className="font-semibold">{going.label}</span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {Math.round(going.averageAccuracy)}% accurate over your last{" "}
+              {going.attempts === 1 ? "try" : `${going.attempts} tries`}
+            </span>
+          </p>
         )}
+        <AccuracySparkline
+          attemptsNewestFirst={detail.attempts}
+          timeZone={timeZone}
+        />
       </section>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function NotMemorizing({
+  reference,
+}: {
+  reference: {
+    book: string;
+    chapter: number;
+    startVerse: number;
+    endVerse: number;
+  };
+}) {
+  const memorizeSheet = useMemorizeSheet();
   return (
-    <div className="rounded-lg border bg-card px-2 py-2">
-      <p className="text-sm font-semibold tabular-nums">{value}</p>
-      <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-        {label}
+    <div className="space-y-3 py-2">
+      <p className="text-sm text-muted-foreground">
+        You&apos;re not memorizing this right now. Your past progress is kept.
       </p>
+      <Button
+        type="button"
+        size="sm"
+        className="max-sm:h-11"
+        onClick={() =>
+          memorizeSheet.open({ kind: "spans", spans: [reference] })
+        }
+      >
+        <Brain aria-hidden />
+        {memorizeTitleLabel(formatVerseRefTitle(reference))}
+      </Button>
     </div>
   );
+}
+
+type SparkAttempt = Pick<
+  VerseDetailData["attempts"][number],
+  "accuracy" | "createdAt"
+>;
+
+const sparkY = (pct: number) =>
+  scaleLinear(pct, 0, 100, SPARK_H - SPARK_PAD, SPARK_PAD);
+
+function formatAttemptDay(createdAt: number, timeZone: string): string {
+  return new Date(createdAt).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone,
+  });
+}
+
+/** Keeps the tooltip inside the chart near its edges. */
+function sparkTooltipTranslateX(x: number): string {
+  if (x < 48) return "0%";
+  if (x > SPARK_W - 48) return "-100%";
+  return "-50%";
 }
 
 /**
- * One attempt isn't a trend — show the result as a meter with quality/stage
- * context instead of a lonely sparkline point.
+ * Accuracy per try, oldest to newest. Hover, or focus and use the arrow
+ * keys, to see one try's accuracy and day.
  */
-function SingleAttemptAccuracy({
-  attempt,
+function AccuracySparkline({
+  attemptsNewestFirst,
+  timeZone,
 }: {
-  attempt: {
-    quality: VerseAttemptQuality;
-    accuracy: number;
-    stage: number;
-    createdAt: number;
-  };
+  attemptsNewestFirst: readonly SparkAttempt[];
+  timeZone: string;
 }) {
-  const stageLabel =
-    STAGE_LABELS[Math.min(attempt.stage, MAX_LEARN_STAGE)] ??
-    `Stage ${attempt.stage}`;
-  const clamped = Math.max(0, Math.min(100, attempt.accuracy));
+  const [active, setActive] = useState<number | null>(null);
+  const [focused, setFocused] = useState(false);
+  const tooltipId = useId();
+  if (attemptsNewestFirst.length < 2) return null;
+
+  const chronological = [...attemptsNewestFirst].reverse();
+  const last = chronological.length - 1;
+  const points = chronological.map((attempt, i) => ({
+    x: scaleLinear(i, 0, last, SPARK_PAD, SPARK_W - SPARK_PAD),
+    y: sparkY(attempt.accuracy),
+  }));
+  const activeAttempt = active === null ? undefined : chronological[active];
+  const activePoint = active === null ? undefined : points[active];
+  const activeCopy = activeAttempt
+    ? {
+        accuracy: formatAccuracyPercent(activeAttempt.accuracy),
+        day: formatAttemptDay(activeAttempt.createdAt, timeZone),
+      }
+    : null;
+
+  const onPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const x = ((event.clientX - rect.left) / rect.width) * SPARK_W;
+    setActive(
+      hoverIndexFromX(
+        x - SPARK_PAD,
+        chronological.length,
+        SPARK_W - 2 * SPARK_PAD,
+      ),
+    );
+  };
+
+  const onKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
+    const current = active ?? last;
+    const next =
+      event.key === "ArrowLeft"
+        ? Math.max(0, current - 1)
+        : event.key === "ArrowRight"
+          ? Math.min(last, current + 1)
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? last
+              : null;
+    if (next === null) return;
+    event.preventDefault();
+    setActive(next);
+  };
 
   return (
-    <div
-      className="space-y-2"
-      role="img"
-      aria-label={`${Math.round(attempt.accuracy)} percent accuracy, ${QUALITY_LABELS[attempt.quality]}, ${stageLabel}, ${formatRelativeTime(attempt.createdAt)}.`}
-    >
-      <div className="flex items-end justify-between gap-3">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-semibold tabular-nums tracking-tight">
-            {Math.round(attempt.accuracy)}%
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {QUALITY_LABELS[attempt.quality]}
-          </span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {stageLabel} · {formatRelativeTime(attempt.createdAt)}
-        </p>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
-        <div
-          className="h-full rounded-full bg-[var(--chart-1)]"
-          style={{ width: `${clamped}%` }}
-          aria-hidden
+    <div className="relative">
+      <svg
+        role="img"
+        tabIndex={0}
+        aria-label={`Accuracy across the last ${points.length} tries. Use the arrow keys to step through them.`}
+        aria-describedby={activeCopy ? tooltipId : undefined}
+        viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+        preserveAspectRatio="none"
+        className="block h-14 w-full cursor-crosshair rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => setActive(null)}
+        onFocus={() => {
+          setFocused(true);
+          setActive((current) => current ?? last);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          setActive(null);
+        }}
+        onKeyDown={onKeyDown}
+      >
+        <rect x={0} y={0} width={SPARK_W} height={SPARK_H} fill="transparent" />
+        {[0, 50, 100].map((pct) => (
+          <line
+            key={pct}
+            x1={0}
+            y1={sparkY(pct)}
+            x2={SPARK_W}
+            y2={sparkY(pct)}
+            stroke="var(--border)"
+            strokeWidth={1}
+            strokeDasharray={pct === 50 ? "3 3" : undefined}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        <path
+          d={linePath(points)}
+          fill="none"
+          stroke="var(--chart-1)"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
         />
-      </div>
-      <p className="text-[11px] text-muted-foreground/80">
-        Practice again to see how accuracy trends over time.
+        {activePoint ? (
+          <line
+            x1={activePoint.x}
+            y1={SPARK_PAD}
+            x2={activePoint.x}
+            y2={SPARK_H - SPARK_PAD}
+            stroke="var(--chart-1)"
+            strokeWidth={1}
+            strokeOpacity={0.45}
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+      </svg>
+      {activePoint && activeCopy ? (
+        <>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-chart-1 ring-2 ring-card"
+            style={{
+              left: `${(activePoint.x / SPARK_W) * 100}%`,
+              top: `${(activePoint.y / SPARK_H) * 100}%`,
+            }}
+          />
+          <div
+            id={tooltipId}
+            role="tooltip"
+            className="pointer-events-none absolute z-20 -mt-2 w-max rounded-md bg-foreground px-3 py-1.5 text-xs text-background tabular-nums"
+            style={{
+              left: `${(activePoint.x / SPARK_W) * 100}%`,
+              top: `${(activePoint.y / SPARK_H) * 100}%`,
+              transform: `translateX(${sparkTooltipTranslateX(activePoint.x)}) translateY(-100%)`,
+            }}
+          >
+            <div className="font-medium">{activeCopy.accuracy}</div>
+            <div className="text-background/70">{activeCopy.day}</div>
+          </div>
+        </>
+      ) : null}
+      <p aria-live="polite" className="sr-only">
+        {focused && activeCopy
+          ? `${activeCopy.accuracy}, ${activeCopy.day}`
+          : ""}
       </p>
     </div>
   );
 }
 
-function formatInterval(days: number): string {
-  if (days <= 0) return "—";
-  if (days < 1) return "<1d";
-  return `${Math.round(days)}d`;
+function StopMemorizingMenu({
+  verseRefId,
+  reference,
+  onStopped,
+}: {
+  verseRefId: Id<"verseRefs">;
+  reference: string;
+  onStopped: () => void;
+}) {
+  const stopMemorizing = useMutation(api.verseMemory.stopMemorizing);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const { submit, pending } = useSubmitLock();
+
+  const handleStop = () =>
+    submit(async () => {
+      try {
+        await stopMemorizing({ verseRefId, now: Date.now() });
+        setConfirmOpen(false);
+        toast.success(`Stopped memorizing ${reference}.`);
+        onStopped();
+      } catch {
+        toast.error("Couldn't stop memorizing. Please try again.");
+      }
+    });
+
+  return (
+    <>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 text-muted-foreground sm:size-8"
+            aria-label="More actions"
+          >
+            <MoreHorizontal aria-hidden />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => setConfirmOpen(true)}
+          >
+            <CircleStop aria-hidden />
+            Stop memorizing
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent showCloseButton={false} className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Stop memorizing {reference}?</DialogTitle>
+            <DialogDescription>
+              Your progress is saved if you start again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+            >
+              Keep
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              loading={pending}
+              onClick={handleStop}
+            >
+              Stop memorizing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

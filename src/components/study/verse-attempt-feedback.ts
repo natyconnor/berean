@@ -6,9 +6,11 @@ import {
   formatNextReviewPhrase,
   formatReviewIntervalPhrase,
 } from "@/lib/memory-due-label";
+import { stepShortLabel } from "@/lib/memory-copy";
 import {
   isReviewPhase,
   nextExactReviewIntervalDays,
+  REVIEW_LAPSE_LEARN_STAGE,
   type MemorySchedule,
   type ReviewGradeOutcome,
 } from "@/lib/memory-scheduler";
@@ -109,8 +111,8 @@ function exactLead(errors: AttemptErrorCounts | undefined): string {
 }
 
 /**
- * Outcome-agnostic lead for a graded attempt. Review banners append a schedule
- * suffix; learning / practice can show the lead on its own.
+ * Outcome-agnostic lead for a graded attempt: the specific encouragement
+ * under the result banner's headline.
  */
 export function attemptFeedbackLead(input: AttemptFeedbackInput): string {
   if (input.outcome === "exact") {
@@ -131,16 +133,20 @@ export function attemptFeedbackLead(input: AttemptFeedbackInput): string {
   return leadForAccuracy(LAPSE_ACCURACY_LEADS, input.accuracy);
 }
 
+/** The lead as a sentence, exclaimed when the recall was exact. */
+export function attemptPraiseLine(input: AttemptFeedbackInput): string {
+  const lead = attemptFeedbackLead(input);
+  return `${lead}${input.outcome === "exact" ? "!" : "."}`;
+}
+
 /** Decline the extra retry and move on at the current interval. */
 export const REVIEW_RETRY_KEEP_GOING_LABEL = "It's okay — keep going";
 
-function withNextReview(
-  lead: string,
-  schedule: MemorySchedule | null | undefined,
-  now: number,
-): string {
-  const phrase = formatNextReviewPhrase(schedule, now);
-  return phrase ? `${lead} — next review ${phrase}` : lead;
+interface ReviewOutcomeInput {
+  outcome: ReviewGradeOutcome;
+  nextSchedule?: MemorySchedule | null;
+  now: number;
+  lapsedToLearning: boolean;
 }
 
 function reviewRetryScheduleCopy(
@@ -158,23 +164,27 @@ function reviewRetryScheduleCopy(
 }
 
 /**
- * Review-queue banner: lead plus the schedule consequence.
- *
- * Retry stays due, so we invite another attempt and name the current gap
- * plus the interval a perfect recall would land.
+ * What the grade does to the schedule, lowercase, or null when the next
+ * review isn't known yet. Retry stays due, so it invites another attempt and
+ * names the current gap plus the interval a perfect recall would land.
  */
-export function reviewFeedbackMessage(input: {
-  lead: string;
-  outcome: ReviewGradeOutcome;
-  nextSchedule?: MemorySchedule | null;
-  now: number;
-  lapsedToLearning: boolean;
-}): string {
+function reviewOutcomeClause(input: ReviewOutcomeInput): string | null {
   if (input.outcome === "retry") {
-    return `${input.lead} — ${reviewRetryScheduleCopy(input.nextSchedule)}.`;
+    return reviewRetryScheduleCopy(input.nextSchedule);
   }
   if (input.outcome === "lapse" && input.lapsedToLearning) {
-    return `${input.lead} — back to Challenge.`;
+    return `back to ${stepShortLabel(REVIEW_LAPSE_LEARN_STAGE).toLowerCase()}`;
   }
-  return withNextReview(input.lead, input.nextSchedule, input.now);
+  const phrase = formatNextReviewPhrase(input.nextSchedule, input.now);
+  return phrase ? `next review ${phrase}` : null;
+}
+
+/**
+ * The schedule consequence as a sentence ("Next review in 3 days."), the
+ * result banner's closing line in Review.
+ */
+export function reviewOutcomeMessage(input: ReviewOutcomeInput): string | null {
+  const clause = reviewOutcomeClause(input);
+  if (!clause) return null;
+  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
 }

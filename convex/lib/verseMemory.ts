@@ -1,6 +1,6 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { initialSchedule } from "../../src/lib/memory-scheduler";
+import type { VerseSpan } from "../../src/lib/hearted-verse-coverage";
 
 type MemoryStatus = Doc<"verseMemory">["status"];
 
@@ -8,7 +8,7 @@ type MemoryStatus = Doc<"verseMemory">["status"];
  * Look up the single `verseMemory` row for a (user, verse) pair, if any.
  *
  * There is at most one row per pair (enforced by convention via the
- * `by_userId_verseRefId` index + the seed helper below).
+ * `by_userId_verseRefId` index and `memorizeSpan`).
  */
 export async function findVerseMemory(
   ctx: QueryCtx | MutationCtx,
@@ -24,27 +24,27 @@ export async function findVerseMemory(
 }
 
 /**
- * Live hearted `verseMemory` rows, keyed by verse ref.
+ * The user's in-Memory `verseMemory` rows, keyed by verse ref.
  *
- * Pack / library joins should load this once instead of `findVerseMemory` per
- * heart. Rows whose `isHearted` flag was never backfilled are absent; callers
- * fall back to {@link findVerseMemory} for those.
+ * Pack and library joins load this once instead of `findVerseMemory` per row.
+ * Rows that were never backfilled (`inMemory` unset) are not in Memory.
  */
-export async function loadHeartedVerseMemoryByRef(
+export async function loadInMemoryVerseMemoryByRef(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<Map<Id<"verseRefs">, Doc<"verseMemory">>> {
   const memories = await ctx.db
     .query("verseMemory")
-    .withIndex("by_userId_isHearted", (q) =>
-      q.eq("userId", userId).eq("isHearted", true),
+    .withIndex("by_userId_inMemory", (q) =>
+      q.eq("userId", userId).eq("inMemory", true),
     )
     .collect();
   return new Map(memories.map((row) => [row.verseRefId, row]));
 }
 
-export function isLiveHeartedMemory(row: Doc<"verseMemory">): boolean {
-  return row.isHearted === true;
+/** True when the user chose to memorize this verse. */
+export function isInMemory(row: Doc<"verseMemory">): boolean {
+  return row.inMemory === true;
 }
 
 /** Canonical heart check: a `savedVerses` row must exist. */
@@ -61,38 +61,49 @@ export async function findSavedVerse(
     .unique();
 }
 
-/**
- * Require the verse to be hearted before memory create/attempt paths.
- * Memory is hearted-only: no `savedVerses` row → reject.
- */
-export async function requireHeartedSavedVerse(
+/** The in-Memory row for a verse; throws when the verse is not in Memory. */
+export async function requireInMemory(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   verseRefId: Id<"verseRefs">,
-): Promise<Doc<"savedVerses">> {
-  const saved = await findSavedVerse(ctx, userId, verseRefId);
-  if (!saved) {
-    throw new Error("Verse must be hearted before it can be practiced");
+): Promise<Doc<"verseMemory">> {
+  const memory = await findVerseMemory(ctx, userId, verseRefId);
+  if (!memory || !isInMemory(memory)) {
+    throw new Error("Start memorizing this verse first.");
   }
-  return saved;
+  return memory;
 }
 
-/** Remove the verse from every custom pack the user owns. */
-export async function deletePackMembershipsForVerse(
-  ctx: MutationCtx,
+/** In-Memory verse items in one chapter, as spans for heart coverage checks. */
+export async function loadChapterInMemoryItems(
+  ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
-  verseRefId: Id<"verseRefs">,
-): Promise<number> {
-  const rows = await ctx.db
-    .query("packVerses")
-    .withIndex("by_userId_verseRefId", (q) =>
-      q.eq("userId", userId).eq("verseRefId", verseRefId),
+  book: string,
+  chapter: number,
+): Promise<Array<VerseSpan & { verseRefId: Id<"verseRefs"> }>> {
+  const refs = await ctx.db
+    .query("verseRefs")
+    .withIndex("by_userId_book_chapter", (q) =>
+      q.eq("userId", userId).eq("book", book).eq("chapter", chapter),
     )
     .collect();
-  for (const row of rows) {
-    await ctx.db.delete(row._id);
-  }
-  return rows.length;
+  const memories = await Promise.all(
+    refs.map((ref) => findVerseMemory(ctx, userId, ref._id)),
+  );
+
+  const items: Array<VerseSpan & { verseRefId: Id<"verseRefs"> }> = [];
+  refs.forEach((ref, index) => {
+    const memory = memories[index];
+    if (!memory || !isInMemory(memory)) return;
+    items.push({
+      verseRefId: ref._id,
+      book: ref.book,
+      chapter: ref.chapter,
+      startVerse: ref.startVerse,
+      endVerse: ref.endVerse,
+    });
+  });
+  return items;
 }
 
 const EMPTY_STATS = {
@@ -125,8 +136,9 @@ async function getOrCreateUserMemoryStats(
 }
 
 /**
- * Adjust denormalized status counts when a hearted verse enters/leaves a status
- * or the hearted set. Pass `null` for from/to when adding/removing from totals.
+ * Adjust denormalized status counts when an in-Memory verse changes status or
+ * enters/leaves Memory. Pass `null` for from/to when adding/removing from
+ * totals.
  */
 export async function adjustUserMemoryStats(
   ctx: MutationCtx,
@@ -159,75 +171,19 @@ export async function adjustUserMemoryStats(
 }
 
 /**
- * Idempotently create the `verseMemory` row for a hearted (user, verse) pair.
- *
- * Callers must already have verified a `savedVerses` row exists (or be the
- * heart write path that just inserted one). Returns the existing row's id when
- * one is already present.
+ * Take a verse out of Memory. Its schedule, review history, heart, and pack
+ * rows are kept, so memorizing it again resumes where it left off. No-op when
+ * the verse is not in Memory.
  */
-export async function seedVerseMemory(
+export async function stopMemorizingVerse(
   ctx: MutationCtx,
   userId: Id<"users">,
   verseRefId: Id<"verseRefs">,
   now: number,
-): Promise<Id<"verseMemory">> {
-  const existing = await findVerseMemory(ctx, userId, verseRefId);
-  if (existing) {
-    if (!isLiveHeartedMemory(existing)) {
-      await ctx.db.patch(existing._id, { isHearted: true });
-      await adjustUserMemoryStats(ctx, userId, now, null, existing.status);
-    }
-    return existing._id;
-  }
+): Promise<void> {
+  const memory = await findVerseMemory(ctx, userId, verseRefId);
+  if (!memory || !isInMemory(memory)) return;
 
-  const schedule = initialSchedule(now);
-  const id = await ctx.db.insert("verseMemory", {
-    userId,
-    verseRefId,
-    status: schedule.status,
-    learnStage: schedule.learnStage,
-    stageReps: schedule.stageReps,
-    ease: schedule.ease,
-    intervalDays: schedule.intervalDays,
-    dueAt: schedule.dueAt,
-    consecutiveCorrect: schedule.consecutiveCorrect,
-    lapses: schedule.lapses,
-    earlyReviewApplied: schedule.earlyReviewApplied,
-    isHearted: true,
-    createdAt: now,
-  });
-  await adjustUserMemoryStats(ctx, userId, now, null, schedule.status);
-  return id;
-}
-
-/**
- * Idempotent get-or-create that returns the full row (not just the id).
- * Requires the verse to already be hearted.
- */
-export async function getOrCreateVerseMemory(
-  ctx: MutationCtx,
-  userId: Id<"users">,
-  verseRefId: Id<"verseRefs">,
-  now: number,
-): Promise<Doc<"verseMemory">> {
-  await requireHeartedSavedVerse(ctx, userId, verseRefId);
-
-  const existing = await findVerseMemory(ctx, userId, verseRefId);
-  if (existing) {
-    if (!isLiveHeartedMemory(existing)) {
-      await ctx.db.patch(existing._id, { isHearted: true });
-      await adjustUserMemoryStats(ctx, userId, now, null, existing.status);
-      const refreshed = await ctx.db.get(existing._id);
-      if (!refreshed) throw new Error("Failed to refresh verse memory row");
-      return refreshed;
-    }
-    return existing;
-  }
-
-  const id = await seedVerseMemory(ctx, userId, verseRefId, now);
-  const created = await ctx.db.get(id);
-  if (!created) {
-    throw new Error("Failed to create verse memory row");
-  }
-  return created;
+  await ctx.db.patch(memory._id, { inMemory: false });
+  await adjustUserMemoryStats(ctx, userId, now, memory.status, null);
 }

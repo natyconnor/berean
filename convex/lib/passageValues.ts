@@ -26,6 +26,15 @@ export const passageAttemptKindValidator = v.union(
   v.literal("frontier"),
 );
 
+/** `packs.passageRange`; see `PassageRange` in src/lib/passage-range.ts. */
+export const passageRangeValidator = v.object({
+  book: v.string(),
+  startChapter: v.number(),
+  startVerse: v.number(),
+  endChapter: v.number(),
+  endVerse: v.number(),
+});
+
 export const pieceBaseValidator = v.object({
   index: v.number(),
   book: v.string(),
@@ -48,6 +57,7 @@ export const passagePieceValidator = v.object({
   learnStage: v.number(),
   stageReps: v.number(),
   dueAt: v.optional(v.number()),
+  carriedOver: v.optional(v.boolean()),
 });
 
 /**
@@ -74,6 +84,8 @@ export const passageViewValidator = v.object({
   unheartedCount: v.optional(v.number()),
   keptHeartCount: v.optional(v.number()),
   migrationBannerDismissed: v.optional(v.boolean()),
+  celebratedAt: v.optional(v.number()),
+  needsCelebration: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
   remainingIntroduces: v.number(),
@@ -82,6 +94,37 @@ export const passageViewValidator = v.object({
   ropePieceIndexes: v.array(v.number()),
 });
 
+/**
+ * A memorized passage as seen from one chapter's heart row (see
+ * `passageHeartProgress`). Counts cover the passage; the verse range and
+ * `verseStates` cover this chapter.
+ */
+export const passageHeartInfoValidator = v.object({
+  passageMemoryId: v.id("passageMemory"),
+  packId: v.id("packs"),
+  title: v.string(),
+  status: passageStatusValidator,
+  dueAt: v.number(),
+  learnedVerses: v.number(),
+  totalVerses: v.number(),
+  chapterCount: v.number(),
+  isFirstChapter: v.boolean(),
+  isLastChapter: v.boolean(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  verseStates: v.array(
+    v.object({
+      verse: v.number(),
+      state: v.union(
+        v.literal("memorized"),
+        v.literal("learning"),
+        v.literal("upNext"),
+      ),
+    }),
+  ),
+});
+
+export type PassageHeartInfoValue = Infer<typeof passageHeartInfoValidator>;
 export type PieceBase = Infer<typeof pieceBaseValidator>;
 export type PassagePieceValue = Infer<typeof passagePieceValidator>;
 export type PassageView = Infer<typeof passageViewValidator>;

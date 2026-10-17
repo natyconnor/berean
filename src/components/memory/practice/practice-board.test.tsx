@@ -8,8 +8,14 @@ import { getSessionNow } from "@/hooks/use-live-now";
 import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
+import { verseRefKey } from "../../../../shared/verse-ref-key";
 
-import { PracticeBoard, type PracticeVerse } from "./practice-board";
+import {
+  PracticeBoard,
+  type PracticeRunState,
+  type PracticeSessionResult,
+  type PracticeVerse,
+} from "./practice-board";
 
 const {
   queryResults,
@@ -182,7 +188,7 @@ describe("PracticeBoard composite recitation", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("button", {
-        name: /^Psalm 23 \(From Memory band\)$/,
+        name: /^Psalm 23 \(From memory step\)$/,
       }),
     ).toHaveLength(1);
 
@@ -206,7 +212,10 @@ describe("PracticeBoard composite recitation", () => {
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
     expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    // The headline leads; the percentage is quiet text under it.
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("100% recalled")).toBeVisible();
+    expect(screen.queryByText("100% recalled.")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
     // One summary, one accuracy, labeled with the pack — and no per-verse
@@ -221,6 +230,29 @@ describe("PracticeBoard composite recitation", () => {
     expect(
       row.queryByRole("button", { name: "Practice" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("celebrates a word-for-word recitation in one banner with particles", async () => {
+    renderComposite();
+
+    const answer = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(answer);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    await waitFor(() => {
+      expect(check).toBeEnabled();
+    });
+    await userEvent.click(check);
+
+    expect(await screen.findByText("Nailed it!")).toBeVisible();
+    const banner = screen
+      .getByText("Word for word.")
+      .closest('[role="status"]');
+    expect(banner).toHaveAttribute("data-tone", "exact");
+    expect(banner).toHaveTextContent("🎉");
+    expect(banner).toHaveTextContent("100% recalled");
+    expect(banner).toHaveTextContent(/Next review in \d+ days\./);
+    expect(screen.getByTestId("confetti-burst")).toBeInTheDocument();
   });
 
   it("grades a reviewing passage through passageMemory, not unified review", async () => {
@@ -275,6 +307,48 @@ describe("PracticeBoard composite recitation", () => {
     expect(args.quality).toBe("exact");
     expect(mutationMock("packs.recordUnifiedReview")).not.toHaveBeenCalled();
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+  });
+
+  it("opens a pack recitation already reviewed this session read-only", async () => {
+    const unifiedId = `unified:${PACK_ID}`;
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[
+            compositeVerse,
+            {
+              ...compositeVerse,
+              composite: undefined,
+              verseRefId: "vr_ps23_1" as Id<"verseRefs">,
+            },
+          ]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          remainingDue={0}
+          initialVerseId={unifiedId}
+          runState={{
+            progress: {
+              [unifiedId]: {
+                status: "reviewing",
+                learnStage: 3,
+                stageReps: 0,
+                dueAt: getSessionNow() + 2 * 24 * 60 * 60 * 1000,
+                intervalDays: 2.3,
+              },
+            },
+            attempts: [],
+            graded: [unifiedId],
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("Reviewed")).toBeInTheDocument();
+    expect(screen.getByText(/^Next review /)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Your recited passage")).toBeNull();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+    expect(mutationMock("packs.recordUnifiedReview")).not.toHaveBeenCalled();
   });
 
   it("offers retry when the composite passage fails to load", async () => {
@@ -446,9 +520,9 @@ describe("PracticeBoard learning step label", () => {
     );
 
     expect(
-      await screen.findByText(/Guided · 1 of \d+ today/),
+      await screen.findByText(/First letters · 1 of \d+ today/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Guided · 0 of/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/First letters · 0 of/)).not.toBeInTheDocument();
   });
 
   it("advances the journey bar when a check settles, before Continue", async () => {
@@ -475,7 +549,7 @@ describe("PracticeBoard learning step label", () => {
       </TooltipProvider>,
     );
 
-    await screen.findByText(/Guided · 1 of \d+ today/);
+    await screen.findByText(/First letters · 1 of \d+ today/);
     const pctBefore = Math.max(
       ...screen
         .getAllByLabelText(/Learning journey:/)
@@ -489,7 +563,7 @@ describe("PracticeBoard learning step label", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     await waitFor(() => {
       const pctAfter = Math.max(
         ...screen
@@ -501,18 +575,20 @@ describe("PracticeBoard learning step label", () => {
       expect(pctAfter).toBeGreaterThan(pctBefore);
     });
     // Step label stays on the step just graded until Continue.
-    expect(screen.getByText(/Guided · 1 of \d+ today/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/First letters · 1 of \d+ today/),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Continue/ }),
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(
-      await screen.findByText(/Guided · 2 of \d+ today/),
+      await screen.findByText(/First letters · 2 of \d+ today/),
     ).toBeInTheDocument();
   });
 
-  it("ends the day after clearing Guided instead of opening Challenge", async () => {
+  it("ends the day after clearing First letters instead of opening blanks", async () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue({
       status: "learning",
       learnStage: 2,
@@ -541,16 +617,125 @@ describe("PracticeBoard learning step label", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
+    expect(await screen.findByText("That's today's step.")).toBeInTheDocument();
     expect(
-      await screen.findByText("Today's learning is done"),
+      screen.getByText("Tomorrow: Fill in the blanks"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Challenge tomorrow/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Each day builds on the last\. See you tomorrow\./),
+    ).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Your recalled verse"),
     ).not.toBeInTheDocument();
+  });
+
+  async function finishLastStep() {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 2,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() + MIN_LEARNING_LOCK_MS,
+      consecutiveCorrect: 3,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+  }
+
+  it("ends on Done with a ghost Extra practice that returns where it started", async () => {
+    const onExit = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...guidedVerse, stageReps: 2 }]}
+          scopeLabel="Memory"
+          onExit={onExit}
+          backLabel="Back to Today"
+          returnTo="/memory"
+          hasMemorized
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Back to Today" }),
+    ).toBeInTheDocument();
+    await finishLastStep();
+
+    expect(await screen.findByText("That's today's step.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Extra practice" }),
+    ).toHaveAttribute("href", "/memory/practice?return=%2Fmemory");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves out Extra practice when nothing is memorized yet", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...guidedVerse, stageReps: 2 }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await finishLastStep();
+
+    expect(
+      await screen.findByRole("button", { name: "Done" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Extra practice" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hands the results up instead of a summary inside a longer session", async () => {
+    const onComplete = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[{ ...guidedVerse, stageReps: 2 }]}
+          scopeLabel="Today"
+          onExit={() => {}}
+          progress={{ label: "Learning · 1 verse", fraction: 0.4 }}
+          onComplete={onComplete}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Session progress: Learning · 1 verse",
+      }),
+    ).toHaveAttribute("aria-valuenow", "40");
+    await finishLastStep();
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete).toHaveBeenCalledWith({
+      verses: [
+        expect.objectContaining({
+          reference: guidedVerse.reference,
+          learnStage: 2,
+          status: "learning",
+        }),
+      ],
+      attempts: [],
+    });
+    expect(screen.queryByText("That's today's step.")).not.toBeInTheDocument();
   });
 });
 
@@ -596,7 +781,7 @@ describe("PracticeBoard recall submit loading", () => {
 
     await userEvent.click(check);
 
-    expect(await screen.findByText("100% recalled.")).toBeVisible();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
     const savingButton = screen.getByRole("button", { name: "Saving..." });
     expect(savingButton).toBeDisabled();
     expect(savingButton).toHaveAttribute("aria-busy", "true");
@@ -728,7 +913,7 @@ const luke9: EsvChapterData = {
 
 function verseRailLabels(): string[] {
   return screen
-    .getAllByRole("button", { name: /band/ })
+    .getAllByRole("button", { name: / step[,)]/ })
     .map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "");
 }
 
@@ -765,7 +950,9 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     );
 
     expect(
-      await screen.findByRole("button", { name: /Psalm 8:2 \(Guided band\)/ }),
+      await screen.findByRole("button", {
+        name: /Psalm 8:2 \(First letters step\)/,
+      }),
     ).toBeVisible();
     expect(screen.getByText("Psalm 8")).toBeVisible();
     expect(screen.getByText("Luke 9")).toBeVisible();
@@ -776,9 +963,9 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     ).toBeVisible();
     expect(verseRailLabels()).toEqual([
       "Psalm 8:2",
-      "Psalm 8:3-4",
+      "Psalm 8:3–4",
       "Psalm 8:5",
-      "Luke 9:23-24",
+      "Luke 9:23–24",
     ]);
 
     await userEvent.click(screen.getByRole("button", { name: "Shuffle" }));
@@ -794,18 +981,18 @@ describe("PracticeBoard in-order Scripture sequence", () => {
         shuffled.indexOf("Psalm 8:2"),
         shuffled.indexOf("Psalm 8:2") + 3,
       ),
-    ).toEqual(["Psalm 8:2", "Psalm 8:3-4", "Psalm 8:5"]);
+    ).toEqual(["Psalm 8:2", "Psalm 8:3–4", "Psalm 8:5"]);
     expect(
-      shuffled.join() === "Luke 9:23-24,Psalm 8:2,Psalm 8:3-4,Psalm 8:5" ||
-        shuffled.join() === "Psalm 8:2,Psalm 8:3-4,Psalm 8:5,Luke 9:23-24",
+      shuffled.join() === "Luke 9:23–24,Psalm 8:2,Psalm 8:3–4,Psalm 8:5" ||
+        shuffled.join() === "Psalm 8:2,Psalm 8:3–4,Psalm 8:5,Luke 9:23–24",
     ).toBe(true);
 
     await userEvent.click(screen.getByRole("button", { name: "In order" }));
     expect(verseRailLabels()).toEqual([
       "Psalm 8:2",
-      "Psalm 8:3-4",
+      "Psalm 8:3–4",
       "Psalm 8:5",
-      "Luke 9:23-24",
+      "Luke 9:23–24",
     ]);
     expect(screen.getByText("Psalm 8")).toBeVisible();
     expect(screen.getByText("Luke 9")).toBeVisible();
@@ -828,11 +1015,13 @@ describe("PracticeBoard in-order Scripture sequence", () => {
     );
 
     expect(
-      await screen.findByRole("button", { name: /Psalm 8:2 \(Guided band\)/ }),
+      await screen.findByRole("button", {
+        name: /Psalm 8:2 \(First letters step\)/,
+      }),
     ).toBeVisible();
     expect(verseRailLabels()).toEqual([
       "Psalm 8:2",
-      "Psalm 8:3-4",
+      "Psalm 8:3–4",
       "Psalm 8:5",
     ]);
     expect(
@@ -972,5 +1161,267 @@ describe("PracticeBoard review retry", () => {
     const average = Number(averageText.match(/(\d+)%/)?.[1]);
     expect(average).toBeGreaterThan(0);
     expect(average).toBeLessThan(100);
+  });
+});
+
+const SECOND_REF_ID = "vr_ps23_2" as Id<"verseRefs">;
+const secondReviewingVerse: PracticeVerse = {
+  ...reviewingVerse,
+  verseRefId: SECOND_REF_ID,
+  reference: span(2, 2),
+};
+const FIRST_ID = verseRefKey(span(1, 1));
+const SECOND_ID = verseRefKey(span(2, 2));
+
+describe("PracticeBoard spent reviews", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+  });
+
+  function renderBoard(
+    kind: "review" | "practice",
+    extra: Partial<Parameters<typeof PracticeBoard>[0]> = {},
+  ) {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind={kind}
+          verses={[reviewingVerse, secondReviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+          {...extra}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function recite(text: string) {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(text);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  /** The board's own verse rail row, e.g. "Psalm 23:1 (From memory step)". */
+  function railButton(reference: string): HTMLElement {
+    return screen.getByRole("button", {
+      name: new RegExp(`^${reference} \\(`),
+    });
+  }
+
+  it("opens a review spent this session read-only, with where it landed", async () => {
+    renderBoard("review");
+
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
+
+    await userEvent.click(railButton("Psalm 23:1"));
+
+    expect(await screen.findByText("Reviewed")).toBeInTheDocument();
+    expect(screen.getByText(/^Next review /)).toBeInTheDocument();
+    expect(screen.getByText("Done for today")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Your recalled verse")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Check answer/ }),
+    ).not.toBeInTheDocument();
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a pending retry open after leaving and coming back", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      stillDueSchedule,
+    );
+    renderBoard("review");
+
+    await recite("The Lord is my shepherd I shall not eat");
+    expect(
+      await screen.findByRole("button", { name: /Try again/ }),
+    ).toBeVisible();
+    await userEvent.click(railButton("Psalm 23:2"));
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
+    await userEvent.click(railButton("Psalm 23:1"));
+
+    expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
+    await recite(PASSAGE_ONE);
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+  });
+
+  it("lets Practice recall the same verse again", async () => {
+    renderBoard("practice");
+
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await userEvent.click(railButton("Psalm 23:2"));
+    await userEvent.click(railButton("Psalm 23:1"));
+
+    expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
+    await recite(PASSAGE_ONE);
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+  });
+
+  it("opens at the chosen verse and reports its run so it can resume", async () => {
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    const { unmount } = renderBoard("review", {
+      initialVerseId: SECOND_ID,
+      onRunStateChange,
+    });
+
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
+    await recite(PASSAGE_TWO);
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await waitFor(() => {
+      const [state] = onRunStateChange.mock.lastCall ?? [];
+      expect(state?.graded).toEqual([SECOND_ID]);
+      expect(state?.progress[SECOND_ID]?.dueAt).toBe(heldSchedule.dueAt);
+    });
+    const [state, result] = onRunStateChange.mock.lastCall ?? [];
+    expect(result?.attempts).toHaveLength(1);
+    unmount();
+
+    renderBoard("review", { initialVerseId: SECOND_ID, runState: state });
+    expect(await screen.findByText("Reviewed")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Your recalled verse")).toBeNull();
+    await userEvent.click(railButton("Psalm 23:1"));
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
+  });
+
+  const spentRun = (ids: string[]): PracticeRunState => ({
+    progress: Object.fromEntries(
+      ids.map((id) => [
+        id,
+        {
+          status: heldSchedule.status,
+          learnStage: heldSchedule.learnStage,
+          stageReps: 0,
+          dueAt: heldSchedule.dueAt,
+          intervalDays: heldSchedule.intervalDays,
+        },
+      ]),
+    ),
+    attempts: ids.map(() => ({ reference: span(1, 1), accuracy: 100 })),
+    graded: ids,
+  });
+
+  it("finishes straight away when a run is picked back up with nothing left", async () => {
+    const onComplete = vi.fn();
+    renderBoard("review", {
+      runState: spentRun([FIRST_ID, SECOND_ID]),
+      initialVerseId: FIRST_ID,
+      onComplete,
+    });
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempts: [expect.anything(), expect.anything()],
+      }),
+    );
+    expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+  });
+
+  it("moves from a reviewed card to the next one with work left", async () => {
+    renderBoard("review");
+
+    await recite(PASSAGE_ONE);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
+    await userEvent.click(railButton("Psalm 23:1"));
+    expect(await screen.findByText("Reviewed")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
+  });
+
+  it("finishes the run from the last spent card, as dismissing its result would", async () => {
+    const onComplete = vi.fn();
+    renderBoard("review", {
+      runState: spentRun([FIRST_ID]),
+      initialVerseId: SECOND_ID,
+      onComplete,
+    });
+
+    await recite(PASSAGE_TWO);
+    expect(await screen.findByText("Word for word.")).toBeInTheDocument();
+    // Leave before dismissing the last result: every card is spent now.
+    await userEvent.click(railButton("Psalm 23:1"));
+    expect(await screen.findByText("Reviewed")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Next" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves on from a learning card that is done for today", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[
+            { ...guidedVerse, reference: span(1, 1) },
+            {
+              ...guidedVerse,
+              verseRefId: SECOND_REF_ID,
+              reference: span(2, 2),
+            },
+          ]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          initialVerseId={FIRST_ID}
+          runState={{
+            progress: {
+              [FIRST_ID]: {
+                status: "learning",
+                learnStage: 2,
+                stageReps: 0,
+                dueAt: getSessionNow() + MIN_LEARNING_LOCK_MS,
+              },
+            },
+            attempts: [],
+            graded: [FIRST_ID],
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("Done for today")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
   });
 });

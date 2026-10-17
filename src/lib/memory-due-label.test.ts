@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatMemoryDueLabel,
-  formatMemoryStatusSubtitle,
   formatNextReviewPhrase,
   formatReviewIntervalPhrase,
 } from "./memory-due-label";
@@ -82,48 +81,5 @@ describe("formatReviewIntervalPhrase", () => {
   it("omits missing gaps and floors empty ones to 1 day", () => {
     expect(formatReviewIntervalPhrase(undefined)).toBeNull();
     expect(formatReviewIntervalPhrase(0)).toBe("1 day");
-  });
-});
-
-describe("formatMemoryStatusSubtitle", () => {
-  it("returns only the status label when the due label is hidden", () => {
-    expect(
-      formatMemoryStatusSubtitle({
-        status: "learning",
-        statusLabel: "Learning",
-        dueAt: NOW,
-        now: NOW,
-      }),
-    ).toBe("Learning");
-    expect(
-      formatMemoryStatusSubtitle({
-        status: "new",
-        statusLabel: "New",
-        dueAt: NOW + 5 * 60 * 1000,
-        now: NOW,
-      }),
-    ).toBe("New");
-  });
-
-  it("joins learning status and Tomorrow when soft-locked", () => {
-    expect(
-      formatMemoryStatusSubtitle({
-        status: "learning",
-        statusLabel: "Learning",
-        dueAt: NOW + DAY_MS,
-        now: NOW,
-      }),
-    ).toBe("Learning · Tomorrow");
-  });
-
-  it("joins review status and due label", () => {
-    expect(
-      formatMemoryStatusSubtitle({
-        status: "reviewing",
-        statusLabel: "Reviewing",
-        dueAt: NOW,
-        now: NOW,
-      }),
-    ).toBe("Reviewing · Due now");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { passageHeartSpans } from "./hearted-verse-coverage";
 import { packAllowsPassageMode } from "./passage-eligibility";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
 import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
@@ -20,21 +21,16 @@ describe("buildPreviewPassageSeed", () => {
         "buildingDue",
         "budgetExhausted",
         "maintenanceDue",
-        "collectionOnly",
       ]),
     );
   });
 
-  it("keeps start/maintenance packs passage-eligible and multi-book ineligible", () => {
+  it("keeps the ready-to-start pack passage-eligible and unstarted", () => {
     const ready = plan.packs.find((pack) => pack.role === "readyToStart");
-    const multi = plan.packs.find((pack) => pack.role === "collectionOnly");
     expect(ready).toBeDefined();
-    expect(multi).toBeDefined();
-    if (!ready || !multi) return;
+    if (!ready) return;
     expect(packAllowsPassageMode(ready.scope)).toBe(true);
-    expect(packAllowsPassageMode(multi.scope)).toBe(false);
     expect(ready.passage).toBeUndefined();
-    expect(multi.passage).toBeUndefined();
   });
 
   it("seeds a building pack that is learn-due today", () => {
@@ -93,6 +89,21 @@ describe("buildPreviewPassageSeed", () => {
     expect(
       plan.packs.filter((pack) => /\bJude\b/.test(pack.name)),
     ).toHaveLength(1);
+  });
+
+  it("gives each seeded passage one heart span per chapter", () => {
+    const seeded = plan.packs.filter((pack) => pack.passage);
+    expect(seeded.length).toBeGreaterThan(0);
+    for (const pack of seeded) {
+      const pieces = pack.passage!.pieces;
+      const chapters = new Set(
+        pieces.map((piece) => `${piece.book}:${piece.chapter}`),
+      );
+      const hearts = passageHeartSpans(pieces);
+      expect(hearts).toHaveLength(chapters.size);
+      expect(hearts[0]?.startVerse).toBe(pieces[0]?.startVerse);
+      expect(hearts.at(-1)?.endVerse).toBe(pieces.at(-1)?.endVerse);
+    }
   });
 
   it("builds Jude pieces from auto-heart grouping (short chunks)", () => {

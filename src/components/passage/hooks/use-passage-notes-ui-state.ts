@@ -155,6 +155,8 @@ export interface PassageNotesUiState {
     isPassage: boolean,
   ) => void;
   handleClickAway: () => void;
+  /** What Esc does: clear the selection and open notes, asking first if an editor is dirty. */
+  requestClearSelection: () => void;
   cancelEditor: (key: string) => void;
   openVerseNotes: (verseNumber: number) => void;
   closeVerseNotes: (verseNumber: number) => void;
@@ -1280,6 +1282,14 @@ export function usePassageNotesUiState({
 
   // --- Escape key ---
 
+  const requestClearSelection = useCallback(() => {
+    if (editorHasChangesRef.current.size > 0) {
+      setShowDiscardConfirmation(true);
+      return;
+    }
+    handleClickAway();
+  }, [handleClickAway]);
+
   useEffect(() => {
     function handleEscapeKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -1700,6 +1710,7 @@ export function usePassageNotesUiState({
     handleDelete,
     handleNoteDeleteCleanup,
     handleClickAway,
+    requestClearSelection,
     cancelEditor,
     openVerseNotes,
     closeVerseNotes,

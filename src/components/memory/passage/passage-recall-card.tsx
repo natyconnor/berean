@@ -21,7 +21,7 @@ import {
   verseAttemptAccuracy,
   type VerseAttemptQuality,
 } from "@/components/study/study-attempt-quality";
-import { VerseAttemptResult } from "@/components/study/study-verse-memory-card";
+import { VerseAttemptResult } from "@/components/study/verse-attempt-result";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,6 +36,11 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { requiredRepsFor, type MemoryStatus } from "@/lib/memory-scheduler";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
+import {
+  READER_MEASURE_CLASS,
+  READER_REFERENCE_CLASS,
+  SESSION_VERSE_TEXT_CLASS,
+} from "@/lib/reader-typography";
 import { cn } from "@/lib/utils";
 import { countVerseWords, type HintToken } from "@/lib/verse-hint";
 
@@ -106,8 +111,8 @@ export function PassageRecallCard({
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
-  // Snapshot of "Guided · N of M today" at Check so the step label stays on the
-  // step just finished while the journey bar adopts banked progress early.
+  // Snapshot of "First letters · N of M today" at Check so the step label stays
+  // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -234,7 +239,7 @@ export function PassageRecallCard({
               />
               {phaseLabel}
             </p>
-            <CardTitle className="mt-2 text-3xl tracking-tight">
+            <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {title}
             </CardTitle>
           </div>
@@ -266,7 +271,9 @@ export function PassageRecallCard({
             <>
               <div
                 className={cn(
-                  "min-h-[140px] rounded-xl border bg-background/75 px-5 py-5 text-left text-lg leading-8",
+                  "mx-auto min-h-[140px] rounded-xl border bg-background/75 px-5 py-5 text-left",
+                  SESSION_VERSE_TEXT_CLASS,
+                  READER_MEASURE_CLASS,
                   stageColor.panel,
                 )}
               >
@@ -277,7 +284,7 @@ export function PassageRecallCard({
                     <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
                   </div>
                 ) : error ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 font-sans">
                     <p className="text-sm text-destructive">
                       Could not load verse text.
                     </p>
@@ -286,7 +293,7 @@ export function PassageRecallCard({
                     </Button>
                   </div>
                 ) : hint.type === "hidden" ? (
-                  <div className="flex h-full min-h-[140px] items-center justify-center text-center">
+                  <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
                     <p className="max-w-sm text-sm text-muted-foreground">
                       {hint.message}
                     </p>
@@ -312,7 +319,9 @@ export function PassageRecallCard({
                       : "Type what you remember"
                   }
                   className={cn(
-                    "bg-background/80",
+                    "mx-auto bg-background/80 px-4 py-3",
+                    SESSION_VERSE_TEXT_CLASS,
+                    READER_MEASURE_CLASS,
                     compositeField
                       ? "min-h-[180px] resize-y"
                       : "min-h-[170px] resize-none",
@@ -329,11 +338,8 @@ export function PassageRecallCard({
                 typedAnswer={typedAnswer}
                 versePlainText={versePlainText}
                 diffTokens={checkedDiffTokens}
+                note={passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`}
               />
-              <p className="text-center text-sm text-muted-foreground">
-                {`${checkedAccuracy}% recalled.`}
-                {passed ? "" : ` Pass at ${PASSAGE_PASS_ACCURACY}%.`}
-              </p>
             </div>
           )}
         </CardContent>

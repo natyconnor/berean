@@ -28,6 +28,23 @@ export const FEATURE_HINTS = {
   SEARCH_REVEAL_AFTER_LIBRARY: "search-reveal-after-library",
   /** Wave 5 callout that appears beside the newly-revealed Compose/Read toggle. */
   READING_MODE_REVEAL: "reading-mode-reveal",
+  /** "How memorizing works" inside the Memorize sheet until the first start. */
+  MEMORIZE_EXPLAINER: "memorize-explainer",
+  /**
+   * Legacy "Don't ask again" for the reader's heart popover, which now always
+   * offers Memorize. Retained so persisted rows stay valid; no longer read.
+   */
+  HEART_MEMORIZE_NUDGE: "heart-memorize-nudge",
+  /** Session summary banner the first time a verse is memorized. */
+  CELEBRATE_FIRST_VERSE: "celebrate-first-verse",
+  /** Toast the first time a verse or passage is mastered. */
+  CELEBRATE_FIRST_MASTERED: "celebrate-first-mastered",
+  /**
+   * One-off popover on the chapter header's Memorize button for people who
+   * finished the app tour before it taught Memorize. Seeing the tour's
+   * Memorize step completes it.
+   */
+  CHAPTER_MEMORIZE_NEW: "chapter-memorize-new",
 } as const;
 
 export type FeatureHintId = (typeof FEATURE_HINTS)[keyof typeof FEATURE_HINTS];
@@ -53,4 +70,9 @@ export const FEATURE_HINT_METADATA: Record<FeatureHintId, FeatureHintMetadata> =
     [FEATURE_HINTS.STUDY_FIRST_OPEN_EXPLAINER]: { priority: 0 },
     [FEATURE_HINTS.SEARCH_REVEAL_AFTER_LIBRARY]: { priority: 70 },
     [FEATURE_HINTS.READING_MODE_REVEAL]: { priority: 60 },
+    [FEATURE_HINTS.MEMORIZE_EXPLAINER]: { priority: 0 },
+    [FEATURE_HINTS.HEART_MEMORIZE_NUDGE]: { priority: 0 },
+    [FEATURE_HINTS.CELEBRATE_FIRST_VERSE]: { priority: 0 },
+    [FEATURE_HINTS.CELEBRATE_FIRST_MASTERED]: { priority: 0 },
+    [FEATURE_HINTS.CHAPTER_MEMORIZE_NEW]: { priority: 65 },
   };

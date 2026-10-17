@@ -22,8 +22,11 @@ import {
   type VerseHeadingAtOffset,
 } from "@/lib/highlight-utils";
 import { getHighlightColor } from "@/lib/highlight-colors";
+import { READER_VERSE_TEXT_CLASS } from "@/lib/reader-typography";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
+import type { HeartMemoryCopy } from "@/lib/heart-memory-copy";
 import { VERSE_EXPAND_TRANSITION } from "./note-animation-config";
+import { UnheartMemorizingDialog } from "./unheart-memorizing-dialog";
 
 export interface VerseSelectionState {
   isSelected: boolean;
@@ -55,13 +58,25 @@ export interface VerseInteractionHandlers {
 
 export interface PassageHeartControl {
   filled: boolean;
-  onToggle: () => void;
+  /** `anchor` is the heart button, for a popover that points at it. */
+  onToggle: (anchor: HTMLElement) => void;
   alwaysVisible?: boolean;
   /**
    * Mastery-ring fill fraction (0..1) drawn subtly around the heart to reflect
    * spaced-repetition progress. Absent/0 = no ring. See `masteryRingFraction`.
    */
   masteryFraction?: number;
+  /** Unhearting would stop memorizing, so the heart asks first. */
+  stopsMemorizing?: boolean;
+  /** Names the verse in that confirm: "Psalm 1:5". */
+  reference?: string;
+  /**
+   * Set when clicking the filled heart offers Memorize or Unheart instead of
+   * unhearting; `unheart` unhearts it.
+   */
+  onOfferChoices?: (anchor: HTMLElement, unheart: () => void) => void;
+  /** Set while the verse is in Memory: replaces "Heart" / "Unheart". */
+  memoryCopy?: HeartMemoryCopy;
 }
 
 interface VerseRowLeftProps {
@@ -159,6 +174,53 @@ const HEART_BURST_SPARK_DISTANCE_PX = 22;
 const MASTERY_RING_RADIUS = 15;
 const MASTERY_RING_CIRCUMFERENCE = 2 * Math.PI * MASTERY_RING_RADIUS;
 
+/** Progress ring drawn around a heart in its `currentColor`; `fraction` is 0..1. */
+export function MasteryRing({
+  fraction,
+  className,
+  progressClassName,
+}: {
+  fraction: number;
+  className?: string;
+  progressClassName?: string;
+}) {
+  const clamped = Math.max(0, Math.min(1, fraction));
+  return (
+    <svg
+      viewBox="0 0 36 36"
+      className={className}
+      aria-hidden
+      data-mastery-ring=""
+    >
+      <circle
+        cx="18"
+        cy="18"
+        r={MASTERY_RING_RADIUS}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        className="opacity-15"
+      />
+      {clamped > 0 ? (
+        <circle
+          cx="18"
+          cy="18"
+          r={MASTERY_RING_RADIUS}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          className={cn("opacity-70", progressClassName)}
+          strokeDasharray={MASTERY_RING_CIRCUMFERENCE}
+          strokeDashoffset={MASTERY_RING_CIRCUMFERENCE * (1 - clamped)}
+          transform="rotate(-90 18 18)"
+          data-ring-progress=""
+        />
+      ) : null}
+    </svg>
+  );
+}
+
 export const PassageHeartAnimatedButton = memo(
   function PassageHeartAnimatedButton({
     passageHeart,
@@ -172,8 +234,10 @@ export const PassageHeartAnimatedButton = memo(
     size?: "default" | "large";
   }) {
     const reduceMotion = useReducedMotion();
+    const buttonRef = useRef<HTMLButtonElement>(null);
     const [fxKey, setFxKey] = useState(0);
     const [playHeartAnim, setPlayHeartAnim] = useState(false);
+    const [confirmUnheartOpen, setConfirmUnheartOpen] = useState(false);
     const [optimisticFilled, setOptimisticFilled] = useState(
       passageHeart.filled,
     );
@@ -192,6 +256,16 @@ export const PassageHeartAnimatedButton = memo(
       Math.min(1, passageHeart.masteryFraction ?? 0),
     );
     const showMasteryRing = optimisticFilled && masteryFraction > 0;
+    const { memoryCopy } = passageHeart;
+    const offerChoices =
+      optimisticFilled && !passageHeart.stopsMemorizing
+        ? passageHeart.onOfferChoices
+        : undefined;
+    const heartLabel = !optimisticFilled
+      ? "Heart this verse"
+      : offerChoices
+        ? "Hearted. Memorize or unheart"
+        : "Remove from hearted verses";
 
     return (
       <div
@@ -248,9 +322,10 @@ export const PassageHeartAnimatedButton = memo(
           </span>
         ) : null}
         <motion.button
+          ref={buttonRef}
           type="button"
           aria-label={
-            optimisticFilled ? "Remove from hearted verses" : "Heart this verse"
+            memoryCopy ? `${heartLabel} ${memoryCopy.ariaSuffix}` : heartLabel
           }
           aria-pressed={optimisticFilled}
           className={cn(
@@ -266,13 +341,25 @@ export const PassageHeartAnimatedButton = memo(
           aria-busy={playHeartAnim}
           onClick={(e) => {
             e.stopPropagation();
+            if (optimisticFilled && passageHeart.stopsMemorizing) {
+              setConfirmUnheartOpen(true);
+              return;
+            }
+            if (offerChoices) {
+              const anchor = e.currentTarget;
+              offerChoices(anchor, () => {
+                setOptimisticFilled(false);
+                passageHeart.onToggle(anchor);
+              });
+              return;
+            }
             const nextFilled = !optimisticFilled;
             setOptimisticFilled(nextFilled);
             if (nextFilled && !reduceMotion) {
               setFxKey((k) => k + 1);
               setPlayHeartAnim(true);
             }
-            passageHeart.onToggle();
+            passageHeart.onToggle(e.currentTarget);
           }}
           whileTap={
             reduceMotion
@@ -288,35 +375,10 @@ export const PassageHeartAnimatedButton = memo(
               aria-hidden
               className="pointer-events-none absolute inset-0 flex items-center justify-center"
             >
-              <svg
-                viewBox="0 0 36 36"
+              <MasteryRing
+                fraction={masteryFraction}
                 className={size === "large" ? "h-8 w-8" : "h-7 w-7"}
-              >
-                <circle
-                  cx="18"
-                  cy="18"
-                  r={MASTERY_RING_RADIUS}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  className="opacity-15"
-                />
-                <circle
-                  cx="18"
-                  cy="18"
-                  r={MASTERY_RING_RADIUS}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                  className="opacity-70"
-                  strokeDasharray={MASTERY_RING_CIRCUMFERENCE}
-                  strokeDashoffset={
-                    MASTERY_RING_CIRCUMFERENCE * (1 - masteryFraction)
-                  }
-                  transform="rotate(-90 18 18)"
-                />
-              </svg>
+              />
             </span>
           ) : null}
           <motion.span
@@ -353,12 +415,31 @@ export const PassageHeartAnimatedButton = memo(
         </motion.button>
         <span
           className={cn(
-            "pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/heart:opacity-100",
+            "pointer-events-none absolute z-50 rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/heart:opacity-100",
+            memoryCopy
+              ? "left-0 w-max max-w-64"
+              : "left-1/2 -translate-x-1/2 whitespace-nowrap",
             shouldFlipTooltipBelow ? "top-full mt-1.5" : "bottom-full mb-1.5",
           )}
         >
-          {optimisticFilled ? "Unheart" : "Heart"}
+          {memoryCopy?.tooltip ??
+            (!optimisticFilled
+              ? "Heart"
+              : offerChoices
+                ? "Memorize or unheart"
+                : "Unheart")}
         </span>
+        {passageHeart.stopsMemorizing ? (
+          <UnheartMemorizingDialog
+            open={confirmUnheartOpen}
+            onOpenChange={setConfirmUnheartOpen}
+            reference={passageHeart.reference ?? "this verse"}
+            onConfirm={() => {
+              setOptimisticFilled(false);
+              if (buttonRef.current) passageHeart.onToggle(buttonRef.current);
+            }}
+          />
+        ) : null}
       </div>
     );
   },
@@ -762,7 +843,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                   ? { position: "absolute" as const, top: 0, left: 0, right: 0 }
                   : {}),
               }}
-              className="font-serif w-full whitespace-pre-wrap leading-relaxed"
+              className={READER_VERSE_TEXT_CLASS}
             >
               {renderHighlightedText(false)}
             </span>
@@ -783,7 +864,7 @@ export const VerseRowLeft = memo(function VerseRowLeft({
                   ? { position: "absolute" as const, top: 0, left: 0, right: 0 }
                   : {}),
               }}
-              className="font-serif w-full whitespace-pre-wrap leading-relaxed"
+              className={READER_VERSE_TEXT_CLASS}
             >
               {renderHighlightedText(isExpanded)}
             </span>

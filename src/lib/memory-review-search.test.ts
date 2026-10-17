@@ -27,6 +27,32 @@ describe("validateMemoryReviewSearch", () => {
       {},
     );
   });
+
+  it("keeps an allowed return with or without a verse scope", () => {
+    expect(
+      validateMemoryReviewSearch({ return: "/memory?panel=pack:abc" }),
+    ).toEqual({ return: "/memory?panel=pack:abc" });
+    expect(
+      validateMemoryReviewSearch({
+        book: "John",
+        chapter: 1,
+        startVerse: 4,
+        return: "/memory/verses",
+      }),
+    ).toEqual({
+      book: "John",
+      chapter: 1,
+      startVerse: 4,
+      endVerse: 4,
+      return: "/memory/verses",
+    });
+  });
+
+  it("drops a return that leaves the app", () => {
+    expect(
+      validateMemoryReviewSearch({ return: "https://evil.com/memory" }),
+    ).toEqual({});
+  });
 });
 
 describe("hasReviewVerseScope", () => {

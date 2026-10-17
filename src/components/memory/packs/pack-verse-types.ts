@@ -1,6 +1,6 @@
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 export interface PackableVerse {
   verseRefId?: Id<"verseRefs">;
@@ -20,5 +20,5 @@ export type HeartedVerse = PackableVerse & {
 };
 
 export function packVerseKey(verse: PackableVerse): string {
-  return formatVerseRef(verse);
+  return formatVerseRefTitle(verse);
 }

@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { ArrowLeft, Loader2, SearchX } from "lucide-react";
 
+import { packLearningSessionVerses } from "@/components/memory/pack-session-verses";
 import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
@@ -12,6 +13,7 @@ import {
 } from "@/components/memory/to-practice-verse";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import {
   isMemorySessionCandidate,
@@ -25,21 +27,31 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 export function MemoryPackPracticePage() {
   const { packId } = Route.useParams();
+  const { return: returnTo } = Route.useSearch();
 
   return (
-    <MemoryPackSessionPage kind="practice" packId={packId as Id<"packs">} />
+    <MemoryPackSessionPage
+      kind="practice"
+      packId={packId as Id<"packs">}
+      returnTo={returnTo}
+    />
   );
 }
 
 export function MemoryPackSessionPage({
   kind,
   packId: typedPackId,
+  returnTo,
 }: {
   kind: MemorySessionKind;
   packId: Id<"packs">;
+  /** Where Done and Back go; else history, else the pack page. */
+  returnTo?: string;
 }) {
-  const navigate = useNavigate();
   const now = useLiveNow();
+  const packHref = `/memory/${encodeURIComponent(typedPackId)}`;
+  const onExit = useMemoryExit(returnTo, packHref);
+  const backLabel = useMemoryExitLabel(returnTo, packHref);
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
   const members = useFrozenQuery(api.packs.resolveMembers, {
@@ -55,8 +67,8 @@ export function MemoryPackSessionPage({
   const unifiedEnabled = pack?.unifiedReviewEnabled === true;
   const sessionVerses = useMemo<PracticeVerse[]>(() => {
     if (members === undefined) return [];
+    if (kind === "learning") return packLearningSessionVerses(members, now);
     if (
-      kind !== "learning" &&
       unifiedEnabled &&
       members.length > 0 &&
       members.every((member) => isReviewPhase(member.status))
@@ -116,16 +128,14 @@ export function MemoryPackSessionPage({
           ) {
             return false;
           }
-          return isMemorySessionCandidate(
-            verse,
-            kind,
-            now,
-            kind === "learning",
-          );
+          return isMemorySessionCandidate(verse, kind, now);
         }),
     );
   }, [members, kind, now, unifiedEnabled, pack?.name, typedPackId]);
   const isLearning = kind === "learning";
+  const hasMemorized = (members ?? []).some((member) =>
+    isReviewPhase(member.status),
+  );
 
   if (pack === undefined || passage === undefined) {
     return (
@@ -155,7 +165,7 @@ export function MemoryPackSessionPage({
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Memory
+            Back to Today
           </Link>
         </div>
       </div>
@@ -168,12 +178,8 @@ export function MemoryPackSessionPage({
         packId={typedPackId}
         view={passage}
         packName={pack.name}
-        onExit={() =>
-          void navigate({
-            to: "/memory/$packId",
-            params: { packId: typedPackId },
-          })
-        }
+        onExit={onExit}
+        backLabel={backLabel}
         exitTooltip="Go back to the pack"
       />
     );
@@ -193,13 +199,10 @@ export function MemoryPackSessionPage({
       verses={sessionVerses}
       scopeLabel={pack.name}
       exitTooltip="Go back to the pack"
-      exitLabel="Back to Pack"
-      onExit={() =>
-        void navigate({
-          to: "/memory/$packId",
-          params: { packId: typedPackId },
-        })
-      }
+      backLabel={backLabel}
+      returnTo={returnTo}
+      hasMemorized={hasMemorized}
+      onExit={onExit}
       emptyState={
         <div className="flex h-full items-center justify-center bg-background px-6">
           <div className="max-w-sm space-y-3 text-center">
@@ -213,13 +216,13 @@ export function MemoryPackSessionPage({
                 ? "No in-progress verses in this pack are ready for Learning."
                 : "Verses in this pack become available after they finish Learning."}
             </p>
-            <Link
-              to="/memory/$packId"
-              params={{ packId: typedPackId }}
+            <button
+              type="button"
+              onClick={onExit}
               className="inline-flex text-sm font-medium text-primary hover:underline"
             >
-              Back to Pack
-            </Link>
+              {backLabel}
+            </button>
           </div>
         </div>
       }

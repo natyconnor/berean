@@ -1,14 +1,15 @@
 import { useMemo, useState } from "react";
-import { Loader2, Clock3, Sparkles } from "lucide-react";
+import { Loader2, Clock3 } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { ReviewEmptyState } from "@/components/memory/session-empty-states";
 import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryBack } from "@/hooks/use-memory-back";
+import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
 import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
@@ -21,44 +22,23 @@ function dueRowToPracticeVerse(
   return dueQueueEntryToPracticeVerse(row);
 }
 
-function ReviewCaughtUp({
-  onExit,
-  doneLabel = "Back to memory",
-}: {
-  onExit: () => void;
-  doneLabel?: string;
-}) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-        <Sparkles className="h-6 w-6 text-primary" aria-hidden />
-      </div>
-      <div className="max-w-sm space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">All caught up</h1>
-        <p className="text-sm text-muted-foreground">
-          No verses are due for review right now. Check back later.
-        </p>
-      </div>
-      <Button variant="outline" onClick={onExit}>
-        {doneLabel}
-      </Button>
-    </div>
-  );
-}
-
 function MemoryReviewSessionPage({
   verses,
   scopeLabel,
   remainingDue,
+  now,
   onExit,
-  exitLabel = "Back to memory",
+  backLabel,
+  returnTo,
   onContinueSession,
 }: {
   verses: ReadonlyArray<PracticeVerse>;
   scopeLabel: string;
   remainingDue: number;
+  now: number;
   onExit: () => void;
-  exitLabel?: string;
+  backLabel: string;
+  returnTo?: string;
   onContinueSession?: () => void;
 }) {
   return (
@@ -67,17 +47,22 @@ function MemoryReviewSessionPage({
       verses={verses}
       scopeLabel={scopeLabel}
       onExit={onExit}
-      exitLabel={exitLabel}
+      backLabel={backLabel}
+      returnTo={returnTo}
       remainingDue={remainingDue}
       onContinueSession={onContinueSession}
-      emptyState={<ReviewCaughtUp onExit={onExit} doneLabel={exitLabel} />}
+      emptyState={
+        <ReviewEmptyState now={now} onExit={onExit} backLabel={backLabel} />
+      }
     />
   );
 }
 
 export function MemoryReviewPage() {
-  const onExit = useMemoryBack();
   const search = Route.useSearch();
+  const returnTo = search.return;
+  const onExit = useMemoryExit(returnTo);
+  const backLabel = useMemoryExitLabel(returnTo);
   const now = useLiveNow();
   const hasScope = hasReviewVerseScope(search);
   const [queueEpoch, setQueueEpoch] = useState(0);
@@ -133,7 +118,10 @@ export function MemoryReviewPage() {
         verses={globalVerses}
         scopeLabel="All due today"
         remainingDue={remainingDue}
+        now={now}
         onExit={onExit}
+        backLabel={backLabel}
+        returnTo={returnTo}
         onContinueSession={() => {
           setDrainedDue((value) => value + globalVerses.length);
           setQueueEpoch((value) => value + 1);
@@ -166,7 +154,7 @@ export function MemoryReviewPage() {
           </p>
         </div>
         <Button variant="outline" onClick={onExit}>
-          Back
+          {backLabel}
         </Button>
       </div>
     );
@@ -177,7 +165,10 @@ export function MemoryReviewPage() {
       verses={[dueRowToPracticeVerse(scopedDue)]}
       scopeLabel={formatVerseRef(search)}
       remainingDue={0}
+      now={now}
       onExit={onExit}
+      backLabel={backLabel}
+      returnTo={returnTo}
     />
   );
 }
