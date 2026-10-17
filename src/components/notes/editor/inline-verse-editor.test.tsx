@@ -261,6 +261,57 @@ describe("InlineVerseEditor", () => {
     expect(noteBodyToPlainText(latestBody)).toBe("John 3 ");
   });
 
+  it("inserts a verse link when Enter is pressed on @Jude 2", () => {
+    let latestBody: NoteBody = EMPTY_NOTE_BODY;
+
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={(body) => {
+          latestBody = body;
+        }}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    editor.innerHTML = "@Jude 2";
+    const textNode = editor.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected text node");
+    }
+    placeCaretAtEnd(textNode);
+    act(() => {
+      fireEvent.input(editor);
+    });
+
+    expect(
+      screen.getByRole("button", { name: /Jude 1:2 is ready to insert/i }),
+    ).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(editor, { key: "Enter" });
+    });
+
+    expect(latestBody.segments).toEqual([
+      {
+        type: "verseRef",
+        label: "Jude 1:2",
+        ref: {
+          book: "Jude",
+          chapter: 1,
+          startVerse: 2,
+          endVerse: 2,
+        },
+      },
+      {
+        type: "text",
+        text: " ",
+      },
+    ]);
+    expect(noteBodyToPlainText(latestBody)).toBe("Jude 1:2 ");
+  });
+
   it("inserts a verse link when the ready status is clicked", () => {
     let latestBody: NoteBody = EMPTY_NOTE_BODY;
 
