@@ -312,6 +312,91 @@ describe("InlineVerseEditor", () => {
     expect(noteBodyToPlainText(latestBody)).toBe("Jude 1:2 ");
   });
 
+  it.each([
+    ["@Jude 3-5", /Jude 1:3-5 is ready to insert/i],
+    ["@Jude 1-3", /Jude 1:1-3 is ready to insert/i],
+    ["@Jude 1-1", /Jude 1:1 is ready to insert/i],
+  ])(
+    "hides book suggestions once %s is a ready verse range",
+    (html, readyName) => {
+      render(
+        <InlineVerseEditor
+          initialBody={EMPTY_NOTE_BODY}
+          verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+          onChange={() => {}}
+        />,
+      );
+
+      const editor = screen.getByRole("textbox");
+      editor.innerHTML = html;
+      const textNode = editor.firstChild;
+      if (!(textNode instanceof Text)) {
+        throw new Error("Expected text node");
+      }
+      placeCaretAtEnd(textNode);
+      act(() => {
+        fireEvent.input(editor);
+      });
+
+      expect(
+        screen.getByRole("button", { name: readyName }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps the verse popover open while typing a single-chapter Book N- range", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    editor.innerHTML = "@Jude 3-";
+    const textNode = editor.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected text node");
+    }
+    placeCaretAtEnd(textNode);
+    act(() => {
+      fireEvent.input(editor);
+    });
+
+    expect(
+      screen.getByText("Keep typing the end of the range for Jude 1:3."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
+  });
+
+  it("still hides the popover for a multi-chapter Book N-M query", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    editor.innerHTML = "@John 3-5";
+    const textNode = editor.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected text node");
+    }
+    placeCaretAtEnd(textNode);
+    act(() => {
+      fireEvent.input(editor);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /ready to insert/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
+  });
+
   it("inserts a verse link when the ready status is clicked", () => {
     let latestBody: NoteBody = EMPTY_NOTE_BODY;
 
