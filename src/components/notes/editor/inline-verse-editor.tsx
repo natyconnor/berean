@@ -779,10 +779,10 @@ export function InlineVerseEditor({
   );
 
   const hasStructuredReferenceInput = useMemo(() => {
-    if (draft) return true;
+    if (parsedRef || draft) return true;
     if (!effectiveQuery.endsWith(" ")) return false;
     return resolveCanonicalBookName(trimmedEffectiveQuery) !== null;
-  }, [draft, effectiveQuery, trimmedEffectiveQuery]);
+  }, [draft, effectiveQuery, parsedRef, trimmedEffectiveQuery]);
 
   const bookSuggestions = useMemo(() => {
     if (!trimmedEffectiveQuery) return starterSuggestions;
