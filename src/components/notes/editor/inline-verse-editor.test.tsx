@@ -495,6 +495,94 @@ describe("InlineVerseEditor", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("hints a verse number on a single-chapter chapter link", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@Jude");
+    expect(
+      screen.getByText(
+        "Jude 1 is ready to insert. Keep typing a verse number, like Jude 5.",
+      ),
+    ).toBeInTheDocument();
+
+    typeAtQuery(editor, "@Philemon");
+    expect(
+      screen.getByText(
+        "Philemon 1 is ready to insert. Keep typing a verse number, like Philemon 5.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the colon-verse hint on a multi-chapter chapter link", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@John 3");
+    expect(
+      screen.getByText(
+        "John 3 is ready to insert. Keep typing :verse for a specific verse.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("describes an invalid single-chapter Book N as a missing verse", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@Jude 0");
+    expect(screen.getByText("Jude 1 only has 25 verses.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Choose a valid chapter to keep creating the link."),
+    ).not.toBeInTheDocument();
+
+    typeAtQuery(editor, "@Philemon 0");
+    expect(
+      screen.getByText("Philemon 1 only has 25 verses."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps chapter errors for John 0 and an explicit Jude chapter", () => {
+    render(
+      <InlineVerseEditor
+        initialBody={EMPTY_NOTE_BODY}
+        verseRef={{ book: "John", chapter: 3, startVerse: 16, endVerse: 16 }}
+        onChange={() => {}}
+      />,
+    );
+
+    const editor = screen.getByRole("textbox");
+    typeAtQuery(editor, "@John 0");
+    expect(screen.getByText("John has 21 chapters.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Choose a valid chapter to keep creating the link."),
+    ).toBeInTheDocument();
+
+    typeAtQuery(editor, "@Jude 2:1");
+    expect(screen.getByText("Jude has 1 chapter.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Choose a valid chapter to keep creating the link."),
+    ).toBeInTheDocument();
+  });
+
   it("keeps book-name completion for an inexact Jude prefix", () => {
     render(
       <InlineVerseEditor
