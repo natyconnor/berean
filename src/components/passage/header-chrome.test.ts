@@ -11,11 +11,17 @@ describe("chapterMemorizeStageClasses", () => {
       }).line,
     ).toBe("@max-[9rem]/chapter-memorize:hidden");
     expect(
-      chapterMemorizeStageClasses("Memorize Psalm 119", {
+      chapterMemorizeStageClasses("Memorize Psalm 1", {
         ellipsize: false,
         word: true,
       }).line,
     ).toBe("@max-[11rem]/chapter-memorize:hidden");
+    expect(
+      chapterMemorizeStageClasses("Memorize Psalm 119", {
+        ellipsize: false,
+        word: true,
+      }).line,
+    ).toBe("@max-[12rem]/chapter-memorize:hidden");
     expect(
       chapterMemorizeStageClasses("Memorize Song of Solomon 8", {
         ellipsize: false,
@@ -39,7 +45,7 @@ describe("chapterMemorizeStageClasses", () => {
       word: true,
     });
     expect(classes.word).toBe(
-      "hidden @max-[11rem]/chapter-memorize:inline @max-[9rem]/chapter-memorize:hidden",
+      "hidden @max-[12rem]/chapter-memorize:inline @max-[9rem]/chapter-memorize:hidden",
     );
     expect(classes.button).toBe(
       "@max-[9rem]/chapter-memorize:w-8 @max-[9rem]/chapter-memorize:justify-center @max-[9rem]/chapter-memorize:px-0",
@@ -52,12 +58,12 @@ describe("chapterMemorizeStageClasses", () => {
       ellipsize: false,
       word: false,
     });
-    expect(classes.line).toBe("@max-[13rem]/chapter-memorize:hidden");
+    expect(classes.line).toBe("@max-[14rem]/chapter-memorize:hidden");
     expect(classes.word).toBeNull();
     expect(classes.button).toBe(
-      "@max-[13rem]/chapter-memorize:w-8 @max-[13rem]/chapter-memorize:justify-center @max-[13rem]/chapter-memorize:px-0",
+      "@max-[14rem]/chapter-memorize:w-8 @max-[14rem]/chapter-memorize:justify-center @max-[14rem]/chapter-memorize:px-0",
     );
-    expect(classes.mark).toBe("hidden @max-[13rem]/chapter-memorize:block");
+    expect(classes.mark).toBe("hidden @max-[14rem]/chapter-memorize:block");
   });
 
   it("narrows a passage title to the icon where its line leaves", () => {

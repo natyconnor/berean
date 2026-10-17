@@ -103,19 +103,19 @@ function headerMarkup(
   );
 }
 
-let server: ViteDevServer | undefined;
 let browser: Browser | undefined;
-let origin = "";
+let layoutCss = "";
 
 beforeAll(async () => {
   if (!chromeExecutablePath) return;
 
-  server = await createServer({
+  const server: ViteDevServer = await createServer({
     configFile: false,
     root: process.cwd(),
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0, strictPort: false },
     plugins: [tailwindcss()],
+    optimizeDeps: { noDiscovery: true },
     resolve: {
       alias: {
         "@": path.resolve(process.cwd(), "src"),
@@ -123,11 +123,24 @@ beforeAll(async () => {
     },
   });
   await server.listen();
-  const address = server.httpServer?.address();
-  if (!address || typeof address === "string") {
-    throw new Error("Vite did not bind a TCP port for the layout test");
+  try {
+    const address = server.httpServer?.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Vite did not bind a TCP port for the layout test");
+    }
+    const cssRes = await fetch(
+      `http://127.0.0.1:${address.port}/src/index.css`,
+      {
+        headers: { Accept: "text/css" },
+      },
+    );
+    if (!cssRes.ok) {
+      throw new Error(`CSS compile failed: ${cssRes.status}`);
+    }
+    layoutCss = await cssRes.text();
+  } finally {
+    await server.close();
   }
-  origin = `http://127.0.0.1:${address.port}`;
 
   browser = await chromium.launch({
     executablePath: chromeExecutablePath,
@@ -138,8 +151,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await browser?.close();
-  await server?.close();
 }, 20_000);
+
+function layoutDocument(body: string): string {
+  return `<!doctype html><html><head><style>${layoutCss}</style></head><body>${body}</body></html>`;
+}
 
 async function measureColumn(
   book: string,
@@ -151,10 +167,9 @@ async function measureColumn(
     viewport: { width: 900, height: 400 },
   });
   try {
-    await page.setContent(
-      `<!doctype html><html><head><link rel="stylesheet" href="${origin}/src/index.css"></head><body>${headerMarkup(book, chapter, width)}</body></html>`,
-      { waitUntil: "load" },
-    );
+    await page.setContent(layoutDocument(headerMarkup(book, chapter, width)), {
+      waitUntil: "load",
+    });
     await page.waitForFunction(() => {
       const well = document.querySelector("h1");
       return !!well && getComputedStyle(well).display === "flex";
@@ -262,8 +277,9 @@ const PSALM_119: MemorizeLayoutCase = {
 };
 
 /**
- * Loads the header once and resizes the passage column through `widths`, so
- * a sweep costs one page load and the container queries re-run in place.
+ * Loads the header once and resizes the passage column through `widths` in
+ * one Chrome evaluate. A Vite CSS request or Playwright round-trip per width
+ * leaked enough heap in this worker to OOM a 4GB CI job.
  */
 async function measureMemorizeWidths(
   widths: number[],
@@ -276,7 +292,9 @@ async function measureMemorizeWidths(
   });
   try {
     await page.setContent(
-      `<!doctype html><html><head><link rel="stylesheet" href="${origin}/src/index.css"></head><body>${headerMarkup(book, chapter, firstWidth, memorizeControl(state))}</body></html>`,
+      layoutDocument(
+        headerMarkup(book, chapter, firstWidth, memorizeControl(state)),
+      ),
       { waitUntil: "load" },
     );
     await page.waitForFunction(() => {
@@ -285,76 +303,71 @@ async function measureMemorizeWidths(
     });
     await page.evaluate(() => document.fonts.ready);
 
-    const reports: MemorizeLayoutReport[] = [];
-    for (const width of widths) {
-      reports.push(
-        await page.evaluate((columnWidth) => {
-          function required(selector: string): HTMLElement {
-            const element = document.querySelector(selector);
-            if (!(element instanceof HTMLElement)) {
-              throw new Error(`missing ${selector}`);
-            }
-            return element;
-          }
-          function rect(element: Element) {
-            const box = element.getBoundingClientRect();
-            return {
-              left: box.left,
-              right: box.right,
-              top: box.top,
-              bottom: box.bottom,
-              width: box.width,
-            };
-          }
+    const reports = await page.evaluate((columnWidths) => {
+      function required(selector: string): HTMLElement {
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`missing ${selector}`);
+        }
+        return element;
+      }
+      function rect(element: Element) {
+        const box = element.getBoundingClientRect();
+        return {
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+          width: box.width,
+        };
+      }
 
-          required("#layout-root").style.width = `${columnWidth}px`;
-          const header = required("#layout-root > div");
-          const memorize = required('[data-tour-id="chapter-memorize"]');
-          const [full, short] = Array.from(
-            memorize.querySelectorAll(":scope > span"),
-          );
-          const mark = memorize.querySelector("[data-memorize-mark]");
-          const next = document
-            .querySelector(".lucide-chevron-right")
-            ?.closest("button");
-          if (!full || !next) throw new Error("missing parts");
-          const bookLabel = required(
-            '[aria-label^="Change book"] span.truncate',
-          );
-          const headersChip = document.getElementById(
-            "passage-section-headers",
-          )?.parentElement;
-          if (!headersChip) throw new Error("missing headers switch");
-          const truncated = (element: Element) =>
-            element.scrollWidth > element.clientWidth + 1;
-          const shown = (element: Element) =>
-            getComputedStyle(element).display !== "none";
-          const stage = !shown(memorize)
-            ? "gone"
-            : shown(full)
-              ? "line"
-              : short && shown(short)
-                ? "word"
-                : "icon";
-          return {
-            width: columnWidth,
-            stage,
-            bookTruncated: truncated(bookLabel),
-            fullTruncated: truncated(full),
-            shortTruncated: short ? truncated(short) : false,
-            markShown: mark ? shown(mark) : false,
-            headerScrollWidth: header.scrollWidth,
-            headerClientWidth: header.clientWidth,
-            fullText: full.textContent ?? "",
-            memorize: rect(memorize),
-            memorizeHeight: memorize.getBoundingClientRect().height,
-            headers: rect(headersChip),
-            next: rect(next),
-            note: rect(required('[aria-label^="Add a chapter note"]')),
-          } satisfies MemorizeLayoutReport;
-        }, width),
-      );
-    }
+      return columnWidths.map((columnWidth) => {
+        required("#layout-root").style.width = `${columnWidth}px`;
+        const header = required("#layout-root > div");
+        const memorize = required('[data-tour-id="chapter-memorize"]');
+        const [full, short] = Array.from(
+          memorize.querySelectorAll(":scope > span"),
+        );
+        const mark = memorize.querySelector("[data-memorize-mark]");
+        const next = document
+          .querySelector(".lucide-chevron-right")
+          ?.closest("button");
+        if (!full || !next) throw new Error("missing parts");
+        const bookLabel = required('[aria-label^="Change book"] span.truncate');
+        const headersChip = document.getElementById(
+          "passage-section-headers",
+        )?.parentElement;
+        if (!headersChip) throw new Error("missing headers switch");
+        const truncated = (element: Element) =>
+          element.scrollWidth > element.clientWidth + 1;
+        const shown = (element: Element) =>
+          getComputedStyle(element).display !== "none";
+        const stage = !shown(memorize)
+          ? "gone"
+          : shown(full)
+            ? "line"
+            : short && shown(short)
+              ? "word"
+              : "icon";
+        return {
+          width: columnWidth,
+          stage,
+          bookTruncated: truncated(bookLabel),
+          fullTruncated: truncated(full),
+          shortTruncated: short ? truncated(short) : false,
+          markShown: mark ? shown(mark) : false,
+          headerScrollWidth: header.scrollWidth,
+          headerClientWidth: header.clientWidth,
+          fullText: full.textContent ?? "",
+          memorize: rect(memorize),
+          memorizeHeight: memorize.getBoundingClientRect().height,
+          headers: rect(headersChip),
+          next: rect(next),
+          note: rect(required('[aria-label^="Add a chapter note"]')),
+        } satisfies MemorizeLayoutReport;
+      });
+    }, widths);
     return reports;
   } finally {
     await page.close();

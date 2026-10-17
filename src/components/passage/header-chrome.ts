@@ -145,7 +145,8 @@ export interface ChapterMemorizeStageClasses {
  * Container-query classes for the Memorize button's stages. The line shows
  * only while the slot holds it whole, so "Memorize Psalm 119" never
  * ellipsizes into "Memorize Psalm 1…". At 13px semibold a line runs about
- * 0.45rem a character plus 2.75rem of icon and padding. `ellipsize` lines (a
+ * 0.45rem a character plus 2.75rem of icon and padding, plus 1rem so the line
+ * hides before it ellipsizes at the `@max-[Nrem]` edge. `ellipsize` lines (a
  * passage title) show from 10rem and truncate. With `word`, the word takes
  * over from the line down to 9rem; without it, the line gives way to the icon.
  */
@@ -153,7 +154,7 @@ export function chapterMemorizeStageClasses(
   line: string,
   { ellipsize, word }: { ellipsize: boolean; word: boolean },
 ): ChapterMemorizeStageClasses {
-  const needed = Math.ceil(2.75 + 0.45 * line.length);
+  const needed = Math.ceil(2.75 + 0.45 * line.length) + 1;
   const rem = ellipsize ? Math.min(needed, MEMORIZE_ELLIPSIZE_REM) : needed;
   const lineStage =
     MEMORIZE_SLOT_STAGES.find((candidate) => candidate.rem >= rem) ??
