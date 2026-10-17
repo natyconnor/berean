@@ -230,6 +230,9 @@ function getDraftChapterErrorMessage(
 
   if (chapter < 1 || chapter > bookInfo.chapters) {
     if (isSingleChapterBareNumber(draft)) {
+      if (chapter < 1) {
+        return "Verses start at 1.";
+      }
       const maxVerse = getChapterVerseCount(draft.book, 1);
       if (maxVerse) {
         return `${displayBookName(draft.book)} 1 only has ${maxVerse} verse${
