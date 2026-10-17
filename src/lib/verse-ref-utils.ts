@@ -24,6 +24,9 @@ export function formatBookChapter(book: string, chapter: number): string {
 
 export function formatVerseRef(ref: VerseRef): string {
   if (isChapterScopeRef(ref)) {
+    if (getBookInfo(ref.book)?.chapters === 1) {
+      return displayBookName(ref.book);
+    }
     return formatBookChapter(ref.book, ref.chapter);
   }
   const book = displayBookName(ref.book);

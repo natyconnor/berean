@@ -432,7 +432,7 @@ describe("InlineVerseEditor", () => {
     expect(noteBodyToPlainText(latestBody)).toBe("Jude 1:1 ");
   });
 
-  it("inserts a chapter link when Enter is pressed on exact @Jude", () => {
+  it("inserts a book-named chapter link when Enter is pressed on exact @Jude", () => {
     let latestBody: NoteBody = EMPTY_NOTE_BODY;
 
     render(
@@ -449,7 +449,7 @@ describe("InlineVerseEditor", () => {
     typeAtQuery(editor, "@Jude");
 
     expect(
-      screen.getByRole("button", { name: /Jude 1 is ready to insert/i }),
+      screen.getByRole("button", { name: /Jude is ready to insert/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Complete book name")).not.toBeInTheDocument();
 
@@ -460,7 +460,7 @@ describe("InlineVerseEditor", () => {
     expect(latestBody.segments).toEqual([
       {
         type: "verseRef",
-        label: "Jude 1",
+        label: "Jude",
         ref: {
           book: "Jude",
           chapter: 1,
@@ -474,7 +474,7 @@ describe("InlineVerseEditor", () => {
         text: " ",
       },
     ]);
-    expect(noteBodyToPlainText(latestBody)).toBe("Jude 1 ");
+    expect(noteBodyToPlainText(latestBody)).toBe("Jude ");
   });
 
   it("does not turn exact @John into a chapter link", () => {
@@ -508,14 +508,14 @@ describe("InlineVerseEditor", () => {
     typeAtQuery(editor, "@Jude");
     expect(
       screen.getByText(
-        "Jude 1 is ready to insert. Keep typing a verse number, like Jude 5.",
+        "Jude is ready to insert. Keep typing a verse number, like Jude 5.",
       ),
     ).toBeInTheDocument();
 
     typeAtQuery(editor, "@Philemon");
     expect(
       screen.getByText(
-        "Philemon 1 is ready to insert. Keep typing a verse number, like Philemon 5.",
+        "Philemon is ready to insert. Keep typing a verse number, like Philemon 5.",
       ),
     ).toBeInTheDocument();
   });
