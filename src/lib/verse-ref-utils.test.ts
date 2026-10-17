@@ -374,6 +374,20 @@ describe("formatVerseRef", () => {
   });
 });
 
+describe("formatBookChapter", () => {
+  it("labels a whole one-chapter book with the book name only", () => {
+    expect(formatBookChapter("Jude", 1)).toBe("Jude");
+    expect(formatBookChapter("Obadiah", 1)).toBe("Obadiah");
+    expect(formatBookChapter("Philemon", 1)).toBe("Philemon");
+    expect(formatBookChapter("2 John", 1)).toBe("2 John");
+    expect(formatBookChapter("3 John", 1)).toBe("3 John");
+  });
+
+  it("keeps multi-chapter book labels as book plus chapter", () => {
+    expect(formatBookChapter("John", 3)).toBe("John 3");
+  });
+});
+
 describe("unionVerseRefs", () => {
   it("returns null for an empty list", () => {
     expect(unionVerseRefs([])).toBeNull();

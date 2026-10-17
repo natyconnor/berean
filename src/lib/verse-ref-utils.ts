@@ -19,14 +19,13 @@ export function isChapterScopeRef(
 }
 
 export function formatBookChapter(book: string, chapter: number): string {
-  return `${displayBookName(book)} ${chapter}`;
+  const name = displayBookName(book);
+  if (getBookInfo(book)?.chapters === 1) return name;
+  return `${name} ${chapter}`;
 }
 
 export function formatVerseRef(ref: VerseRef): string {
   if (isChapterScopeRef(ref)) {
-    if (getBookInfo(ref.book)?.chapters === 1) {
-      return displayBookName(ref.book);
-    }
     return formatBookChapter(ref.book, ref.chapter);
   }
   const book = displayBookName(ref.book);

@@ -102,6 +102,12 @@ describe("applyLearningSections", () => {
     expect(packed[0]?.sectionLabel).toBe("John 3");
   });
 
+  it("labels a whole one-chapter book with the book name only", () => {
+    const packed = applyLearningSections(ones(6, { book: "Jude", chapter: 1 }));
+    expect(packed.every((item) => item.sectionIndex === 0)).toBe(true);
+    expect(packed[0]?.sectionLabel).toBe("Jude");
+  });
+
   it("still starts a new section when the chapter changes", () => {
     const packed = applyLearningSections([
       piece(0, 1, 1, { book: "John", chapter: 3 }),

@@ -78,6 +78,10 @@ describe("VerseRangeOverlayChip", () => {
     const { onNudge } = renderChip(john(16));
 
     expect(screen.getByRole("group")).toHaveTextContent("John 1:16");
+    expect(screen.getByRole("group")).toHaveAttribute(
+      "aria-label",
+      "John 1:16",
+    );
     expect(nudge("start", "grow")).toBeDisabled();
     expect(nudge("start", "grow")).toHaveAttribute("tabindex", "-1");
     expect(nudge("end", "grow")).toHaveClass("opacity-0!");
@@ -251,5 +255,12 @@ describe("NoteEditor retarget gate", () => {
       body: "Saved body",
       tags: ["hope"],
     });
+  });
+
+  it("keeps a one-chapter verse as book, chapter, and verse", () => {
+    renderChip({ book: "Jude", chapter: 1, startVerse: 2, endVerse: 2 });
+    const chip = screen.getByRole("group");
+    expect(chip).toHaveTextContent("Jude 1:2");
+    expect(chip).toHaveAttribute("aria-label", "Jude 1:2");
   });
 });
