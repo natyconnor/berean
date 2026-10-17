@@ -823,7 +823,7 @@ export function InlineVerseEditor({
       };
     }
 
-    if (draftChapterErrorMessage) {
+    if (!parsedRef && draftChapterErrorMessage) {
       return {
         tone: "error",
         label: draftChapterErrorMessage,

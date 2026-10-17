@@ -227,25 +227,44 @@ export function parseVerseRef(
     };
   }
 
-  if (!options.allowChapterOnly) {
+  const bareNumberMatch = value.match(/^(.+?)\s+(\d+)(?:-(\d+))?$/);
+  if (!bareNumberMatch) return null;
+
+  const canonicalBook = resolveCanonicalBookName(bareNumberMatch[1]);
+  if (!canonicalBook) return null;
+
+  const bookInfo = getBookInfo(canonicalBook);
+  if (!bookInfo) return null;
+
+  const start = Number.parseInt(bareNumberMatch[2], 10);
+  const end = bareNumberMatch[3]
+    ? Number.parseInt(bareNumberMatch[3], 10)
+    : start;
+  const isRange = bareNumberMatch[3] !== undefined;
+
+  if (bookInfo.chapters === 1 && (isRange || start !== 1)) {
+    if (start < 1 || end < start) {
+      return null;
+    }
+    return {
+      book: canonicalBook,
+      chapter: 1,
+      startVerse: start,
+      endVerse: end,
+    };
+  }
+
+  if (!options.allowChapterOnly || isRange) {
     return null;
   }
 
-  const chapterMatch = value.match(/^(.+?)\s+(\d+)$/);
-  if (!chapterMatch) return null;
-
-  const canonicalBook = resolveCanonicalBookName(chapterMatch[1]);
-  if (!canonicalBook) return null;
-
-  const chapter = Number.parseInt(chapterMatch[2], 10);
-  const bookInfo = getBookInfo(canonicalBook);
-  if (!bookInfo || chapter < 1 || chapter > bookInfo.chapters) {
+  if (start < 1 || start > bookInfo.chapters) {
     return null;
   }
 
   return {
     book: canonicalBook,
-    chapter,
+    chapter: start,
     startVerse: 1,
     endVerse: 1,
     scope: "chapter",
