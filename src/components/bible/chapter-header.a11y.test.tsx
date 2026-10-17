@@ -124,6 +124,24 @@ describe("ChapterHeader accessible chapter controls", () => {
     ).toBeInTheDocument();
   });
 
+  it("omits the chapter picker on a one-chapter book and keeps it on John 3", () => {
+    renderHeader("Jude", 1);
+    expect(
+      screen.getByRole("button", { name: "Change book, currently Jude" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Change chapter/ }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    renderHeader("John", 3);
+    expect(
+      screen.getByRole("button", {
+        name: "Change chapter in John, currently chapter 3",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("names chapter notes with the chapter for a multi-chapter book", () => {
     renderHeader("John", 3, { onChapterNotesClick: vi.fn() });
     expect(
