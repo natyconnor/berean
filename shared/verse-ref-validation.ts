@@ -1,4 +1,4 @@
-import { displayBookName, getBookInfo } from "../src/lib/bible-books";
+import { formatBookChapter, getBookInfo } from "../src/lib/bible-books";
 import { getChapterVerseCount } from "../src/lib/bible-verse-counts";
 
 export interface VerseRefLike {
@@ -68,13 +68,13 @@ export function getVerseRefBoundsErrorMessage(
         : "That chapter does not exist.";
     }
     case "invalid_range":
-      if (ref.startVerse < 1) {
-        return "Verse numbers start at 1.";
+      if (ref.startVerse < 1 || ref.endVerse < 1) {
+        return "Verses start at 1.";
       }
-      return "The ending verse must come after the starting verse.";
+      return "That range is backwards.";
     case "verse_out_of_range":
       return validation.maxVerse
-        ? `${displayBookName(ref.book)} ${ref.chapter} only has ${validation.maxVerse} verse${validation.maxVerse === 1 ? "" : "s"}.`
+        ? `${formatBookChapter(ref.book, ref.chapter)} only has ${validation.maxVerse} verse${validation.maxVerse === 1 ? "" : "s"}.`
         : "That verse does not exist.";
     default:
       return "That verse reference is invalid.";

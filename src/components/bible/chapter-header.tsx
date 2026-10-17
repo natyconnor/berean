@@ -24,7 +24,7 @@ import {
   ChevronRight,
   ScrollText,
 } from "lucide-react";
-import { displayBookName } from "@/lib/bible-books";
+import { displayBookName, getBookInfo } from "@/lib/bible-books";
 import { getAdjacentChapterDestinations } from "@/lib/chapter-navigation";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import {
@@ -304,6 +304,7 @@ export function ChapterHeader({
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [navigatorBook, setNavigatorBook] = useState<string | null>(null);
 
+  const hasChapterPicker = getBookInfo(book)?.chapters !== 1;
   const chapterLabel = formatBookChapter(book, chapter);
   const previousChapterName = previous
     ? `Previous chapter (${previous.label})`
@@ -389,19 +390,21 @@ export function ChapterHeader({
             </span>
             <ReferenceCaret />
           </TooltipButton>
-          <TooltipButton
-            variant="ghost"
-            onClick={openChapterNavigator}
-            className={cn(
-              REFERENCE_SEGMENT_CLASS,
-              "shrink-0 tabular-nums @max-xs/chapter-chrome:px-1",
-            )}
-            tooltip={`Change chapter in ${book}`}
-            aria-label={`Change chapter in ${book}, currently chapter ${chapter}`}
-          >
-            {chapter}
-            <ReferenceCaret />
-          </TooltipButton>
+          {hasChapterPicker ? (
+            <TooltipButton
+              variant="ghost"
+              onClick={openChapterNavigator}
+              className={cn(
+                REFERENCE_SEGMENT_CLASS,
+                "shrink-0 tabular-nums @max-xs/chapter-chrome:px-1",
+              )}
+              tooltip={`Change chapter in ${book}`}
+              aria-label={`Change chapter in ${book}, currently chapter ${chapter}`}
+            >
+              {chapter}
+              <ReferenceCaret />
+            </TooltipButton>
+          ) : null}
           <PassageNavigator
             open={navigatorOpen}
             onOpenChange={handleNavigatorOpenChange}

@@ -1,3 +1,5 @@
+import { PUBLIC_LEGAL_PATHS } from "../../shared/http-routes";
+
 /**
  * Routes where the Mode Dock should not render (and its shortcuts should not
  * fire). Settings is inside AppShell; public legal pages are usually outside
@@ -5,9 +7,7 @@
  */
 const MODE_DOCK_HIDDEN_PATH_PREFIXES = [
   "/settings",
-  "/privacy",
-  "/terms",
-  "/license",
+  ...PUBLIC_LEGAL_PATHS,
 ] as const;
 
 export function shouldHideModeDock(pathname: string): boolean {

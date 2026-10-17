@@ -59,9 +59,9 @@ describe("memorizeSearch", () => {
       title: "Psalm 23",
       planLine: "6 verses · learn it in about 4 days",
     });
-    expect(memorizeSearch("Jude 1")).toMatchObject({
+    expect(memorizeSearch("Jude")).toMatchObject({
       kind: "match",
-      title: "Jude 1",
+      title: "Jude",
       target: { kind: "chapters", book: "Jude", startChapter: 1 },
     });
   });
@@ -81,13 +81,29 @@ describe("memorizeSearch", () => {
       title: "Philippians 4:6–7",
       planLine: "2 verses · learn it in about 3 days",
     });
+    expect(memorizeSearch("Jude 1")).toMatchObject({
+      kind: "match",
+      title: "Jude 1:1",
+      target: {
+        kind: "spans",
+        spans: [{ book: "Jude", chapter: 1, startVerse: 1, endVerse: 1 }],
+      },
+    });
+    expect(memorizeSearch("Jude 2")).toMatchObject({
+      kind: "match",
+      title: "Jude 1:2",
+    });
+    expect(memorizeSearch("Jude 1-3")).toMatchObject({
+      kind: "match",
+      title: "Jude 1:1–3",
+    });
   });
 
   it("finds nothing for text that is not a reference or past the chapter", () => {
     expect(memorizeSearch("Psa")).toEqual({ kind: "noMatch" });
     expect(memorizeSearch("Nowhere 3")).toEqual({ kind: "noMatch" });
     expect(memorizeSearch("John 3:99")).toEqual({ kind: "noMatch" });
-    expect(memorizeSearch("Jude 2")).toEqual({ kind: "noMatch" });
+    expect(memorizeSearch("Jude 26")).toEqual({ kind: "noMatch" });
   });
 
   it("turns a chapter range into one passage, using its preset when there is one", () => {

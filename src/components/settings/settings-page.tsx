@@ -400,6 +400,13 @@ export function SettingsPage() {
           >
             Terms of Service
           </Link>
+          <span className="mx-2">·</span>
+          <Link
+            to="/license"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            License
+          </Link>
         </section>
       </motion.div>
 

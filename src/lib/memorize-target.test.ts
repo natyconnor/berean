@@ -503,6 +503,7 @@ describe("memorizeTargetSpans", () => {
 describe("titles and scope", () => {
   it("formats chapter and verse titles with an en dash", () => {
     expect(formatChapterSpanTitle("Psalms", 23, 23)).toBe("Psalm 23");
+    expect(formatChapterSpanTitle("Jude", 1, 1)).toBe("Jude");
     expect(formatChapterSpanTitle("John", 14, 17)).toBe("John 14\u201317");
     expect(formatSpanTitle(span("John", 3, 16))).toBe("John 3:16");
     expect(formatSpanTitle(span("Psalms", 46, 1, 3))).toBe("Psalm 46:1\u20133");

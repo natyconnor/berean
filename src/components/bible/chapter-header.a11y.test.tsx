@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChapterHeader } from "./chapter-header";
@@ -15,7 +16,14 @@ vi.mock("@/lib/use-tabs", () => ({
   }),
 }));
 
-function renderHeader(book: string, chapter: number) {
+function renderHeader(
+  book: string,
+  chapter: number,
+  extras?: Pick<
+    ComponentProps<typeof ChapterHeader>,
+    "onChapterNotesClick" | "chapterScopedNoteCount"
+  >,
+) {
   return render(
     <TooltipProvider delayDuration={0}>
       <ChapterHeader
@@ -23,6 +31,7 @@ function renderHeader(book: string, chapter: number) {
         chapter={chapter}
         showSectionHeaders={false}
         onToggleSectionHeaders={vi.fn()}
+        {...extras}
       />
     </TooltipProvider>,
   );
@@ -99,6 +108,45 @@ describe("ChapterHeader accessible chapter controls", () => {
     expect(
       screen.getByRole("button", { name: "Next chapter (Hebrews 1)" }),
     ).toBeEnabled();
+  });
+
+  it("names an adjacent one-chapter book without a chapter number", () => {
+    renderHeader("3 John", 1);
+    expect(
+      screen.getByRole("button", { name: "Next chapter (Jude)" }),
+    ).toBeEnabled();
+  });
+
+  it("names chapter notes for a one-chapter book without a chapter number", () => {
+    renderHeader("Jude", 1, { onChapterNotesClick: vi.fn() });
+    expect(
+      screen.getByRole("button", { name: "Add a chapter note for Jude" }),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the chapter picker on a one-chapter book and keeps it on John 3", () => {
+    renderHeader("Jude", 1);
+    expect(
+      screen.getByRole("button", { name: "Change book, currently Jude" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Change chapter/ }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    renderHeader("John", 3);
+    expect(
+      screen.getByRole("button", {
+        name: "Change chapter in John, currently chapter 3",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("names chapter notes with the chapter for a multi-chapter book", () => {
+    renderHeader("John", 3, { onChapterNotesClick: vi.fn() });
+    expect(
+      screen.getByRole("button", { name: "Add a chapter note for John 3" }),
+    ).toBeInTheDocument();
   });
 
   it("uses the reader-facing psalm name", () => {

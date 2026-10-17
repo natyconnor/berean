@@ -154,15 +154,14 @@ function parseSearchPassage(
     const startChapter = Number.parseInt(chapterRange[2], 10);
     const endChapter = Number.parseInt(chapterRange[3], 10);
     if (
-      !book ||
-      chapters === undefined ||
-      startChapter < 1 ||
-      endChapter < startChapter ||
-      endChapter > chapters
+      book &&
+      chapters !== undefined &&
+      startChapter >= 1 &&
+      endChapter >= startChapter &&
+      endChapter <= chapters
     ) {
-      return null;
+      return { kind: "chapters", book, startChapter, endChapter };
     }
-    return { kind: "chapters", book, startChapter, endChapter };
   }
 
   const ref = parseVerseRef(normalized, { allowChapterOnly: true });

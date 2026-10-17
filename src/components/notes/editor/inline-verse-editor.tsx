@@ -119,16 +119,32 @@ function readReferenceDraft(
   }
 
   const match = value.match(/^(.+?)\s+(\d*)(?::(\d*)(?:-(\d*))?)?$/);
-  if (!match) return null;
+  if (match) {
+    const canonicalBook = resolveCanonicalBookName(match[1]);
+    if (!canonicalBook) return null;
 
-  const canonicalBook = resolveCanonicalBookName(match[1]);
+    return {
+      book: canonicalBook,
+      chapterText: match[2] ?? "",
+      startVerseText: match[3] ?? "",
+      endVerseText: match[4] ?? null,
+    };
+  }
+
+  const verseRangeMatch = value.match(/^(.+?)\s+(\d+)-(\d*)$/);
+  if (!verseRangeMatch) return null;
+
+  const canonicalBook = resolveCanonicalBookName(verseRangeMatch[1]);
   if (!canonicalBook) return null;
+
+  const bookInfo = getBookInfo(canonicalBook);
+  if (!bookInfo || bookInfo.chapters !== 1) return null;
 
   return {
     book: canonicalBook,
-    chapterText: match[2] ?? "",
-    startVerseText: match[3] ?? "",
-    endVerseText: match[4] ?? null,
+    chapterText: "1",
+    startVerseText: verseRangeMatch[2],
+    endVerseText: verseRangeMatch[3],
   };
 }
 
@@ -763,10 +779,10 @@ export function InlineVerseEditor({
   );
 
   const hasStructuredReferenceInput = useMemo(() => {
-    if (draft) return true;
+    if (parsedRef || draft) return true;
     if (!effectiveQuery.endsWith(" ")) return false;
     return resolveCanonicalBookName(trimmedEffectiveQuery) !== null;
-  }, [draft, effectiveQuery, trimmedEffectiveQuery]);
+  }, [draft, effectiveQuery, parsedRef, trimmedEffectiveQuery]);
 
   const bookSuggestions = useMemo(() => {
     if (!trimmedEffectiveQuery) return starterSuggestions;
@@ -823,7 +839,7 @@ export function InlineVerseEditor({
       };
     }
 
-    if (draftChapterErrorMessage) {
+    if (!parsedRef && draftChapterErrorMessage) {
       return {
         tone: "error",
         label: draftChapterErrorMessage,
@@ -833,9 +849,13 @@ export function InlineVerseEditor({
 
     if (parsedRef) {
       const label = formatVerseRef(parsedRef);
-      const readyLabel = isChapterScopeRef(parsedRef)
-        ? `${label} is ready to insert. Keep typing :verse for a specific verse.`
-        : `${label} is ready to insert.`;
+      let readyLabel = `${label} is ready to insert.`;
+      if (isChapterScopeRef(parsedRef)) {
+        readyLabel =
+          getBookInfo(parsedRef.book)?.chapters === 1
+            ? `${readyLabel} Keep typing a verse number, like ${displayBookName(parsedRef.book)} 5.`
+            : `${readyLabel} Keep typing :verse for a specific verse.`;
+      }
       switch (validation.status) {
         case "debouncing":
         case "checking":

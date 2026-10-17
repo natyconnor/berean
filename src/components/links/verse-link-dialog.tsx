@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { logInteraction } from "@/lib/dev-log";
 import type { VerseRef } from "@/lib/verse-ref-utils";
 import { formatVerseRef, parseVerseRef } from "@/lib/verse-ref-utils";
+import { getVerseRefBoundsErrorMessage } from "../../../shared/verse-ref-validation";
 
 interface VerseLinkDialogProps {
   open: boolean;
@@ -32,7 +33,7 @@ export function VerseLinkDialog({
 
   const handleCreate = useCallback(async () => {
     const target = parseVerseRef(targetInput.trim());
-    if (!target) {
+    if (!target || getVerseRefBoundsErrorMessage(target)) {
       logInteraction("verse-links", "create-failed", {
         reason: "invalid-reference",
         source: formatVerseRef(sourceRef),

@@ -30,6 +30,34 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.19](https://github.com/natyconnor/berean/compare/v1.17.18...v1.17.19) (2026-10-17)
+
+
+### Bug Fixes
+
+* **verse-ref:** label one-chapter books by name ([#298](https://github.com/natyconnor/berean/issues/298)) ([11e17a0](https://github.com/natyconnor/berean/commit/11e17a0948d66a67b4d1d9b782eb203a8ffe67e9))
+
+## [1.17.18](https://github.com/natyconnor/berean/compare/v1.17.17...v1.17.18) (2026-10-17)
+
+
+### Bug Fixes
+
+* **verse-ref:** show verse-0 and reversed-range errors ([#294](https://github.com/natyconnor/berean/issues/294)) ([9872626](https://github.com/natyconnor/berean/commit/98726266f83882d66446938b8dcfd8690c0b583b))
+
+## [1.17.17](https://github.com/natyconnor/berean/compare/v1.17.16...v1.17.17) (2026-10-17)
+
+
+### Bug Fixes
+
+* **verse-ref:** parse single-chapter Book N as a verse ([#291](https://github.com/natyconnor/berean/issues/291)) ([e901539](https://github.com/natyconnor/berean/commit/e90153946d5501e9d25f730d0e22b9d64c27f7eb))
+
+## [1.17.16](https://github.com/natyconnor/berean/compare/v1.17.15...v1.17.16) (2026-10-16)
+
+
+### Bug Fixes
+
+* Unstick splash after legal pages and serve /license ([#287](https://github.com/natyconnor/berean/issues/287)) ([c82aa0a](https://github.com/natyconnor/berean/commit/c82aa0ab460cc944e02cb914d2912b2fee75647b)), closes [#283](https://github.com/natyconnor/berean/issues/283)
+
 ## [1.17.15](https://github.com/natyconnor/berean/compare/v1.17.14...v1.17.15) (2026-10-13)
 
 

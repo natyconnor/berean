@@ -21,13 +21,16 @@ import {
 } from "@/lib/hero-backdrop";
 import { TabProvider } from "@/lib/tab-context";
 import { ThemeProvider } from "@/lib/theme-provider";
-import { resolveAppPath } from "../../../shared/http-routes";
+import {
+  PUBLIC_LEGAL_PATHS,
+  resolveAppPath,
+} from "../../../shared/http-routes";
 import { api } from "../../../convex/_generated/api";
 
 const MIN_SPLASH_MS = 600;
 const AUTH_BOOTSTRAP_DIAGNOSTIC_MS = 10_000;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 15_000;
-const PUBLIC_LEGAL_PATHS = new Set(["/privacy", "/terms"]);
+const PUBLIC_LEGAL_PATH_SET = new Set<string>(PUBLIC_LEGAL_PATHS);
 
 export function RootRouteComponent() {
   const { pathname, searchStr } = useLocation();
@@ -62,7 +65,7 @@ function RootRouteShell() {
     useAppVersionMonitor();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const location = useLocation();
-  const isPublicLegalPath = PUBLIC_LEGAL_PATHS.has(location.pathname);
+  const isPublicLegalPath = PUBLIC_LEGAL_PATH_SET.has(location.pathname);
   const onboardingStatus = useQuery(
     api.onboarding.getOnboardingStatus,
     isAuthenticated ? {} : "skip",
@@ -84,17 +87,37 @@ function RootRouteShell() {
 
   const alreadyReady = !isLoading && isAuthenticated;
 
-  const [minTimePassed, setMinTimePassed] = useState(() => alreadyReady);
+  const [minTimePassed, setMinTimePassed] = useState(
+    () => alreadyReady || isPublicLegalPath,
+  );
   const [splashGone, setSplashGone] = useState(
-    () => alreadyReady && tutorialStatus !== undefined,
+    () => isPublicLegalPath || (alreadyReady && tutorialStatus !== undefined),
   );
   const [authBootstrapTimedOut, setAuthBootstrapTimedOut] = useState(false);
+
+  // Legal pages never wait on the splash overlay. Mark it dismissed during
+  // render so leaving them does not remount a stuck hero cover (jsdom and
+  // some browsers never fire animationend on `.animate-splash-exit`).
+  if (isPublicLegalPath && !splashGone) {
+    setSplashGone(true);
+  }
+  if (isPublicLegalPath && !minTimePassed) {
+    setMinTimePassed(true);
+  }
 
   useEffect(() => {
     if (minTimePassed) return;
     const timer = setTimeout(() => setMinTimePassed(true), MIN_SPLASH_MS);
     return () => clearTimeout(timer);
   }, [minTimePassed]);
+
+  useEffect(() => {
+    if (splashGone || isPublicLegalPath) return;
+    // Same idea as `useDismissSplashBackdrop`: animationend is missing on some
+    // browsers (and in jsdom), so the overlay must not depend on it alone.
+    const fallback = window.setTimeout(() => setSplashGone(true), 800);
+    return () => window.clearTimeout(fallback);
+  }, [isPublicLegalPath, splashGone]);
 
   useEffect(() => {
     if (isPublicLegalPath || !isLoading) return;
@@ -235,8 +258,9 @@ function RootRouteShell() {
 
       {refreshPrompt}
 
-      {!splashGone && (
+      {!splashGone && !isPublicLegalPath && (
         <div
+          data-testid="app-splash-overlay"
           className="animate-splash-exit pointer-events-none fixed inset-0 z-50"
           onAnimationEnd={() => setSplashGone(true)}
         >

@@ -1,4 +1,12 @@
-import { BIBLE_BOOKS, displayBookName, getBookInfo } from "@/lib/bible-books";
+import {
+  BIBLE_BOOKS,
+  displayBookName,
+  formatBookChapter,
+  getBookInfo,
+} from "@/lib/bible-books";
+import { getVerseRefBoundsErrorMessage } from "../../shared/verse-ref-validation";
+
+export { formatBookChapter };
 
 export type VerseRefScope = "chapter";
 
@@ -15,10 +23,6 @@ export function isChapterScopeRef(
   ref: Pick<VerseRef, "scope"> | VerseRef,
 ): boolean {
   return ref.scope === "chapter";
-}
-
-export function formatBookChapter(book: string, chapter: number): string {
-  return `${displayBookName(book)} ${chapter}`;
 }
 
 export function formatVerseRef(ref: VerseRef): string {
@@ -139,14 +143,19 @@ function buildBookAliasEntries(): Array<{ alias: string; name: string }> {
 
 const BOOK_ALIAS_ENTRIES = buildBookAliasEntries();
 
+function findExactBookAlias(normalizedInput: string): string | null {
+  return (
+    BOOK_ALIAS_ENTRIES.find((entry) => entry.alias === normalizedInput)?.name ??
+    null
+  );
+}
+
 export function resolveCanonicalBookName(input: string): string | null {
   const normalizedInput = normalizeLookupToken(input);
   if (!normalizedInput) return null;
 
-  const exact = BOOK_ALIAS_ENTRIES.find(
-    (entry) => entry.alias === normalizedInput,
-  );
-  if (exact) return exact.name;
+  const exact = findExactBookAlias(normalizedInput);
+  if (exact) return exact;
 
   const prefix = BOOK_ALIAS_ENTRIES.find((entry) =>
     entry.alias.startsWith(normalizedInput),
@@ -217,7 +226,7 @@ export function parseVerseRef(
       ? Number.parseInt(compactReferenceMatch[3], 10)
       : startVerse;
 
-    if (!chapter || startVerse < 1 || endVerse < startVerse) {
+    if (!chapter) {
       return null;
     }
 
@@ -244,9 +253,6 @@ export function parseVerseRef(
     if (!bookInfo || chapter < 1 || chapter > bookInfo.chapters) {
       return null;
     }
-    if (startVerse < 1 || endVerse < startVerse) {
-      return null;
-    }
 
     return {
       book: canonicalBook,
@@ -256,25 +262,55 @@ export function parseVerseRef(
     };
   }
 
-  if (!options.allowChapterOnly) {
-    return null;
+  const bareNumberMatch = value.match(/^(.+?)\s+(\d+)(?:-(\d+))?$/);
+  if (bareNumberMatch) {
+    const canonicalBook = resolveCanonicalBookName(bareNumberMatch[1]);
+    if (!canonicalBook) return null;
+
+    const bookInfo = getBookInfo(canonicalBook);
+    if (!bookInfo) return null;
+
+    const start = Number.parseInt(bareNumberMatch[2], 10);
+    const end = bareNumberMatch[3]
+      ? Number.parseInt(bareNumberMatch[3], 10)
+      : start;
+    const isRange = bareNumberMatch[3] !== undefined;
+
+    if (bookInfo.chapters === 1) {
+      return {
+        book: canonicalBook,
+        chapter: 1,
+        startVerse: start,
+        endVerse: end,
+      };
+    }
+
+    if (!options.allowChapterOnly || isRange) {
+      return null;
+    }
+
+    if (start < 1 || start > bookInfo.chapters) {
+      return null;
+    }
+
+    return {
+      book: canonicalBook,
+      chapter: start,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    };
   }
 
-  const chapterMatch = value.match(/^(.+?)\s+(\d+)$/);
-  if (!chapterMatch) return null;
+  if (!options.allowChapterOnly) return null;
 
-  const canonicalBook = resolveCanonicalBookName(chapterMatch[1]);
-  if (!canonicalBook) return null;
-
-  const chapter = Number.parseInt(chapterMatch[2], 10);
-  const bookInfo = getBookInfo(canonicalBook);
-  if (!bookInfo || chapter < 1 || chapter > bookInfo.chapters) {
-    return null;
-  }
+  const exactBook = findExactBookAlias(normalizeLookupToken(value));
+  const exactBookInfo = exactBook ? getBookInfo(exactBook) : undefined;
+  if (!exactBook || exactBookInfo?.chapters !== 1) return null;
 
   return {
-    book: canonicalBook,
-    chapter,
+    book: exactBook,
+    chapter: 1,
     startVerse: 1,
     endVerse: 1,
     scope: "chapter",
@@ -290,7 +326,7 @@ export function buildVerseSuggestions(
 
   const results: VerseSuggestionItem[] = [];
   const parsedRef = parseVerseRef(query, options);
-  if (parsedRef) {
+  if (parsedRef && !getVerseRefBoundsErrorMessage(parsedRef)) {
     results.push({
       kind: "reference",
       key: `ref:${formatVerseRef(parsedRef)}`,
