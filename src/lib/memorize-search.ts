@@ -156,6 +156,7 @@ function parseSearchPassage(
     if (
       book &&
       chapters !== undefined &&
+      chapters > 1 &&
       startChapter >= 1 &&
       endChapter >= startChapter &&
       endChapter <= chapters

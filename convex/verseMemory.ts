@@ -1796,24 +1796,27 @@ function deriveDifficulty(attempts: Attempt[]): {
  * `Date.now()` in a query) and only used to flag whether the verse is due now.
  */
 export const verseDetail = query({
-  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  args: { verseRefId: v.string(), now: v.number() },
   returns: v.union(verseDetailValidator, v.null()),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) return null;
 
-    const ref = await ctx.db.get(args.verseRefId);
+    const verseRefId = ctx.db.normalizeId("verseRefs", args.verseRefId);
+    if (!verseRefId) return null;
+
+    const ref = await ctx.db.get(verseRefId);
     if (!ref || ref.userId !== userId) return null;
 
-    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
+    const memory = await findVerseMemory(ctx, userId, verseRefId);
     if (!memory) return null;
 
-    const saved = await findSavedVerse(ctx, userId, args.verseRefId);
+    const saved = await findSavedVerse(ctx, userId, verseRefId);
 
     const attemptRows = await ctx.db
       .query("verseMemoryReviews")
       .withIndex("by_userId_verseRefId_createdAt", (q) =>
-        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+        q.eq("userId", userId).eq("verseRefId", verseRefId),
       )
       .order("desc")
       .take(VERSE_DETAIL_ATTEMPT_LIMIT);
@@ -1828,7 +1831,7 @@ export const verseDetail = query({
     }));
 
     return {
-      verseRefId: args.verseRefId,
+      verseRefId,
       book: ref.book,
       chapter: ref.chapter,
       startVerse: ref.startVerse,

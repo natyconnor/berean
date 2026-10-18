@@ -57,6 +57,7 @@ import {
 } from "@/lib/memory-session-path";
 import { nextStepCopy } from "@/lib/memorize-plan";
 import { cn } from "@/lib/utils";
+import { asTableId } from "@/lib/convex-id";
 import { howItsGoing, verseDetailFacts } from "@/lib/verse-detail-copy";
 import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
@@ -118,11 +119,25 @@ function VerseDetailSkeleton() {
 export function VerseDetailPanel({
   verseRefId,
 }: {
-  verseRefId: Id<"verseRefs">;
+  verseRefId: Id<"verseRefs"> | string;
 }) {
   const now = useLiveNow();
   const frame = useMemoryPanelFrame();
-  const detail = useQuery(api.verseMemory.verseDetail, { verseRefId, now });
+  const id = asTableId<"verseRefs">(verseRefId);
+  const detail = useQuery(
+    api.verseMemory.verseDetail,
+    id ? { verseRefId: id, now } : "skip",
+  );
+
+  if (!id || detail === null) {
+    return (
+      <MemoryPanelFrame kind="verse" title="Verse not found">
+        <p className="py-6 text-sm text-muted-foreground">
+          This verse isn&apos;t in your Memory. It may have been removed.
+        </p>
+      </MemoryPanelFrame>
+    );
+  }
 
   if (detail === undefined) {
     return (
@@ -143,16 +158,6 @@ export function VerseDetailPanel({
     );
   }
 
-  if (detail === null) {
-    return (
-      <MemoryPanelFrame kind="verse" title="Verse not found">
-        <p className="py-6 text-sm text-muted-foreground">
-          This verse isn&apos;t in your Memory. It may have been removed.
-        </p>
-      </MemoryPanelFrame>
-    );
-  }
-
   const reference = formatVerseRefTitle(detail);
   return (
     <MemoryPanelFrame
@@ -162,7 +167,7 @@ export function VerseDetailPanel({
       actions={
         detail.inMemory ? (
           <StopMemorizingMenu
-            verseRefId={verseRefId}
+            verseRefId={id}
             reference={reference}
             onStopped={frame.exit}
           />
@@ -179,21 +184,25 @@ export function VerseDetail({
   verseRefId,
   returnTo,
 }: {
-  verseRefId: Id<"verseRefs">;
+  verseRefId: Id<"verseRefs"> | string;
   /** Where sessions started here return. */
   returnTo: string;
 }) {
   const now = useLiveNow();
-  const detail = useQuery(api.verseMemory.verseDetail, { verseRefId, now });
+  const id = asTableId<"verseRefs">(verseRefId);
+  const detail = useQuery(
+    api.verseMemory.verseDetail,
+    id ? { verseRefId: id, now } : "skip",
+  );
 
-  if (detail === undefined) return <VerseDetailSkeleton />;
-  if (detail === null) {
+  if (!id || detail === null) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
         This verse isn&apos;t in your Memory.
       </p>
     );
   }
+  if (detail === undefined) return <VerseDetailSkeleton />;
   return (
     <div className="space-y-5">
       <div className="min-w-0">

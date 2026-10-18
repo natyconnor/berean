@@ -371,6 +371,8 @@ export function sessionFromView(
       pieces: view.pieces,
       remainingIntroduces: view.remainingIntroduces,
       now,
+      lastSessionAt: view.lastSessionAt,
+      tzOffsetMinutes,
     }),
     pieces: view.pieces,
     addsOnDay: view.addsOnDay,

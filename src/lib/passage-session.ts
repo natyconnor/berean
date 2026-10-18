@@ -108,8 +108,9 @@ function sectionAllSolid(
 
 /**
  * Ongoing phase from piece state (after a warm-up or connect finishes).
- * Due verses and new introduces win. Warm-up is only forced on session open
- * via {@link initialPassageSessionPhase}; once that pass ends, move on.
+ * Due verses and new introduces win. Warm-up is only forced on a fresh
+ * session open via {@link initialPassageSessionPhase}; once that pass ends,
+ * or a reload finds today's work already persisted, move on.
  */
 export function sessionPhaseForPieces(args: {
   pieces: readonly PassagePiece[];
@@ -230,16 +231,27 @@ function clearSignals(
 /**
  * Opening phase for a passage session.
  * When at least two pieces are already on the practice rope, warm up with
- * them first (rehearsal window). Otherwise start the due verse or offer the
- * next introduce — same priority as {@link sessionPhaseForPieces}.
+ * them first (rehearsal window) unless this local day already has a
+ * persisted session — then resume from piece state. Otherwise start the
+ * due verse or offer the next introduce — same priority as
+ * {@link sessionPhaseForPieces}.
  */
 export function initialPassageSessionPhase(args: {
   pieces: readonly PassagePiece[];
   remainingIntroduces: number;
   now: number;
+  lastSessionAt?: number;
+  tzOffsetMinutes?: number;
 }): PassageSessionPhase {
   if (allSolid(args.pieces)) return "passage-complete";
-  if (ropePieceIndexes(args.pieces).length >= 2) return "rope";
+  const practicedToday =
+    args.lastSessionAt !== undefined &&
+    args.tzOffsetMinutes !== undefined &&
+    localDayIndex(args.lastSessionAt, args.tzOffsetMinutes) ===
+      localDayIndex(args.now, args.tzOffsetMinutes);
+  if (ropePieceIndexes(args.pieces).length >= 2 && !practicedToday) {
+    return "rope";
+  }
   return sessionPhaseForPieces(args);
 }
 

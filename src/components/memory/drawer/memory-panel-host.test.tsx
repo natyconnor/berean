@@ -158,8 +158,10 @@ const TODAY = {
   emptyPacks: [],
 };
 
+const VERSE_REF_ID = "j97xyz_9-Q";
+
 const VERSE_DETAIL = {
-  verseRefId: "v1",
+  verseRefId: VERSE_REF_ID,
   book: "Romans",
   chapter: 8,
   startVerse: 28,
@@ -330,7 +332,7 @@ describe("MemoryPanelHost", () => {
 
     rerender(
       <TooltipProvider>
-        <MemoryPanelHost panel="verse:v1" from="verses" />
+        <MemoryPanelHost panel={`verse:${VERSE_REF_ID}`} from="verses" />
       </TooltipProvider>,
     );
 
@@ -343,7 +345,7 @@ describe("MemoryPanelHost", () => {
     ).toHaveAttribute("href", "/memory?panel=verses");
     expect(
       within(dialog).getByRole("link", { name: "Open full page" }),
-    ).toHaveAttribute("href", "/memory/verse/v1?from=verses");
+    ).toHaveAttribute("href", `/memory/verse/${VERSE_REF_ID}?from=verses`);
     expect(
       within(dialog).getByRole("link", { name: "Review" }),
     ).toHaveAttribute(
@@ -353,7 +355,7 @@ describe("MemoryPanelHost", () => {
   });
 
   it("has no back link without from=verses", () => {
-    renderHost("verse:v1");
+    renderHost(`verse:${VERSE_REF_ID}`);
     expect(
       screen.queryByRole("link", { name: "Back to Your verses" }),
     ).not.toBeInTheDocument();
@@ -365,7 +367,7 @@ describe("MemoryPanelHost", () => {
   });
 
   it("confirms Stop memorizing, then goes back to Your verses", async () => {
-    renderHost("verse:v1", "verses");
+    renderHost(`verse:${VERSE_REF_ID}`, "verses");
 
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     await userEvent.click(
@@ -385,7 +387,9 @@ describe("MemoryPanelHost", () => {
     await waitFor(() =>
       expect(
         mocks.mutations.get("verseMemory.stopMemorizing"),
-      ).toHaveBeenCalledWith(expect.objectContaining({ verseRefId: "v1" })),
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ verseRefId: VERSE_REF_ID }),
+      ),
     );
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenLastCalledWith({
@@ -421,7 +425,9 @@ describe("MemoryPanelPage", () => {
       screen.getByRole("heading", { name: "Verse not found" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("This verse isn't in your Memory. It may have been removed."),
+      screen.getByText(
+        "This verse isn't in your Memory. It may have been removed.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Romans 8:28" }),
@@ -432,7 +438,7 @@ describe("MemoryPanelPage", () => {
     render(
       <TooltipProvider>
         <MemoryPanelPage
-          panel={{ kind: "verse", verseRefId: "v1" }}
+          panel={{ kind: "verse", verseRefId: VERSE_REF_ID }}
           from="verses"
         />
       </TooltipProvider>,
@@ -446,7 +452,7 @@ describe("MemoryPanelPage", () => {
     ).toHaveAttribute("href", "/memory/verses");
     expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute(
       "href",
-      "/memory/review?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory%2Fverse%2Fv1%3Ffrom%3Dverses",
+      `/memory/review?book=Romans&chapter=8&startVerse=28&endVerse=28&return=${encodeURIComponent(`/memory/verse/${VERSE_REF_ID}?from=verses`)}`,
     );
     expect(
       screen.queryByRole("link", { name: "Open full page" }),
@@ -459,7 +465,7 @@ describe("MemoryPanelPage", () => {
     render(
       <TooltipProvider>
         <MemoryPanelPage
-          panel={{ kind: "verse", verseRefId: "v1" }}
+          panel={{ kind: "verse", verseRefId: VERSE_REF_ID }}
           from={undefined}
         />
       </TooltipProvider>,
@@ -479,7 +485,7 @@ describe("MemoryPanelPage", () => {
     render(
       <TooltipProvider>
         <MemoryPanelPage
-          panel={{ kind: "verse", verseRefId: "v1" }}
+          panel={{ kind: "verse", verseRefId: VERSE_REF_ID }}
           from="verses"
         />
       </TooltipProvider>,

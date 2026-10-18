@@ -55,9 +55,7 @@ function MemoryPanelContent({ panel }: { panel: MemoryPanel }) {
     case "verses":
       return <VersesPanel />;
     case "verse":
-      return (
-        <VerseDetailPanel verseRefId={panel.verseRefId as Id<"verseRefs">} />
-      );
+      return <VerseDetailPanel verseRefId={panel.verseRefId} />;
     case "pack":
       return <PackDetail packId={panel.packId as Id<"packs">} />;
   }

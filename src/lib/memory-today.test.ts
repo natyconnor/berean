@@ -4,6 +4,7 @@ import type { GoalVerseInput } from "./memory-goals";
 import { DAY_MS } from "./memory-scheduler";
 import type { PassagePiece } from "./passage-pieces";
 import {
+  applyTodayDismissals,
   buildTodayModel,
   emptyTodayModel,
   formatNextReviewDay,
@@ -129,6 +130,35 @@ describe("buildTodayModel: state", () => {
   it("has work when anything is left today", () => {
     const model = buildTodayModel(input({ verses: [verse("open", 1)] }));
     expect(model.state).toBe("work");
+  });
+
+  it("drops a dismissed building passage from today's work", () => {
+    const model = buildTodayModel(
+      input({
+        passages: [
+          {
+            packId: "psalm16",
+            title: "Psalm 16",
+            status: "building",
+            pieces: [{ ...solidPiece(0), attachment: "unreached" }],
+            addsOnDay: 0,
+            intervalDays: 0,
+            dueAt: NOW,
+            createdAt: NOW,
+          },
+        ],
+      }),
+    );
+    expect(model.state).toBe("work");
+    expect(model.counts.passageSessions).toBe(1);
+
+    const next = applyTodayDismissals(model, new Set(["psalm16"]));
+    expect(next.counts.passageSessions).toBe(0);
+    expect(next.state).toBe("caughtUp");
+    expect(next.goals[0]).toMatchObject({
+      packId: "psalm16",
+      hasWorkToday: false,
+    });
   });
 
   it("lists packs with nothing in Memory apart from the goals", () => {

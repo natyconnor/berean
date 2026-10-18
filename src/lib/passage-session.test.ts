@@ -40,7 +40,7 @@ function piece(
 
 function session(
   pieces: readonly PassagePiece[],
-  extra?: Partial<PassageSessionState>,
+  extra?: Partial<PassageSessionState> & { lastSessionAt?: number },
 ): PassageSessionState {
   const addsOnDay = extra?.addsOnDay ?? 0;
   const addDayKey = extra?.addDayKey;
@@ -60,6 +60,8 @@ function session(
             ? PASSAGE_MAX_ADDS_PER_DAY - addsOnDay
             : remaining,
         now,
+        lastSessionAt: extra?.lastSessionAt,
+        tzOffsetMinutes: extra?.tzOffsetMinutes ?? TZ,
       }),
     pieces,
     addsOnDay,

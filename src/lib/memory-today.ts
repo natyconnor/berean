@@ -248,6 +248,50 @@ export function buildTodayModel<P extends string, V extends string>(
   };
 }
 
+/**
+ * A passage set aside with "That's enough for today" is done for this local
+ * day: drop it from Today's work, like a finished item.
+ */
+export function applyTodayDismissals<T extends TodayModel<string, string>>(
+  model: T,
+  dismissedPackIds: ReadonlySet<string>,
+): T {
+  if (dismissedPackIds.size === 0) return model;
+
+  let droppedSessions = 0;
+  let droppedReviews = 0;
+  const goals = model.goals.map((goal) => {
+    if (
+      goal.kind !== "passage" ||
+      !goal.hasWorkToday ||
+      !dismissedPackIds.has(goal.packId)
+    ) {
+      return goal;
+    }
+    if (goal.status === "building") droppedSessions += 1;
+    else droppedReviews += 1;
+    return { ...goal, hasWorkToday: false, todayStep: null };
+  });
+  if (droppedSessions === 0 && droppedReviews === 0) return model;
+
+  const counts = {
+    ...model.counts,
+    passageSessions: model.counts.passageSessions - droppedSessions,
+    reviews: model.counts.reviews - droppedReviews,
+  };
+  return {
+    ...model,
+    goals,
+    counts,
+    state:
+      model.state === "firstRun"
+        ? "firstRun"
+        : todayWorkCount(counts) === 0
+          ? "caughtUp"
+          : "work",
+  };
+}
+
 /** Everything left today, passages counted once each. */
 export function todayWorkCount(counts: TodayCounts): number {
   return counts.learningVerses + counts.passageSessions + counts.reviews;
