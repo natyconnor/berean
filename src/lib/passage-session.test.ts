@@ -501,6 +501,24 @@ describe("reducePassageSession", () => {
     expect(start.phase).toBe("rope");
   });
 
+  it("resumes the due verse after a reload when the passage was already practiced today", () => {
+    const start = session(
+      [
+        piece(0, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(1, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(2, "learning", { learnStage: 1, dueAt: NOW }),
+      ],
+      { lastSessionAt: NOW - 60_000 },
+    );
+    expect(start.phase).toBe("frontier");
+  });
+
   it("opens on the due verse when fewer than two pieces are practiced", () => {
     const start = session([
       piece(0, "attached", { learnStage: 2 }),

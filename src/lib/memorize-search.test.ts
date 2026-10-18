@@ -97,6 +97,22 @@ describe("memorizeSearch", () => {
       kind: "match",
       title: "Jude 1:1–3",
     });
+    expect(memorizeSearch("Jude 1-1")).toMatchObject({
+      kind: "match",
+      title: "Jude 1:1",
+      target: {
+        kind: "spans",
+        spans: [{ book: "Jude", chapter: 1, startVerse: 1, endVerse: 1 }],
+      },
+    });
+    expect(memorizeSearch("Obadiah 1-1")).toMatchObject({
+      kind: "match",
+      title: "Obadiah 1:1",
+    });
+    expect(memorizeSearch("Philemon 1-1")).toMatchObject({
+      kind: "match",
+      title: "Philemon 1:1",
+    });
   });
 
   it("finds nothing for text that is not a reference or past the chapter", () => {

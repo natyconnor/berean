@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+} from "@/lib/learn-dismissed-packs";
 import { DAY_MS } from "@/lib/memory-scheduler";
 
 import { TodayPage } from "./today-page";
@@ -282,6 +286,7 @@ function primaryButtons(container: HTMLElement): HTMLElement[] {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   mocks.queryResults.clear();
   mocks.queryByArgs.clear();
   mocks.navigate.mockReset();
@@ -298,6 +303,23 @@ beforeEach(() => {
 });
 
 describe("TodayPage", () => {
+  it("drops a passage set aside today from Today's to-dos", () => {
+    dismissLearnPackForToday("psalm16", learnDismissDayKey(NOW));
+    mocks.queryResults.set("memoryHome.today", {
+      ...WORK_TODAY,
+      counts: { learningVerses: 0, passageSessions: 1, reviews: 0 },
+      goals: [PASSAGE_GOAL],
+    });
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { name: /All caught up/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Start today|Continue/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("has exactly one primary button, Start today, when there is work", () => {
     mocks.queryResults.set("memoryHome.today", WORK_TODAY);
     const { container } = renderPage();

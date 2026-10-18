@@ -407,6 +407,27 @@ describe("MemoryPanelPage", () => {
     mocks.queryResults.set("verseMemory.verseDetail", VERSE_DETAIL);
   });
 
+  it("shows verse not found for a junk id", () => {
+    render(
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "verse", verseRefId: "xyz" }}
+          from={undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Verse not found" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This verse isn't in your Memory. It may have been removed."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Romans 8:28" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("links back to Your verses and returns sessions to the page", () => {
     render(
       <TooltipProvider>
