@@ -1,4 +1,4 @@
-import { Outlet, useLocation } from "@tanstack/react-router";
+import { Outlet, useLocation, useMatches } from "@tanstack/react-router";
 import { useConvexAuth } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -63,7 +63,11 @@ function RootRouteShell() {
     useAppVersionMonitor();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const location = useLocation();
+  const matches = useMatches();
+  const presentedPathname =
+    matches[matches.length - 1]?.pathname ?? location.pathname;
   const isPublicLegalPath = PUBLIC_LEGAL_PATH_SET.has(location.pathname);
+  const isPublicLegalMatch = PUBLIC_LEGAL_PATH_SET.has(presentedPathname);
   const onboardingStatus = useQuery(
     api.onboarding.getOnboardingStatus,
     isAuthenticated ? {} : "skip",
@@ -192,7 +196,7 @@ function RootRouteShell() {
 
   let content: ReactNode;
 
-  if (isPublicLegalPath) {
+  if (isPublicLegalMatch) {
     content = (
       <ThemeProvider>
         <Outlet />
