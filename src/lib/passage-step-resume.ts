@@ -126,6 +126,20 @@ export function clearPassageStepInProgress(packId: string): void {
   }
 }
 
+export function discardPassageStepMarkerIfLandedElsewhere(
+  landedPath = locationPath(),
+): void {
+  const marker = readMarker();
+  if (
+    marker?.path === undefined ||
+    landedPath === undefined ||
+    marker.path === landedPath
+  ) {
+    return;
+  }
+  clearPassageStepInProgress(marker.packId);
+}
+
 /**
  * SPA leave. Delay the clear so a StrictMode remount in this same turn can
  * mark again. A reload never runs this, so the next load still sees a reload.

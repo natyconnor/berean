@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearPassageStepInProgress,
+  discardPassageStepMarkerIfLandedElsewhere,
   isPassageStepReload,
   markPassageStepInProgress,
   PASSAGE_STEP_IN_PROGRESS_KEY,
@@ -21,6 +22,7 @@ describe("passage step resume", () => {
   afterEach(() => {
     clearPassageStepInProgress(PACK_ID);
     sessionStorage.clear();
+    history.replaceState({}, "", "/");
     vi.restoreAllMocks();
   });
 
@@ -74,8 +76,27 @@ describe("passage step resume", () => {
         path: window.location.pathname,
       }),
     );
+    discardPassageStepMarkerIfLandedElsewhere();
 
     expect(isPassageStepReload(PACK_ID)).toBe(true);
+  });
+
+  it("treats a leftover marker as a fresh open after a page load on another path then an in-app return", () => {
+    const sessionPath = "/memory/today";
+    sessionStorage.setItem(
+      PASSAGE_STEP_IN_PROGRESS_KEY,
+      JSON.stringify({
+        packId: PACK_ID,
+        origin: performance.timeOrigin - 1,
+        path: sessionPath,
+      }),
+    );
+    history.pushState({}, "", "/memory");
+    discardPassageStepMarkerIfLandedElsewhere();
+    history.pushState({}, "", sessionPath);
+
+    expect(isPassageStepReload(PACK_ID)).toBe(false);
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
   });
 
   it("stops skipping warm-up once the step is cleared", () => {
@@ -129,5 +150,6 @@ describe("passage step resume", () => {
     expect(isPassageStepReload(PACK_ID)).toBe(false);
     expect(() => markPassageStepInProgress(PACK_ID)).not.toThrow();
     expect(() => clearPassageStepInProgress(PACK_ID)).not.toThrow();
+    expect(() => discardPassageStepMarkerIfLandedElsewhere()).not.toThrow();
   });
 });
