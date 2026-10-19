@@ -80,6 +80,8 @@ interface PassageRecallCardProps {
   showJourneyBar?: boolean;
   /** Review interval; drives progress toward mastered when reviewing. */
   intervalDays?: number;
+  /** Review ease; pairs with interval and banked reps for mastery fill. */
+  ease?: number;
   /** Read (full text) banks without typing. Frontier only. */
   readContinue?: boolean;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
@@ -104,6 +106,7 @@ export function PassageRecallCard({
   status,
   showJourneyBar = false,
   intervalDays,
+  ease,
   readContinue = false,
   onSubmit,
   onContinueAfterResult,
@@ -261,6 +264,7 @@ export function PassageRecallCard({
               wordCount={wordCount}
               status={status}
               intervalDays={intervalDays}
+              ease={ease}
             />
           ) : null}
         </CardHeader>

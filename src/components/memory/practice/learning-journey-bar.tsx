@@ -20,15 +20,19 @@ interface LearningJourneyBarProps {
   wordCount?: number;
   /**
    * Lifecycle status. Learning fills its own bar to 100% learned. Reviewing
-   * and mastered replace that with a separate mastery bar driven by
-   * `intervalDays`.
+   * and mastered replace that with a separate mastery bar.
    */
   status?: MemoryStatus;
   /**
-   * Review interval in days. Ignored while learning. Once the verse has
-   * graduated, this is how full the mastery bar is.
+   * Review interval in days. Ignored while learning. Together with `stageReps`
+   * and `ease`, this estimates remaining exacts to mastered.
    */
   intervalDays?: number;
+  /**
+   * Current review ease. Used with `intervalDays` and `stageReps` to estimate
+   * remaining exacts to mastered. Defaults to the scheduler start ease.
+   */
+  ease?: number;
   className?: string;
 }
 
@@ -36,8 +40,9 @@ interface LearningJourneyBarProps {
  * Compact progress bar for the phase the verse is in now.
  *
  * While learning, the track fills to 100% learned. After graduation it is
- * replaced by a new mastery track that starts empty and fills as the review
- * interval approaches mastered. Fill fraction is {@link memoryProgressFraction}.
+ * replaced by a new mastery track that starts empty and fills one equal share
+ * per exact on the path to mastered. Fill fraction is
+ * {@link memoryProgressFraction}.
  *
  * From Memory stays the learning (amber) color. Reviewing is sky and mastered
  * is emerald.
@@ -48,6 +53,7 @@ export function LearningJourneyBar({
   wordCount,
   status,
   intervalDays,
+  ease,
   className,
 }: LearningJourneyBarProps): JSX.Element {
   const graduated = status === "reviewing" || status === "mastered";
@@ -62,6 +68,7 @@ export function LearningJourneyBar({
     stageReps ?? 0,
     intervalDays ?? 0,
     wordCount,
+    ease,
   );
   const pct = Math.round(fraction * 100);
   const ariaKind = graduated ? "Progress to mastered" : "Learning journey";

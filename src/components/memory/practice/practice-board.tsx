@@ -1045,6 +1045,7 @@ export function PracticeBoard({
             currentStageReps={currentProgress.stageReps}
             currentStatus={currentProgress.status}
             currentIntervalDays={currentProgress.intervalDays}
+            currentEase={currentProgress.ease}
             currentWordCount={currentWordCount}
             currentLocked={currentLocked}
             allowReorder={sessionClusterCount(baseVerses) > 1}
@@ -1427,6 +1428,7 @@ function PracticeCard({
             wordCount={wordCount}
             status={status}
             intervalDays={scheduleSnapshot.intervalDays}
+            ease={scheduleSnapshot.ease}
           />
           {locked ? (
             <p className="text-xs text-muted-foreground">

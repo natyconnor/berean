@@ -650,6 +650,7 @@ export function PassageSession({
             status={recall.status}
             showJourneyBar={recall.showJourneyBar}
             intervalDays={view.intervalDays}
+            ease={view.ease}
             readContinue={recall.readContinue}
             onSubmit={handleGraded}
             onContinueAfterResult={handleContinueAfterResult}

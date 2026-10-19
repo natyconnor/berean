@@ -43,6 +43,8 @@ interface PracticeVerseRailProps {
   currentStatus: MemoryStatus;
   /** Review interval; drives progress toward mastered on the journey bar. */
   currentIntervalDays?: number;
+  /** Review ease; pairs with interval and banked reps for mastery fill. */
+  currentEase?: number;
   /**
    * Word count of the active verse's text. When provided, the rep label uses
    * the length-adjusted required-rep count via {@link requiredRepsFor} so it
@@ -77,6 +79,7 @@ export function PracticeVerseRail({
   currentStageReps,
   currentStatus,
   currentIntervalDays,
+  currentEase,
   currentWordCount,
   currentLocked = false,
   allowReorder = true,
@@ -170,6 +173,7 @@ export function PracticeVerseRail({
               wordCount={currentWordCount}
               status={currentStatus}
               intervalDays={currentIntervalDays}
+              ease={currentEase}
             />
             {currentLocked ? (
               <p className="mt-1.5 text-[11px] text-muted-foreground">

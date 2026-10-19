@@ -1,6 +1,9 @@
 import {
+  EASE_START,
   MASTERED_INTERVAL_DAYS,
   MAX_LEARN_STAGE,
+  REVIEW_DAILY_INTERVAL_DAYS,
+  exactReviewsUntilMastered,
   requiredRepsFor,
   type MemoryStatus,
 } from "./memory-scheduler";
@@ -63,8 +66,9 @@ export function learningJourneyFraction(
  * Learning and mastery are separate bars, each on its own 0–100% scale:
  * - While learning (or not yet started), the bar is {@link learningJourneyFraction}
  *   and reaches 100% when the verse is fully learned.
- * - Once reviewing, a new bar starts at 0 and fills to 1 as `intervalDays`
- *   approaches {@link MASTERED_INTERVAL_DAYS}.
+ * - Once reviewing, a new bar starts at 0. Each exact on the path to mastered
+ *   fills an equal share, estimated from the current interval, banked
+ *   `stageReps`, and ease. Interval {@link MASTERED_INTERVAL_DAYS}+ is 100%.
  * - Mastered is a full mastery bar.
  *
  * The heart ring still compresses both phases onto one circle via
@@ -78,12 +82,40 @@ export function memoryProgressFraction(
   stageReps: number,
   intervalDays = 0,
   wordCount?: number,
+  ease = EASE_START,
 ): number {
   if (status === "mastered") return 1;
   if (status === "reviewing") {
-    return Math.max(0, Math.min(1, intervalDays / MASTERED_INTERVAL_DAYS));
+    return reviewingProgressFraction(intervalDays, stageReps, ease);
   }
   return learningJourneyFraction(learnStage, stageReps, wordCount, status);
+}
+
+/**
+ * How far a reviewing verse is along the exact-recall path to mastered.
+ *
+ * The denominator is the path length from a daily-interval start at this
+ * ease, so each remaining exact (including banked daily / every-other-day
+ * `stageReps`) is the same fraction of the bar.
+ */
+function reviewingProgressFraction(
+  intervalDays: number,
+  stageReps: number,
+  ease: number,
+): number {
+  if (intervalDays >= MASTERED_INTERVAL_DAYS) return 1;
+  const remaining = exactReviewsUntilMastered({
+    intervalDays,
+    ease,
+    stageReps,
+  });
+  const total = exactReviewsUntilMastered({
+    intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+    ease,
+    stageReps: 0,
+  });
+  if (total <= 0) return 1;
+  return Math.max(0, Math.min(1, (total - remaining) / total));
 }
 
 /**
@@ -96,8 +128,8 @@ export function memoryProgressFraction(
  *   bank, using `learnStage` + `stageReps` against each band's required reps
  *   ({@link requiredRepsFor}) so it approaches, but stays below, the reviewing
  *   floor.
- * - `reviewing` → 0.5…0.9 — a half that grows with the interval, scaled linearly
- *   from just-graduated up to {@link MASTERED_INTERVAL_DAYS}.
+ * - `reviewing` → 0.5…0.9 — the same per-exact reviewing path as
+ *   {@link memoryProgressFraction}, mapped into this band.
  * - `mastered` → 1 (full) — interval has reached the mastered threshold.
  *
  * Pure: no React, no `Date.now()`. `learnStage` / `stageReps` default to 0 so
@@ -108,12 +140,13 @@ export function masteryRingFraction(
   intervalDays: number,
   learnStage = 0,
   stageReps = 0,
+  ease = EASE_START,
 ): number {
   switch (status) {
     case "mastered":
       return 1;
     case "reviewing": {
-      const t = Math.max(0, Math.min(1, intervalDays / MASTERED_INTERVAL_DAYS));
+      const t = reviewingProgressFraction(intervalDays, stageReps, ease);
       return 0.5 + t * 0.4;
     }
     case "learning":

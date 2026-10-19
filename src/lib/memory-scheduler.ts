@@ -698,6 +698,36 @@ export function nextExactReviewIntervalDays(
 }
 
 /**
+ * Exact reviewing recalls still needed before the interval reaches
+ * {@link MASTERED_INTERVAL_DAYS}. Uses the same daily / every-other-day /
+ * growing rules as {@link scheduleNext}. Returns 0 once the interval is
+ * already at the mastered threshold.
+ */
+export function exactReviewsUntilMastered(
+  s: Pick<MemorySchedule, "intervalDays" | "ease" | "stageReps">,
+): number {
+  if (s.intervalDays >= MASTERED_INTERVAL_DAYS) return 0;
+
+  let current: Pick<
+    MemorySchedule,
+    "status" | "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+  > = {
+    status: "reviewing",
+    intervalDays: s.intervalDays,
+    ease: s.ease,
+    stageReps: Math.max(0, s.stageReps),
+    consecutiveCorrect: 0,
+  };
+  let remaining = 0;
+  const cap = 64;
+  while (remaining < cap && current.status !== "mastered") {
+    current = nextReviewingOnExact(current);
+    remaining += 1;
+  }
+  return remaining;
+}
+
+/**
  * Drop one post-graduation ladder step after a hard miss.
  *
  * Daily review returns to Challenge (due now, out of the review queue).

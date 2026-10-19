@@ -372,6 +372,7 @@ export function VerseDetailBody({
             stageReps={detail.stageReps}
             status={detail.status}
             intervalDays={detail.intervalDays}
+            ease={detail.ease}
           />
         ) : null}
         <p className="text-sm text-muted-foreground">{stepsLine}</p>

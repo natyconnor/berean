@@ -27,6 +27,7 @@ import {
   holdReviewingInterval,
   isFromMemoryGraduationAttempt,
   nextExactReviewIntervalDays,
+  exactReviewsUntilMastered,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -559,6 +560,43 @@ describe("post-graduation review ladder", () => {
     expect(next.consecutiveCorrect).toBe(2);
     expect(next.ease).toBe(2.3);
     expect(next.dueAt).toBe(NOW + DAY_MS);
+  });
+
+  it("counts remaining exacts to mastered from daily and every-other-day reps", () => {
+    const fresh = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      ease: EASE_START,
+      stageReps: 0,
+    });
+    const fromStart = exactReviewsUntilMastered(fresh);
+    expect(fromStart).toBeGreaterThan(
+      REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS,
+    );
+    expect(exactReviewsUntilMastered({ ...fresh, stageReps: 1 })).toBe(
+      fromStart - 1,
+    );
+    expect(
+      exactReviewsUntilMastered({
+        ...fresh,
+        intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+        stageReps: 0,
+      }),
+    ).toBe(fromStart - REVIEW_DAILY_REPS);
+    expect(
+      exactReviewsUntilMastered({
+        intervalDays: MASTERED_INTERVAL_DAYS,
+        ease: EASE_START,
+        stageReps: 0,
+      }),
+    ).toBe(0);
+
+    let s = fresh;
+    expect(exactReviewsUntilMastered(s)).toBe(fromStart);
+    for (let left = fromStart; left > 0; left -= 1) {
+      s = exactAt(s, s.dueAt);
+      expect(exactReviewsUntilMastered(s)).toBe(left - 1);
+    }
+    expect(s.status).toBe("mastered");
   });
 
   it("does not count an 80%+ close toward the daily streak and stays due", () => {

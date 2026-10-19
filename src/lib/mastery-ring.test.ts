@@ -45,24 +45,33 @@ function exactReview(s: MemorySchedule): MemorySchedule {
 }
 
 function barOf(
-  s: Pick<MemorySchedule, "status" | "learnStage" | "stageReps" | "intervalDays">,
+  s: Pick<
+    MemorySchedule,
+    "status" | "learnStage" | "stageReps" | "intervalDays" | "ease"
+  >,
 ): number {
   return memoryProgressFraction(
     s.status,
     s.learnStage,
     s.stageReps,
     s.intervalDays,
+    undefined,
+    s.ease,
   );
 }
 
 function ringOf(
-  s: Pick<MemorySchedule, "status" | "intervalDays" | "learnStage" | "stageReps">,
+  s: Pick<
+    MemorySchedule,
+    "status" | "intervalDays" | "learnStage" | "stageReps" | "ease"
+  >,
 ): number {
   return masteryRingFraction(
     s.status,
     s.intervalDays,
     s.learnStage,
     s.stageReps,
+    s.ease,
   );
 }
 
@@ -121,9 +130,16 @@ describe("masteryRingFraction", () => {
   it("fills the reviewing ring by the same per-exact share as the mastery bar", () => {
     const path = pathToMastered(reviewingAt());
     const exacts = path.length - 1;
-    expect(exacts).toBeGreaterThan(0);
+    expect(exacts).toBeGreaterThan(REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS);
+    const streakEnd = REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS;
+    const step = 0.4 / exacts;
+    for (let i = 1; i <= streakEnd; i += 1) {
+      expect(ringOf(path[i]) - ringOf(path[i - 1])).toBeCloseTo(step);
+    }
     for (let i = 0; i < exacts; i += 1) {
-      expect(ringOf(path[i])).toBeCloseTo(0.5 + (i / exacts) * 0.4);
+      expect(ringOf(path[i])).toBeCloseTo(0.5 + barOf(path[i]) * 0.4);
+      expect(ringOf(path[i])).toBeGreaterThanOrEqual(0.5);
+      expect(ringOf(path[i])).toBeLessThan(0.9);
     }
     expect(ringOf(path[exacts])).toBe(1);
   });
@@ -296,10 +312,14 @@ describe("memoryProgressFraction", () => {
   it("fills an equal share of the bar for each exact on the path to mastered", () => {
     const path = pathToMastered(reviewingAt());
     const exacts = path.length - 1;
-    expect(exacts).toBeGreaterThan(0);
+    expect(exacts).toBeGreaterThan(REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS);
     const step = 1 / exacts;
-    for (let i = 1; i <= exacts; i += 1) {
+    const streakEnd = REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS;
+    for (let i = 1; i <= streakEnd; i += 1) {
       expect(barOf(path[i]) - barOf(path[i - 1])).toBeCloseTo(step);
+    }
+    for (let i = 1; i <= exacts; i += 1) {
+      expect(barOf(path[i])).toBeGreaterThan(barOf(path[i - 1]));
     }
     expect(barOf(path[exacts])).toBe(1);
     expect(path[exacts]?.status).toBe("mastered");
