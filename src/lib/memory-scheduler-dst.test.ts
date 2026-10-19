@@ -74,33 +74,30 @@ function localMinutes(timestamp: number, timeZone: string): number {
   return hour * 60 + minute;
 }
 
-/**
- * Instant whose local clock is `hour:minute` on the day that starts at
- * `dayStart`. A raw `hour * 3600000` add overshoots a 23-hour spring-forward
- * day, so this nudges from that guess until the local clock matches.
- */
-function atLocalFromStart(
+function instantOnLocalClock(
   timeZone: string,
   dayStart: number,
   nextStart: number,
   hour: number,
   minute: number,
 ): number {
-  const target = hour * 60 + minute;
-  let ts = Math.min(
-    dayStart + hour * 60 * 60 * 1000 + minute * 60 * 1000,
-    nextStart - 1,
-  );
-  for (let i = 0; i < 4; i += 1) {
-    if (ts < dayStart) ts = dayStart;
-    if (ts >= nextStart) ts = nextStart - 1;
-    const local = localMinutes(ts, timeZone);
-    if (local === target) return ts;
-    ts += (target - local) * 60 * 1000;
+  const want = hour * 60 + minute;
+  const minuteMs = 60 * 1000;
+  let lo = 0;
+  let hi = Math.floor((nextStart - dayStart - 1) / minuteMs);
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (localMinutes(dayStart + mid * minuteMs, timeZone) < want) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
   }
-  throw new Error(
-    `No local ${pad2(hour)}:${pad2(minute)} after ${new Date(dayStart).toISOString()} in ${timeZone}`,
-  );
+  const ts = dayStart + lo * minuteMs;
+  if (localMinutes(ts, timeZone) !== want) {
+    throw new Error(`No local ${pad2(hour)}:${pad2(minute)} in ${timeZone}`);
+  }
+  return ts;
 }
 
 function reviewingAt(now: number): MemorySchedule {
@@ -133,7 +130,7 @@ describe("dueAtInCalendarDays across DST", () => {
   it("keeps a 1-day review at 11:30 PM at least 6 hours out", () => {
     const dayStart = startOfCalendarDate(PACIFIC, 2026, 10, 30);
     const nextStart = startOfCalendarDate(PACIFIC, 2026, 10, 31);
-    const now = atLocalFromStart(PACIFIC, dayStart, nextStart, 23, 30);
+    const now = instantOnLocalClock(PACIFIC, dayStart, nextStart, 23, 30);
     const due = dueAtInCalendarDays(now, 1, 420, PACIFIC);
     expect(due - now).toBeGreaterThanOrEqual(MIN_LEARNING_LOCK_MS);
     expect(due).toBe(now + MIN_LEARNING_LOCK_MS);
@@ -204,7 +201,7 @@ describe("dueAtInCalendarDays 2026 sweep", () => {
           throw new Error("sweep midnight table is short");
         }
         for (const [hour, minute] of localTimes) {
-          const now = atLocalFromStart(
+          const now = instantOnLocalClock(
             timeZone,
             dayStart,
             nextStart,
