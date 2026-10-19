@@ -6,6 +6,7 @@ import {
   isChapterScopeRef,
   parseVerseRef,
   resolveCanonicalBookName,
+  resolveExtraBookAliases,
   searchBibleBooks,
   unionVerseRefs,
   formatVerseRange,
@@ -527,10 +528,21 @@ describe("Song of Solomon aliases", () => {
       );
     },
   );
+});
 
-  it("registers extra aliases under a space-stripped map key", () => {
-    expect(parseVerseRef("SOS 2:4")).toEqual(SONG_OF_SOLOMON_2_4);
-    expect(parseVerseRef("Canticles 2:4")).toEqual(SONG_OF_SOLOMON_2_4);
+describe("resolveExtraBookAliases", () => {
+  it("resolves space-stripped and spaced keys to the canonical book", () => {
+    expect(
+      resolveExtraBookAliases({
+        "1John": ["1 Jn"],
+        "Song of Solomon": ["SOS"],
+      }),
+    ).toEqual(
+      new Map([
+        ["1 John", ["1 Jn"]],
+        ["Song of Solomon", ["SOS"]],
+      ]),
+    );
   });
 });
 
