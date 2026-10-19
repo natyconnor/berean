@@ -28,6 +28,7 @@ import {
   isFromMemoryGraduationAttempt,
   nextExactReviewIntervalDays,
   exactReviewsUntilMastered,
+  reviewingPathStartEase,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -1052,6 +1053,60 @@ describe("isDueForLearning / isLearningLocked", () => {
         frozenNow,
       ),
     ).toBe(false);
+  });
+});
+
+describe("reviewingPathStartEase", () => {
+  function exactAtDue(s: MemorySchedule): MemorySchedule {
+    return scheduleNext(
+      s,
+      review({ quality: "exact", accuracy: 100, mode: "review", now: s.dueAt }),
+    );
+  }
+
+  it("recovers the path's starting ease on every growth step", () => {
+    for (const startEase of [1.3, EASE_START, 2.37, 2.8]) {
+      let s = reviewing({
+        intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+        ease: startEase,
+        stageReps: 0,
+        consecutiveCorrect: 0,
+      });
+      while (s.status === "reviewing") {
+        if (s.intervalDays > REVIEW_EVERY_OTHER_INTERVAL_DAYS) {
+          expect(reviewingPathStartEase(s.intervalDays, s.ease)).toBeCloseTo(
+            startEase,
+            10,
+          );
+        }
+        s = exactAtDue(s);
+      }
+    }
+  });
+
+  it("returns the same value as the first call when called again", () => {
+    const cases: Array<[number, number]> = [
+      [REVIEW_DAILY_INTERVAL_DAYS, EASE_START],
+      [REVIEW_EVERY_OTHER_INTERVAL_DAYS, EASE_START],
+      [2.6, 2.6],
+      [3, 1.85],
+      [4.6, 2.35],
+      [5.2, EASE_START],
+      [7.3, 2.8],
+      [29.9, 1.3],
+      [0, EASE_START],
+      [Number.NaN, EASE_START],
+      [5.2, Number.NaN],
+    ];
+    const first = cases.map(([intervalDays, ease]) =>
+      reviewingPathStartEase(intervalDays, ease),
+    );
+    const second = cases.map(([intervalDays, ease]) =>
+      reviewingPathStartEase(intervalDays, ease),
+    );
+    expect(second.every((value, i) => Object.is(value, first[i]))).toBe(true);
+    expect(first[0]).toBe(EASE_START);
+    expect(first[5]).toBe(EASE_START);
   });
 });
 

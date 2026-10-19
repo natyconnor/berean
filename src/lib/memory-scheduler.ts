@@ -727,18 +727,12 @@ export function exactReviewsUntilMastered(
   return remaining;
 }
 
-export function reviewingPathStartEase(
+const reviewingPathStartEaseCache = new Map<string, number>();
+
+function computeReviewingPathStartEase(
   intervalDays: number,
   ease: number,
 ): number {
-  if (
-    !(intervalDays > REVIEW_EVERY_OTHER_INTERVAL_DAYS) ||
-    !Number.isFinite(intervalDays) ||
-    !Number.isFinite(ease)
-  ) {
-    return ease;
-  }
-
   for (let k = 0; k <= 64; k += 1) {
     const startEase = ease - k * 0.05;
     if (k > 0 && startEase < EASE_MIN - 1e-6) break;
@@ -764,6 +758,27 @@ export function reviewingPathStartEase(
     }
   }
   return ease;
+}
+
+export function reviewingPathStartEase(
+  intervalDays: number,
+  ease: number,
+): number {
+  if (
+    !(intervalDays > REVIEW_EVERY_OTHER_INTERVAL_DAYS) ||
+    !Number.isFinite(intervalDays) ||
+    !Number.isFinite(ease)
+  ) {
+    return ease;
+  }
+
+  const key = `${intervalDays}\0${ease}`;
+  const cached = reviewingPathStartEaseCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const startEase = computeReviewingPathStartEase(intervalDays, ease);
+  reviewingPathStartEaseCache.set(key, startEase);
+  return startEase;
 }
 
 /**
