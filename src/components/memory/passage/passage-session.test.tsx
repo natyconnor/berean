@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
+import { PASSAGE_STEP_IN_PROGRESS_KEY } from "@/lib/passage-step-resume";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -179,8 +180,8 @@ describe("PassageSession", () => {
 
   it("resumes the due verse after a reload mid-step", async () => {
     sessionStorage.setItem(
-      "berean:passage-step-in-progress",
-      JSON.stringify({ packId: PACK_ID, origin: 0 }),
+      PASSAGE_STEP_IN_PROGRESS_KEY,
+      JSON.stringify({ packId: PACK_ID, origin: performance.timeOrigin - 1 }),
     );
     renderSession(practicedDueView());
 
@@ -195,8 +196,10 @@ describe("PassageSession", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens with a warm-up when reopening a passage practiced earlier today", async () => {
-    renderSession(practicedDueView({ lastSessionAt: getSessionNow() - 60_000 }));
+  it("opens with a warm-up when reopening a passage practiced earlier today", () => {
+    renderSession(
+      practicedDueView({ lastSessionAt: getSessionNow() - 60_000 }),
+    );
 
     expect(
       screen.getByRole("status", { name: "Session phase: Warm up" }),
@@ -205,6 +208,17 @@ describe("PassageSession", () => {
     expect(
       screen.queryByRole("status", { name: "Session phase: First letters" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("clears the in-progress marker when the learner leaves", async () => {
+    const onExit = vi.fn();
+    renderSession(practicedDueView(), onExit);
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
   });
 
   it("jumps into a due verse instead of a mixed recitation", async () => {

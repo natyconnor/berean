@@ -63,8 +63,6 @@ function session(
             ? PASSAGE_MAX_ADDS_PER_DAY - addsOnDay
             : remaining,
         now,
-        lastSessionAt: extra?.lastSessionAt,
-        tzOffsetMinutes: extra?.tzOffsetMinutes ?? TZ,
         resume: extra?.resume,
       }),
     pieces,
