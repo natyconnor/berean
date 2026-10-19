@@ -524,7 +524,6 @@ describe("PackDetail for a pack", () => {
     expect(
       within(dialog).getByText("Pack · 3 verses · added Sep 12"),
     ).toBeInTheDocument();
-    // One review due and one Up-next verse: the pack's blended session runs both.
     expect(
       within(dialog).getByRole("link", { name: "Continue · 2 verses today" }),
     ).toHaveAttribute("href", `/memory/today?packId=mercedxx&${RETURN}`);

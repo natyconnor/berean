@@ -119,11 +119,6 @@ type Passage = NonNullable<
 const sectionHeadingClassName =
   "text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground";
 
-/**
- * One passage or pack, in a drawer over Today or on its full page: the one
- * main action for its state, progress, and every verse with its own sessions.
- * Session links return to wherever this is shown.
- */
 export function PackDetail({ packId }: { packId: Id<"packs"> | string }) {
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
