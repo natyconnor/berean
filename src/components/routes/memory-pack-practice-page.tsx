@@ -186,10 +186,7 @@ export function MemoryPackSessionPage({
         onDoneForToday={
           isLearning
             ? () => {
-                dismissLearnPackForToday(
-                  typedPackId,
-                  learnDismissDayKey(now),
-                );
+                dismissLearnPackForToday(typedPackId, learnDismissDayKey(now));
                 onExit();
               }
             : undefined

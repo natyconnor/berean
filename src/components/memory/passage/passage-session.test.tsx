@@ -256,7 +256,7 @@ describe("PassageSession", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("still resumes after a reload when StrictMode remounts the session", async () => {
+  it("still resumes after a reload when StrictMode remounts the session", () => {
     sessionStorage.setItem(
       PASSAGE_STEP_IN_PROGRESS_KEY,
       JSON.stringify({ packId: PACK_ID, origin: performance.timeOrigin - 1 }),
