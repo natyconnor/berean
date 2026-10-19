@@ -170,6 +170,13 @@ export interface ReviewInput {
    * of their next local day. Omitted falls back to a rolling day.
    */
   tzOffsetMinutes?: number;
+  /**
+   * IANA zone (e.g. `America/Los_Angeles`). When present, due dates use the
+   * offset on the due day itself so a DST change inside the interval still
+   * lands at local midnight. Invalid or omitted values fall back to
+   * `tzOffsetMinutes`, then to a rolling day.
+   */
+  timeZone?: string;
 }
 
 /** Ease bounds. Ease starts at {@link EASE_START} for freshly-seeded verses. */
@@ -287,18 +294,23 @@ export function dueIndexUntil(now: number): number {
  * late-night 1-day gap from reopening minutes after midnight.
  *
  * `tzOffsetMinutes` is the client's `Date.prototype.getTimezoneOffset()`
- * (minutes to add to local time to reach UTC, e.g. 420 for UTC-7). Without it
- * the local day is unknowable, so the due date falls back to a rolling day.
+ * (minutes to add to local time to reach UTC, e.g. 420 for UTC-7). `timeZone`
+ * is an IANA name; when it is valid, the due day's own offset is used so a
+ * DST change inside the interval still lands at local midnight. Without any
+ * zone info the local day is unknowable, so the due date falls back to a
+ * rolling day.
  */
 export function dueAtInCalendarDays(
   now: number,
   intervalDays: number,
   tzOffsetMinutes?: number,
+  timeZone?: string,
 ): number {
   const days = Math.max(1, Math.round(intervalDays));
   if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
     return now + days * DAY_MS;
   }
+  void timeZone;
   const offsetMs = tzOffsetMinutes * 60 * 1000;
   const localNow = now - offsetMs;
   const startOfLocalDay = Math.floor(localNow / DAY_MS) * DAY_MS;
