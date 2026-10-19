@@ -50,6 +50,7 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useStartPassage } from "@/hooks/use-start-passage";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { asTableId } from "@/lib/convex-id";
 import {
   EXTRA_PRACTICE_TOOLTIP,
   PRACTICE_ANYTIME_LABEL,
@@ -123,26 +124,26 @@ const sectionHeadingClassName =
  * main action for its state, progress, and every verse with its own sessions.
  * Session links return to wherever this is shown.
  */
-export function PackDetail({ packId }: { packId: Id<"packs"> }) {
+export function PackDetail({ packId }: { packId: Id<"packs"> | string }) {
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
-  const pack = useQuery(api.packs.get, { id: packId });
-  const members = useQuery(api.packs.resolveMembers, { id: packId, now });
-  const passage = useQuery(api.passageMemory.getForPack, {
-    packId,
-    now,
-    tzOffsetMinutes,
-  });
+  const id = asTableId<"packs">(packId);
+  const pack = useQuery(api.packs.get, id ? { id } : "skip");
+  const members = useQuery(api.packs.resolveMembers, id ? { id, now } : "skip");
+  const passage = useQuery(
+    api.passageMemory.getForPack,
+    id ? { packId: id, now, tzOffsetMinutes } : "skip",
+  );
 
   const touch = useMutation(api.packs.touch);
   const touched = useRef(false);
   useEffect(() => {
-    if (!pack || touched.current) return;
+    if (!id || !pack || touched.current) return;
     touched.current = true;
-    void touch({ id: packId });
-  }, [pack, packId, touch]);
+    void touch({ id });
+  }, [id, pack, touch]);
 
-  if (pack === null) {
+  if (!id || pack === null) {
     return (
       <MemoryPanelFrame title="Not found">
         <p className="py-6 text-sm text-muted-foreground">

@@ -10,7 +10,6 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 
-import type { Id } from "../../../../convex/_generated/dataModel";
 import { PackDetail } from "@/components/memory/packs/pack-detail";
 import { ProgressBody } from "@/components/memory/progress/progress-body";
 import { VerseDetailPanel } from "@/components/memory/verse-detail";
@@ -57,7 +56,7 @@ function MemoryPanelContent({ panel }: { panel: MemoryPanel }) {
     case "verse":
       return <VerseDetailPanel verseRefId={panel.verseRefId} />;
     case "pack":
-      return <PackDetail packId={panel.packId as Id<"packs">} />;
+      return <PackDetail packId={panel.packId} />;
   }
 }
 
