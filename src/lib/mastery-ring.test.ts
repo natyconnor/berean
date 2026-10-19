@@ -14,6 +14,7 @@ import {
   REVIEW_DAILY_REPS,
   REVIEW_EVERY_OTHER_INTERVAL_DAYS,
   REVIEW_EVERY_OTHER_REPS,
+  holdReviewingInterval,
   scheduleNext,
   type MemorySchedule,
 } from "./memory-scheduler";
@@ -85,6 +86,28 @@ function pathToMastered(start: MemorySchedule): MemorySchedule[] {
   return path;
 }
 
+function expectEqualReviewingShares(start: MemorySchedule) {
+  const path = pathToMastered(start);
+  const exacts = path.length - 1;
+  expect(exacts).toBeGreaterThan(REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS);
+  const barStep = 1 / exacts;
+  const ringStep = 0.4 / exacts;
+  for (let i = 1; i < exacts; i += 1) {
+    expect(barOf(path[i]) - barOf(path[i - 1])).toBeCloseTo(barStep, 10);
+    expect(ringOf(path[i]) - ringOf(path[i - 1])).toBeCloseTo(ringStep, 10);
+    expect(ringOf(path[i])).toBeCloseTo(0.5 + barOf(path[i]) * 0.4, 10);
+    expect(ringOf(path[i])).toBeGreaterThanOrEqual(0.5);
+    expect(ringOf(path[i])).toBeLessThan(0.9);
+  }
+  expect(barOf(path[exacts]) - barOf(path[exacts - 1])).toBeCloseTo(
+    barStep,
+    10,
+  );
+  expect(barOf(path[exacts])).toBe(1);
+  expect(ringOf(path[exacts])).toBe(1);
+  expect(path[exacts]?.status).toBe("mastered");
+}
+
 describe("masteryRingFraction", () => {
   it("shows no ring for new verses", () => {
     expect(masteryRingFraction("new", 0)).toBe(0);
@@ -128,20 +151,7 @@ describe("masteryRingFraction", () => {
   });
 
   it("fills the reviewing ring by the same per-exact share as the mastery bar", () => {
-    const path = pathToMastered(reviewingAt());
-    const exacts = path.length - 1;
-    expect(exacts).toBeGreaterThan(REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS);
-    const streakEnd = REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS;
-    const step = 0.4 / exacts;
-    for (let i = 1; i <= streakEnd; i += 1) {
-      expect(ringOf(path[i]) - ringOf(path[i - 1])).toBeCloseTo(step);
-    }
-    for (let i = 0; i < exacts; i += 1) {
-      expect(ringOf(path[i])).toBeCloseTo(0.5 + barOf(path[i]) * 0.4);
-      expect(ringOf(path[i])).toBeGreaterThanOrEqual(0.5);
-      expect(ringOf(path[i])).toBeLessThan(0.9);
-    }
-    expect(ringOf(path[exacts])).toBe(1);
+    expectEqualReviewingShares(reviewingAt());
   });
 
   it("banks daily and every-other-day reviewing reps on the heart ring", () => {
@@ -310,19 +320,13 @@ describe("memoryProgressFraction", () => {
   });
 
   it("fills an equal share of the bar for each exact on the path to mastered", () => {
-    const path = pathToMastered(reviewingAt());
-    const exacts = path.length - 1;
-    expect(exacts).toBeGreaterThan(REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS);
-    const step = 1 / exacts;
-    const streakEnd = REVIEW_DAILY_REPS + REVIEW_EVERY_OTHER_REPS;
-    for (let i = 1; i <= streakEnd; i += 1) {
-      expect(barOf(path[i]) - barOf(path[i - 1])).toBeCloseTo(step);
+    expectEqualReviewingShares(reviewingAt());
+  });
+
+  it("keeps a 1/total share on every exact through mastered at several eases", () => {
+    for (const ease of [1.3, EASE_START, 2.37, 2.8]) {
+      expectEqualReviewingShares(reviewingAt({ ease }));
     }
-    for (let i = 1; i <= exacts; i += 1) {
-      expect(barOf(path[i])).toBeGreaterThan(barOf(path[i - 1]));
-    }
-    expect(barOf(path[exacts])).toBe(1);
-    expect(path[exacts]?.status).toBe("mastered");
   });
 
   it("increases while banking daily streak reps before the interval leaves 1 day", () => {
@@ -406,7 +410,56 @@ describe("memoryProgressFraction", () => {
     });
     expect(barOf(retry)).toBe(before);
     expect(barOf(hold)).toBe(before);
+    expect(barOf(holdReviewingInterval(s, s.dueAt))).toBe(before);
     expect(barOf(lapse)).toBeLessThan(before);
+
+    const early = scheduleNext(s, {
+      quality: "exact",
+      accuracy: 100,
+      mode: "review",
+      now: s.dueAt - 1,
+    });
+    const secondEarly = scheduleNext(early, {
+      quality: "exact",
+      accuracy: 100,
+      mode: "review",
+      now: early.dueAt - 1,
+    });
+    expect(barOf(secondEarly)).toBe(barOf(early));
+    expect(ringOf(secondEarly)).toBe(ringOf(early));
+  });
+
+  it("stays in [0, 1] for odd reviewing rows", () => {
+    const eases = [0, -1, Number.NaN, 5];
+    const intervals = [0, -1, Number.NaN, 1.4, 2.4, 7.3];
+    const repsList = [-2, 9, Number.NaN];
+    for (const ease of eases) {
+      for (const intervalDays of intervals) {
+        for (const stageReps of repsList) {
+          const bar = memoryProgressFraction(
+            "reviewing",
+            3,
+            stageReps,
+            intervalDays,
+            undefined,
+            ease,
+          );
+          const ring = masteryRingFraction(
+            "reviewing",
+            intervalDays,
+            3,
+            stageReps,
+            ease,
+          );
+          expect(Number.isFinite(bar)).toBe(true);
+          expect(bar).toBeGreaterThanOrEqual(0);
+          expect(bar).toBeLessThanOrEqual(1);
+          expect(Number.isFinite(ring)).toBe(true);
+          expect(ring).toBeGreaterThanOrEqual(0);
+          expect(ring).toBeLessThanOrEqual(1);
+        }
+      }
+    }
   });
 
   it("leaves learning-phase bar behavior unchanged", () => {
