@@ -5,6 +5,7 @@ import {
   REVIEW_DAILY_INTERVAL_DAYS,
   exactReviewsUntilMastered,
   requiredRepsFor,
+  reviewingPathStartEase,
   type MemoryStatus,
 } from "./memory-scheduler";
 
@@ -94,9 +95,9 @@ export function memoryProgressFraction(
 /**
  * How far a reviewing verse is along the exact-recall path to mastered.
  *
- * The denominator is the path length from a daily-interval start at this
- * ease, so each remaining exact (including banked daily / every-other-day
- * `stageReps`) is the same fraction of the bar.
+ * The denominator is the path length from a daily-interval start at the
+ * path's starting ease. Growth exacts add 0.05 ease, so the live ease is
+ * ahead of that start once the interval grows.
  */
 function reviewingProgressFraction(
   intervalDays: number,
@@ -111,7 +112,7 @@ function reviewingProgressFraction(
   });
   const total = exactReviewsUntilMastered({
     intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
-    ease,
+    ease: reviewingPathStartEase(intervalDays, ease),
     stageReps: 0,
   });
   if (total <= 0) return 1;

@@ -728,6 +728,49 @@ export function exactReviewsUntilMastered(
 }
 
 /**
+ * Ease at the daily-interval start of this uninterrupted reviewing path.
+ *
+ * Each growth exact adds 0.05 (then clamps), so the live ease is ahead of
+ * the start once the interval has left every-other-day. Mastery fill uses
+ * this start ease for the path length so each exact fills an equal share.
+ */
+export function reviewingPathStartEase(
+  intervalDays: number,
+  ease: number,
+): number {
+  if (
+    !(intervalDays > REVIEW_EVERY_OTHER_INTERVAL_DAYS) ||
+    !Number.isFinite(intervalDays) ||
+    !Number.isFinite(ease)
+  ) {
+    return ease;
+  }
+
+  for (let k = 0; k <= 64; k += 1) {
+    const startEase = ease - k * 0.05;
+    if (k > 0 && startEase < EASE_MIN - 1e-6) break;
+    let current: Pick<
+      MemorySchedule,
+      "status" | "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+    > = {
+      status: "reviewing",
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      ease: startEase,
+      stageReps: 0,
+      consecutiveCorrect: 0,
+    };
+    for (let i = 0; i < 64; i += 1) {
+      if (Math.abs(current.intervalDays - intervalDays) <= 1e-6) {
+        return startEase;
+      }
+      if (current.status === "mastered") break;
+      current = nextReviewingOnExact(current);
+    }
+  }
+  return ease;
+}
+
+/**
  * Drop one post-graduation ladder step after a hard miss.
  *
  * Daily review returns to Challenge (due now, out of the review queue).
