@@ -6,10 +6,12 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexQueryCacheProvider } from "convex-helpers/react/cache";
 import { routeTree } from "./routeTree.gen";
 import { DevLogRoot } from "@/components/dev/dev-log-root";
+import { discardStalePassageStepMarker } from "@/lib/passage-step-resume";
 import { initDevSelectionLogger } from "./lib/dev-selection-logger";
 import "./index.css";
 
 initDevSelectionLogger();
+discardStalePassageStepMarker();
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
