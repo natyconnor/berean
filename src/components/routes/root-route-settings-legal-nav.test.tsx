@@ -106,6 +106,7 @@ vi.mock("@/components/tutorial/tutorial-provider", async () => {
     isTourActive: () => false,
     isStepActive: () => false,
     isFocusModeTutorialComplete: true,
+    isMainTutorialComplete: true,
   };
   return {
     TutorialProvider: ({ children }: { children: ReactNode }) =>
