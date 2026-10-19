@@ -429,6 +429,32 @@ describe("memoryProgressFraction", () => {
     expect(ringOf(secondEarly)).toBe(ringOf(early));
   });
 
+  it("does not drop on an exact when the live ease could not have produced this interval", () => {
+    const s = reviewingAt({ intervalDays: 2.6, ease: 2.0 });
+    const next = exactReview(s);
+    expect(next.intervalDays).toBeCloseTo(5.2, 5);
+    expect(next.ease).toBeCloseTo(2.05, 5);
+    expect(barOf(s)).toBeGreaterThan(0);
+    expect(barOf(s)).toBeLessThan(1);
+    expect(Number.isFinite(barOf(s))).toBe(true);
+    expect(barOf(next)).toBeGreaterThanOrEqual(barOf(s));
+    expect(ringOf(next)).toBeGreaterThanOrEqual(ringOf(s));
+    expect(barOf(next)).toBeLessThanOrEqual(1);
+    expect(Number.isFinite(barOf(next))).toBe(true);
+  });
+
+  it("does not drop on an exact when no start ease matches both interval and ease", () => {
+    const s = reviewingAt({ intervalDays: 5.2, ease: 2.05 });
+    const next = exactReview(s);
+    expect(barOf(s)).toBeGreaterThanOrEqual(0);
+    expect(barOf(s)).toBeLessThanOrEqual(1);
+    expect(Number.isFinite(barOf(s))).toBe(true);
+    expect(barOf(next)).toBeGreaterThanOrEqual(barOf(s));
+    expect(ringOf(next)).toBeGreaterThanOrEqual(ringOf(s));
+    expect(barOf(next)).toBeLessThanOrEqual(1);
+    expect(Number.isFinite(barOf(next))).toBe(true);
+  });
+
   it("stays in [0, 1] for odd reviewing rows", () => {
     const eases = [0, -1, Number.NaN, 5];
     const intervals = [0, -1, Number.NaN, 1.4, 2.4, 7.3];
