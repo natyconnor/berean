@@ -325,6 +325,7 @@ export function sessionFromView(
   now: number,
   tzOffsetMinutes: number,
   pieceWordCounts?: readonly number[],
+  timeZone?: string,
 ): PassageSessionState {
   return {
     phase: initialPassageSessionPhase({
@@ -337,6 +338,7 @@ export function sessionFromView(
     addDayKey: view.addDayKey,
     now,
     tzOffsetMinutes,
+    timeZone,
     pieceWordCounts,
   };
 }

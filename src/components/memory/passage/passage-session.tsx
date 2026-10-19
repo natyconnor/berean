@@ -53,6 +53,7 @@ import {
   type RopeStartOverride,
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,7 @@ export function PassageSession({
   const finishForToday = onDoneForToday ?? onExit;
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
+  const timeZone = getViewerTimeZone();
   const introduceNext = useMutation(api.passageMemory.introduceNext);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
 
@@ -143,7 +145,7 @@ export function PassageSession({
   const isMaintenance = status === "reviewing" || status === "mastered";
 
   const [state, setState] = useState<PassageSessionState>(() =>
-    sessionFromView(view, now, tzOffsetMinutes),
+    sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
   );
   const [introduceBusy, setIntroduceBusy] = useState(false);
   const [ropeOverride, setRopeOverride] =
@@ -211,6 +213,7 @@ export function PassageSession({
     }
     const attemptedAt = Date.now();
     const tz = tzOffsetMinutesAt(attemptedAt);
+    const zone = getViewerTimeZone();
     try {
       if (pending.name === "introduceNext") {
         const nextView = await introduceNext({
@@ -238,6 +241,7 @@ export function PassageSession({
         accuracy: pending.accuracy,
         now: attemptedAt,
         tzOffsetMinutes: tz,
+        timeZone: zone,
         durationMs,
         pieceIndex: pending.pieceIndex,
         wordCount:

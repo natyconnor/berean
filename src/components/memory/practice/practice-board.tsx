@@ -36,6 +36,7 @@ import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
   holdReviewingInterval,
@@ -498,6 +499,7 @@ export function PracticeBoard({
       if (!quality) return null;
       const attemptedAt = Date.now();
       const tzOffsetMinutes = new Date(attemptedAt).getTimezoneOffset();
+      const timeZone = getViewerTimeZone();
       const accuracy = verseAttemptAccuracy(tokens);
       try {
         if (passageStatus === "reviewing" || passageStatus === "mastered") {
@@ -508,6 +510,7 @@ export function PracticeBoard({
             accuracy,
             now: attemptedAt,
             tzOffsetMinutes,
+            timeZone,
           });
           return {
             status: view.status === "mastered" ? "mastered" : "reviewing",
@@ -528,6 +531,7 @@ export function PracticeBoard({
           now: attemptedAt,
           wordCount,
           tzOffsetMinutes,
+          timeZone,
         });
       } catch (error) {
         devLog.warn(
@@ -601,6 +605,7 @@ export function PracticeBoard({
   async function persistRetryHold(
     attemptedAt: number,
     tzOffsetMinutes: number,
+    timeZone: string,
   ): Promise<MemorySchedule | null> {
     if (!currentVerse) return null;
     if (composite) {
@@ -612,6 +617,7 @@ export function PracticeBoard({
           packId: composite.packId,
           now: attemptedAt,
           tzOffsetMinutes,
+          timeZone,
         });
         return {
           status: view.status === "mastered" ? "mastered" : "reviewing",
@@ -629,6 +635,7 @@ export function PracticeBoard({
         id: composite.packId,
         now: attemptedAt,
         tzOffsetMinutes,
+        timeZone,
       });
     }
     const verseRefId =
@@ -638,6 +645,7 @@ export function PracticeBoard({
       verseRefId,
       now: attemptedAt,
       tzOffsetMinutes,
+      timeZone,
     });
   }
 
@@ -790,6 +798,7 @@ export function PracticeBoard({
                 const tzOffsetMinutes = new Date(
                   attemptedAt,
                 ).getTimezoneOffset();
+                const timeZone = getViewerTimeZone();
                 const snapshot = memoryScheduleFromSnapshot(
                   scheduleSnapshotFrom(currentProgress),
                 );
@@ -798,6 +807,7 @@ export function PracticeBoard({
                       snapshot,
                       attemptedAt,
                       tzOffsetMinutes,
+                      timeZone,
                     )
                   : null;
                 if (localHold) adoptVerseSchedule(verseId, localHold);
@@ -805,6 +815,7 @@ export function PracticeBoard({
                   const next = await persistRetryHold(
                     attemptedAt,
                     tzOffsetMinutes,
+                    timeZone,
                   );
                   if (next) adoptVerseSchedule(verseId, next);
                 } catch (error) {
@@ -1063,6 +1074,7 @@ function PracticeCard({
               now,
               wordCount: wordCount ?? 0,
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+              timeZone: getViewerTimeZone(),
             })
           : null;
       // Freeze the step label on the step being graded; journey props may adopt

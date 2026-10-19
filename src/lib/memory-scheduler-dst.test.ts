@@ -10,7 +10,6 @@ import {
   type MemorySchedule,
 } from "./memory-scheduler";
 
-const HOUR_MS = 60 * 60 * 1000;
 const PACIFIC = "America/Los_Angeles";
 
 /** Civil date plus `days`, using UTC so month/year rollover stays calendar-only. */
@@ -52,18 +51,55 @@ function startOfCalendarDate(
   throw new Error(`No local midnight for ${key} in ${timeZone}`);
 }
 
-function atLocal(
+const clockFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function clockFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = clockFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    clockFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+function localMinutes(timestamp: number, timeZone: string): number {
+  const parts = clockFormatter(timeZone).formatToParts(new Date(timestamp));
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  return hour * 60 + minute;
+}
+
+/**
+ * Instant whose local clock is `hour:minute` on the day that starts at
+ * `dayStart`. A raw `hour * 3600000` add overshoots a 23-hour spring-forward
+ * day, so this nudges from that guess until the local clock matches.
+ */
+function atLocalFromStart(
   timeZone: string,
-  year: number,
-  month: number,
-  day: number,
+  dayStart: number,
+  nextStart: number,
   hour: number,
   minute: number,
 ): number {
-  return (
-    startOfCalendarDate(timeZone, year, month, day) +
-    hour * HOUR_MS +
-    minute * 60 * 1000
+  const target = hour * 60 + minute;
+  let ts = Math.min(
+    dayStart + hour * 60 * 60 * 1000 + minute * 60 * 1000,
+    nextStart - 1,
+  );
+  for (let i = 0; i < 4; i += 1) {
+    if (ts < dayStart) ts = dayStart;
+    if (ts >= nextStart) ts = nextStart - 1;
+    const local = localMinutes(ts, timeZone);
+    if (local === target) return ts;
+    ts += (target - local) * 60 * 1000;
+  }
+  throw new Error(
+    `No local ${pad2(hour)}:${pad2(minute)} after ${new Date(dayStart).toISOString()} in ${timeZone}`,
   );
 }
 
@@ -95,7 +131,9 @@ describe("dueAtInCalendarDays across DST", () => {
   });
 
   it("keeps a 1-day review at 11:30 PM at least 6 hours out", () => {
-    const now = atLocal(PACIFIC, 2026, 10, 30, 23, 30);
+    const dayStart = startOfCalendarDate(PACIFIC, 2026, 10, 30);
+    const nextStart = startOfCalendarDate(PACIFIC, 2026, 10, 31);
+    const now = atLocalFromStart(PACIFIC, dayStart, nextStart, 23, 30);
     const due = dueAtInCalendarDays(now, 1, 420, PACIFIC);
     expect(due - now).toBeGreaterThanOrEqual(MIN_LEARNING_LOCK_MS);
     expect(due).toBe(now + MIN_LEARNING_LOCK_MS);
@@ -151,29 +189,37 @@ describe("dueAtInCalendarDays 2026 sweep", () => {
   it.each(zones)(
     "hits local midnight of the target day in %s, except the 6-hour floor",
     (timeZone) => {
+      const dayCount = 365 + 30;
+      const starts: number[] = [];
+      for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
+        const [year, month, day] = addCivilDays(2026, 1, 1, dayOffset);
+        starts.push(startOfCalendarDate(timeZone, year, month, day));
+      }
       const misses: string[] = [];
       for (let dayOffset = 0; dayOffset < 365; dayOffset += 1) {
         const [year, month, day] = addCivilDays(2026, 1, 1, dayOffset);
+        const dayStart = starts[dayOffset];
+        const nextStart = starts[dayOffset + 1];
+        if (dayStart === undefined || nextStart === undefined) {
+          throw new Error("sweep midnight table is short");
+        }
         for (const [hour, minute] of localTimes) {
-          const now = atLocal(timeZone, year, month, day, hour, minute);
+          const now = atLocalFromStart(
+            timeZone,
+            dayStart,
+            nextStart,
+            hour,
+            minute,
+          );
           const nowKey = zonedDateKey(now, timeZone);
           expect(nowKey).toBe(dateKey(year, month, day));
           for (const interval of intervals) {
             const due = dueAtInCalendarDays(now, interval, undefined, timeZone);
-            const [dueYear, dueMonth, dueDay] = addCivilDays(
-              year,
-              month,
-              day,
-              interval,
-            );
-            const midnight = startOfCalendarDate(
-              timeZone,
-              dueYear,
-              dueMonth,
-              dueDay,
-            );
-            const floor = now + MIN_LEARNING_LOCK_MS;
-            const expected = Math.max(midnight, floor);
+            const midnight = starts[dayOffset + interval];
+            if (midnight === undefined) {
+              throw new Error("sweep midnight table is short");
+            }
+            const expected = Math.max(midnight, now + MIN_LEARNING_LOCK_MS);
             if (due !== expected) {
               misses.push(
                 `${timeZone} ${nowKey} ${pad2(hour)}:${pad2(minute)} +${interval}d → ${new Date(due).toISOString()} want ${new Date(expected).toISOString()}`,
@@ -184,5 +230,6 @@ describe("dueAtInCalendarDays 2026 sweep", () => {
       }
       expect(misses).toEqual([]);
     },
+    20_000,
   );
 });

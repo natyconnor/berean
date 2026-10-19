@@ -1,3 +1,5 @@
+import { zonedUpcomingDayStarts } from "./dashboard-buckets";
+
 /**
  * Pure spaced-repetition scheduler for verse memory.
  *
@@ -307,15 +309,38 @@ export function dueAtInCalendarDays(
   timeZone?: string,
 ): number {
   const days = Math.max(1, Math.round(intervalDays));
-  if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
+  const calendarDue = zonedCalendarDueAt(now, days, tzOffsetMinutes, timeZone);
+  if (calendarDue === undefined) {
     return now + days * DAY_MS;
   }
-  void timeZone;
+  return Math.max(calendarDue, now + MIN_LEARNING_LOCK_MS);
+}
+
+function zonedCalendarDueAt(
+  now: number,
+  days: number,
+  tzOffsetMinutes?: number,
+  timeZone?: string,
+): number | undefined {
+  if (timeZone && isValidTimeZone(timeZone)) {
+    return zonedUpcomingDayStarts(now, days + 1, timeZone)[days];
+  }
+  if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
+    return undefined;
+  }
   const offsetMs = tzOffsetMinutes * 60 * 1000;
   const localNow = now - offsetMs;
   const startOfLocalDay = Math.floor(localNow / DAY_MS) * DAY_MS;
-  const calendarDue = startOfLocalDay + days * DAY_MS + offsetMs;
-  return Math.max(calendarDue, now + MIN_LEARNING_LOCK_MS);
+  return startOfLocalDay + days * DAY_MS + offsetMs;
+}
+
+function isValidTimeZone(timeZone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -325,8 +350,9 @@ export function dueAtInCalendarDays(
 export function nextLearningSessionDueAt(
   now: number,
   tzOffsetMinutes?: number,
+  timeZone?: string,
 ): number {
-  return dueAtInCalendarDays(now, 1, tzOffsetMinutes);
+  return dueAtInCalendarDays(now, 1, tzOffsetMinutes, timeZone);
 }
 
 /**
@@ -367,7 +393,12 @@ function inProgressLearningDueAt(previousDueAt: number, now: number): number {
  */
 function computeDueAt(input: ReviewInput, intervalDays: number): number {
   if (intervalDays <= 0) return input.now;
-  return dueAtInCalendarDays(input.now, intervalDays, input.tzOffsetMinutes);
+  return dueAtInCalendarDays(
+    input.now,
+    intervalDays,
+    input.tzOffsetMinutes,
+    input.timeZone,
+  );
 }
 
 /** True while the verse is still on the learn ladder (not yet graduated). */
@@ -541,7 +572,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
         ease: s.ease,
         intervalDays: 0,
         dueAt: sessionEnding
-          ? nextLearningSessionDueAt(r.now, r.tzOffsetMinutes)
+          ? nextLearningSessionDueAt(r.now, r.tzOffsetMinutes, r.timeZone)
           : inProgressLearningDueAt(s.dueAt, r.now),
         consecutiveCorrect: s.consecutiveCorrect + 1,
         lapses: s.lapses,
@@ -787,7 +818,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
 
   // hold (60–79%): keep the current gap. A messy recall should not earn more
   // time before the next review.
-  return holdReviewingInterval(s, r.now, r.tzOffsetMinutes);
+  return holdReviewingInterval(s, r.now, r.tzOffsetMinutes, r.timeZone);
 }
 
 /**
@@ -804,6 +835,7 @@ export function holdReviewingInterval(
   s: MemorySchedule,
   now: number,
   tzOffsetMinutes?: number,
+  timeZone?: string,
 ): MemorySchedule {
   if (!isReviewPhase(s.status)) return s;
   const isEarly = now < s.dueAt;
@@ -815,7 +847,7 @@ export function holdReviewingInterval(
     stageReps: s.stageReps,
     ease: s.ease,
     intervalDays,
-    dueAt: dueAtInCalendarDays(now, intervalDays, tzOffsetMinutes),
+    dueAt: dueAtInCalendarDays(now, intervalDays, tzOffsetMinutes, timeZone),
     consecutiveCorrect: s.consecutiveCorrect,
     lapses: s.lapses,
     earlyReviewApplied: isEarly,
