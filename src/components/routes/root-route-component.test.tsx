@@ -18,6 +18,7 @@ vi.mock("@tanstack/react-router", async () => {
         locationState.pathname,
       ),
     useLocation: () => locationState,
+    useMatches: () => [{ pathname: locationState.pathname }],
     useNavigate: () => vi.fn(),
     useCanGoBack: () => false,
     Link: React.forwardRef<

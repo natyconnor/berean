@@ -1,11 +1,13 @@
 /**
  * In-progress passage step, so a reload can skip warm-up and a later open
- * the same day (Extra practice, another step) still warms up.
+ * the same day still warms up.
  *
  * sessionStorage survives a reload of this tab and dies with the tab.
  * The stored `origin` is `performance.timeOrigin` from the page that marked
- * the step. A matching origin is this same page load (StrictMode remount or
- * a leftover after SPA leave). A mismatch is a real reload.
+ * the step. A matching origin is this same page load (StrictMode remount).
+ * A mismatch on the same path is a real reload. A leftover from another
+ * route (typed URL) is a later open. SPA leave clears the marker; a reload
+ * does not run React unmount cleanup, so the marker stays for the next load.
  */
 
 export const PASSAGE_STEP_IN_PROGRESS_KEY = "berean:passage-step-in-progress";
@@ -13,6 +15,7 @@ export const PASSAGE_STEP_IN_PROGRESS_KEY = "berean:passage-step-in-progress";
 type Marker = {
   packId: string;
   origin: number;
+  path?: string;
 };
 
 function sessionStore(): Storage | null {
@@ -52,8 +55,19 @@ function toMarker(value: unknown): Marker | null {
   if (!value || typeof value !== "object") return null;
   const packId = (value as { packId?: unknown }).packId;
   const origin = (value as { origin?: unknown }).origin;
+  const path = (value as { path?: unknown }).path;
   if (typeof packId !== "string" || typeof origin !== "number") return null;
-  return { packId, origin };
+  if (path !== undefined && typeof path !== "string") return null;
+  return path === undefined ? { packId, origin } : { packId, origin, path };
+}
+
+function locationPath(): string | undefined {
+  try {
+    if (typeof window === "undefined") return undefined;
+    return window.location.pathname;
+  } catch {
+    return undefined;
+  }
 }
 
 function writeMarker(marker: Marker): void {
@@ -67,13 +81,27 @@ function writeMarker(marker: Marker): void {
   }
 }
 
+let pendingLeaveClear: ReturnType<typeof setTimeout> | undefined;
+
+function cancelPendingLeaveClear(): void {
+  if (pendingLeaveClear === undefined) return;
+  clearTimeout(pendingLeaveClear);
+  pendingLeaveClear = undefined;
+}
+
 export function isPassageStepReload(packId: string): boolean {
   const marker = readMarker();
   if (!marker || marker.packId !== packId) return false;
-  return marker.origin !== performance.timeOrigin;
+  if (marker.origin === performance.timeOrigin) return false;
+  const path = locationPath();
+  if (marker.path !== undefined && path !== undefined && marker.path !== path) {
+    return false;
+  }
+  return true;
 }
 
 export function markPassageStepInProgress(packId: string): void {
+  cancelPendingLeaveClear();
   const existing = readMarker();
   if (
     existing?.packId === packId &&
@@ -81,10 +109,14 @@ export function markPassageStepInProgress(packId: string): void {
   ) {
     return;
   }
-  writeMarker({ packId, origin: performance.timeOrigin });
+  const marker: Marker = { packId, origin: performance.timeOrigin };
+  const path = locationPath();
+  if (path !== undefined) marker.path = path;
+  writeMarker(marker);
 }
 
 export function clearPassageStepInProgress(packId: string): void {
+  cancelPendingLeaveClear();
   const existing = readMarker();
   if (existing?.packId !== packId) return;
   try {
@@ -92,4 +124,16 @@ export function clearPassageStepInProgress(packId: string): void {
   } catch {
     // sessionStorage unavailable
   }
+}
+
+/**
+ * SPA leave. Delay the clear so a StrictMode remount in this same turn can
+ * mark again. A reload never runs this, so the next load still sees a reload.
+ */
+export function releasePassageStepInProgress(packId: string): void {
+  cancelPendingLeaveClear();
+  pendingLeaveClear = setTimeout(() => {
+    pendingLeaveClear = undefined;
+    clearPassageStepInProgress(packId);
+  }, 0);
 }

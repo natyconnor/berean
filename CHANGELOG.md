@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.20](https://github.com/natyconnor/berean/compare/v1.17.19...v1.17.20) (2026-10-18)
+
+
+### Bug Fixes
+
+* **routes:** keep providers until the legal match commits ([#301](https://github.com/natyconnor/berean/issues/301)) ([abc05ff](https://github.com/natyconnor/berean/commit/abc05ffc27bb48a15d9cd39649f18eef4a009a0e))
+
 ## [1.17.19](https://github.com/natyconnor/berean/compare/v1.17.18...v1.17.19) (2026-10-17)
 
 

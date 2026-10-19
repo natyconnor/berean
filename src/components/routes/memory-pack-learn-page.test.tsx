@@ -1,10 +1,13 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { DAY_MS } from "@/lib/memory-scheduler";
+import { DONE_FOR_NOW_LABEL } from "@/components/memory/passage/passage-session-model";
 import type { EsvChapterData } from "../../../shared/esv-api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 import { MemoryPackLearnPage } from "./memory-pack-learn-page";
 
@@ -134,6 +137,7 @@ describe("MemoryPackLearnPage", () => {
     queryResults.clear();
     actionMocks.clear();
     mutationMocks.clear();
+    localStorage.clear();
     actionMock("esv.get").mockResolvedValue(psalm23);
     actionMock("esv.getChaptersBatch").mockResolvedValue([
       { chapter: 23, data: psalm23 },
@@ -178,5 +182,76 @@ describe("MemoryPackLearnPage", () => {
     expect(
       screen.queryByRole("button", { name: /^Psalm 23:5 \(/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("sets the pack aside from That's enough for today", async () => {
+    const now = getSessionNow();
+    queryResults.set("packs.get", {
+      _id: "pack_1",
+      name: "Jude",
+      kind: "custom",
+      createdAt: 0,
+      lastOpenedAt: 0,
+    });
+    queryResults.set("packs.resolveMembers", []);
+    queryResults.set("savedVerses.listRecordingIds", []);
+    queryResults.set("passageMemory.getForPack", {
+      _id: "passage_1" as Id<"passageMemory">,
+      packId: "pack_1" as Id<"packs">,
+      status: "building",
+      pieces: [
+        {
+          index: 0,
+          book: "Jude",
+          chapter: 1,
+          startVerse: 1,
+          endVerse: 1,
+          sectionIndex: 0,
+          attachment: "attached",
+          learnStage: 2,
+          stageReps: 0,
+          dueAt: now + DAY_MS,
+        },
+        {
+          index: 1,
+          book: "Jude",
+          chapter: 1,
+          startVerse: 2,
+          endVerse: 2,
+          sectionIndex: 0,
+          attachment: "unreached",
+          learnStage: 0,
+          stageReps: 0,
+        },
+      ],
+      addsOnDay: 1,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: now,
+      consecutiveCorrect: 0,
+      lapses: 0,
+      stageReps: 0,
+      needsCelebration: false,
+      createdAt: now,
+      updatedAt: now,
+      remainingIntroduces: 4,
+      frontierIndex: 1,
+      rehearsalStartIndex: 0,
+      ropePieceIndexes: [0],
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <MemoryPackLearnPage />
+      </TooltipProvider>,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: DONE_FOR_NOW_LABEL }),
+    );
+
+    const dismissed = localStorage.getItem("berean:learn-dismissed-packs");
+    expect(dismissed).not.toBeNull();
+    expect(dismissed).toContain("pack_1");
   });
 });

@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +7,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
-import { PASSAGE_STEP_IN_PROGRESS_KEY } from "@/lib/passage-step-resume";
+import {
+  clearPassageStepInProgress,
+  PASSAGE_STEP_IN_PROGRESS_KEY,
+} from "@/lib/passage-step-resume";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -149,6 +153,7 @@ function renderSession(view: PassageView, onExit: () => void = () => {}) {
 describe("PassageSession", () => {
   beforeEach(() => {
     mutationMocks.clear();
+    clearPassageStepInProgress(PACK_ID);
     sessionStorage.clear();
     fetchChaptersBatchMock.mockReset();
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
@@ -219,6 +224,62 @@ describe("PassageSession", () => {
 
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
+  });
+
+  it("shows the warm-up after leaving without Back and opening on a later page load", async () => {
+    const { unmount } = renderSession(practicedDueView());
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
+
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const leftover = sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY);
+    if (leftover) {
+      const parsed = JSON.parse(leftover) as { packId: string; origin: number };
+      sessionStorage.setItem(
+        PASSAGE_STEP_IN_PROGRESS_KEY,
+        JSON.stringify({
+          packId: parsed.packId,
+          origin: performance.timeOrigin - 1,
+        }),
+      );
+    }
+
+    renderSession(practicedDueView());
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: Warm up" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: First letters" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still resumes after a reload when StrictMode remounts the session", () => {
+    sessionStorage.setItem(
+      PASSAGE_STEP_IN_PROGRESS_KEY,
+      JSON.stringify({ packId: PACK_ID, origin: performance.timeOrigin - 1 }),
+    );
+    render(
+      <StrictMode>
+        <TooltipProvider delayDuration={0}>
+          <PassageSession
+            packId={PACK_ID}
+            view={practicedDueView()}
+            packName="Psalm 23"
+            onExit={() => {}}
+          />
+        </TooltipProvider>
+      </StrictMode>,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: First letters" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: Warm up" }),
+    ).not.toBeInTheDocument();
   });
 
   it("jumps into a due verse instead of a mixed recitation", async () => {

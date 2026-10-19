@@ -5,6 +5,7 @@ import {
   isPassageStepReload,
   markPassageStepInProgress,
   PASSAGE_STEP_IN_PROGRESS_KEY,
+  releasePassageStepInProgress,
 } from "./passage-step-resume";
 
 const PACK_ID = "pack_1";
@@ -18,6 +19,7 @@ function writePriorLoad(packId = PACK_ID): void {
 
 describe("passage step resume", () => {
   afterEach(() => {
+    clearPassageStepInProgress(PACK_ID);
     sessionStorage.clear();
     vi.restoreAllMocks();
   });
@@ -50,12 +52,57 @@ describe("passage step resume", () => {
     expect(isPassageStepReload(PACK_ID)).toBe(false);
   });
 
+  it("treats a leftover marker from another route as a fresh open", () => {
+    sessionStorage.setItem(
+      PASSAGE_STEP_IN_PROGRESS_KEY,
+      JSON.stringify({
+        packId: PACK_ID,
+        origin: performance.timeOrigin - 1,
+        path: "/memory/today",
+      }),
+    );
+
+    expect(isPassageStepReload(PACK_ID)).toBe(false);
+  });
+
+  it("treats a leftover marker from this route as a reload", () => {
+    sessionStorage.setItem(
+      PASSAGE_STEP_IN_PROGRESS_KEY,
+      JSON.stringify({
+        packId: PACK_ID,
+        origin: performance.timeOrigin - 1,
+        path: window.location.pathname,
+      }),
+    );
+
+    expect(isPassageStepReload(PACK_ID)).toBe(true);
+  });
+
   it("stops skipping warm-up once the step is cleared", () => {
     writePriorLoad();
     clearPassageStepInProgress(PACK_ID);
 
     expect(isPassageStepReload(PACK_ID)).toBe(false);
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
+  });
+
+  it("drops the marker after an SPA leave so a later page load is a fresh open", async () => {
+    markPassageStepInProgress(PACK_ID);
+    releasePassageStepInProgress(PACK_ID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(isPassageStepReload(PACK_ID)).toBe(false);
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
+  });
+
+  it("keeps a prior-load marker when a remount cancels the leave-clear", async () => {
+    writePriorLoad();
+    markPassageStepInProgress(PACK_ID);
+    releasePassageStepInProgress(PACK_ID);
+    markPassageStepInProgress(PACK_ID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(isPassageStepReload(PACK_ID)).toBe(true);
   });
 
   it("drops a record that is not a pack-and-origin marker", () => {
