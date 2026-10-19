@@ -5,7 +5,76 @@ import {
   masteryRingFraction,
   memoryProgressFraction,
 } from "./mastery-ring";
-import { MASTERED_INTERVAL_DAYS, requiredRepsFor } from "./memory-scheduler";
+import {
+  EASE_START,
+  MASTERED_INTERVAL_DAYS,
+  MAX_LEARN_STAGE,
+  requiredRepsFor,
+  REVIEW_DAILY_INTERVAL_DAYS,
+  REVIEW_DAILY_REPS,
+  REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+  REVIEW_EVERY_OTHER_REPS,
+  scheduleNext,
+  type MemorySchedule,
+} from "./memory-scheduler";
+
+const NOW = 1_700_000_000_000;
+
+function reviewingAt(overrides: Partial<MemorySchedule> = {}): MemorySchedule {
+  return {
+    status: "reviewing",
+    learnStage: MAX_LEARN_STAGE,
+    stageReps: 0,
+    ease: EASE_START,
+    intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+    dueAt: NOW,
+    consecutiveCorrect: 0,
+    lapses: 0,
+    earlyReviewApplied: false,
+    ...overrides,
+  };
+}
+
+function exactReview(s: MemorySchedule): MemorySchedule {
+  return scheduleNext(s, {
+    quality: "exact",
+    accuracy: 100,
+    mode: "review",
+    now: s.dueAt,
+  });
+}
+
+function barOf(
+  s: Pick<MemorySchedule, "status" | "learnStage" | "stageReps" | "intervalDays">,
+): number {
+  return memoryProgressFraction(
+    s.status,
+    s.learnStage,
+    s.stageReps,
+    s.intervalDays,
+  );
+}
+
+function ringOf(
+  s: Pick<MemorySchedule, "status" | "intervalDays" | "learnStage" | "stageReps">,
+): number {
+  return masteryRingFraction(
+    s.status,
+    s.intervalDays,
+    s.learnStage,
+    s.stageReps,
+  );
+}
+
+function pathToMastered(start: MemorySchedule): MemorySchedule[] {
+  const path = [start];
+  let s = start;
+  for (let i = 0; i < 64 && s.status !== "mastered"; i += 1) {
+    s = exactReview(s);
+    path.push(s);
+  }
+  return path;
+}
 
 describe("masteryRingFraction", () => {
   it("shows no ring for new verses", () => {
@@ -44,17 +113,48 @@ describe("masteryRingFraction", () => {
     expect(masteryRingFraction("mastered", MASTERED_INTERVAL_DAYS)).toBe(1);
   });
 
-  it("grows the reviewing ring from a half toward full with the interval", () => {
+  it("starts the reviewing ring at the learning ceiling for a fresh graduate", () => {
+    expect(ringOf(reviewingAt())).toBe(0.5);
     expect(masteryRingFraction("reviewing", 0)).toBe(0.5);
+  });
+
+  it("fills the reviewing ring by the same per-exact share as the mastery bar", () => {
+    const path = pathToMastered(reviewingAt());
+    const exacts = path.length - 1;
+    expect(exacts).toBeGreaterThan(0);
+    for (let i = 0; i < exacts; i += 1) {
+      expect(ringOf(path[i])).toBeCloseTo(0.5 + (i / exacts) * 0.4);
+    }
+    expect(ringOf(path[exacts])).toBe(1);
+  });
+
+  it("banks daily and every-other-day reviewing reps on the heart ring", () => {
+    let s = reviewingAt();
+    let previous = ringOf(s);
+    for (let reps = 1; reps < REVIEW_DAILY_REPS; reps += 1) {
+      s = exactReview(s);
+      expect(s.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+      expect(s.stageReps).toBe(reps);
+      expect(ringOf(s)).toBeGreaterThan(previous);
+      previous = ringOf(s);
+    }
+    s = exactReview(s);
+    expect(s.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+    expect(ringOf(s)).toBeGreaterThan(previous);
+    previous = ringOf(s);
+    for (let reps = 1; reps < REVIEW_EVERY_OTHER_REPS; reps += 1) {
+      s = exactReview(s);
+      expect(s.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+      expect(s.stageReps).toBe(reps);
+      expect(ringOf(s)).toBeGreaterThan(previous);
+      previous = ringOf(s);
+    }
+  });
+
+  it("keeps a 30-day reviewing interval at the reviewing ceiling, not full", () => {
     expect(
       masteryRingFraction("reviewing", MASTERED_INTERVAL_DAYS),
     ).toBeCloseTo(0.9);
-    const mid = masteryRingFraction("reviewing", MASTERED_INTERVAL_DAYS / 2);
-    expect(mid).toBeGreaterThan(0.5);
-    expect(mid).toBeLessThan(0.9);
-  });
-
-  it("clamps an over-long reviewing interval to the reviewing ceiling", () => {
     expect(
       masteryRingFraction("reviewing", MASTERED_INTERVAL_DAYS * 4),
     ).toBeCloseTo(0.9);
@@ -188,20 +288,115 @@ describe("memoryProgressFraction", () => {
     ).toBeCloseTo(1);
   });
 
-  it("starts a separate mastery bar once the verse is reviewing", () => {
+  it("starts a separate mastery bar at 0 for a fresh graduate", () => {
+    expect(barOf(reviewingAt())).toBe(0);
     expect(memoryProgressFraction("reviewing", 3, 0, 0)).toBe(0);
-    expect(memoryProgressFraction("reviewing", 3, 0, 1)).toBeCloseTo(
-      1 / MASTERED_INTERVAL_DAYS,
-    );
-    expect(
-      memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS / 2),
-    ).toBeCloseTo(0.5);
+  });
+
+  it("fills an equal share of the bar for each exact on the path to mastered", () => {
+    const path = pathToMastered(reviewingAt());
+    const exacts = path.length - 1;
+    expect(exacts).toBeGreaterThan(0);
+    const step = 1 / exacts;
+    for (let i = 1; i <= exacts; i += 1) {
+      expect(barOf(path[i]) - barOf(path[i - 1])).toBeCloseTo(step);
+    }
+    expect(barOf(path[exacts])).toBe(1);
+    expect(path[exacts]?.status).toBe("mastered");
+  });
+
+  it("increases while banking daily streak reps before the interval leaves 1 day", () => {
+    let s = reviewingAt();
+    const fractions = [barOf(s)];
+    for (let reps = 1; reps < REVIEW_DAILY_REPS; reps += 1) {
+      s = exactReview(s);
+      expect(s.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+      expect(s.stageReps).toBe(reps);
+      fractions.push(barOf(s));
+    }
+    for (let i = 1; i < fractions.length; i += 1) {
+      expect(fractions[i]).toBeGreaterThan(fractions[i - 1]);
+    }
+  });
+
+  it("increases while banking every-other-day streak reps before the interval grows", () => {
+    let s = reviewingAt({
+      intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+      consecutiveCorrect: REVIEW_DAILY_REPS,
+    });
+    const fractions = [barOf(s)];
+    for (let reps = 1; reps < REVIEW_EVERY_OTHER_REPS; reps += 1) {
+      s = exactReview(s);
+      expect(s.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+      expect(s.stageReps).toBe(reps);
+      fractions.push(barOf(s));
+    }
+    for (let i = 1; i < fractions.length; i += 1) {
+      expect(fractions[i]).toBeGreaterThan(fractions[i - 1]);
+    }
+  });
+
+  it("keeps advancing as the interval grows, and treats 30d+ as mastered", () => {
+    let s = reviewingAt({
+      intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+      consecutiveCorrect: REVIEW_DAILY_REPS,
+      stageReps: REVIEW_EVERY_OTHER_REPS - 1,
+    });
+    s = exactReview(s);
+    expect(s.intervalDays).toBeGreaterThan(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+    let previous = barOf(s);
+    while (s.status === "reviewing") {
+      s = exactReview(s);
+      expect(barOf(s)).toBeGreaterThan(previous);
+      previous = barOf(s);
+    }
+    expect(s.status).toBe("mastered");
+    expect(barOf(s)).toBe(1);
     expect(
       memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS),
-    ).toBeCloseTo(1);
+    ).toBe(1);
     expect(
       memoryProgressFraction("reviewing", 3, 0, MASTERED_INTERVAL_DAYS * 4),
     ).toBe(1);
+  });
+
+  it("does not move on retry or hold, and drops only on a lapse", () => {
+    const s = reviewingAt({
+      intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+      stageReps: 2,
+    });
+    const before = barOf(s);
+    const retry = scheduleNext(s, {
+      quality: "close",
+      accuracy: 82,
+      mode: "review",
+      now: s.dueAt,
+    });
+    const hold = scheduleNext(s, {
+      quality: "close",
+      accuracy: 70,
+      mode: "review",
+      now: s.dueAt,
+    });
+    const lapse = scheduleNext(s, {
+      quality: "off",
+      accuracy: 40,
+      mode: "review",
+      now: s.dueAt,
+    });
+    expect(barOf(retry)).toBe(before);
+    expect(barOf(hold)).toBe(before);
+    expect(barOf(lapse)).toBeLessThan(before);
+  });
+
+  it("leaves learning-phase bar behavior unchanged", () => {
+    expect(memoryProgressFraction("learning", 0, 0)).toBe(0);
+    expect(memoryProgressFraction("learning", 1, 0)).toBeCloseTo(
+      learningJourneyFraction(1, 0),
+    );
+    expect(memoryProgressFraction("learning", 2, 2)).toBeCloseTo(
+      learningJourneyFraction(2, 2, undefined, "learning"),
+    );
   });
 
   it("fills the mastery bar once mastered", () => {
