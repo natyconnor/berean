@@ -8,8 +8,6 @@
  * A mismatch on the same path is a real reload. A leftover from another
  * route (typed URL) is a later open. SPA leave clears the marker; a reload
  * does not run React unmount cleanup, so the marker stays for the next load.
- * A page load on another path drops the marker at boot, so an in-app return
- * to the session is a later open even though the leftover path would match.
  */
 
 export const PASSAGE_STEP_IN_PROGRESS_KEY = "berean:passage-step-in-progress";
@@ -128,7 +126,7 @@ export function clearPassageStepInProgress(packId: string): void {
   }
 }
 
-export function discardStalePassageStepMarker(
+export function discardPassageStepMarkerIfLandedElsewhere(
   landedPath = locationPath(),
 ): void {
   const marker = readMarker();

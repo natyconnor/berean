@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearPassageStepInProgress,
-  discardStalePassageStepMarker,
+  discardPassageStepMarkerIfLandedElsewhere,
   isPassageStepReload,
   markPassageStepInProgress,
   PASSAGE_STEP_IN_PROGRESS_KEY,
@@ -76,7 +76,7 @@ describe("passage step resume", () => {
         path: window.location.pathname,
       }),
     );
-    discardStalePassageStepMarker();
+    discardPassageStepMarkerIfLandedElsewhere();
 
     expect(isPassageStepReload(PACK_ID)).toBe(true);
   });
@@ -92,7 +92,7 @@ describe("passage step resume", () => {
       }),
     );
     history.pushState({}, "", "/memory");
-    discardStalePassageStepMarker();
+    discardPassageStepMarkerIfLandedElsewhere();
     history.pushState({}, "", sessionPath);
 
     expect(isPassageStepReload(PACK_ID)).toBe(false);
@@ -150,6 +150,6 @@ describe("passage step resume", () => {
     expect(isPassageStepReload(PACK_ID)).toBe(false);
     expect(() => markPassageStepInProgress(PACK_ID)).not.toThrow();
     expect(() => clearPassageStepInProgress(PACK_ID)).not.toThrow();
-    expect(() => discardStalePassageStepMarker()).not.toThrow();
+    expect(() => discardPassageStepMarkerIfLandedElsewhere()).not.toThrow();
   });
 });
