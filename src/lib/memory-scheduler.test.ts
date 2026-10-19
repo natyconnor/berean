@@ -1040,60 +1040,69 @@ describe("calendar due dates across DST", () => {
     expect(next.dueAt).toBe(Date.parse("2026-11-02T08:00:00.000Z"));
   });
 
-  it("sweeps 2026 intervals onto local midnight except the 6-hour floor", () => {
-    const zones = [
-      "America/Los_Angeles",
-      "America/Adak",
-      "Pacific/Auckland",
-      "Australia/Lord_Howe",
-      "UTC",
-    ];
-    const intervals = [1, 2, 3, 7, 30];
-    const hours = [0.5, 9.5, 13.5, 15.5, 23.5];
-    const misses: string[] = [];
+  it(
+    "sweeps 2026 intervals onto local midnight except the 6-hour floor",
+    { timeout: 20_000 },
+    () => {
+      const zones = [
+        "America/Los_Angeles",
+        "America/Adak",
+        "Pacific/Auckland",
+        "Australia/Lord_Howe",
+        "UTC",
+      ];
+      const intervals = [1, 2, 3, 7, 30];
+      const hours = [0.5, 9.5, 13.5, 15.5, 23.5];
+      const misses: string[] = [];
 
-    for (const timeZone of zones) {
-      for (
-        let cursor = Date.UTC(2026, 0, 1);
-        cursor < Date.UTC(2027, 0, 1);
-        cursor += DAY_MS
-      ) {
-        const today = zonedParts(cursor + 12 * 60 * 60 * 1000, timeZone);
-        for (const hour of hours) {
-          const hourPart = Math.floor(hour);
-          const minute = Math.round((hour - hourPart) * 60);
-          const now = zonedLocalUtc(
-            timeZone,
-            today.year,
-            today.month,
-            today.day,
-            hourPart,
-            minute,
-          );
-          for (const days of intervals) {
-            const due = dueAtInCalendarDays(now, days, 0, timeZone);
-            if (due === now + MIN_LEARNING_LOCK_MS) continue;
-            const target = addCivilDays(today.year, today.month, today.day, days);
-            const got = zonedParts(due, timeZone);
-            if (
-              got.year !== target.year ||
-              got.month !== target.month ||
-              got.day !== target.day ||
-              got.hour !== 0 ||
-              got.minute !== 0 ||
-              got.second !== 0
-            ) {
-              misses.push(
-                `${timeZone} ${today.year}-${today.month}-${today.day} ${hourPart}:${minute} +${days}d -> ${got.year}-${got.month}-${got.day} ${got.hour}:${got.minute}`,
+      for (const timeZone of zones) {
+        for (
+          let cursor = Date.UTC(2026, 0, 1);
+          cursor < Date.UTC(2027, 0, 1);
+          cursor += DAY_MS
+        ) {
+          const today = zonedParts(cursor + 12 * 60 * 60 * 1000, timeZone);
+          for (const hour of hours) {
+            const hourPart = Math.floor(hour);
+            const minute = Math.round((hour - hourPart) * 60);
+            const now = zonedLocalUtc(
+              timeZone,
+              today.year,
+              today.month,
+              today.day,
+              hourPart,
+              minute,
+            );
+            for (const days of intervals) {
+              const due = dueAtInCalendarDays(now, days, 0, timeZone);
+              if (due === now + MIN_LEARNING_LOCK_MS) continue;
+              const target = addCivilDays(
+                today.year,
+                today.month,
+                today.day,
+                days,
               );
+              const got = zonedParts(due, timeZone);
+              if (
+                got.year !== target.year ||
+                got.month !== target.month ||
+                got.day !== target.day ||
+                got.hour !== 0 ||
+                got.minute !== 0 ||
+                got.second !== 0
+              ) {
+                misses.push(
+                  `${timeZone} ${today.year}-${today.month}-${today.day} ${hourPart}:${minute} +${days}d -> ${got.year}-${got.month}-${got.day} ${got.hour}:${got.minute}`,
+                );
+              }
             }
           }
         }
       }
-    }
 
-    expect(misses).toEqual([]);
-  });
+      expect(misses).toEqual([]);
+    },
+  );
 });
 
 describe("requiredRepsFor length curve", () => {

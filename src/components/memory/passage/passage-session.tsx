@@ -53,6 +53,7 @@ import {
   type RopeStartOverride,
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
+import { viewerZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,7 @@ export function PassageSession({
   const finishForToday = onDoneForToday ?? onExit;
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
+  const timeZone = viewerZone(now).timeZone;
   const introduceNext = useMutation(api.passageMemory.introduceNext);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
 
@@ -143,7 +145,7 @@ export function PassageSession({
   const isMaintenance = status === "reviewing" || status === "mastered";
 
   const [state, setState] = useState<PassageSessionState>(() =>
-    sessionFromView(view, now, tzOffsetMinutes),
+    sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
   );
   const [introduceBusy, setIntroduceBusy] = useState(false);
   const [ropeOverride, setRopeOverride] =
@@ -210,13 +212,13 @@ export function PassageSession({
       return true;
     }
     const attemptedAt = Date.now();
-    const tz = tzOffsetMinutesAt(attemptedAt);
+    const zone = viewerZone(attemptedAt);
     try {
       if (pending.name === "introduceNext") {
         const nextView = await introduceNext({
           packId,
           now: attemptedAt,
-          tzOffsetMinutes: tz,
+          tzOffsetMinutes: zone.tzOffsetMinutes,
         });
         setStatus(nextView.status);
         setState({
@@ -237,7 +239,8 @@ export function PassageSession({
         quality,
         accuracy: pending.accuracy,
         now: attemptedAt,
-        tzOffsetMinutes: tz,
+        tzOffsetMinutes: zone.tzOffsetMinutes,
+        timeZone: zone.timeZone,
         durationMs,
         pieceIndex: pending.pieceIndex,
         wordCount:
@@ -248,7 +251,7 @@ export function PassageSession({
       const remaining = remainingIntroduces({
         addsOnDay: nextView.addsOnDay,
         addDayKey: nextView.addDayKey,
-        todayKey: localDayIndex(attemptedAt, tz),
+        todayKey: localDayIndex(attemptedAt, zone.tzOffsetMinutes),
       });
       setStatus(nextView.status);
       setState({

@@ -26,6 +26,10 @@ vi.mock("../../../convex/_generated/api", () => ({
 
 vi.mock("@/lib/viewer-timezone", () => ({
   getViewerTimeZone: () => "America/Los_Angeles",
+  viewerZone: (now: number) => ({
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+    timeZone: "America/Los_Angeles",
+  }),
 }));
 
 const VERSE_REF_ID = "vr_john_3_16" as Id<"verseRefs">;

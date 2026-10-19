@@ -9,3 +9,14 @@ export function getViewerTimeZone(): string {
     return "UTC";
   }
 }
+
+/** Offset plus IANA zone for scheduler mutations that land on local midnight. */
+export function viewerZone(now: number): {
+  tzOffsetMinutes: number;
+  timeZone: string;
+} {
+  return {
+    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+    timeZone: getViewerTimeZone(),
+  };
+}

@@ -12,6 +12,7 @@ import { toEsvQuery } from "../../shared/esv-query";
 import { buildPassagePieces } from "@/lib/passage-pieces";
 import { enumerateScopeChapters } from "@/lib/scope-chapter-count";
 import type { VerseScope } from "@/lib/verse-scope-match";
+import { viewerZone } from "@/lib/viewer-timezone";
 
 function chapterKey(book: string, chapter: number): string {
   return `${book}|${chapter}`;
@@ -114,7 +115,7 @@ export function useStartPassage({
         packId,
         pieces,
         now,
-        tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+        ...viewerZone(now),
       });
     } catch (caught) {
       setError(

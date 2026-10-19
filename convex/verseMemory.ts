@@ -509,9 +509,9 @@ export const recordAttempt = mutation({
     durationMs: v.optional(v.number()),
     now: v.number(),
     wordCount: v.optional(v.number()),
-    /** Client `getTimezoneOffset()`; lands learning soft locks on their day. */
+    /** Client `getTimezoneOffset()`; fallback when `timeZone` is omitted. */
     tzOffsetMinutes: v.optional(v.number()),
-    /** IANA zone for Practice heatmap day buckets; same as `reviewActivity`. */
+    /** IANA zone for calendar due midnights and Practice heatmap day buckets. */
     timeZone: v.optional(v.string()),
   },
   returns: memoryScheduleValidator,
@@ -594,6 +594,7 @@ export const recordAttempt = mutation({
       now: args.now,
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
     });
 
     if (memory.status !== next.status && isLiveHeartedMemory(memory)) {
@@ -633,6 +634,7 @@ export const acceptRetryHold = mutation({
     verseRefId: v.id("verseRefs"),
     now: v.number(),
     tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -669,7 +671,12 @@ export const acceptRetryHold = mutation({
       );
     }
 
-    const next = holdReviewingInterval(current, args.now, args.tzOffsetMinutes);
+    const next = holdReviewingInterval(
+      current,
+      args.now,
+      args.tzOffsetMinutes,
+      args.timeZone,
+    );
 
     await ctx.db.patch(memory._id, {
       status: next.status,

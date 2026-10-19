@@ -27,6 +27,7 @@ export type PlanStartArgs = {
   memberSchedules: readonly MemorySchedule[];
   now: number;
   tzOffsetMinutes?: number;
+  timeZone?: string;
 };
 
 export type PlanStartResult = {
@@ -46,6 +47,7 @@ export type PlanStartResult = {
 export function freshReviewingSchedule(
   now: number,
   tzOffsetMinutes?: number,
+  timeZone?: string,
 ): MemorySchedule {
   const seed = initialSchedule(now);
   return {
@@ -53,7 +55,7 @@ export function freshReviewingSchedule(
     status: "reviewing",
     learnStage: MAX_LEARN_STAGE,
     intervalDays: 1,
-    dueAt: dueAtInCalendarDays(now, 1, tzOffsetMinutes),
+    dueAt: dueAtInCalendarDays(now, 1, tzOffsetMinutes, timeZone),
   };
 }
 
@@ -62,12 +64,13 @@ export function openingMaintenanceSchedule(
   memberSchedules: readonly MemorySchedule[],
   now: number,
   tzOffsetMinutes?: number,
+  timeZone?: string,
 ): MemorySchedule {
   const reviewMembers = memberSchedules.filter((member) =>
     isReviewPhase(member.status),
   );
   if (reviewMembers.length === 0) {
-    return freshReviewingSchedule(now, tzOffsetMinutes);
+    return freshReviewingSchedule(now, tzOffsetMinutes, timeZone);
   }
   return canonicalUnifiedSchedule(reviewMembers, now);
 }
@@ -198,7 +201,12 @@ export function planStart(args: PlanStartArgs): PlanStartResult {
 
   const finished = allPiecesSolid(nextPieces);
   const schedule = finished
-    ? openingMaintenanceSchedule(memberSchedules, now, args.tzOffsetMinutes)
+    ? openingMaintenanceSchedule(
+        memberSchedules,
+        now,
+        args.tzOffsetMinutes,
+        args.timeZone,
+      )
     : initialSchedule(now);
 
   const status: PassageRowStatus = finished

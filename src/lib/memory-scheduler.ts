@@ -1,3 +1,5 @@
+import { startOfZonedDay, zonedDateKey } from "./dashboard-buckets";
+
 /**
  * Pure spaced-repetition scheduler for verse memory.
  *
@@ -291,25 +293,69 @@ export function dueIndexUntil(now: number): number {
  * from today (rounded to a whole day, at least 1). A 6-hour floor keeps a
  * late-night 1-day gap from reopening minutes after midnight.
  *
- * `tzOffsetMinutes` is the client's `Date.prototype.getTimezoneOffset()`
- * (minutes to add to local time to reach UTC, e.g. 420 for UTC-7). Without it
- * the local day is unknowable, so the due date falls back to a rolling day.
+ * `timeZone` is an IANA zone (e.g. `America/Los_Angeles`). Midnight is taken
+ * from the due day itself, so a DST change inside the interval does not shift
+ * the opening hour. `tzOffsetMinutes` is the client's
+ * `Date.prototype.getTimezoneOffset()` (minutes to add to local time to reach
+ * UTC, e.g. 420 for UTC-7). Older clients that only send the offset keep the
+ * pre-DST-safe math. With neither, the local day is unknowable, so the due
+ * date falls back to a rolling day.
  */
 export function dueAtInCalendarDays(
   now: number,
   intervalDays: number,
   tzOffsetMinutes?: number,
-  _timeZone?: string,
+  timeZone?: string,
 ): number {
   const days = Math.max(1, Math.round(intervalDays));
+  const calendarDue = calendarDueUtc(now, days, tzOffsetMinutes, timeZone);
+  return Math.max(calendarDue, now + MIN_LEARNING_LOCK_MS);
+}
+
+function calendarDueUtc(
+  now: number,
+  days: number,
+  tzOffsetMinutes?: number,
+  timeZone?: string,
+): number {
+  if (typeof timeZone === "string" && timeZone.length > 0) {
+    try {
+      return startOfZonedDayInCalendarDays(now, days, timeZone);
+    } catch {
+      // Invalid IANA zone: same fallback as a missing zone.
+    }
+  }
   if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
     return now + days * DAY_MS;
   }
   const offsetMs = tzOffsetMinutes * 60 * 1000;
   const localNow = now - offsetMs;
   const startOfLocalDay = Math.floor(localNow / DAY_MS) * DAY_MS;
-  const calendarDue = startOfLocalDay + days * DAY_MS + offsetMs;
-  return Math.max(calendarDue, now + MIN_LEARNING_LOCK_MS);
+  return startOfLocalDay + days * DAY_MS + offsetMs;
+}
+
+const ZONE_WINDOW_MS = 14 * 60 * 60 * 1000;
+
+/**
+ * Local midnight `days` calendar days after the zoned civil date of `now`.
+ * Adds on the YYYY-MM-DD, then snaps to that date's midnight so a DST change
+ * inside the gap cannot reuse today's offset.
+ */
+function startOfZonedDayInCalendarDays(
+  now: number,
+  days: number,
+  timeZone: string,
+): number {
+  const [year, month, day] = zonedDateKey(now, timeZone).split("-").map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day + days));
+  const y = utc.getUTCFullYear();
+  const m = utc.getUTCMonth() + 1;
+  const d = utc.getUTCDate();
+  const key = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  let probe = Date.UTC(y, m - 1, d, 12);
+  if (zonedDateKey(probe, timeZone) < key) probe += ZONE_WINDOW_MS;
+  if (zonedDateKey(probe, timeZone) > key) probe -= ZONE_WINDOW_MS;
+  return startOfZonedDay(probe, timeZone);
 }
 
 /**
@@ -362,7 +408,12 @@ function inProgressLearningDueAt(previousDueAt: number, now: number): number {
  */
 function computeDueAt(input: ReviewInput, intervalDays: number): number {
   if (intervalDays <= 0) return input.now;
-  return dueAtInCalendarDays(input.now, intervalDays, input.tzOffsetMinutes);
+  return dueAtInCalendarDays(
+    input.now,
+    intervalDays,
+    input.tzOffsetMinutes,
+    input.timeZone,
+  );
 }
 
 /** True while the verse is still on the learn ladder (not yet graduated). */
@@ -536,7 +587,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
         ease: s.ease,
         intervalDays: 0,
         dueAt: sessionEnding
-          ? nextLearningSessionDueAt(r.now, r.tzOffsetMinutes)
+          ? nextLearningSessionDueAt(r.now, r.tzOffsetMinutes, r.timeZone)
           : inProgressLearningDueAt(s.dueAt, r.now),
         consecutiveCorrect: s.consecutiveCorrect + 1,
         lapses: s.lapses,
@@ -782,7 +833,7 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
 
   // hold (60–79%): keep the current gap. A messy recall should not earn more
   // time before the next review.
-  return holdReviewingInterval(s, r.now, r.tzOffsetMinutes);
+  return holdReviewingInterval(s, r.now, r.tzOffsetMinutes, r.timeZone);
 }
 
 /**
@@ -799,6 +850,7 @@ export function holdReviewingInterval(
   s: MemorySchedule,
   now: number,
   tzOffsetMinutes?: number,
+  timeZone?: string,
 ): MemorySchedule {
   if (!isReviewPhase(s.status)) return s;
   const isEarly = now < s.dueAt;
@@ -810,7 +862,7 @@ export function holdReviewingInterval(
     stageReps: s.stageReps,
     ease: s.ease,
     intervalDays,
-    dueAt: dueAtInCalendarDays(now, intervalDays, tzOffsetMinutes),
+    dueAt: dueAtInCalendarDays(now, intervalDays, tzOffsetMinutes, timeZone),
     consecutiveCorrect: s.consecutiveCorrect,
     lapses: s.lapses,
     earlyReviewApplied: isEarly,
