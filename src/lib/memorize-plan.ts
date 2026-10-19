@@ -5,7 +5,6 @@ import {
   initialSchedule,
   isLearningLocked,
   isLearningPhase,
-  MASTERED_INTERVAL_DAYS,
   MAX_LEARN_STAGE,
   scheduleNext,
   type MemorySchedule,
@@ -177,12 +176,6 @@ export function formatMasteryDuration(
     span = `about ${months} months`;
   }
   return opts?.short ? span : `Mastered in ${span}`;
-}
-
-/** Fill for a mastery bar: the review gap as a share of the mastered gap. */
-export function masteryProgress(intervalDays: number): number {
-  if (!Number.isFinite(intervalDays) || intervalDays <= 0) return 0;
-  return Math.min(intervalDays / MASTERED_INTERVAL_DAYS, 1);
 }
 
 /** Rough session length in whole minutes; 0 when there is nothing to do. */

@@ -17,7 +17,6 @@ import {
   formatMasteryDuration,
   formatMonthOrDate,
   formatShortDate,
-  masteryProgress,
   nextStepCopy,
   projectedFinishDate,
   projectedMasteryDate,
@@ -165,16 +164,6 @@ describe("mastery estimates", () => {
         estimateMasteryDays({ mode: "verse", verseCount: 1 }),
       ),
     ).toBe("Mastered in about 2 months");
-  });
-});
-
-describe("masteryProgress", () => {
-  it("fills toward the mastered interval and stops at full", () => {
-    expect(masteryProgress(0)).toBe(0);
-    expect(masteryProgress(-3)).toBe(0);
-    expect(masteryProgress(MASTERED_INTERVAL_DAYS / 2)).toBe(0.5);
-    expect(masteryProgress(MASTERED_INTERVAL_DAYS)).toBe(1);
-    expect(masteryProgress(MASTERED_INTERVAL_DAYS * 3)).toBe(1);
   });
 });
 

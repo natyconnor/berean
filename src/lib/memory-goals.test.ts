@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { memoryProgressFraction } from "./mastery-ring";
 import {
   buildGoalCards,
   goalLearnDaysLeft,
@@ -13,7 +14,7 @@ import {
   type PassageGoalCard,
   type VerseGoalCard,
 } from "./memory-goals";
-import { DAY_MS } from "./memory-scheduler";
+import { DAY_MS, EASE_START } from "./memory-scheduler";
 import { localDayIndex } from "./passage-frontier";
 import type { PassagePiece, PieceAttachment } from "./passage-pieces";
 
@@ -42,6 +43,8 @@ function verse(
     status: "learning",
     learnStage: 0,
     intervalDays: 0,
+    stageReps: 0,
+    ease: EASE_START,
     dueAt: NOW - HOUR_MS,
     createdAt: NOW - 3 * DAY_MS,
     ...extra,
@@ -84,6 +87,8 @@ function passage(
     pieces,
     addsOnDay: 0,
     intervalDays: 0,
+    stageReps: 0,
+    ease: EASE_START,
     dueAt: NOW,
     createdAt: NOW - 5 * DAY_MS,
     ...extra,
@@ -300,7 +305,14 @@ describe("buildGoalCards: passages", () => {
       status: "reviewing",
       hasWorkToday: false,
       todayStep: null,
-      masteryFraction: 0.4,
+      masteryFraction: memoryProgressFraction(
+        "reviewing",
+        0,
+        0,
+        12,
+        undefined,
+        EASE_START,
+      ),
       nextDueAt: NOW + 2 * DAY_MS,
       lastActivityAt: NOW - DAY_MS,
       lastPracticedAt: NOW - DAY_MS,
@@ -397,7 +409,9 @@ describe("buildGoalCards: verses on their own", () => {
     const goal = only(goals, "verse");
     expect(goal.title).toBe("John 3:16");
     expect(goal.hasWorkToday).toBe(true);
-    expect(goal.masteryFraction).toBeCloseTo(0.15);
+    expect(goal.masteryFraction).toBeCloseTo(
+      memoryProgressFraction("reviewing", 0, 0, 4.5, undefined, EASE_START),
+    );
   });
 
   it("leaves out verses in a pack or inside a passage", () => {
@@ -509,7 +523,11 @@ describe("buildGoalCards: packs", () => {
       lastActivityAt: NOW - HOUR_MS,
       lastPracticedAt: NOW - HOUR_MS,
     });
-    expect(goal.masteryFraction).toBeCloseTo((6 / 30 + 1) / 4);
+    expect(goal.masteryFraction).toBeCloseTo(
+      (memoryProgressFraction("reviewing", 0, 0, 6, undefined, EASE_START) +
+        1) /
+        4,
+    );
   });
 
   it("gives a scope pack only the verses listed in it, not every verse its scope holds", () => {

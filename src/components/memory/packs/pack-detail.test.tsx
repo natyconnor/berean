@@ -8,6 +8,7 @@ import {
   MemoryPanelPage,
 } from "@/components/memory/drawer/memory-panel-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { memoryProgressFraction } from "@/lib/mastery-ring";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import { localDayIndex } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
@@ -459,7 +460,11 @@ describe("PackDetail for a passage", () => {
       screen.getByRole("link", { name: "Review Psalm 16" }),
     ).toHaveAttribute("href", "/memory/psalm16/review?return=%2Fmemory");
     expect(
-      screen.getByRole("progressbar", { name: "Mastery 22%" }),
+      screen.getByRole("progressbar", {
+        name: `Mastery ${Math.round(
+          memoryProgressFraction("reviewing", 3, 0, 6.6, undefined, 2.5) * 100,
+        )}%`,
+      }),
     ).toBeInTheDocument();
   });
 
@@ -537,7 +542,11 @@ describe("PackDetail for a pack", () => {
     ).toBeInTheDocument();
 
     expect(
-      within(dialog).getByText("Memorized · review due today · mastery 22%"),
+      within(dialog).getByText(
+        `Memorized · review due today · mastery ${Math.round(
+          memoryProgressFraction("reviewing", 3, 0, 6.6, undefined, 2.5) * 100,
+        )}%`,
+      ),
     ).toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "Review Luke 9:23–24" }),

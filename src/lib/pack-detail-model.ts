@@ -12,6 +12,7 @@ import {
   type PackGoalCard,
   type PassageGoalCard,
 } from "./memory-goals";
+import { memoryProgressFraction } from "./mastery-ring";
 import { formatNextReviewDay } from "./memory-today";
 import {
   isDueForReview,
@@ -28,7 +29,6 @@ import {
   formatMasteryDuration,
   formatMonthOrDate,
   formatShortDate,
-  masteryProgress,
   projectedFinishDate,
   projectedMasteryDate,
 } from "./memorize-plan";
@@ -74,6 +74,8 @@ export interface PackDetailMember {
   status: MemoryStatus;
   learnStage: number;
   intervalDays: number;
+  stageReps: number;
+  ease: number;
   dueAt: number;
   lastReviewedAt?: number;
 }
@@ -85,6 +87,8 @@ export interface PackDetailPassage {
   addsOnDay: number;
   addDayKey?: number;
   intervalDays: number;
+  stageReps: number;
+  ease: number;
   dueAt: number;
   lastSessionAt?: number;
   createdAt: number;
@@ -470,7 +474,7 @@ export type PackRowAction = "learn" | "review" | "practice";
 
 export interface PackMemberRow {
   status: MemoryStatus;
-  /** "Up next · starts when you're ready", "Memorized · review due today · mastery 22%" */
+  /** "Up next · starts when you're ready", "Memorized · review due today · mastery N%" */
   line: string;
   actions: PackRowAction[];
 }
@@ -512,7 +516,18 @@ export function packMemberRow(
       : `next review ${formatDueDay(member.dueAt, now, timeZone)}`,
   ];
   if (status === "reviewing") {
-    parts.push(`mastery ${percent(masteryProgress(member.intervalDays))}%`);
+    parts.push(
+      `mastery ${percent(
+        memoryProgressFraction(
+          "reviewing",
+          0,
+          member.stageReps,
+          member.intervalDays,
+          undefined,
+          member.ease,
+        ),
+      )}%`,
+    );
   }
   return {
     status,

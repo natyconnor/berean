@@ -321,6 +321,8 @@ export const listMine = query({
                 addsOnDay: passage.addsOnDay,
                 addDayKey: passage.addDayKey,
                 intervalDays: passage.intervalDays,
+                stageReps: passage.stageReps,
+                ease: passage.ease,
                 dueAt: passage.dueAt,
                 lastSessionAt: passage.lastSessionAt,
                 createdAt: passage.createdAt,
