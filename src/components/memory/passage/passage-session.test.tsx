@@ -221,6 +221,36 @@ describe("PassageSession", () => {
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
   });
 
+  it("shows the warm-up after leaving without Back and opening on a later page load", async () => {
+    const { unmount } = renderSession(practicedDueView());
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
+
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const leftover = sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY);
+    if (leftover) {
+      const parsed = JSON.parse(leftover) as { packId: string; origin: number };
+      sessionStorage.setItem(
+        PASSAGE_STEP_IN_PROGRESS_KEY,
+        JSON.stringify({
+          packId: parsed.packId,
+          origin: performance.timeOrigin - 1,
+        }),
+      );
+    }
+
+    renderSession(practicedDueView());
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: Warm up" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: First letters" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("jumps into a due verse instead of a mixed recitation", async () => {
     renderSession(
       passageView([
