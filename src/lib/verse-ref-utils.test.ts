@@ -527,6 +527,11 @@ describe("Song of Solomon aliases", () => {
       );
     },
   );
+
+  it("registers extra aliases under a space-stripped map key", () => {
+    expect(parseVerseRef("SOS 2:4")).toEqual(SONG_OF_SOLOMON_2_4);
+    expect(parseVerseRef("Canticles 2:4")).toEqual(SONG_OF_SOLOMON_2_4);
+  });
 });
 
 describe("existing book aliases", () => {

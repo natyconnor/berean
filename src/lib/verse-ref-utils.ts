@@ -102,7 +102,7 @@ function buildBookAliasEntries(): Array<{ alias: string; name: string }> {
 
   const additionalAliases: Record<string, string[]> = {
     Psalms: ["Psalm", "Psa", "Psm", "Pss"],
-    "Song of Solomon": ["Song of Songs", "Songs", "SOS", "Canticles"],
+    SongOfSolomon: ["Song of Songs", "Songs", "SOS", "Canticles"],
     Revelation: ["Revelations", "Apocalypse"],
   };
 
