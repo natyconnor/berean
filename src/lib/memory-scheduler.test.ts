@@ -803,6 +803,299 @@ describe("calendar due dates", () => {
   });
 });
 
+describe("calendar due dates across DST", () => {
+  function zonedParts(ms: number, timeZone: string) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(ms));
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+      Number(parts.find((part) => part.type === type)?.value ?? NaN);
+    return {
+      year: value("year"),
+      month: value("month"),
+      day: value("day"),
+      hour: value("hour"),
+      minute: value("minute"),
+      second: value("second"),
+    };
+  }
+
+  function zonedLocalUtc(
+    timeZone: string,
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    minute = 0,
+  ): number {
+    const target = Date.UTC(year, month - 1, day, hour, minute, 0);
+    const asUtc = (ms: number) => {
+      const part = zonedParts(ms, timeZone);
+      return Date.UTC(
+        part.year,
+        part.month - 1,
+        part.day,
+        part.hour,
+        part.minute,
+        part.second,
+      );
+    };
+    let instant = target;
+    instant += target - asUtc(instant);
+    instant += target - asUtc(instant);
+    return instant;
+  }
+
+  function addCivilDays(
+    year: number,
+    month: number,
+    day: number,
+    days: number,
+  ) {
+    const utc = new Date(Date.UTC(year, month - 1, day + days));
+    return {
+      year: utc.getUTCFullYear(),
+      month: utc.getUTCMonth() + 1,
+      day: utc.getUTCDate(),
+    };
+  }
+
+  function expectLocalMidnight(
+    dueAt: number,
+    timeZone: string,
+    year: number,
+    month: number,
+    day: number,
+  ) {
+    expect(zonedParts(dueAt, timeZone)).toEqual({
+      year,
+      month,
+      day,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    });
+  }
+
+  it("lands a 2-day exact on Sat 2026-10-31 3 PM PDT at Mon 2026-11-02 00:00 PST", () => {
+    const timeZone = "America/Los_Angeles";
+    const now = zonedLocalUtc(timeZone, 2026, 10, 31, 15);
+    const due = dueAtInCalendarDays(now, 2, 0, timeZone);
+    expect(due).toBe(Date.parse("2026-11-02T08:00:00.000Z"));
+    expectLocalMidnight(due, timeZone, 2026, 11, 2);
+  });
+
+  it("lands a 2-day exact on Sat 2026-03-07 3 PM PST at Mon 2026-03-09 00:00 PDT", () => {
+    const timeZone = "America/Los_Angeles";
+    const now = zonedLocalUtc(timeZone, 2026, 3, 7, 15);
+    const due = dueAtInCalendarDays(now, 2, 0, timeZone);
+    expect(due).toBe(Date.parse("2026-03-09T07:00:00.000Z"));
+    expectLocalMidnight(due, timeZone, 2026, 3, 9);
+  });
+
+  it.each([
+    {
+      timeZone: "Pacific/Auckland",
+      year: 2026,
+      month: 4,
+      day: 4,
+      hour: 15,
+      days: 2,
+    },
+    {
+      timeZone: "Pacific/Auckland",
+      year: 2026,
+      month: 9,
+      day: 26,
+      hour: 15,
+      days: 2,
+    },
+    {
+      timeZone: "Pacific/Auckland",
+      year: 2026,
+      month: 4,
+      day: 4,
+      hour: 15,
+      days: 7,
+    },
+    {
+      timeZone: "Pacific/Auckland",
+      year: 2026,
+      month: 9,
+      day: 26,
+      hour: 15,
+      days: 30,
+    },
+    {
+      timeZone: "Australia/Lord_Howe",
+      year: 2026,
+      month: 4,
+      day: 4,
+      hour: 15,
+      days: 2,
+    },
+    {
+      timeZone: "Australia/Lord_Howe",
+      year: 2026,
+      month: 10,
+      day: 3,
+      hour: 15,
+      days: 2,
+    },
+    {
+      timeZone: "Australia/Lord_Howe",
+      year: 2026,
+      month: 4,
+      day: 4,
+      hour: 15,
+      days: 7,
+    },
+    {
+      timeZone: "Australia/Lord_Howe",
+      year: 2026,
+      month: 10,
+      day: 3,
+      hour: 15,
+      days: 30,
+    },
+  ])(
+    "lands $days-day exact in $timeZone from $year-$month-$day $hour:00 at local midnight",
+    ({ timeZone, year, month, day, hour, days }) => {
+      const now = zonedLocalUtc(timeZone, year, month, day, hour);
+      const due = dueAtInCalendarDays(now, days, 0, timeZone);
+      const target = addCivilDays(year, month, day, days);
+      expectLocalMidnight(due, timeZone, target.year, target.month, target.day);
+    },
+  );
+
+  it("keeps a non-DST 2-day exact at the same midnight the offset math already used", () => {
+    const timeZone = "America/Los_Angeles";
+    const now = zonedLocalUtc(timeZone, 2026, 7, 11, 15);
+    const offset = 420;
+    expect(dueAtInCalendarDays(now, 2, offset, timeZone)).toBe(
+      dueAtInCalendarDays(now, 2, offset),
+    );
+    expectLocalMidnight(
+      dueAtInCalendarDays(now, 2, offset, timeZone),
+      timeZone,
+      2026,
+      7,
+      13,
+    );
+  });
+
+  it("leaves UTC 2-day exacts on UTC midnight", () => {
+    const now = Date.parse("2026-10-31T15:00:00.000Z");
+    const due = dueAtInCalendarDays(now, 2, 0, "UTC");
+    expect(due).toBe(Date.parse("2026-11-02T00:00:00.000Z"));
+  });
+
+  it("still floors a late-night 1-day gap to 6 hours", () => {
+    const timeZone = "America/Los_Angeles";
+    const now = zonedLocalUtc(timeZone, 2026, 7, 11, 23, 30);
+    const due = dueAtInCalendarDays(now, 1, 0, timeZone);
+    expect(due - now).toBe(MIN_LEARNING_LOCK_MS);
+    expect(zonedParts(due, timeZone)).toMatchObject({
+      year: 2026,
+      month: 7,
+      day: 12,
+      hour: 5,
+      minute: 30,
+      second: 0,
+    });
+  });
+
+  it("falls back to a rolling day when no zone is given", () => {
+    const now = Date.parse("2026-10-31T22:00:00.000Z");
+    expect(dueAtInCalendarDays(now, 2)).toBe(now + 2 * DAY_MS);
+  });
+
+  it("keeps offset-only scheduling when the client has no IANA zone", () => {
+    const now = Date.parse("2026-10-31T22:00:00.000Z");
+    const offset = 420;
+    expect(dueAtInCalendarDays(now, 2, offset)).toBe(
+      localMidnightUtc(now, offset) + 2 * DAY_MS,
+    );
+  });
+
+  it("uses the IANA zone on a 2-day reviewing exact, not the offset at now", () => {
+    const timeZone = "America/Los_Angeles";
+    const now = zonedLocalUtc(timeZone, 2026, 10, 31, 15);
+    const next = scheduleNext(
+      reviewing({ intervalDays: 2, ease: 1, stageReps: 0 }),
+      review({
+        quality: "exact",
+        now,
+        tzOffsetMinutes: 0,
+        timeZone,
+      }),
+    );
+    expect(next.dueAt).toBe(Date.parse("2026-11-02T08:00:00.000Z"));
+  });
+
+  it("sweeps 2026 intervals onto local midnight except the 6-hour floor", () => {
+    const zones = [
+      "America/Los_Angeles",
+      "America/Adak",
+      "Pacific/Auckland",
+      "Australia/Lord_Howe",
+      "UTC",
+    ];
+    const intervals = [1, 2, 3, 7, 30];
+    const hours = [0.5, 9.5, 13.5, 15.5, 23.5];
+    const misses: string[] = [];
+
+    for (const timeZone of zones) {
+      for (
+        let cursor = Date.UTC(2026, 0, 1);
+        cursor < Date.UTC(2027, 0, 1);
+        cursor += DAY_MS
+      ) {
+        const today = zonedParts(cursor + 12 * 60 * 60 * 1000, timeZone);
+        for (const hour of hours) {
+          const hourPart = Math.floor(hour);
+          const minute = Math.round((hour - hourPart) * 60);
+          const now = zonedLocalUtc(
+            timeZone,
+            today.year,
+            today.month,
+            today.day,
+            hourPart,
+            minute,
+          );
+          for (const days of intervals) {
+            const due = dueAtInCalendarDays(now, days, 0, timeZone);
+            if (due === now + MIN_LEARNING_LOCK_MS) continue;
+            const target = addCivilDays(today.year, today.month, today.day, days);
+            const got = zonedParts(due, timeZone);
+            if (
+              got.year !== target.year ||
+              got.month !== target.month ||
+              got.day !== target.day ||
+              got.hour !== 0 ||
+              got.minute !== 0 ||
+              got.second !== 0
+            ) {
+              misses.push(
+                `${timeZone} ${today.year}-${today.month}-${today.day} ${hourPart}:${minute} +${days}d -> ${got.year}-${got.month}-${got.day} ${got.hour}:${got.minute}`,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    expect(misses).toEqual([]);
+  });
+});
+
 describe("requiredRepsFor length curve", () => {
   it("returns 1 for Read (stage 0) regardless of wordCount", () => {
     expect(requiredRepsFor(0)).toBe(1);

@@ -170,6 +170,11 @@ export interface ReviewInput {
    * of their next local day. Omitted falls back to a rolling day.
    */
   tzOffsetMinutes?: number;
+  /**
+   * IANA zone (e.g. `America/Los_Angeles`). When set, calendar midnights use
+   * the due day's offset, not the offset at `now`.
+   */
+  timeZone?: string;
 }
 
 /** Ease bounds. Ease starts at {@link EASE_START} for freshly-seeded verses. */
@@ -294,6 +299,7 @@ export function dueAtInCalendarDays(
   now: number,
   intervalDays: number,
   tzOffsetMinutes?: number,
+  _timeZone?: string,
 ): number {
   const days = Math.max(1, Math.round(intervalDays));
   if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
@@ -313,8 +319,9 @@ export function dueAtInCalendarDays(
 export function nextLearningSessionDueAt(
   now: number,
   tzOffsetMinutes?: number,
+  timeZone?: string,
 ): number {
-  return dueAtInCalendarDays(now, 1, tzOffsetMinutes);
+  return dueAtInCalendarDays(now, 1, tzOffsetMinutes, timeZone);
 }
 
 /**
