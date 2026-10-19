@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +7,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
-import { PASSAGE_STEP_IN_PROGRESS_KEY } from "@/lib/passage-step-resume";
+import {
+  clearPassageStepInProgress,
+  PASSAGE_STEP_IN_PROGRESS_KEY,
+} from "@/lib/passage-step-resume";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -149,6 +153,7 @@ function renderSession(view: PassageView, onExit: () => void = () => {}) {
 describe("PassageSession", () => {
   beforeEach(() => {
     mutationMocks.clear();
+    clearPassageStepInProgress(PACK_ID);
     sessionStorage.clear();
     fetchChaptersBatchMock.mockReset();
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
@@ -248,6 +253,32 @@ describe("PassageSession", () => {
     expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
     expect(
       screen.queryByRole("status", { name: "Session phase: First letters" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still resumes after a reload when StrictMode remounts the session", async () => {
+    sessionStorage.setItem(
+      PASSAGE_STEP_IN_PROGRESS_KEY,
+      JSON.stringify({ packId: PACK_ID, origin: performance.timeOrigin - 1 }),
+    );
+    render(
+      <StrictMode>
+        <TooltipProvider delayDuration={0}>
+          <PassageSession
+            packId={PACK_ID}
+            view={practicedDueView()}
+            packName="Psalm 23"
+            onExit={() => {}}
+          />
+        </TooltipProvider>
+      </StrictMode>,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: First letters" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: Warm up" }),
     ).not.toBeInTheDocument();
   });
 

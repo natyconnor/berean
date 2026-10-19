@@ -99,6 +99,7 @@ import {
 import {
   clearPassageStepInProgress,
   markPassageStepInProgress,
+  releasePassageStepInProgress,
 } from "@/lib/passage-step-resume";
 import { countVerseWords } from "@/lib/verse-hint";
 
@@ -261,6 +262,9 @@ export function PassageSession({
       return;
     }
     markPassageStepInProgress(packId);
+    return () => {
+      releasePassageStepInProgress(packId);
+    };
   }, [packId, state.phase]);
 
   async function persist(
