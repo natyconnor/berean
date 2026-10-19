@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
+import { PASSAGE_STEP_IN_PROGRESS_KEY } from "@/lib/passage-step-resume";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -163,6 +164,61 @@ describe("PassageSession", () => {
         updatedAt: getSessionNow() + 1,
       }),
     );
+  });
+
+  function practicedDueView(extra?: Partial<PassageView>): PassageView {
+    const now = getSessionNow();
+    return passageView(
+      [
+        piece(0, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+        piece(1, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+        piece(2, "learning", { learnStage: 1, dueAt: now }),
+      ],
+      extra,
+    );
+  }
+
+  it("resumes the due verse after a reload mid-step", async () => {
+    sessionStorage.setItem(
+      PASSAGE_STEP_IN_PROGRESS_KEY,
+      JSON.stringify({ packId: PACK_ID, origin: performance.timeOrigin - 1 }),
+    );
+    renderSession(practicedDueView());
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: First letters" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: Warm up" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Type what you remember"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens with a warm-up when reopening a passage practiced earlier today", () => {
+    renderSession(
+      practicedDueView({ lastSessionAt: getSessionNow() - 60_000 }),
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: Warm up" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: First letters" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears the in-progress marker when the learner leaves", async () => {
+    const onExit = vi.fn();
+    renderSession(practicedDueView(), onExit);
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
   });
 
   it("jumps into a due verse instead of a mixed recitation", async () => {

@@ -23,6 +23,7 @@ import {
   type PassageSessionPhase,
   type PassageSessionState,
 } from "@/lib/passage-session";
+import { isPassageStepReload } from "@/lib/passage-step-resume";
 import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import type { PassageView } from "./passage-session-types";
@@ -371,8 +372,7 @@ export function sessionFromView(
       pieces: view.pieces,
       remainingIntroduces: view.remainingIntroduces,
       now,
-      lastSessionAt: view.lastSessionAt,
-      tzOffsetMinutes,
+      resume: isPassageStepReload(view.packId),
     }),
     pieces: view.pieces,
     addsOnDay: view.addsOnDay,

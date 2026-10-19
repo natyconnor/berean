@@ -96,6 +96,10 @@ import {
   type PassageSessionPhase,
   type PassageSessionState,
 } from "@/lib/passage-session";
+import {
+  clearPassageStepInProgress,
+  markPassageStepInProgress,
+} from "@/lib/passage-step-resume";
 import { countVerseWords } from "@/lib/verse-hint";
 
 import { api } from "../../../../convex/_generated/api";
@@ -154,7 +158,6 @@ export function PassageSession({
   progress,
   aside,
 }: PassageSessionProps): JSX.Element {
-  const finishForToday = onDoneForToday ?? onExit;
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
   const introduceNext = useMutation(api.passageMemory.introduceNext);
@@ -166,6 +169,15 @@ export function PassageSession({
   const [state, setState] = useState<PassageSessionState>(() =>
     sessionFromView(view, now, tzOffsetMinutes),
   );
+
+  const leaveSession = () => {
+    clearPassageStepInProgress(packId);
+    onExit();
+  };
+  const finishForToday = () => {
+    clearPassageStepInProgress(packId);
+    (onDoneForToday ?? onExit)();
+  };
   const [addsAtOpen] = useState(() => remainingAddsIn(state));
   const headerProgress =
     typeof progress === "function"
@@ -242,6 +254,14 @@ export function PassageSession({
   const cue = stallCue ?? recall?.pickUpCue ?? null;
 
   const autoIntroduceStarted = useRef(false);
+
+  useEffect(() => {
+    if (state.phase === "passage-complete") {
+      clearPassageStepInProgress(packId);
+      return;
+    }
+    markPassageStepInProgress(packId);
+  }, [packId, state.phase]);
 
   async function persist(
     next: PassageSessionState,
@@ -501,7 +521,7 @@ export function PassageSession({
     <PassageSessionShell
       phaseLabel={phaseLabel}
       packName={packName}
-      onExit={onExit}
+      onExit={leaveSession}
       exitTooltip={exitTooltip}
       backLabel={backLabel}
       progress={headerProgress}
