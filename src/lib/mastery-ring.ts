@@ -92,13 +92,6 @@ export function memoryProgressFraction(
   return learningJourneyFraction(learnStage, stageReps, wordCount, status);
 }
 
-/**
- * How far a reviewing verse is along the exact-recall path to mastered.
- *
- * The denominator is the path length from a daily-interval start at the
- * path's starting ease. Growth exacts add 0.05 ease, so the live ease is
- * ahead of that start once the interval grows.
- */
 function reviewingProgressFraction(
   intervalDays: number,
   stageReps: number,

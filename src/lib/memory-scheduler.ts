@@ -727,13 +727,6 @@ export function exactReviewsUntilMastered(
   return remaining;
 }
 
-/**
- * Ease at the daily-interval start of this uninterrupted reviewing path.
- *
- * Each growth exact adds 0.05 (then clamps), so the live ease is ahead of
- * the start once the interval has left every-other-day. Mastery fill uses
- * this start ease for the path length so each exact fills an equal share.
- */
 export function reviewingPathStartEase(
   intervalDays: number,
   ease: number,
