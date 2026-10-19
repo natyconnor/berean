@@ -753,7 +753,10 @@ export function reviewingPathStartEase(
       consecutiveCorrect: 0,
     };
     for (let i = 0; i < 64; i += 1) {
-      if (Math.abs(current.intervalDays - intervalDays) <= 1e-6) {
+      if (
+        Math.abs(current.intervalDays - intervalDays) <= 1e-6 &&
+        Math.abs(current.ease - ease) <= 1e-6
+      ) {
         return startEase;
       }
       if (current.status === "mastered") break;
