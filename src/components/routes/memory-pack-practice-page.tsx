@@ -14,6 +14,10 @@ import {
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+} from "@/lib/learn-dismissed-packs";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import {
   isMemorySessionCandidate,
@@ -179,6 +183,17 @@ export function MemoryPackSessionPage({
         view={passage}
         packName={pack.name}
         onExit={onExit}
+        onDoneForToday={
+          isLearning
+            ? () => {
+                dismissLearnPackForToday(
+                  typedPackId,
+                  learnDismissDayKey(now),
+                );
+                onExit();
+              }
+            : undefined
+        }
         backLabel={backLabel}
         exitTooltip="Go back to the pack"
       />
