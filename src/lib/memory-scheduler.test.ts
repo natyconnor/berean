@@ -1106,6 +1106,7 @@ describe("reviewingPathStartEase", () => {
     );
     expect(second.every((value, i) => Object.is(value, first[i]))).toBe(true);
     expect(first[0]).toBe(EASE_START);
+    expect(first[2]).toBe(2.6);
     expect(first[5]).toBe(EASE_START);
   });
 });
