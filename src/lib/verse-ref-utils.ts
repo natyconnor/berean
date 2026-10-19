@@ -112,9 +112,11 @@ function buildBookAliasEntries(): Array<{ alias: string; name: string }> {
     entries.push({ alias: normalizedName, name: book.name });
     entries.push({ alias: normalizedAbbreviation, name: book.name });
 
-    const aliasCandidates = additionalAliases[book.name] ?? [];
-    for (const alias of aliasCandidates) {
-      entries.push({ alias: normalizeLookupToken(alias), name: book.name });
+    for (const [key, aliases] of Object.entries(additionalAliases)) {
+      if (normalizeLookupToken(key) !== normalizedName) continue;
+      for (const alias of aliases) {
+        entries.push({ alias: normalizeLookupToken(alias), name: book.name });
+      }
     }
   }
 
