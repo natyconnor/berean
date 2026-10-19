@@ -23,8 +23,6 @@ describe("formatMemoryDueLabel", () => {
   });
 
   it("says Tomorrow for a same-calendar-day lock, matching the list CTA", () => {
-    // Next local midnight can be < 12h away, which would otherwise round to
-    // "Due today" while the row button still says Tomorrow.
     expect(
       formatMemoryDueLabel("learning", NOW + 8 * 60 * 60 * 1000, NOW),
     ).toBe("Tomorrow");

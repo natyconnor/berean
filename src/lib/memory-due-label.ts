@@ -33,8 +33,6 @@ export function formatMemoryDueLabel(
 ): string | null {
   if (isLearningPhase(status)) {
     if (!isLearningLocked({ status, dueAt, lastReviewedAt }, now)) return null;
-    // Locked learning is always "come back tomorrow", even when dueAt is
-    // later today (review-phase copy would say "Due today").
     return "Tomorrow";
   }
 
