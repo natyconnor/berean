@@ -165,6 +165,48 @@ describe("PassageSession", () => {
     );
   });
 
+  function practicedDueView(extra?: Partial<PassageView>): PassageView {
+    const now = getSessionNow();
+    return passageView(
+      [
+        piece(0, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+        piece(1, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+        piece(2, "learning", { learnStage: 1, dueAt: now }),
+      ],
+      extra,
+    );
+  }
+
+  it("resumes the due verse after a reload mid-step", async () => {
+    sessionStorage.setItem(
+      "berean:passage-step-in-progress",
+      JSON.stringify({ packId: PACK_ID, origin: 0 }),
+    );
+    renderSession(practicedDueView());
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: First letters" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: Warm up" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Type what you remember"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens with a warm-up when reopening a passage practiced earlier today", async () => {
+    renderSession(practicedDueView({ lastSessionAt: getSessionNow() - 60_000 }));
+
+    expect(
+      screen.getByRole("status", { name: "Session phase: Warm up" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Session phase: First letters" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("jumps into a due verse instead of a mixed recitation", async () => {
     renderSession(
       passageView([

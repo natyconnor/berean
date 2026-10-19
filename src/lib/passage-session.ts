@@ -242,6 +242,7 @@ export function initialPassageSessionPhase(args: {
   now: number;
   lastSessionAt?: number;
   tzOffsetMinutes?: number;
+  resume?: boolean;
 }): PassageSessionPhase {
   if (allSolid(args.pieces)) return "passage-complete";
   const practicedToday =
