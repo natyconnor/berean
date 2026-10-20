@@ -458,9 +458,12 @@ function verseModel(
   }
 
   const day = stepLadderDay(goal.learnStage);
+  const laterToday =
+    goal.nextDueAt !== null &&
+    calendarDaysBetween(now, goal.nextDueAt, timeZone) <= 0;
   // Read and First letters are day one's one session, so the next session
   // after a step is never day one (`nextStepCopy` says the same).
-  const tomorrow = `Tomorrow: ${stepAction(Math.max(goal.learnStage, 2))}.`;
+  const next = `${laterToday ? "Later today" : "Tomorrow"}: ${stepAction(Math.max(goal.learnStage, 2))}.`;
   const upNext = goal.status === "new";
   let steps: GoalStep[];
   if (goal.hasWorkToday) {
@@ -470,8 +473,8 @@ function verseModel(
   } else {
     steps = [
       doneToday
-        ? { kind: "done", text: `Today's step done. ${tomorrow}` }
-        : { kind: "note", text: tomorrow },
+        ? { kind: "done", text: `Today's step done. ${next}` }
+        : { kind: "note", text: next },
     ];
   }
 

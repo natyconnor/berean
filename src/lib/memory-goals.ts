@@ -553,9 +553,16 @@ export function goalLearnDaysLeft(goal: GoalCard): number {
 /** "On track for {date}" assumes a daily session; after this many idle days it reads "to go". */
 const ON_TRACK_IDLE_DAYS = 2;
 
-/** Whether learning can still move today, so today counts toward the finish. */
-function learnsToday(goal: GoalCard): boolean {
-  return goal.kind === "pack" ? goal.learningToday > 0 : goal.hasWorkToday;
+/** True when a session is open now, or a lock still opens later today. */
+function learnsToday(goal: GoalCard, now: number, timeZone?: string): boolean {
+  if (goal.kind === "pack" ? goal.learningToday > 0 : goal.hasWorkToday) {
+    return true;
+  }
+  return (
+    goal.nextDueAt !== null &&
+    goal.nextDueAt > now &&
+    calendarDaysBetween(now, goal.nextDueAt, timeZone) <= 0
+  );
 }
 
 /**
@@ -580,7 +587,9 @@ export function goalLearnPace(
     return `${formatLearnDuration(days, { short: true })} to go`;
   }
   const finish = new Date(now);
-  finish.setDate(finish.getDate() + days - (learnsToday(goal) ? 1 : 0));
+  finish.setDate(
+    finish.getDate() + days - (learnsToday(goal, now, timeZone) ? 1 : 0),
+  );
   return `on track for ${formatShortDate(finish, timeZone)}`;
 }
 
