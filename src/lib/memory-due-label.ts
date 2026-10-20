@@ -7,6 +7,16 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+function localCalendarDaysUntil(dueAt: number, now: number): number {
+  const due = new Date(dueAt);
+  const current = new Date(now);
+  return (
+    (Date.UTC(due.getFullYear(), due.getMonth(), due.getDate()) -
+      Date.UTC(current.getFullYear(), current.getMonth(), current.getDate())) /
+    DAY_MS
+  );
+}
+
 /**
  * Human-readable due label for library / detail subtitles.
  *
@@ -23,15 +33,13 @@ export function formatMemoryDueLabel(
 ): string | null {
   if (isLearningPhase(status)) {
     if (!isLearningLocked({ status, dueAt, lastReviewedAt }, now)) return null;
-    // Locked learning is always "come back tomorrow", even when the next
-    // local midnight is still "today" on the calendar rounding used below.
     return "Tomorrow";
   }
 
   const diff = dueAt - now;
   if (diff <= 0) return "Due now";
 
-  const days = Math.round(diff / DAY_MS);
+  const days = localCalendarDaysUntil(dueAt, now);
   if (days <= 0) return "Due today";
   if (days === 1) return "Tomorrow";
   return `In ${days} days`;
