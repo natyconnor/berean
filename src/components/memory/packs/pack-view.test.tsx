@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { getSessionNow } from "@/hooks/use-live-now";
+import { getSessionNow, resetSessionNowForTests } from "@/hooks/use-live-now";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { DAY_MS } from "@/lib/memory-scheduler";
@@ -370,6 +370,32 @@ describe("PackView", () => {
       screen.queryByRole("button", { name: "Memorize whole passage" }),
     ).not.toBeInTheDocument();
     expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
+  });
+
+  it("names the list row with later-today unlock time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 8, 0, 30));
+    resetSessionNowForTests();
+    try {
+      renderPack({
+        members: [
+          member({
+            startVerse: 3,
+            endVerse: 3,
+            status: "learning",
+            dueAt: new Date(2026, 2, 8, 5, 57).getTime(),
+          }),
+        ],
+      });
+      expect(
+        screen.getByRole("button", {
+          name: /unlocks later today at 5:57 AM/,
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+      resetSessionNowForTests();
+    }
   });
 
   it("queues the whole pack from Learn this pack, then opens the pack session", async () => {

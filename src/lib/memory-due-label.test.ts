@@ -11,6 +11,12 @@ import {
 const NOW = 1_700_000_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+function expectSpringForwardZone() {
+  expect(new Date(2026, 2, 8).getTimezoneOffset()).not.toBe(
+    new Date(2026, 2, 10).getTimezoneOffset(),
+  );
+}
+
 describe("formatMemoryDueLabel", () => {
   it("omits due labels for available learning-phase verses", () => {
     expect(formatMemoryDueLabel("new", NOW, NOW)).toBeNull();
@@ -64,6 +70,7 @@ describe("formatMemoryDueLabel", () => {
   });
 
   it("counts two calendar days across a spring-forward night, not rounded hours", () => {
+    expectSpringForwardZone();
     expect(
       formatMemoryDueLabel(
         "learning",
@@ -71,6 +78,17 @@ describe("formatMemoryDueLabel", () => {
         new Date(2026, 2, 8, 23).getTime(),
       ),
     ).toBe("In 2 days");
+  });
+
+  it("says Later today on a spring-forward morning", () => {
+    expectSpringForwardZone();
+    expect(
+      formatMemoryDueLabel(
+        "learning",
+        new Date(2026, 2, 8, 5, 57).getTime(),
+        new Date(2026, 2, 8, 0, 30).getTime(),
+      ),
+    ).toBe("Later today");
   });
 
   it("does not lock or date unstarted verses", () => {
@@ -277,6 +295,22 @@ describe("formatMemoryStatusCaption", () => {
         statusLabel: "Learning",
         dueAt: new Date(2026, 5, 15, 5, 57).getTime(),
         now: new Date(2026, 5, 15, 0, 30).getTime(),
+      }),
+    ).toEqual({
+      text: "Learning · Later today",
+      title: "Unlocks at 5:57 AM",
+      accessibleName: "Learning, unlocks later today at 5:57 AM",
+    });
+  });
+
+  it("puts later-today unlock time on a spring-forward morning", () => {
+    expectSpringForwardZone();
+    expect(
+      formatMemoryStatusCaption({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 2, 8, 5, 57).getTime(),
+        now: new Date(2026, 2, 8, 0, 30).getTime(),
       }),
     ).toEqual({
       text: "Learning · Later today",

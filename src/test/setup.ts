@@ -2,6 +2,8 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
+process.env.TZ = "America/Los_Angeles";
+
 class MockResizeObserver {
   observe() {}
 
