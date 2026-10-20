@@ -880,6 +880,7 @@ export const recordUnifiedReview = mutation({
     now: v.number(),
     wordCount: v.number(),
     tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
     durationMs: v.optional(v.number()),
   },
   returns: memoryScheduleValidator,
@@ -927,6 +928,7 @@ export const recordUnifiedReview = mutation({
       now: args.now,
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
     });
 
     for (const { member, memory } of memories) {
@@ -965,6 +967,7 @@ export const acceptRetryHold = mutation({
     id: v.id("packs"),
     now: v.number(),
     tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -996,6 +999,7 @@ export const acceptRetryHold = mutation({
       canonical,
       args.now,
       args.tzOffsetMinutes,
+      args.timeZone,
     );
 
     for (const member of members) {

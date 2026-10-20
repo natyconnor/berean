@@ -43,6 +43,7 @@ export type PassageSessionState = {
   addDayKey?: number;
   now: number;
   tzOffsetMinutes: number;
+  timeZone?: string;
   pieceWordCounts?: readonly number[];
   /** Phase to resume after a stall-repair pass. */
   interruptedPhase?: PassageSessionPhase;
@@ -344,6 +345,7 @@ function applyFrontierAttempt(
     accuracy,
     now,
     tzOffsetMinutes: state.tzOffsetMinutes,
+    timeZone: state.timeZone,
     wordCount: wordCountAt(state, dueIndex),
   });
   const pieces = replacePiece(state.pieces, dueIndex, nextPiece);

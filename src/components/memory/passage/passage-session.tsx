@@ -57,6 +57,7 @@ import {
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import { SessionColumns } from "@/components/memory/practice/session-columns";
 import {
@@ -161,6 +162,7 @@ export function PassageSession({
 }: PassageSessionProps): JSX.Element {
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
+  const timeZone = getViewerTimeZone();
   const introduceNext = useMutation(api.passageMemory.introduceNext);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
 
@@ -168,7 +170,7 @@ export function PassageSession({
   const isMaintenance = status === "reviewing" || status === "mastered";
 
   const [state, setState] = useState<PassageSessionState>(() =>
-    sessionFromView(view, now, tzOffsetMinutes),
+    sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
   );
 
   const leaveSession = () => {
@@ -280,6 +282,7 @@ export function PassageSession({
     }
     const attemptedAt = Date.now();
     const tz = tzOffsetMinutesAt(attemptedAt);
+    const zone = getViewerTimeZone();
     try {
       if (pending.name === "introduceNext") {
         const nextView = await introduceNext({
@@ -307,6 +310,7 @@ export function PassageSession({
         accuracy: pending.accuracy,
         now: attemptedAt,
         tzOffsetMinutes: tz,
+        timeZone: zone,
         durationMs,
         pieceIndex: pending.pieceIndex,
         wordCount:

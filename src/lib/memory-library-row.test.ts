@@ -35,6 +35,25 @@ describe("libraryRow", () => {
         TZ,
       ),
     ).toEqual({
+      line: "Nice. Later today you'll try it with blanks.",
+      dueToday: false,
+      action: null,
+    });
+  });
+
+  it("waits until tomorrow when the lock is the next local day", () => {
+    expect(
+      libraryRow(
+        {
+          status: "learning",
+          learnStage: 1,
+          dueAt: NOW + DAY_MS,
+          lastReviewedAt: NOW,
+        },
+        NOW,
+        TZ,
+      ),
+    ).toEqual({
       line: "Nice. Tomorrow you'll try it with blanks.",
       dueToday: false,
       action: null,

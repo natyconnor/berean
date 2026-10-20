@@ -81,7 +81,7 @@ export function MemoryLibrary({
   const [learnOpen, setLearnOpen] = useState(false);
   const learnOpenerRef = useRef<HTMLButtonElement | null>(null);
   const memorizeSheet = useMemorizeSheet();
-  const timeZone = getViewerTimeZone();
+  const timeZone = getViewerTimeZone() ?? "UTC";
   const openLearnPicker = (opener: HTMLButtonElement) => {
     learnOpenerRef.current = opener;
     setLearnOpen(true);

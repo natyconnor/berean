@@ -100,14 +100,17 @@ function detail(overrides: Partial<VerseDetailData> = {}): VerseDetailData {
   };
 }
 
-function renderBody(data: VerseDetailData) {
+function renderBody(
+  data: VerseDetailData,
+  extras: { now?: number; timeZone?: string } = {},
+) {
   return render(
     <TooltipProvider>
       <VerseDetailBody
         detail={data}
-        now={NOW}
+        now={extras.now ?? NOW}
         returnTo={RETURN_TO}
-        timeZone="UTC"
+        timeZone={extras.timeZone ?? "UTC"}
       />
     </TooltipProvider>,
   );
@@ -200,6 +203,34 @@ describe("VerseDetailBody", () => {
     expect(
       screen.getByText("Nice. Tomorrow you'll try it with blanks."),
     ).toBeInTheDocument();
+  });
+
+  it("names a same-day spring-forward lock Later today with the unlock time", () => {
+    const now = new Date(2026, 2, 8, 0, 30).getTime();
+    const dueAt = new Date(2026, 2, 8, 5, 57).getTime();
+    renderBody(
+      detail({
+        status: "learning",
+        learnStage: 2,
+        intervalDays: 0,
+        dueAt,
+        lastReviewedAt: undefined,
+        attempts: [],
+        difficulty: null,
+      }),
+      { now, timeZone: "America/Los_Angeles" },
+    );
+
+    expect(
+      screen.getByText("Nice. Later today you'll try it with blanks."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Later today")).toBeInTheDocument();
+    const visible = screen.getByText("Learning · Later today");
+    expect(visible).toHaveAttribute("title", "Unlocks at 5:57 AM");
+    expect(visible).toHaveAttribute("aria-hidden", "true");
+    expect(
+      screen.getByText("Learning, unlocks later today at 5:57 AM"),
+    ).toHaveClass("sr-only");
   });
 
   it("shows a try's accuracy and day when hovering the accuracy trend", () => {

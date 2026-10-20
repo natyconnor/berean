@@ -224,7 +224,7 @@ function PackDetailContent({
   tzOffsetMinutes: number;
 }) {
   const frame = useMemoryPanelFrame();
-  const timeZone = getViewerTimeZone();
+  const timeZone = getViewerTimeZone() ?? "UTC";
   const detailPack = toDetailPack(pack);
   const goal = packDetailGoal({
     pack: detailPack,
