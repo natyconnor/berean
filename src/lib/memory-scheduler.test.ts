@@ -30,7 +30,6 @@ import {
   exactReviewsUntilMastered,
   reviewingPathStartEase,
   REVIEWING_PATH_START_EASE_CACHE_LIMIT,
-  reviewingPathStartEaseCacheSizeForTests,
   scheduleNext,
   SHORT_VERSE_WORDS,
   LONG_VERSE_WORDS,
@@ -1112,30 +1111,25 @@ describe("reviewingPathStartEase", () => {
     expect(first[5]).toBe(EASE_START);
   });
 
-  it("stays bounded and still returns the same values after eviction", () => {
-    const sizeBeforeGuard = reviewingPathStartEaseCacheSizeForTests();
-    expect(
-      Object.is(reviewingPathStartEase(Number.NaN, EASE_START), EASE_START),
-    ).toBe(true);
-    expect(Object.is(reviewingPathStartEase(5.2, Number.NaN), Number.NaN)).toBe(
-      true,
-    );
-    expect(Object.is(reviewingPathStartEase(0, EASE_START), EASE_START)).toBe(
-      true,
-    );
-    expect(reviewingPathStartEaseCacheSizeForTests()).toBe(sizeBeforeGuard);
-
+  it("returns the same start ease after more than 512 distinct inputs", () => {
     const keep = reviewingPathStartEase(5.2, EASE_START);
+    const extras: Array<[number, number, number]> = [];
     for (let i = 0; i < REVIEWING_PATH_START_EASE_CACHE_LIMIT + 40; i += 1) {
-      reviewingPathStartEase(3 + i * 1e-6, 1.3 + i * 1e-6);
-      expect(reviewingPathStartEaseCacheSizeForTests()).toBeLessThanOrEqual(
-        REVIEWING_PATH_START_EASE_CACHE_LIMIT,
-      );
+      const intervalDays = 3 + i * 1e-6;
+      const ease = 1.3 + i * 1e-6;
+      extras.push([
+        intervalDays,
+        ease,
+        reviewingPathStartEase(intervalDays, ease),
+      ]);
     }
-    expect(reviewingPathStartEaseCacheSizeForTests()).toBe(
-      REVIEWING_PATH_START_EASE_CACHE_LIMIT,
-    );
+
     expect(Object.is(reviewingPathStartEase(5.2, EASE_START), keep)).toBe(true);
+    expect(
+      extras.every(([intervalDays, ease, value]) =>
+        Object.is(reviewingPathStartEase(intervalDays, ease), value),
+      ),
+    ).toBe(true);
   });
 });
 

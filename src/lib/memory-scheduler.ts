@@ -731,10 +731,6 @@ export const REVIEWING_PATH_START_EASE_CACHE_LIMIT = 512;
 
 const reviewingPathStartEaseCache = new Map<string, number>();
 
-export function reviewingPathStartEaseCacheSizeForTests(): number {
-  return reviewingPathStartEaseCache.size;
-}
-
 function reviewingPathStartEaseCacheGet(key: string): number | undefined {
   const value = reviewingPathStartEaseCache.get(key);
   if (value === undefined) return undefined;
