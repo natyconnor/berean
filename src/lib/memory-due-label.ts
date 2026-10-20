@@ -44,15 +44,6 @@ export type MemoryStatusCaption = {
   accessibleName?: string;
 };
 
-/**
- * Human-readable due label for library / detail subtitles.
- *
- * Review-phase verses always get a due label. Learning-phase verses only get
- * one when soft-locked (`dueAt` in the future). The lock wording follows the
- * same local calendar-day buckets as reviewing: later today, tomorrow, or in
- * N days. Available learning verses return null so the subtitle stays just
- * the status label.
- */
 export function formatMemoryDueLabel(
   status: MemoryStatus,
   dueAt: number,
