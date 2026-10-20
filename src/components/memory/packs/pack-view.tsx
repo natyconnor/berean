@@ -52,6 +52,7 @@ import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
+import { MemoryStatusCaptionLine } from "@/components/memory/memory-status-caption";
 import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
@@ -951,13 +952,10 @@ function PackViewMain({
                           <span className="block truncate text-sm font-medium">
                             {formatVerseRef(member)}
                           </span>
-                          <span
+                          <MemoryStatusCaptionLine
+                            caption={caption}
                             className="block text-xs text-muted-foreground"
-                            title={caption.title}
-                            aria-label={caption.accessibleName}
-                          >
-                            {caption.text}
-                          </span>
+                          />
                         </span>
                       </button>
                       <MemoryVerseListAction

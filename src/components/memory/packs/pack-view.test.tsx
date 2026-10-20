@@ -352,8 +352,12 @@ describe("PackView", () => {
     const lockLabel = screen.getByText(lockCaption.text);
     expect(lockLabel).toBeInTheDocument();
     expect(lockLabel).toHaveAttribute("title", lockCaption.title);
-    expect(lockLabel).toHaveAccessibleName(lockCaption.accessibleName ?? "");
+    expect(lockLabel).toHaveAttribute("aria-hidden", "true");
     expect(lockLabel.className).not.toMatch(/truncate/);
+    expect(lockLabel.parentElement?.className).not.toMatch(/truncate/);
+    expect(screen.getByText(lockCaption.accessibleName ?? "")).toHaveClass(
+      "sr-only",
+    );
     expect(screen.getByRole("button", { name: "Tomorrow" })).toBeDisabled();
 
     expect(

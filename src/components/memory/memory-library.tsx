@@ -16,6 +16,7 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
 import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
+import { MemoryStatusCaptionLine } from "./memory-status-caption";
 import { LearnVerseDialog } from "./learn-verse-dialog";
 import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
@@ -243,13 +244,10 @@ export function MemoryLibrary({
                         <span className="block truncate text-sm font-medium">
                           {formatVerseRef(row)}
                         </span>
-                        <span
+                        <MemoryStatusCaptionLine
+                          caption={caption}
                           className="block text-xs text-muted-foreground"
-                          title={caption.title}
-                          aria-label={caption.accessibleName}
-                        >
-                          {caption.text}
-                        </span>
+                        />
                       </span>
                     </button>
                     <MemoryVerseListAction

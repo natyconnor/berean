@@ -4,6 +4,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
+import { MemoryStatusCaptionLine } from "./memory-status-caption";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import {
@@ -243,13 +244,11 @@ export function VerseDetail({
           <h3 className="text-base font-semibold tracking-tight">
             {reference}
           </h3>
-          <p
+          <MemoryStatusCaptionLine
+            as="p"
+            caption={caption}
             className="mt-0.5 text-sm text-muted-foreground"
-            title={caption.title}
-            aria-label={caption.accessibleName}
-          >
-            {caption.text}
-          </p>
+          />
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {showReviewAction ? (
