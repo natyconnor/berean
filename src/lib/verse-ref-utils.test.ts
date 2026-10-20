@@ -5,6 +5,9 @@ import {
   formatVerseRef,
   isChapterScopeRef,
   parseVerseRef,
+  resolveCanonicalBookName,
+  resolveExtraBookAliases,
+  searchBibleBooks,
   unionVerseRefs,
   formatVerseRange,
   verseRefsHaveMixedRanges,
@@ -483,5 +486,99 @@ describe("isChapterScopeRef", () => {
         endVerse: 1,
       }),
     ).toBe(false);
+  });
+});
+
+const SONG_OF_SOLOMON_ALIASES = [
+  "Song of Songs",
+  "Songs",
+  "SOS",
+  "Canticles",
+] as const;
+
+const SONG_OF_SOLOMON_2_4 = {
+  book: "Song of Solomon",
+  chapter: 2,
+  startVerse: 4,
+  endVerse: 4,
+};
+
+describe("Song of Solomon aliases", () => {
+  it.each(SONG_OF_SOLOMON_ALIASES)(
+    'parseVerseRef("%s 2:4") is Song of Solomon 2:4',
+    (alias) => {
+      expect(parseVerseRef(`${alias} 2:4`)).toEqual(SONG_OF_SOLOMON_2_4);
+    },
+  );
+
+  it('parseVerseRef("Canticles 2") is Song of Solomon chapter 2', () => {
+    expect(parseVerseRef("Canticles 2", { allowChapterOnly: true })).toEqual({
+      book: "Song of Solomon",
+      chapter: 2,
+      startVerse: 1,
+      endVerse: 1,
+      scope: "chapter",
+    });
+  });
+
+  it.each(SONG_OF_SOLOMON_ALIASES)(
+    "resolveCanonicalBookName(%s) is Song of Solomon",
+    (alias) => {
+      expect(resolveCanonicalBookName(alias)).toBe("Song of Solomon");
+    },
+  );
+
+  it.each(SONG_OF_SOLOMON_ALIASES)(
+    "searchBibleBooks(%s) includes Song of Solomon",
+    (alias) => {
+      expect(searchBibleBooks(alias).map((match) => match.name)).toContain(
+        "Song of Solomon",
+      );
+    },
+  );
+});
+
+describe("resolveExtraBookAliases", () => {
+  it("resolves space-stripped and spaced keys to the canonical book", () => {
+    expect(
+      resolveExtraBookAliases({
+        "1John": ["1 Jn"],
+        "Song of Solomon": ["SOS"],
+      }),
+    ).toEqual(
+      new Map([
+        ["1 John", ["1 Jn"]],
+        ["Song of Solomon", ["SOS"]],
+      ]),
+    );
+  });
+});
+
+describe("existing book aliases", () => {
+  it.each([
+    [
+      "Song of Solomon 2:4",
+      {
+        book: "Song of Solomon",
+        chapter: 2,
+        startVerse: 4,
+        endVerse: 4,
+      },
+    ],
+    [
+      "Song 2:4",
+      {
+        book: "Song of Solomon",
+        chapter: 2,
+        startVerse: 4,
+        endVerse: 4,
+      },
+    ],
+    [
+      "Revelations 1:1",
+      { book: "Revelation", chapter: 1, startVerse: 1, endVerse: 1 },
+    ],
+  ] as const)("parseVerseRef(%s) still resolves", (input, expected) => {
+    expect(parseVerseRef(input)).toEqual(expected);
   });
 });

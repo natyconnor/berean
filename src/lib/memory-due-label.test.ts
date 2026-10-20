@@ -22,8 +22,6 @@ describe("formatMemoryDueLabel", () => {
   });
 
   it("says Tomorrow for a same-calendar-day lock, matching the list CTA", () => {
-    // Next local midnight can be < 12h away, which would otherwise round to
-    // "Due today" while the row button still says Tomorrow.
     expect(
       formatMemoryDueLabel("learning", NOW + 8 * 60 * 60 * 1000, NOW),
     ).toBe("Tomorrow");
@@ -43,6 +41,59 @@ describe("formatMemoryDueLabel", () => {
     expect(formatMemoryDueLabel("mastered", NOW + DAY_MS, NOW)).toBe(
       "Tomorrow",
     );
+  });
+
+  it("says Tomorrow for next local midnight at 9 AM, 12:30 PM, and 11 PM", () => {
+    const nextMidnight = new Date(2026, 5, 16).getTime();
+    for (const now of [
+      new Date(2026, 5, 15, 9).getTime(),
+      new Date(2026, 5, 15, 12, 30).getTime(),
+      new Date(2026, 5, 15, 23).getTime(),
+    ]) {
+      expect(formatMemoryDueLabel("reviewing", nextMidnight, now)).toBe(
+        "Tomorrow",
+      );
+    }
+  });
+
+  it("says Tomorrow just after midnight the day before next local midnight", () => {
+    expect(
+      formatMemoryDueLabel(
+        "reviewing",
+        new Date(2026, 5, 16).getTime(),
+        new Date(2026, 5, 15, 0, 1).getTime(),
+      ),
+    ).toBe("Tomorrow");
+  });
+
+  it("says Due today only when dueAt is later today", () => {
+    expect(
+      formatMemoryDueLabel(
+        "reviewing",
+        new Date(2026, 5, 15, 18).getTime(),
+        new Date(2026, 5, 15, 9).getTime(),
+      ),
+    ).toBe("Due today");
+  });
+
+  it("says Due now when dueAt has already passed", () => {
+    expect(
+      formatMemoryDueLabel(
+        "reviewing",
+        new Date(2026, 5, 15, 8).getTime(),
+        new Date(2026, 5, 15, 9).getTime(),
+      ),
+    ).toBe("Due now");
+  });
+
+  it("counts In N days by local calendar day, not rounded hours", () => {
+    expect(
+      formatMemoryDueLabel(
+        "reviewing",
+        new Date(2026, 5, 18).getTime(),
+        new Date(2026, 5, 15, 23).getTime(),
+      ),
+    ).toBe("In 3 days");
   });
 });
 
@@ -65,6 +116,18 @@ describe("formatNextReviewPhrase", () => {
         NOW,
       ),
     ).toBe("in 2 days");
+  });
+
+  it("names tomorrow after an afternoon exact whose dueAt is next local midnight", () => {
+    expect(
+      formatNextReviewPhrase(
+        {
+          status: "reviewing",
+          dueAt: new Date(2026, 5, 16).getTime(),
+        },
+        new Date(2026, 5, 15, 12, 30).getTime(),
+      ),
+    ).toBe("tomorrow");
   });
 });
 
