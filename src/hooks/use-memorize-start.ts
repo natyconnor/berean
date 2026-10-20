@@ -19,6 +19,7 @@ import {
   type ResolvedMemorize,
 } from "@/lib/memorize-target";
 import { MAX_GROUP_VERSES } from "@/lib/memory-span-group";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 /** Where a memorized target lives. A verse carries its span for session URLs. */
 export type MemorizeDestination =
@@ -210,6 +211,7 @@ export function useMemorizeStart(): {
                 pieces: planned.pieces,
                 now,
                 tzOffsetMinutes,
+                timeZone: getViewerTimeZone(),
               });
             } else if (!existing) {
               await startPassageForPack(

@@ -17,7 +17,7 @@ export function useTodayModel(now: number): TodayModelResult | undefined {
   const raw = useQuery(api.memoryHome.today, {
     now,
     tzOffsetMinutes: new Date(now).getTimezoneOffset(),
-    timeZone: getViewerTimeZone(),
+    timeZone: getViewerTimeZone() ?? "UTC",
   });
   if (raw === undefined) return undefined;
   return applyTodayDismissals(

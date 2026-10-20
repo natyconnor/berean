@@ -499,11 +499,14 @@ export function packMemberRow(
 
   if (status === "learning") {
     const locked = isLearningLocked(member, now);
+    const when = !locked
+      ? "today"
+      : calendarDaysBetween(now, member.dueAt, timeZone) <= 0
+        ? "later today"
+        : "tomorrow";
     return {
       status,
-      line: `Learning · ${locked ? "tomorrow" : "today"}: ${stepAction(
-        member.learnStage,
-      )}`,
+      line: `Learning · ${when}: ${stepAction(member.learnStage)}`,
       actions: locked ? [] : ["learn"],
     };
   }

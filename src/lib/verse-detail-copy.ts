@@ -57,6 +57,18 @@ export function formatFactDay(
   return formatWeekdayDate(at, timeZone);
 }
 
+function learningNextStep(
+  verse: VerseFactInput,
+  now: number,
+  timeZone?: string,
+): string {
+  if (verse.status === "new") return "When you're ready";
+  if (!isLearningLocked(verse, now)) return "Today";
+  return calendarDaysBetween(now, verse.dueAt, timeZone) <= 0
+    ? "Later today"
+    : "Tomorrow";
+}
+
 /** Next review · Gap between reviews · Times it slipped (left out at 0). */
 export function verseDetailFacts(
   verse: VerseFactInput,
@@ -74,12 +86,7 @@ export function verseDetailFacts(
   } else {
     facts.push({
       label: "Next step",
-      value:
-        verse.status === "new"
-          ? "When you're ready"
-          : isLearningLocked(verse, now)
-            ? "Tomorrow"
-            : "Today",
+      value: learningNextStep(verse, now, timeZone),
     });
   }
   if (verse.lapses > 0) {

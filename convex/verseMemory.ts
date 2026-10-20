@@ -609,6 +609,7 @@ export const recordAttempt = mutation({
       now: args.now,
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
     });
 
     if (memory.status !== next.status) {
@@ -648,6 +649,7 @@ export const acceptRetryHold = mutation({
     verseRefId: v.id("verseRefs"),
     now: v.number(),
     tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -681,7 +683,12 @@ export const acceptRetryHold = mutation({
       );
     }
 
-    const next = holdReviewingInterval(current, args.now, args.tzOffsetMinutes);
+    const next = holdReviewingInterval(
+      current,
+      args.now,
+      args.tzOffsetMinutes,
+      args.timeZone,
+    );
 
     await ctx.db.patch(memory._id, {
       status: next.status,

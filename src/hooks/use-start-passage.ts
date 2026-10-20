@@ -21,6 +21,7 @@ import {
   type PassagePieceBase,
 } from "@/lib/passage-pieces";
 import type { PassageRange } from "@/lib/passage-range";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { enumerateScopeChapters } from "@/lib/scope-chapter-count";
 import type { VerseScope } from "@/lib/verse-scope-match";
 
@@ -174,6 +175,7 @@ export async function startPassageForPack(
     pieces: buildPassagePieces(chapters, range),
     now,
     tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+    timeZone: getViewerTimeZone(),
   });
 }
 

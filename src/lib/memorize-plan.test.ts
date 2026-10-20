@@ -230,7 +230,7 @@ describe("nextStepCopy", () => {
           { status: "learning", learnStage, dueAt: LOCKED_DUE },
           NOW,
         ),
-      ).toBe("Nice. Tomorrow you'll try it with blanks.");
+      ).toBe("Nice. Later today you'll try it with blanks.");
     }
   });
 
@@ -240,7 +240,21 @@ describe("nextStepCopy", () => {
         { status: "learning", learnStage: 3, dueAt: LOCKED_DUE },
         NOW,
       ),
-    ).toBe("Great. Tomorrow you'll say it from memory.");
+    ).toBe("Great. Later today you'll say it from memory.");
+  });
+
+  it("looks ahead to tomorrow when the lock is the next local day", () => {
+    expect(
+      nextStepCopy(
+        {
+          status: "learning",
+          learnStage: 1,
+          dueAt: Date.UTC(2026, 9, 13),
+        },
+        NOW,
+        "UTC",
+      ),
+    ).toBe("Nice. Tomorrow you'll try it with blanks.");
   });
 
   it("keeps an in-progress verse open against a stale clock", () => {

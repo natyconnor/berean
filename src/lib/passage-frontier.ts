@@ -427,6 +427,7 @@ export function progressPassagePiece(
     accuracy: number;
     now: number;
     tzOffsetMinutes: number;
+    timeZone?: string;
     wordCount: number;
   },
 ): PassagePiece {
@@ -449,7 +450,12 @@ export function progressPassagePiece(
       attachment: "solid",
       learnStage: MAX_LEARN_STAGE,
       stageReps: 0,
-      dueAt: dueAtInCalendarDays(input.now, 1, input.tzOffsetMinutes),
+      dueAt: dueAtInCalendarDays(
+        input.now,
+        1,
+        input.tzOffsetMinutes,
+        input.timeZone,
+      ),
     };
   }
 
@@ -458,7 +464,7 @@ export function progressPassagePiece(
   const attachment: PieceAttachment =
     nextStage >= 2 || piece.attachment === "attached" ? "attached" : "learning";
   const dueAt = sessionEnding
-    ? dueAtInCalendarDays(input.now, 1, input.tzOffsetMinutes)
+    ? dueAtInCalendarDays(input.now, 1, input.tzOffsetMinutes, input.timeZone)
     : piece.dueAt === undefined
       ? input.now
       : Math.min(piece.dueAt, input.now);

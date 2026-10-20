@@ -279,7 +279,7 @@ describe("MemoryLibrary rows", () => {
 
     expect(within(waiting).queryByText("Today")).not.toBeInTheDocument();
     expect(
-      within(waiting).getByText("Nice. Tomorrow you'll try it with blanks."),
+      within(waiting).getByText("Nice. Later today you'll try it with blanks."),
     ).toBeInTheDocument();
     expect(within(waiting).getAllByRole("button")).toHaveLength(1);
 

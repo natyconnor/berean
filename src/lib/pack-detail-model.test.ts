@@ -412,6 +412,23 @@ describe("packMemberRow", () => {
     });
   });
 
+  it("names a same-day lock as later today", () => {
+    expect(
+      packMemberRow(
+        member("rom", {
+          status: "learning",
+          learnStage: 2,
+          dueAt: NOW + 2 * HOUR_MS,
+        }),
+        opts,
+      ),
+    ).toEqual({
+      status: "learning",
+      line: "Learning · later today: fill in the blanks",
+      actions: [],
+    });
+  });
+
   it("open learning offers Learn", () => {
     expect(
       packMemberRow(

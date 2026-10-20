@@ -104,6 +104,7 @@ export const start = mutation({
     pieces: v.array(pieceBaseValidator),
     now: v.number(),
     tzOffsetMinutes: v.number(),
+    timeZone: v.optional(v.string()),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -159,6 +160,7 @@ export const start = mutation({
       memberSchedules: members.map(memberToSchedule),
       now: args.now,
       tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
     });
 
     // Re-check before side effects / insert to collapse concurrent starts.
@@ -284,6 +286,7 @@ export const recordAttempt = mutation({
     accuracy: v.number(),
     now: v.number(),
     tzOffsetMinutes: v.number(),
+    timeZone: v.optional(v.string()),
     durationMs: v.optional(v.number()),
     pieceIndex: v.optional(v.number()),
     wordCount: v.optional(v.number()),
@@ -329,6 +332,7 @@ export const recordAttempt = mutation({
           accuracy: args.accuracy,
           now: args.now,
           tzOffsetMinutes: args.tzOffsetMinutes,
+          timeZone: args.timeZone,
           wordCount: resolvedPassageWordCount(args.wordCount),
         });
         pieces = row.pieces.map((current, index) =>
@@ -341,7 +345,7 @@ export const recordAttempt = mutation({
         pieces.every((current) => current.attachment === "solid");
       const graduating = allSolid && row.status === "building";
       const schedule = graduating
-        ? freshReviewingSchedule(args.now, args.tzOffsetMinutes)
+        ? freshReviewingSchedule(args.now, args.tzOffsetMinutes, args.timeZone)
         : null;
 
       next = await patchPassageMemory(ctx, row._id, {
@@ -370,6 +374,7 @@ export const recordAttempt = mutation({
           mode: "review",
           now: args.now,
           tzOffsetMinutes: args.tzOffsetMinutes,
+          timeZone: args.timeZone,
         });
         const nextStatus =
           scheduled.status === "mastered" || scheduled.status === "reviewing"
@@ -416,6 +421,7 @@ export const acceptRetryHold = mutation({
     packId: v.id("packs"),
     now: v.number(),
     tzOffsetMinutes: v.number(),
+    timeZone: v.optional(v.string()),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -432,6 +438,7 @@ export const acceptRetryHold = mutation({
       toPassageSchedule(row),
       args.now,
       args.tzOffsetMinutes,
+      args.timeZone,
     );
     const nextStatus =
       scheduled.status === "mastered" || scheduled.status === "reviewing"

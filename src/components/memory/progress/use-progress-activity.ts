@@ -35,7 +35,7 @@ export function useProgressActivity(now: number): {
   activity: ReviewActivity | undefined;
   forecast: ReviewForecastDays | undefined;
 } {
-  const timeZone = getViewerTimeZone();
+  const timeZone = getViewerTimeZone() ?? "UTC";
   const ensureReviewActivityDays = useMutation(
     api.verseMemory.ensureReviewActivityDays,
   );

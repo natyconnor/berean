@@ -219,9 +219,13 @@ export function nextStepCopy(
     if (!isLearningLocked(schedule, now)) {
       return stepActionLine(schedule.learnStage);
     }
+    const when =
+      calendarDaysBetween(now, schedule.dueAt, timeZone) <= 0
+        ? "Later today"
+        : "Tomorrow";
     return schedule.learnStage >= MAX_LEARN_STAGE
-      ? "Great. Tomorrow you'll say it from memory."
-      : "Nice. Tomorrow you'll try it with blanks.";
+      ? `Great. ${when} you'll say it from memory.`
+      : `Nice. ${when} you'll try it with blanks.`;
   }
 
   const daysAway = calendarDaysBetween(now, schedule.dueAt, timeZone);

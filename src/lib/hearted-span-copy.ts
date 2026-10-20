@@ -1,3 +1,4 @@
+import { formatMemoryDueLabel } from "./memory-due-label";
 import { isLearningLocked, type MemoryStatus } from "./memory-scheduler";
 import { reviewPhaseListAction } from "./memory-session";
 
@@ -46,7 +47,7 @@ export function heartedSpanConfirmAction(
     return { label: "Learn", disabled: false };
   }
   if (memory.status === "learning") {
-    const locked =
+    if (
       memory.dueAt !== undefined &&
       now !== undefined &&
       isLearningLocked(
@@ -56,10 +57,20 @@ export function heartedSpanConfirmAction(
           lastReviewedAt: memory.lastReviewedAt,
         },
         now,
-      );
-    return locked
-      ? { label: "Tomorrow", disabled: true }
-      : { label: "Continue Learning", disabled: false };
+      )
+    ) {
+      return {
+        label:
+          formatMemoryDueLabel(
+            memory.status,
+            memory.dueAt,
+            now,
+            memory.lastReviewedAt,
+          ) ?? "Tomorrow",
+        disabled: true,
+      };
+    }
+    return { label: "Continue Learning", disabled: false };
   }
   if (memory.status === "reviewing" || memory.status === "mastered") {
     const label =

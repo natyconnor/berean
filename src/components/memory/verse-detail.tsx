@@ -44,7 +44,9 @@ import {
   statusLabel,
   stepShortLabel,
 } from "@/lib/memory-copy";
+import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { withReturn } from "@/lib/memory-return";
+import { MemoryStatusCaptionLine } from "./memory-status-caption";
 import {
   isDueForReview,
   isLearningLocked,
@@ -229,7 +231,7 @@ export function VerseDetailBody({
   detail,
   now,
   returnTo,
-  timeZone = getViewerTimeZone(),
+  timeZone = getViewerTimeZone() ?? "UTC",
 }: {
   detail: VerseDetailData;
   now: number;
@@ -313,11 +315,29 @@ export function VerseDetailBody({
       ? "All steps done, and it's mastered."
       : "All steps done. Short reviews keep it fresh.";
 
+  const lockCaption = !reviewPhase
+    ? formatMemoryStatusCaption({
+        status: detail.status,
+        statusLabel: statusLabel(detail.status),
+        dueAt: detail.dueAt,
+        lastReviewedAt: detail.lastReviewedAt,
+        now,
+        timeZone,
+      })
+    : null;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         {actions}
         <AddToPack reference={reference} now={now} returnTo={returnTo} />
+        {lockCaption?.title ? (
+          <MemoryStatusCaptionLine
+            as="p"
+            caption={lockCaption}
+            className="w-full text-sm text-muted-foreground"
+          />
+        ) : null}
       </div>
 
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">

@@ -60,6 +60,20 @@ describe("heartedSpanConfirmAction", () => {
     ).toEqual({ label: "Tomorrow", disabled: true });
   });
 
+  it("uses Later today when the lock unlocks the same local day", () => {
+    const morning = new Date(2026, 5, 15, 0, 30).getTime();
+    expect(
+      heartedSpanConfirmAction(
+        "Learn",
+        {
+          status: "learning",
+          dueAt: new Date(2026, 5, 15, 5, 57).getTime(),
+        },
+        morning,
+      ),
+    ).toEqual({ label: "Later today", disabled: true });
+  });
+
   it("uses Review for due reviewing and mastered verses", () => {
     expect(
       heartedSpanConfirmAction(

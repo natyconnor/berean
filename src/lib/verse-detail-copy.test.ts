@@ -86,6 +86,19 @@ describe("verseDetailFacts", () => {
     expect(
       verseDetailFacts(
         {
+          status: "learning",
+          learnStage: 2,
+          dueAt: NOW + 2 * 60 * 60 * 1000,
+          intervalDays: 0,
+          lapses: 0,
+        },
+        NOW,
+        TZ,
+      ),
+    ).toEqual([{ label: "Next step", value: "Later today" }]);
+    expect(
+      verseDetailFacts(
+        {
           status: "new",
           learnStage: 0,
           dueAt: NOW,
