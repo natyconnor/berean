@@ -14,6 +14,14 @@ import {
 } from "./verse-ref-utils";
 
 describe("parseVerseRef", () => {
+  it("understands common short book names", () => {
+    expect(parseVerseRef("Jn 3:16")).toMatchObject({ book: "John" });
+    expect(parseVerseRef("1 Jn 4:8")).toMatchObject({ book: "1 John" });
+    expect(parseVerseRef("Mt 6:33")).toMatchObject({ book: "Matthew" });
+    expect(parseVerseRef("Mk 1:15")).toMatchObject({ book: "Mark" });
+    expect(parseVerseRef("Lk 9:23")).toMatchObject({ book: "Luke" });
+  });
+
   it("parses single verses and ranges", () => {
     expect(parseVerseRef("John 3:16")).toEqual({
       book: "John",

@@ -13,13 +13,16 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { logInteraction } from "@/lib/dev-log";
+import { MEMORIZE_LABEL, memorizeTitleLabel } from "@/lib/memory-copy";
 import { writeSearchWorkspaceParams } from "@/lib/search-workspace-state";
+import { formatBookChapter, parsePassageId } from "@/lib/verse-ref-utils";
 import { api } from "../../../convex/_generated/api";
 import { useOptionalStagedOnboarding } from "./staged-onboarding-context";
 import {
   TutorialContext,
   type TutorialContextValue,
   type TutorialStep as TourStep,
+  type TutorialStepContext,
 } from "./tutorial-context";
 import {
   FOCUS_MODE_CENTER_VERSE,
@@ -39,6 +42,35 @@ interface TutorialStatus {
   categoryColors: Record<string, string>;
 }
 
+/** "John 1" for `/passage/John-1`; `null` off a chapter route. */
+function chapterTitleFromPath(pathname: string): string | null {
+  const match = /^\/passage\/([^/]+)/.exec(pathname);
+  if (!match) return null;
+  const { book, chapter } = parsePassageId(match[1]);
+  if (book.length === 0 || !Number.isInteger(chapter) || chapter < 1) {
+    return null;
+  }
+  return formatBookChapter(book, chapter);
+}
+
+function memorizeStepDescription({ pathname }: TutorialStepContext) {
+  const chapter = chapterTitleFromPath(pathname);
+  return (
+    <>
+      Use{" "}
+      <strong className="font-semibold text-foreground">
+        {chapter ? memorizeTitleLabel(chapter) : MEMORIZE_LABEL}
+      </strong>{" "}
+      here, or heart a few verses and tap{" "}
+      <strong className="font-semibold text-foreground">
+        {MEMORIZE_LABEL}
+      </strong>
+      . A few minutes a day for about three days, and it&apos;s yours. A ring
+      around a verse&apos;s heart shows how it&apos;s going.
+    </>
+  );
+}
+
 const MAIN_TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
@@ -54,6 +86,13 @@ const MAIN_TOUR_STEPS: TourStep[] = [
       "Tap the + beside a verse to start a note. You can have multiple notes per verse, or even select multiple verses.",
     targetIds: ["passage-verse-1"],
     cardAnchorIds: ["passage-add-note"],
+  },
+  {
+    id: "memorize",
+    title: "Memorize any passage",
+    description: memorizeStepDescription,
+    targetIds: ["chapter-memorize"],
+    centerWhenTargetMissing: true,
   },
   {
     id: "note-body",
@@ -145,8 +184,12 @@ function getTargetElements(targetIds: string[]): HTMLElement[] {
   );
 }
 
-function stepRequiresTarget(step: TourStep): boolean {
+function stepHasTargets(step: TourStep): boolean {
   return step.targetIds.length > 0;
+}
+
+function stepRequiresTarget(step: TourStep): boolean {
+  return stepHasTargets(step) && step.centerWhenTargetMissing !== true;
 }
 
 function isStepTargetReady(step: TourStep): boolean {
@@ -279,8 +322,14 @@ export function TutorialProvider({
     writeActiveTutorialTour(activeTour);
   }, [activeTour, pendingTour]);
 
+  const completeHint = stagedOnboarding?.complete;
+  const isMemorizeStep = activeTour === "main" && activeStep?.id === "memorize";
   useEffect(() => {
-    if (!activeStep || !stepRequiresTarget(activeStep)) {
+    if (isMemorizeStep) completeHint?.(FEATURE_HINTS.CHAPTER_MEMORIZE_NEW);
+  }, [completeHint, isMemorizeStep]);
+
+  useEffect(() => {
+    if (!activeStep || !stepHasTargets(activeStep)) {
       return;
     }
 
@@ -532,6 +581,7 @@ export function TutorialProvider({
       isTourActive: (tour) => activeTour === tour,
       isStepActive: (tour, stepId) =>
         activeTour === tour && activeStep?.id === stepId,
+      isMainTutorialComplete: isMainComplete,
       isFocusModeTutorialComplete,
     }),
     [
@@ -539,6 +589,7 @@ export function TutorialProvider({
       activeSteps.length,
       activeTour,
       isFocusModeTutorialComplete,
+      isMainComplete,
       startTour,
       stepIndex,
     ],
@@ -552,9 +603,17 @@ export function TutorialProvider({
   const currentCardAnchorRect = hasCurrentStepMeasurement
     ? cardAnchorRect
     : null;
+  // A step that can fall back to a centered card still waits for its first
+  // measurement so it doesn't flash centered before finding its target.
   const shouldRenderActiveStep =
     activeStep !== null &&
-    (!activeStepRequiresTarget || currentTargetRect !== null);
+    (activeStepRequiresTarget
+      ? currentTargetRect !== null
+      : !stepHasTargets(activeStep) || hasCurrentStepMeasurement);
+  const activeDescription =
+    typeof activeStep?.description === "function"
+      ? activeStep.description({ pathname: location.pathname })
+      : activeStep?.description;
 
   const spotlightStyle: CSSProperties | undefined = currentTargetRect
     ? {
@@ -595,7 +654,7 @@ export function TutorialProvider({
                 </p>
                 <h2 className="text-base font-semibold">{activeStep.title}</h2>
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  {activeStep.description}
+                  {activeDescription}
                 </p>
               </div>
 

@@ -64,6 +64,66 @@ export function exactSpanMatch<T extends VerseSpan>(
   );
 }
 
+/** True when `outer` contains every verse of `inner` (same book and chapter). */
+export function spanContains(outer: VerseSpan, inner: VerseSpan): boolean {
+  return (
+    sameChapter(outer, inner) &&
+    outer.startVerse <= inner.startVerse &&
+    inner.endVerse <= outer.endVerse
+  );
+}
+
+/**
+ * True when a single heart contains the whole span: an exact heart, a wider
+ * span heart, or a passage heart. Hearts that only cover part of the span
+ * between them do not count.
+ */
+export function spanCoveredBy(
+  span: VerseSpan,
+  hearts: readonly VerseSpan[],
+): boolean {
+  return hearts.some((heart) => spanContains(heart, span));
+}
+
+/**
+ * Items that the removed hearts covered and no remaining heart covers, i.e.
+ * the in-memory items that must stop when those hearts go away. Items that
+ * were already uncovered are not reported.
+ */
+export function spansLosingCoverage<T extends VerseSpan>(
+  removed: readonly VerseSpan[],
+  remaining: readonly VerseSpan[],
+  items: readonly T[],
+): T[] {
+  return items.filter(
+    (item) => spanCoveredBy(item, removed) && !spanCoveredBy(item, remaining),
+  );
+}
+
+/**
+ * The heart spans for a passage: one per chapter, from the lowest start verse
+ * to the highest end verse of its pieces in that chapter, in first-seen order.
+ */
+export function passageHeartSpans(pieces: readonly VerseSpan[]): VerseSpan[] {
+  const byChapter = new Map<string, VerseSpan>();
+  for (const piece of pieces) {
+    const key = `${piece.book}:${piece.chapter}`;
+    const current = byChapter.get(key);
+    if (!current) {
+      byChapter.set(key, {
+        book: piece.book,
+        chapter: piece.chapter,
+        startVerse: piece.startVerse,
+        endVerse: piece.endVerse,
+      });
+      continue;
+    }
+    current.startVerse = Math.min(current.startVerse, piece.startVerse);
+    current.endVerse = Math.max(current.endVerse, piece.endVerse);
+  }
+  return [...byChapter.values()];
+}
+
 /**
  * Union covered verses in a chapter, then group contiguous runs.
  * Used to paint muted coverage; not a new selection model.

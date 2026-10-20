@@ -70,6 +70,14 @@ describe("resolveAppPath", () => {
       pathname: "/memory/learn",
     });
     expect(resolveAppPath("/memory/AbC123")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/memory/verses")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/memory/progress")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/memory/library")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/memory/verse/AbC123")).toEqual({ type: "serve" });
+    expect(resolveAppPath("/MEMORY/VERSE/AbC123")).toEqual({
+      type: "redirect",
+      pathname: "/memory/verse/AbC123",
+    });
     expect(resolveAppPath("/Memory/AbC123/")).toEqual({
       type: "redirect",
       pathname: "/memory/AbC123",

@@ -24,12 +24,12 @@ interface EnableUnifiedReviewDialogProps {
 }
 
 /**
- * The one confirmation between a pack of separately-scheduled units and a
- * single passage recitation.
+ * The one confirmation between a pack of separately-scheduled verses and a
+ * single recitation.
  *
- * It names the trade the learner is actually making: the units that aren't due
- * yet get pulled to today (which is what ends the "two due, two not" drip), and
- * from then on the pack comes back as one card on one schedule.
+ * It names the trade the learner is actually making: the verses that aren't
+ * due yet get pulled to today (which is what ends the "two due, two not"
+ * drip), and from then on the pack comes back as one card on one schedule.
  */
 export function EnableUnifiedReviewDialog({
   open,
@@ -45,10 +45,10 @@ export function EnableUnifiedReviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Recite {packName} as one passage?</DialogTitle>
+          <DialogTitle>Review {packName} together?</DialogTitle>
           <DialogDescription>
-            Reviews stop arriving a unit at a time. From now on this pack comes
-            back as a single recitation on a single schedule.
+            Reviews stop arriving a verse at a time. From now on this pack comes
+            back as one recitation on one schedule.
           </DialogDescription>
         </DialogHeader>
 
@@ -61,8 +61,8 @@ export function EnableUnifiedReviewDialog({
             <span>
               <span className="font-medium">Everything moves to today.</span>{" "}
               {notDueCount > 0
-                ? `${notDueCount} of ${verseCount} unit${verseCount === 1 ? "" : "s"} ${notDueCount === 1 ? "isn't" : "aren't"} due yet — ${notDueCount === 1 ? "it joins" : "they join"} this review so the whole passage stays in step.`
-                : `All ${verseCount} unit${verseCount === 1 ? "" : "s"} are already due, so nothing is left half-scheduled.`}
+                ? `${notDueCount} of ${verseCount} verse${verseCount === 1 ? "" : "s"} ${notDueCount === 1 ? "isn't" : "aren't"} due yet — ${notDueCount === 1 ? "it joins" : "they join"} this review so the whole passage stays in step.`
+                : `All ${verseCount} verse${verseCount === 1 ? "" : "s"} are already due, so nothing is left half-scheduled.`}
             </span>
           </li>
           <li className="flex gap-3">
@@ -71,16 +71,16 @@ export function EnableUnifiedReviewDialog({
               className="mt-0.5 h-4 w-4 shrink-0 text-primary"
             />
             <span>
-              <span className="font-medium">One card, one grade.</span> Type the
-              whole passage — no verse numbers — and that grade sets the next
-              review date for every unit at once.
+              <span className="font-medium">One recitation, one grade.</span>{" "}
+              Type it all the way through — no verse numbers — and that grade
+              sets the next review for every verse at once.
             </span>
           </li>
         </ul>
 
         <p className="text-xs text-muted-foreground">
-          You can switch back to unit-by-unit reviews any time. Nothing you have
-          learned is reset.
+          You can switch back to reviewing verse by verse any time from the ⋯
+          menu. Nothing you have learned is reset.
         </p>
 
         {error ? (

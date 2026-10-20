@@ -4,6 +4,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { noteBodyValue } from "./lib/noteContent";
 import {
   passagePieceValidator,
+  passageRangeValidator,
   passageStatusValidator,
   qualityValidator,
 } from "./lib/passageValues";
@@ -147,11 +148,14 @@ export default defineSchema({
     book: v.string(),
     chapter: v.number(),
     createdAt: v.number(),
+    // Set on the one heart row per chapter that represents a memorized passage.
+    passageMemoryId: v.optional(v.id("passageMemory")),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_verseRefId", ["userId", "verseRefId"])
     .index("by_userId_book_chapter", ["userId", "book", "chapter"])
-    .index("by_userId_createdAt", ["userId", "createdAt"]),
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_userId_passageMemoryId", ["userId", "passageMemoryId"]),
 
   highlights: defineTable({
     userId: v.id("users"),
@@ -228,6 +232,12 @@ export default defineSchema({
         tagMatchMode: v.union(v.literal("any"), v.literal("all")),
       }),
     ),
+    /**
+     * Verse bounds of a scope pack's passage when it starts or ends
+     * mid-chapter; `scope` still holds the covering chapters. Absent means
+     * whole chapters.
+     */
+    passageRange: v.optional(passageRangeValidator),
     createdAt: v.number(),
     lastOpenedAt: v.number(),
     /**
@@ -244,7 +254,8 @@ export default defineSchema({
     .index("by_userId_presetId", ["userId", "presetId"]),
 
   packVerses: defineTable({
-    // Custom-pack membership (ordered). Hearted-only: unheart deletes these rows.
+    // Custom-pack membership (ordered). Members are rows whose verse is in
+    // Memory; rows survive stop and unheart so memorizing again restores them.
     userId: v.id("users"),
     packId: v.id("packs"),
     verseRefId: v.id("verseRefs"),
@@ -257,7 +268,7 @@ export default defineSchema({
     .index("by_userId_verseRefId", ["userId", "verseRefId"]),
 
   /**
-   * Denormalized hearted-verse status counts for O(1) memoryStats.
+   * Denormalized in-Memory verse status counts for O(1) memoryStats.
    * `due` is time-dependent and is still computed live from the due index.
    */
   userMemoryStats: defineTable({
@@ -268,6 +279,8 @@ export default defineSchema({
     mastered: v.number(),
     total: v.number(),
     updatedAt: v.number(),
+    // Set once `verseMemory.inMemory` has been derived for this user.
+    inMemoryBackfilledAt: v.optional(v.number()),
   }).index("by_userId", ["userId"]),
 
   feedbackReports: defineTable({
@@ -303,6 +316,9 @@ export default defineSchema({
     earlyReviewApplied: v.optional(v.boolean()),
     // Optional while backfilled; true means the verse is currently in savedVerses.
     isHearted: v.optional(v.boolean()),
+    // Source of truth for "the user chose to memorize this". Optional until
+    // the inMemory backfill has run for the user.
+    inMemory: v.optional(v.boolean()),
     lastReviewedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
@@ -310,6 +326,9 @@ export default defineSchema({
     .index("by_userId_isHearted", ["userId", "isHearted"])
     .index("by_userId_isHearted_dueAt", ["userId", "isHearted", "dueAt"])
     .index("by_userId_isHearted_status", ["userId", "isHearted", "status"])
+    .index("by_userId_inMemory", ["userId", "inMemory"])
+    .index("by_userId_inMemory_dueAt", ["userId", "inMemory", "dueAt"])
+    .index("by_userId_inMemory_status", ["userId", "inMemory", "status"])
     .index("by_userId_status", ["userId", "status"])
     .index("by_userId_verseRefId", ["userId", "verseRefId"]), // upsert on heart
 
@@ -362,6 +381,11 @@ export default defineSchema({
     unheartedCount: v.optional(v.number()),
     keptHeartCount: v.optional(v.number()),
     migrationBannerDismissed: v.optional(v.boolean()),
+    // When the "by heart" moment was shown, so it shows once per passage.
+    celebratedAt: v.optional(v.number()),
+    // When the passage first left building, so the moment survives leaving
+    // before it was shown. Older passages have neither and never celebrate.
+    celebrationPendingAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

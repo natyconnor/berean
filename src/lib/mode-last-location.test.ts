@@ -4,6 +4,7 @@ import {
   clearModeLastLocations,
   DEFAULT_MODE_HREFS,
   isValidModeHref,
+  MODE_LAST_LOCATION_STORAGE_KEY,
   modeForPathname,
   modeNavigateTargetFromHref,
   readModeLastLocations,
@@ -63,6 +64,106 @@ describe("mode-last-location", () => {
       memory: "/memory/pack-1",
       notes: "/passage/John-3?startVerse=16&mode=compose",
     });
+  });
+
+  it("remembers Today without its open drawer", () => {
+    expect(
+      rememberModeLocation("/memory", "/memory?panel=pack%3Aabc&from=verses"),
+    ).toEqual({ memory: "/memory" });
+    expect(readModeLastLocations()).toEqual({ memory: "/memory" });
+
+    expect(
+      rememberModeLocation("/memory", "/memory?panel=progress", {
+        memory: "/memory",
+      }),
+    ).toBeNull();
+    expect(
+      rememberModeLocation("/memory", "/memory?panel=verses", {
+        memory: "/memory/pack-1",
+      }),
+    ).toEqual({ memory: "/memory" });
+  });
+
+  it("keeps panel-like params on pages other than Today", () => {
+    expect(
+      rememberModeLocation("/memory/verse/v1", "/memory/verse/v1?from=verses"),
+    ).toEqual({ memory: "/memory/verse/v1?from=verses" });
+    expect(
+      rememberModeLocation(
+        "/memory/review",
+        "/memory/review?book=John&return=%2Fmemory%3Fpanel%3Dverses",
+      ),
+    ).toEqual({
+      memory: "/memory/review?book=John&return=%2Fmemory%3Fpanel%3Dverses",
+    });
+  });
+
+  it("does not remember a session opened from the reader", () => {
+    const current = { memory: "/memory/pack-1" };
+    for (const href of [
+      "/memory/learn?book=John&chapter=2&startVerse=5&endVerse=5&return=%2Fpassage%2FJohn-2",
+      "/memory/learn?book=john&chapter=2&startverse=5&endverse=5&return=%2Fpassage%2Fjohn-2",
+      "/memory/review?RETURN=%2Fpassage%2FJohn-2%3Fmode%3Dcompose",
+      "/memory/today?return=%2Fpassage%2FPsalms-1",
+      "/memory/pack-1/practice?return=%2Fpassage%2FPsalms-1",
+    ]) {
+      const pathname = href.split("?")[0] ?? href;
+      expect(rememberModeLocation(pathname, href, current), href).toBeNull();
+    }
+    expect(resolveModeHref("memory", current)).toBe("/memory/pack-1");
+  });
+
+  it("remembers sessions started inside Memory, so leaving one resumes it", () => {
+    expect(
+      rememberModeLocation("/memory/today", "/memory/today?return=%2Fmemory"),
+    ).toEqual({ memory: "/memory/today?return=%2Fmemory" });
+    expect(
+      rememberModeLocation(
+        "/memory/pack-1/learn",
+        "/memory/pack-1/learn?return=%2Fmemory%2Fpack-1",
+      ),
+    ).toEqual({ memory: "/memory/pack-1/learn?return=%2Fmemory%2Fpack-1" });
+    expect(rememberModeLocation("/memory/review", "/memory/review")).toEqual({
+      memory: "/memory/review",
+    });
+  });
+
+  it("keeps a page opened from the reader that is not a session", () => {
+    expect(
+      rememberModeLocation(
+        "/memory/new",
+        "/memory/new?book=John&chapter=3&return=%2Fpassage%2FJohn-3",
+      ),
+    ).toEqual({
+      memory: "/memory/new?book=John&chapter=3&return=%2Fpassage%2FJohn-3",
+    });
+  });
+
+  it("sends a reader session stored before back to Today", () => {
+    sessionStorage.setItem(
+      MODE_LAST_LOCATION_STORAGE_KEY,
+      JSON.stringify({
+        memory:
+          "/memory/learn?book=john&chapter=2&startverse=5&endverse=5&return=%2Fpassage%2Fjohn-2",
+        notes: "/passage/John-2",
+      }),
+    );
+    const stored = readModeLastLocations();
+    expect(stored).toEqual({ notes: "/passage/John-2" });
+    expect(resolveModeHref("memory", stored)).toBe("/memory");
+    expect(
+      resolveModeHref("memory", {
+        memory: "/memory/review?return=%2Fpassage%2FJohn-2",
+      }),
+    ).toBe("/memory");
+  });
+
+  it("drops a drawer from a Today href stored before", () => {
+    sessionStorage.setItem(
+      MODE_LAST_LOCATION_STORAGE_KEY,
+      JSON.stringify({ memory: "/memory?panel=verse%3Av1" }),
+    );
+    expect(readModeLastLocations()).toEqual({ memory: "/memory" });
   });
 
   it("does not rewrite a stored mode when visiting a different mode", () => {
@@ -128,5 +229,14 @@ describe("mode-last-location", () => {
       },
     });
     expect(modeNavigateTargetFromHref("/settings")).toBeNull();
+  });
+
+  it("leaves static Memory pages to href navigation instead of pack ids", () => {
+    expect(
+      modeNavigateTargetFromHref("/memory/today?packId=p1&return=%2Fmemory"),
+    ).toBeNull();
+    expect(modeNavigateTargetFromHref("/memory/verses")).toBeNull();
+    expect(modeNavigateTargetFromHref("/memory/progress")).toBeNull();
+    expect(modeNavigateTargetFromHref("/memory/verse/v1")).toBeNull();
   });
 });

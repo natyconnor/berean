@@ -9,7 +9,7 @@ import { verseRefKey } from "../../../shared/verse-ref-key";
  */
 export type ActivityType = "teach";
 
-/** The kinds of cards a deck can render (shared with the Memory deck). */
+/** The kinds of cards a deck can render. */
 export type CardType = StudyCard["type"];
 
 export interface CardReference {
@@ -17,12 +17,6 @@ export interface CardReference {
   chapter: number;
   startVerse: number;
   endVerse: number;
-}
-
-export interface VerseMemoryCard {
-  type: "verse-memory";
-  id: string;
-  reference: CardReference;
 }
 
 export interface PassageNote {
@@ -38,7 +32,7 @@ export interface TeachCard {
   passageNotes: PassageNote[];
 }
 
-export type StudyCard = VerseMemoryCard | TeachCard;
+export type StudyCard = TeachCard;
 
 export interface ResolvedNote {
   noteId: string;
@@ -173,23 +167,13 @@ export function buildStudyCards(notes: ResolvedNote[]): StudyCard[] {
 
 export function activityLabel(cardType: CardType): string {
   switch (cardType) {
-    case "verse-memory":
-      return "Verse Memory";
     case "teach":
       return "Teach";
   }
 }
 
-export type CardKind = "verse" | "note";
-
-export function getCardKind(card: StudyCard): CardKind {
-  return card.type === "verse-memory" ? "verse" : "note";
-}
-
 export function activityDescription(cardType: CardType): string {
   switch (cardType) {
-    case "verse-memory":
-      return "Recall hearted verses from memory";
     case "teach":
       return "Teach a point on the passage, then reveal your notes";
   }

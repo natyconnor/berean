@@ -7,6 +7,7 @@ import {
   insertPassageMemory,
   insertPassageReview,
   loadPassageForPack,
+  markPassageCelebrated,
   memberToHeart,
   memberToSchedule,
   patchPassageMemory,
@@ -17,6 +18,7 @@ import {
   toPassageView,
   withNormalizedPieces,
 } from "./lib/passageMemory";
+import { celebrationPendingPatch } from "./lib/passageCelebration";
 import {
   dueQueuePackItemValidator,
   passageAttemptKindValidator,
@@ -24,18 +26,25 @@ import {
   pieceBaseValidator,
   qualityValidator,
 } from "./lib/passageValues";
-import { loadPackMembers } from "./lib/packs";
+import {
+  filterScopeMembers,
+  loadCustomPackVerseRefIds,
+  loadInMemoryMembers,
+  loadPassageMemoryByUser,
+} from "./lib/packs";
 import {
   ensurePassageDueBackfill,
   loadPassageDueRecords,
 } from "./lib/passageDue";
-import { unheartByVerseRefId } from "./lib/savedVerses";
-import { findVerseRefId } from "./lib/verseRefs";
+import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
 import {
   holdReviewingInterval,
   SHORT_VERSE_WORDS,
 } from "../src/lib/memory-scheduler";
-import { packAllowsPassageMode } from "../src/lib/passage-eligibility";
+import {
+  packAllowsPassageMode,
+  rangeAllowsPassageMode,
+} from "../src/lib/passage-eligibility";
 import {
   isPassageDueForLearning,
   isProjectedPassageDueForLearning,
@@ -47,7 +56,9 @@ import {
   remainingIntroduces,
 } from "../src/lib/passage-frontier";
 import {
+  absorbedVerseItems,
   assertPiecesMatchScope,
+  findOverlappingPassage,
   freshReviewingSchedule,
   planStart,
 } from "../src/lib/passage-start";
@@ -77,8 +88,12 @@ export const getForPack = query({
 
 /**
  * Explicit opt-in. Idempotent if a passage row already exists. Otherwise
- * freezes client-supplied pieces, maybe unhearts auto-hearts, and clears
- * unified recitation. Does not run on pack open alone.
+ * freezes client-supplied pieces (seeded from the in-Memory members' progress;
+ * a pack with `passageRange` has only members inside it, and its pieces must
+ * cover it exactly), writes one passage heart per chapter over the pieces'
+ * verses, absorbs standalone verse items inside the passage, and clears
+ * unified recitation. Never unhearts anything. Does not run on pack open
+ * alone.
  */
 export const start = mutation({
   args: {
@@ -101,20 +116,39 @@ export const start = mutation({
       return toPassageView(existing, args.now, args.tzOffsetMinutes);
     }
 
-    if (pack.kind !== "scope" || !pack.scope) {
-      throw new Error(
-        "Passage mode is only available for eligible scope packs",
-      );
+    const range = pack.passageRange ?? null;
+    if (
+      pack.kind !== "scope" ||
+      !pack.scope ||
+      !packAllowsPassageMode(pack.scope) ||
+      (range !== null && !rangeAllowsPassageMode(range))
+    ) {
+      throw new Error("This pack can't be learned as a passage");
     }
-    if (!packAllowsPassageMode(pack.scope)) {
+
+    assertPiecesMatchScope(args.pieces, pack.scope, range);
+
+    const overlapping = findOverlappingPassage(
+      args.pieces,
+      (await loadPassageMemoryByUser(ctx, userId)).filter(
+        (passage) => passage.packId !== pack._id,
+      ),
+    );
+    if (overlapping) {
+      const other = await ctx.db.get(overlapping.packId);
       throw new Error(
-        "Passage mode is only available for eligible scope packs",
+        other
+          ? `This overlaps ${other.name}, which you're memorizing. Stop it first.`
+          : "This overlaps a passage you're memorizing. Stop it first.",
       );
     }
 
-    assertPiecesMatchScope(args.pieces, pack.scope);
-
-    const members = await loadPackMembers(ctx, userId, pack);
+    // In-Memory verses already inside the range carry their progress over.
+    const members = filterScopeMembers(
+      await loadInMemoryMembers(ctx, userId),
+      pack.scope,
+      pack.passageRange,
+    );
     const plan = planStart({
       pieces: args.pieces,
       hearts: members.map(memberToHeart),
@@ -135,12 +169,6 @@ export const start = mutation({
       return toPassageView(raced, args.now, args.tzOffsetMinutes);
     }
 
-    for (const span of plan.unheartSpans) {
-      const verseRefId = await findVerseRefId(ctx, userId, span);
-      if (!verseRefId) continue;
-      await unheartByVerseRefId(ctx, userId, verseRefId, args.now);
-    }
-
     await ctx.db.patch(pack._id, { unifiedReviewEnabled: false });
 
     const row = await insertPassageMemory(ctx, {
@@ -149,13 +177,27 @@ export const start = mutation({
       plan,
       now: args.now,
     });
+    await ensurePassageHearts(ctx, userId, row, args.now);
+
+    const customPackVerseRefIds = await loadCustomPackVerseRefIds(ctx, userId);
+    const absorbed = absorbedVerseItems(
+      members.map((member) => ({
+        ...member,
+        inCustomPack: customPackVerseRefIds.has(member.verseRefId),
+      })),
+      row.pieces,
+    );
+    for (const member of absorbed) {
+      await stopMemorizingVerse(ctx, userId, member.verseRefId, args.now);
+    }
+
     return toPassageView(row, args.now, args.tzOffsetMinutes);
   },
 });
 
 /**
- * Removes the passage overlay. Hearts are left untouched. Pack UX reverts to
- * a heart collection.
+ * Removes the passage overlay and its progress. Its passage hearts stay as
+ * plain range hearts. Pack UX reverts to a verse collection.
  */
 export const stop = mutation({
   args: { packId: v.id("packs") },
@@ -310,6 +352,7 @@ export const recordAttempt = mutation({
         ...(schedule
           ? {
               status: "reviewing" as const,
+              ...celebrationPendingPatch(row, "reviewing", args.now),
               ease: schedule.ease,
               intervalDays: schedule.intervalDays,
               dueAt: schedule.dueAt,
@@ -413,6 +456,21 @@ export const acceptRetryHold = mutation({
     });
 
     return toPassageView(next, args.now, args.tzOffsetMinutes);
+  },
+});
+
+/**
+ * The "by heart" moment was shown for this passage. It is owed from the first
+ * move out of building until this runs, even across sessions.
+ */
+export const markCelebrated = mutation({
+  args: { packId: v.id("packs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = await requirePassageForPack(ctx, args.packId, userId);
+    await markPassageCelebrated(ctx, row, Date.now());
+    return null;
   },
 });
 

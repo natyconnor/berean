@@ -90,6 +90,18 @@ describe("preview memory seed", () => {
     ).toBe(false);
   });
 
+  it("seeds every verse in Memory, with Up-next verses inside a pack", () => {
+    expect(plan.verses.every((verse) => verse.inMemory)).toBe(true);
+    const packed = new Set(plan.packs.flatMap((pack) => pack.verseIds));
+    const upNext = plan.verses.filter(
+      (verse) => verse.schedule.status === "new",
+    );
+    expect(upNext.length).toBeGreaterThan(0);
+    for (const verse of upNext) {
+      expect(packed.has(verse.id)).toBe(true);
+    }
+  });
+
   it("builds packs that only reference seeded verse ids", () => {
     const ids = new Set(plan.verses.map((verse) => verse.id));
     expect(plan.packs.length).toBeGreaterThanOrEqual(3);

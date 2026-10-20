@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 import {
   ArrowLeft,
   GraduationCap,
@@ -10,54 +9,30 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { packReviewSession } from "@/components/memory/pack-session-verses";
 import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
-import type { PracticeVerse } from "@/components/memory/practice/practice-board";
-import type { CardReference } from "@/components/study/study-card-model";
-import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
-import { isReviewPhase, type MemorySchedule } from "@/lib/memory-scheduler";
+import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import { isReviewPhase } from "@/lib/memory-scheduler";
 import { remainingDueAfterQueue } from "@/lib/memory-session";
-import { sortSessionVerses } from "@/lib/memory-session-order";
-import { canonicalUnifiedSchedule } from "@/lib/unified-review-schedule";
 import { Route } from "@/routes/memory_.$packId.review";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
-type PackMember = FunctionReturnType<typeof api.packs.resolveMembers>[number];
-
-function memberReference(member: PackMember): CardReference {
-  return {
-    book: member.book,
-    chapter: member.chapter,
-    startVerse: member.startVerse,
-    endVerse: member.endVerse,
-  };
-}
-
-function memberSchedule(member: PackMember): MemorySchedule {
-  return {
-    status: member.status,
-    learnStage: member.learnStage,
-    stageReps: member.stageReps,
-    ease: member.ease,
-    intervalDays: member.intervalDays,
-    dueAt: member.dueAt,
-    consecutiveCorrect: member.consecutiveCorrect,
-    lapses: member.lapses,
-    earlyReviewApplied: member.earlyReviewApplied ?? false,
-  };
-}
-
 export function MemoryPackReviewPage() {
   const navigate = useNavigate();
   const { packId } = Route.useParams();
+  const { return: returnTo } = Route.useSearch();
   const typedPackId = packId as Id<"packs">;
   const now = useLiveNow();
   const [sessionEpoch, setSessionEpoch] = useState(0);
+  const packHref = `/memory/${encodeURIComponent(packId)}`;
+  const onExit = useMemoryExit(returnTo, packHref);
+  const backLabel = useMemoryExitLabel(returnTo, packHref);
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
   const members = useFrozenQuery(api.packs.resolveMembers, {
@@ -70,75 +45,22 @@ export function MemoryPackReviewPage() {
     tzOffsetMinutes: new Date(now).getTimezoneOffset(),
   });
 
-  const dueMembers = useMemo(
-    () => (members ?? []).filter((member) => member.isDue),
-    [members],
-  );
-
-  const unifiedEnabled = pack?.unifiedReviewEnabled === true;
-  // A flagged pack can still pick up an ungraduated member — a new heart inside
-  // the scope, or a lapse back into learning. The recitation needs every member
-  // in review phase, and grading the spans one at a time is not a fallback: it
-  // would write per-verse schedules the pack UI still presents as one item.
-  const unifiedBlocked =
-    unifiedEnabled &&
-    members !== undefined &&
-    (members.length === 0 ||
-      !members.every((member) => isReviewPhase(member.status)));
-
-  // Unified recitation: the pack is one card, not N due spans. Enabling already
-  // pulled every member to today and synced their schedules, so the whole pack
-  // recites together — the conservative canonical schedule (same helper the
-  // mutation uses) drives the card's "next review in N days" preview.
-  const compositeVerse = useMemo<PracticeVerse | null>(() => {
-    if (pack == null || pack.unifiedReviewEnabled !== true) return null;
-    if (members === undefined || members.length === 0) return null;
-    if (!members.every((member) => isReviewPhase(member.status))) return null;
-    if (dueMembers.length === 0) return null;
-
-    const canonical = canonicalUnifiedSchedule(
-      members.map(memberSchedule),
-      now,
-    );
-    return {
-      reference: memberReference(members[0]),
-      learnStage: canonical.learnStage,
-      stageReps: canonical.stageReps,
-      status: canonical.status,
-      dueAt: canonical.dueAt,
-      ease: canonical.ease,
-      intervalDays: canonical.intervalDays,
-      consecutiveCorrect: canonical.consecutiveCorrect,
-      lapses: canonical.lapses,
-      earlyReviewApplied: canonical.earlyReviewApplied,
-      composite: {
+  const review = useMemo(
+    () =>
+      packReviewSession({
         packId: typedPackId,
-        packName: pack.name,
-        members: members.map(memberReference),
-      },
-    };
-  }, [pack, members, dueMembers.length, now, typedPackId]);
-
-  const reviewVerses = useMemo<PracticeVerse[]>(() => {
-    if (members === undefined) return [];
-    // While the flag is on, the recitation is the only way to review this pack:
-    // either the one composite card or nothing at all.
-    if (unifiedEnabled) return compositeVerse ? [compositeVerse] : [];
-    return sortSessionVerses(
-      dueMembers.map((member) => toPracticeVerse(member)),
-    );
-  }, [members, dueMembers, compositeVerse, unifiedEnabled]);
-
-  const remainingDue = remainingDueAfterQueue(
-    unifiedEnabled ? (compositeVerse ? 1 : 0) : dueMembers.length,
-    reviewVerses.length,
+        packName: pack?.name ?? "",
+        unifiedReviewEnabled: pack?.unifiedReviewEnabled === true,
+        members: members ?? [],
+        now,
+      }),
+    [pack?.name, pack?.unifiedReviewEnabled, members, now, typedPackId],
   );
-
-  const onExit = () =>
-    void navigate({
-      to: "/memory/$packId",
-      params: { packId: typedPackId },
-    });
+  const unifiedBlocked = members !== undefined && review.unifiedBlocked;
+  const remainingDue = remainingDueAfterQueue(
+    review.dueCount,
+    review.verses.length,
+  );
 
   if (pack === undefined || passage === undefined) {
     return (
@@ -168,7 +90,7 @@ export function MemoryPackReviewPage() {
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Memory
+            Back to Today
           </Link>
         </div>
       </div>
@@ -182,6 +104,7 @@ export function MemoryPackReviewPage() {
         view={passage}
         packName={pack.name}
         onExit={onExit}
+        backLabel={backLabel}
         exitTooltip="Go back to the pack"
       />
     );
@@ -203,11 +126,12 @@ export function MemoryPackReviewPage() {
     <MemorySessionRunner
       key={`pack-review-${sessionEpoch}`}
       kind="review"
-      verses={reviewVerses}
+      verses={review.verses}
       scopeLabel={pack.name}
       onExit={onExit}
       exitTooltip="Go back to the pack"
-      exitLabel="Back to pack"
+      backLabel={backLabel}
+      returnTo={returnTo}
       remainingDue={remainingDue}
       onContinueSession={() => setSessionEpoch((value) => value + 1)}
       emptyState={
@@ -225,7 +149,7 @@ export function MemoryPackReviewPage() {
               <p className="text-sm text-muted-foreground">
                 {learningCount > 0
                   ? `${pack.name} recites as one passage, so every unit has to graduate before it comes back. ${learningCount} ${learningCount === 1 ? "unit is" : "units are"} still learning.`
-                  : `${pack.name} has no hearted verses right now. Heart verses inside this scope and they join the recitation.`}
+                  : `${pack.name} has no verses being memorized right now.`}
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -235,6 +159,9 @@ export function MemoryPackReviewPage() {
                     void navigate({
                       to: "/memory/$packId/learn",
                       params: { packId: typedPackId },
+                      ...(returnTo === undefined
+                        ? {}
+                        : { search: { return: returnTo } }),
                     })
                   }
                 >
@@ -242,7 +169,7 @@ export function MemoryPackReviewPage() {
                 </Button>
               ) : null}
               <Button variant="outline" onClick={onExit}>
-                Back to pack
+                {backLabel}
               </Button>
             </div>
           </div>
@@ -260,7 +187,7 @@ export function MemoryPackReviewPage() {
               </p>
             </div>
             <Button variant="outline" onClick={onExit}>
-              Back to pack
+              {backLabel}
             </Button>
           </div>
         )

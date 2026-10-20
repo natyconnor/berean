@@ -6,9 +6,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
 
+import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
+import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
 import {
   PassageRecallCard,
   type PassageRecallHint,
@@ -20,7 +22,7 @@ import {
   type StallCueContent,
   CONNECT_COPY,
   CONNECT_RECITE_LABEL,
-  CONNECT_TITLE,
+  connectPairTitle,
   DONE_FOR_NOW_LABEL,
   BUDGET_EXHAUSTED_COPY,
   FRONTIER_LOCKED_COPY,
@@ -40,6 +42,7 @@ import {
   pieceReference,
   pieceStatus,
   pickUpCue,
+  RECITE_IT_ALL_LABEL,
   remainingAddsIn,
   repairPromptIndexes,
   ropeWindowPieceIndexes,
@@ -53,8 +56,14 @@ import {
   type RopeStartOverride,
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
+import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
+import { SessionColumns } from "@/components/memory/practice/session-columns";
+import {
+  SessionHeaderProgress,
+  type SessionProgress,
+} from "@/components/memory/practice/session-header-progress";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,6 +97,11 @@ import {
   type PassageSessionPhase,
   type PassageSessionState,
 } from "@/lib/passage-session";
+import {
+  clearPassageStepInProgress,
+  markPassageStepInProgress,
+  releasePassageStepInProgress,
+} from "@/lib/passage-step-resume";
 import { countVerseWords } from "@/lib/verse-hint";
 
 import { api } from "../../../../convex/_generated/api";
@@ -124,6 +138,15 @@ interface PassageSessionProps {
    */
   onDoneForToday?: () => void;
   exitTooltip?: string;
+  /** Header back button text, e.g. "Back to Today". */
+  backLabel?: string;
+  /**
+   * Header text and overall bar when this passage is one part of a session.
+   * A function gets the share of today's new verses added so far.
+   */
+  progress?: SessionProgress | ((todayShare: number) => SessionProgress);
+  /** A side column beside the passage, e.g. the rest of today's queue. */
+  aside?: ReactNode;
 }
 
 export function PassageSession({
@@ -133,8 +156,10 @@ export function PassageSession({
   onExit,
   onDoneForToday,
   exitTooltip = "Go back to the pack",
+  backLabel = "Back",
+  progress,
+  aside,
 }: PassageSessionProps): JSX.Element {
-  const finishForToday = onDoneForToday ?? onExit;
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
   const timeZone = getViewerTimeZone();
@@ -147,6 +172,27 @@ export function PassageSession({
   const [state, setState] = useState<PassageSessionState>(() =>
     sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
   );
+
+  const leaveSession = () => {
+    clearPassageStepInProgress(packId);
+    onExit();
+  };
+  const finishForToday = () => {
+    clearPassageStepInProgress(packId);
+    (onDoneForToday ?? onExit)();
+  };
+  const [addsAtOpen] = useState(() => remainingAddsIn(state));
+  const headerProgress =
+    typeof progress === "function"
+      ? progress(
+          addsAtOpen > 0
+            ? Math.min(
+                Math.max((addsAtOpen - remainingAddsIn(state)) / addsAtOpen, 0),
+                1,
+              )
+            : 0,
+        )
+      : progress;
   const [introduceBusy, setIntroduceBusy] = useState(false);
   const [ropeOverride, setRopeOverride] =
     useState<RopeStartOverride>("rehearsal");
@@ -156,6 +202,18 @@ export function PassageSession({
   const [recitingSection, setRecitingSection] = useState(false);
   const [recitingConnect, setRecitingConnect] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
+  // The passage just became known by heart: "pending" holds the moment until
+  // the learner continues past the result that finished it. "owed" is a moment
+  // missed by leaving early, shown once this session opens with its text.
+  const [moment, setMoment] = useState<"pending" | "showing" | "owed" | null>(
+    view.needsCelebration ? "owed" : null,
+  );
+  const celebrateMastered = useFirstMasteredToast();
+  const carriedOver = useCarriedOverNotice(
+    view._id,
+    state.pieces,
+    !isMaintenance,
+  );
 
   const pieceRefs = useMemo(
     () => view.pieces.map(pieceReference),
@@ -199,6 +257,17 @@ export function PassageSession({
   const cue = stallCue ?? recall?.pickUpCue ?? null;
 
   const autoIntroduceStarted = useRef(false);
+
+  useEffect(() => {
+    if (state.phase === "passage-complete") {
+      clearPassageStepInProgress(packId);
+      return;
+    }
+    markPassageStepInProgress(packId);
+    return () => {
+      releasePassageStepInProgress(packId);
+    };
+  }, [packId, state.phase]);
 
   async function persist(
     next: PassageSessionState,
@@ -254,6 +323,12 @@ export function PassageSession({
         addDayKey: nextView.addDayKey,
         todayKey: localDayIndex(attemptedAt, tz),
       });
+      if (status === "building" && nextView.needsCelebration) {
+        setMoment("pending");
+      }
+      if (status !== "mastered" && nextView.status === "mastered") {
+        celebrateMastered(packName);
+      }
       setStatus(nextView.status);
       setState({
         ...next,
@@ -354,6 +429,7 @@ export function PassageSession({
   }
 
   function handleContinueAfterResult() {
+    if (moment === "pending") setMoment("showing");
     setHoldResult(false);
     setHeldRecall(null);
     if (state.phase !== "rope" && state.phase !== "stall-repair") {
@@ -412,7 +488,7 @@ export function PassageSession({
   }, [needsFirstVerse]);
 
   const phaseLabel = isMaintenance
-    ? "Review"
+    ? RECITE_IT_ALL_LABEL
     : liveRecall?.mode === "frontier"
       ? (PRACTICE_STAGES[liveRecall.learnStage]?.label ?? "Learn")
       : PASSAGE_SESSION_PHASE_LABELS[effectivePhase];
@@ -453,10 +529,20 @@ export function PassageSession({
     <PassageSessionShell
       phaseLabel={phaseLabel}
       packName={packName}
-      onExit={onExit}
+      onExit={leaveSession}
       exitTooltip={exitTooltip}
+      backLabel={backLabel}
+      progress={headerProgress}
       persistError={persistError}
+      aside={aside}
     >
+      {carriedOver.notice ? (
+        <CarriedOverNotice
+          notice={carriedOver.notice}
+          onDismiss={carriedOver.dismiss}
+        />
+      ) : null}
+
       {needsFirstVerse ? (
         persistError ? (
           <NextVersePanel
@@ -503,12 +589,11 @@ export function PassageSession({
 
       {effectivePhase === "connect" && !holdResult && !recitingConnect ? (
         <ConnectPanel
-          verseTitles={(state.rehearsalRopeIndexes ?? [])
-            .map((index) => {
-              const piece = state.pieces[index];
-              return piece ? pieceCardTitle(piece) : null;
-            })
-            .filter((title): title is string => Boolean(title))}
+          title={connectPairTitle(
+            (state.rehearsalRopeIndexes ?? [])
+              .map((index) => state.pieces[index])
+              .filter((piece): piece is PassagePiece => piece !== undefined),
+          )}
           onRecite={() => setRecitingConnect(true)}
           onSkip={handleSkipSection}
         />
@@ -599,7 +684,46 @@ export function PassageSession({
           />
         </div>
       ) : null}
+
+      {moment === "showing" || (moment === "owed" && wordCountsReady) ? (
+        <PassageCompleteMoment
+          packId={packId}
+          title={packName}
+          verseCount={verseCountIn(state.pieces)}
+          createdAt={view.createdAt}
+          segments={composite.segments}
+          onDone={moment === "owed" ? () => setMoment(null) : finishForToday}
+        />
+      ) : null}
     </PassageSessionShell>
+  );
+}
+
+function CarriedOverNotice({
+  notice,
+  onDismiss,
+}: {
+  notice: string;
+  onDismiss: () => void;
+}): JSX.Element {
+  return (
+    <div
+      role="note"
+      className="mx-auto mb-4 flex max-w-xl items-center gap-2 rounded-lg border bg-muted/40 py-1.5 pr-1.5 pl-3 text-sm text-muted-foreground"
+    >
+      <Info className="size-4 shrink-0" aria-hidden />
+      <p className="min-w-0 flex-1">{notice}</p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="shrink-0"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+      >
+        <X aria-hidden />
+      </Button>
+    </div>
   );
 }
 
@@ -692,20 +816,16 @@ function SectionCompletePanel({
 }
 
 function ConnectPanel({
-  verseTitles,
+  title,
   onRecite,
   onSkip,
 }: {
-  verseTitles: readonly string[];
+  title: string;
   onRecite: () => void;
   onSkip: () => void;
 }): JSX.Element {
-  const pairLabel =
-    verseTitles.length >= 2
-      ? `${verseTitles[0]} · ${verseTitles[1]}`
-      : CONNECT_TITLE;
   return (
-    <CheckpointCard title={pairLabel} description={CONNECT_COPY}>
+    <CheckpointCard title={title} description={CONNECT_COPY}>
       <Button type="button" onClick={onRecite}>
         {CONNECT_RECITE_LABEL}
       </Button>
@@ -1001,14 +1121,20 @@ function PassageSessionShell({
   packName,
   onExit,
   exitTooltip,
+  backLabel,
+  progress,
   persistError,
+  aside,
   children,
 }: {
   phaseLabel: string;
   packName: string;
   onExit: () => void;
   exitTooltip: string;
+  backLabel: string;
+  progress?: SessionProgress;
   persistError: string | null;
+  aside?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -1024,7 +1150,7 @@ function PassageSessionShell({
                 className="-ml-2 shrink-0 gap-1.5"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden />
-                Back
+                {backLabel}
               </Button>
             </TooltipTrigger>
             <TooltipContent>{exitTooltip}</TooltipContent>
@@ -1044,6 +1170,7 @@ function PassageSessionShell({
               {packName}
             </span>
           </h1>
+          {progress ? <SessionHeaderProgress progress={progress} /> : null}
         </div>
       </header>
       {persistError ? (
@@ -1055,7 +1182,9 @@ function PassageSessionShell({
         </div>
       ) : null}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">{children}</div>
+        <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">
+          <SessionColumns aside={aside}>{children}</SessionColumns>
+        </div>
       </ScrollArea>
     </div>
   );

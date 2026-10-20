@@ -1,3 +1,4 @@
+import { calendarDaysBetween } from "@/lib/memorize-plan";
 import {
   isLearningLocked,
   isLearningPhase,
@@ -5,28 +6,17 @@ import {
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function localCalendarDaysUntil(dueAt: number, now: number): number {
-  const due = new Date(dueAt);
-  const current = new Date(now);
-  return (
-    (Date.UTC(due.getFullYear(), due.getMonth(), due.getDate()) -
-      Date.UTC(current.getFullYear(), current.getMonth(), current.getDate())) /
-    DAY_MS
-  );
-}
-
 function lockedLearningDueLabel(days: number): string {
   if (days <= 0) return "Later today";
   if (days === 1) return "Tomorrow";
   return `In ${days} days`;
 }
 
-function formatUnlockClock(dueAt: number): string {
+function formatUnlockClock(dueAt: number, timeZone?: string): string {
   return new Date(dueAt).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 
@@ -36,6 +26,7 @@ type MemoryStatusLabelInput = {
   dueAt: number;
   now: number;
   lastReviewedAt?: number;
+  timeZone?: string;
 };
 
 export type MemoryStatusCaption = {
@@ -49,16 +40,17 @@ export function formatMemoryDueLabel(
   dueAt: number,
   now: number,
   lastReviewedAt?: number,
+  timeZone?: string,
 ): string | null {
   if (isLearningPhase(status)) {
     if (!isLearningLocked({ status, dueAt, lastReviewedAt }, now)) return null;
-    return lockedLearningDueLabel(localCalendarDaysUntil(dueAt, now));
+    return lockedLearningDueLabel(calendarDaysBetween(now, dueAt, timeZone));
   }
 
   const diff = dueAt - now;
   if (diff <= 0) return "Due now";
 
-  const days = localCalendarDaysUntil(dueAt, now);
+  const days = calendarDaysBetween(now, dueAt, timeZone);
   if (days <= 0) return "Due today";
   if (days === 1) return "Tomorrow";
   return `In ${days} days`;
@@ -101,15 +93,22 @@ export function formatMemoryStatusCaption({
   dueAt,
   now,
   lastReviewedAt,
+  timeZone,
 }: MemoryStatusLabelInput): MemoryStatusCaption {
-  const dueLabel = formatMemoryDueLabel(status, dueAt, now, lastReviewedAt);
+  const dueLabel = formatMemoryDueLabel(
+    status,
+    dueAt,
+    now,
+    lastReviewedAt,
+    timeZone,
+  );
   const text = dueLabel === null ? statusLabel : `${statusLabel} · ${dueLabel}`;
   if (dueLabel === null || !isLearningPhase(status)) {
     return { text };
   }
 
-  const days = localCalendarDaysUntil(dueAt, now);
-  const time = formatUnlockClock(dueAt);
+  const days = calendarDaysBetween(now, dueAt, timeZone);
+  const time = formatUnlockClock(dueAt, timeZone);
   if (days <= 0) {
     return {
       text,

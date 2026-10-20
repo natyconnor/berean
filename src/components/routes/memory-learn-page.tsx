@@ -5,19 +5,19 @@ import { Loader2 } from "lucide-react";
 import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import type { PracticeVerse } from "@/components/memory/practice/practice-board";
+import { AllLearnEmptyState } from "@/components/memory/session-empty-states";
 import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { MemoryAllSessionPage } from "@/components/routes/memory-practice-page";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryBack } from "@/hooks/use-memory-back";
+import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
   readLearnPacksDismissedToday,
 } from "@/lib/learn-dismissed-packs";
 import { hasLearnVerseScope } from "@/lib/memory-learn-search";
-import { isMemorySessionCandidate } from "@/lib/memory-session";
-import { sortSessionVerses } from "@/lib/memory-session-order";
+import { hasMemorizedVerses } from "@/lib/memory-session";
 import { Route } from "@/routes/memory/learn";
 
 import { api } from "../../../convex/_generated/api";
@@ -30,20 +30,32 @@ export function MemoryLearnPage() {
     return <MemoryAllSessionPage kind="learning" search={search} />;
   }
 
-  return <GlobalMemoryLearnPage />;
+  return <GlobalMemoryLearnPage returnTo={search.return} />;
 }
 
-function GlobalMemoryLearnPage(): JSX.Element {
-  const onExitHome = useMemoryBack();
+function GlobalMemoryLearnPage({
+  returnTo,
+}: {
+  returnTo: string | undefined;
+}): JSX.Element {
+  const onExitHome = useMemoryExit(returnTo);
+  const backLabel = useMemoryExitLabel(returnTo);
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
-  const savedVerses = useFrozenQuery(api.savedVerses.listAll, {});
+  const learnQueue = useFrozenQuery(api.verseMemory.learnQueue, {
+    now,
+    tzOffsetMinutes,
+  });
   const duePassages = useFrozenQuery(api.passageMemory.dueForLearning, {
     now,
     tzOffsetMinutes,
   });
+  const stats = useFrozenQuery(api.verseMemory.memoryStats, {
+    now,
+    tzOffsetMinutes,
+  });
 
-  if (savedVerses === undefined || duePassages === undefined) {
+  if (learnQueue === undefined || duePassages === undefined) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -51,14 +63,27 @@ function GlobalMemoryLearnPage(): JSX.Element {
     );
   }
 
-  const verses = learningVersesFromSaved(savedVerses, now);
+  const verses = learnQueue.map((item) =>
+    toPracticeVerse({
+      verseRefId: item.verseRefId,
+      book: item.book,
+      chapter: item.chapter,
+      startVerse: item.startVerse,
+      endVerse: item.endVerse,
+      ...item.memory,
+    }),
+  );
 
   return (
     <GlobalLearnSession
       passages={duePassages}
       verses={verses}
+      now={now}
       dayKey={learnDismissDayKey(now)}
       onExitHome={onExitHome}
+      backLabel={backLabel}
+      returnTo={returnTo}
+      hasMemorized={hasMemorizedVerses(stats)}
     />
   );
 }
@@ -66,13 +91,21 @@ function GlobalMemoryLearnPage(): JSX.Element {
 function GlobalLearnSession({
   passages,
   verses,
+  now,
   dayKey,
   onExitHome,
+  backLabel,
+  returnTo,
+  hasMemorized,
 }: {
   passages: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
   verses: PracticeVerse[];
+  now: number;
   dayKey: number;
   onExitHome: () => void;
+  backLabel: string;
+  returnTo: string | undefined;
+  hasMemorized: boolean;
 }): JSX.Element {
   // Freeze the due list for this visit so a live update cannot swap packs
   // mid-session. Walk every frozen pack: the first one not set aside earlier
@@ -97,33 +130,15 @@ function GlobalLearnSession({
         packId={passage.packId}
         packName={passage.packName}
         onExitHome={onExitHome}
+        backLabel={backLabel}
         onDismissPack={dismissAndLeave}
       />
     );
   }
 
-  if (frozenVerses.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center bg-background px-6">
-        <div className="max-w-sm space-y-3 text-center">
-          <h1 className="text-base font-semibold tracking-tight">
-            Nothing to learn right now
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Start a verse from your library, or come back when an in-progress
-            verse or passage is ready.
-          </p>
-          <button
-            type="button"
-            onClick={onExitHome}
-            className="inline-flex text-sm font-medium text-primary hover:underline"
-          >
-            Back
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const emptyState = (
+    <AllLearnEmptyState now={now} onExit={onExitHome} backLabel={backLabel} />
+  );
 
   return (
     <MemorySessionRunner
@@ -131,26 +146,10 @@ function GlobalLearnSession({
       verses={frozenVerses}
       scopeLabel="Today's learning"
       onExit={onExitHome}
-      emptyState={
-        <div className="flex h-full items-center justify-center bg-background px-6">
-          <div className="max-w-sm space-y-3 text-center">
-            <h1 className="text-base font-semibold tracking-tight">
-              Nothing to learn right now
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Start a verse from your library, or come back when an in-progress
-              verse is ready.
-            </p>
-            <button
-              type="button"
-              onClick={onExitHome}
-              className="inline-flex text-sm font-medium text-primary hover:underline"
-            >
-              Back
-            </button>
-          </div>
-        </div>
-      }
+      backLabel={backLabel}
+      returnTo={returnTo}
+      hasMemorized={hasMemorized}
+      emptyState={emptyState}
     />
   );
 }
@@ -159,11 +158,13 @@ function BuildingPassageLearnCard({
   packId,
   packName,
   onExitHome,
+  backLabel,
   onDismissPack,
 }: {
   packId: Id<"packs">;
   packName: string;
   onExitHome: () => void;
+  backLabel: string;
   /** "That's enough for today", or Back from a pack this query cannot load. */
   onDismissPack: () => void;
 }): JSX.Element {
@@ -194,7 +195,7 @@ function BuildingPassageLearnCard({
             className="inline-flex text-sm font-medium text-primary hover:underline"
             onClick={onDismissPack}
           >
-            Back
+            {backLabel}
           </button>
         </div>
       </div>
@@ -209,67 +210,7 @@ function BuildingPassageLearnCard({
       onExit={onExitHome}
       onDoneForToday={onDismissPack}
       exitTooltip="Go back"
+      backLabel={backLabel}
     />
-  );
-}
-
-function learningVersesFromSaved(
-  savedVerses: ReadonlyArray<{
-    verseRefId: Id<"verseRefs">;
-    book: string;
-    chapter: number;
-    startVerse: number;
-    endVerse: number;
-    memory?: {
-      learnStage?: number;
-      stageReps?: number;
-      status?: PracticeVerse["status"];
-      dueAt?: number;
-      lastReviewedAt?: number;
-      ease?: number;
-      intervalDays?: number;
-      consecutiveCorrect?: number;
-      lapses?: number;
-      earlyReviewApplied?: boolean;
-    } | null;
-  }>,
-  now: number,
-): PracticeVerse[] {
-  return sortSessionVerses(
-    savedVerses.flatMap((verse) => {
-      if (
-        !isMemorySessionCandidate(
-          {
-            status: verse.memory?.status,
-            dueAt: verse.memory?.dueAt,
-            lastReviewedAt: verse.memory?.lastReviewedAt,
-          },
-          "learning",
-          now,
-          false,
-        )
-      ) {
-        return [];
-      }
-      return [
-        toPracticeVerse({
-          verseRefId: verse.verseRefId,
-          book: verse.book,
-          chapter: verse.chapter,
-          startVerse: verse.startVerse,
-          endVerse: verse.endVerse,
-          learnStage: verse.memory?.learnStage ?? 0,
-          stageReps: verse.memory?.stageReps ?? 0,
-          status: verse.memory?.status ?? "new",
-          dueAt: verse.memory?.dueAt,
-          lastReviewedAt: verse.memory?.lastReviewedAt,
-          ease: verse.memory?.ease,
-          intervalDays: verse.memory?.intervalDays,
-          consecutiveCorrect: verse.memory?.consecutiveCorrect,
-          lapses: verse.memory?.lapses,
-          earlyReviewApplied: verse.memory?.earlyReviewApplied,
-        }),
-      ];
-    }),
   );
 }

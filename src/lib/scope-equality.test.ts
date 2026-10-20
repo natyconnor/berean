@@ -1,5 +1,81 @@
 import { describe, expect, it } from "vitest";
-import { scopesEqual, type FullScope } from "./scope-equality";
+import type { PassageRange } from "./passage-range";
+import {
+  passageRangesEqual,
+  scopePackMatches,
+  scopesEqual,
+  type FullScope,
+} from "./scope-equality";
+
+describe("scope pack idempotency with passage ranges", () => {
+  const philippians2: FullScope = {
+    books: ["Philippians"],
+    chapterRanges: [{ book: "Philippians", startChapter: 2, endChapter: 2 }],
+    tags: [],
+    tagMatchMode: "any",
+  };
+  const verses = (startVerse: number, endVerse: number): PassageRange => ({
+    book: "Philippians",
+    startChapter: 2,
+    startVerse,
+    endChapter: 2,
+    endVerse,
+  });
+
+  it("treats Philippians 2:1–11 and 2:12–18 as different packs", () => {
+    expect(passageRangesEqual(verses(1, 11), verses(12, 18))).toBe(false);
+    expect(
+      scopePackMatches(
+        { kind: "scope", scope: philippians2, passageRange: verses(1, 11) },
+        philippians2,
+        verses(12, 18),
+      ),
+    ).toBe(false);
+  });
+
+  it("reuses the pack for the same range", () => {
+    expect(passageRangesEqual(verses(1, 11), verses(1, 11))).toBe(true);
+    expect(
+      scopePackMatches(
+        { kind: "scope", scope: philippians2, passageRange: verses(1, 11) },
+        philippians2,
+        verses(1, 11),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps a whole-chapter pack apart from a range in that chapter", () => {
+    expect(passageRangesEqual(undefined, null)).toBe(true);
+    expect(passageRangesEqual(undefined, verses(1, 11))).toBe(false);
+    expect(
+      scopePackMatches(
+        { kind: "scope", scope: philippians2 },
+        philippians2,
+        verses(1, 11),
+      ),
+    ).toBe(false);
+    expect(
+      scopePackMatches(
+        { kind: "scope", scope: philippians2, passageRange: verses(5, 11) },
+        philippians2,
+        undefined,
+      ),
+    ).toBe(false);
+    expect(
+      scopePackMatches(
+        { kind: "scope", scope: philippians2 },
+        philippians2,
+        null,
+      ),
+    ).toBe(true);
+  });
+
+  it("never matches a custom pack", () => {
+    expect(scopePackMatches({ kind: "custom" }, philippians2, undefined)).toBe(
+      false,
+    );
+  });
+});
 
 const base: FullScope = {
   books: ["John", "Romans"],

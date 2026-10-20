@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -13,7 +13,7 @@ import {
   type DayCount,
 } from "@/lib/practice-heatmap";
 import { chartCardClassName } from "./chart-card";
-import { chartColor } from "./svg-chart-helpers";
+import { practiceCellStyle } from "./svg-chart-helpers";
 
 export type { DayCount };
 
@@ -36,19 +36,6 @@ function monthLabel(dayStart: number): string {
 /** Learn, review, deck, and free practice all count as practice activity. */
 function practicePhrase(count: number): string {
   return count === 1 ? "1 practice" : `${count} practices`;
-}
-
-/** Map a count to a background: muted at 0, ramping chart-1 opacity otherwise. */
-function cellStyle(count: number, max: number): CSSProperties {
-  if (count <= 0) {
-    return { backgroundColor: "var(--muted)" };
-  }
-  const intensity = max <= 0 ? 1 : 0.25 + 0.75 * (count / max);
-  return {
-    backgroundColor: `color-mix(in oklab, ${chartColor(1)} ${Math.round(
-      intensity * 100,
-    )}%, transparent)`,
-  };
 }
 
 /**
@@ -169,7 +156,7 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
                                 type="button"
                                 className="size-3 rounded-[3px] outline-none transition-[filter] duration-150 hover:brightness-[1.08] focus-visible:ring-2 focus-visible:ring-ring"
                                 aria-label={`${formatDay(cell.dayStart)}: ${practicePhrase(cell.count)}`}
-                                style={cellStyle(cell.count, max)}
+                                style={practiceCellStyle(cell.count, max)}
                               />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="tabular-nums">
@@ -196,7 +183,7 @@ export function PracticeHeatmap({ data }: { data: DayCount[] }) {
                 key={t}
                 className="inline-block size-2.5 rounded-[2px]"
                 aria-hidden
-                style={cellStyle(t === 0 ? 0 : Math.ceil(t * max), max)}
+                style={practiceCellStyle(t === 0 ? 0 : Math.ceil(t * max), max)}
               />
             ))}
             <span>More</span>

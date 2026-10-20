@@ -18,7 +18,7 @@ import {
   overlappingSpans,
 } from "@/lib/hearted-verse-coverage";
 import type { MemoryStatus } from "@/lib/memory-scheduler";
-import { formatVerseRef } from "@/lib/verse-ref-utils";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import type { VerseScope } from "@/lib/verse-scope-match";
 import { cn } from "@/lib/utils";
 
@@ -565,7 +565,7 @@ function VerseRangeGrid({
           {relatedHearted.length > 0 ? (
             <div className="space-y-1">
               {relatedHearted.map((offer) => {
-                const label = formatVerseRef(offer);
+                const label = formatVerseRefTitle(offer);
                 const isExact =
                   offer.startVerse === span.startVerse &&
                   offer.endVerse === span.endVerse;
@@ -603,7 +603,7 @@ function VerseRangeGrid({
           <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate text-sm font-medium">
-                {formatVerseRef(span)}
+                {formatVerseRefTitle(span)}
               </span>
               <div className="flex shrink-0 items-center gap-1">
                 <Button

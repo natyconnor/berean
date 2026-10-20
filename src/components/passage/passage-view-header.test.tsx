@@ -13,8 +13,22 @@ import {
 import { PassageViewHeader } from "./passage-view-header";
 
 vi.mock("@/components/bible/chapter-header", () => ({
-  ChapterHeader: () => <div data-testid="chapter-header" />,
+  ChapterHeader: ({ memorize }: { memorize?: unknown }) => (
+    <div
+      data-testid="chapter-header"
+      data-memorize={memorize ? "shown" : "hidden"}
+    />
+  ),
 }));
+
+const memorize = {
+  state: {
+    kind: "memorize" as const,
+    title: "Mark 9",
+  },
+  onMemorize: vi.fn(),
+  onOpenPack: vi.fn(),
+};
 
 const baseProps = {
   book: "Mark",
@@ -48,6 +62,41 @@ function renderHeader(
     </TooltipProvider>,
   );
 }
+
+describe("PassageViewHeader Memorize button", () => {
+  it("passes the Memorize button to the chapter header outside Focus mode", () => {
+    renderHeader({
+      effectiveViewMode: "compose",
+      isReadMode: false,
+      memorize,
+    });
+    expect(screen.getByTestId("chapter-header")).toHaveAttribute(
+      "data-memorize",
+      "shown",
+    );
+  });
+
+  it("hides it in Focus mode", () => {
+    renderHeader({
+      effectiveViewMode: "compose",
+      isReadMode: false,
+      isFocusMode: true,
+      memorize,
+    });
+    expect(screen.getByTestId("chapter-header")).toHaveAttribute(
+      "data-memorize",
+      "hidden",
+    );
+  });
+
+  it("keeps it in Read mode, where Focus does not apply", () => {
+    renderHeader({ isFocusMode: true, memorize });
+    expect(screen.getByTestId("chapter-header")).toHaveAttribute(
+      "data-memorize",
+      "shown",
+    );
+  });
+});
 
 describe("PassageViewHeader compact chrome", () => {
   it("compacts Compose/Read to shortcut chips when the header is tight", () => {

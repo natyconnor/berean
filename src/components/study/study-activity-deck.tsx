@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import {
-  ArrowRight,
-  Check,
-  CheckCircle2,
-  Eye,
-  RotateCcw,
-  SkipForward,
-  Timer,
-} from "lucide-react";
+import { Check, Eye, RotateCcw, SkipForward, Timer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,11 +8,6 @@ import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 import { StudyTeachCard } from "./study-teach-card";
 import {
-  StudyVerseMemoryCard,
-  type GradedDeckAttempt,
-} from "./study-verse-memory-card";
-import {
-  getCardKind,
   referenceKey,
   type PassageNote,
   type StudyCard,
@@ -31,30 +18,12 @@ import {
   StudyDeckEmptyState,
 } from "./study-activity-deck-views";
 
-/** Flashcard = free reveal/retry. Test = one-shot typed check (Memory Review). */
-export type DeckInteraction = "flashcard" | "test";
-
-export type { GradedDeckAttempt };
-
 interface StudyActivityDeckProps {
   cards: StudyCard[];
   scopeLabel: string;
   /** Optional tertiary footer action (e.g. "End review"). */
   onEndSession?: () => void;
   endSessionLabel?: string;
-  /**
-   * Interaction style for verse-memory cards. `"flashcard"` (default) allows
-   * free Reveal / Try Again. `"test"` requires a typed answer, grades once on
-   * Check, then only advances (Memory Review).
-   */
-  interaction?: DeckInteraction;
-  /**
-   * When the last card advances off the queue, call this instead of showing
-   * the built-in "Session complete" state (Memory Review → summary).
-   */
-  onDeckComplete?: () => void;
-  /** Fired each time a verse-memory card grades a typed recall. */
-  onAttemptGraded?: (attempt: GradedDeckAttempt) => void;
 }
 
 const TEACH_TIMER_SECONDS = 300;
@@ -101,11 +70,7 @@ export function StudyActivityDeck({
   scopeLabel,
   onEndSession,
   endSessionLabel = "End session",
-  interaction = "flashcard",
-  onDeckComplete,
-  onAttemptGraded,
 }: StudyActivityDeckProps): JSX.Element {
-  const isTestMode = interaction === "test";
   // Compare by card-id *set*, not array reference. Parents (e.g. ReviewPlayer)
   // often pass a fresh `cards` array on Convex re-renders with the same ids;
   // resetting on reference inequality wiped completedIds mid-session.
@@ -136,11 +101,6 @@ export function StudyActivityDeck({
   const [exitDirection, setExitDirection] = useState<ExitDirection | null>(
     null,
   );
-
-  // The active verse-memory card publishes its "persist this attempt" callback
-  // here. Fired on Done (flashcard) or Check answer (test). The deck owns no
-  // scheduling logic.
-  const recordAttemptRef = useRef<(() => void) | null>(null);
 
   if (queueSourceKey !== cardsKey) {
     setQueueSourceKey(cardsKey);
@@ -240,17 +200,10 @@ export function StudyActivityDeck({
     setQueue(nextQueue);
     setPosition(nextPos);
     setFlipped(false);
-    if (nextQueue.length === 0) {
-      onDeckComplete?.();
-    }
   }
 
   function handleCorrect() {
     if (!currentCardId || isInitialShuffle) return;
-    // Flashcard: persist on Done. Test mode already persisted on Check.
-    if (!isTestMode) {
-      recordAttemptRef.current?.();
-    }
     advanceCurrentCard();
   }
 
@@ -259,16 +212,7 @@ export function StudyActivityDeck({
     setFlipped(true);
   }
 
-  function handleCheckAnswer() {
-    if (isInitialShuffle || flipped) return;
-    if (currentTyped.trim().length === 0) return;
-    // Grade once: record on check so Skip/retry can't replace the attempt.
-    recordAttemptRef.current?.();
-    setFlipped(true);
-  }
-
   function handleTryAgain() {
-    if (isTestMode) return;
     setFlipped(false);
     if (currentCardId) {
       setTypedById((prev) => {
@@ -337,15 +281,13 @@ export function StudyActivityDeck({
     });
   }
 
-  // Enter: Reveal/Check on the front, Done/Next on the back. Shift+Enter still
-  // inserts newlines in the recall textarea. Leave buttons alone so native
-  // activation handles focused Skip / Reveal / Check / Try Again / Done / Next.
+  // Enter: Reveal on the front, Done on the back. Shift+Enter still inserts
+  // newlines in the textarea. Leave buttons alone so native activation handles
+  // focused Skip / Reveal / Try Again / Done.
   const shortcutRef = useRef({
     flipped: false,
     isInitialShuffle: true,
     isComplete: false,
-    canCheck: false,
-    isTestMode: false,
     onFrontAction: () => {},
     onDone: () => {},
   });
@@ -354,9 +296,7 @@ export function StudyActivityDeck({
       flipped,
       isInitialShuffle,
       isComplete,
-      canCheck: currentTyped.trim().length > 0,
-      isTestMode,
-      onFrontAction: isTestMode ? handleCheckAnswer : handleReveal,
+      onFrontAction: handleReveal,
       onDone: handleCorrect,
     };
   });
@@ -393,8 +333,6 @@ export function StudyActivityDeck({
         s.onDone();
         return;
       }
-      // Test mode: require a typed answer before Check (no empty peek).
-      if (s.isTestMode && !s.canCheck) return;
       event.preventDefault();
       s.onFrontAction();
     }
@@ -407,11 +345,6 @@ export function StudyActivityDeck({
   }
 
   if (isComplete || !currentCard) {
-    // Parent-owned completion (e.g. Review → summary) replaces the built-in
-    // session-complete screen; show nothing while that handoff lands.
-    if (onDeckComplete) {
-      return <div className="py-8" aria-hidden />;
-    }
     return (
       <StudyDeckCompleteState
         cards={cards}
@@ -479,32 +412,20 @@ export function StudyActivityDeck({
               >
                 {isTop ? (
                   <div className="h-full w-full">
-                    {card.type === "verse-memory" ? (
-                      <StudyVerseMemoryCard
-                        card={card}
-                        flipped={flipped}
-                        typedAnswer={currentTyped}
-                        onTypedAnswerChange={handleTypedAnswerChange}
-                        recordRef={recordAttemptRef}
-                        attemptMode={isTestMode ? "review" : "deck"}
-                        onAttemptGraded={onAttemptGraded}
-                      />
-                    ) : (
-                      <StudyTeachCard
-                        card={card}
-                        flipped={flipped}
-                        typedAnswer={currentTyped}
-                        onTypedAnswerChange={handleTypedAnswerChange}
-                        extraPassageNotes={
-                          extraNotesByRef[referenceKey(card.reference)] ?? []
-                        }
-                        onPassageNoteSaved={handlePassageNoteSaved}
-                      />
-                    )}
+                    <StudyTeachCard
+                      card={card}
+                      flipped={flipped}
+                      typedAnswer={currentTyped}
+                      onTypedAnswerChange={handleTypedAnswerChange}
+                      extraPassageNotes={
+                        extraNotesByRef[referenceKey(card.reference)] ?? []
+                      }
+                      onPassageNoteSaved={handlePassageNoteSaved}
+                    />
                   </div>
                 ) : (
                   <div className="pointer-events-none h-full w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-                    <StackedCardStub card={card} />
+                    <StackedCardStub />
                   </div>
                 )}
               </motion.div>
@@ -538,41 +459,17 @@ export function StudyActivityDeck({
               <SkipForward className="h-4 w-4" />
               Skip
             </Button>
-            {isTestMode ? (
-              <Button
-                type="button"
-                size="lg"
-                className="min-w-0 flex-1 gap-1.5"
-                onClick={handleCheckAnswer}
-                disabled={isInitialShuffle || currentTyped.trim().length === 0}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Check answer
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="lg"
-                className="min-w-0 flex-1 gap-1.5"
-                onClick={handleReveal}
-                disabled={isInitialShuffle}
-              >
-                <Eye className="h-4 w-4" />
-                Reveal
-              </Button>
-            )}
+            <Button
+              type="button"
+              size="lg"
+              className="min-w-0 flex-1 gap-1.5"
+              onClick={handleReveal}
+              disabled={isInitialShuffle}
+            >
+              <Eye className="h-4 w-4" />
+              Reveal
+            </Button>
           </div>
-        ) : isTestMode ? (
-          <Button
-            type="button"
-            size="lg"
-            className="w-full gap-1.5"
-            onClick={handleCorrect}
-            disabled={isInitialShuffle}
-          >
-            Next
-            <ArrowRight className="h-4 w-4" />
-          </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -617,13 +514,11 @@ export function StudyActivityDeck({
   );
 }
 
-function StackedCardStub({ card }: { card: StudyCard }): JSX.Element {
-  const label =
-    card.type === "verse-memory" ? formatVerseRef(card.reference) : "Teach";
+function StackedCardStub(): JSX.Element {
   return (
     <div className="flex h-full w-full items-start justify-center px-6 py-6">
       <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
+        Teach
       </p>
     </div>
   );
@@ -715,21 +610,6 @@ function ShuffleDealerCard({
 
 function ShuffleDealerCardFace({ card }: { card: StudyCard }): JSX.Element {
   const refLabel = formatVerseRef(card.reference);
-  if (card.type === "verse-memory") {
-    return (
-      <div className="flex h-full w-full flex-col items-center gap-4 px-6 py-7 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          {refLabel}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Can you recall this verse?
-        </p>
-        <div className="min-h-[160px] w-full max-w-xl rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-muted-foreground/50">
-          Type what you remember
-        </div>
-      </div>
-    );
-  }
   return (
     <div className="flex h-full w-full flex-col gap-4 px-6 py-8">
       <h2 className="shrink-0 text-center text-2xl font-semibold tracking-tight text-foreground">
@@ -756,60 +636,28 @@ function StudyDeckProgress({
   completedIds: Set<string>;
   currentIndex: number;
 }): JSX.Element {
-  const counts = useMemo(() => {
-    let totalVerses = 0;
-    let totalNotes = 0;
-    let doneVerses = 0;
-    let doneNotes = 0;
-    for (const card of cards) {
-      const kind = getCardKind(card);
-      if (kind === "verse") {
-        totalVerses += 1;
-        if (completedIds.has(card.id)) doneVerses += 1;
-      } else {
-        totalNotes += 1;
-        if (completedIds.has(card.id)) doneNotes += 1;
-      }
-    }
-    return { totalVerses, totalNotes, doneVerses, doneNotes };
-  }, [cards, completedIds]);
+  const done = useMemo(
+    () => cards.filter((card) => completedIds.has(card.id)).length,
+    [cards, completedIds],
+  );
 
   const total = cards.length;
-  const versePct = total === 0 ? 0 : (counts.doneVerses / total) * 100;
-  const notePct = total === 0 ? 0 : (counts.doneNotes / total) * 100;
-  const hasVerses = counts.totalVerses > 0;
-  const hasNotes = counts.totalNotes > 0;
+  const donePct = total === 0 ? 0 : (done / total) * 100;
 
   return (
     <div className="space-y-2">
       <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        {hasVerses && (
-          <div
-            className="h-full bg-primary transition-[width]"
-            style={{ width: `${versePct}%` }}
-          />
-        )}
-        {hasNotes && (
-          <div
-            className="h-full bg-chart-2 transition-[width]"
-            style={{ width: `${notePct}%` }}
-          />
-        )}
+        <div
+          className="h-full bg-chart-2 transition-[width]"
+          style={{ width: `${donePct}%` }}
+        />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         <div className="flex flex-wrap items-center gap-3 font-medium normal-case tracking-normal">
-          {hasVerses && (
-            <LegendItem
-              colorClass="bg-primary"
-              label={`${counts.doneVerses}/${counts.totalVerses} hearted verse${counts.totalVerses !== 1 ? "s" : ""}`}
-            />
-          )}
-          {hasNotes && (
-            <LegendItem
-              colorClass="bg-chart-2"
-              label={`${counts.doneNotes}/${counts.totalNotes} passage${counts.totalNotes !== 1 ? "s" : ""}`}
-            />
-          )}
+          <LegendItem
+            colorClass="bg-chart-2"
+            label={`${done}/${total} passage${total !== 1 ? "s" : ""}`}
+          />
         </div>
         <p className="tabular-nums">
           {Math.min(currentIndex + 1, total)} of {total}

@@ -5,7 +5,11 @@ import {
   exactSpanMatch,
   heartedRunsForChapter,
   overlappingSpans,
+  passageHeartSpans,
+  spanContains,
+  spanCoveredBy,
   spanCoversVerse,
+  spansLosingCoverage,
   spansOverlap,
   type VerseSpan,
 } from "./hearted-verse-coverage";
@@ -86,5 +90,150 @@ describe("exactSpanMatch", () => {
   it("returns the matching 16–18 span", () => {
     const spans = [john(16), JOHN_3_16_18];
     expect(exactSpanMatch(john(16, 18), spans)).toEqual(JOHN_3_16_18);
+  });
+});
+
+describe("spanContains / spanCoveredBy", () => {
+  it("counts an exact heart as covering", () => {
+    expect(spanContains(JOHN_3_16_18, JOHN_3_16_18)).toBe(true);
+    expect(spanCoveredBy(JOHN_3_16_18, [JOHN_3_16_18])).toBe(true);
+  });
+
+  it("counts a wider heart as covering a verse inside it", () => {
+    expect(spanCoveredBy(john(17), [JOHN_3_16_18])).toBe(true);
+    expect(spanCoveredBy(john(16, 17), [john(1, 36)])).toBe(true);
+  });
+
+  it("does not count a narrower or straddling heart", () => {
+    expect(spanCoveredBy(JOHN_3_16_18, [john(17)])).toBe(false);
+    expect(spanCoveredBy(john(15, 16), [JOHN_3_16_18])).toBe(false);
+    expect(spanCoveredBy(john(18, 19), [JOHN_3_16_18])).toBe(false);
+  });
+
+  it("does not combine partial hearts into coverage", () => {
+    expect(spanCoveredBy(john(16, 17), [john(16), john(17)])).toBe(false);
+  });
+
+  it("never covers across books or chapters", () => {
+    expect(
+      spanCoveredBy(john(16), [
+        { book: "John", chapter: 4, startVerse: 1, endVerse: 54 },
+        { book: "Romans", chapter: 3, startVerse: 1, endVerse: 31 },
+      ]),
+    ).toBe(false);
+  });
+
+  it("is false with no hearts", () => {
+    expect(spanCoveredBy(john(16), [])).toBe(false);
+  });
+});
+
+describe("spansLosingCoverage", () => {
+  const verse16 = { ...john(16), id: "16" };
+  const verse17 = { ...john(17), id: "17" };
+  const verse20 = { ...john(20), id: "20" };
+
+  it("reports items only the removed heart covered", () => {
+    expect(
+      spansLosingCoverage([JOHN_3_16_18], [], [verse16, verse17, verse20]),
+    ).toEqual([verse16, verse17]);
+  });
+
+  it("keeps items another heart still covers", () => {
+    expect(
+      spansLosingCoverage([JOHN_3_16_18], [john(16)], [verse16, verse17]),
+    ).toEqual([verse17]);
+    expect(
+      spansLosingCoverage([john(16)], [JOHN_3_16_18], [verse16, verse17]),
+    ).toEqual([]);
+  });
+
+  it("keeps items a passage heart covers", () => {
+    expect(
+      spansLosingCoverage([john(16)], [john(1, 36)], [verse16, verse20]),
+    ).toEqual([]);
+  });
+
+  it("ignores items the removed heart never covered", () => {
+    expect(spansLosingCoverage([john(16)], [], [verse17, verse20])).toEqual([]);
+  });
+
+  it("handles several removed hearts at once", () => {
+    const john4v1 = {
+      book: "John",
+      chapter: 4,
+      startVerse: 1,
+      endVerse: 1,
+      id: "4:1",
+    };
+    expect(
+      spansLosingCoverage(
+        [
+          john(1, 36),
+          { book: "John", chapter: 4, startVerse: 1, endVerse: 54 },
+        ],
+        [],
+        [verse16, john4v1],
+      ),
+    ).toEqual([verse16, john4v1]);
+  });
+});
+
+describe("passageHeartSpans", () => {
+  it("collapses one chapter's pieces into a single span", () => {
+    expect(
+      passageHeartSpans([
+        { book: "Psalms", chapter: 1, startVerse: 1, endVerse: 2 },
+        { book: "Psalms", chapter: 1, startVerse: 3, endVerse: 4 },
+        { book: "Psalms", chapter: 1, startVerse: 5, endVerse: 6 },
+      ]),
+    ).toEqual([{ book: "Psalms", chapter: 1, startVerse: 1, endVerse: 6 }]);
+  });
+
+  it("returns one span per chapter for multi-chapter passages", () => {
+    expect(
+      passageHeartSpans([
+        { book: "Matthew", chapter: 5, startVerse: 1, endVerse: 12 },
+        { book: "Matthew", chapter: 5, startVerse: 13, endVerse: 48 },
+        { book: "Matthew", chapter: 6, startVerse: 1, endVerse: 34 },
+        { book: "Matthew", chapter: 7, startVerse: 1, endVerse: 29 },
+      ]),
+    ).toEqual([
+      { book: "Matthew", chapter: 5, startVerse: 1, endVerse: 48 },
+      { book: "Matthew", chapter: 6, startVerse: 1, endVerse: 34 },
+      { book: "Matthew", chapter: 7, startVerse: 1, endVerse: 29 },
+    ]);
+  });
+
+  it("uses the lowest start and highest end even out of order", () => {
+    expect(
+      passageHeartSpans([
+        { book: "Philippians", chapter: 2, startVerse: 5, endVerse: 8 },
+        { book: "Philippians", chapter: 2, startVerse: 1, endVerse: 4 },
+      ]),
+    ).toEqual([
+      { book: "Philippians", chapter: 2, startVerse: 1, endVerse: 8 },
+    ]);
+  });
+
+  it("does not mutate the pieces and drops extra fields", () => {
+    const pieces = [
+      { book: "Psalms", chapter: 23, startVerse: 1, endVerse: 3, index: 0 },
+      { book: "Psalms", chapter: 23, startVerse: 4, endVerse: 6, index: 1 },
+    ];
+    expect(passageHeartSpans(pieces)).toEqual([
+      { book: "Psalms", chapter: 23, startVerse: 1, endVerse: 6 },
+    ]);
+    expect(pieces[0]).toEqual({
+      book: "Psalms",
+      chapter: 23,
+      startVerse: 1,
+      endVerse: 3,
+      index: 0,
+    });
+  });
+
+  it("returns nothing for no pieces", () => {
+    expect(passageHeartSpans([])).toEqual([]);
   });
 });

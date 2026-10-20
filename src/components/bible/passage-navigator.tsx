@@ -1,4 +1,10 @@
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { TooltipButton } from "@/components/ui/tooltip-button";
 import {
@@ -13,9 +19,18 @@ import { Input } from "@/components/ui/input";
 import { TableOfContents } from "lucide-react";
 import { BIBLE_BOOKS, type BookInfo } from "@/lib/bible-books";
 import { useTabs } from "@/lib/use-tabs";
+import type { PassageNavigationSearch } from "@/lib/tab-context-internal";
 import { formatBookChapter, toPassageId } from "@/lib/verse-ref-utils";
 import { cn } from "@/lib/utils";
 import { formatCommandOrControlShortcut } from "@/lib/keyboard-shortcuts";
+import { HeartedList, type HeartListItem } from "./hearted-list";
+
+type NavigatorView = "books" | "hearted";
+
+const VIEWS: Array<{ key: NavigatorView; label: string }> = [
+  { key: "books", label: "Books" },
+  { key: "hearted", label: "Hearted" },
+];
 
 const slideVariants = {
   enterFromRight: { x: 20, opacity: 0 },
@@ -30,7 +45,12 @@ interface PassageNavigatorProps {
   trigger?: ReactNode | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  onSelectPassage?: (passageId: string, label: string) => void;
+  /** `search` carries the verses to focus when a heart is opened. */
+  onSelectPassage?: (
+    passageId: string,
+    label: string,
+    search?: PassageNavigationSearch,
+  ) => void;
   /**
    * When the dialog opens with this set, skip book selection and show
    * chapter selection for the named book.
@@ -58,12 +78,26 @@ export function PassageNavigator({
   const [selectedBookOverride, setSelectedBookOverride] = useState<
     BookInfo | null | undefined
   >(undefined);
+  const [view, setView] = useState<NavigatorView>("books");
   const [search, setSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [chapterDigits, setChapterDigits] = useState("");
   const open = openProp ?? uncontrolledOpen;
   const { openTab } = useTabs();
   const passageShortcutLabel = formatCommandOrControlShortcut("G");
+  /** What had focus before the dialog opened; the Memorize sheet returns there. */
+  const openerRef = useRef<HTMLElement | null>(null);
+  const closingForMemorizeRef = useRef(false);
+
+  // Runs before the dialog's portal mounts its content, so focus is still on
+  // whatever opened it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    closingForMemorizeRef.current = false;
+    const active = document.activeElement;
+    openerRef.current =
+      active instanceof HTMLElement && active !== document.body ? active : null;
+  }, [open]);
 
   const selectedBook =
     selectedBookOverride !== undefined
@@ -106,18 +140,39 @@ export function PassageNavigator({
     }
   }
 
-  function selectChapter(book: BookInfo, chapter: number) {
-    const passageId = toPassageId(book.name, chapter);
-    const label = formatBookChapter(book.name, chapter);
+  function goToPassage(
+    book: string,
+    chapter: number,
+    passageSearch?: PassageNavigationSearch,
+  ) {
+    const passageId = toPassageId(book, chapter);
+    const label = formatBookChapter(book, chapter);
     if (onSelectPassage) {
-      onSelectPassage(passageId, label);
+      onSelectPassage(passageId, label, passageSearch);
     } else {
-      openTab(passageId, label);
+      openTab(passageId, label, passageSearch);
     }
     handleOpenChange(false);
   }
 
+  function selectChapter(book: BookInfo, chapter: number) {
+    goToPassage(book.name, chapter);
+  }
+
+  function openHeart(item: HeartListItem) {
+    goToPassage(item.book, item.chapter, {
+      startVerse: item.startVerse,
+      endVerse: item.endVerse,
+    });
+  }
+
+  function closeForMemorize() {
+    closingForMemorizeRef.current = true;
+    handleOpenChange(false);
+  }
+
   function resetState() {
+    setView("books");
     setSelectedBookOverride(undefined);
     setSearch("");
     setHighlightedIndex(0);
@@ -156,12 +211,57 @@ export function PassageNavigator({
       <DialogContent
         className="max-w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-md"
         data-passage-dismiss-exempt
+        onCloseAutoFocus={(event) => {
+          // The Memorize sheet is taking focus; it returns it to the opener.
+          if (!closingForMemorizeRef.current) return;
+          closingForMemorizeRef.current = false;
+          event.preventDefault();
+        }}
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Go to passage</DialogTitle>
         </DialogHeader>
+        <div className="border-b p-2 pr-12">
+          <div
+            role="group"
+            aria-label="Go to passage by"
+            className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+          >
+            {VIEWS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setView(option.key)}
+                aria-pressed={view === option.key}
+                className={cn(
+                  "h-11 cursor-pointer rounded-md px-3 text-sm font-medium transition-colors sm:h-7",
+                  view === option.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <AnimatePresence mode="wait" initial={false}>
-          {!selectedBook ? (
+          {view === "hearted" ? (
+            <motion.div
+              key="hearted"
+              variants={slideVariants}
+              initial="enterFromRight"
+              animate="center"
+              exit="exitToRight"
+              transition={{ duration: 0.15, ease: "easeOut" }}
+            >
+              <HeartedList
+                onOpenHeart={openHeart}
+                onMemorizeOpen={closeForMemorize}
+                getReturnFocusTarget={() => openerRef.current}
+              />
+            </motion.div>
+          ) : !selectedBook ? (
             <motion.div
               key="book-list"
               variants={slideVariants}

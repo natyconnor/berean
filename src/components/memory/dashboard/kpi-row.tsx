@@ -1,19 +1,27 @@
 import type { ReactNode } from "react";
-import { CalendarClock, Flame, Layers, Target } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarClock,
+  Flame,
+  Layers,
+  Target,
+} from "lucide-react";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import type { StreakInfo } from "@/lib/dashboard-buckets";
+import { practicedDaysCopy, streakCopy } from "@/lib/streak-copy";
 import { cn } from "@/lib/utils";
 
 /**
  * KPI inputs. Each numeric field may be `undefined` while its backing query is
  * still loading (the cell shows a skeleton), so the KPI row never blocks on the
  * slowest aggregate. `accuracy30d` is additionally `null` when there are no
- * reviews to average. `streak` carries `atRisk` so a live streak waiting on
- * today's practice can nudge instead of reading as zero.
+ * reviews to average.
  */
 export interface DashboardKpis {
   dueToday: number | undefined;
   streak: StreakInfo | undefined;
+  /** Days with practice in the last 7, shown while the streak is hidden. */
+  practicedLastWeek: number | undefined;
   inMemory: number | undefined;
   accuracy30d: number | null | undefined;
 }
@@ -29,7 +37,10 @@ export function KpiRow({ kpis }: { kpis: DashboardKpis }) {
           kpis.dueToday === undefined ? null : kpis.dueToday.toLocaleString()
         }
       />
-      <StreakKpi streak={kpis.streak} />
+      <PracticeKpi
+        streak={kpis.streak}
+        practicedLastWeek={kpis.practicedLastWeek}
+      />
       <Kpi
         icon={<Layers className="h-4 w-4" />}
         label="In memory"
@@ -52,30 +63,32 @@ export function KpiRow({ kpis }: { kpis: DashboardKpis }) {
   );
 }
 
-function StreakKpi({ streak }: { streak: StreakInfo | undefined }) {
-  const loading = streak === undefined;
-  const alive = streak !== undefined && streak.days > 0;
-  const atRisk = streak?.atRisk === true;
+/**
+ * The streak once it means something (2+ days); until then, and after one
+ * ends, how many of the last 7 days had practice. Never a nudge or a loss.
+ */
+function PracticeKpi({
+  streak,
+  practicedLastWeek,
+}: {
+  streak: StreakInfo | undefined;
+  practicedLastWeek: number | undefined;
+}) {
+  const loading = streak === undefined || practicedLastWeek === undefined;
+  const copy = streak === undefined ? null : streakCopy(streak.days);
 
   return (
-    <MemoryDashboardCard
-      className={cn(
-        "p-3",
-        atRisk &&
-          "border-[color:var(--chart-1)]/45 bg-[color:var(--chart-1)]/[0.07] shadow-[0_0_0_1px_color-mix(in_oklch,var(--chart-1)_18%,transparent)]",
-      )}
-    >
+    <MemoryDashboardCard className="p-3">
       <div className="flex items-center gap-1.5 text-muted-foreground">
-        <span
-          className={cn(
-            alive && "text-[color:var(--chart-1)]",
-            atRisk && "animate-pulse",
+        <span className={cn(copy && "text-[color:var(--chart-1)]")}>
+          {copy ? (
+            <Flame className="h-4 w-4" />
+          ) : (
+            <CalendarCheck className="h-4 w-4" />
           )}
-        >
-          <Flame className="h-4 w-4" />
         </span>
         <span className="text-[11px] font-medium uppercase tracking-[0.08em]">
-          Day streak
+          Practice
         </span>
       </div>
       {loading ? (
@@ -83,26 +96,21 @@ function StreakKpi({ streak }: { streak: StreakInfo | undefined }) {
           className="mt-2 h-6 w-10 animate-pulse rounded bg-muted"
           aria-hidden
         />
-      ) : (
+      ) : copy ? (
         <>
-          <div
-            className={cn(
-              "mt-1 text-2xl font-semibold tabular-nums tracking-tight",
-              atRisk && "text-[color:var(--chart-1)]",
-            )}
-          >
-            {streak.days.toLocaleString()}
+          <div className="mt-1 text-lg font-semibold tabular-nums tracking-tight">
+            {copy.label}
           </div>
-          {atRisk ? (
-            <p className="mt-1 text-[11px] leading-snug font-medium text-[color:var(--chart-1)]">
-              Keep it going — review or learn a verse today
-            </p>
-          ) : alive ? (
-            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-              {streak.days === 1 ? "Day one — nice start" : "On a roll"}
+          {copy.note ? (
+            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+              {copy.note}
             </p>
           ) : null}
         </>
+      ) : (
+        <p className="mt-1.5 text-sm leading-snug text-muted-foreground">
+          {practicedDaysCopy(practicedLastWeek)}
+        </p>
       )}
     </MemoryDashboardCard>
   );

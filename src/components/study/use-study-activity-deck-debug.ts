@@ -93,10 +93,7 @@ export function useStudyActivityDeckDebug({
   ): void {
     if (!studyTeachDebugEnabled() || !currentCardId) return;
     const card = cardsById.get(currentCardId);
-    const refLabel =
-      card?.type === "teach" || card?.type === "verse-memory"
-        ? formatVerseRef(card.reference)
-        : null;
+    const refLabel = card ? formatVerseRef(card.reference) : null;
     devLog.debug("studyTeach", `advance:${action}`, {
       cardId: currentCardId,
       cardType: card?.type ?? null,

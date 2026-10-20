@@ -70,7 +70,8 @@ vi.mock("convex-helpers/react/cache", () => ({
 }));
 
 vi.mock("@/hooks/use-memory-back", () => ({
-  useMemoryBack: () => onExitHome,
+  useMemoryExit: () => onExitHome,
+  useMemoryExitLabel: () => "Back",
 }));
 
 vi.mock("@/routes/memory/learn", () => ({
@@ -84,7 +85,6 @@ vi.mock("../../../convex/_generated/api", () => ({
       getPassage: "esv.getPassage",
     },
     savedVerses: {
-      listAll: "savedVerses.listAll",
       listRecordingIds: "savedVerses.listRecordingIds",
     },
     packs: {
@@ -92,6 +92,8 @@ vi.mock("../../../convex/_generated/api", () => ({
       acceptRetryHold: "packs.acceptRetryHold",
     },
     verseMemory: {
+      learnQueue: "verseMemory.learnQueue",
+      listInMemory: "verseMemory.listInMemory",
       recordAttempt: "verseMemory.recordAttempt",
       acceptRetryHold: "verseMemory.acceptRetryHold",
     },
@@ -155,6 +157,7 @@ function passageView(
     consecutiveCorrect: 0,
     lapses: 0,
     stageReps: 0,
+    needsCelebration: false,
     createdAt: now,
     updatedAt: now,
     remainingIntroduces: 5,
@@ -162,6 +165,32 @@ function passageView(
     rehearsalStartIndex: 0,
     ropePieceIndexes: [],
     ...extra,
+  };
+}
+
+function inMemoryVerse(
+  book: string,
+  chapter: number,
+  verse: number,
+  status: "new" | "learning",
+) {
+  return {
+    verseRefId: `verse_${book}_${chapter}_${verse}` as Id<"verseRefs">,
+    book,
+    chapter,
+    startVerse: verse,
+    endVerse: verse,
+    memory: {
+      status,
+      learnStage: status === "new" ? 0 : 1,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow(),
+      consecutiveCorrect: 0,
+      lapses: 0,
+    },
+    packIds: [],
   };
 }
 
@@ -174,11 +203,13 @@ function renderLearn(
   view: PassageView,
   options?: {
     passages?: ReadonlyArray<{ packId: Id<"packs">; packName: string }>;
-    savedVerses?: unknown[];
+    learnQueue?: unknown[];
+    inMemory?: unknown[];
     missingPackIds?: ReadonlyArray<Id<"packs">>;
   },
 ) {
-  queryResults.set("savedVerses.listAll", options?.savedVerses ?? []);
+  queryResults.set("verseMemory.learnQueue", options?.learnQueue ?? []);
+  queryResults.set("verseMemory.listInMemory", options?.inMemory ?? []);
   queryResults.set(
     "passageMemory.dueForLearning",
     options?.passages ?? DEFAULT_DUE_PACKS,
@@ -343,23 +374,9 @@ describe("MemoryLearnPage", () => {
   });
 
   it("opens the verse session on a later visit when the only due pack was dismissed", async () => {
-    const savedVerses = [
-      {
-        verseRefId: "verse_john316" as Id<"verseRefs">,
-        book: "John",
-        chapter: 3,
-        startVerse: 16,
-        endVerse: 16,
-        memory: {
-          status: "learning" as const,
-          learnStage: 1,
-          stageReps: 0,
-          dueAt: getSessionNow(),
-        },
-      },
-    ];
+    const learnQueue = [inMemoryVerse("John", 3, 16, "learning")];
     const passages = [{ packId: PACK_JUDE, packName: JUDE }];
-    const first = renderLearn(nextVerseView(), { passages, savedVerses });
+    const first = renderLearn(nextVerseView(), { passages, learnQueue });
 
     expect(await screen.findByText(JUDE)).toBeInTheDocument();
     await userEvent.click(
@@ -367,11 +384,72 @@ describe("MemoryLearnPage", () => {
     );
     first.unmount();
 
-    renderLearn(nextVerseView(), { passages, savedVerses });
+    renderLearn(nextVerseView(), { passages, learnQueue });
 
     expect(await screen.findByText("Today's learning")).toBeInTheDocument();
     expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
     expect(screen.queryByText(DONE_FOR_NOW_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("learns in-progress verses and pack Up-next verses from the learn queue", async () => {
+    renderLearn(nextVerseView(), {
+      passages: [],
+      learnQueue: [
+        inMemoryVerse("Romans", 8, 28, "learning"),
+        inMemoryVerse("John", 3, 16, "new"),
+      ],
+    });
+
+    expect(await screen.findByText("Today's learning")).toBeInTheDocument();
+    expect(screen.getByText("Verse 1 of 2")).toBeInTheDocument();
+    expect(screen.getAllByText("John 3:16").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Romans 8:28").length).toBeGreaterThan(0);
+  });
+
+  it("offers something new when the learn queue is empty", async () => {
+    renderLearn(nextVerseView(), { passages: [], learnQueue: [] });
+
+    expect(
+      await screen.findByRole("heading", { name: "Nothing new today" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Pick something new to memorize."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Start something new" }),
+    ).toHaveAttribute("href", "/memory");
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onExitHome).toHaveBeenCalledTimes(1);
+  });
+
+  it("says what unlocks next when today's steps are done", async () => {
+    const waiting = inMemoryVerse("Romans", 8, 28, "learning");
+    renderLearn(nextVerseView(), {
+      passages: [],
+      learnQueue: [],
+      inMemory: [
+        {
+          ...waiting,
+          memory: {
+            ...waiting.memory,
+            learnStage: 1,
+            dueAt: getSessionNow() + DAY_MS,
+            lastReviewedAt: getSessionNow(),
+          },
+        },
+      ],
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Nothing new today" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Nice. Tomorrow you'll try it with blanks."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Start something new" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the same pack again after Back", async () => {

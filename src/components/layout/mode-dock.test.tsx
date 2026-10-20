@@ -3,10 +3,13 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetEnsureInMemoryBackfillForTests } from "@/hooks/use-ensure-in-memory-backfill";
 import { clearModeLastLocations } from "@/lib/mode-last-location";
 import { ModeDock } from "./mode-dock";
 
 const mocks = vi.hoisted(() => ({
+  ensureInMemoryBackfill: vi.fn(() => Promise.resolve(null)),
+  isAuthenticated: true,
   navigate: vi.fn(),
   useLocation: vi.fn(() => ({
     pathname: "/passage/John-1",
@@ -30,6 +33,11 @@ vi.mock("@/lib/use-tabs", () => ({
 
 vi.mock("convex/react", () => ({
   useQuery: (query: unknown, args?: unknown) => mocks.useQuery(query, args),
+  useMutation: () => mocks.ensureInMemoryBackfill,
+  useConvexAuth: () => ({
+    isAuthenticated: mocks.isAuthenticated,
+    isLoading: false,
+  }),
 }));
 
 vi.mock("@/components/tutorial/feature-callout", () => ({
@@ -74,6 +82,28 @@ describe("ModeDock last-mode restore", () => {
       params: { packId: "pack-abc" },
       search: {},
     });
+  });
+
+  it("opens Today after a session that the reader sent into Memory", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/learn",
+      href: "/memory/learn?book=john&chapter=2&startverse=5&endverse=5&return=%2Fpassage%2Fjohn-2",
+    });
+    rerender(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/john-2",
+      href: "/passage/john-2",
+    });
+    rerender(<ModeDock />);
+
+    const memoryLink = screen.getByRole("link", { name: "Memory" });
+    expect(memoryLink).toHaveAttribute("href", "/memory");
+    await user.click(memoryLink);
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory" });
   });
 
   it("restores the last Notes href, including search, after leaving Memory", async () => {
@@ -290,5 +320,56 @@ describe("ModeDock dueCount subscription", () => {
 
     expect(mocks.useQuery).toHaveBeenCalledWith(expect.anything(), "skip");
     expect(screen.getByLabelText("3 verses due today")).toBeInTheDocument();
+  });
+});
+
+describe("ModeDock inMemory backfill", () => {
+  beforeEach(() => {
+    resetEnsureInMemoryBackfillForTests();
+    mocks.ensureInMemoryBackfill.mockClear();
+    mocks.isAuthenticated = true;
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/John-1",
+      href: "/passage/John-1",
+    });
+    clearModeLastLocations();
+  });
+
+  afterEach(() => {
+    mocks.isAuthenticated = true;
+    clearModeLastLocations();
+  });
+
+  it("asks for the backfill once per session when signed in", () => {
+    const first = render(<ModeDock />);
+    first.rerender(<ModeDock />);
+    first.unmount();
+    render(<ModeDock />);
+
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledWith({
+      now: expect.any(Number) as number,
+    });
+  });
+
+  it("waits until the user is signed in", () => {
+    mocks.isAuthenticated = false;
+    const { rerender } = render(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).not.toHaveBeenCalled();
+
+    mocks.isAuthenticated = true;
+    rerender(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again for the next account after signing out", () => {
+    const { rerender } = render(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
+
+    mocks.isAuthenticated = false;
+    rerender(<ModeDock />);
+    mocks.isAuthenticated = true;
+    rerender(<ModeDock />);
+    expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { packAllowsPassageMode } from "@/lib/passage-eligibility";
+import { resolveMemorizeTarget } from "@/lib/memorize-target";
+import {
+  packAllowsPassageMode,
+  rangeAllowsPassageMode,
+} from "@/lib/passage-eligibility";
 import { validateVerseRefBounds } from "../../shared/verse-ref-validation";
 import {
   HUNDRED_VERSES_PRESET_ID,
+  assertPresetCatalogValid,
+  chapterPresetRange,
   chapterPresetScope,
+  chapterPresetTarget,
   chapterPresetVerseCount,
   chapterPresets,
+  formatChapterRange,
   formatPresetPassage,
   getMemoryPreset,
   passagesForCollectionStart,
@@ -66,6 +74,68 @@ describe("memory presets", () => {
       title: "Sermon on the Mount",
       startChapter: 5,
       endChapter: 7,
+    });
+  });
+
+  it("passes its own catalog check", () => {
+    expect(() => assertPresetCatalogValid()).not.toThrow();
+  });
+
+  it.each([
+    [
+      "matthew-6-9-13",
+      "The Lord's Prayer",
+      "Matthew 6:9\u201313",
+      5,
+      "Gospels",
+    ],
+    [
+      "philippians-2-5-11",
+      "The Christ Hymn",
+      "Philippians 2:5\u201311",
+      7,
+      "Letters",
+    ],
+    [
+      "romans-8-28-39",
+      "More than conquerors",
+      "Romans 8:28\u201339",
+      12,
+      "Letters",
+    ],
+  ])(
+    "offers %s as a partial-chapter passage",
+    (id, title, reference, verseCount, group) => {
+      const preset = getMemoryPreset(id);
+      expect(preset?.kind).toBe("chapter");
+      if (preset?.kind !== "chapter") return;
+      expect(preset).toMatchObject({ title, group });
+      expect(formatChapterRange(preset)).toBe(reference);
+      expect(chapterPresetVerseCount(preset)).toBe(verseCount);
+      const range = chapterPresetRange(preset);
+      expect(range && rangeAllowsPassageMode(range)).toBe(true);
+
+      const resolved = resolveMemorizeTarget(chapterPresetTarget(preset));
+      expect(resolved).toMatchObject({
+        mode: "passage",
+        title,
+        presetId: id,
+        range,
+        verseCount,
+      });
+    },
+  );
+
+  it("keeps whole-chapter presets as chapter targets without a range", () => {
+    const psalm23 = getMemoryPreset("psalm-23");
+    if (psalm23?.kind !== "chapter") throw new Error("missing");
+    expect(chapterPresetRange(psalm23)).toBeNull();
+    expect(chapterPresetTarget(psalm23)).toEqual({
+      kind: "chapters",
+      book: "Psalms",
+      startChapter: 23,
+      endChapter: 23,
+      presetId: "psalm-23",
     });
   });
 

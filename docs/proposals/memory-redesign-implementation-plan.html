@@ -1,0 +1,3833 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>
+      Berean · Memory redesign — Implementation Plan (for an LLM agent)
+    </title>
+    <style>
+      :root {
+        --page: #f6f1e6;
+        --surface: #fdfbf7;
+        --surface-2: #f1ece1;
+        --ink: #241d12;
+        --ink-2: #6b6151;
+        --ink-3: #948a76;
+        --hairline: #e4dcc9;
+        --grid: #ece5d4;
+        --accent: #84621e;
+        --accent-deep: #664a12;
+        --accent-soft: #f0e4c6;
+        --good: #1e6b2e;
+        --bad: #a03d2e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --serif: Georgia, "Times New Roman", serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15.5px;
+        line-height: 1.62;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.18;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 42px;
+        margin: 10px 0 8px;
+      }
+      h2 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 22px 0 6px;
+      }
+      h4 {
+        font-size: 16px;
+        margin: 16px 0 4px;
+        font-family: var(--sans);
+        font-weight: 700;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent-deep);
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        font-family: var(--serif);
+        font-style: italic;
+      }
+      .muted {
+        color: var(--ink-2);
+      }
+      .small {
+        font-size: 13px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        border: 1px solid var(--hairline);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12.5px;
+      }
+      pre {
+        background: #2b2416;
+        color: #ede4d0;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: inherit;
+      }
+      pre .c {
+        color: #9d9077;
+      }
+      header.hero {
+        padding: 60px 0 20px;
+      }
+      .chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 999px;
+        padding: 3px 10px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        border: 1px solid #e3d2a6;
+      }
+      .chip.ghost {
+        background: transparent;
+        color: var(--ink-3);
+        border-color: var(--hairline);
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      section {
+        padding: 40px 0 4px;
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--hairline);
+        margin: 36px 0 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 2px rgba(36, 29, 18, 0.04);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 760px) {
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin-top: 6px;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-3);
+        font-weight: 700;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--grid);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .fileref {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: var(--accent-deep);
+      }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      ul.clean {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      ul.clean li {
+        margin: 5px 0;
+      }
+      ul.acc {
+        list-style: none;
+        padding-left: 0;
+        margin: 8px 0;
+      }
+      ul.acc li {
+        position: relative;
+        padding-left: 26px;
+        margin: 6px 0;
+      }
+      ul.acc li::before {
+        content: "\2713";
+        position: absolute;
+        left: 2px;
+        color: var(--good);
+        font-weight: 800;
+      }
+      ul.acc li.manual::before {
+        content: "\25CE";
+        color: var(--accent);
+      }
+      .pr {
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        margin: 20px 0;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .pr > .pr-head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(180deg, #fbf6ea, #f3ecdd);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .pr .num {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fdf9ef;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pr .pr-title {
+        margin: 0;
+        font-size: 20px;
+      }
+      .pr .pr-sub {
+        font-size: 12px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 700;
+      }
+      .pr-body {
+        padding: 8px 20px 20px;
+      }
+      .dep {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        margin: 6px 0 0;
+      }
+      .toc {
+        columns: 2;
+        column-gap: 30px;
+        font-size: 14px;
+      }
+      @media (max-width: 640px) {
+        .toc {
+          columns: 1;
+        }
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0;
+      }
+      footer {
+        padding: 50px 0 20px;
+        color: var(--ink-3);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tag-new {
+        color: var(--accent-deep);
+        font-weight: 700;
+      }
+      .tag-del {
+        color: var(--bad);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <span class="eyebrow"
+          >Implementation Plan · for an LLM coding agent</span
+        >
+        <h1>Memory redesign: one Memorize verb and a Today home</h1>
+        <p class="lede">
+          Someone reading Scripture in Berean can start memorizing a verse, a
+          range, or a chapter in two taps, and opening Memory shows exactly what
+          to do today, with no packs, modes, or internals to learn first.
+        </p>
+        <div class="meta">
+          <span class="chip">18 pull requests</span>
+          <span class="chip ghost">1 new runtime dep: sonner</span>
+          <span class="chip ghost">1 data migration (lazy, per user)</span>
+          <span class="chip ghost"
+            >scheduler &amp; passage engine unchanged</span
+          >
+        </div>
+        <div class="callout">
+          <strong>How to use this document.</strong> Each numbered block below
+          is <em>one pull request</em>. Do them in order. Do not start the next
+          PR until the current one is green: implement only what that PR lists,
+          run <code>pnpm run agent:check</code>, satisfy the PR's acceptance
+          criteria, then stop.
+        </div>
+        <div class="callout small">
+          <strong>Sources.</strong> Product epic
+          <code>memory-ux-epic-all.md</code> (sub-issues #TBD-1 … #TBD-10) and
+          the static mockups <code>index.html</code> (screens 1–22) supplied by
+          the owner on 2026-10-12. This plan supersedes them where the
+          <a href="#decisions">Settled decisions</a> table says so. Acceptance
+          items marked ◎ are behavioral/visual and need the owner's manual test.
+        </div>
+      </header>
+
+      <hr class="rule" />
+
+      <!-- ============ DECISIONS ============ -->
+      <section id="decisions">
+        <div class="eyebrow">Settled decisions</div>
+        <h2>Decisions locked before implementation</h2>
+        <p>
+          Fixed constraints resolved with the product owner. Treat as
+          non-negotiable. Rows tagged <b>(changed)</b> intentionally differ from
+          the epic text.
+        </p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Decision</th>
+                <th>Resolution</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>One verb, automatic mode</b></td>
+                <td>
+                  <b>Memorize</b> is the only start action, for a verse, a
+                  range, a chapter, or a pack. The resolver picks the method;
+                  the user never chooses one. Rules (final form, PR 18): one
+                  contiguous span in one book with ≥ 4 verses and ≤ 20 chapters
+                  becomes a <b>passage</b>, unless all of it groups into a
+                  single learning piece (≤ <code>MAX_GROUP_WORDS</code> = 60
+                  words), in which case it is one verse card. 1–3 verses become
+                  one <b>verse</b> card. Several separate spans become a
+                  <b>pack</b>. More than 20 chapters is rejected. Until PR 18
+                  ships: whole chapters become passages and partial ranges of
+                  more than 3 verses become packs.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Passage threshold is 4+ verses</b></td>
+                <td>
+                  Owner asked whether 5+ is better. 4+ was chosen because many
+                  well-known passages are exactly 4 verses (1 Corinthians
+                  13:4–7, Isaiah 40:28–31, Philippians 4:4–7); at 5+ they would
+                  become four unrelated cards with no recite-through. The
+                  single-piece guard keeps very short 4-verse ranges as one
+                  card.
+                </td>
+              </tr>
+              <tr>
+                <td><b>A heart means "I love this"</b></td>
+                <td>
+                  Hearting never starts memorizing. Every memorize path also
+                  hearts the target when no existing heart covers it. Unhearting
+                  something being memorized asks first: "Unhearting also stops
+                  memorizing it." with
+                  <b>Keep</b> / <b>Unheart and stop</b>. The server enforces
+                  invariant I1 (see Architecture) regardless of UI.
+                </td>
+              </tr>
+              <tr>
+                <td><b>One heart per passage</b></td>
+                <td>
+                  Starting a passage writes one <code>savedVerses</code> span
+                  row per chapter, linked by <code>passageMemoryId</code>. It
+                  writes no per-verse hearts and never unhearts anything. Verses
+                  the user hearted individually keep their own hearts. The
+                  reader shows the passage heart in the left gutter with a
+                  progress ring and a rail over the passage's verses.
+                </td>
+              </tr>
+              <tr>
+                <td><b>(changed) Absorb on passage start</b></td>
+                <td>
+                  Standalone verse items (in Memory, not in any custom pack)
+                  that lie fully inside a newly started passage stop being
+                  separate items (<code>inMemory: false</code>) after their
+                  progress seeds the passage pieces. Nothing is due twice.
+                  Hearts are untouched; review history is kept.
+                </td>
+              </tr>
+              <tr>
+                <td><b>(changed) Pack pacing</b></td>
+                <td>
+                  Pack members enter Memory as <b>Up next</b> (status
+                  <code>new</code>, <code>inMemory: true</code>). Each pack
+                  keeps up to <code>PACK_ACTIVE_LEARNING_CAP = 3</code> verses
+                  learning at once; the next Up-next verses join Today
+                  automatically as earlier ones finish learning. A per-row
+                  <b>Learn</b> starts one early. A verse memorized on its own
+                  starts learning immediately. Pack learn estimate =
+                  <code>3 × ceil(n / 3)</code> days. Reason: without pacing,
+                  memorizing "100 Verses Every Christian Should Know" would make
+                  every verse due today.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Hearted-only verses leave Memory</b></td>
+                <td>
+                  Migration rule:
+                  <code
+                    >inMemory = isHearted &amp;&amp; (status ≠ "new" || in a
+                    custom pack || inside a scope pack's scope || inside an
+                    active passage)</code
+                  >. Everything else stays hearted and appears in "From your
+                  hearts" on Today and in Go to passage → Hearted. Nothing is
+                  deleted.
+                </td>
+              </tr>
+              <tr>
+                <td><b>(changed) Migration runs lazily per user</b></td>
+                <td>
+                  Besides an internal global migration, the app calls
+                  <code>verseMemory.ensureInMemoryBackfill</code> once per
+                  session for the signed-in user (flagged by
+                  <code>userMemoryStats.inMemoryBackfilledAt</code>). Deploying
+                  the branch never leaves Memory empty while someone forgets to
+                  run a migration.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Today is the one home</b></td>
+                <td>
+                  <code>/memory</code> is Today. No tabs. Exactly one primary
+                  button. Stats live behind "Your progress"; the full list lives
+                  behind "Your verses".
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <b>(changed) Drawers plus full pages, both functional</b>
+                </td>
+                <td>
+                  Your progress, Your verses, pack/passage detail, and verse
+                  detail open as drawers over Today (right side ≥ 640px, a 92vh
+                  bottom sheet below), addressed by
+                  <code>/memory?panel=…</code>. Each has a full page that
+                  renders the <b>same body component</b>, for deep links and for
+                  arriving from other contexts such as the reader. Drawers are
+                  <b>not</b> view-only: rename, reorder, add, remove and stop
+                  all work in both. The drawer header has <b>Open full page</b>.
+                  There is no stacking: going from Your verses into a pack swaps
+                  the content and shows "‹ Your verses"
+                  (<code>from=verses</code>). Open, swap and close push history,
+                  so Back steps through them. The owner wants to iterate on
+                  this; keep the drawer/page split in one host component so it
+                  is cheap to change.
+                </td>
+              </tr>
+              <tr>
+                <td><b>(changed) Session return</b></td>
+                <td>
+                  Every session route takes a validated <code>return</code>
+                  search param (an internal path including its search string).
+                  <b>Done</b> and the session's back link go there: exactly
+                  where the session started, including an open drawer. If it is
+                  missing or invalid, use history back, else
+                  <code>/memory</code>. No row-highlight or toast on return (the
+                  session summary already showed the result).
+                </td>
+              </tr>
+              <tr>
+                <td><b>(changed) Heart nudge</b></td>
+                <td>
+                  After <b>every</b> heart of a verse or range that is not being
+                  memorized, show the anchored popover ("Saved to your hearts" /
+                  "Memorize {ref}?" / <b>Memorize</b> · <b>Not now</b>, plus a
+                  small <b>Don't ask again</b> link), until the user picks Don't
+                  ask again (feature hint
+                  <code>heart-memorize-nudge</code> dismissed). Auto-dismiss
+                  after 6 s, no focus steal, Esc and click-away close it.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Reader chrome</b></td>
+                <td>
+                  No per-verse Memorize button. The ring around a heart is the
+                  memory indicator. The selection bar (range · Heart · Memorize
+                  · ×) appears only for selections of 2+ verses and replaces the
+                  grouped-range heart column. The chapter header gets a Memorize
+                  button beside the chapter-note well.
+                </td>
+              </tr>
+              <tr>
+                <td><b>(changed) Practice copy is honest</b></td>
+                <td>
+                  A practice attempt can count once as an early review (<code
+                    >earlyReviewApplied</code
+                  >
+                  in <code>src/lib/memory-scheduler.ts</code>). Never claim
+                  "doesn't change your schedule". Extra practice tooltip: "Go
+                  over anything you've memorized, any time." Scheduler behavior
+                  is unchanged.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Stop memorizing</b></td>
+                <td>
+                  <b>Verse:</b> <code>inMemory: false</code>; history and heart
+                  kept; memorizing again resumes the schedule.
+                  <b>Passage:</b> progress is deleted (existing
+                  <code>passageMemory</code> delete behavior), the pack is
+                  removed, the heart stays as a plain range heart (<code
+                    >passageMemoryId</code
+                  >
+                  cleared). Confirm copy: "This clears your progress on
+                  {title}." <b>Pack:</b> the pack is deleted; members not in
+                  another pack stop memorizing (progress kept if restarted);
+                  hearts kept.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Words</b></td>
+                <td>
+                  "Pack" stays (never "Collection"). Status chips: New ·
+                  Learning · Memorized · Mastered (never "Reviewing"). "Your
+                  verses", "Your progress", "Suggestions" (never "Presets").
+                  Never show scope, custom, preset, unit, piece, rope, frontier,
+                  band, ease, Guided, Challenge.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Honest time</b></td>
+                <td>
+                  Learning time ("Learn it in about N days") and mastery time
+                  ("Mastered in about 2 months") are always separate facts and
+                  never one number.
+                </td>
+              </tr>
+              <tr>
+                <td><b>Keyboard</b></td>
+                <td>
+                  No new shortcuts. Esc closes drawers, sheets, dialogs and
+                  popovers (Radix default). Reorder has a keyboard path (Move up
+                  / Move down).
+                </td>
+              </tr>
+              <tr>
+                <td><b>Deferred / dropped</b></td>
+                <td>
+                  The share-card image (the passage moment ships with
+                  <b>Done</b> only). Word search in New pack (no ESV search API
+                  exists; reference search plus From your hearts). The launch
+                  announcement (already removed in #274). Reminders, chart
+                  redesign, scheduler constants. Swipe-to-close on bottom sheets
+                  (× / Esc / scrim instead; no new gesture dependency).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ CODEBASE GROUNDING ============ -->
+      <section id="grounding">
+        <div class="eyebrow">What already exists</div>
+        <h2>Assets to reuse (verified in the codebase)</h2>
+        <p>Do not rebuild these. Reuse them.</p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 44%">Existing asset</th>
+                <th>Role in the new system</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fileref">
+                  src/lib/memory-scheduler.ts → initialSchedule, scheduleNext,
+                  SUPPORT_BANDS, MASTERED_INTERVAL_DAYS, isDueForLearning,
+                  isLearningLocked, dueAtInCalendarDays
+                </td>
+                <td>
+                  Engine stays as is. <code>scheduleNext</code> is simulated by
+                  <code>memorize-plan.ts</code> for mastery estimates. Convex
+                  imports it via <code>../src/lib/…</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/passage-frontier.ts → PASSAGE_MAX_ADDS_PER_DAY (5),
+                  localDayIndex
+                </td>
+                <td>Passage learn estimate and day keys.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/passage-pieces.ts → buildPassagePieces;
+                  src/lib/memory-span-group.ts → groupChapterForHearting,
+                  MAX_GROUP_WORDS
+                </td>
+                <td>
+                  Client builds passage pieces from ESV text before
+                  <code>passageMemory.start</code>; single-piece guard (PR 18).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/hooks/use-start-passage.ts → loadChaptersForScope
+                  (private), useStartPassage
+                </td>
+                <td>
+                  Refactored in PR 5 so the Memorize orchestrator can start a
+                  passage for a freshly created pack.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/passage-eligibility.ts → packAllowsPassageMode;
+                  src/lib/scope-chapter-count.ts → AUTO_HEART_MAX_CHAPTERS (20),
+                  enumerateScopeChapters
+                </td>
+                <td>Resolver's chapter-passage rule and the 20-chapter cap.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/passage-start.ts → planStart, inferPieceLearningState,
+                  assertPiecesMatchScope
+                </td>
+                <td>
+                  Start planning; the <code>unheartSpans</code> output is
+                  dropped in PR 3.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/hearted-verse-coverage.ts → exactSpanMatch,
+                  overlappingSpans, VerseSpan
+                </td>
+                <td>Heart coverage checks for invariant I1.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/lib/verse-ref-utils.ts → parseVerseRef, formatVerseRef,
+                  formatBookChapter; src/lib/bible-verse-counts.ts →
+                  getChapterVerseCount; src/lib/bible-books.ts → displayBookName
+                </td>
+                <td>
+                  Today search parsing, titles ("Psalm 1"), verse counts for
+                  estimates.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/hooks/use-esv-reference.ts → useEsvReference;
+                  src/hooks/use-near-viewport-visible.ts
+                </td>
+                <td>
+                  Lazy one-line verse text in Hearted / From your hearts lists.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/lib/savedVerses.ts → heartSpanIfAbsent,
+                  unheartByVerseRefId, loadUserHeartSpans
+                </td>
+                <td>Heart writes; stop seeding memory in PR 3.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/lib/verseMemory.ts → findVerseMemory, seedVerseMemory,
+                  adjustUserMemoryStats, requireHeartedSavedVerse
+                </td>
+                <td>
+                  Re-keyed from <code>isHearted</code> to
+                  <code>inMemory</code> in PR 3.
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/lib/packs.ts → loadPackMembers, filterScopeMembers,
+                  loadUnifiedReviewPacks
+                </td>
+                <td>Membership re-keyed to <code>inMemory</code>.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/lib/passageMemory.ts → deletePassageAndReviews,
+                  insertPassageMemory; convex/lib/passageDue.ts →
+                  loadPassageDueRecords
+                </td>
+                <td>Passage stop and due facts for Today.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/migrations.ts (paginate + scheduler self-chain
+                  pattern); verseMemory.ensureReviewActivityDays,
+                  passageMemory.ensureDueBackfill (lazy client-triggered
+                  pattern)
+                </td>
+                <td>Pattern for the inMemory migration and lazy backfill.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  convex/lib/auth.ts → getCurrentUserId, getCurrentUserIdOrNull
+                </td>
+                <td>
+                  Auth in every new function (mutations throw; queries return
+                  empty/null when signed out).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/practice/memory-session-runner.tsx;
+                  practice-board.tsx; session-complete.tsx; review-summary.tsx;
+                  src/components/memory/passage/passage-session.tsx
+                </td>
+                <td>Session engines reused by the blended Today session.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/dashboard/{kpi-row, practice-heatmap,
+                  mastery-donut, accuracy-trend, review-forecast}.tsx
+                </td>
+                <td>Moved into the Your progress body; data unchanged.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/memory/memory-library.tsx; packs/pack-list.tsx;
+                  verse-detail.tsx; packs/add-to-pack.tsx;
+                  packs/pack-verse-picker.tsx; packs/verse-browse-picker.tsx
+                </td>
+                <td>Hosted in Your verses / detail bodies; pickers reused.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/tutorial/use-feature-hint.ts → useFeatureHint;
+                  src/lib/feature-hints.ts → FEATURE_HINTS,
+                  FEATURE_HINT_METADATA
+                </td>
+                <td>
+                  Explainer, heart nudge, celebrations. Adding an id requires a
+                  metadata entry (typed <code>Record</code>).
+                </td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/passage/verse-row.tsx →
+                  PassageHeartAnimatedButton (ring: masteryFraction);
+                  src/components/passage/passage-view-body.tsx →
+                  spanMasteryFraction; src/lib/mastery-ring.ts
+                </td>
+                <td>Reader heart/ring; passage heart reuses ring geometry.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/passage/view/passage-group-with-notes.tsx;
+                  view/verse-row-with-notes.tsx → SavedPassagePill;
+                  src/components/passage/hooks/use-passage-notes-ui-state.ts
+                </td>
+                <td>Selection shell, range hearts, selection state.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/components/bible/chapter-header.tsx;
+                  src/components/passage/header-chrome.ts (container queries
+                  from #255); src/components/bible/passage-navigator.tsx
+                </td>
+                <td>Header Memorize button; Hearted list in Go to passage.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  shared/memory-presets.ts → MEMORY_PRESETS, getMemoryPreset;
+                  convex/packs.ts → startPreset
+                </td>
+                <td>Suggestions and preset-backed passages.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  shared/http-routes.ts → APP_ROUTE_PATTERNS (unit test keeps it
+                  aligned with <code>src/routeTree.gen.ts</code>)
+                </td>
+                <td>Every new route must be added here.</td>
+              </tr>
+              <tr>
+                <td class="fileref">
+                  src/hooks/use-live-now.ts, use-frozen-query.ts,
+                  use-memory-back.ts
+                </td>
+                <td>Session clocks, frozen queues, fallback exit.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout small">
+          <strong>Gaps the plan adds explicitly.</strong> No toast library (PR 5
+          adds <code>sonner</code>). No Sheet/Drawer primitive (PR 5 adds
+          <code>src/components/ui/sheet.tsx</code> on <code>radix-ui</code>
+          Dialog). No DropdownMenu (PR 11 adds
+          <code>src/components/ui/dropdown-menu.tsx</code> on
+          <code>radix-ui</code>). No <code>useMediaQuery</code> (PR 5). No
+          <code>packs.reorder</code> (PR 15). No drag-and-drop library (PR 15
+          uses native HTML5 drag plus Move up/down). No
+          <code>convex-test</code>: server logic that needs tests is extracted
+          into pure <code>src/lib/*</code> helpers. No ESV word search. Route
+          files are generated: <code>src/routeTree.gen.ts</code> is regenerated
+          by the TanStack Router Vite plugin (run <code>pnpm run build</code>).
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ ARCHITECTURE ============ -->
+      <section id="architecture">
+        <div class="eyebrow">Shared architecture</div>
+        <h2>Data model &amp; core contracts (referenced by every PR)</h2>
+
+        <h3>Data model changes</h3>
+        <pre><code><span class="c">// convex/schema.ts — additions only. Existing fields and indexes stay.</span>
+
+<span class="c">// PR 2</span>
+verseMemory: { ...existing,
+  <span class="c">// Source of truth for "the user chose to memorize this".</span>
+  <span class="c">// isHearted keeps existing but only mirrors "an exact savedVerses row exists".</span>
+  inMemory: v.optional(v.boolean()),
+}
+  .index("by_userId_inMemory", ["userId", "inMemory"])
+  .index("by_userId_inMemory_dueAt", ["userId", "inMemory", "dueAt"])
+  .index("by_userId_inMemory_status", ["userId", "inMemory", "status"])
+  <span class="c">// by_userId_isHearted* indexes remain until a later cleanup PR (not in this plan).</span>
+
+savedVerses: { ...existing,
+  <span class="c">// Set on the one heart row per chapter that represents a memorized passage.</span>
+  passageMemoryId: v.optional(v.id("passageMemory")),
+}
+  .index("by_userId_passageMemoryId", ["userId", "passageMemoryId"])
+
+userMemoryStats: { ...existing,           <span class="c">// counts now describe the inMemory set</span>
+  inMemoryBackfilledAt: v.optional(v.number()),
+}
+
+<span class="c">// PR 16</span>
+passageMemory: { ...existing, celebratedAt: v.optional(v.number()) }
+
+<span class="c">// PR 18</span>
+packs: { ...existing,
+  passageRange: v.optional(v.object({
+    book: v.string(), startChapter: v.number(), startVerse: v.number(),
+    endChapter: v.number(), endVerse: v.number(),
+  })),
+}</code></pre>
+
+        <h3>Invariants (server-enforced from PR 3)</h3>
+        <ul class="clean small">
+          <li>
+            <b>I1</b>: <code>inMemory === true</code> ⇒ the verse's span is
+            covered by at least one heart: an exact <code>savedVerses</code>
+            row, a containing span row, or a passage heart. Memorize adds a
+            heart when none covers the span. Unhearting stops memorizing every
+            in-memory item that loses coverage. If the removed heart has
+            <code>passageMemoryId</code>, it stops that passage.
+          </li>
+          <li>
+            <b>I2</b>: Queues, counts, badges, stats, library, and pack
+            membership read <code>inMemory</code> only. <code>isHearted</code>
+            is display-only.
+          </li>
+          <li>
+            <b>I3</b>: Passage members are not separate verse items (absorb on
+            start, see Decisions).
+          </li>
+          <li>
+            <b>I4</b>: Custom pack membership = <code>packVerses</code> rows
+            whose verse is <code>inMemory</code>. Legacy scope packs (not in
+            passage mode) = scope ∩ <code>inMemory</code>.
+            <code>packVerses</code> rows survive stop/unheart so memorizing
+            again restores membership.
+          </li>
+          <li>
+            <b>I5</b>: Status <code>new</code> means "Up next in a pack". A
+            verse memorized on its own starts at <code>learning</code>, step 0,
+            <code>dueAt = now</code>.
+          </li>
+        </ul>
+
+        <h3>Server contracts (new or changed)</h3>
+        <pre><code><span class="c">// convex/lib/memorize.ts (new, PR 2) — shared helpers, no exports to the client</span>
+ensureHeartCoverage(ctx, userId, span: VerseSpan, now): Promise&lt;"added" | "covered"&gt;
+memorizeSpan(ctx, userId, span, now, opts: { upNext: boolean }):
+  Promise&lt;{ verseRefId: Id&lt;"verseRefs"&gt;; result: "added" | "resumed" | "promoted" | "already" }&gt;
+  <span class="c">// none → insert inMemory row (learning, or new if upNext); inMemory false → set true (resume schedule;</span>
+  <span class="c">// new→learning unless upNext); inMemory true + new + !upNext → "promoted" to learning; else "already".</span>
+  <span class="c">// Always calls ensureHeartCoverage. Keeps userMemoryStats in sync.</span>
+stopMemorizingVerse(ctx, userId, verseRefId, now): Promise&lt;void&gt;   <span class="c">// inMemory false, stats, keep history</span>
+
+<span class="c">// convex/verseMemory.ts</span>
+memorize               mutation { spans: VerseSpan[] (1..50), now }
+                       → { added: number; alreadyMemorizing: number; verseRefIds: Id&lt;"verseRefs"&gt;[] }   <span class="c">// PR 2</span>
+stopMemorizing         mutation { verseRefId, now } → null                                       <span class="c">// PR 2</span>
+ensureInMemoryBackfill mutation { now } → null   <span class="c">// no-op once userMemoryStats.inMemoryBackfilledAt set  // PR 3</span>
+listInMemory           query { } → InMemoryVerseItem[]                                            <span class="c">// PR 3</span>
+getInMemory            query { book, chapter, startVerse, endVerse } → InMemoryVerseItem | null   <span class="c">// PR 3</span>
+learnQueue             query { now, tzOffsetMinutes } → InMemoryVerseItem[]  <span class="c">// learning unlocked + pack up-next  // PR 4</span>
+memorizeStatus         query { spans: VerseSpan[] } → { state: "none" | "memorizing" | "partOf";
+                         title?: string; destination?: MemorizeDestination; allHearted: boolean } <span class="c">// PR 5</span>
+listLibrary            (changed PR 3) view: "due" | "learning" | "memorized" | "mastered" | "all"
+                         <span class="c">// learning = new + learning; memorized = reviewing. "notStarted"/"inMemory" removed.</span>
+
+<span class="c">// InMemoryVerseItem = { verseRefId, book, chapter, startVerse, endVerse,</span>
+<span class="c">//   memory: { status, learnStage, stageReps?, ease, intervalDays, dueAt, consecutiveCorrect, lapses,</span>
+<span class="c">//             earlyReviewApplied?, lastReviewedAt? }, packIds: Id&lt;"packs"&gt;[] }</span>
+
+<span class="c">// convex/packs.ts</span>
+createAndMemorize mutation { name, spans: VerseSpan[] (1..200), now } → { packId }   <span class="c">// custom pack; members upNext, in order  // PR 5</span>
+addVerse          (changed PR 3) memorizes the verse as upNext and appends packVerses
+stopMemorizing    mutation { id, now } → null                                       <span class="c">// PR 12</span>
+reorder           mutation { id, orderedVerseRefIds: Id&lt;"verseRefs"&gt;[] } → null     <span class="c">// custom packs  // PR 15</span>
+restoreVerse      mutation { id, verseRefId, order } → null                          <span class="c">// Undo after remove  // PR 15</span>
+
+<span class="c">// convex/savedVerses.ts</span>
+toggle          (changed PR 3) heart add no longer creates verseMemory; remove enforces I1
+listForChapter  (changed) items gain memory.inMemory, stopsMemorizing: boolean (PR 3),
+                passage?: PassageHeartInfo (PR 8)
+listHearted       query { paginationOpts } → page of HeartListItem                <span class="c">// PR 7</span>
+listNotMemorizing query { limit (1..30) } → HeartListItem[]  <span class="c">// newest first, scans ≤ 500 hearts  // PR 7</span>
+<span class="c">// HeartListItem = { savedVerseId, verseRefId, book, chapter, startVerse, endVerse, createdAt,</span>
+<span class="c">//                   inMemory: boolean, passage?: { packId, title } }</span>
+<span class="c">// PassageHeartInfo = { passageMemoryId, packId, title, status: "building"|"reviewing"|"mastered",</span>
+<span class="c">//   learnedVerses, totalVerses, chapterCount, isFirstChapter, startVerse, endVerse,</span>
+<span class="c">//   verseStates: { verse: number; state: "memorized" | "learning" | "upNext" }[] }</span>
+
+<span class="c">// convex/passageMemory.ts</span>
+start  (changed PR 3) creates passage heart rows, absorbs inner standalone items, never unhearts
+stop   (changed PR 3) clears passageMemoryId on its heart rows (hearts stay)
+markCelebrated mutation { packId } → null                                            <span class="c">// PR 16</span>
+
+<span class="c">// convex/memoryHome.ts (new, PR 10)</span>
+today query { now, tzOffsetMinutes, timeZone } → TodayModel   <span class="c">// see src/lib/memory-today.ts</span></code></pre>
+
+        <h3>Pure library contracts (unit-tested, <code>now</code> injected)</h3>
+        <pre><code><span class="c">// src/lib/memory-copy.ts (PR 1) — glossary strings only</span>
+MEMORIZE_LABEL, START_TODAY_LABEL, EXTRA_PRACTICE_LABEL, EXTRA_PRACTICE_TOOLTIP, ...
+stepShortLabel(learnStage: number): "Read" | "First letters" | "Fill in the blanks" | "From memory"
+stepDayLine(learnStage): string   <span class="c">// "Day 1 of 3: read it, then type it with first letters"</span>
+statusLabel(status): "New" | "Learning" | "Memorized" | "Mastered"
+
+<span class="c">// src/lib/pack-pacing.ts (PR 1)</span>
+export const PACK_ACTIVE_LEARNING_CAP = 3;
+packUpNextVerseRefIds&lt;T extends { verseRefId: string; status: MemoryStatus }&gt;(
+  orderedMembers: readonly T[], cap?: number): T["verseRefId"][]
+  <span class="c">// first (cap − #learning) members with status "new", in pack order; [] when ≥ cap learning</span>
+
+<span class="c">// src/lib/memorize-plan.ts (PR 1)</span>
+type MemorizeMode = "verse" | "passage" | "pack";
+estimateMemorizeDays({ mode, verseCount }): number
+  <span class="c">// verse 3 · passage ceil(n / PASSAGE_MAX_ADDS_PER_DAY) + 2 · pack 3 * ceil(n / PACK_ACTIVE_LEARNING_CAP)</span>
+formatLearnDuration(days, opts?: { short?: boolean }): string
+  <span class="c">// 1 "Learn it in about a day" · 2–6 "…about N days" · 7–10 "…about a week" · 11+ "…about N weeks"; short drops "Learn it in "</span>
+estimateReviewDaysToMastery(): number   <span class="c">// loop scheduleNext with exact grades from a just-graduated schedule</span>
+estimateMasteryDays({ mode, verseCount }): number   <span class="c">// learn days + review days to mastery</span>
+formatMasteryDuration(days): string     <span class="c">// "Mastered in about N weeks" (&lt; 8 wk) | "Mastered in about N months" (min 2)</span>
+masteryProgress(intervalDays): number   <span class="c">// min(interval / MASTERED_INTERVAL_DAYS, 1)</span>
+estimateSessionMinutes({ learningVerses, reviewVerses, passageSessions }): number
+  <span class="c">// heuristics (comment says so): 2 / 0.5 / 4 min; 0 when all zero, else max(1, round)</span>
+nextStepCopy(s: { status; learnStage; dueAt }, now, timeZone?): string
+projectedFinishDate({ mode, verseCount, learnedCount }, now): Date
+projectedMasteryDate({ mode, verseCount, learnedCount }, now): Date
+formatShortDate(date, timeZone?): string        <span class="c">// "Oct 20"</span>
+formatMonthOrDate(date, now, timeZone?): string  <span class="c">// "around December" when &gt; 6 weeks out</span>
+
+<span class="c">// src/lib/memorize-target.ts (PR 5; rule change in PR 18)</span>
+type MemorizeTarget =
+  | { kind: "spans"; spans: VerseSpan[]; title?: string }
+  | { kind: "chapters"; book: string; startChapter: number; endChapter: number; presetId?: string; title?: string };
+type ResolvedMemorize =
+  | { mode: "verse"; title: string; span: VerseSpan; verseCount: number }
+  | { mode: "passage"; title: string; book: string; startChapter: number; endChapter: number;
+      range: PassageRange | null; presetId?: string; verseCount: number }
+  | { mode: "pack"; title: string; spans: VerseSpan[]; verseCount: number }
+  | { mode: "invalid"; title: string; reason: "tooLong" | "empty" | "crossBook" };
+resolveMemorizeTarget(target, deps: { chapterVerseCount(book, chapter): number | null }): ResolvedMemorize
+
+<span class="c">// src/lib/memory-panel.ts (PR 11)</span>
+type MemoryPanel = { kind: "progress" } | { kind: "verses" } | { kind: "pack"; packId: string } | { kind: "verse"; verseRefId: string };
+parseMemoryPanel(raw: unknown): MemoryPanel | undefined
+formatMemoryPanel(panel: MemoryPanel): string   <span class="c">// "progress" | "verses" | "pack:&lt;id&gt;" | "verse:&lt;id&gt;"</span>
+memoryPanelFullPagePath(panel): string          <span class="c">// /memory/progress | /memory/verses | /memory/$packId | /memory/verse/$id</span>
+
+<span class="c">// src/lib/memory-return.ts (PR 11)</span>
+parseMemoryReturn(raw: unknown): string | undefined
+  <span class="c">// accepts "/memory", "/memory/…", "/passage/…" with optional "?…"; rejects "//", "\\", "://", control chars, &gt; 512 chars</span>
+withReturn(href: string, returnTo: string): string
+
+<span class="c">// src/lib/memory-goals.ts + src/lib/memory-today.ts (PR 10)</span>
+type GoalCard =
+  | { kind: "passage"; packId; title; verseCount; learnedVerses; status: "building"|"reviewing"|"mastered";
+      hasWorkToday; todayStep: { label: string; ladderDay: 1 | 2 | 3 } | null; masteryFraction;
+      nextDueAt: number | null; createdAt; lastActivityAt }
+  | { kind: "pack"; packId; title; verseCount; learned; learning; upNext; mastered; masteryFraction;
+      reviewsDue: { verseRefId; label }[]; learningToday: number; hasWorkToday; nextDueAt; createdAt;
+      lastActivityAt; memberLabels: string[] }
+  | { kind: "verse"; verseRefId; title; status; learnStage; intervalDays; hasWorkToday; nextDueAt; lastActivityAt };
+type TodayModel = {
+  state: "firstRun" | "work" | "caughtUp";
+  counts: { learningVerses: number; passageSessions: number; reviews: number };
+  doneToday: { learningSteps: number; reviews: number };
+  nextReviewAt: number | null; hasAnythingMemorized: boolean; totalInMemory: number;
+  statusCounts: { learning: number; memorized: number; mastered: number };
+  goals: GoalCard[];   <span class="c">// sorted: work today first, then soonest projected learn date</span>
+};</code></pre>
+
+        <h3>Client contracts</h3>
+        <pre><code><span class="c">// src/hooks/use-memorize-start.ts (PR 5)</span>
+type MemorizeDestination = { kind: "verse"; verseRefId: Id&lt;"verseRefs"&gt; } | { kind: "pack"; packId: Id&lt;"packs"&gt; };
+type MemorizeResult = { mode: MemorizeMode; destination: MemorizeDestination; alreadyMemorizing: boolean };
+useMemorizeStart(): { start(resolved: ResolvedMemorize, opts?: { name?: string }): Promise&lt;MemorizeResult&gt;; pending: boolean }
+  <span class="c">// verse   → verseMemory.memorize({ spans: [span] })</span>
+  <span class="c">// passage → packs.startPreset({ presetId }) or packs.create({ kind: "scope", scope }) → load ESV chapters →</span>
+  <span class="c">//           buildPassagePieces → passageMemory.start (which writes the passage heart)</span>
+  <span class="c">// pack    → packs.createAndMemorize({ name, spans })</span>
+memorizeStartHref(destination, returnTo): string
+  <span class="c">// verse → /memory/learn?book&amp;chapter&amp;startVerse&amp;endVerse&amp;return= · pack → /memory/$packId/learn?return=</span>
+
+<span class="c">// src/components/memory/memorize/memorize-provider.tsx (PR 6) — one sheet instance mounted at the root</span>
+useMemorizeSheet(): { open(target: MemorizeTarget): void }
+
+<span class="c">// URLs</span>
+/memory?panel=progress|verses|pack:&lt;packId&gt;|verse:&lt;verseRefId&gt;[&amp;from=verses]
+/memory/progress · /memory/verses (/memory/library redirects) · /memory/$packId · /memory/verse/$verseRefId · /memory/new
+/memory/today · /memory/learn · /memory/review · /memory/practice · /memory/$packId/{learn,review,practice}
+  <span class="c">// every session route accepts ?return=&lt;internal path&gt; (PR 13)</span></code></pre>
+
+        <h3>Copy reference (user-facing strings)</h3>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 34%">Where</th>
+                <th>String</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Start button pattern</td>
+                <td><code>Memorize {title}</code> (e.g. "Memorize Psalm 1")</td>
+              </tr>
+              <tr>
+                <td>Steps (short)</td>
+                <td>Read · First letters · Fill in the blanks · From memory</td>
+              </tr>
+              <tr>
+                <td>Steps (day lines)</td>
+                <td>
+                  "Day 1 of 3: read it, then type it with first letters" · "Day
+                  2 of 3: fill in the blanks" · "Day 3 of 3: say it from memory"
+                </td>
+              </tr>
+              <tr>
+                <td>nextStepCopy</td>
+                <td>
+                  After Read/First letters: "Nice. Tomorrow you'll try it with
+                  blanks." · After blanks: "Great. Tomorrow you'll say it from
+                  memory." · Graduated: "Memorized. We'll bring it back tomorrow
+                  to keep it fresh." · Later review: "Next review {Thu}"
+                </td>
+              </tr>
+              <tr>
+                <td>Waiting button (replaces "Tomorrow")</td>
+                <td>"Up next tomorrow" (tooltip = nextStepCopy)</td>
+              </tr>
+              <tr>
+                <td>Session complete</td>
+                <td>
+                  Title "That's today's step." · rows "Tomorrow: {step}" /
+                  "Memorized" · footer "Each day builds on the last. See you
+                  tomorrow."
+                </td>
+              </tr>
+              <tr>
+                <td>Passage phases</td>
+                <td>
+                  Warm up · Fix a tricky spot (was Practice) · Go over what you
+                  know · Join verses (was Recite together) · Section complete ·
+                  Recite it all (was Review). Passage map legend: Not started ·
+                  Learning · Joined · Memorized
+                </td>
+              </tr>
+              <tr>
+                <td>Passage budget/locked</td>
+                <td>
+                  "That's 5 new verses today, a good day's work. Tomorrow you'll
+                  add the next ones." · "Today's new verses are in. Tomorrow
+                  we'll start with a quick recite, then add more."
+                </td>
+              </tr>
+              <tr>
+                <td>Memorize sheet how-it-works</td>
+                <td>
+                  passage: "You'll learn it in order, a few verses a day, then
+                  say it all the way through." · verse: "Three short daily
+                  steps, then we'll bring it back right before you'd forget it."
+                  · pack: "Each verse takes three short daily steps. We'll keep
+                  them all fresh for you."
+                </td>
+              </tr>
+              <tr>
+                <td>Mastery line</td>
+                <td>
+                  "Then short reviews keep it fresh. Mastered in about 2
+                  months."
+                </td>
+              </tr>
+              <tr>
+                <td>Heart line in sheet</td>
+                <td>
+                  "Also adds {title} to your hearts" (hidden when allHearted)
+                </td>
+              </tr>
+              <tr>
+                <td>Success toast</td>
+                <td>"{title} is in Today." action <b>Start now</b></td>
+              </tr>
+              <tr>
+                <td>Unheart while memorizing</td>
+                <td>
+                  Title "Unheart {ref}?" · body "Unhearting also stops
+                  memorizing it." · <b>Keep</b> / <b>Unheart and stop</b>
+                </td>
+              </tr>
+              <tr>
+                <td>Extra practice</td>
+                <td>
+                  Label "Extra practice" · tooltip "Go over anything you've
+                  memorized, any time."
+                </td>
+              </tr>
+              <tr>
+                <td>Pack row statuses</td>
+                <td>
+                  "Up next · starts when you're ready" · "Learning · tomorrow:
+                  fill in the blanks" · "Memorized · review due today · mastery
+                  22%"
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Data flow</h3>
+        <p class="muted">
+          A reader taps <b>Memorize Psalm 16</b> in the chapter header (or
+          selects verses and taps Memorize in the selection bar, or taps
+          Memorize in the heart popover, Today search, From your hearts, a
+          suggestion, or New pack). Every entry point calls
+          <code>useMemorizeSheet().open(target)</code>. The sheet runs
+          <code>resolveMemorizeTarget</code> (pure) to get the mode, title and
+          counts, reads <code>verseMemory.memorizeStatus</code> to detect
+          "already memorizing" / "part of" and whether a heart line is needed,
+          and shows the plan from <code>memorize-plan.ts</code>. On "Start
+          memorizing", <code>useMemorizeStart</code> calls the right server
+          path: <code>verseMemory.memorize</code> for a verse, scope pack plus
+          ESV pieces plus <code>passageMemory.start</code> for a passage, or
+          <code>packs.createAndMemorize</code> for a pack. Each path sets
+          <code>inMemory</code> and ensures heart coverage (I1). A toast offers
+          <b>Start now</b>. On Today, <code>memoryHome.today</code> folds
+          building passages, unlocked learning verses, pack Up-next verses
+          (<code>packUpNextVerseRefIds</code>), and due reviews into one Today
+          card and goal cards. <b>Start today</b> opens
+          <code>/memory/today?return=/memory</code>, which runs passages →
+          learning → reviews and returns to <code>return</code> on Done.
+          Hearting a verse only writes <code>savedVerses</code>. It never adds
+          work, and the reader offers the nudge popover until dismissed.
+        </p>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ CONVENTIONS ============ -->
+      <section id="conventions">
+        <div class="eyebrow">Rules for the agent</div>
+        <h2>Conventions every PR must follow</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h4>Workflow</h4>
+            <ul class="clean small">
+              <li>One PR at a time, in order. Read files before editing.</li>
+              <li>
+                After code changes run <code>pnpm run agent:check</code>
+                (format → lint → typecheck).
+              </li>
+              <li>
+                Run <code>pnpm test</code> for any PR that adds/edits a
+                <code>*.test.ts(x)</code> or changes logic covered by existing
+                tests. Update tests whose expected copy changes; never delete a
+                test just to make it pass. If a test covers removed UI, remove
+                it with the UI.
+              </li>
+              <li>
+                Regenerate Convex types with <code>pnpm run codegen</code>
+                after schema or Convex function changes.
+              </li>
+              <li>
+                Adding/removing a file under <code>src/routes/</code>: run
+                <code>pnpm run build</code> to regenerate
+                <code>src/routeTree.gen.ts</code>, and add/remove the path in
+                <code>shared/http-routes.ts</code> →
+                <code>APP_ROUTE_PATTERNS</code>
+                (<code>src/lib/http-routes.test.ts</code> enforces parity).
+              </li>
+              <li>
+                New dependencies: exact versions (<code>pnpm add -E</code>).
+                Only <code>sonner</code> is planned.
+              </li>
+              <li>Never commit or push unless the orchestrator asks.</li>
+              <li>
+                Do not change scheduler constants, grading, or the passage
+                engine (<code>passage-frontier.ts</code>,
+                <code>passage-session.ts</code>) unless a PR lists it.
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Convex rules (enforced by lint and review)</h4>
+            <ul class="clean small">
+              <li>
+                Every public query/mutation has <code>args</code> <b>and</b>
+                <code>returns</code> validators.
+              </li>
+              <li>
+                Auth via <code>getCurrentUserId</code> (mutations) /
+                <code>getCurrentUserIdOrNull</code> (queries return empty or
+                null); verify ownership of every row loaded by id.
+              </li>
+              <li>
+                Never call <code>Date.now()</code> inside a query; pass
+                <code>now</code> (and <code>tzOffsetMinutes</code> /
+                <code>timeZone</code> where day boundaries matter).
+              </li>
+              <li>
+                Query with <code>.withIndex(...)</code>, never
+                <code>.filter(...)</code>. <code>await</code> every promise.
+                Only schedule <code>internal.*</code> functions.
+              </li>
+              <li>
+                No <code>any</code>; use generated <code>Doc&lt;&gt;</code> /
+                <code>Id&lt;&gt;</code>. Keep handlers thin: put logic in
+                <code>convex/lib/*</code> or pure <code>src/lib/*</code>.
+              </li>
+              <li>
+                Keep <code>userMemoryStats</code> in sync on every
+                <code>inMemory</code> or status transition
+                (<code>adjustUserMemoryStats</code>).
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>UI rules</h4>
+            <ul class="clean small">
+              <li>
+                Use existing <code>src/components/ui/*</code> (shadcn on
+                <code>radix-ui</code>), Tailwind,
+                <code>lucide-react</code> icons, <code>framer-motion</code>.
+                Respect <code>prefers-reduced-motion</code>.
+              </li>
+              <li>
+                Copy comes from <code>src/lib/memory-copy.ts</code> and the Copy
+                reference table. Use the banned-word guard from PR 1.
+              </li>
+              <li>
+                Mobile: 360–375px with no horizontal scroll; touch targets ≥
+                44px; inputs ≥ 16px font (no iOS zoom).
+              </li>
+              <li>
+                Accessible names on icon buttons; dialogs/sheets get
+                <code>aria-labelledby</code>; Esc closes overlays; focus returns
+                to the opener.
+              </li>
+              <li>
+                Signed-out users never reach the reader or Memory (<code
+                  >root-route-component.tsx</code
+                >
+                gate), so do not build signed-out states.
+              </li>
+              <li>
+                Tests: Vitest + Testing Library; mock Convex like
+                <code>src/components/memory/packs/pack-view.test.tsx</code>
+                (string api stubs + <code>Map</code>-backed
+                <code>useQuery</code>/<code>useMutation</code>).
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Data/migration rules</h4>
+            <ul class="clean small">
+              <li>
+                Never delete <code>verseMemory</code>,
+                <code>verseMemoryReviews</code>, or <code>savedVerses</code>
+                rows as part of decoupling. Stopping a verse sets
+                <code>inMemory: false</code>.
+              </li>
+              <li>
+                The migration must be idempotent and safe to run twice, and must
+                log counts (rows, inMemory true, hearted-only, passage hearts
+                created).
+              </li>
+              <li>
+                Code identifiers (<code>packs.kind</code>,
+                <code>learnStage</code>, <code>scope</code>) stay; only
+                user-visible strings change.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr class="rule" />
+
+      <!-- ============ TOC ============ -->
+      <section id="prs">
+        <div class="eyebrow">The build</div>
+        <h2>18 pull requests</h2>
+        <div class="card toc">
+          <a href="#pr1"
+            ><b>PR 1</b> — Copy, plan &amp; pacing helpers
+            <span class="chip ghost">foundation</span></a
+          >
+          <a href="#pr2"
+            ><b>PR 2</b> — inMemory data model &amp; migration (silent)
+            <span class="chip ghost">data</span></a
+          >
+          <a href="#pr3"
+            ><b>PR 3</b> — Hearts stop enrolling; Memory reads inMemory
+            <span class="chip ghost">data flip</span></a
+          >
+          <a href="#pr4"
+            ><b>PR 4</b> — Pack pacing in the daily queue
+            <span class="chip ghost">data</span></a
+          >
+          <a href="#pr5"
+            ><b>PR 5</b> — Memorize infrastructure
+            <span class="chip ghost">foundation</span></a
+          >
+          <a href="#pr6"
+            ><b>PR 6</b> — Memorize sheet
+            <span class="chip ghost">memorize</span></a
+          >
+          <a href="#pr7"
+            ><b>PR 7</b> — Hearted list in Go to passage
+            <span class="chip ghost">hearts</span></a
+          >
+          <a href="#pr8"
+            ><b>PR 8</b> — Reader: header, selection bar, nudge, confirm
+            <span class="chip ghost">reader</span></a
+          >
+          <a href="#pr9"
+            ><b>PR 9</b> — Reader: passage heart &amp; rail
+            <span class="chip ghost">reader</span></a
+          >
+          <a href="#pr10"
+            ><b>PR 10</b> — Today data model
+            <span class="chip ghost">today</span></a
+          >
+          <a href="#pr11"
+            ><b>PR 11</b> — Drawers, progress, verses, verse detail
+            <span class="chip ghost">today</span></a
+          >
+          <a href="#pr12"
+            ><b>PR 12</b> — Pack &amp; passage detail
+            <span class="chip ghost">packs</span></a
+          >
+          <a href="#pr13"
+            ><b>PR 13</b> — Blended Today session &amp; return rules
+            <span class="chip ghost">sessions</span></a
+          >
+          <a href="#pr14"
+            ><b>PR 14</b> — Today home <span class="chip ghost">today</span></a
+          >
+          <a href="#pr15"
+            ><b>PR 15</b> — Pack editing, New pack, Suggestions
+            <span class="chip ghost">packs</span></a
+          >
+          <a href="#pr16"
+            ><b>PR 16</b> — Sessions that feel like Scripture
+            <span class="chip ghost">polish</span></a
+          >
+          <a href="#pr17"
+            ><b>PR 17</b> — Onboarding &amp; paper cuts
+            <span class="chip ghost">polish</span></a
+          >
+          <a href="#pr18"
+            ><b>PR 18</b> — Partial-chapter passages
+            <span class="chip ghost">engine plumbing</span></a
+          >
+        </div>
+      </section>
+
+      <!-- ============ PR 1 ============ -->
+      <div class="pr" id="pr1">
+        <div class="pr-head">
+          <div class="num">1</div>
+          <div>
+            <div class="pr-sub">foundation · copy only on existing layouts</div>
+            <h3 class="pr-title">Copy, plan &amp; pacing helpers</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> nothing. <b>Unblocks:</b> every later PR.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add the pure helpers every later PR uses (glossary copy, step
+            labels, learn-vs-mastery estimates, forward-looking "what's next"
+            copy, pack pacing) and replace lock-style and internal copy on the
+            existing surfaces without changing layout. Add a guard test that
+            fails if banned words reappear.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/memory-copy.ts</span>
+              <span class="tag-new">(new)</span> — glossary constants,
+              <code>stepShortLabel</code>, <code>stepDayLine</code>,
+              <code>statusLabel</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memorize-plan.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">src/lib/memorize-plan.test.ts</span>
+              <span class="tag-new">(new)</span> — estimates and copy per the
+              Architecture contract.
+            </li>
+            <li>
+              <span class="fileref">src/lib/pack-pacing.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">src/lib/pack-pacing.test.ts</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-status-style.ts</span> —
+              <code>reviewing.label</code> → "Memorized".
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/memory-verse-list-action.tsx</span
+              >
+              (+ its test) — disabled "Tomorrow" → "Up next tomorrow" with
+              nextStepCopy tooltip; at &lt; 400px use icon + "Tomorrow" with the
+              full copy in tooltip/aria-label.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/practice/practice-board.tsx</span
+              >, <span class="fileref">practice/session-complete.tsx</span>,
+              <span class="fileref">practice/practice-stages.ts</span>,
+              <span class="fileref">practice/learning-journey-bar.tsx</span>
+              — stage display labels via <code>stepShortLabel</code>; locked
+              prompt via nextStepCopy; session-complete copy per Copy reference.
+            </li>
+            <li>
+              <span class="fileref">src/components/memory/verse-detail.tsx</span
+              >,
+              <span class="fileref"
+                >src/components/memory/learn-verse-dialog.tsx</span
+              >,
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+              — lock copy replacements (see epic #TBD-1 table).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/passage/passage-session-model.ts</span
+              >, <span class="fileref">passage/passage-session.tsx</span>,
+              <span class="fileref">packs/passage-map.tsx</span> — phase and
+              legend renames; <code>BUDGET_EXHAUSTED_COPY</code>,
+              <code>FRONTIER_LOCKED_COPY</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-copy-guard.test.ts</span>
+              <span class="tag-new">(new)</span> — banned-word scan.
+            </li>
+            <li>
+              Existing tests whose expected strings change (e.g.
+              <span class="fileref">practice-board.test.tsx</span>,
+              <span class="fileref">passage-session.test.tsx</span>,
+              <span class="fileref">passage-session-model.test.ts</span>,
+              <span class="fileref">learning-journey-bar.test.tsx</span>,
+              <span class="fileref">memory-due-label.test.ts</span>,
+              <span class="fileref">mastery-donut.test.tsx</span>).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Write <code>memory-copy.ts</code>: map <code>learnStage</code> 0–3
+              to short labels and day lines (stage 0 and 1 share "Day 1 of 3").
+              Do not change <code>SUPPORT_BANDS</code> labels in the scheduler;
+              map in the display layer.
+            </li>
+            <li>
+              Write <code>pack-pacing.ts</code> per the contract. Tests: 0, 1,
+              2, 3, 4 learning members; mixed order (new before learning);
+              reviewing/mastered members ignored for the cap.
+            </li>
+            <li>
+              Write <code>memorize-plan.ts</code>. Import
+              <code>PASSAGE_MAX_ADDS_PER_DAY</code>,
+              <code>MASTERED_INTERVAL_DAYS</code>, <code>scheduleNext</code>,
+              <code>initialSchedule</code>, and
+              <code>PACK_ACTIVE_LEARNING_CAP</code>. Simulate review days to
+              mastery by building a graduated schedule (run the ladder with
+              exact grades, advancing <code>now</code> to <code>dueAt</code>
+              whenever soft-locked) and counting days until status is
+              <code>mastered</code>. Mark minute constants as heuristics in a
+              comment. Format dates with <code>Intl.DateTimeFormat</code> and an
+              optional <code>timeZone</code>.
+            </li>
+            <li>
+              Tests: every branch of <code>formatLearnDuration</code> and
+              <code>formatMasteryDuration</code>;
+              <code>estimateMemorizeDays</code> for verse, passage (6, 11, 31
+              verses) and pack (1, 3, 4, 9);
+              <code>estimateMasteryDays</code> equals an independent loop over
+              <code>scheduleNext</code> in the test (so scheduler changes move
+              the estimate); <code>nextStepCopy</code> for each step, graduated,
+              and a future review; <code>projectedFinishDate</code> across a
+              month boundary with injected <code>now</code>;
+              <code>estimateSessionMinutes</code> zero and rounding.
+            </li>
+            <li>
+              Replace copy on the listed surfaces. Keep layouts identical.
+            </li>
+            <li>
+              Guard test: walk <code>src/components/memory/**</code> and
+              <code>src/components/routes/memory-*.tsx</code> (skip
+              <code>*.test.*</code>), strip comments, extract string literals
+              and JSX text with a regex, and fail on: "come back tomorrow"
+              (case-insensitive), whole word "band", "Guided", "Challenge",
+              "Reviewing" (case-sensitive). Export the banned list so PRs 15 and
+              17 can extend it. Keep a small documented allowlist for
+              unavoidable cases.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code>
+              pass; no existing test breaks.
+            </li>
+            <li>
+              New unit tests cover every branch listed above; the mastery
+              estimate is checked against a direct scheduler loop.
+            </li>
+            <li>
+              The guard test passes and fails if a banned word is reintroduced.
+            </li>
+            <li>
+              No Memory session, summary, or verse-detail surface shows
+              "Guided", "Challenge", "band", "Reviewing", or "come back
+              tomorrow"; passage phases never show "Practice".
+            </li>
+            <li class="manual">
+              Layouts unchanged at 360px and 1280px; "Up next tomorrow" does not
+              wrap in Library rows.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 2 ============ -->
+      <div class="pr" id="pr2">
+        <div class="pr-head">
+          <div class="num">2</div>
+          <div>
+            <div class="pr-sub">
+              ships silently · schema + helpers + migration
+            </div>
+            <h3 class="pr-title">inMemory data model &amp; migration</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 1. <b>Unblocks:</b> PR 3.</p>
+          <h4>Goal</h4>
+          <p>
+            Add the fields, indexes, server helpers, the
+            <code>memorize</code>/<code>stopMemorizing</code> mutations, and the
+            migration code without switching any reader. App behavior is
+            unchanged after this PR.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/schema.ts</span> —
+              <code>verseMemory.inMemory</code> + 3 indexes;
+              <code>savedVerses.passageMemoryId</code> + index;
+              <code>userMemoryStats.inMemoryBackfilledAt</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/in-memory-migration.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">src/lib/in-memory-migration.test.ts</span>
+              <span class="tag-new">(new)</span> — pure
+              <code
+                >shouldBeInMemory({ isHearted, status, inCustomPack,
+                inScopePack, inActivePassage })</code
+              >.
+            </li>
+            <li>
+              <span class="fileref">src/lib/hearted-verse-coverage.ts</span> (+
+              test) — add <code>spanCoveredBy(span, hearts): boolean</code> (a
+              heart contains the span) and
+              <code>spansLosingCoverage(removed, remaining, items)</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/memorize.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>ensureHeartCoverage</code>, <code>memorizeSpan</code>,
+              <code>stopMemorizingVerse</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/inMemoryBackfill.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>backfillInMemoryForUser(ctx, userId, now)</code>: computes
+              inMemory for all of the user's <code>verseMemory</code> rows,
+              creates passage heart rows for active passages, rebuilds
+              <code>userMemoryStats</code> from the inMemory set, and sets
+              <code>inMemoryBackfilledAt</code>. Returns counts.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> — new
+              <code>memorize</code> and <code>stopMemorizing</code> mutations
+              (thin wrappers over <code>convex/lib/memorize.ts</code>).
+            </li>
+            <li>
+              <span class="fileref">convex/migrations.ts</span> —
+              <code>backfillInMemory</code> (internalMutation; paginate the
+              <code>users</code> table in batches of 25, call
+              <code>backfillInMemoryForUser</code>, self-schedule) and
+              <code>checkInMemoryInvariant</code> (internalQuery; counts
+              inMemory rows without heart coverage and active passages without a
+              passage heart).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Add schema fields and indexes exactly as in Architecture; run
+              <code>pnpm run codegen</code>.
+            </li>
+            <li>
+              <code>memorizeSpan</code>: validate bounds with
+              <code>getVerseRefBoundsErrorMessage</code>;
+              <code>findOrCreateVerseRefId</code>; then
+              <code>ensureHeartCoverage</code> (if no heart covers the span,
+              insert a <code>savedVerses</code> row for the exact span). For
+              <code>verseMemory</code>: insert with <code>inMemory: true</code>,
+              <code>isHearted</code> = exact heart exists, status
+              <code>learning</code> (or <code>new</code> when
+              <code>upNext</code>), schedule fields from
+              <code>initialSchedule(now)</code>; or patch an existing row per
+              the contract. Adjust <code>userMemoryStats</code> for the inMemory
+              set. This PR does not touch the existing hearted-based stats
+              writers; PR 3 switches them.
+            </li>
+            <li>
+              Passage hearts in the backfill: for each
+              <code>passageMemory</code> row, group its pieces by chapter. For
+              each chapter, find or create the verseRef for
+              <code>[min startVerse, max endVerse]</code>; if a
+              <code>savedVerses</code> row exists for that exact ref, patch
+              <code>passageMemoryId</code>; else insert one. Never add per-verse
+              hearts.
+            </li>
+            <li>
+              Backfill rule per row: <code>shouldBeInMemory</code> using
+              custom-pack membership
+              (<code>packVerses.by_userId_verseRefId</code>), scope packs
+              (<code>verseMatchesScope</code>), and active passages (pieces
+              cover the verse). Idempotent.
+            </li>
+            <li>Do not call the new functions from the client yet.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Unit tests: <code>shouldBeInMemory</code> truth table (hearted new
+              unpacked → false; hearted learning → true; hearted new in custom
+              pack → true; in scope → true; in passage → true; not hearted →
+              false); <code>spanCoveredBy</code> and
+              <code>spansLosingCoverage</code> cases.
+            </li>
+            <li>
+              All new public functions have <code>args</code> and
+              <code>returns</code> validators and auth; the migration only
+              schedules <code>internal.*</code>.
+            </li>
+            <li>No reader or UI behavior changes (no client file changed).</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 3 ============ -->
+      <div class="pr" id="pr3">
+        <div class="pr-head">
+          <div class="num">3</div>
+          <div>
+            <div class="pr-sub">
+              behavior change · largest data PR (can split server/client)
+            </div>
+            <h3 class="pr-title">
+              Hearts stop enrolling; Memory reads inMemory
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 2. <b>Unblocks:</b> PRs 4–18.</p>
+          <h4>Goal</h4>
+          <p>
+            Flip the model. Hearting only saves. Everything that schedules or
+            counts reads <code>inMemory</code>. Passage start writes one passage
+            heart and absorbs inner verse items. Unhearting enforces I1. A lazy
+            per-user backfill runs on first load. Existing Memory screens keep
+            working on the new data.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/lib/savedVerses.ts</span> —
+              <code>heartSpanIfAbsent</code> no longer seeds memory (only
+              mirrors <code>isHearted</code> on an existing row);
+              <code>unheartByVerseRefId</code> enforces I1 (stop passage if
+              <code>passageMemoryId</code>; stop items losing coverage via
+              <code>spansLosingCoverage</code>); stops deleting
+              <code>packVerses</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/verseMemory.ts</span> —
+              <code>loadInMemoryVerseMemoryByRef</code>,
+              <code>isInMemory</code>, <code>requireInMemory</code> replace the
+              hearted variants; <code>adjustUserMemoryStats</code> docs now
+              describe the inMemory set; <code>seedVerseMemory</code> /
+              <code>getOrCreateVerseMemory</code> removed or routed through
+              <code>memorizeSpan</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/savedVerses.ts</span> —
+              <code>toggle</code>/<code>heartMany</code> per above;
+              <code>listForChapter</code> memory join adds
+              <code>inMemory</code> and each item gets
+              <code>stopsMemorizing</code> and optional
+              <code>passageMemoryId</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> — switch
+              <code>dueQueue</code>, <code>dueForVerse</code>,
+              <code>dueCount</code>, <code>recordAttempt</code>,
+              <code>acceptRetryHold</code>, <code>memoryStatus</code>,
+              <code>memoryStats</code>, <code>reviewForecast</code>,
+              <code>listLibrary</code> (new views), and
+              <code>verseDetail</code> (adds <code>inMemory</code>) to the
+              inMemory indexes; add <code>listInMemory</code>,
+              <code>getInMemory</code>, <code>ensureInMemoryBackfill</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/packs.ts</span>,
+              <span class="fileref">convex/packs.ts</span> — membership via
+              inMemory; <code>addVerse</code> and <code>startPreset</code>
+              (collections) memorize members as upNext;
+              <code>presetProgress</code> reports memorized (not hearted) ids;
+              <code>enrollLearning</code> counts inMemory.
+            </li>
+            <li>
+              <span class="fileref">convex/passageMemory.ts</span>,
+              <span class="fileref">src/lib/passage-start.ts</span> (+ test) —
+              <code>start</code> creates passage heart rows, absorbs standalone
+              inner items, removes the unheart loop (drop
+              <code>unheartSpans</code> from <code>planStart</code>);
+              <code>stop</code> clears <code>passageMemoryId</code> on its
+              hearts.
+            </li>
+            <li>
+              <span class="fileref">convex/migrations.ts</span> —
+              <code>backfillUserMemoryStats</code> uses the inMemory index.
+            </li>
+            <li>
+              <span class="fileref">convex/seedPreviewMemory.ts</span>,
+              <span class="fileref">src/lib/preview-memory-seed.ts</span>,
+              <span class="fileref">src/lib/preview-passage-seed.ts</span> —
+              seeded rows set <code>inMemory: true</code>; seeded passages get a
+              passage heart.
+            </li>
+            <li>
+              <span class="fileref">src/components/layout/mode-dock.tsx</span>
+              — call <code>ensureInMemoryBackfill({ now })</code> once per
+              session on mount when signed in (same pattern as the dashboard's
+              <code>ensureReviewActivityDays</code> effect).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-learn-page.tsx</span
+              >, <span class="fileref">memory-practice-page.tsx</span> (+ tests)
+              — candidates come from <code>verseMemory.listInMemory</code> /
+              <code>getInMemory</code> instead of
+              <code>savedVerses.listAll</code> / <code>getHearted</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/learn-verse-dialog.tsx</span
+              >
+              — choosing a verse calls <code>verseMemory.memorize</code>, then
+              routes to Learn; description "Pick a verse to memorize. You don't
+              need to heart it first."
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/memory-library.tsx</span
+              >
+              — filters Due today · Learning · Memorized · Mastered · All (no
+              "Not started"); empty strings updated.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/passage/passage-view-body.tsx</span
+              >
+              — ring only when <code>memory.inMemory</code>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Server first: rewrite the lib helpers, then each query/mutation.
+              Grep <code>isHearted</code>, <code>isLiveHeartedMemory</code>,
+              <code>loadHeartedVerseMemoryByRef</code>,
+              <code>requireHeartedSavedVerse</code>, and
+              <code>loadHeartedMembers</code> across <code>convex/</code> until
+              nothing scheduling-related reads them.
+            </li>
+            <li>
+              <code>stopsMemorizing</code> in <code>listForChapter</code>: true
+              when the row has <code>passageMemoryId</code> of an active
+              passage, or when removing this heart would leave some inMemory
+              item in the chapter uncovered.
+            </li>
+            <li>
+              Absorb in <code>passageMemory.start</code>: after
+              <code>planStart</code> and insert, for each member verse item
+              fully inside the passage's chapters (or range in PR 18) with no
+              <code>packVerses</code> row, call
+              <code>stopMemorizingVerse</code>. Ignore the old
+              <code>unheartedCount</code>/<code>keptHeartCount</code> (write 0);
+              the migration banner stays hidden and is deleted in PR 12.
+            </li>
+            <li>
+              <code>recordAttempt</code> requires <code>inMemory</code>
+              (message "Start memorizing this verse first.") and keeps the
+              unified-pack guard. Verify no Study code path builds
+              <code>verse-memory</code> cards
+              (<code>study-card-model.ts</code>); if one does, leave it and note
+              it for PR 17.
+            </li>
+            <li>
+              Reader: until PR 8 adds the confirm dialog, unhearting silently
+              enforces I1. Leave a TODO in code only if lint requires none;
+              otherwise no comment.
+            </li>
+            <li>Run codegen; update every affected test.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              <code>rg "by_userId_isHearted" convex --glob '!_generated'</code>
+              shows only the schema definitions and the migration rule.
+            </li>
+            <li>
+              <code>passage-start.test.ts</code> no longer expects
+              <code>unheartSpans</code>; a new test checks the absorb selector
+              (pure helper) picks only standalone items fully inside the range.
+            </li>
+            <li class="manual">
+              Heart a new verse in the reader: it does not appear in Memory
+              counts, the dock badge, the Library, or Learn.
+            </li>
+            <li class="manual">
+              Library → Memorize a verse (Romans 8:28, not hearted): it is now
+              hearted and learning, due now.
+            </li>
+            <li class="manual">
+              Start a chapter passage from a preset: exactly one heart appears
+              (range), no per-verse hearts, nothing is unhearted; a previously
+              learning verse inside it is no longer separately due.
+            </li>
+            <li class="manual">
+              Existing account after first load: Today/Review counts match
+              before the flip, apart from never-started, unpacked hearts.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 4 ============ -->
+      <div class="pr" id="pr4">
+        <div class="pr-head">
+          <div class="num">4</div>
+          <div>
+            <div class="pr-sub">data · queue semantics</div>
+            <h3 class="pr-title">Pack pacing in the daily queue</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 1, 3. <b>Unblocks:</b> PRs 5, 10, 13.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Pack Up-next verses join the learn queue automatically, up to the
+            per-pack cap, so a big pack trickles in instead of flooding Today.
+            One server query, <code>learnQueue</code>, becomes the source for
+            every learning session and count.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/lib/packUpNext.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>loadPackUpNext(ctx, userId)</code>: for each non-passage
+              pack, ordered inMemory members (custom: <code>packVerses</code>
+              order; scope: canonical verse order) →
+              <code>packUpNextVerseRefIds</code>. Dedupe across packs.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> —
+              <code>learnQueue</code>; <code>memoryStats.learningDue</code> and
+              <code>dueCount</code> include the Up-next count.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-learn-page.tsx</span
+              >
+              (+ test) — the global session uses
+              <code>learnQueue</code> (frozen) and passes Up-next items to the
+              runner as startable (status <code>new</code>).
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-session.ts</span> (+ test) —
+              no behavior change unless needed for runner eligibility of Up-next
+              items; document it if changed.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              <code>learnQueue</code> = inMemory rows with
+              <code>isDueForLearning</code> ∪ Up-next rows, mapped to
+              <code>InMemoryVerseItem</code>, sorted with
+              <code>sortSessionVerses</code> order rules (learning before Up
+              next).
+            </li>
+            <li>
+              Confirm <code>verseMemory.recordAttempt</code> on a
+              <code>new</code> row at step 0 moves it to
+              <code>learning</code> (existing scheduler behavior) and that stats
+              update.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Unit test for the pure ordering/dedupe helper used by
+              <code>loadPackUpNext</code> (two packs sharing a verse; scope pack
+              canonical order).
+            </li>
+            <li class="manual">
+              Create a pack of 9 verses: Learn shows 3 of them today; after the
+              first graduates, the 4th appears on the next session.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 5 ============ -->
+      <div class="pr" id="pr5">
+        <div class="pr-head">
+          <div class="num">5</div>
+          <div>
+            <div class="pr-sub">foundation · mostly invisible</div>
+            <h3 class="pr-title">Memorize infrastructure</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 1–4. <b>Unblocks:</b> PRs 6–18.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add the shared pieces every Memorize entry point uses: toasts, a
+            responsive sheet primitive, the target resolver, the client start
+            orchestrator, <code>packs.createAndMemorize</code>, and
+            <code>verseMemory.memorizeStatus</code>.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">package.json</span>,
+              <span class="fileref">pnpm-lock.yaml</span> —
+              <code>pnpm add -E sonner</code>.
+            </li>
+            <li>
+              <span class="fileref">src/components/ui/sonner.tsx</span>
+              <span class="tag-new">(new)</span> — shadcn-style
+              <code>Toaster</code> themed with app tokens;
+              <span class="fileref"
+                >src/components/routes/root-route-component.tsx</span
+              >
+              mounts it once (bottom-center, above the mode dock).
+            </li>
+            <li>
+              <span class="fileref">src/components/ui/sheet.tsx</span>
+              <span class="tag-new">(new)</span> — Radix Dialog sheet with
+              <code>side: "right" | "bottom"</code>, scrim, sticky header slot,
+              close button, reduced-motion fade.
+            </li>
+            <li>
+              <span class="fileref">src/hooks/use-media-query.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>useMediaQuery(query)</code>, <code>useIsMobile()</code>
+              (&lt; 640px).
+            </li>
+            <li>
+              <span class="fileref">src/lib/memorize-target.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">src/lib/memorize-target.test.ts</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref">src/hooks/use-start-passage.ts</span> —
+              export <code>loadChaptersForScope</code> and a
+              <code>startPassageForPack(deps, { packId, scope, now })</code>
+              helper; <code>useStartPassage</code> uses it.
+            </li>
+            <li>
+              <span class="fileref">src/hooks/use-memorize-start.ts</span>
+              <span class="tag-new">(new)</span> — orchestrator +
+              <code>memorizeStartHref</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/packs.ts</span> —
+              <code>createAndMemorize</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/verseMemory.ts</span> —
+              <code>memorizeStatus</code>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Resolver (pre-PR 18 rules): <code>chapters</code> target or spans
+              exactly covering 1–20 whole contiguous chapters in one book →
+              passage (title from preset or <code>formatBookChapter</code>,
+              "Matthew 5–7"); a single span of 1–3 verses → verse; a single
+              partial span of &gt; 3 verses → pack titled by reference
+              ("Philippians 2:1–11"); several spans → pack (title "{n} verses"
+              unless provided); &gt; 20 chapters → invalid <code>tooLong</code>;
+              cross-book → invalid.
+            </li>
+            <li>
+              Resolver tests: Psalm 1 chapter → passage, 6 verses; Psalm 1:1–6
+              spans → passage; Romans 8:28 → verse; Philippians 2:1–11 → pack of
+              11; Matthew 5–7 → passage "Matthew 5–7" (or "Sermon on the Mount"
+              with presetId); Romans 1–21 → tooLong; two spans → pack.
+            </li>
+            <li>
+              <code>createAndMemorize</code>: insert custom pack; for each span
+              in order, <code>memorizeSpan(upNext: true)</code> then insert a
+              <code>packVerses</code> row (<code>order</code> = index; skip
+              duplicates). Max 200 spans. Name trimmed, 1–80 chars.
+            </li>
+            <li>
+              <code>memorizeStatus</code>: "memorizing" when the exact verse is
+              inMemory or an active passage's range equals the target; "partOf"
+              when an active passage contains the target (title = passage pack
+              name, destination = pack); <code>allHearted</code> via
+              <code>spanCoveredBy</code> against the user's hearts.
+            </li>
+            <li>
+              Orchestrator: wrap each path in try/catch and surface errors to
+              the caller; prevent double submits (<code>use-submit-lock</code>).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>All resolver cases above pass.</li>
+            <li>
+              <code>sonner</code> is pinned to an exact version; exactly one
+              <code>Toaster</code> is mounted.
+            </li>
+            <li>No visible UI change except toasts being available.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 6 ============ -->
+      <div class="pr" id="pr6">
+        <div class="pr-head">
+          <div class="num">6</div>
+          <div>
+            <div class="pr-sub">memorize · shared sheet</div>
+            <h3 class="pr-title">Memorize sheet</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PR 5. <b>Unblocks:</b> PRs 7, 8, 14, 15.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            One sheet, opened from anywhere via
+            <code>useMemorizeSheet().open(target)</code>, that shows an honest
+            plan and starts memorizing with one tap (mock screen 21). Wire the
+            existing Library and Suggestions surfaces to it.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/memorize/memorize-provider.tsx</span
+              >
+              <span class="tag-new">(new)</span> — context + single sheet
+              instance; mounted in
+              <span class="fileref">root-route-component.tsx</span> inside the
+              Convex/auth providers.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/memorize/memorize-sheet.tsx</span
+              >
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">memorize-sheet.test.tsx</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/memorize/memorize-explainer.tsx</span
+              >
+              <span class="tag-new">(new)</span> — 3 day cards (Read + first
+              letters / Fill in the blanks / Say it from memory) with tiny
+              reader-serif samples; passage extra line "Longer passages add up
+              to 5 new verses a day."
+            </li>
+            <li>
+              <span class="fileref">src/lib/feature-hints.ts</span> — add
+              <code>MEMORIZE_EXPLAINER: "memorize-explainer"</code> and
+              <code>HEART_MEMORIZE_NUDGE: "heart-memorize-nudge"</code> with
+              metadata (priority 0; not queued).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/memory-library.tsx</span
+              >, <span class="fileref">learn-verse-dialog.tsx</span> — "Learn a
+              new verse" → "Memorize a verse": picker → sheet.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/presets/preset-browser.tsx</span
+              >,
+              <span class="fileref">presets/collection-preset-page.tsx</span> (+
+              <span class="fileref">preset-browser.test.tsx</span>) — Memorize
+              opens the sheet (chapter presets as <code>chapters</code> target
+              with <code>presetId</code>; a chosen collection subset as
+              <code>spans</code> with the preset title); "Added" → "Memorizing";
+              Continue → "Open".
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Layout: Dialog (max-w 580px) at ≥ 640px; bottom
+              <code>Sheet</code> below. Eyebrow "Memorize", title "Memorize
+              {title}", fact chips (N verses · Learn it in about N days · About
+              N min a day; omit "N verses" when 1), how-it-works line, mastery
+              line, explainer (until hint completed), pack-only Name input
+              (default title, placeholder "e.g. Verses for the Merced team"),
+              footer: heart line (left), <b>Not now</b>,
+              <b>Start memorizing</b>.
+            </li>
+            <li>
+              States: already memorizing ("You're memorizing {title}" + plan
+              from <code>nextStepCopy</code> + <b>Open</b>), partOf ("{ref} is
+              part of {title}, which you're memorizing." + <b>Open {title}</b>),
+              loading (spinner, disabled), error (toast "Couldn't start
+              memorizing. Try again.", sheet stays open), tooLong ("Pick up to
+              20 chapters to memorize as one passage.", disabled).
+            </li>
+            <li>
+              <b>Open</b> targets: verse →
+              <code>/memory?panel=verse:&lt;id&gt;</code>; pack/passage →
+              <code>/memory?panel=pack:&lt;id&gt;</code> (panel routes land in
+              PR 11; until then they open Memory home and the panel param is
+              ignored).
+            </li>
+            <li>
+              On success: close, complete <code>MEMORIZE_EXPLAINER</code>, toast
+              "{title} is in Today." with <b>Start now</b> →
+              <code>memorizeStartHref(destination, currentPath)</code>.
+            </li>
+            <li>
+              Tests: verse, passage, and pack render the right lines; explainer
+              hidden after completion; already/partOf states; double-click
+              starts once.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              The sheet never shows learning time and mastery time as one
+              number; no "scope", "custom", or "preset" text (guard test).
+            </li>
+            <li class="manual">
+              Suggestions → Psalm 23 → Memorize shows the sheet with plan and
+              explainer (first time only); Start lands Psalm 23 as a passage
+              with one heart; reopening shows "You're memorizing Psalm 23".
+            </li>
+            <li class="manual">
+              At 375px it is a bottom sheet; for a verse the primary button is
+              visible without scrolling.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 7 ============ -->
+      <div class="pr" id="pr7">
+        <div class="pr-head">
+          <div class="num">7</div>
+          <div>
+            <div class="pr-sub">hearts · a home for hearts outside Memory</div>
+            <h3 class="pr-title">Hearted list in Go to passage</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 3, 6. <b>Unblocks:</b> PR 14 (From your
+            hearts).
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Hearted-only verses left Memory in PR 3. Give them a browsable home
+            with a Memorize button in the reader's Go to passage dialog, and add
+            the query Today will use for "From your hearts".
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/savedVerses.ts</span> —
+              <code>listHearted</code> (paginated, newest first; a passage heart
+              is one item with <code>passage.title</code>) and
+              <code>listNotMemorizing</code> (newest first, excludes items whose
+              span is inMemory or covered by an active passage).
+            </li>
+            <li>
+              <span class="fileref">src/components/bible/hearted-list.tsx</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">hearted-list.test.tsx</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/bible/passage-navigator.tsx</span
+              >
+              — segmented control <b>Books · Hearted</b> at the top (Books
+              default and unchanged).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Hearted view: "Filter hearts…" input (matches book names), rows
+              grouped by book: reference link (navigates + closes), one line of
+              verse text in reader serif loaded lazily when near the viewport,
+              right action <b>Memorize</b> (opens the sheet) or a muted
+              "Memorizing" chip.
+            </li>
+            <li>
+              Keyboard: Up/Down moves through rows, Enter opens the passage
+              (mirror the book list handling). Rows ≥ 48px; at &lt; 640px the
+              Memorize button collapses to an icon with aria-label "Memorize
+              {ref}".
+            </li>
+            <li>
+              Empty state: "No hearts yet. Tap ♥ beside any verse you love."
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Tests: grouping, filter, keyboard navigation, Memorize opens the
+              sheet with a <code>spans</code> target, empty state.
+            </li>
+            <li class="manual">
+              A memorized passage appears once ("Psalm 16 · passage"); works at
+              375px and by keyboard.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 8 ============ -->
+      <div class="pr" id="pr8">
+        <div class="pr-head">
+          <div class="num">8</div>
+          <div>
+            <div class="pr-sub">reader · entry points</div>
+            <h3 class="pr-title">
+              Reader: header Memorize, selection bar, heart nudge, unheart
+              confirm
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 3, 6. <b>Unblocks:</b> PRs 9, 17.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Make memorizing reachable from reading (mock screens 16, 18, 19,
+            20): a Memorize button in the chapter header, a quiet selection bar
+            for 2+ verses, the heart nudge popover, and the
+            unheart-while-memorizing confirm.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/savedVerses.ts</span> —
+              <code>listForChapter</code> adds <code>passage</code>
+              (<code>PassageHeartInfo</code>) on passage heart rows.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/bible/chapter-header.tsx</span
+              >
+              (+ tests),
+              <span class="fileref"
+                >src/components/passage/header-chrome.ts</span
+              >,
+              <span class="fileref"
+                >src/components/passage/passage-view-header.tsx</span
+              >,
+              <span class="fileref"
+                >src/components/passage/passage-chapter-view.tsx</span
+              >
+              — header button and data.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/passage/selection-memorize-bar.tsx</span
+              >
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">selection-memorize-bar.test.tsx</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/passage/view/passage-group-with-notes.tsx</span
+              >
+              (+ test) — remove the large heart column; render the bar on the
+              shell's top edge.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/passage/heart-memorize-nudge.tsx</span
+              >
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">heart-memorize-nudge.test.tsx</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/passage/unheart-memorizing-dialog.tsx</span
+              >
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref">src/components/passage/verse-row.tsx</span>,
+              <span class="fileref"
+                >src/components/passage/passage-view-body.tsx</span
+              >,
+              <span class="fileref"
+                >src/components/passage/view/verse-row-with-notes.tsx</span
+              >
+              (+ tests) — confirm when <code>stopsMemorizing</code>; anchor the
+              nudge to the clicked heart.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Header button (beside the chapter-note well): tinted (<code
+                >primary/7%</code
+              >
+              bg, <code>primary/35%</code> border), brain icon, "Memorize {Book
+              N}" over "{n} verses · learn in about N days". States from
+              <code>listForChapter</code> passage data: "Memorizing Psalm 16 · 4
+              of 11 learned", "Memorized ✓", "Part of {title}". Memorize opens
+              the sheet with a <code>chapters</code> target; the other states
+              navigate to <code>/memory?panel=pack:&lt;packId&gt;</code>. Use
+              the <code>@container/chapter-chrome</code> rules to collapse to
+              icon + "Memorize" on tight widths. Hidden in Focus mode.
+              <code>data-tour-id="chapter-memorize"</code>.
+            </li>
+            <li>
+              Selection bar: only when the selection spans ≥ 2 verses; a pill
+              (<code>bg-popover</code>, hairline amber border, soft shadow,
+              ~32px) at the shell's top edge aligned with the text column: range
+              label · <b>Heart</b> (secondary; "Hearted" + filled when covered;
+              toggles the range heart with the existing confirm) ·
+              <b>Memorize</b> (primary; opens the sheet with a
+              <code>spans</code> target) · <b>×</b> (clears the selection). On
+              touch/mobile pin it to the shell's bottom edge, full width, 44px
+              targets. Hide in Focus mode, during tours, and while the highlight
+              toolbar is open.
+            </li>
+            <li>
+              Nudge: when a heart toggles <b>on</b> (single verse or range) and
+              the span is not inMemory and the hint is not dismissed, open a
+              Radix Popover anchored to that heart (<code>side="left"</code>,
+              collision fallback <code>top</code>), ~184px: "♥ Saved to your
+              hearts", "Memorize {ref}?", <b>Memorize</b> (opens the sheet),
+              <b>Not now</b>, and a small "Don't ask again" link (dismisses the
+              hint). Auto-close after 6 s; no focus steal. Never during Focus
+              mode, tours, or when another popover is open.
+            </li>
+            <li>
+              Unheart confirm: when the clicked heart (verse heart, range pill,
+              or bar Heart) has <code>stopsMemorizing</code>, show the dialog
+              from the Copy reference; <b>Unheart and stop</b> calls
+              <code>savedVerses.toggle</code>.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Tests: bar hidden for single-verse selection and shown for 2+;
+              nudge shows on heart-on for non-memorized spans, not after
+              dismissal, auto-closes; confirm shows only when
+              <code>stopsMemorizing</code>; header button states.
+            </li>
+            <li class="manual">
+              Psalm 1 header shows "Memorize Psalm 1 · 6 verses · learn in about
+              4 days"; after starting, "Memorizing Psalm 1 · 0 of 6 learned".
+            </li>
+            <li class="manual">
+              Selecting Psalm 1:5–6 shows the shell without the left heart
+              column and the bar on its top edge; the note editor still opens on
+              the right.
+            </li>
+            <li class="manual">
+              At 375px the header button is icon + "Memorize" with no overflow;
+              Focus mode hides the button and the bar.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 9 ============ -->
+      <div class="pr" id="pr9">
+        <div class="pr-head">
+          <div class="num">9</div>
+          <div>
+            <div class="pr-sub">reader · progress you can see</div>
+            <h3 class="pr-title">
+              Reader: passage heart &amp; rail, memorizing tooltips
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep"><b>Depends on:</b> PR 8. <b>Unblocks:</b> PR 17.</p>
+          <h4>Goal</h4>
+          <p>
+            Show a memorized passage once in the reader (mock screen 17): a
+            filled heart with a learned/total ring in the left gutter level with
+            the passage's first verse, and a quiet rail down to its last verse
+            with per-verse segments. Per-verse rings and tooltips say how
+            memorizing is going.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/passage-rail.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">passage-rail.test.ts</span>
+              <span class="tag-new">(new)</span> — pure: verseStates → rail
+              segments (solid / dashed / faint), breaking at verse boundaries.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/passage/passage-heart-rail.tsx</span
+              >
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/passage/passage-view-body.tsx</span
+              >,
+              <span class="fileref"
+                >src/components/passage/view/verse-row-with-notes.tsx</span
+              >
+              — render the passage heart + rail for passage heart rows instead
+              of a <code>SavedPassagePill</code>.
+            </li>
+            <li>
+              <span class="fileref">src/components/passage/verse-row.tsx</span>
+              — tooltip/aria when memorizing: "Memorizing · {nextStepCopy}",
+              "Memorized · next review {Thu}", "Mastered".
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Heart: 34px, ring = learnedVerses ÷ totalVerses (same geometry as
+              <code>PassageHeartAnimatedButton</code>), positioned like
+              <code>SavedPassagePill</code> (<code>right-full mr-2</code>) on
+              the first visible chapter. Clicking unhearts via the PR 8 confirm.
+              Tooltip "Psalm 16 · memorizing · 4 of 11 learned".
+            </li>
+            <li>
+              Rail: 3px; solid (heart red 55%) = memorized, dashed = learning,
+              faint (foreground 12%) = up next; ends with a foot tick; continues
+              past section headings; drawn behind a selection shell. Mobile:
+              24px heart at the top-left of the first verse, 2px rail.
+            </li>
+            <li>
+              Individually hearted verses inside a passage keep their own heart
+              with no ring.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Rail segment tests cover mixed states and a chapter boundary.
+            </li>
+            <li class="manual">
+              Psalm 16 with 4 of 11 learned shows one heart with a partial ring
+              and a segmented rail over 1–11; Psalm 16:8 hearted alone keeps its
+              own ringless heart.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 10 ============ -->
+      <div class="pr" id="pr10">
+        <div class="pr-head">
+          <div class="num">10</div>
+          <div>
+            <div class="pr-sub">ships silently · server + pure model</div>
+            <h3 class="pr-title">Today data model</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 1, 3, 4. <b>Unblocks:</b> PRs 11, 13, 14.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            One query, <code>memoryHome.today</code>, that returns everything
+            the Today page, the side cards, and the Your verses drawer need. The
+            derivation lives in pure, tested helpers.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/memory-goals.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">memory-goals.test.ts</span>
+              <span class="tag-new">(new)</span> — build
+              <code>GoalCard[]</code> from loaded rows.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-today.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">memory-today.test.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>TodayModel</code> state, headline (<code
+                >"3 to learn · 5 to review"</code
+              >, zero parts omitted), done line, next-review label ("tomorrow"
+              or weekday).
+            </li>
+            <li>
+              <span class="fileref">convex/memoryHome.ts</span>
+              <span class="tag-new">(new)</span> — <code>today</code> query.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Load inMemory rows (<code>by_userId_inMemory</code>), packs
+              (<code>by_userId_lastOpenedAt</code>), <code>packVerses</code>,
+              passage due records (<code>loadPassageDueRecords</code>) and
+              passage rows, Up-next ids (<code>loadPackUpNext</code>), and
+              today's logs (<code>verseMemoryReviews</code> and
+              <code>passageReviews</code> <code>by_userId_createdAt</code> ≥
+              local midnight computed from <code>now</code> +
+              <code>tzOffsetMinutes</code>).
+            </li>
+            <li>
+              Goals: one per passage pack, one per non-passage pack with ≥ 1
+              inMemory member, one per standalone inMemory verse that is still
+              learning or has a review due. "Learned" counts verses (pieces
+              <code>solid</code>/<code>attached</code> for passages; status
+              reviewing/mastered for verses). Pack mastery = mean of member
+              <code>masteryProgress</code>. Sort: work today first, then soonest
+              projected learn date.
+            </li>
+            <li>
+              State: <code>firstRun</code> when there are no inMemory rows and
+              no passages; <code>caughtUp</code> when no work remains today;
+              else <code>work</code>.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Tests: phase-based fields for each goal kind (building passage,
+              memorized passage, learning verse, memorized verse, pack with
+              nothing learned, pack with some learned); sorting; state
+              derivation; headline zero-omission; done line.
+            </li>
+            <li>
+              No <code>Date.now()</code> in the query; all reads use indexes.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 11 ============ -->
+      <div class="pr" id="pr11">
+        <div class="pr-head">
+          <div class="num">11</div>
+          <div>
+            <div class="pr-sub">
+              today · navigation system (can split: drawer core / bodies)
+            </div>
+            <h3 class="pr-title">
+              Drawers, Your progress, Your verses, verse detail
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 5, 10. <b>Unblocks:</b> PRs 12–15.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Add the drawer host on <code>/memory</code> with URL-addressed
+            panels, the matching full pages, and the bodies for Your progress,
+            Your verses, and verse detail (mock screens 4–7). Add the return
+            helper used by sessions.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/memory-panel.ts</span>,
+              <span class="fileref">src/lib/memory-return.ts</span>
+              <span class="tag-new">(new)</span> + tests
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref">src/components/ui/dropdown-menu.tsx</span>
+              <span class="tag-new">(new)</span> — shadcn DropdownMenu on
+              <code>radix-ui</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/drawer/memory-drawer.tsx</span
+              >
+              <span class="tag-new">(new)</span>,
+              <span class="fileref">drawer/memory-panel-host.tsx</span>
+              <span class="tag-new">(new)</span>,
+              <span class="fileref">drawer/memory-page-shell.tsx</span>
+              <span class="tag-new">(new)</span> (full-page header: "‹ Today" /
+              "‹ Your verses", title, subtitle, actions).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/progress/progress-body.tsx</span
+              >
+              <span class="tag-new">(new)</span> — KPI row + 4 charts (2×2, one
+              column on mobile) + "Learning and mastery by goal" table; moves
+              the data hooks out of
+              <span class="fileref">dashboard/dashboard.tsx</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/verses/verses-drawer-body.tsx</span
+              >
+              <span class="tag-new">(new)</span> (compact) and
+              <span class="fileref">verses/verses-page-body.tsx</span>
+              <span class="tag-new">(new)</span> (hosts
+              <code>MemoryLibrary</code> + <code>PackList</code>).
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/verse-detail.tsx</span
+              >
+              — becomes a body usable in drawer and page; plain facts (Next
+              review · Gap between reviews · Times it slipped, hidden at 0),
+              "Your steps", "How it's going" (Solid / A few slips / Needs
+              another pass), actions Learn/Review/Practice, Add to pack, ⋯ Stop
+              memorizing (confirm "Stop memorizing {ref}? Your progress is saved
+              if you start again.").
+            </li>
+            <li>
+              Routes <span class="tag-new">(new)</span>:
+              <span class="fileref">src/routes/memory/progress.tsx</span>,
+              <span class="fileref">src/routes/memory/verses.tsx</span>,
+              <span class="fileref">src/routes/memory/library.tsx</span>
+              (redirect to <code>/memory/verses</code>),
+              <span class="fileref"
+                >src/routes/memory/verse.$verseRefId.tsx</span
+              >; page components in
+              <span class="fileref">src/components/routes/</span>
+              (<code>memory-progress-page.tsx</code>,
+              <code>memory-verses-page.tsx</code>,
+              <code>memory-verse-page.tsx</code>)
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref">src/routes/memory/index.tsx</span> —
+              <code>validateSearch</code> for <code>panel</code> and
+              <code>from</code>; mounts the host.
+            </li>
+            <li>
+              <span class="fileref">shared/http-routes.ts</span>,
+              <span class="fileref">src/routeTree.gen.ts</span> (regenerated).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Drawer: <code>Sheet</code> right at ≥ 640px, width
+              <code>min(66vw, 880px)</code>, ~320ms ease-out slide over a scrim
+              <code>rgb(20 14 6 / .36)</code>; bottom 92vh with rounded top and
+              a grab handle below 640px. Sticky header: optional "‹ Your verses"
+              (when <code>from=verses</code>), title, subtitle, header actions
+              (cross-link, ⋯), <b>Open full page</b> (icon only on mobile), ×.
+              The body scrolls independently. Swap content with a 200ms fade and
+              move focus to the new title. Close (×, Esc, scrim) removes
+              <code>panel</code> with a push.
+            </li>
+            <li>
+              Host: parse <code>panel</code>; render ProgressBody,
+              VersesDrawerBody, VerseDetail, or (temporary until PR 12) the
+              existing <code>PackView</code> for <code>pack:</code>. Unknown
+              panel → ignore.
+            </li>
+            <li>
+              Your verses drawer: search ("Search your verses, passages and
+              packs…", over goal titles and pack member labels from
+              <code>memoryHome.today</code>), "Due today · N" grouped by goal
+              with one link per group, "Recently active" (5–6 goals by
+              <code>lastActivityAt</code>), and an outline "All N verses,
+              filters and packs" → <code>/memory/verses</code>.
+            </li>
+            <li>
+              Your verses page: two columns (list ~1.6fr, "Passages and packs"
+              ~1fr; one column on mobile) with filters from PR 3.
+            </li>
+            <li>
+              Every link that starts a session from a drawer or page appends
+              <code>return</code> = current path + search (helper
+              <code>withReturn</code>).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run build</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass; <code>http-routes.test.ts</code>
+              passes with the new paths.
+            </li>
+            <li>
+              Tests: <code>parseMemoryPanel</code>/<code
+                >formatMemoryPanel</code
+              >
+              round trip and rejects junk;
+              <code>parseMemoryReturn</code> rejects <code>//evil.com</code>,
+              <code>https://…</code>, <code>/\\x</code>, and over-long values
+              and accepts <code>/memory?panel=pack:abc</code>.
+            </li>
+            <li class="manual">
+              <code>/memory?panel=verses</code> opens over Memory home; Esc, ×,
+              and the scrim close it; Back steps from pack → Your verses →
+              closed; focus returns to the opener; reduced motion fades.
+            </li>
+            <li class="manual">
+              Open full page goes to the matching page with the right back link;
+              <code>/memory/library</code> redirects.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 12 ============ -->
+      <div class="pr" id="pr12">
+        <div class="pr-head">
+          <div class="num">12</div>
+          <div>
+            <div class="pr-sub">packs · one detail, one primary action</div>
+            <h3 class="pr-title">Pack &amp; passage detail</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 6, 11. <b>Unblocks:</b> PRs 14, 15.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Replace the four overlapping passage paths with one state-driven
+            <code>PackDetail</code> body rendered in the drawer
+            (<code>?panel=pack:&lt;id&gt;</code>) and on
+            <code>/memory/$packId</code> (mock screens 8–11).
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-detail.tsx</span
+              >
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">pack-detail.test.tsx</span>
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/pack-detail-model.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">pack-detail-model.test.ts</span>
+              <span class="tag-new">(new)</span> — primary action by state,
+              subtitle, row status lines.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-view.tsx</span
+              >
+              <span class="tag-del">(delete)</span> and its test;
+              <span class="fileref"
+                >src/components/routes/memory-pack-page.tsx</span
+              >
+              renders <code>PackDetail</code> in the page shell; the drawer host
+              renders it for <code>pack:</code>.
+            </li>
+            <li>
+              Remove:
+              <span class="fileref">src/lib/heart-scope-copy.ts</span> (+ test),
+              <span class="fileref">packs/passage-migration-banner.tsx</span>,
+              <span class="fileref">packs/scope-heart-preview.tsx</span> (+
+              test),
+              <span class="fileref">src/hooks/use-scope-heart-preview.ts</span>
+              (+ test), <code>heartHint</code>/<code>startPassage</code> from
+              <span class="fileref">src/lib/memory-pack-search.ts</span> — only
+              where nothing else imports them.
+            </li>
+            <li>
+              <span class="fileref"
+                >packs/enable-unified-review-dialog.tsx</span
+              >
+              — reused behind the ⋯ checkbox "Review together as one recitation"
+              (contiguous packs only, off by default).
+            </li>
+            <li>
+              <span class="fileref">convex/packs.ts</span> —
+              <code>stopMemorizing</code> per Decisions (uses
+              <code>deletePassageAndReviews</code> for passages, clears
+              <code>passageMemoryId</code> on hearts,
+              <code>stopMemorizingVerse</code> for exclusive members).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Header: title, subtitle ("Pack · 9 verses · added Sep 12" /
+              "Passage · 11 verses · ♥ hearted as one passage"), ⋯ (Stop
+              memorizing, Review together for contiguous packs).
+            </li>
+            <li>
+              Primary action table: passage building with work → "Continue ·
+              about N min" (<code>/memory/$packId/learn</code>); building,
+              waiting → disabled "Up next tomorrow" with
+              <code>FRONTIER_LOCKED_COPY</code> tooltip; memorized and due →
+              "Recite {title}" (<code>/memory/$packId/review</code>); memorized,
+              not due → secondary "Practice anytime" plus "Memorized · recite
+              again Thu"; pack with work → "Continue · N verses today"; pack,
+              nothing today → secondary "Practice anytime" (only when something
+              is memorized). Passages also get ghost "Open in reader".
+            </li>
+            <li>
+              Progress: packs with ≥ 1 learned verse show Learned and Mastery
+              bars side by side; otherwise Learned only. Passages show the
+              Learned bar plus today's step with the 3-step ladder while
+              building, then Mastery.
+            </li>
+            <li>
+              Rows: passages show number, one line of verse text (reader serif,
+              truncated), and a chip: Memorized (sky) / Today: day N of 3
+              (amber) / Up next (slate); small heart if hearted individually.
+              Packs show a status dot, reference, status line, and per-row
+              Review (outline) + Practice (ghost) for due memorized, nothing for
+              waiting learning, <b>Learn</b> for Up next. Every session link
+              carries <code>return</code>.
+            </li>
+            <li>
+              Legacy scope packs not in passage mode where
+              <code>packAllowsPassageMode</code>: one quiet line "Want to learn
+              all of {title} in order? <b>Learn it as a passage</b>" (uses
+              <code>startPassageForPack</code>).
+            </li>
+            <li>
+              Stop confirm copy: passage "This clears your progress on {title}.
+              Your heart stays." · pack "Stop memorizing {name}? Verses that
+              aren't in another pack leave Today. Your progress is saved if you
+              start again."
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Model tests cover every row of the primary action table; the guard
+              test extends to "Learn as a passage", "Learn whole passage",
+              "Memorize whole passage", "Recite as one passage".
+            </li>
+            <li>
+              <code
+                >rg
+                "HeartScopeButton|StartPassagePanel|PackLearnPanel|UnifiedReviewPanel"
+                src</code
+              >
+              finds nothing.
+            </li>
+            <li class="manual">
+              Psalm 16 from a drawer shows the Learned bar, today's step, and
+              per-verse chips; Stop memorizing removes it and leaves a plain
+              heart in the reader.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 13 ============ -->
+      <div class="pr" id="pr13">
+        <div class="pr-head">
+          <div class="num">13</div>
+          <div>
+            <div class="pr-sub">sessions · one button for the day</div>
+            <h3 class="pr-title">Blended Today session &amp; return rules</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 4, 11. <b>Unblocks:</b> PR 14.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            <code>/memory/today</code> runs building passages → learning verses
+            → due reviews in one route with short interstitials. Every session
+            route honors <code>return</code>.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/memory-today-session.ts</span>
+              <span class="tag-new">(new)</span> +
+              <span class="fileref">memory-today-session.test.ts</span>
+              <span class="tag-new">(new)</span> — pure segment planner (skip
+              empty segments; interstitial text "Nice. Next: 5 reviews · about 2
+              min").
+            </li>
+            <li>
+              <span class="fileref">src/routes/memory/today.tsx</span>
+              <span class="tag-new">(new)</span>,
+              <span class="fileref"
+                >src/components/routes/memory-today-page.tsx</span
+              >
+              <span class="tag-new">(new)</span>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-verse-search.ts</span>,
+              <span class="fileref">src/lib/memory-learn-search.ts</span>,
+              <span class="fileref">memory-review-search.ts</span>,
+              <span class="fileref">memory-practice-search.ts</span>, pack
+              session routes (<span class="fileref"
+                >src/routes/memory_.$packId.*.tsx</span
+              >) — add <code>return</code> via <code>parseMemoryReturn</code>.
+            </li>
+            <li>
+              <span class="fileref">src/hooks/use-memory-back.ts</span> (+ test)
+              — <code>useMemoryExit(returnTo?)</code>: navigate to
+              <code>returnTo</code>, else history back, else
+              <code>/memory</code>.
+            </li>
+            <li>
+              <span class="fileref">practice/practice-board.tsx</span>,
+              <span class="fileref">practice/session-complete.tsx</span>,
+              <span class="fileref">review-summary.tsx</span>,
+              <span class="fileref">passage/passage-session.tsx</span>, session
+              page components — exit label "Back to Today" when
+              <code>return</code> is <code>/memory</code>; summary primary
+              <b>Done</b> with ghost <b>Extra practice</b>.
+            </li>
+            <li>
+              <span class="fileref">shared/http-routes.ts</span>,
+              <span class="fileref">src/routeTree.gen.ts</span>.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Freeze inputs at mount (<code>useFrozenQuery</code>):
+              <code>passageMemory.dueForLearning</code>,
+              <code>verseMemory.learnQueue</code>,
+              <code>verseMemory.dueQueue</code>. Passages run one
+              <code>PassageSession</code> each, oldest first ("That's enough for
+              today" moves on to the next segment). Then
+              <code>MemorySessionRunner</code> learning, then review.
+            </li>
+            <li>
+              Header progress text per segment ("Psalm 16 · new verses" →
+              "Learning · 2 verses" → "Review · 5") with a thin overall bar; the
+              verse rail stays on the right.
+            </li>
+            <li>
+              Interstitial between non-empty segments: <b>Continue</b> and
+              <b>Stop for today</b> (exit to <code>return</code>).
+            </li>
+            <li>
+              One combined summary at the end; <b>Done</b> exits to
+              <code>return</code>.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run build</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Planner tests: all segments, each empty combination, and
+              interstitial copy.
+            </li>
+            <li>
+              <code>useMemoryExit</code> tests: valid return, invalid return
+              falls back, no history falls back to <code>/memory</code>.
+            </li>
+            <li class="manual">
+              A review started in the Merced Team drawer returns to
+              <code>/memory?panel=pack:…</code> with the drawer open; from the
+              full page it returns to the page.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 14 ============ -->
+      <div class="pr" id="pr14">
+        <div class="pr-head">
+          <div class="num">14</div>
+          <div>
+            <div class="pr-sub">
+              today · the new home (can split: Today card / Start something new)
+            </div>
+            <h3 class="pr-title">Today home</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 6, 7, 10–13. <b>Unblocks:</b> PRs 15–17.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Replace the dashboard home with Today (mock screens 1, 2, 3, 22): a
+            compact Today card with one primary button, Your progress / Your
+            verses doorway cards, clickable goal cards, and Start something new
+            with search, suggestions, Make your own pack, and From your hearts.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/components/memory/today/</span>
+              <span class="tag-new">(new)</span>: <code>today-page.tsx</code>,
+              <code>today-card.tsx</code>, <code>doorway-cards.tsx</code>,
+              <code>goal-card.tsx</code>, <code>goal-grid.tsx</code>,
+              <code>start-something-new.tsx</code>,
+              <code>from-your-hearts.tsx</code>, <code>first-run.tsx</code>, and
+              tests (<code>today-page.test.tsx</code>,
+              <code>goal-card.test.tsx</code>).
+            </li>
+            <li>
+              <span class="fileref">shared/memorize-suggestions.ts</span>
+              <span class="tag-new">(new)</span> + test placed under
+              <span class="fileref">src/lib/memorize-suggestions.test.ts</span>
+              <span class="tag-new">(new)</span> (Vitest only includes
+              <code>src/**</code>) — Psalm 23, The Lord's Prayer (Matthew
+              6:9–13), Romans 8:28, John 3:16, Psalm 1, John 15, 1 Corinthians
+              13, Philippians 4, "100 Verses Every Christian Should Know".
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-home-page.tsx</span
+              >
+              (+ test) — renders <code>TodayPage</code>; no welcome dialog.
+            </li>
+            <li>
+              Delete:
+              <span class="fileref">src/components/memory/memory-home.tsx</span
+              >, <span class="fileref">memory-first-open-dialog.tsx</span> (+
+              test), <code>TodayHero</code> and any now-unused parts of
+              <span class="fileref">dashboard/dashboard.tsx</span> (+ test).
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Header stays "Memory" + subtitle, no buttons. Row 1: Today card
+              (~1.65fr) and the two stacked doorway cards (~1fr); on mobile the
+              doorway cards sit side by side under the Today card.
+            </li>
+            <li>
+              Today card states from <code>TodayModel</code>: work (eyebrow
+              "Today · {Fri, Oct 9}", headline, "New learning first, then
+              reviews.", primary <b>Start today · about N min</b> (40px) →
+              <code>/memory/today?return=/memory</code>, then outline sm
+              <b>Only new verses · N</b> (<code>/memory/learn</code>) and
+              <b>Only reviews · N</b> (<code>/memory/review</code>) and a ghost
+              <b>Extra practice</b> when anything is memorized); continue
+              (started today, work left → <b>Continue · about N min</b>); caught
+              up (emerald check, "All caught up · next review
+              {tomorrow|Sunday}", done line, outline Extra practice, no primary
+              button).
+            </li>
+            <li>
+              Doorway cards (whole card is a link): Your progress → stat line
+              "Practiced <b>4 of the last 7 days</b> · <b>98%</b> accuracy"
+              (omit accuracy until 5 answers), 14-day strip, 30-day sparkline
+              (hidden &lt; 640px); Your verses → "<b>17 verses</b> · <b>9</b>
+              due today" + stacked status bar + legend (hidden &lt; 640px).
+            </li>
+            <li>
+              Goal cards (max 6; 2 columns ≥ 768px): stretched link on the title
+              opens <code>?panel=pack:…</code> or <code>?panel=verse:…</code>;
+              exactly one button (Continue · N min / Review N · N min / Start ·
+              N min / Recite); "Today" chip; bars per phase rule; pack reviews
+              due as reference chips (5 + "+N more"); "On track for {date}"
+              unless no practice in 2+ days ("about N days to go"); caught-up
+              cards show "✓ Done today" and no button. Hover lift + tinted
+              border + title chevron; focus-visible ring on the card.
+            </li>
+            <li>
+              Start something new: labelled search "What do you want to
+              memorize?" (placeholder "Try Psalm 23 or John 15") parsed with
+              <code>parseVerseRef(…, { allowChapterOnly: true })</code>; a valid
+              result row "Memorize {title}" + plan line opens the sheet; no
+              match → "We couldn't find that reference. Try a book and chapter,
+              like Psalm 23." Suggestion chips (memorizing ones say "Memorizing"
+              and open their panel); the 100-verses chip opens its collection
+              page; the <b>Make your own pack</b> tile →
+              <code>/memory/new</code>; "More suggestions" →
+              <code>/memory/presets</code>.
+            </li>
+            <li>
+              From your hearts (<code>listNotMemorizing</code>): heading,
+              sub-line "Verses you've hearted. Memorize any of them.", 4–5 cards
+              (reference, 2-line reader-serif text, Memorize), "Show all (n)"
+              expands to 30; filtered by the search text; hidden when empty.
+            </li>
+            <li>
+              First run: one hero card ("Welcome to Memory" / "What do you want
+              to memorize first?" / "Learn it in a few short days, then quick
+              reviews keep it."), John 3:16 starter strip with
+              <b>Try one verse · about 3 min</b> (memorize John 3:16 → scoped
+              Learn with <code>return=/memory</code>), the search, suggestions
+              (no John 3:16), Make your own pack; "Start with a verse you love"
+              (hearts) only if any. No goal grid, doorway cards, or zero stats.
+            </li>
+            <li>
+              <code>PreviewMemorySeedCard</code> stays at the bottom on preview
+              builds.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Tests: exactly one primary button in each state; first-run renders
+              no goal grid; caught-up has no disabled button; goal card has one
+              button and a stretched link; search valid/invalid.
+            </li>
+            <li><code>rg "Practice All" src</code> finds nothing.</li>
+            <li class="manual">
+              At 1280px the Today card and doorway cards fit one row with no
+              empty band; at 375px Start today is full-width above the fold.
+            </li>
+            <li class="manual">
+              Tab order: Start today → Only new → Only reviews → Extra practice
+              → Your progress → Your verses → each goal (link, button) → search
+              → suggestions → Make your own pack.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 15 ============ -->
+      <div class="pr" id="pr15">
+        <div class="pr-head">
+          <div class="num">15</div>
+          <div>
+            <div class="pr-sub">
+              packs · editing and naming (can split: editing / New pack)
+            </div>
+            <h3 class="pr-title">
+              Pack editing, New pack, Add to pack, Suggestions
+            </h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 12, 14. <b>Unblocks:</b> PR 17.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Editing works in both drawer and page (rename, reorder, add, remove
+            with Undo). New pack becomes one screen. Add to pack lists all
+            packs. Remove Scope/Custom/Preset from the UI.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/packs.ts</span> —
+              <code>reorder</code>, <code>restoreVerse</code>;
+              <code>removeVerse</code> returns the removed <code>order</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/pack-detail.tsx</span
+              >
+              (+ test) — pencil rename (Enter/blur saves with toast "Pack
+              renamed", Esc cancels, empty not allowed); drag handle (native
+              HTML5 drag on pointer:fine) and ⋯ Move up / Move down with
+              <code>aria-live</code> announcements; remove × with Undo toast;
+              <b>+ Add verses</b> inline row.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/verse-search-add.tsx</span
+              >
+              <span class="tag-new">(new)</span> — segmented
+              <b>Search · From your hearts (n)</b>; reference search via
+              <code>parseVerseRef</code> + <code>useEsvReference</code> preview;
+              rows with reference, one line of text, a red heart if hearted, and
+              <b>+ Add</b> / "✓ Added".
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/routes/memory-pack-new-page.tsx</span
+              >,
+              <span class="fileref"
+                >src/components/memory/packs/new-pack.tsx</span
+              >
+              <span class="tag-new">(new)</span>;
+              <span class="fileref">packs/pack-builder.tsx</span> (+ test)
+              <span class="tag-del">(delete)</span>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/packs/add-to-pack.tsx</span
+              >
+              — all packs + "New pack…"; containing passages disabled ("Already
+              part of this passage"); empty "No packs yet."
+            </li>
+            <li>
+              <span class="fileref">packs/pack-list.tsx</span>,
+              <span class="fileref">packs/pack-list-subtitle.ts</span> (+ test)
+              — "Passages and packs", <b>Suggestions</b> and <b>New pack</b>
+              buttons, subtitles per epic #TBD-6 table.
+            </li>
+            <li>
+              <span class="fileref">presets/preset-browser.tsx</span> (+ test) —
+              title "Suggestions", description "Popular passages and verse packs
+              to memorize.", sections "Passages" and "Packs".
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-copy-guard.test.ts</span> —
+              add "Scope", "Custom pack", "Scope pack", "Preset", "Collection",
+              "Browse presets".
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              New pack (<code>/memory/new</code>, "‹ Today"): left = Name +
+              <code>VerseSearchAdd</code>; right = "In this pack" (drag/remove),
+              plan box from <code>memorize-plan.ts</code> ("{n} verses · learn
+              them in about {d} days" / "About {m} min a day, then short
+              reviews. Mastered in about 2 months."), muted line "The first
+              steps show up in Today. Memorizing also adds these verses to your
+              hearts.", <b>Create pack</b> (disabled until name + ≥ 1 verse;
+              tooltip "Add a name and at least one verse") and ghost Cancel.
+              Mobile: one column, sticky bottom button that never covers the
+              last item.
+            </li>
+            <li>
+              If the picked verses are exactly whole chapters, show "This is all
+              of {title}. Memorize it as a passage instead?" with a link that
+              opens the sheet.
+            </li>
+            <li>
+              Create → <code>packs.createAndMemorize</code> → navigate to
+              <code>/memory?panel=pack:&lt;id&gt;</code> + toast "{name} is in
+              Today."
+            </li>
+            <li>
+              <code>reorder</code>: validate the list is a permutation of the
+              pack's current <code>packVerses</code>; rewrite
+              <code>order</code> 0..n-1.
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Tests: <code>reorder</code> permutation validation (pure helper);
+              subtitle table; New pack disabled state; Move up/down; Undo
+              restores order.
+            </li>
+            <li>Guard test passes with the extended list.</li>
+            <li class="manual">
+              Today → Make your own pack and Your verses → New pack open the
+              same screen; creating "Peace when I'm anxious" with 3 verses
+              hearts them and shows the pack on Today.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 16 ============ -->
+      <div class="pr" id="pr16">
+        <div class="pr-head">
+          <div class="num">16</div>
+          <div>
+            <div class="pr-sub">polish · tone and moments</div>
+            <h3 class="pr-title">Sessions that feel like Scripture</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 1, 13, 14. <b>Unblocks:</b> nothing.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Reader typography in sessions, encouraging accuracy headlines,
+            one-time milestones (first memorized verse, finished passage, first
+            mastered), and a streak that only appears when it means something.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">src/lib/reader-typography.ts</span>
+              <span class="tag-new">(new)</span> —
+              <code>READER_VERSE_TEXT_CLASS</code> extracted from
+              <span class="fileref">src/components/passage/verse-row.tsx</span>
+              (which then imports it).
+            </li>
+            <li>
+              <span class="fileref">practice/practice-board.tsx</span>,
+              <span class="fileref">passage/passage-recall-card.tsx</span>,
+              <span class="fileref">passage/passage-session.tsx</span> — hint
+              text, revealed answer, and recall textarea use it (≥ 16px on
+              mobile, ~65ch).
+            </li>
+            <li>
+              <span class="fileref">src/lib/accuracy-feedback.ts</span>
+              <span class="tag-new">(new)</span> + test — exact "Word for word."
+              · ≥ 85 "Nearly there: a couple of small slips." · 60–84 "Good
+              progress. The highlighted words are worth another look." · &lt; 60
+              "This one needs another pass. We'll bring it back sooner."
+              (thresholds from scheduler constants).
+            </li>
+            <li>
+              <span class="fileref">convex/schema.ts</span>,
+              <span class="fileref">convex/passageMemory.ts</span> —
+              <code>celebratedAt</code> + <code>markCelebrated</code>.
+            </li>
+            <li>
+              <span class="fileref"
+                >src/components/memory/celebrate/passage-complete-moment.tsx</span
+              >
+              <span class="tag-new">(new)</span> — full passage text fades in
+              (reader typography), "You can say all of {title} by heart.", "{n}
+              verses · {d} days", <b>Done</b>; no confetti; reduced motion shows
+              without animation.
+            </li>
+            <li>
+              <span class="fileref">src/lib/feature-hints.ts</span> —
+              <code>CELEBRATE_FIRST_VERSE</code>,
+              <code>CELEBRATE_FIRST_MASTERED</code>.
+            </li>
+            <li>
+              <span class="fileref">practice/session-complete.tsx</span> —
+              first-verse banner "{ref} is memorized. We'll bring it back
+              tomorrow to keep it fresh."; first-mastered toast "{ref} is
+              mastered. A month between reviews and it's still yours."
+            </li>
+            <li>
+              <span class="fileref">dashboard/kpi-row.tsx</span>, doorway card —
+              streak hidden below 2 days; "{n}-day streak" (2–6), "{n}-day
+              streak. Faithful in little." (7+); remove "Keep it going…" and
+              "Day one — nice start".
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              The passage moment triggers when a passage first moves from
+              building to reviewing and <code>celebratedAt</code> is unset; call
+              <code>markCelebrated</code> when shown.
+            </li>
+            <li>Percentages become secondary text under the headline.</li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Accuracy-band tests; milestones show once (hint/flag tests).
+            </li>
+            <li class="manual">
+              Session text matches the reader's verse font; iOS doesn't zoom on
+              focus; the passage moment shows once per passage.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 17 ============ -->
+      <div class="pr" id="pr17">
+        <div class="pr-head">
+          <div class="num">17</div>
+          <div>
+            <div class="pr-sub">polish · teach in context and tidy edges</div>
+            <h3 class="pr-title">Onboarding &amp; paper cuts</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 8, 14, 15. <b>Unblocks:</b> nothing.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Teach Memorize in the app tour, update the dock callout, give every
+            empty state a next step, make Library rows status-first, and remove
+            the leftover Study verse-memory path.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref"
+                >src/components/tutorial/tutorial-provider.tsx</span
+              >
+              — step <code>memorize</code> after <code>add-note</code> targeting
+              <code>chapter-memorize</code>, falling back to a centered card:
+              "Memorize any passage" / "Use <b>Memorize {chapter}</b> here, or
+              select a few verses and tap <b>Memorize</b>. A few minutes a day
+              for about three days, and it's yours. A ring around a verse's
+              heart shows how it's going."
+            </li>
+            <li>
+              <span class="fileref">src/components/layout/mode-dock.tsx</span>
+              — callout "<b>Memory lives here.</b> Memorize verses and passages,
+              then come back for a few minutes each day. A badge shows when
+              something's ready."
+            </li>
+            <li>
+              <span class="fileref">memory-review-page.tsx</span>,
+              <span class="fileref">memory-learn-page.tsx</span>,
+              <span class="fileref">memory-practice-page.tsx</span>,
+              <span class="fileref">memory-library.tsx</span> (+ tests) — empty
+              states per epic #TBD-9 §4 with <b>Back to Today</b> /
+              <b>Memorize a verse</b>.
+            </li>
+            <li>
+              <span class="fileref">memory-library.tsx</span>,
+              <span class="fileref">memory-verse-list-action.tsx</span> (+
+              tests) — rows: reference, status chip, one-line
+              <code>nextStepCopy</code>, "Today" chip when due; small outline
+              Learn/Review and ghost Practice; waiting rows have no button; the
+              Due today filter has one primary "Do all {n} · about {m} min" (or
+              "Review all {n}") → <code>/memory/today</code> with return.
+            </li>
+            <li>
+              Study:
+              <span class="fileref"
+                >src/components/study/study-verse-memory-card.tsx</span
+              >, <span class="fileref">study-activity-deck.tsx</span>,
+              <span class="fileref">use-record-verse-attempt.ts</span>,
+              <span class="fileref">study-card-model.ts</span>, deck progress
+              legend — if no builder creates <code>verse-memory</code> cards,
+              remove the path and the <code>"deck"</code> mode from client code
+              (keep the schema literal for old rows); "hearted verse(s)" →
+              "verse(s)".
+            </li>
+            <li>
+              <span class="fileref">src/lib/memory-copy-guard.test.ts</span> —
+              add "Heart verses to see them here", "Review verses to master",
+              "build packs".
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>
+              Existing users who completed the tour see a one-off popover on the
+              header Memorize button: "New: memorize this chapter in a few
+              minutes a day." (feature hint, dismissible, shown once).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run agent:check</code> and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              <code>rg "StudyVerseMemoryCard" src</code> finds nothing (or the
+              PR documents why it stays).
+            </li>
+            <li>Guard test passes with the extended list.</li>
+            <li class="manual">
+              Fresh account: the main tour has 4 steps and step 3 highlights the
+              header Memorize button; in Focus mode it shows a centered card.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ PR 18 ============ -->
+      <div class="pr" id="pr18">
+        <div class="pr-head">
+          <div class="num">18</div>
+          <div>
+            <div class="pr-sub">
+              engine plumbing · approved by owner 2026-10-12
+            </div>
+            <h3 class="pr-title">Partial-chapter passages</h3>
+          </div>
+        </div>
+        <div class="pr-body">
+          <p class="dep">
+            <b>Depends on:</b> PRs 3, 5, 12. <b>Unblocks:</b> nothing.
+          </p>
+          <h4>Goal</h4>
+          <p>
+            Contiguous ranges of 4+ verses (Philippians 2:5–11, Matthew 6:9–13,
+            Romans 8:28–39, Romans 7:24–8:2) become true passages: learned in
+            order and recited through. The scheduler, frontier, session model,
+            and due cache are unchanged.
+          </p>
+          <h4>Files</h4>
+          <ul class="clean small">
+            <li>
+              <span class="fileref">convex/schema.ts</span> —
+              <code>packs.passageRange</code> (optional; absent = whole
+              chapters; <code>scope</code> still holds the covering chapters).
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-range.ts</span>
+              <span class="tag-new">(new)</span> + test —
+              <code>rangeVerseCount</code>, <code>verseInRange</code>,
+              <code>rangeCoversWholeChapters</code>,
+              <code>formatPassageRange</code>, <code>trimChapterVerses</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-eligibility.ts</span> (+
+              test) — <code>rangeAllowsPassageMode(range)</code>.
+            </li>
+            <li>
+              <span class="fileref">src/hooks/use-start-passage.ts</span> — trim
+              first/last chapter verses when <code>passageRange</code> is set;
+              if <code>buildPassagePieces</code> yields one piece, fall back to
+              verse mode (<code>verseMemory.memorize</code>) and report it.
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-sections.ts</span> (+ test)
+              — chapter label only when a section covers verse 1 through the
+              chapter's last verse; a short cross-chapter edge segment may join
+              its neighbor; whole-chapter output unchanged (snapshot).
+            </li>
+            <li>
+              <span class="fileref">src/lib/passage-start.ts</span>,
+              <span class="fileref">convex/passageMemory.ts</span> — accept
+              packs with <code>passageRange</code>; assert pieces lie inside and
+              exactly cover the range in order; passage hearts per chapter use
+              the trimmed span; absorb uses <code>verseInRange</code>.
+            </li>
+            <li>
+              <span class="fileref">convex/lib/packs.ts</span>,
+              <span class="fileref">convex/packs.ts</span>,
+              <span class="fileref">src/lib/scope-equality.ts</span> (+ test) —
+              members filtered by <code>verseInRange</code>;
+              <code>create</code> idempotency includes
+              <code>passageRange</code>; new arg on <code>packs.create</code>.
+            </li>
+            <li>
+              <span class="fileref">src/lib/memorize-target.ts</span> (+ test) —
+              final rules from Decisions; overlap: a range inside an active
+              passage → partOf; a partial range inside an active whole-chapter
+              passage → "You're memorizing {title}".
+            </li>
+            <li>
+              <span class="fileref">shared/memory-presets.ts</span> (+
+              <span class="fileref">src/lib/memory-presets.test.ts</span>) —
+              optional <code>startVerse</code>/<code>endVerse</code> on chapter
+              presets; add The Lord's Prayer (Matthew 6:9–13), The Christ Hymn
+              (Philippians 2:5–11), More than conquerors (Romans 8:28–39);
+              <code>assertPresetCatalogValid</code> updated.
+            </li>
+          </ul>
+          <h4>Implementation steps</h4>
+          <ul class="clean small">
+            <li>Follow epic #TBD-10 "Proposed design" items 1–10.</li>
+            <li>
+              Validate pieces against fetched verses, not static counts (ESV
+              omits some verses).
+            </li>
+          </ul>
+          <h4>Acceptance criteria</h4>
+          <ul class="acc small">
+            <li>
+              <code>pnpm run codegen</code>, <code>pnpm run agent:check</code>,
+              and <code>pnpm test</code> pass.
+            </li>
+            <li>
+              Unit tests: Phil 2:1–11 ✓, Matt 6:9–13 ✓, Rom 8:28–39 ✓, Rom
+              7:24–8:2 ✓, John 3:16 ✗, Psalm 117 ✗ (verse card), a 4-verse
+              single-piece range ✗; trimmed pieces exactly cover the range;
+              section labels "Philippians 2:1–11"; idempotency treats Phil
+              2:1–11 and 2:12–18 as different packs.
+            </li>
+            <li>
+              Existing whole-chapter pieces and sections are unchanged
+              (snapshot).
+            </li>
+            <li class="manual">
+              Typing "Philippians 2:1-11" on Today → Memorize starts a passage
+              whose first session introduces 2:1; hearts in 2:12–30 are not
+              members.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <hr class="rule" />
+
+      <!-- ============ RISKS ============ -->
+      <section id="risks">
+        <div class="eyebrow">Eyes open</div>
+        <h2>Risks &amp; how the plan answers them</h2>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%">Risk</th>
+                <th>Mitigation (baked into the PR sequence)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Memory looks empty right after deploy (migration not run)
+                </td>
+                <td>
+                  Lazy per-user <code>ensureInMemoryBackfill</code> on app mount
+                  plus an internal global migration and invariant check (PRs 2,
+                  3).
+                </td>
+              </tr>
+              <tr>
+                <td>Missed <code>isHearted</code> reader keeps old behavior</td>
+                <td>
+                  PR 3 acceptance greps for hearted indexes; invariant query (PR
+                  2).
+                </td>
+              </tr>
+              <tr>
+                <td>Verses due twice (passage + verse item)</td>
+                <td>Absorb on passage start (PR 3; range-aware in PR 18).</td>
+              </tr>
+              <tr>
+                <td>Big packs flood Today</td>
+                <td>Pack pacing with a per-pack cap (PRs 1, 4).</td>
+              </tr>
+              <tr>
+                <td>Unheart breaks the "memorizing implies heart" rule</td>
+                <td>
+                  Server enforces I1 on every unheart (PR 3); UI confirm (PR 8).
+                </td>
+              </tr>
+              <tr>
+                <td>Open redirect through <code>return</code></td>
+                <td>
+                  <code>parseMemoryReturn</code> allowlist with tests (PR 11).
+                </td>
+              </tr>
+              <tr>
+                <td>Drawer + page duplication drifts</td>
+                <td>
+                  One body component per entity and a single host; the owner may
+                  iterate on the split (PRs 11, 12).
+                </td>
+              </tr>
+              <tr>
+                <td>Reader regressions (selection, notes, Focus mode)</td>
+                <td>
+                  Bar/nudge hidden in Focus and tours; existing reader tests
+                  must pass; reader work split across PRs 8 and 9.
+                </td>
+              </tr>
+              <tr>
+                <td>Section-label regressions for existing passages</td>
+                <td>Snapshot test for whole-chapter output (PR 18).</td>
+              </tr>
+              <tr>
+                <td>"Extra practice" promises no schedule change</td>
+                <td>Copy says what is true (Decisions; PR 1, 14).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        Berean · Memory redesign implementation plan · grounded in the current
+        codebase (main @ be9c3a0).
+      </footer>
+    </div>
+  </body>
+</html>

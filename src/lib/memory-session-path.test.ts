@@ -1,9 +1,50 @@
 import { describe, expect, it } from "vitest";
 
-import { isMemorySessionPath } from "./memory-session-path";
+import {
+  isMemorySessionPath,
+  memoryPackSessionHref,
+  memoryTodaySessionHref,
+  memoryVerseSessionHref,
+} from "./memory-session-path";
+
+describe("session hrefs", () => {
+  it("builds one-verse session hrefs", () => {
+    expect(
+      memoryVerseSessionHref("review", {
+        book: "1 Samuel",
+        chapter: 12,
+        startVerse: 23,
+        endVerse: 24,
+      }),
+    ).toBe("/memory/review?book=1+Samuel&chapter=12&startVerse=23&endVerse=24");
+  });
+
+  it("builds pack session hrefs that read as session paths", () => {
+    const href = memoryPackSessionHref("learn", "k57abc");
+    expect(href).toBe("/memory/k57abc/learn");
+    expect(isMemorySessionPath(href)).toBe(true);
+  });
+
+  it("builds the blended Today session href, optionally for one pack", () => {
+    expect(memoryTodaySessionHref()).toBe("/memory/today");
+    expect(memoryTodaySessionHref({ packId: "k57abc" })).toBe(
+      "/memory/today?packId=k57abc",
+    );
+  });
+
+  it("builds Today hrefs for only learning or only reviews", () => {
+    expect(memoryTodaySessionHref({ only: "learning" })).toBe(
+      "/memory/today?only=learning",
+    );
+    expect(memoryTodaySessionHref({ packId: "k57abc", only: "review" })).toBe(
+      "/memory/today?packId=k57abc&only=review",
+    );
+  });
+});
 
 describe("isMemorySessionPath", () => {
-  it("treats global Learn, Practice, and Review as sessions", () => {
+  it("treats Today, global Learn, Practice, and Review as sessions", () => {
+    expect(isMemorySessionPath("/memory/today")).toBe(true);
     expect(isMemorySessionPath("/memory/learn")).toBe(true);
     expect(isMemorySessionPath("/memory/practice")).toBe(true);
     expect(isMemorySessionPath("/memory/review")).toBe(true);

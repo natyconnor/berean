@@ -91,6 +91,7 @@ export interface PassageNotesInteraction {
     isPassage: boolean,
   ) => void;
   handleClickAway: () => void;
+  requestClearSelection: () => void;
   cancelEditor: (key: string) => void;
   openVerseNotes: (verseNumber: number) => void;
   closeVerseNotes: (verseNumber: number) => void;

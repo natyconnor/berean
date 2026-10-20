@@ -16,13 +16,15 @@ import {
   type MemoryStatus,
 } from "../../src/lib/memory-scheduler";
 import { passageLearningDueAt } from "../../src/lib/passage-due";
+import { passageHeartProgress } from "../../src/lib/passage-heart-info";
 import {
   loadOwnedPack,
   passagePiecesAsMembers,
   type PackMember,
 } from "./packs";
+import { needsCelebration } from "./passageCelebration";
 import { deletePassageMemoryDue, upsertPassageMemoryDue } from "./passageDue";
-import type { PassageView } from "./passageValues";
+import type { PassageHeartInfoValue, PassageView } from "./passageValues";
 
 /** Pack card for global Learn / Review. Members are frozen pieces, not hearts. */
 export type DueQueuePassagePackItem = {
@@ -117,6 +119,32 @@ export async function loadPassageForPack(
   const row = await findPassageByPackId(ctx, packId);
   if (!row || row.userId !== userId) return null;
   return row;
+}
+
+/**
+ * The reader's view of a passage from its heart row in `book` `chapter`: its
+ * pack name and progress. `null` when the pack is gone or not the user's, or
+ * no piece is in that chapter.
+ */
+export async function loadPassageHeartInfo(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  row: Doc<"passageMemory">,
+  book: string,
+  chapter: number,
+): Promise<PassageHeartInfoValue | null> {
+  const pack = await loadOwnedPack(ctx, row.packId, userId);
+  if (!pack) return null;
+  const progress = passageHeartProgress(row.pieces, book, chapter);
+  if (!progress) return null;
+  return {
+    passageMemoryId: row._id,
+    packId: pack._id,
+    title: pack.name,
+    status: row.status,
+    dueAt: row.dueAt,
+    ...progress,
+  };
 }
 
 export async function findPassageByPackId(
@@ -218,8 +246,8 @@ export async function insertPassageMemory(
     stageReps: args.plan.schedule.stageReps,
     earlyReviewApplied: args.plan.schedule.earlyReviewApplied,
     migratedAt: args.now,
-    unheartedCount: args.plan.unheartedCount,
-    keptHeartCount: args.plan.keptHeartCount,
+    unheartedCount: 0,
+    keptHeartCount: 0,
     createdAt: args.now,
     updatedAt: args.now,
   });
@@ -243,6 +271,26 @@ export async function patchPassageMemory(
   return row;
 }
 
+/**
+ * Record that the "by heart" moment was shown. Idempotent: the first time
+ * stands. Not progress, so `updatedAt` and the due cache are untouched.
+ */
+export async function markPassageCelebrated(
+  ctx: MutationCtx,
+  row: Doc<"passageMemory">,
+  now: number,
+): Promise<void> {
+  if (row.celebratedAt !== undefined) return;
+  await ctx.db.patch(row._id, {
+    celebratedAt: now,
+    celebrationPendingAt: undefined,
+  });
+}
+
+/**
+ * Delete a passage, its reviews, and its due cache. Its passage hearts stay as
+ * plain range hearts (`passageMemoryId` cleared).
+ */
 export async function deletePassageAndReviews(
   ctx: MutationCtx,
   row: Doc<"passageMemory">,
@@ -253,6 +301,15 @@ export async function deletePassageAndReviews(
     .collect();
   for (const review of reviews) {
     await ctx.db.delete(review._id);
+  }
+  const hearts = await ctx.db
+    .query("savedVerses")
+    .withIndex("by_userId_passageMemoryId", (q) =>
+      q.eq("userId", row.userId).eq("passageMemoryId", row._id),
+    )
+    .collect();
+  for (const heart of hearts) {
+    await ctx.db.patch(heart._id, { passageMemoryId: undefined });
   }
   await deletePassageMemoryDue(ctx, row._id);
   await ctx.db.delete(row._id);
@@ -322,6 +379,8 @@ export function toPassageView(
     unheartedCount: row.unheartedCount,
     keptHeartCount: row.keptHeartCount,
     migrationBannerDismissed: row.migrationBannerDismissed,
+    celebratedAt: row.celebratedAt,
+    needsCelebration: needsCelebration(row),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     remainingIntroduces: remainingIntroduces({

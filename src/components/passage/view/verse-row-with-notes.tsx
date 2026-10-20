@@ -32,31 +32,38 @@ import type {
 import { LAYOUT_CORRECTION_TRANSITION } from "../note-animation-config";
 import { passageColumnsClass } from "../passage-columns";
 import { Heart } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { formatSpanTitle } from "@/lib/memorize-target";
 import type { PassageHeartControl } from "../verse-row";
+import { UnheartMemorizingDialog } from "../unheart-memorizing-dialog";
+import { PassageRailGutter, type PassageRailMark } from "../passage-heart-rail";
+
+/** A hearted range in the left gutter, level with its first verse. */
+export interface SavedPassageAtAnchor {
+  startVerse: number;
+  endVerse: number;
+  /** Unhearting would stop memorizing, so the pill asks the memorizing confirm. */
+  stopsMemorizing?: boolean;
+  /** Set when clicking the pill offers Memorize or Unheart instead of unhearting. */
+  onOfferChoices?: (anchor: HTMLElement) => void;
+}
 
 const SavedPassagePill = memo(function SavedPassagePill({
   startVerse,
   endVerse,
+  stopsMemorizing = false,
+  onOfferChoices,
+  reference,
   onHoverEnter,
   onHoverLeave,
   onToggleSavedPassage,
-}: {
-  startVerse: number;
-  endVerse: number;
+}: SavedPassageAtAnchor & {
+  reference: string;
   onHoverEnter: (startVerse: number, endVerse: number) => void;
   onHoverLeave: () => void;
   onToggleSavedPassage: (startVerse: number, endVerse: number) => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const offerChoices = stopsMemorizing ? undefined : onOfferChoices;
 
   return (
     <>
@@ -71,9 +78,13 @@ const SavedPassagePill = memo(function SavedPassagePill({
         onMouseLeave={onHoverLeave}
         onClick={(e) => {
           e.stopPropagation();
-          setConfirmOpen(true);
+          if (stopsMemorizing) setConfirmOpen(true);
+          else if (offerChoices) offerChoices(e.currentTarget);
+          else onToggleSavedPassage(startVerse, endVerse);
         }}
-        aria-label={`Hearted passage: verses ${startVerse}–${endVerse}. Click to remove.`}
+        aria-label={`Hearted passage: verses ${startVerse}–${endVerse}. ${
+          offerChoices ? "Memorize or unheart" : "Click to remove."
+        }`}
       >
         <span
           aria-hidden
@@ -86,36 +97,14 @@ const SavedPassagePill = memo(function SavedPassagePill({
           </span>
         </span>
       </button>
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Remove this passage?</DialogTitle>
-            <DialogDescription>
-              This will remove verses {startVerse}–{endVerse} from your hearted
-              list. You can heart the passage again anytime from the reader.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                onToggleSavedPassage(startVerse, endVerse);
-                setConfirmOpen(false);
-              }}
-            >
-              Unheart passage
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {stopsMemorizing ? (
+        <UnheartMemorizingDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onConfirm={() => onToggleSavedPassage(startVerse, endVerse)}
+          reference={reference}
+        />
+      ) : null}
     </>
   );
 });
@@ -215,13 +204,12 @@ export interface VerseRowWithNotesProps {
   rowTourId?: string;
   passageHeart?: PassageHeartControl | null;
   isInHoveredSavedPassage?: boolean;
-  savedPassagesAtAnchor?: Array<{
-    startVerse: number;
-    endVerse: number;
-  }>;
+  savedPassagesAtAnchor?: SavedPassageAtAnchor[];
   onSavedPassageHoverEnter?: (startVerse: number, endVerse: number) => void;
   onSavedPassageHoverLeave?: () => void;
   onToggleSavedPassage?: (startVerse: number, endVerse: number) => void;
+  /** This verse's part of a memorized passage's heart and rail. */
+  passageRail?: PassageRailMark | null;
 }
 
 export const VerseRowWithNotes = memo(function VerseRowWithNotes({
@@ -278,6 +266,7 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
   onSavedPassageHoverEnter,
   onSavedPassageHoverLeave,
   onToggleSavedPassage,
+  passageRail = null,
   onRetargetNewDraft,
   onRetargetEditNote,
   retargetingEditorKey = null,
@@ -451,17 +440,30 @@ export const VerseRowWithNotes = memo(function VerseRowWithNotes({
         )}
         style={focusDimStyle}
       >
+        {passageRail ? <PassageRailGutter mark={passageRail} /> : null}
         {savedPassagesAtAnchor &&
           savedPassagesAtAnchor.length > 0 &&
           onSavedPassageHoverEnter &&
           onSavedPassageHoverLeave &&
           onToggleSavedPassage && (
-            <div className="pointer-events-auto absolute top-1/2 right-full z-20 mr-2 flex -translate-y-1/2 flex-col items-end gap-1">
+            <div
+              className={cn(
+                "pointer-events-auto absolute right-full z-20 mr-2 flex flex-col items-end gap-1",
+                passageRail?.heart ? "top-[42px]" : "top-1/2 -translate-y-1/2",
+              )}
+            >
               {savedPassagesAtAnchor.map((span) => (
                 <SavedPassagePill
                   key={`${span.startVerse}-${span.endVerse}`}
                   startVerse={span.startVerse}
                   endVerse={span.endVerse}
+                  stopsMemorizing={span.stopsMemorizing}
+                  onOfferChoices={span.onOfferChoices}
+                  reference={
+                    currentChapter
+                      ? formatSpanTitle({ ...currentChapter, ...span })
+                      : `verses ${span.startVerse}–${span.endVerse}`
+                  }
                   onHoverEnter={onSavedPassageHoverEnter}
                   onHoverLeave={onSavedPassageHoverLeave}
                   onToggleSavedPassage={onToggleSavedPassage}

@@ -40,7 +40,10 @@ function piece(
 
 function session(
   pieces: readonly PassagePiece[],
-  extra?: Partial<PassageSessionState>,
+  extra?: Partial<PassageSessionState> & {
+    lastSessionAt?: number;
+    resume?: boolean;
+  },
 ): PassageSessionState {
   const addsOnDay = extra?.addsOnDay ?? 0;
   const addDayKey = extra?.addDayKey;
@@ -60,6 +63,7 @@ function session(
             ? PASSAGE_MAX_ADDS_PER_DAY - addsOnDay
             : remaining,
         now,
+        resume: extra?.resume,
       }),
     pieces,
     addsOnDay,
@@ -498,6 +502,42 @@ describe("reducePassageSession", () => {
       }),
       piece(2, "unreached"),
     ]);
+    expect(start.phase).toBe("rope");
+  });
+
+  it("resumes the due verse after a reload mid-step", () => {
+    const start = session(
+      [
+        piece(0, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(1, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(2, "learning", { learnStage: 1, dueAt: NOW }),
+      ],
+      { resume: true },
+    );
+    expect(start.phase).toBe("frontier");
+  });
+
+  it("opens with a warm-up when reopening a passage practiced earlier today", () => {
+    const start = session(
+      [
+        piece(0, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(1, "attached", {
+          learnStage: 2,
+          dueAt: NOW + DAY_MS,
+        }),
+        piece(2, "learning", { learnStage: 1, dueAt: NOW }),
+      ],
+      { lastSessionAt: NOW - 60_000 },
+    );
     expect(start.phase).toBe("rope");
   });
 

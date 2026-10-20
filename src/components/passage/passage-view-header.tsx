@@ -1,7 +1,10 @@
 "use client";
 
 import { BookOpen, Crosshair, Pencil } from "lucide-react";
-import { ChapterHeader } from "@/components/bible/chapter-header";
+import {
+  ChapterHeader,
+  type ChapterMemorizeControl,
+} from "@/components/bible/chapter-header";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -52,6 +55,8 @@ interface PassageViewHeaderProps {
   /** Floating chapter panel is open (header button toggles closed). */
   chapterNotesOpen?: boolean;
   onChapterNotesClick?: () => void;
+  /** Chapter Memorize button; hidden in Focus mode. */
+  memorize?: ChapterMemorizeControl | null;
 }
 
 export function PassageViewHeader({
@@ -75,6 +80,7 @@ export function PassageViewHeader({
   chapterScopedNoteCount = 0,
   chapterNotesOpen = false,
   onChapterNotesClick,
+  memorize = null,
 }: PassageViewHeaderProps) {
   const stagedOnboarding = useOptionalStagedOnboarding();
   const milestones = stagedOnboarding?.milestones;
@@ -122,6 +128,7 @@ export function PassageViewHeader({
             chapterScopedNoteCount={chapterScopedNoteCount}
             chapterNotesOpen={chapterNotesOpen}
             onChapterNotesClick={onChapterNotesClick}
+            memorize={isFocusMode && !isReadMode ? null : memorize}
           />
         </div>
         <div className="min-w-0 pb-3 pt-1">

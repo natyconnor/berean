@@ -4,11 +4,29 @@ import type { PassagePiece } from "@/lib/passage-pieces";
 
 import {
   computeStallCue,
+  CONNECT_TITLE,
+  connectPairTitle,
+  PASSAGE_SESSION_PHASE_LABELS,
   pickUpCue,
   repairWindowShowsStageHints,
   stallRepairCue,
 } from "./passage-session-model";
 import type { PassageSessionState } from "@/lib/passage-session";
+
+describe("PASSAGE_SESSION_PHASE_LABELS", () => {
+  it("names passage phases without reusing Practice", () => {
+    expect(PASSAGE_SESSION_PHASE_LABELS["stall-repair"]).toBe(
+      "Fix a tricky spot",
+    );
+    expect(PASSAGE_SESSION_PHASE_LABELS.connect).toBe("Join verses");
+    expect(PASSAGE_SESSION_PHASE_LABELS["passage-complete"]).toBe(
+      "Recite it all",
+    );
+    for (const label of Object.values(PASSAGE_SESSION_PHASE_LABELS)) {
+      expect(label).not.toMatch(/practic/i);
+    }
+  });
+});
 
 function piece(
   index: number,
@@ -29,6 +47,47 @@ function piece(
     ...overrides,
   };
 }
+
+describe("connectPairTitle", () => {
+  const ref = (
+    chapter: number,
+    startVerse: number,
+    endVerse = startVerse,
+    book = "Psalms",
+  ) => ({ book, chapter, startVerse, endVerse });
+
+  it("names verse numbers only within one chapter", () => {
+    expect(connectPairTitle([ref(3, 1, 3), ref(3, 4, 5)])).toBe(
+      "Connect verses 1–3 to 4–5",
+    );
+    expect(connectPairTitle([ref(3, 3), ref(3, 4)])).toBe(
+      "Connect verse 3 to 4",
+    );
+    expect(connectPairTitle([ref(3, 3), ref(3, 4, 6)])).toBe(
+      "Connect verses 3 to 4–6",
+    );
+  });
+
+  it("names the chapters when the pair crosses one", () => {
+    expect(
+      connectPairTitle([ref(7, 24, 25, "Romans"), ref(8, 1, 2, "Romans")]),
+    ).toBe("Connect 7:24–25 to 8:1–2");
+    expect(
+      connectPairTitle([ref(7, 25, 25, "Romans"), ref(8, 1, 1, "Romans")]),
+    ).toBe("Connect 7:25 to 8:1");
+  });
+
+  it("names the books when the pair crosses one", () => {
+    expect(connectPairTitle([ref(150, 6, 6), ref(1, 1, 2, "Proverbs")])).toBe(
+      "Connect Psalm 150:6 to Proverbs 1:1–2",
+    );
+  });
+
+  it("falls back to a plain title without a pair", () => {
+    expect(connectPairTitle([])).toBe(CONNECT_TITLE);
+    expect(connectPairTitle([ref(3, 1)])).toBe(CONNECT_TITLE);
+  });
+});
 
 describe("stallRepairCue", () => {
   it("includes first-letter recovery when the main panel has no stage hints", () => {

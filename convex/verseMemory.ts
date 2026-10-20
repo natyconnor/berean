@@ -5,21 +5,38 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
   findVerseMemory,
-  getOrCreateVerseMemory,
-  isLiveHeartedMemory,
+  isInMemory,
   adjustUserMemoryStats,
   findSavedVerse,
+  requireInMemory,
 } from "./lib/verseMemory";
 import {
   countDueUnifiedReviewPacks,
   dueUnifiedPackDueAt,
+  loadPackMembershipIndex,
   loadUnifiedReviewPacks,
   loadUnifiedReviewVerseRefIds,
+  loadVersePackLabels,
   unifiedPackForecastDueAt,
   unifiedReviewPhaseVerseRefIds,
   type PackMember,
+  type VersePackLabel,
 } from "./lib/packs";
 import { loadPassageDueRecords } from "./lib/passageDue";
+import { loadPackUpNext } from "./lib/packUpNext";
+import {
+  loadMemorizeStartStatus,
+  loadMemorizeStatusForSpans,
+  memorizeSpan,
+  memorizeStatusReader,
+  stopMemorizingVerse,
+} from "./lib/memorize";
+import { MEMORIZE_STATUS_MAX_TARGETS } from "../src/lib/memorize-status";
+import {
+  backfillInMemoryForUser,
+  hasInMemoryBackfill,
+} from "./lib/inMemoryBackfill";
+import { sortByVerseRef } from "../shared/compare-verse-refs";
 import {
   MAX_REVIEW_ACTIVITY_ROWS,
   ensureReviewActivityDays as backfillReviewActivityDaysIfNeeded,
@@ -123,6 +140,7 @@ const verseMemoryValidator = v.object({
   lapses: v.number(),
   earlyReviewApplied: v.optional(v.boolean()),
   isHearted: v.optional(v.boolean()),
+  inMemory: v.optional(v.boolean()),
   lastReviewedAt: v.optional(v.number()),
   createdAt: v.number(),
 });
@@ -252,6 +270,7 @@ function toRowView(row: Doc<"verseMemory">) {
     lapses: row.lapses,
     earlyReviewApplied: row.earlyReviewApplied,
     isHearted: row.isHearted,
+    inMemory: row.inMemory,
     lastReviewedAt: row.lastReviewedAt,
     createdAt: row.createdAt,
   };
@@ -262,9 +281,9 @@ function toRowView(row: Doc<"verseMemory">) {
  *
  * Only `reviewing` / `mastered` verses with `dueAt <= now` qualify — learning-
  * phase verses are practiced from the verse detail / learn flow, not the review
- * queue. Heart-aware: only rows denormalized as currently hearted are returned.
- * A verse un-hearted after review keeps its `verseMemory` row as durable
- * history, but drops out of the live due queue until re-hearted.
+ * queue. Only in-Memory rows are returned. A verse that stops memorizing keeps
+ * its `verseMemory` row as durable history, but drops out of the live due
+ * queue until it is memorized again.
  * `now` is passed in by the caller so the query stays deterministic/cacheable.
  *
  * Unified packs are one card: their review-phase members are skipped as verse
@@ -274,9 +293,10 @@ function toRowView(row: Doc<"verseMemory">) {
  *
  * Reviewing/mastered `passageMemory` rows are also one pack card, with
  * `members` from frozen pieces. Building passages are not review-due.
- * Leftover hearts in a passage pack stay in this verse scan — they are not
- * added to `unifiedReviewPhaseVerseRefIds` (the unified flag is cleared on
- * start, and packs with a passage row are excluded from that set).
+ * In-Memory verses a passage did not absorb (they are in a custom pack) stay
+ * in this verse scan — they are not added to `unifiedReviewPhaseVerseRefIds`
+ * (the unified flag is cleared on start, and packs with a passage row are
+ * excluded from that set).
  */
 export const dueQueue = query({
   args: {
@@ -310,8 +330,8 @@ export const dueQueue = query({
 
     const dueRows = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_isHearted_dueAt", (q) =>
-        q.eq("userId", userId).eq("isHearted", true).lte("dueAt", args.now),
+      .withIndex("by_userId_inMemory_dueAt", (q) =>
+        q.eq("userId", userId).eq("inMemory", true).lte("dueAt", args.now),
       )
       .order("asc")
       .take(scanCap);
@@ -357,7 +377,7 @@ export const dueQueue = query({
 });
 
 /**
- * Resolve a single hearted verse for a scoped review session.
+ * Resolve a single in-Memory verse for a scoped review session.
  *
  * Unlike the global due queue, a verse-scoped deep link may start a one-off
  * early review: any live `reviewing` / `mastered` row qualifies, even when
@@ -390,11 +410,8 @@ export const dueForVerse = query({
     });
     if (!verseRefId) return null;
 
-    const saved = await findSavedVerse(ctx, userId, verseRefId);
-    if (!saved) return null;
-
     const memory = await findVerseMemory(ctx, userId, verseRefId);
-    if (!memory || !isLiveHeartedMemory(memory)) return null;
+    if (!memory || !isInMemory(memory)) return null;
     if (!isReviewPhase(memory.status)) return null;
 
     const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(ctx, userId);
@@ -426,10 +443,11 @@ export const dueForVerse = query({
 });
 
 /**
- * Cheap count of verses due *today* — review-phase dues plus in-progress
- * learning verses whose session is available. Hearted `new` verses and
- * soft-locked learning are excluded. Drives the dock badge. Bounded scan —
- * not a full collect. Shares the same `now` snapshot as the dashboard.
+ * Cheap count of verses due *today* — review-phase dues, in-progress learning
+ * verses whose session is available, and pack Up-next verses joining learning
+ * today (`loadPackUpNext`). Other `new` verses and soft-locked learning are
+ * excluded. Drives the dock badge. Bounded scan — not a full collect. Shares
+ * the same `now` snapshot as the dashboard.
  *
  * The due-index upper bound is {@link dueIndexUntil} rather than `now`:
  * in-progress learning can stamp `dueAt` with a live clock while this query
@@ -447,10 +465,10 @@ export const dueCount = query({
 
     const dueRows = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_isHearted_dueAt", (q) =>
+      .withIndex("by_userId_inMemory_dueAt", (q) =>
         q
           .eq("userId", userId)
-          .eq("isHearted", true)
+          .eq("inMemory", true)
           .lte("dueAt", dueIndexUntil(args.now)),
       )
       .order("asc")
@@ -466,8 +484,9 @@ export const dueCount = query({
     );
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
+    const upNext = await loadPackUpNext(ctx, userId);
 
-    let count = 0;
+    let count = upNext.members.length;
     for (const row of dueRows) {
       if (isDueForLearning(row, args.now)) {
         count += 1;
@@ -492,9 +511,10 @@ export const dueCount = query({
 /**
  * Log a graded attempt and reschedule the verse in one atomic mutation.
  *
- * Appends a `verseMemoryReviews` row, loads (or seeds) the `verseMemory` row,
- * applies the pure `scheduleNext`, and patches the row. Returns the new
+ * Appends a `verseMemoryReviews` row, applies the pure `scheduleNext` to the
+ * verse's in-Memory `verseMemory` row, and patches it. Returns the new
  * schedule so callers can reflect the updated `dueAt`/status immediately.
+ * Throws when the verse is not in Memory.
  *
  * Soft-locked learning verses (`dueAt` in the future) do not advance: the
  * mutation returns the current schedule without writing a review or patch.
@@ -523,12 +543,7 @@ export const recordAttempt = mutation({
       throw new Error("Verse reference not found");
     }
 
-    const memory = await getOrCreateVerseMemory(
-      ctx,
-      userId,
-      args.verseRefId,
-      args.now,
-    );
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
 
     if (isReviewPhase(memory.status)) {
       const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(
@@ -597,7 +612,7 @@ export const recordAttempt = mutation({
       timeZone: args.timeZone,
     });
 
-    if (memory.status !== next.status && isLiveHeartedMemory(memory)) {
+    if (memory.status !== next.status) {
       await adjustUserMemoryStats(
         ctx,
         userId,
@@ -645,10 +660,7 @@ export const acceptRetryHold = mutation({
       throw new Error("Verse reference not found");
     }
 
-    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
-    if (!memory) {
-      throw new Error("Verse memory not found");
-    }
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
 
     const current: MemorySchedule = {
       status: memory.status,
@@ -695,7 +707,10 @@ export const acceptRetryHold = mutation({
   },
 });
 
-/** Idempotent upsert of the verse-memory row for a verse the user owns. */
+/**
+ * The verse's memory row, memorizing it first (see `memorizeSpan`) when it is
+ * not in Memory yet. Idempotent for a verse already in Memory.
+ */
 export const getOrCreateForVerse = mutation({
   args: { verseRefId: v.id("verseRefs"), now: v.number() },
   returns: verseMemoryValidator,
@@ -707,13 +722,395 @@ export const getOrCreateForVerse = mutation({
       throw new Error("Verse reference not found");
     }
 
-    const memory = await getOrCreateVerseMemory(
-      ctx,
-      userId,
-      args.verseRefId,
-      args.now,
-    );
+    const existing = await findVerseMemory(ctx, userId, args.verseRefId);
+    if (existing && isInMemory(existing)) return toRowView(existing);
+
+    await memorizeSpan(ctx, userId, ref, args.now, { upNext: false });
+    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
+    if (!memory) throw new Error("Failed to create verse memory row");
     return toRowView(memory);
+  },
+});
+
+const MAX_MEMORIZE_SPANS = 50;
+
+const memorizeSpanValidator = v.object({
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+});
+
+/**
+ * Put spans in Memory on their own: each starts learning, due now, and gets a
+ * heart when no existing heart covers it. A span already in Memory is left as
+ * is, so repeat calls are no-ops. `added` counts spans that were added,
+ * resumed, or promoted from Up next; `verseRefIds` follows the order of
+ * `spans`.
+ */
+export const memorize = mutation({
+  args: {
+    spans: v.array(memorizeSpanValidator),
+    now: v.number(),
+  },
+  returns: v.object({
+    added: v.number(),
+    alreadyMemorizing: v.number(),
+    verseRefIds: v.array(v.id("verseRefs")),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    if (args.spans.length === 0 || args.spans.length > MAX_MEMORIZE_SPANS) {
+      throw new Error(
+        `Memorize between 1 and ${MAX_MEMORIZE_SPANS} verses at a time.`,
+      );
+    }
+
+    let added = 0;
+    let alreadyMemorizing = 0;
+    const verseRefIds: Id<"verseRefs">[] = [];
+    for (const span of args.spans) {
+      const { verseRefId, result } = await memorizeSpan(
+        ctx,
+        userId,
+        span,
+        args.now,
+        { upNext: false },
+      );
+      verseRefIds.push(verseRefId);
+      if (result === "already") {
+        alreadyMemorizing += 1;
+      } else {
+        added += 1;
+      }
+    }
+
+    return { added, alreadyMemorizing, verseRefIds };
+  },
+});
+
+const memorizeDestinationValidator = v.union(
+  v.object({
+    kind: v.literal("verse"),
+    verseRefId: v.id("verseRefs"),
+    span: memorizeSpanValidator,
+  }),
+  v.object({ kind: v.literal("pack"), packId: v.id("packs") }),
+);
+
+const memorizeStatusValidator = v.object({
+  state: v.union(
+    v.literal("none"),
+    v.literal("memorizing"),
+    v.literal("partOf"),
+    v.literal("overlaps"),
+  ),
+  title: v.optional(v.string()),
+  destination: v.optional(memorizeDestinationValidator),
+  allHearted: v.boolean(),
+  progress: v.optional(
+    v.union(
+      v.literal("upNext"),
+      v.literal("notStarted"),
+      v.literal("learning"),
+      v.literal("memorized"),
+      v.literal("mastered"),
+    ),
+  ),
+  upNextPackName: v.optional(v.string()),
+  carriedOver: v.optional(
+    v.array(
+      v.object({
+        book: v.string(),
+        chapter: v.number(),
+        startVerse: v.number(),
+        endVerse: v.number(),
+        memorized: v.boolean(),
+      }),
+    ),
+  ),
+});
+
+/**
+ * Whether the user already memorizes these spans (alone, as a passage, or as a
+ * custom pack) or a passage they memorize contains them, and whether hearts
+ * already cover every span. See `loadMemorizeStatus`; the exact verse also
+ * says where it stands (`progress`, `upNextPackName`). Signed out, or with no
+ * or too many spans, reads as not memorizing and not hearted. A target that
+ * would start fresh also lists the verses inside it whose progress carries
+ * over (`carriedOver`, see `loadMemorizeStartStatus`).
+ */
+export const memorizeStatus = query({
+  args: { spans: v.array(memorizeSpanValidator) },
+  returns: memorizeStatusValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return { state: "none" as const, allHearted: false };
+    return await loadMemorizeStartStatus(ctx, userId, args.spans);
+  },
+});
+
+/**
+ * {@link memorizeStatus} for up to `MEMORIZE_STATUS_MAX_TARGETS` targets at
+ * once, in order, sharing hearts and passage reads across them.
+ */
+export const memorizeStatuses = query({
+  args: {
+    targets: v.array(v.object({ spans: v.array(memorizeSpanValidator) })),
+  },
+  returns: v.array(memorizeStatusValidator),
+  handler: async (ctx, args) => {
+    if (args.targets.length > MEMORIZE_STATUS_MAX_TARGETS) {
+      throw new Error(
+        `Check at most ${MEMORIZE_STATUS_MAX_TARGETS} targets at once`,
+      );
+    }
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return args.targets.map(() => ({
+        state: "none" as const,
+        allHearted: false,
+      }));
+    }
+    const reader = memorizeStatusReader(ctx, userId);
+    const statuses = [];
+    for (const target of args.targets) {
+      statuses.push(
+        await loadMemorizeStatusForSpans(ctx, userId, target.spans, reader),
+      );
+    }
+    return statuses;
+  },
+});
+
+/**
+ * Take a verse out of Memory. The heart, schedule, and review history stay,
+ * so memorizing it again resumes where it left off.
+ */
+export const stopMemorizing = mutation({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+
+    await stopMemorizingVerse(ctx, userId, args.verseRefId, args.now);
+    return null;
+  },
+});
+
+/** A verse in Memory with its schedule and the packs that list it. */
+const inMemoryVerseItemValidator = v.object({
+  verseRefId: v.id("verseRefs"),
+  book: v.string(),
+  chapter: v.number(),
+  startVerse: v.number(),
+  endVerse: v.number(),
+  memory: v.object({
+    status: statusValidator,
+    learnStage: v.number(),
+    stageReps: v.optional(v.number()),
+    ease: v.number(),
+    intervalDays: v.number(),
+    dueAt: v.number(),
+    consecutiveCorrect: v.number(),
+    lapses: v.number(),
+    earlyReviewApplied: v.optional(v.boolean()),
+    lastReviewedAt: v.optional(v.number()),
+  }),
+  packIds: v.array(v.id("packs")),
+});
+
+function toInMemoryVerseItem(
+  memory: Pick<
+    Doc<"verseMemory">,
+    | "verseRefId"
+    | "status"
+    | "learnStage"
+    | "stageReps"
+    | "ease"
+    | "intervalDays"
+    | "dueAt"
+    | "consecutiveCorrect"
+    | "lapses"
+    | "earlyReviewApplied"
+    | "lastReviewedAt"
+  >,
+  ref: Pick<Doc<"verseRefs">, "book" | "chapter" | "startVerse" | "endVerse">,
+  packIds: Id<"packs">[],
+) {
+  return {
+    verseRefId: memory.verseRefId,
+    book: ref.book,
+    chapter: ref.chapter,
+    startVerse: ref.startVerse,
+    endVerse: ref.endVerse,
+    memory: {
+      status: memory.status,
+      learnStage: memory.learnStage,
+      stageReps: memory.stageReps,
+      ease: memory.ease,
+      intervalDays: memory.intervalDays,
+      dueAt: memory.dueAt,
+      consecutiveCorrect: memory.consecutiveCorrect,
+      lapses: memory.lapses,
+      earlyReviewApplied: memory.earlyReviewApplied,
+      lastReviewedAt: memory.lastReviewedAt,
+    },
+    packIds,
+  };
+}
+
+/**
+ * Every verse the user is memorizing, in Bible order. Session pages snapshot
+ * this (a `verseMemory` patch re-runs it), so do not subscribe to it live
+ * while recording attempts.
+ */
+export const listInMemory = query({
+  args: {},
+  returns: v.array(inMemoryVerseItemValidator),
+  handler: async (ctx) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+
+    const [memories, packIndex] = await Promise.all([
+      ctx.db
+        .query("verseMemory")
+        .withIndex("by_userId_inMemory", (q) =>
+          q.eq("userId", userId).eq("inMemory", true),
+        )
+        .collect(),
+      loadPackMembershipIndex(ctx, userId),
+    ]);
+
+    const items = await Promise.all(
+      memories.map(async (memory) => {
+        const ref = await ctx.db.get(memory.verseRefId);
+        if (!ref || ref.userId !== userId) return null;
+        return toInMemoryVerseItem(
+          memory,
+          ref,
+          packIndex.packIdsFor(memory.verseRefId),
+        );
+      }),
+    );
+    return sortByVerseRef(
+      items.filter(
+        (item): item is ReturnType<typeof toInMemoryVerseItem> => item !== null,
+      ),
+    );
+  },
+});
+
+/** Bound on the in-progress `learning` rows one learn queue reads. */
+const MAX_LEARN_QUEUE_LEARNING_ROWS = 500;
+
+/**
+ * Today's verse learning: unlocked `learning` rows, then the pack Up-next
+ * verses that join learning now (`loadPackUpNext`). Each group is in Bible
+ * order. Up-next items keep status `new`; their first attempt moves them to
+ * `learning`. Session pages snapshot this like {@link listInMemory}.
+ */
+export const learnQueue = query({
+  args: { now: v.number(), tzOffsetMinutes: v.optional(v.number()) },
+  returns: v.array(inMemoryVerseItemValidator),
+  handler: async (ctx, args) => {
+    // Cache-key parity with `passageMemory.dueForLearning`; verse learning
+    // availability does not depend on the local day.
+    void args.tzOffsetMinutes;
+
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+
+    const [learningRows, upNext, packIndex] = await Promise.all([
+      ctx.db
+        .query("verseMemory")
+        .withIndex("by_userId_inMemory_status", (q) =>
+          q.eq("userId", userId).eq("inMemory", true).eq("status", "learning"),
+        )
+        .take(MAX_LEARN_QUEUE_LEARNING_ROWS),
+      loadPackUpNext(ctx, userId),
+      loadPackMembershipIndex(ctx, userId),
+    ]);
+
+    const learning = await Promise.all(
+      learningRows
+        .filter((row) => isDueForLearning(row, args.now))
+        .map(async (row) => {
+          const ref = await ctx.db.get(row.verseRefId);
+          if (!ref || ref.userId !== userId) return null;
+          return toInMemoryVerseItem(
+            row,
+            ref,
+            packIndex.packIdsFor(row.verseRefId),
+          );
+        }),
+    );
+    const upNextItems = upNext.members.map((member) =>
+      toInMemoryVerseItem(
+        member,
+        member,
+        packIndex.packIdsFor(member.verseRefId),
+      ),
+    );
+
+    return [
+      ...sortByVerseRef(
+        learning.filter(
+          (item): item is ReturnType<typeof toInMemoryVerseItem> =>
+            item !== null,
+        ),
+      ),
+      ...sortByVerseRef(upNextItems),
+    ];
+  },
+});
+
+/** One in-Memory verse for a verse-scoped Learn / Practice URL, or `null`. */
+export const getInMemory = query({
+  args: {
+    book: v.string(),
+    chapter: v.number(),
+    startVerse: v.number(),
+    endVerse: v.number(),
+  },
+  returns: v.union(inMemoryVerseItemValidator, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return null;
+
+    const verseRefId = await findVerseRefId(ctx, userId, args);
+    if (!verseRefId) return null;
+
+    const memory = await findVerseMemory(ctx, userId, verseRefId);
+    if (!memory || !isInMemory(memory)) return null;
+
+    const ref = await ctx.db.get(verseRefId);
+    if (!ref || ref.userId !== userId) return null;
+
+    const packIndex = await loadPackMembershipIndex(ctx, userId, verseRefId);
+    return toInMemoryVerseItem(memory, ref, packIndex.packIdsFor(verseRefId));
+  },
+});
+
+/**
+ * Derive `inMemory` for the signed-in user's existing memory rows (see
+ * `backfillInMemoryForUser`). The app calls this once per session; it is a
+ * no-op once `userMemoryStats.inMemoryBackfilledAt` is set.
+ */
+export const ensureInMemoryBackfill = mutation({
+  args: { now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (await hasInMemoryBackfill(ctx, userId)) return null;
+    await backfillInMemoryForUser(ctx, userId, args.now);
+    return null;
   },
 });
 
@@ -744,9 +1141,9 @@ const EMPTY_MEMORY_STATUS = {
 };
 
 /**
- * Hearted-verse status totals from `userMemoryStats` (O(1)). Pre-backfill
- * fallback counts hearted `verseMemory` rows once. Does not scan dues, packs,
- * or `passageMemory`.
+ * In-Memory status totals from `userMemoryStats` (O(1)). Pre-backfill
+ * fallback counts in-Memory `verseMemory` rows once. Does not scan dues,
+ * packs, or `passageMemory`.
  */
 async function loadMemoryStatus(
   ctx: QueryCtx,
@@ -773,11 +1170,11 @@ async function loadMemoryStatus(
     };
   }
 
-  // Pre-backfill fallback: count from hearted rows once.
+  // Pre-backfill fallback: count from in-Memory rows once.
   const rows = await ctx.db
     .query("verseMemory")
-    .withIndex("by_userId_isHearted", (q) =>
-      q.eq("userId", userId).eq("isHearted", true),
+    .withIndex("by_userId_inMemory", (q) =>
+      q.eq("userId", userId).eq("inMemory", true),
     )
     .take(MAX_DUE_SCAN);
   const stats = { ...EMPTY_MEMORY_STATUS };
@@ -789,7 +1186,7 @@ async function loadMemoryStatus(
 }
 
 /**
- * Per-status hearted-verse totals for Mastery, Practice All, and seed
+ * Per-status in-Memory verse totals for Mastery, Practice All, and seed
  * `heartedTotal`. O(1) from `userMemoryStats` — does not load due scans,
  * unified packs, or passage rows.
  */
@@ -810,7 +1207,8 @@ export const memoryStatus = query({
  * - `due` — review-phase verses (`reviewing` / `mastered` with `dueAt <= now`)
  *   plus due reviewing/mastered passage packs (1 each)
  * - `learningDue` — in-progress `learning` verses available for today's
- *   session (excludes hearted-but-not-started `new` verses), plus building
+ *   session, plus pack Up-next verses joining learning today
+ *   (`loadPackUpNext`), plus building
  *   passage packs with a learning session today (1 each). Soft-locked
  *   frontier with no remaining introduces does not inflate this count (rope
  *   practice stays available from the pack). Same {@link dueIndexUntil} bound
@@ -836,10 +1234,10 @@ export const memoryStats = query({
 
     const dueRows = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_isHearted_dueAt", (q) =>
+      .withIndex("by_userId_inMemory_dueAt", (q) =>
         q
           .eq("userId", userId)
-          .eq("isHearted", true)
+          .eq("inMemory", true)
           .lte("dueAt", dueIndexUntil(args.now)),
       )
       .order("asc")
@@ -855,9 +1253,10 @@ export const memoryStats = query({
     );
     const unifiedReviewVerseRefIds =
       unifiedReviewPhaseVerseRefIds(unifiedPacks);
+    const upNext = await loadPackUpNext(ctx, userId);
 
     let due = 0;
-    let learningDue = 0;
+    let learningDue = upNext.members.length;
     for (const row of dueRows) {
       if (isDueForReview(row, args.now)) {
         if (!unifiedReviewVerseRefIds.has(row.verseRefId)) due += 1;
@@ -985,9 +1384,8 @@ export const ensureReviewActivityDays = mutation({
  * Count of review-phase verses due per upcoming day over the next `days`
  * (default 30). Learning-phase verses are excluded.
  *
- * Overdue verses are folded into today (day 0). Heart-aware: reads only rows
- * denormalized as currently hearted. Day buckets use the viewer's IANA
- * `timeZone`.
+ * Overdue verses are folded into today (day 0). Reads only in-Memory rows.
+ * Day buckets use the viewer's IANA `timeZone`.
  */
 export const reviewForecast = query({
   args: {
@@ -1014,8 +1412,8 @@ export const reviewForecast = query({
     );
     const rows = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_isHearted_dueAt", (q) =>
-        q.eq("userId", userId).eq("isHearted", true).lt("dueAt", windowEnd),
+      .withIndex("by_userId_inMemory_dueAt", (q) =>
+        q.eq("userId", userId).eq("inMemory", true).lt("dueAt", windowEnd),
       )
       .take(MAX_DUE_SCAN);
 
@@ -1056,15 +1454,21 @@ export const reviewForecast = query({
 
 const libraryViewValidator = v.union(
   v.literal("due"),
-  v.literal("inMemory"),
-  v.literal("notStarted"),
+  v.literal("learning"),
+  v.literal("memorized"),
+  v.literal("mastered"),
+  v.literal("all"),
 );
 
-/** One hearted verse: its live memory schedule joined to its reference. */
+/**
+ * One in-Memory verse: its live memory schedule joined to its reference.
+ * `savedVerseId` / `heartedAt` are present when the verse has its own exact
+ * heart (a wider or passage heart may cover it instead).
+ */
 const libraryItemValidator = v.object({
   verseMemoryId: v.id("verseMemory"),
   verseRefId: v.id("verseRefs"),
-  savedVerseId: v.id("savedVerses"),
+  savedVerseId: v.optional(v.id("savedVerses")),
   book: v.string(),
   chapter: v.number(),
   startVerse: v.number(),
@@ -1076,13 +1480,20 @@ const libraryItemValidator = v.object({
   dueAt: v.number(),
   lapses: v.number(),
   lastReviewedAt: v.optional(v.number()),
-  heartedAt: v.number(),
+  heartedAt: v.optional(v.number()),
+  packs: v.array(
+    v.object({
+      packId: v.id("packs"),
+      name: v.string(),
+      kind: v.union(v.literal("pack"), v.literal("passage")),
+    }),
+  ),
 });
 
 type LibraryItem = {
   verseMemoryId: Id<"verseMemory">;
   verseRefId: Id<"verseRefs">;
-  savedVerseId: Id<"savedVerses">;
+  savedVerseId?: Id<"savedVerses">;
   book: string;
   chapter: number;
   startVerse: number;
@@ -1094,18 +1505,20 @@ type LibraryItem = {
   dueAt: number;
   lapses: number;
   lastReviewedAt?: number;
-  heartedAt: number;
+  heartedAt?: number;
+  packs: VersePackLabel[];
 };
 
 function toLibraryItem(
   memory: Doc<"verseMemory">,
   ref: Doc<"verseRefs">,
-  saved: Doc<"savedVerses">,
+  saved: Doc<"savedVerses"> | null,
+  packs: VersePackLabel[],
 ): LibraryItem {
   return {
     verseMemoryId: memory._id,
     verseRefId: memory.verseRefId,
-    savedVerseId: saved._id,
+    savedVerseId: saved?._id,
     book: ref.book,
     chapter: ref.chapter,
     startVerse: ref.startVerse,
@@ -1117,8 +1530,30 @@ function toLibraryItem(
     dueAt: memory.dueAt,
     lapses: memory.lapses,
     lastReviewedAt: memory.lastReviewedAt,
-    heartedAt: saved.createdAt,
+    heartedAt: saved?.createdAt,
+    packs,
   };
+}
+
+async function toLibraryItems(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  memories: readonly Doc<"verseMemory">[],
+  keep: (memory: Doc<"verseMemory">) => boolean,
+): Promise<LibraryItem[]> {
+  const kept = memories.filter((memory) => isInMemory(memory) && keep(memory));
+  if (kept.length === 0) return [];
+  const packsFor = await loadVersePackLabels(ctx, userId);
+  const items: LibraryItem[] = [];
+  for (const memory of kept) {
+    const ref = await ctx.db.get(memory.verseRefId);
+    if (!ref || ref.userId !== userId) continue;
+    const saved = await findSavedVerse(ctx, userId, memory.verseRefId);
+    items.push(
+      toLibraryItem(memory, ref, saved, packsFor(memory.verseRefId, ref)),
+    );
+  }
+  return items;
 }
 
 async function toLibraryPage(
@@ -1127,23 +1562,14 @@ async function toLibraryPage(
   paginated: PaginationResult<Doc<"verseMemory">>,
   keep: (memory: Doc<"verseMemory">) => boolean,
 ): Promise<PaginationResult<LibraryItem>> {
-  const page: LibraryItem[] = [];
-  for (const memory of paginated.page) {
-    if (!isLiveHeartedMemory(memory)) continue;
-    if (!keep(memory)) continue;
-    const saved = await ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId_verseRefId", (q) =>
-        q.eq("userId", userId).eq("verseRefId", memory.verseRefId),
-      )
-      .unique();
-    if (!saved) continue;
-    const ref = await ctx.db.get(memory.verseRefId);
-    if (!ref || ref.userId !== userId) continue;
-    page.push(toLibraryItem(memory, ref, saved));
-  }
-  return { ...paginated, page };
+  return {
+    ...paginated,
+    page: await toLibraryItems(ctx, userId, paginated.page, keep),
+  };
 }
+
+/** Upper bound on each status read by the single-page `"learning"` view. */
+const MAX_LIBRARY_LEARNING_ROWS = 500;
 
 const emptyLibraryPage: PaginationResult<LibraryItem> = {
   page: [],
@@ -1152,26 +1578,26 @@ const emptyLibraryPage: PaginationResult<LibraryItem> = {
 };
 
 /**
- * A page of the user's hearted verses, each joined to its live memory schedule
- * and verse reference. Paginated via `paginationOptsValidator`/`.paginate()`.
+ * A page of the user's in-Memory verses, each joined to its live memory
+ * schedule and verse reference. Paginated via
+ * `paginationOptsValidator`/`.paginate()`.
  *
  * `view` picks the index the page is read through so ordering is stable across
  * pages (never a cross-page in-memory sort):
- * - `"due"` — due review + unlocked learning (`by_userId_isHearted_dueAt` with
- *   `dueAt <= dueIndexUntil(now)`). Hearted `new` rows share that index and
+ * - `"due"` — due review + unlocked learning (`by_userId_inMemory_dueAt` with
+ *   `dueAt <= dueIndexUntil(now)`). Up-next `new` rows share that index and
  *   are skipped in-page via `isDueForLibrary`. Pass `now`; missing `now`
  *   returns an empty exhausted page (never `Date.now()`). The scan bound is
  *   wider than `now` so in-progress learning stamped ahead of a frozen
  *   session clock still appears until today's reps are finished.
- * - `"inMemory"` — started work (`learning` / `reviewing` / `mastered`) via
- *   `by_userId_isHearted_status` ascending. Skip `new`. Do not use the dueAt
- *   index: New rows stamp `dueAt = now` and would fill every early page.
- *   Status-index order is alphabetical, not lifecycle.
- * - `"notStarted"` — hearted `new` only (`by_userId_isHearted_status`).
- *   Pagination order is index order, not Bible order.
- *
- * The canonical set is the user's *hearted* verses. Indexes use
- * `verseMemory.isHearted`; `savedVerses` is still loaded for `heartedAt`.
+ * - `"learning"` — `learning` then Up-next `new` rows, as one exhausted page
+ *   (each status capped at {@link MAX_LIBRARY_LEARNING_ROWS}). The two
+ *   statuses are not adjacent in the status index, so paging over the range
+ *   between them would mostly read `mastered` rows.
+ * - `"memorized"` — `reviewing` only (`by_userId_inMemory_status`).
+ * - `"mastered"` — `mastered` only (`by_userId_inMemory_status`).
+ * - `"all"` — every in-Memory row (`by_userId_inMemory_status`). Status-index
+ *   order is alphabetical, not lifecycle or Bible order.
  */
 export const listLibrary = query({
   args: {
@@ -1209,10 +1635,10 @@ export const listLibrary = query({
       );
       const paginated = await ctx.db
         .query("verseMemory")
-        .withIndex("by_userId_isHearted_dueAt", (q) =>
+        .withIndex("by_userId_inMemory_dueAt", (q) =>
           q
             .eq("userId", userId)
-            .eq("isHearted", true)
+            .eq("inMemory", true)
             .lte("dueAt", dueIndexUntil(now)),
         )
         .order("asc")
@@ -1227,11 +1653,30 @@ export const listLibrary = query({
       );
     }
 
-    if (args.view === "notStarted") {
+    if (args.view === "learning") {
+      const byStatus = await Promise.all(
+        (["learning", "new"] as const).map((status) =>
+          ctx.db
+            .query("verseMemory")
+            .withIndex("by_userId_inMemory_status", (q) =>
+              q.eq("userId", userId).eq("inMemory", true).eq("status", status),
+            )
+            .take(MAX_LIBRARY_LEARNING_ROWS),
+        ),
+      );
+      return {
+        page: await toLibraryItems(ctx, userId, byStatus.flat(), () => true),
+        isDone: true,
+        continueCursor: "",
+      };
+    }
+
+    if (args.view === "memorized" || args.view === "mastered") {
+      const status = args.view === "memorized" ? "reviewing" : "mastered";
       const paginated = await ctx.db
         .query("verseMemory")
-        .withIndex("by_userId_isHearted_status", (q) =>
-          q.eq("userId", userId).eq("isHearted", true).eq("status", "new"),
+        .withIndex("by_userId_inMemory_status", (q) =>
+          q.eq("userId", userId).eq("inMemory", true).eq("status", status),
         )
         .paginate(args.paginationOpts);
       return await toLibraryPage(ctx, userId, paginated, () => true);
@@ -1239,17 +1684,12 @@ export const listLibrary = query({
 
     const paginated = await ctx.db
       .query("verseMemory")
-      .withIndex("by_userId_isHearted_status", (q) =>
-        q.eq("userId", userId).eq("isHearted", true),
+      .withIndex("by_userId_inMemory_status", (q) =>
+        q.eq("userId", userId).eq("inMemory", true),
       )
       .order("asc")
       .paginate(args.paginationOpts);
-    return await toLibraryPage(
-      ctx,
-      userId,
-      paginated,
-      (memory) => memory.status !== "new",
-    );
+    return await toLibraryPage(ctx, userId, paginated, () => true);
   },
 });
 
@@ -1286,6 +1726,7 @@ const verseDetailValidator = v.object({
   endVerse: v.number(),
   isHearted: v.boolean(),
   heartedAt: v.union(v.number(), v.null()),
+  inMemory: v.boolean(),
   isDue: v.boolean(),
   status: statusValidator,
   learnStage: v.number(),
@@ -1362,29 +1803,27 @@ function deriveDifficulty(attempts: Attempt[]): {
  * `Date.now()` in a query) and only used to flag whether the verse is due now.
  */
 export const verseDetail = query({
-  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  args: { verseRefId: v.string(), now: v.number() },
   returns: v.union(verseDetailValidator, v.null()),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) return null;
 
-    const ref = await ctx.db.get(args.verseRefId);
+    const verseRefId = ctx.db.normalizeId("verseRefs", args.verseRefId);
+    if (!verseRefId) return null;
+
+    const ref = await ctx.db.get(verseRefId);
     if (!ref || ref.userId !== userId) return null;
 
-    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
+    const memory = await findVerseMemory(ctx, userId, verseRefId);
     if (!memory) return null;
 
-    const saved = await ctx.db
-      .query("savedVerses")
-      .withIndex("by_userId_verseRefId", (q) =>
-        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
-      )
-      .unique();
+    const saved = await findSavedVerse(ctx, userId, verseRefId);
 
     const attemptRows = await ctx.db
       .query("verseMemoryReviews")
       .withIndex("by_userId_verseRefId_createdAt", (q) =>
-        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+        q.eq("userId", userId).eq("verseRefId", verseRefId),
       )
       .order("desc")
       .take(VERSE_DETAIL_ATTEMPT_LIMIT);
@@ -1399,13 +1838,14 @@ export const verseDetail = query({
     }));
 
     return {
-      verseRefId: args.verseRefId,
+      verseRefId,
       book: ref.book,
       chapter: ref.chapter,
       startVerse: ref.startVerse,
       endVerse: ref.endVerse,
       isHearted: saved !== null,
       heartedAt: saved?.createdAt ?? null,
+      inMemory: isInMemory(memory),
       isDue: isDueForReview(memory, args.now),
       status: memory.status,
       learnStage: memory.learnStage,

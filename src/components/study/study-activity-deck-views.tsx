@@ -58,23 +58,11 @@ function buildCompletionMessage(
   cards: StudyCard[],
   scopeLabel: string,
 ): string {
-  const verseCount = cards.filter((c) => c.type === "verse-memory").length;
   const noteCount = cards.filter((c) => c.type === "teach").length;
-
-  const parts: string[] = [];
-  if (verseCount > 0) {
-    parts.push(`${verseCount} hearted verse${verseCount !== 1 ? "s" : ""}`);
-  }
-  if (noteCount > 0) {
-    parts.push(`${noteCount} passage${noteCount !== 1 ? "s" : ""}`);
-  }
-
   const subjects =
-    parts.length === 0
+    noteCount === 0
       ? "your cards"
-      : parts.length === 1
-        ? parts[0]
-        : `${parts[0]} and ${parts[1]}`;
+      : `${noteCount} passage${noteCount !== 1 ? "s" : ""}`;
 
   const scope = scopeLabel.trim();
   return scope
