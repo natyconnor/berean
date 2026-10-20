@@ -105,10 +105,27 @@ function normalizeLookupToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+export function resolveExtraBookAliases(
+  table: Readonly<Record<string, readonly string[]>>,
+): Map<string, readonly string[]> {
+  const nameByToken = new Map(
+    BIBLE_BOOKS.map((book) => [normalizeLookupToken(book.name), book.name]),
+  );
+  const byBook = new Map<string, readonly string[]>();
+
+  for (const [key, aliases] of Object.entries(table)) {
+    const name = nameByToken.get(normalizeLookupToken(key));
+    if (!name) continue;
+    byBook.set(name, [...(byBook.get(name) ?? []), ...aliases]);
+  }
+
+  return byBook;
+}
+
 function buildBookAliasEntries(): Array<{ alias: string; name: string }> {
   const entries: Array<{ alias: string; name: string }> = [];
 
-  const additionalAliases: Record<string, string[]> = {
+  const extraAliasesByBook = resolveExtraBookAliases({
     Judges: ["Jdg"],
     Psalms: ["Psalm", "Psa", "Psm", "Pss"],
     SongOfSolomon: ["Song of Songs", "Songs", "SOS", "Canticles"],
@@ -123,7 +140,7 @@ function buildBookAliasEntries(): Array<{ alias: string; name: string }> {
     "2John": ["2 Jn"],
     "3John": ["3 Jn"],
     Revelation: ["Revelations", "Apocalypse"],
-  };
+  });
 
   for (const book of BIBLE_BOOKS) {
     const normalizedName = normalizeLookupToken(book.name);
@@ -131,9 +148,7 @@ function buildBookAliasEntries(): Array<{ alias: string; name: string }> {
     entries.push({ alias: normalizedName, name: book.name });
     entries.push({ alias: normalizedAbbreviation, name: book.name });
 
-    const aliasCandidates =
-      additionalAliases[book.name.replace(/\s/g, "")] ?? [];
-    for (const alias of aliasCandidates) {
+    for (const alias of extraAliasesByBook.get(book.name) ?? []) {
       entries.push({ alias: normalizeLookupToken(alias), name: book.name });
     }
   }

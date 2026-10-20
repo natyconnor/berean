@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.17.21](https://github.com/natyconnor/berean/compare/v1.17.20...v1.17.21) (2026-10-19)
+
+
+### Bug Fixes
+
+* **verse-ref:** register Song of Solomon extra aliases ([#308](https://github.com/natyconnor/berean/issues/308)) ([3f90f80](https://github.com/natyconnor/berean/commit/3f90f80a523d7c1f4d7b20e081041b7fc28e1a2f))
+
 ## [1.17.20](https://github.com/natyconnor/berean/compare/v1.17.19...v1.17.20) (2026-10-18)
 
 
