@@ -727,7 +727,33 @@ export function exactReviewsUntilMastered(
   return remaining;
 }
 
+export const REVIEWING_PATH_START_EASE_CACHE_LIMIT = 512;
+
 const reviewingPathStartEaseCache = new Map<string, number>();
+
+export function reviewingPathStartEaseCacheSizeForTests(): number {
+  return reviewingPathStartEaseCache.size;
+}
+
+function reviewingPathStartEaseCacheGet(key: string): number | undefined {
+  const value = reviewingPathStartEaseCache.get(key);
+  if (value === undefined) return undefined;
+  reviewingPathStartEaseCache.delete(key);
+  reviewingPathStartEaseCache.set(key, value);
+  return value;
+}
+
+function reviewingPathStartEaseCacheSet(key: string, value: number): void {
+  if (reviewingPathStartEaseCache.has(key)) {
+    reviewingPathStartEaseCache.delete(key);
+  } else if (
+    reviewingPathStartEaseCache.size >= REVIEWING_PATH_START_EASE_CACHE_LIMIT
+  ) {
+    const oldest = reviewingPathStartEaseCache.keys().next().value;
+    if (oldest !== undefined) reviewingPathStartEaseCache.delete(oldest);
+  }
+  reviewingPathStartEaseCache.set(key, value);
+}
 
 function computeReviewingPathStartEase(
   intervalDays: number,
@@ -773,11 +799,11 @@ export function reviewingPathStartEase(
   }
 
   const key = `${intervalDays}\0${ease}`;
-  const cached = reviewingPathStartEaseCache.get(key);
+  const cached = reviewingPathStartEaseCacheGet(key);
   if (cached !== undefined) return cached;
 
   const startEase = computeReviewingPathStartEase(intervalDays, ease);
-  reviewingPathStartEaseCache.set(key, startEase);
+  reviewingPathStartEaseCacheSet(key, startEase);
   return startEase;
 }
 
