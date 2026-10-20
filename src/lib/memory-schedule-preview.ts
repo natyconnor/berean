@@ -66,5 +66,6 @@ export function previewNextSchedule(
     ...input,
     tzOffsetMinutes:
       input.tzOffsetMinutes ?? new Date(input.now).getTimezoneOffset(),
+    timeZone: input.timeZone,
   });
 }
