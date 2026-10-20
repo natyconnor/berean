@@ -11,5 +11,6 @@ describe("asTableId", () => {
 
   it("keeps a document-shaped id", () => {
     expect(asTableId("j97xyz_9-Q")).toBe("j97xyz_9-Q");
+    expect(asTableId("abcdefgh")).toBe("abcdefgh");
   });
 });

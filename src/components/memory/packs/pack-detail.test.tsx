@@ -687,6 +687,31 @@ describe("PackDetail on its full page", () => {
     ).toHaveLength(0);
   });
 
+  it("shows Not found for a document-shaped junk pack id without throwing", () => {
+    render(
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "pack", packId: "abcdefgh" }}
+          from={undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Not found" }),
+    ).toBeInTheDocument();
+    expect(mocks.queryCalls).toContainEqual(["packs.get", { id: "abcdefgh" }]);
+    expect(mocks.queryCalls).toContainEqual([
+      "packs.resolveMembers",
+      expect.objectContaining({ id: "abcdefgh" }),
+    ]);
+    expect(mocks.queryCalls).toContainEqual([
+      "passageMemory.getForPack",
+      expect.objectContaining({ packId: "abcdefgh" }),
+    ]);
+    expect(mutation("packs.touch")).not.toHaveBeenCalled();
+  });
+
   it("returns sessions to the page and links back to Your verses", () => {
     render(
       <TooltipProvider>
