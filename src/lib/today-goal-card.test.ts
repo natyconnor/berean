@@ -5,23 +5,12 @@ import { todayGoalCardModel } from "./today-goal-card";
 
 const TZ = "America/Los_Angeles";
 
-/**
- * 12:30 AM PDT Tuesday Oct 20, 2026. 07:30 UTC the same morning, so a UTC
- * runner still needs `TZ` to treat 5:00 AM PDT as later today, not a new day.
- */
-const SAME_DAY_NOW = Date.UTC(2026, 9, 20, 7, 30);
-/** 5:00 AM PDT Oct 20. */
-const SAME_DAY_DUE = Date.UTC(2026, 9, 20, 12, 0);
-/** 11:00 PM PDT Monday Oct 19, the session that locked the next step. */
-const SAME_DAY_PRACTICED = Date.UTC(2026, 9, 20, 6, 0);
-
-/**
- * 11:00 PM PDT Tuesday Oct 20. 06:00 UTC Oct 21, same UTC day as a 5:00 AM
- * Wednesday unlock, so omitting `TZ` would call that lock later today.
- */
-const TOMORROW_NOW = Date.UTC(2026, 9, 21, 6, 0);
-/** 5:00 AM PDT Wednesday Oct 21. */
-const TOMORROW_DUE = Date.UTC(2026, 9, 21, 12, 0);
+const OCT20_12_30_AM = Date.UTC(2026, 9, 20, 7, 30);
+const OCT20_5_AM = Date.UTC(2026, 9, 20, 12, 0);
+const OCT19_11_PM = Date.UTC(2026, 9, 20, 6, 0);
+/** 11:00 PM PDT Oct 20 and 5:00 AM PDT Oct 21 are both Oct 21 in UTC. */
+const OCT20_11_PM = Date.UTC(2026, 9, 21, 6, 0);
+const OCT21_5_AM = Date.UTC(2026, 9, 21, 12, 0);
 
 function verse(overrides: Partial<VerseGoalCard> = {}): VerseGoalCard {
   return {
@@ -37,10 +26,10 @@ function verse(overrides: Partial<VerseGoalCard> = {}): VerseGoalCard {
     intervalDays: 0,
     masteryFraction: 0,
     hasWorkToday: false,
-    nextDueAt: SAME_DAY_DUE,
-    createdAt: SAME_DAY_PRACTICED,
-    lastActivityAt: SAME_DAY_PRACTICED,
-    lastPracticedAt: SAME_DAY_PRACTICED,
+    nextDueAt: OCT20_5_AM,
+    createdAt: OCT19_11_PM,
+    lastActivityAt: OCT19_11_PM,
+    lastPracticedAt: OCT19_11_PM,
     ...overrides,
   };
 }
@@ -48,26 +37,29 @@ function verse(overrides: Partial<VerseGoalCard> = {}): VerseGoalCard {
 function learnedBarDetail(
   goal: VerseGoalCard,
   now: number,
+  timeZone = TZ,
 ): string | null | undefined {
-  return todayGoalCardModel(goal, now, TZ).bars.find(
+  return todayGoalCardModel(goal, now, timeZone).bars.find(
     (bar) => bar.track === "learned",
   )?.detail;
 }
 
 describe("todayGoalCardModel", () => {
   it("says Later today and counts today when a lock opens the same LA day", () => {
-    const model = todayGoalCardModel(verse(), SAME_DAY_NOW, TZ);
+    const model = todayGoalCardModel(verse(), OCT20_12_30_AM, TZ);
 
     expect(model.steps).toEqual([
       { kind: "note", text: "Later today: fill in the blanks." },
     ]);
-    expect(learnedBarDetail(verse(), SAME_DAY_NOW)).toBe("on track for Oct 22");
+    expect(learnedBarDetail(verse(), OCT20_12_30_AM)).toBe(
+      "on track for Oct 22",
+    );
     expect(
       learnedBarDetail(
         verse({
           hasWorkToday: true,
-          lastPracticedAt: SAME_DAY_PRACTICED,
-          lastActivityAt: SAME_DAY_PRACTICED,
+          lastPracticedAt: OCT19_11_PM,
+          lastActivityAt: OCT19_11_PM,
         }),
         Date.UTC(2026, 9, 20, 12, 30),
       ),
@@ -75,30 +67,26 @@ describe("todayGoalCardModel", () => {
   });
 
   it("keeps Tomorrow when the lock opens the next LA calendar day", () => {
-    const model = todayGoalCardModel(
-      verse({
-        nextDueAt: TOMORROW_DUE,
-        lastPracticedAt: TOMORROW_NOW,
-        lastActivityAt: TOMORROW_NOW,
-        createdAt: TOMORROW_NOW,
-      }),
-      TOMORROW_NOW,
-      TZ,
-    );
+    const locked = verse({
+      nextDueAt: OCT21_5_AM,
+      lastPracticedAt: OCT20_11_PM,
+      lastActivityAt: OCT20_11_PM,
+      createdAt: OCT20_11_PM,
+    });
+    const model = todayGoalCardModel(locked, OCT20_11_PM, TZ);
 
     expect(model.steps).toEqual([
-      { kind: "done", text: "Today's step done. Tomorrow: fill in the blanks." },
+      {
+        kind: "done",
+        text: "Today's step done. Tomorrow: fill in the blanks.",
+      },
     ]);
-    expect(
-      learnedBarDetail(
-        verse({
-          nextDueAt: TOMORROW_DUE,
-          lastPracticedAt: TOMORROW_NOW,
-          lastActivityAt: TOMORROW_NOW,
-          createdAt: TOMORROW_NOW,
-        }),
-        TOMORROW_NOW,
-      ),
-    ).toBe("on track for Oct 23");
+    expect(learnedBarDetail(locked, OCT20_11_PM)).toBe("on track for Oct 23");
+    expect(todayGoalCardModel(locked, OCT20_11_PM, "UTC").steps).toEqual([
+      {
+        kind: "done",
+        text: "Today's step done. Later today: fill in the blanks.",
+      },
+    ]);
   });
 });
