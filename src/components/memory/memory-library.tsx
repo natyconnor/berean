@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListRow } from "@/components/memory/memory-surface";
-import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
+import { MemoryStatusCaptionLine } from "./memory-status-caption";
 import { LearnVerseDialog } from "./learn-verse-dialog";
 import { MemoryVerseListAction } from "./memory-verse-list-action";
 import type { PracticeVerse } from "./practice/practice-board";
@@ -217,6 +218,13 @@ export function MemoryLibrary({
             {filtered.map((row) => {
               const style = MEMORY_STATUS_STYLE[row.status];
               const practiceVerse = toPracticeVerse(row);
+              const caption = formatMemoryStatusCaption({
+                status: row.status,
+                statusLabel: style.label,
+                dueAt: row.dueAt,
+                lastReviewedAt: row.lastReviewedAt,
+                now,
+              });
               return (
                 <li key={row.verseMemoryId}>
                   <MemoryListRow className="flex items-center gap-3 px-3 py-2.5">
@@ -236,15 +244,10 @@ export function MemoryLibrary({
                         <span className="block truncate text-sm font-medium">
                           {formatVerseRef(row)}
                         </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {formatMemoryStatusSubtitle({
-                            status: row.status,
-                            statusLabel: style.label,
-                            dueAt: row.dueAt,
-                            lastReviewedAt: row.lastReviewedAt,
-                            now,
-                          })}
-                        </span>
+                        <MemoryStatusCaptionLine
+                          caption={caption}
+                          className="block text-xs text-muted-foreground"
+                        />
                       </span>
                     </button>
                     <MemoryVerseListAction

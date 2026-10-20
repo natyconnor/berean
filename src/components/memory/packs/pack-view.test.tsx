@@ -4,8 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { getSessionNow } from "@/hooks/use-live-now";
+import { getSessionNow, resetSessionNowForTests } from "@/hooks/use-live-now";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 
@@ -308,8 +309,16 @@ describe("PackView", () => {
     );
   });
 
-  it("lets unstarted units Learn, and names a session lock Tomorrow", () => {
+  it("lets unstarted units Learn, and names a session lock by local day", () => {
     const now = getSessionNow();
+    const lockedDueAt = now + 8 * 60 * 60 * 1000;
+    const lockCaption = formatMemoryStatusCaption({
+      status: "learning",
+      statusLabel: "Learning",
+      dueAt: lockedDueAt,
+      lastReviewedAt: now - 1000,
+      now,
+    });
     renderPack({
       members: [
         member({
@@ -323,7 +332,7 @@ describe("PackView", () => {
           startVerse: 3,
           endVerse: 3,
           status: "learning",
-          dueAt: now + 8 * 60 * 60 * 1000,
+          dueAt: lockedDueAt,
           lastReviewedAt: now - 1000,
         }),
         member({
@@ -340,7 +349,15 @@ describe("PackView", () => {
     expect(screen.queryByText(/Due today/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Learn" })).toBeEnabled();
 
-    expect(screen.getByText("Learning · Tomorrow")).toBeInTheDocument();
+    const lockLabel = screen.getByText(lockCaption.text);
+    expect(lockLabel).toBeInTheDocument();
+    expect(lockLabel).toHaveAttribute("title", lockCaption.title);
+    expect(lockLabel).toHaveAttribute("aria-hidden", "true");
+    expect(lockLabel.className).not.toMatch(/truncate/);
+    expect(lockLabel.parentElement?.className).not.toMatch(/truncate/);
+    expect(screen.getByText(lockCaption.accessibleName ?? "")).toHaveClass(
+      "sr-only",
+    );
     expect(screen.getByRole("button", { name: "Tomorrow" })).toBeDisabled();
 
     expect(
@@ -353,6 +370,32 @@ describe("PackView", () => {
       screen.queryByRole("button", { name: "Memorize whole passage" }),
     ).not.toBeInTheDocument();
     expect(mutationMock("passageMemory.start")).not.toHaveBeenCalled();
+  });
+
+  it("names the list row with later-today unlock time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 8, 0, 30));
+    resetSessionNowForTests();
+    try {
+      renderPack({
+        members: [
+          member({
+            startVerse: 3,
+            endVerse: 3,
+            status: "learning",
+            dueAt: new Date(2026, 2, 8, 5, 57).getTime(),
+          }),
+        ],
+      });
+      expect(
+        screen.getByRole("button", {
+          name: /unlocks later today at 5:57 AM/,
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+      resetSessionNowForTests();
+    }
   });
 
   it("queues the whole pack from Learn this pack, then opens the pack session", async () => {

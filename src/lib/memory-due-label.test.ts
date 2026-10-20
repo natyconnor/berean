@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatMemoryDueLabel,
+  formatMemoryStatusCaption,
   formatMemoryStatusSubtitle,
   formatNextReviewPhrase,
   formatReviewIntervalPhrase,
@@ -9,6 +10,12 @@ import {
 
 const NOW = 1_700_000_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+function expectSpringForwardZone() {
+  expect(new Date(2026, 2, 8).getTimezoneOffset()).not.toBe(
+    new Date(2026, 2, 10).getTimezoneOffset(),
+  );
+}
 
 describe("formatMemoryDueLabel", () => {
   it("omits due labels for available learning-phase verses", () => {
@@ -22,10 +29,66 @@ describe("formatMemoryDueLabel", () => {
     );
   });
 
-  it("says Tomorrow for a same-calendar-day lock, matching the list CTA", () => {
+  it("says Later today when a lock unlocks later the same local day", () => {
     expect(
-      formatMemoryDueLabel("learning", NOW + 8 * 60 * 60 * 1000, NOW),
+      formatMemoryDueLabel(
+        "learning",
+        new Date(2026, 5, 15, 5, 57).getTime(),
+        new Date(2026, 5, 15, 0, 30).getTime(),
+      ),
+    ).toBe("Later today");
+  });
+
+  it("omits the lock label once the unlock time has passed", () => {
+    expect(
+      formatMemoryDueLabel(
+        "learning",
+        new Date(2026, 5, 15, 5, 57).getTime(),
+        new Date(2026, 5, 15, 6, 10).getTime(),
+      ),
+    ).toBeNull();
+  });
+
+  it("says Tomorrow when a lock unlocks the next local calendar day", () => {
+    expect(
+      formatMemoryDueLabel(
+        "learning",
+        new Date(2026, 5, 16, 5, 57).getTime(),
+        new Date(2026, 5, 15, 23).getTime(),
+      ),
     ).toBe("Tomorrow");
+  });
+
+  it("counts In N days by local calendar day for locked learning", () => {
+    expect(
+      formatMemoryDueLabel(
+        "learning",
+        new Date(2026, 5, 18, 5, 57).getTime(),
+        new Date(2026, 5, 15, 12, 30).getTime(),
+      ),
+    ).toBe("In 3 days");
+  });
+
+  it("counts two calendar days across a spring-forward night, not rounded hours", () => {
+    expectSpringForwardZone();
+    expect(
+      formatMemoryDueLabel(
+        "learning",
+        new Date(2026, 2, 10, 5, 57).getTime(),
+        new Date(2026, 2, 8, 23).getTime(),
+      ),
+    ).toBe("In 2 days");
+  });
+
+  it("says Later today on a spring-forward morning", () => {
+    expectSpringForwardZone();
+    expect(
+      formatMemoryDueLabel(
+        "learning",
+        new Date(2026, 2, 8, 5, 57).getTime(),
+        new Date(2026, 2, 8, 0, 30).getTime(),
+      ),
+    ).toBe("Later today");
   });
 
   it("does not lock or date unstarted verses", () => {
@@ -179,6 +242,39 @@ describe("formatMemoryStatusSubtitle", () => {
     ).toBe("Learning · Tomorrow");
   });
 
+  it("joins Learning · Later today without the unlock clock time", () => {
+    expect(
+      formatMemoryStatusSubtitle({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 5, 15, 5, 57).getTime(),
+        now: new Date(2026, 5, 15, 0, 30).getTime(),
+      }),
+    ).toBe("Learning · Later today");
+  });
+
+  it("joins Learning · In 3 days without the unlock clock time", () => {
+    expect(
+      formatMemoryStatusSubtitle({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 5, 18, 5, 57).getTime(),
+        now: new Date(2026, 5, 15, 12, 30).getTime(),
+      }),
+    ).toBe("Learning · In 3 days");
+  });
+
+  it("returns only Learning once the same-day unlock has passed", () => {
+    expect(
+      formatMemoryStatusSubtitle({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 5, 15, 5, 57).getTime(),
+        now: new Date(2026, 5, 15, 6, 10).getTime(),
+      }),
+    ).toBe("Learning");
+  });
+
   it("joins review status and due label", () => {
     expect(
       formatMemoryStatusSubtitle({
@@ -188,5 +284,94 @@ describe("formatMemoryStatusSubtitle", () => {
         now: NOW,
       }),
     ).toBe("Reviewing · Due now");
+  });
+});
+
+describe("formatMemoryStatusCaption", () => {
+  it("puts later-today unlock time only in title and accessible name", () => {
+    expect(
+      formatMemoryStatusCaption({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 5, 15, 5, 57).getTime(),
+        now: new Date(2026, 5, 15, 0, 30).getTime(),
+      }),
+    ).toEqual({
+      text: "Learning · Later today",
+      title: "Unlocks at 5:57 AM",
+      accessibleName: "Learning, unlocks later today at 5:57 AM",
+    });
+  });
+
+  it("puts later-today unlock time on a spring-forward morning", () => {
+    expectSpringForwardZone();
+    expect(
+      formatMemoryStatusCaption({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 2, 8, 5, 57).getTime(),
+        now: new Date(2026, 2, 8, 0, 30).getTime(),
+      }),
+    ).toEqual({
+      text: "Learning · Later today",
+      title: "Unlocks at 5:57 AM",
+      accessibleName: "Learning, unlocks later today at 5:57 AM",
+    });
+  });
+
+  it("puts tomorrow unlock time only in title and accessible name", () => {
+    expect(
+      formatMemoryStatusCaption({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 5, 16, 5, 57).getTime(),
+        now: new Date(2026, 5, 15, 23).getTime(),
+      }),
+    ).toEqual({
+      text: "Learning · Tomorrow",
+      title: "Unlocks tomorrow at 5:57 AM",
+      accessibleName: "Learning, unlocks tomorrow at 5:57 AM",
+    });
+  });
+
+  it("puts in-N-days unlock time only in title and accessible name", () => {
+    expect(
+      formatMemoryStatusCaption({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 5, 18, 5, 57).getTime(),
+        now: new Date(2026, 5, 15, 12, 30).getTime(),
+      }),
+    ).toEqual({
+      text: "Learning · In 3 days",
+      title: "Unlocks in 3 days at 5:57 AM",
+      accessibleName: "Learning, unlocks in 3 days at 5:57 AM",
+    });
+  });
+
+  it("omits title and accessible name once the verse is ready to learn", () => {
+    expect(
+      formatMemoryStatusCaption({
+        status: "learning",
+        statusLabel: "Learning",
+        dueAt: new Date(2026, 5, 15, 5, 57).getTime(),
+        now: new Date(2026, 5, 15, 6, 10).getTime(),
+      }),
+    ).toEqual({
+      text: "Learning",
+    });
+  });
+
+  it("omits title and accessible name for reviewing labels", () => {
+    expect(
+      formatMemoryStatusCaption({
+        status: "reviewing",
+        statusLabel: "Reviewing",
+        dueAt: NOW,
+        now: NOW,
+      }),
+    ).toEqual({
+      text: "Reviewing · Due now",
+    });
   });
 });

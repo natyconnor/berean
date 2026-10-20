@@ -48,10 +48,11 @@ import { useScopeHeartPreview } from "@/hooks/use-scope-heart-preview";
 import { useStartPassage } from "@/hooks/use-start-passage";
 import { heartSpansInChunks } from "@/lib/heart-many-client";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
-import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
+import { MemoryStatusCaptionLine } from "@/components/memory/memory-status-caption";
 import { MemoryListItem } from "@/components/memory/memory-surface";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import { memoryReviewSearch } from "@/lib/memory-review-search";
@@ -923,6 +924,13 @@ function PackViewMain({
                 {members.map((member) => {
                   const style = MEMORY_STATUS_STYLE[member.status];
                   const practiceVerse = toPracticeVerse(member);
+                  const caption = formatMemoryStatusCaption({
+                    status: member.status,
+                    statusLabel: style.label,
+                    dueAt: member.dueAt,
+                    lastReviewedAt: member.lastReviewedAt,
+                    now,
+                  });
                   return (
                     <MemoryListItem
                       key={member.verseRefId}
@@ -944,15 +952,10 @@ function PackViewMain({
                           <span className="block truncate text-sm font-medium">
                             {formatVerseRef(member)}
                           </span>
-                          <span className="block text-xs text-muted-foreground">
-                            {formatMemoryStatusSubtitle({
-                              status: member.status,
-                              statusLabel: style.label,
-                              dueAt: member.dueAt,
-                              lastReviewedAt: member.lastReviewedAt,
-                              now,
-                            })}
-                          </span>
+                          <MemoryStatusCaptionLine
+                            caption={caption}
+                            className="block text-xs text-muted-foreground"
+                          />
                         </span>
                       </button>
                       <MemoryVerseListAction
