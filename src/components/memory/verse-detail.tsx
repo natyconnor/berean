@@ -3,7 +3,7 @@ import { useQuery } from "convex-helpers/react/cache";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
+import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import {
@@ -212,6 +212,13 @@ export function VerseDetail({
     },
     now,
   );
+  const caption = formatMemoryStatusCaption({
+    status: detail.status,
+    statusLabel: STATUS_LABELS[detail.status],
+    dueAt: detail.dueAt,
+    lastReviewedAt: detail.lastReviewedAt,
+    now,
+  });
 
   // Attempts arrive newest-first; reverse for a left-to-right time axis.
   const chronological = [...detail.attempts].reverse();
@@ -236,14 +243,12 @@ export function VerseDetail({
           <h3 className="text-base font-semibold tracking-tight">
             {reference}
           </h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {formatMemoryStatusSubtitle({
-              status: detail.status,
-              statusLabel: STATUS_LABELS[detail.status],
-              dueAt: detail.dueAt,
-              lastReviewedAt: detail.lastReviewedAt,
-              now,
-            })}
+          <p
+            className="mt-0.5 text-sm text-muted-foreground"
+            title={caption.title}
+            aria-label={caption.accessibleName}
+          >
+            {caption.text}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">

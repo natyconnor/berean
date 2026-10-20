@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 
@@ -308,8 +309,16 @@ describe("PackView", () => {
     );
   });
 
-  it("lets unstarted units Learn, and names a session lock Tomorrow", () => {
+  it("lets unstarted units Learn, and names a session lock by local day", () => {
     const now = getSessionNow();
+    const lockedDueAt = now + 8 * 60 * 60 * 1000;
+    const lockCaption = formatMemoryStatusCaption({
+      status: "learning",
+      statusLabel: "Learning",
+      dueAt: lockedDueAt,
+      lastReviewedAt: now - 1000,
+      now,
+    });
     renderPack({
       members: [
         member({
@@ -323,7 +332,7 @@ describe("PackView", () => {
           startVerse: 3,
           endVerse: 3,
           status: "learning",
-          dueAt: now + 8 * 60 * 60 * 1000,
+          dueAt: lockedDueAt,
           lastReviewedAt: now - 1000,
         }),
         member({
@@ -340,7 +349,11 @@ describe("PackView", () => {
     expect(screen.queryByText(/Due today/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Learn" })).toBeEnabled();
 
-    expect(screen.getByText("Learning · Tomorrow")).toBeInTheDocument();
+    const lockLabel = screen.getByText(lockCaption.text);
+    expect(lockLabel).toBeInTheDocument();
+    expect(lockLabel).toHaveAttribute("title", lockCaption.title);
+    expect(lockLabel).toHaveAccessibleName(lockCaption.accessibleName ?? "");
+    expect(lockLabel.className).not.toMatch(/truncate/);
     expect(screen.getByRole("button", { name: "Tomorrow" })).toBeDisabled();
 
     expect(

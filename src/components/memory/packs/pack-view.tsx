@@ -48,8 +48,8 @@ import { useScopeHeartPreview } from "@/hooks/use-scope-heart-preview";
 import { useStartPassage } from "@/hooks/use-start-passage";
 import { heartSpansInChunks } from "@/lib/heart-many-client";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
+import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { memoryLearnSearch } from "@/lib/memory-learn-search";
-import { formatMemoryStatusSubtitle } from "@/lib/memory-due-label";
 import { isDueForLearning, isReviewPhase } from "@/lib/memory-scheduler";
 import { MEMORY_STATUS_STYLE } from "@/lib/memory-status-style";
 import { MemoryListItem } from "@/components/memory/memory-surface";
@@ -923,6 +923,13 @@ function PackViewMain({
                 {members.map((member) => {
                   const style = MEMORY_STATUS_STYLE[member.status];
                   const practiceVerse = toPracticeVerse(member);
+                  const caption = formatMemoryStatusCaption({
+                    status: member.status,
+                    statusLabel: style.label,
+                    dueAt: member.dueAt,
+                    lastReviewedAt: member.lastReviewedAt,
+                    now,
+                  });
                   return (
                     <MemoryListItem
                       key={member.verseRefId}
@@ -944,14 +951,12 @@ function PackViewMain({
                           <span className="block truncate text-sm font-medium">
                             {formatVerseRef(member)}
                           </span>
-                          <span className="block text-xs text-muted-foreground">
-                            {formatMemoryStatusSubtitle({
-                              status: member.status,
-                              statusLabel: style.label,
-                              dueAt: member.dueAt,
-                              lastReviewedAt: member.lastReviewedAt,
-                              now,
-                            })}
+                          <span
+                            className="block text-xs text-muted-foreground"
+                            title={caption.title}
+                            aria-label={caption.accessibleName}
+                          >
+                            {caption.text}
                           </span>
                         </span>
                       </button>
