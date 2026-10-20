@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.18.0](https://github.com/natyconnor/berean/compare/v1.17.22...v1.18.0) (2026-10-20)
+
+
+### Features
+
+* Memory redesign — one Memorize action and a Today home ([#289](https://github.com/natyconnor/berean/issues/289)) ([28f5e63](https://github.com/natyconnor/berean/commit/28f5e638ac8f5120d9c51e5aeb5dd37bcf2f81c8))
+
 ## [1.17.22](https://github.com/natyconnor/berean/compare/v1.17.21...v1.17.22) (2026-10-20)
 
 
