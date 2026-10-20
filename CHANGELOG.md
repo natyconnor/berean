@@ -30,6 +30,22 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.18.0](https://github.com/natyconnor/berean/compare/v1.17.22...v1.18.0) (2026-10-20)
+
+
+### Features
+
+* Memory redesign — one Memorize action and a Today home ([#289](https://github.com/natyconnor/berean/issues/289)) ([28f5e63](https://github.com/natyconnor/berean/commit/28f5e638ac8f5120d9c51e5aeb5dd37bcf2f81c8))
+
+## [1.17.22](https://github.com/natyconnor/berean/compare/v1.17.21...v1.17.22) (2026-10-20)
+
+
+### Bug Fixes
+
+* **memory:** compare due labels by local calendar day ([#310](https://github.com/natyconnor/berean/issues/310)) ([1b5d635](https://github.com/natyconnor/berean/commit/1b5d63551ac8fc4f1f1f3a447a2623b5fd68a01a))
+* **memory:** land DST-crossing reviews at local midnight ([#312](https://github.com/natyconnor/berean/issues/312)) ([c7ebb63](https://github.com/natyconnor/berean/commit/c7ebb63f3f5ae7e5f7db6803a91b21c0ae71e565))
+* **memory:** show Later today for same-day learning unlocks ([#317](https://github.com/natyconnor/berean/issues/317)) ([c1a490f](https://github.com/natyconnor/berean/commit/c1a490fb3e98845465a4b64017241e5946d436e7))
+
 ## [1.17.21](https://github.com/natyconnor/berean/compare/v1.17.20...v1.17.21) (2026-10-19)
 
 
