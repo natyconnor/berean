@@ -48,7 +48,7 @@ export function MemoryDashboard({
   onStartReview: () => void;
   onStartLearning: () => void;
 }) {
-  const timeZone = getViewerTimeZone();
+  const timeZone = getViewerTimeZone() ?? "UTC";
   const ensureReviewActivityDays = useMutation(
     api.verseMemory.ensureReviewActivityDays,
   );

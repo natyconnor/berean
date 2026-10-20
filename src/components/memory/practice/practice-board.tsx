@@ -605,7 +605,7 @@ export function PracticeBoard({
   async function persistRetryHold(
     attemptedAt: number,
     tzOffsetMinutes: number,
-    timeZone: string,
+    timeZone?: string,
   ): Promise<MemorySchedule | null> {
     if (!currentVerse) return null;
     if (composite) {

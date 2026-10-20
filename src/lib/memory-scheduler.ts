@@ -1,4 +1,4 @@
-import { zonedUpcomingDayStarts } from "./dashboard-buckets";
+import { startOfZonedDay } from "./dashboard-buckets";
 
 /**
  * Pure spaced-repetition scheduler for verse memory.
@@ -322,9 +322,23 @@ function zonedCalendarDueAt(
   tzOffsetMinutes?: number,
   timeZone?: string,
 ): number | undefined {
-  if (timeZone && isValidTimeZone(timeZone)) {
-    return zonedUpcomingDayStarts(now, days + 1, timeZone)[days];
+  if (timeZone) {
+    try {
+      const startToday = startOfZonedDay(now, timeZone);
+      const dueDayNoon = startToday + days * DAY_MS + DAY_MS / 2;
+      return startOfZonedDay(dueDayNoon, timeZone);
+    } catch {
+      return offsetCalendarDueAt(now, days, tzOffsetMinutes);
+    }
   }
+  return offsetCalendarDueAt(now, days, tzOffsetMinutes);
+}
+
+function offsetCalendarDueAt(
+  now: number,
+  days: number,
+  tzOffsetMinutes?: number,
+): number | undefined {
   if (tzOffsetMinutes === undefined || !Number.isFinite(tzOffsetMinutes)) {
     return undefined;
   }
@@ -332,15 +346,6 @@ function zonedCalendarDueAt(
   const localNow = now - offsetMs;
   const startOfLocalDay = Math.floor(localNow / DAY_MS) * DAY_MS;
   return startOfLocalDay + days * DAY_MS + offsetMs;
-}
-
-function isValidTimeZone(timeZone: string): boolean {
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { startOfZonedDay, zonedDateKey } from "./dashboard-buckets";
 import {
@@ -9,6 +9,7 @@ import {
   scheduleNext,
   type MemorySchedule,
 } from "./memory-scheduler";
+import { getViewerTimeZone } from "./viewer-timezone";
 
 const PACIFIC = "America/Los_Angeles";
 
@@ -152,6 +153,28 @@ describe("dueAtInCalendarDays across DST", () => {
     expect(new Date(expected).toISOString()).toBe("2026-11-02T07:00:00.000Z");
   });
 
+  it("uses the offset midnight when viewer zone resolution fails", () => {
+    const resolvedOptions = vi
+      .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockImplementation(() => {
+        throw new Error("no zone");
+      });
+    const timeZone = getViewerTimeZone();
+    resolvedOptions.mockRestore();
+
+    expect(timeZone).toBeUndefined();
+
+    const now = Date.parse("2026-10-31T22:00:00.000Z");
+    const offset = 420;
+    const offsetDue = dueAtInCalendarDays(now, 2, offset);
+    const failedZoneDue = dueAtInCalendarDays(now, 2, offset, timeZone);
+    const utcDue = dueAtInCalendarDays(now, 2, offset, "UTC");
+
+    expect(failedZoneDue).toBe(offsetDue);
+    expect(failedZoneDue).not.toBe(utcDue);
+    expect(new Date(offsetDue).toISOString()).toBe("2026-11-02T07:00:00.000Z");
+  });
+
   it("schedules through scheduleNext when ReviewInput carries timeZone", () => {
     const now = Date.parse("2026-10-31T22:00:00.000Z");
     const next = scheduleNext(reviewingAt(now), {
@@ -174,7 +197,7 @@ describe("dueAtInCalendarDays 2026 sweep", () => {
     "Australia/Lord_Howe",
     "UTC",
   ];
-  const intervals = [1, 2, 3, 7, 30];
+  const intervals = [1, 2, 3, 7, 30, 180, 365];
   const localTimes: Array<[number, number]> = [
     [0, 30],
     [9, 30],
@@ -186,7 +209,7 @@ describe("dueAtInCalendarDays 2026 sweep", () => {
   it.each(zones)(
     "hits local midnight of the target day in %s, except the 6-hour floor",
     (timeZone) => {
-      const dayCount = 365 + 30;
+      const dayCount = 365 + 365;
       const starts: number[] = [];
       for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
         const [year, month, day] = addCivilDays(2026, 1, 1, dayOffset);
@@ -229,4 +252,42 @@ describe("dueAtInCalendarDays 2026 sweep", () => {
     },
     20_000,
   );
+});
+
+describe("due-day midnight probe", () => {
+  const zones = [
+    "America/Los_Angeles",
+    "America/Adak",
+    "Pacific/Auckland",
+    "Australia/Lord_Howe",
+    "UTC",
+  ];
+
+  it("stays on the target calendar day for every 2026 interval through a year", () => {
+    const misses: string[] = [];
+    for (const timeZone of zones) {
+      const dayCount = 365 + 365;
+      const keys: string[] = [];
+      const starts: number[] = [];
+      for (let dayOffset = 0; dayOffset < dayCount; dayOffset += 1) {
+        const [year, month, day] = addCivilDays(2026, 1, 1, dayOffset);
+        keys.push(dateKey(year, month, day));
+        starts.push(startOfCalendarDate(timeZone, year, month, day));
+      }
+      for (let dayOffset = 0; dayOffset < 365; dayOffset += 1) {
+        const startToday = starts[dayOffset];
+        for (let interval = 1; interval <= 365; interval += 1) {
+          const probe = startToday + interval * DAY_MS + DAY_MS / 2;
+          const got = zonedDateKey(probe, timeZone);
+          const want = keys[dayOffset + interval];
+          if (got !== want) {
+            misses.push(
+              `${timeZone} ${keys[dayOffset]} +${interval}d probe ${got} want ${want}`,
+            );
+          }
+        }
+      }
+    }
+    expect(misses).toEqual([]);
+  }, 20_000);
 });
