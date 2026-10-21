@@ -193,6 +193,10 @@ function heartPopover() {
   return screen.queryByRole("dialog", { name: "In your hearts" });
 }
 
+function savedPopover() {
+  return screen.queryByRole("dialog", { name: "Saved to your hearts" });
+}
+
 beforeAll(() => {
   // `hideWhenDetached` clips to the viewport, which jsdom sizes 0×0.
   for (const [key, value] of [
@@ -266,7 +270,7 @@ describe("PassageViewBody – memorized passage heart and rail", () => {
     const { container } = renderBody([PASSAGE_HEART, VERSE_8_HEART]);
 
     const ownHeart = within(verseRow(container, 8)).getByRole("button", {
-      name: "Remove from hearted verses",
+      name: "Unheart",
     });
     expect(ownHeart.querySelector("[data-mastery-ring]")).toBeNull();
   });
@@ -281,7 +285,7 @@ describe("PassageViewBody – memorized passage heart and rail", () => {
     ]);
 
     const ownHeart = within(verseRow(container, 8)).getByRole("button", {
-      name: "Remove from hearted verses",
+      name: "Unheart",
     });
     expect(ownHeart.querySelector("[data-mastery-ring]")).toBeNull();
   });
@@ -352,15 +356,14 @@ describe("PassageViewBody – memorizing verse hearts", () => {
     ]);
 
     const heart = within(verseRow(container, 2)).getByRole("button", {
-      name: "Remove from hearted verses (memorizing, Fill in the blanks)",
+      name: "Memorizing: Fill in the blanks. Unheart",
     });
     expect(heart.querySelector("[data-ring-progress]")).not.toBeNull();
+    expect(heart).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     await user.hover(heart);
-    expect(
-      within(verseRow(container, 2)).getByText(
-        "Memorizing · Fill in the blanks",
-      ),
-    ).toBeInTheDocument();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toBe("Memorizing\u00A0· Fill in the blanks");
   });
 
   it("names the next review on a memorized verse and just Mastered after", () => {
@@ -385,17 +388,15 @@ describe("PassageViewBody – memorizing verse hearts", () => {
 
     expect(
       within(verseRow(container, 8)).getByRole("button", {
-        name: "Remove from hearted verses (memorized, next review Thu)",
+        name: "Memorized: next review Thu. Unheart",
       }),
-    ).toBeInTheDocument();
-    expect(
-      within(verseRow(container, 8)).getByText("Memorized · next review Thu"),
-    ).toBeInTheDocument();
+    ).toHaveAttribute("aria-pressed", "true");
     expect(
       within(verseRow(container, 9)).getByRole("button", {
-        name: "Remove from hearted verses (mastered)",
+        name: "Mastered. Unheart",
       }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("asks the memorizing confirm before unhearting a learning verse", async () => {
@@ -416,18 +417,19 @@ describe("PassageViewBody – memorizing verse hearts", () => {
       },
     ]);
 
-    await user.click(
-      placeOnScreen(
-        within(verseRow(container, 2)).getByRole("button", {
-          name: /Remove from hearted verses/,
-        }),
-      ),
+    const heart = placeOnScreen(
+      within(verseRow(container, 2)).getByRole("button", {
+        name: "Memorizing: Fill in the blanks. Unheart",
+      }),
     );
+    await user.click(heart);
     expect(
       screen.getByRole("alertdialog", { name: "Unheart Psalm 16:2?" }),
     ).toHaveTextContent("Unhearting also stops memorizing it.");
     expect(heartPopover()).not.toBeInTheDocument();
     expect(onToggleSaved).not.toHaveBeenCalled();
+    await user.hover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
 
@@ -438,16 +440,21 @@ describe("PassageViewBody – hearts not being memorized", () => {
 
     const heart = placeOnScreen(
       within(verseRow(container, 8)).getByRole("button", {
-        name: "Hearted. Memorize or unheart",
+        name: "Memorize or unheart",
       }),
     );
     expect(heart.querySelector("[data-mastery-ring]")).toBeNull();
+    expect(heart).toHaveAttribute("aria-pressed", "true");
+    await user.hover(heart);
     expect(
-      within(verseRow(container, 8)).getByText("Memorize or unheart"),
+      await screen.findByRole("tooltip", { name: "Memorize or unheart" }),
     ).toBeInTheDocument();
 
     await user.click(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     expect(heartPopover()).toHaveAccessibleDescription("Memorize Psalm 16:8?");
+    await user.hover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Memorize" })).toHaveFocus();
     expect(onToggleSaved).not.toHaveBeenCalled();
 
@@ -463,7 +470,7 @@ describe("PassageViewBody – hearts not being memorized", () => {
 
     const heart = placeOnScreen(
       within(verseRow(container, 8)).getByRole("button", {
-        name: "Hearted. Memorize or unheart",
+        name: "Memorize or unheart",
       }),
     );
     await user.click(heart);
@@ -555,7 +562,7 @@ describe("PassageViewBody – hearts not being memorized", () => {
     await user.click(
       placeOnScreen(
         within(verseRow(container, 8)).getByRole("button", {
-          name: "Remove from hearted verses",
+          name: "Unheart",
         }),
       ),
     );
@@ -590,14 +597,10 @@ describe("PassageViewBody – clicking a heart again while Saved to your hearts 
     verse(7),
   ];
 
-  function savedPopover() {
-    return screen.queryByRole("dialog", { name: "Saved to your hearts" });
-  }
-
   function verseHeart(container: HTMLElement, verseNumber: number) {
     return placeOnScreen(
       within(verseRow(container, verseNumber)).getByRole("button", {
-        name: /^(Heart this verse|Hearted\. Memorize or unheart)$/,
+        name: /^(Heart Verse|Memorize or unheart)$/,
       }),
     );
   }
@@ -606,7 +609,9 @@ describe("PassageViewBody – clicking a heart again while Saved to your hearts 
     const bar = screen.getByRole("toolbar", {
       name: "Selected verses, Psalm 16:5–6",
     });
-    return placeOnScreen(within(bar).getByRole("button", { name: "Heart" }));
+    return placeOnScreen(
+      within(bar).getByRole("button", { name: "Heart Verses" }),
+    );
   }
 
   it("just unhearts a verse", async () => {
@@ -724,5 +729,60 @@ describe("PassageViewBody – clicking a heart again while Saved to your hearts 
       [4, 4],
     ]);
     expect(savedPopover()).toHaveAccessibleDescription("Memorize Psalm 16:4?");
+  });
+});
+
+describe("PassageViewBody – verse heart tooltip", () => {
+  it("shows Heart Verse on hover, below verses 1–2 and above later verses", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBody([]);
+
+    const verse1 = placeOnScreen(
+      within(verseRow(container, 1)).getByRole("button", {
+        name: "Heart Verse",
+      }),
+    );
+    expect(verse1).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(verse1);
+    const below = await screen.findByRole("tooltip", { name: "Heart Verse" });
+    expect(below).toHaveAttribute("data-side", "bottom");
+
+    await user.unhover(verse1);
+    await waitFor(() => {
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    });
+
+    const verse5 = placeOnScreen(
+      within(verseRow(container, 5)).getByRole("button", {
+        name: "Heart Verse",
+      }),
+    );
+    await user.hover(verse5);
+    const above = await screen.findByRole("tooltip", { name: "Heart Verse" });
+    expect(above).toHaveAttribute("data-side", "top");
+  });
+
+  it("keeps the tooltip closed while Saved to your hearts is open", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBody([]);
+    const heart = placeOnScreen(
+      within(verseRow(container, 5)).getByRole("button", {
+        name: "Heart Verse",
+      }),
+    );
+
+    await user.hover(heart);
+    expect(
+      await screen.findByRole("tooltip", { name: "Heart Verse" }),
+    ).toBeInTheDocument();
+
+    await user.click(heart);
+    expect(savedPopover()).toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });

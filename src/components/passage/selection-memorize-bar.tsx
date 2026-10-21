@@ -98,7 +98,7 @@ export function SelectionMemorizeBar({
             hearted && "fill-current",
           )}
         />
-        {hearted ? "Hearted" : "Heart"}
+        {hearted ? "Hearted" : "Heart Verses"}
       </button>
       <button
         type="button"

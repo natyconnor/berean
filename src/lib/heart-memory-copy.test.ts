@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { passageHeartCopy, verseHeartMemoryCopy } from "./heart-memory-copy";
+import {
+  passageHeartCopy,
+  verseHeartLabels,
+  verseHeartMemoryCopy,
+} from "./heart-memory-copy";
 
 // Monday, October 12, 2026, 3pm UTC.
 const NOW = Date.UTC(2026, 9, 12, 15);
@@ -15,8 +19,8 @@ describe("verseHeartMemoryCopy", () => {
         "UTC",
       ),
     ).toEqual({
-      tooltip: "Memorizing · Fill in the blanks",
-      ariaSuffix: "(memorizing, Fill in the blanks)",
+      tooltip: "Memorizing\u00A0· Fill in the blanks",
+      ariaLabel: "Memorizing: Fill in the blanks. Unheart",
     });
   });
 
@@ -27,7 +31,7 @@ describe("verseHeartMemoryCopy", () => {
         NOW,
         "UTC",
       ).tooltip,
-    ).toBe("Memorizing · Up next. Starts when you're ready.");
+    ).toBe("Memorizing\u00A0· Up next. Starts when you're ready.");
   });
 
   it("names the next review of a memorized verse", () => {
@@ -38,8 +42,8 @@ describe("verseHeartMemoryCopy", () => {
         "UTC",
       ),
     ).toEqual({
-      tooltip: "Memorized · next review Thu",
-      ariaSuffix: "(memorized, next review Thu)",
+      tooltip: "Memorized\u00A0· next review Thu",
+      ariaLabel: "Memorized: next review Thu. Unheart",
     });
     expect(
       verseHeartMemoryCopy(
@@ -47,7 +51,7 @@ describe("verseHeartMemoryCopy", () => {
         NOW,
         "UTC",
       ).tooltip,
-    ).toBe("Memorized · review due today");
+    ).toBe("Memorized\u00A0· review due today");
   });
 
   it("says Mastered and nothing else for a mastered verse", () => {
@@ -57,7 +61,34 @@ describe("verseHeartMemoryCopy", () => {
         NOW,
         "UTC",
       ),
-    ).toEqual({ tooltip: "Mastered", ariaSuffix: "(mastered)" });
+    ).toEqual({ tooltip: "Mastered", ariaLabel: "Mastered. Unheart" });
+  });
+});
+
+describe("verseHeartLabels", () => {
+  it("names each hearted state with matching tooltip and accessible name", () => {
+    expect(verseHeartLabels(false, false)).toEqual({
+      tooltip: "Heart Verse",
+      ariaLabel: "Heart Verse",
+    });
+    expect(verseHeartLabels(true, true)).toEqual({
+      tooltip: "Memorize or unheart",
+      ariaLabel: "Memorize or unheart",
+    });
+    expect(verseHeartLabels(true, false)).toEqual({
+      tooltip: "Unheart",
+      ariaLabel: "Unheart",
+    });
+  });
+
+  it("uses Memory copy when the verse is in Memory", () => {
+    const memoryCopy = verseHeartMemoryCopy(
+      { status: "learning", learnStage: 2, dueAt: NOW - 1 },
+      NOW,
+      "UTC",
+    );
+    expect(verseHeartLabels(true, false, memoryCopy)).toEqual(memoryCopy);
+    expect(memoryCopy.tooltip.startsWith("Memorizing\u00A0·")).toBe(true);
   });
 });
 

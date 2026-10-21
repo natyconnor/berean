@@ -458,6 +458,15 @@ export function PassageViewBody({
     ? Math.max(...selectedVerses)
     : null;
 
+  const heartNudgeCoversSpan = (startVerse: number, endVerse: number) => {
+    const offer = heartNudge.nudge.offer;
+    return (
+      offer != null &&
+      offer.span.startVerse === startVerse &&
+      offer.span.endVerse === endVerse
+    );
+  };
+
   const passageHeartForSingleVerse = (
     verseNumber: number,
   ): PassageHeartControl | null => {
@@ -481,6 +490,7 @@ export function PassageViewBody({
           ? (anchor, unheart) =>
               offerChoices(passageSelectLo, passageSelectHi, anchor, unheart)
           : undefined,
+        nudgeOpen: heartNudgeCoversSpan(passageSelectLo, passageSelectHi),
       };
     }
     return {
@@ -496,6 +506,7 @@ export function PassageViewBody({
         ? (anchor, unheart) =>
             offerChoices(verseNumber, verseNumber, anchor, unheart)
         : undefined,
+      nudgeOpen: heartNudgeCoversSpan(verseNumber, verseNumber),
     };
   };
 

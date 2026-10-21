@@ -141,16 +141,16 @@ describe("PassageGroupWithNotes selection bar", () => {
     });
     expect(bar).toHaveClass("absolute", "-top-4");
     expect(
-      within(bar).getByRole("button", { name: "Heart" }),
+      within(bar).getByRole("button", { name: "Heart Verses" }),
     ).toBeInTheDocument();
     expect(
       within(bar).queryByRole("button", { name: "Memorize" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Heart this verse" }),
+      screen.queryByRole("button", { name: "Heart Verse" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Remove from hearted verses" }),
+      screen.queryByRole("button", { name: "Unheart" }),
     ).not.toBeInTheDocument();
   });
 
@@ -178,7 +178,9 @@ describe("PassageGroupWithNotes selection bar", () => {
     const bar = screen.getByRole("toolbar");
     expect(bar).not.toHaveClass("absolute");
     expect(bar.parentElement?.lastElementChild).toBe(bar);
-    expect(screen.getByRole("button", { name: "Heart" })).toHaveClass("h-11");
+    expect(screen.getByRole("button", { name: "Heart Verses" })).toHaveClass(
+      "h-11",
+    );
   });
 
   it("keeps a memorized passage's rail and heart beside the selected verses", () => {

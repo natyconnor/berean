@@ -24,7 +24,10 @@ import {
 import { getHighlightColor } from "@/lib/highlight-colors";
 import { READER_VERSE_TEXT_CLASS } from "@/lib/reader-typography";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
-import type { HeartMemoryCopy } from "@/lib/heart-memory-copy";
+import {
+  verseHeartLabels,
+  type HeartMemoryCopy,
+} from "@/lib/heart-memory-copy";
 import { VERSE_EXPAND_TRANSITION } from "./note-animation-config";
 import { UnheartMemorizingDialog } from "./unheart-memorizing-dialog";
 
@@ -75,8 +78,10 @@ export interface PassageHeartControl {
    * unhearting; `unheart` unhearts it.
    */
   onOfferChoices?: (anchor: HTMLElement, unheart: () => void) => void;
-  /** Set while the verse is in Memory: replaces "Heart" / "Unheart". */
+  /** Set while the verse is in Memory: replaces "Heart Verse" / "Unheart". */
   memoryCopy?: HeartMemoryCopy;
+  /** True while this heart's memorize popover is open. Keeps the tooltip closed. */
+  nudgeOpen?: boolean;
 }
 
 interface VerseRowLeftProps {
@@ -238,6 +243,7 @@ export const PassageHeartAnimatedButton = memo(
     const [fxKey, setFxKey] = useState(0);
     const [playHeartAnim, setPlayHeartAnim] = useState(false);
     const [confirmUnheartOpen, setConfirmUnheartOpen] = useState(false);
+    const [tooltipOpen, setTooltipOpen] = useState(false);
     const [optimisticFilled, setOptimisticFilled] = useState(
       passageHeart.filled,
     );
@@ -261,16 +267,21 @@ export const PassageHeartAnimatedButton = memo(
       optimisticFilled && !passageHeart.stopsMemorizing
         ? passageHeart.onOfferChoices
         : undefined;
-    const heartLabel = !optimisticFilled
-      ? "Heart this verse"
-      : offerChoices
-        ? "Hearted. Memorize or unheart"
-        : "Remove from hearted verses";
+    const labels = verseHeartLabels(
+      optimisticFilled,
+      Boolean(offerChoices),
+      memoryCopy,
+    );
+    const suppressTooltip =
+      confirmUnheartOpen || playHeartAnim || Boolean(passageHeart.nudgeOpen);
+    if (suppressTooltip && tooltipOpen) {
+      setTooltipOpen(false);
+    }
 
     return (
       <div
         className={cn(
-          "group/heart relative flex w-full min-h-8 items-center justify-center overflow-visible transition-opacity",
+          "relative flex w-full min-h-8 items-center justify-center overflow-visible transition-opacity",
           alwaysVisible || passageHeart.alwaysVisible || optimisticFilled
             ? "opacity-100"
             : "opacity-0 group-hover:opacity-100",
@@ -321,114 +332,115 @@ export const PassageHeartAnimatedButton = memo(
             })}
           </span>
         ) : null}
-        <motion.button
-          ref={buttonRef}
-          type="button"
-          aria-label={
-            memoryCopy ? `${heartLabel} ${memoryCopy.ariaSuffix}` : heartLabel
-          }
-          aria-pressed={optimisticFilled}
-          className={cn(
-            "relative z-10 flex h-full min-h-9 min-w-9 items-center justify-center rounded px-2 hover:bg-primary/10",
-            optimisticFilled &&
-              "text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300",
-          )}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        <Tooltip
+          open={suppressTooltip ? false : tooltipOpen}
+          onOpenChange={(open) => {
+            if (suppressTooltip) return;
+            setTooltipOpen(open);
           }}
-          disabled={playHeartAnim}
-          aria-busy={playHeartAnim}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (optimisticFilled && passageHeart.stopsMemorizing) {
-              setConfirmUnheartOpen(true);
-              return;
-            }
-            if (offerChoices) {
-              const anchor = e.currentTarget;
-              offerChoices(anchor, () => {
-                setOptimisticFilled(false);
-                passageHeart.onToggle(anchor);
-              });
-              return;
-            }
-            const nextFilled = !optimisticFilled;
-            setOptimisticFilled(nextFilled);
-            if (nextFilled && !reduceMotion) {
-              setFxKey((k) => k + 1);
-              setPlayHeartAnim(true);
-            }
-            passageHeart.onToggle(e.currentTarget);
-          }}
-          whileTap={
-            reduceMotion
-              ? undefined
-              : {
-                  scale: 0.92,
-                  transition: { duration: 0.08, ease: [0.22, 1, 0.36, 1] },
-                }
-          }
         >
-          {showMasteryRing ? (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-0 flex items-center justify-center"
-            >
-              <MasteryRing
-                fraction={masteryFraction}
-                className={size === "large" ? "h-8 w-8" : "h-7 w-7"}
-              />
-            </span>
-          ) : null}
-          <motion.span
-            className="inline-flex"
-            initial={false}
-            animate={
-              playHeartAnim
-                ? {
-                    y: [0, -6, -1.5, 0],
-                    scale: [1, 1.12, 1.04, 1],
-                  }
-                : { y: 0, scale: 1 }
-            }
-            transition={
-              playHeartAnim
-                ? {
-                    duration: 0.45,
-                    times: [0, 0.32, 0.62, 1],
-                    ease: [0.22, 1, 0.36, 1],
-                  }
-                : { duration: 0.15 }
-            }
-            onAnimationComplete={() => {
-              setPlayHeartAnim((p) => (p ? false : p));
-            }}
-          >
-            <Heart
+          <TooltipTrigger asChild>
+            <motion.button
+              ref={buttonRef}
+              type="button"
+              aria-label={labels.ariaLabel}
+              aria-pressed={optimisticFilled}
               className={cn(
-                size === "large" ? "h-[22px] w-[22px]" : "h-[18px] w-[18px]",
-                optimisticFilled ? "fill-current" : "text-primary",
+                "relative z-10 flex h-full min-h-9 min-w-9 items-center justify-center rounded px-2 hover:bg-primary/10",
+                optimisticFilled &&
+                  "text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300",
               )}
-            />
-          </motion.span>
-        </motion.button>
-        <span
-          className={cn(
-            "pointer-events-none absolute z-50 rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover/heart:opacity-100",
-            memoryCopy
-              ? "left-0 w-max max-w-64"
-              : "left-1/2 -translate-x-1/2 whitespace-nowrap",
-            shouldFlipTooltipBelow ? "top-full mt-1.5" : "bottom-full mb-1.5",
-          )}
-        >
-          {memoryCopy?.tooltip ??
-            (!optimisticFilled
-              ? "Heart"
-              : offerChoices
-                ? "Memorize or unheart"
-                : "Unheart")}
-        </span>
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              disabled={playHeartAnim}
+              aria-busy={playHeartAnim}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (optimisticFilled && passageHeart.stopsMemorizing) {
+                  setConfirmUnheartOpen(true);
+                  return;
+                }
+                if (offerChoices) {
+                  const anchor = e.currentTarget;
+                  offerChoices(anchor, () => {
+                    setOptimisticFilled(false);
+                    passageHeart.onToggle(anchor);
+                  });
+                  return;
+                }
+                const nextFilled = !optimisticFilled;
+                setOptimisticFilled(nextFilled);
+                if (nextFilled && !reduceMotion) {
+                  setFxKey((k) => k + 1);
+                  setPlayHeartAnim(true);
+                }
+                passageHeart.onToggle(e.currentTarget);
+              }}
+              whileTap={
+                reduceMotion
+                  ? undefined
+                  : {
+                      scale: 0.92,
+                      transition: { duration: 0.08, ease: [0.22, 1, 0.36, 1] },
+                    }
+              }
+            >
+              {showMasteryRing ? (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                >
+                  <MasteryRing
+                    fraction={masteryFraction}
+                    className={size === "large" ? "h-8 w-8" : "h-7 w-7"}
+                  />
+                </span>
+              ) : null}
+              <motion.span
+                className="inline-flex"
+                initial={false}
+                animate={
+                  playHeartAnim
+                    ? {
+                        y: [0, -6, -1.5, 0],
+                        scale: [1, 1.12, 1.04, 1],
+                      }
+                    : { y: 0, scale: 1 }
+                }
+                transition={
+                  playHeartAnim
+                    ? {
+                        duration: 0.45,
+                        times: [0, 0.32, 0.62, 1],
+                        ease: [0.22, 1, 0.36, 1],
+                      }
+                    : { duration: 0.15 }
+                }
+                onAnimationComplete={() => {
+                  setPlayHeartAnim((p) => (p ? false : p));
+                }}
+              >
+                <Heart
+                  className={cn(
+                    size === "large"
+                      ? "h-[22px] w-[22px]"
+                      : "h-[18px] w-[18px]",
+                    optimisticFilled ? "fill-current" : "text-primary",
+                  )}
+                />
+              </motion.span>
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent
+            side={shouldFlipTooltipBelow ? "bottom" : "top"}
+            className="max-w-64"
+            collisionPadding={8}
+          >
+            {labels.tooltip}
+          </TooltipContent>
+        </Tooltip>
         {passageHeart.stopsMemorizing ? (
           <UnheartMemorizingDialog
             open={confirmUnheartOpen}
