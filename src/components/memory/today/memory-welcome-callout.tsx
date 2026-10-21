@@ -41,7 +41,7 @@ export function MemoryWelcomeCallout({
       description={WELCOME_DESCRIPTION}
       dismissLabel="Dismiss"
       className={cn(
-        "px-4 py-3 text-sm sm:px-5",
+        "px-4 py-3 text-sm sm:px-5 mb-3",
         firstRun && "mx-auto max-w-[920px]",
       )}
     />
