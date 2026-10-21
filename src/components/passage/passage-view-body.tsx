@@ -75,6 +75,7 @@ type SavedSpan = {
     status: MemoryStatus;
     learnStage: number;
     stageReps?: number;
+    ease?: number;
     intervalDays: number;
     dueAt: number;
     lastReviewedAt?: number;
@@ -262,6 +263,7 @@ export function PassageViewBody({
           memory.intervalDays,
           memory.learnStage,
           memory.stageReps ?? 0,
+          memory.ease,
         ),
         memoryCopy: verseHeartMemoryCopy(memory, now),
       };

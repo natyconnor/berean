@@ -8,6 +8,7 @@ import {
   MemoryPanelPage,
 } from "@/components/memory/drawer/memory-panel-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { memoryProgressFraction } from "@/lib/mastery-ring";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import { localDayIndex } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
@@ -19,6 +20,7 @@ const NOW = Date.UTC(2026, 9, 12, 18);
 const mocks = vi.hoisted(() => ({
   queryResults: new Map<string, unknown>(),
   queryByArgs: new Map<string, (args: unknown) => unknown>(),
+  queryCalls: [] as Array<[string, unknown]>,
   mutations: new Map<string, ReturnType<typeof vi.fn>>(),
   navigate: vi.fn(),
   startPassage: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock("convex/react", () => ({
 
 vi.mock("convex-helpers/react/cache", () => ({
   useQuery: (name: string, args: unknown) => {
+    mocks.queryCalls.push([name, args]);
     if (args === "skip") return undefined;
     const byArgs = mocks.queryByArgs.get(name);
     return byArgs ? byArgs(args) : mocks.queryResults.get(name);
@@ -160,23 +163,23 @@ function scopeFor(chapter: number) {
 }
 
 const PACKS: Record<string, unknown> = {
-  psalm16: {
-    _id: "psalm16",
+  psalm16x: {
+    _id: "psalm16x",
     name: "Psalm 16",
     kind: "scope",
     scope: scopeFor(16),
     createdAt: NOW - 10 * DAY_MS,
     lastOpenedAt: NOW - DAY_MS,
   },
-  merced: {
-    _id: "merced",
+  mercedxx: {
+    _id: "mercedxx",
     name: "Merced Team",
     kind: "custom",
     createdAt: Date.UTC(2026, 8, 12, 12),
     lastOpenedAt: NOW - DAY_MS,
   },
-  psalm23: {
-    _id: "psalm23",
+  psalm23x: {
+    _id: "psalm23x",
     name: "Psalm 23",
     kind: "scope",
     scope: scopeFor(23),
@@ -210,7 +213,7 @@ function piece(
 function passageView(extra: Record<string, unknown> = {}) {
   return {
     _id: "pm1",
-    packId: "psalm16",
+    packId: "psalm16x",
     status: "building",
     pieces: [
       piece(0, 1, 4, "solid"),
@@ -311,17 +314,18 @@ function renderHost(panel: string, from?: "verses") {
 beforeEach(() => {
   mocks.queryResults.clear();
   mocks.queryByArgs.clear();
+  mocks.queryCalls.length = 0;
   mocks.mutations.clear();
   mocks.navigate.mockReset();
   mocks.startPassage.mockReset();
   mocks.startPassage.mockResolvedValue(undefined);
   mocks.toast.mockReset();
   mocks.toastSuccess.mockReset();
-  passages = { psalm16: passageView() };
+  passages = { psalm16x: passageView() };
   membersByPack = {
-    psalm16: [],
-    merced: MERCED_MEMBERS,
-    psalm23: PSALM_23_MEMBERS,
+    psalm16x: [],
+    mercedxx: MERCED_MEMBERS,
+    psalm23x: PSALM_23_MEMBERS,
   };
   mocks.queryByArgs.set(
     "packs.get",
@@ -356,7 +360,7 @@ beforeEach(() => {
 
 describe("PackDetail for a passage", () => {
   it("shows the Learned bar, today's step and a chip per verse", () => {
-    renderHost("pack:psalm16");
+    renderHost("pack:psalm16x");
     const dialog = screen.getByRole("dialog", { name: "Psalm 16" });
 
     expect(within(dialog).getByText(/Passage · 11 verses/)).toBeInTheDocument();
@@ -365,7 +369,7 @@ describe("PackDetail for a passage", () => {
     ).toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "Continue · about 7 min" }),
-    ).toHaveAttribute("href", "/memory/psalm16/learn?return=%2Fmemory");
+    ).toHaveAttribute("href", "/memory/psalm16x/learn?return=%2Fmemory");
     expect(
       within(dialog).getByRole("link", { name: "Open in reader" }),
     ).toHaveAttribute("href", "/passage/Psalms-16");
@@ -402,7 +406,7 @@ describe("PackDetail for a passage", () => {
 
   it("says which memorized verses came from before the passage", () => {
     passages = {
-      psalm16: passageView({
+      psalm16x: passageView({
         pieces: [
           piece(0, 1, 4, "solid"),
           piece(1, 5, 6, "solid", { carriedOver: true }),
@@ -410,7 +414,7 @@ describe("PackDetail for a passage", () => {
         ],
       }),
     };
-    renderHost("pack:psalm16");
+    renderHost("pack:psalm16x");
     const dialog = screen.getByRole("dialog", { name: "Psalm 16" });
 
     expect(within(dialog).getAllByText("Memorized")).toHaveLength(6);
@@ -423,7 +427,7 @@ describe("PackDetail for a passage", () => {
 
   it("waits with Up next tomorrow once today's verses are in", () => {
     passages = {
-      psalm16: passageView({
+      psalm16x: passageView({
         pieces: [
           piece(0, 1, 4, "solid"),
           piece(1, 5, 6, "learning", {
@@ -436,7 +440,7 @@ describe("PackDetail for a passage", () => {
         addDayKey: localDayIndex(NOW, new Date(NOW).getTimezoneOffset()),
       }),
     };
-    renderHost("pack:psalm16");
+    renderHost("pack:psalm16x");
 
     expect(
       screen.getByRole("button", { name: /^Up next tomorrow/ }),
@@ -446,25 +450,29 @@ describe("PackDetail for a passage", () => {
 
   it("reviews a memorized passage that is due", () => {
     passages = {
-      psalm16: passageView({
+      psalm16x: passageView({
         status: "reviewing",
         pieces: [piece(0, 1, 11, "solid")],
         intervalDays: 6.6,
         dueAt: NOW - HOUR_MS,
       }),
     };
-    renderHost("pack:psalm16");
+    renderHost("pack:psalm16x");
 
     expect(
       screen.getByRole("link", { name: "Review Psalm 16" }),
-    ).toHaveAttribute("href", "/memory/psalm16/review?return=%2Fmemory");
+    ).toHaveAttribute("href", "/memory/psalm16x/review?return=%2Fmemory");
     expect(
-      screen.getByRole("progressbar", { name: "Mastery 22%" }),
+      screen.getByRole("progressbar", {
+        name: `Mastery ${Math.round(
+          memoryProgressFraction("reviewing", 3, 0, 6.6, undefined, 2.5) * 100,
+        )}%`,
+      }),
     ).toBeInTheDocument();
   });
 
   it("confirms Stop memorizing, clears it and closes the drawer", async () => {
-    renderHost("pack:psalm16");
+    renderHost("pack:psalm16x");
 
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
@@ -490,7 +498,7 @@ describe("PackDetail for a passage", () => {
 
     await waitFor(() =>
       expect(mocks.mutations.get("packs.stopMemorizing")).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "psalm16" }),
+        expect.objectContaining({ id: "psalm16x" }),
       ),
     );
     await waitFor(() =>
@@ -510,19 +518,18 @@ describe("PackDetail for a pack", () => {
   const RETURN = "return=%2Fmemory";
 
   it("shows both bars and per-verse Review, Practice and Learn", () => {
-    renderHost("pack:merced", "verses");
+    renderHost("pack:mercedxx", "verses");
     const dialog = screen.getByRole("dialog", { name: "Merced Team" });
 
     expect(
       within(dialog).getByText("Pack · 3 verses · added Sep 12"),
     ).toBeInTheDocument();
-    // One review due and one Up-next verse: the pack's blended session runs both.
     expect(
       within(dialog).getByRole("link", { name: "Continue · 2 verses today" }),
-    ).toHaveAttribute("href", `/memory/today?packId=merced&${RETURN}`);
+    ).toHaveAttribute("href", `/memory/today?packId=mercedxx&${RETURN}`);
     expect(
       within(dialog).getByRole("link", { name: "Practice anytime" }),
-    ).toHaveAttribute("href", `/memory/merced/practice?${RETURN}`);
+    ).toHaveAttribute("href", `/memory/mercedxx/practice?${RETURN}`);
     expect(
       within(dialog).queryByRole("link", { name: "Open in reader" }),
     ).not.toBeInTheDocument();
@@ -537,7 +544,11 @@ describe("PackDetail for a pack", () => {
     ).toBeInTheDocument();
 
     expect(
-      within(dialog).getByText("Memorized · review due today · mastery 22%"),
+      within(dialog).getByText(
+        `Memorized · review due today · mastery ${Math.round(
+          memoryProgressFraction("reviewing", 3, 0, 6.6, undefined, 2.5) * 100,
+        )}%`,
+      ),
     ).toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "Review Luke 9:23–24" }),
@@ -571,7 +582,7 @@ describe("PackDetail for a pack", () => {
   });
 
   it("deletes a pack without stopping its verses, then goes back to Your verses", async () => {
-    renderHost("pack:merced", "verses");
+    renderHost("pack:mercedxx", "verses");
 
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
@@ -594,7 +605,7 @@ describe("PackDetail for a pack", () => {
 
     await waitFor(() =>
       expect(mocks.mutations.get("packs.remove")).toHaveBeenCalledWith({
-        id: "merced",
+        id: "mercedxx",
       }),
     );
     expect(mocks.mutations.get("packs.stopMemorizing")).not.toHaveBeenCalled();
@@ -607,7 +618,7 @@ describe("PackDetail for a pack", () => {
   });
 
   it("offers Learn it as a passage for a legacy chapter pack", async () => {
-    renderHost("pack:psalm23");
+    renderHost("pack:psalm23x");
 
     expect(
       screen.getByText(/Want to learn all of Psalm 23 in order\?/),
@@ -619,7 +630,7 @@ describe("PackDetail for a pack", () => {
   });
 
   it("turns on Review together from the ⋯ menu and goes to recite", async () => {
-    renderHost("pack:psalm23");
+    renderHost("pack:psalm23x");
 
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     await userEvent.click(
@@ -637,17 +648,17 @@ describe("PackDetail for a pack", () => {
     await waitFor(() =>
       expect(
         mocks.mutations.get("packs.setUnifiedReview"),
-      ).toHaveBeenCalledWith({ id: "psalm23", enabled: true, now: NOW }),
+      ).toHaveBeenCalledWith({ id: "psalm23x", enabled: true, now: NOW }),
     );
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenLastCalledWith({
-        href: "/memory/psalm23/review?return=%2Fmemory",
+        href: "/memory/psalm23x/review?return=%2Fmemory",
       }),
     );
   });
 
   it("says so when the pack is gone", () => {
-    renderHost("pack:missing");
+    renderHost("pack:missing1");
     expect(
       screen.getByRole("dialog", { name: "Not found" }),
     ).toBeInTheDocument();
@@ -655,11 +666,57 @@ describe("PackDetail for a pack", () => {
 });
 
 describe("PackDetail on its full page", () => {
+  it("shows Not found for a junk pack id without querying packs.get", () => {
+    render(
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "pack", packId: "xyz" }}
+          from={undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Not found" }),
+    ).toBeInTheDocument();
+    expect(mocks.queryCalls).toContainEqual(["packs.get", "skip"]);
+    expect(
+      mocks.queryCalls.filter(
+        ([name, args]) => name === "packs.get" && args !== "skip",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("shows Not found for a document-shaped junk pack id without throwing", () => {
+    render(
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "pack", packId: "abcdefgh" }}
+          from={undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Not found" }),
+    ).toBeInTheDocument();
+    expect(mocks.queryCalls).toContainEqual(["packs.get", { id: "abcdefgh" }]);
+    expect(mocks.queryCalls).toContainEqual([
+      "packs.resolveMembers",
+      expect.objectContaining({ id: "abcdefgh" }),
+    ]);
+    expect(mocks.queryCalls).toContainEqual([
+      "passageMemory.getForPack",
+      expect.objectContaining({ packId: "abcdefgh" }),
+    ]);
+    expect(mutation("packs.touch")).not.toHaveBeenCalled();
+  });
+
   it("returns sessions to the page and links back to Your verses", () => {
     render(
       <TooltipProvider>
         <MemoryPanelPage
-          panel={{ kind: "pack", packId: "merced" }}
+          panel={{ kind: "pack", packId: "mercedxx" }}
           from="verses"
         />
       </TooltipProvider>,
@@ -675,7 +732,7 @@ describe("PackDetail on its full page", () => {
       screen.getByRole("link", { name: "Continue · 2 verses today" }),
     ).toHaveAttribute(
       "href",
-      "/memory/today?packId=merced&return=%2Fmemory%2Fmerced%3Ffrom%3Dverses",
+      "/memory/today?packId=mercedxx&return=%2Fmemory%2Fmercedxx%3Ffrom%3Dverses",
     );
     expect(
       screen.queryByRole("link", { name: "Open full page" }),
@@ -691,7 +748,7 @@ describe("PackDetail editing a pack", () => {
   }
 
   it("renames from the pencil: Enter saves, Esc cancels", async () => {
-    renderHost("pack:merced");
+    renderHost("pack:mercedxx");
 
     await userEvent.click(screen.getByRole("button", { name: "Rename" }));
     const field = screen.getByRole("textbox", { name: "Name" });
@@ -709,7 +766,7 @@ describe("PackDetail editing a pack", () => {
       "Merced Crew{Enter}",
     );
     expect(mocks.mutations.get("packs.rename")).toHaveBeenCalledWith({
-      id: "merced",
+      id: "mercedxx",
       name: "Merced Crew",
     });
     await waitFor(() =>
@@ -718,7 +775,7 @@ describe("PackDetail editing a pack", () => {
   });
 
   it("does not save an empty name", async () => {
-    renderHost("pack:merced");
+    renderHost("pack:mercedxx");
 
     await userEvent.click(screen.getByRole("button", { name: "Rename" }));
     await userEvent.clear(screen.getByRole("textbox", { name: "Name" }));
@@ -739,7 +796,7 @@ describe("PackDetail editing a pack", () => {
       vi.fn(({ orderedVerseRefIds }: { orderedVerseRefIds: string[] }) => {
         membersByPack = {
           ...membersByPack,
-          merced: orderedVerseRefIds.map((id) =>
+          mercedxx: orderedVerseRefIds.map((id) =>
             MERCED_MEMBERS.find((member) => member.verseRefId === id),
           ),
         };
@@ -748,7 +805,7 @@ describe("PackDetail editing a pack", () => {
     );
     const host = () => (
       <TooltipProvider>
-        <MemoryPanelHost panel="pack:merced" from={undefined} />
+        <MemoryPanelHost panel="pack:mercedxx" from={undefined} />
       </TooltipProvider>
     );
     const view = render(host());
@@ -764,7 +821,7 @@ describe("PackDetail editing a pack", () => {
 
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
     expect(mocks.mutations.get("packs.reorder")).toHaveBeenCalledWith({
-      id: "merced",
+      id: "mercedxx",
       orderedVerseRefIds: ["josh", "luke", "isa"],
     });
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -778,7 +835,7 @@ describe("PackDetail editing a pack", () => {
     });
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
     expect(mocks.toastSuccess).toHaveBeenCalledWith("New order saved", {
-      id: "pack-order-merced",
+      id: "pack-order-mercedxx",
     });
 
     await userEvent.click(
@@ -788,7 +845,7 @@ describe("PackDetail editing a pack", () => {
       await screen.findByRole("menuitem", { name: "Move up" }),
     );
     expect(mocks.mutations.get("packs.reorder")).toHaveBeenLastCalledWith({
-      id: "merced",
+      id: "mercedxx",
       orderedVerseRefIds: ["josh", "isa", "luke"],
     });
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -798,13 +855,13 @@ describe("PackDetail editing a pack", () => {
 
   it("removes a verse with an Undo that puts it back at its old place", async () => {
     mutation("packs.removeVerse").mockResolvedValue(1);
-    renderHost("pack:merced");
+    renderHost("pack:mercedxx");
 
     await userEvent.click(
       screen.getByRole("button", { name: "Remove Joshua 1:9" }),
     );
     expect(mocks.mutations.get("packs.removeVerse")).toHaveBeenCalledWith({
-      id: "merced",
+      id: "mercedxx",
       verseRefId: "josh",
     });
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledTimes(1));
@@ -817,14 +874,14 @@ describe("PackDetail editing a pack", () => {
 
     options.action.onClick();
     expect(mocks.mutations.get("packs.restoreVerse")).toHaveBeenCalledWith({
-      id: "merced",
+      id: "mercedxx",
       verseRefId: "josh",
       order: 1,
     });
   });
 
   it("adds a verse by reference from the inline row, and Esc closes only the row", async () => {
-    renderHost("pack:merced");
+    renderHost("pack:mercedxx");
 
     await userEvent.click(screen.getByRole("button", { name: "Add verses" }));
     const search = screen.getByRole("searchbox", {
@@ -841,7 +898,7 @@ describe("PackDetail editing a pack", () => {
       screen.getByRole("button", { name: "Add John 14:27" }),
     );
     expect(mocks.mutations.get("packs.addVerse")).toHaveBeenCalledWith({
-      id: "merced",
+      id: "mercedxx",
       book: "John",
       chapter: 14,
       startVerse: 27,
@@ -863,8 +920,8 @@ describe("PackDetail editing a pack", () => {
   });
 
   it("offers Add verses on an empty pack", async () => {
-    membersByPack = { ...membersByPack, merced: [] };
-    renderHost("pack:merced");
+    membersByPack = { ...membersByPack, mercedxx: [] };
+    renderHost("pack:mercedxx");
 
     expect(
       screen.getByText(
@@ -878,7 +935,7 @@ describe("PackDetail editing a pack", () => {
   });
 
   it("leaves chapter packs and passages without add, remove or reorder", () => {
-    renderHost("pack:psalm23");
+    renderHost("pack:psalm23x");
     expect(
       screen.queryByRole("button", { name: "Add verses" }),
     ).not.toBeInTheDocument();

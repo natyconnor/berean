@@ -52,6 +52,7 @@ const savedMemoryValidator = v.object({
   ),
   learnStage: v.number(),
   stageReps: v.optional(v.number()),
+  ease: v.optional(v.number()),
   intervalDays: v.number(),
   dueAt: v.number(),
   lastReviewedAt: v.optional(v.number()),
@@ -107,6 +108,7 @@ type SavedVerseListItem = SavedVerseRefItem & {
     status: Doc<"verseMemory">["status"];
     learnStage: number;
     stageReps?: number;
+    ease?: number;
     intervalDays: number;
     dueAt: number;
     lastReviewedAt?: number;
@@ -141,6 +143,7 @@ function listItemMemory(
     status: memory.status,
     learnStage: memory.learnStage,
     stageReps: memory.stageReps,
+    ease: memory.ease,
     intervalDays: memory.intervalDays,
     dueAt: memory.dueAt,
     lastReviewedAt: memory.lastReviewedAt,

@@ -321,6 +321,8 @@ export const listMine = query({
                 addsOnDay: passage.addsOnDay,
                 addDayKey: passage.addDayKey,
                 intervalDays: passage.intervalDays,
+                stageReps: passage.stageReps,
+                ease: passage.ease,
                 dueAt: passage.dueAt,
                 lastSessionAt: passage.lastSessionAt,
                 createdAt: passage.createdAt,
@@ -353,13 +355,16 @@ export const listMine = query({
 });
 
 export const get = query({
-  args: { id: v.id("packs") },
+  args: { id: v.string() },
   returns: v.union(packValidator, v.null()),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) return null;
 
-    const pack = await loadOwnedPack(ctx, args.id, userId);
+    const id = ctx.db.normalizeId("packs", args.id);
+    if (!id) return null;
+
+    const pack = await loadOwnedPack(ctx, id, userId);
     if (!pack) return null;
 
     return {
@@ -453,13 +458,15 @@ export const stopMemorizing = mutation({
 });
 
 export const touch = mutation({
-  args: { id: v.id("packs") },
+  args: { id: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
-    const pack = await loadOwnedPack(ctx, args.id, userId);
+    const id = ctx.db.normalizeId("packs", args.id);
+    if (!id) return null;
+    const pack = await loadOwnedPack(ctx, id, userId);
     if (!pack) return null;
-    await ctx.db.patch(args.id, { lastOpenedAt: Date.now() });
+    await ctx.db.patch(id, { lastOpenedAt: Date.now() });
     return null;
   },
 });
@@ -690,13 +697,16 @@ export const restoreVerse = mutation({
 });
 
 export const resolveMembers = query({
-  args: { id: v.id("packs"), now: v.number() },
+  args: { id: v.string(), now: v.number() },
   returns: v.array(packMemberValidator),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) return [];
 
-    const pack = await loadOwnedPack(ctx, args.id, userId);
+    const id = ctx.db.normalizeId("packs", args.id);
+    if (!id) return [];
+
+    const pack = await loadOwnedPack(ctx, id, userId);
     if (!pack) return [];
 
     const members = await loadPackMembers(ctx, userId, pack);

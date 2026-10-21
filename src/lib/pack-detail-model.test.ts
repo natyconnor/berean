@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { PackGoalCard, PassageGoalCard } from "./memory-goals";
-import { DAY_MS } from "./memory-scheduler";
+import { memoryProgressFraction } from "./mastery-ring";
+import {
+  buildGoalCards,
+  type PackGoalCard,
+  type PassageGoalCard,
+} from "./memory-goals";
+import { DAY_MS, EASE_START } from "./memory-scheduler";
 import {
   offersLearnAsPassage,
   packDetailActions,
@@ -76,6 +81,8 @@ function passage(extra: Partial<PackDetailPassage> = {}): PackDetailPassage {
     ],
     addsOnDay: 0,
     intervalDays: 0,
+    stageReps: 0,
+    ease: 2.3,
     dueAt: NOW,
     createdAt: NOW - 10 * DAY_MS,
     ...extra,
@@ -95,6 +102,8 @@ function member(
     status: "reviewing",
     learnStage: 3,
     intervalDays: 6.6,
+    stageReps: 0,
+    ease: 2.3,
     dueAt: NOW - HOUR_MS,
     ...extra,
   };
@@ -110,6 +119,24 @@ function passageGoal(extra: Partial<PackDetailPassage> = {}): PassageGoalCard {
   });
   if (goal?.kind !== "passage") throw new Error("expected a passage goal");
   return goal;
+}
+
+function reviewingMasteryPercent(
+  member: Pick<
+    PackDetailMember,
+    "learnStage" | "stageReps" | "intervalDays" | "ease"
+  >,
+): number {
+  return Math.round(
+    memoryProgressFraction(
+      "reviewing",
+      member.learnStage,
+      member.stageReps,
+      member.intervalDays,
+      undefined,
+      member.ease,
+    ) * 100,
+  );
 }
 
 function packGoal(
@@ -418,7 +445,7 @@ describe("packMemberRow", () => {
   it("due memorized offers Review and Practice", () => {
     expect(packMemberRow(MERCED_MEMBERS[0], opts)).toEqual({
       status: "reviewing",
-      line: "Memorized · review due today · mastery 22%",
+      line: `Memorized · review due today · mastery ${reviewingMasteryPercent(MERCED_MEMBERS[0])}%`,
       actions: ["review", "practice"],
     });
   });
@@ -428,7 +455,7 @@ describe("packMemberRow", () => {
       packMemberRow(member("luke", { dueAt: Date.UTC(2026, 9, 15, 12) }), opts),
     ).toEqual({
       status: "reviewing",
-      line: "Memorized · next review Thu · mastery 22%",
+      line: `Memorized · next review Thu · mastery ${reviewingMasteryPercent(MERCED_MEMBERS[0])}%`,
       actions: ["practice"],
     });
     expect(
@@ -448,6 +475,55 @@ describe("packMemberRow", () => {
       packMemberRow(MERCED_MEMBERS[0], { ...opts, reviewTogether: true })
         .actions,
     ).toEqual(["practice"]);
+  });
+
+  it("shows the same reviewing mastery as the verse bar, including banked stageReps", () => {
+    const reviewing = member("john", {
+      intervalDays: 1,
+      stageReps: 2,
+      ease: EASE_START,
+    });
+    const bar = memoryProgressFraction(
+      "reviewing",
+      reviewing.learnStage,
+      reviewing.stageReps,
+      reviewing.intervalDays,
+      undefined,
+      reviewing.ease,
+    );
+    const shown = Math.round(bar * 100);
+
+    expect(packMemberRow(reviewing, opts).line).toContain(`mastery ${shown}%`);
+    expect(packGoal([reviewing]).masteryFraction).toBeCloseTo(bar);
+
+    const verseGoal = buildGoalCards({
+      now: NOW,
+      tzOffsetMinutes: 0,
+      verses: [
+        {
+          verseRefId: reviewing.verseRefId,
+          book: reviewing.book,
+          chapter: reviewing.chapter,
+          startVerse: reviewing.startVerse,
+          endVerse: reviewing.endVerse,
+          status: reviewing.status,
+          learnStage: reviewing.learnStage,
+          intervalDays: reviewing.intervalDays,
+          stageReps: reviewing.stageReps,
+          ease: reviewing.ease,
+          dueAt: reviewing.dueAt,
+          createdAt: NOW - DAY_MS,
+        },
+      ],
+      packs: [],
+      passages: [],
+      upNextByPackId: new Map(),
+      reviewTogether: new Map(),
+      reviewTogetherVerseRefIds: new Set(),
+    });
+    expect(verseGoal).toHaveLength(1);
+    expect(verseGoal[0]?.kind).toBe("verse");
+    expect(verseGoal[0]?.masteryFraction).toBeCloseTo(bar);
   });
 });
 
@@ -539,7 +615,14 @@ describe("progress", () => {
       TZ,
     );
     expect(progress.learned).toBeNull();
-    expect(progress.mastery).toMatchObject({ label: "Mastery 22%" });
+    expect(progress.mastery).toMatchObject({
+      label: `Mastery ${reviewingMasteryPercent({
+        learnStage: 3,
+        stageReps: 0,
+        intervalDays: 6.6,
+        ease: 2.3,
+      })}%`,
+    });
   });
 
   it("pack shows both bars once a verse is learned", () => {
@@ -549,7 +632,17 @@ describe("progress", () => {
       fraction: 0.5,
       detail: "1 learning · 1 up next",
     });
-    expect(progress.mastery).toMatchObject({ label: "Mastery 11%" });
+    const reviewingShare = memoryProgressFraction(
+      "reviewing",
+      3,
+      0,
+      6.6,
+      undefined,
+      2.3,
+    );
+    expect(progress.mastery).toMatchObject({
+      label: `Mastery ${Math.round(((reviewingShare + reviewingShare) / 4) * 100)}%`,
+    });
     expect(progress.mastery?.detail).toMatch(/^first ones mastered /);
   });
 

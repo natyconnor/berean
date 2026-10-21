@@ -3,12 +3,12 @@ import {
   stepLadderDay,
   type StepLadderDay,
 } from "./memory-copy";
+import { memoryProgressFraction } from "./mastery-ring";
 import {
   calendarDaysBetween,
   estimateMemorizeDays,
   formatLearnDuration,
   formatShortDate,
-  masteryProgress,
 } from "./memorize-plan";
 import {
   DAY_MS,
@@ -52,6 +52,8 @@ export interface GoalVerseInput<V extends string = string> {
   status: MemoryStatus;
   learnStage: number;
   intervalDays: number;
+  stageReps: number;
+  ease: number;
   dueAt: number;
   lastReviewedAt?: number;
   createdAt: number;
@@ -82,6 +84,8 @@ export interface GoalPassageInput<P extends string = string> {
   addsOnDay: number;
   addDayKey?: number;
   intervalDays: number;
+  stageReps: number;
+  ease: number;
   dueAt: number;
   lastSessionAt?: number;
   createdAt: number;
@@ -213,12 +217,23 @@ export function localDayStart(now: number, tzOffsetMinutes: number): number {
   );
 }
 
-function masteryFor(
-  phase: MemoryStatus | PassageDueStatus,
-  intervalDays: number,
-): number {
-  if (phase === "mastered") return 1;
-  if (phase === "reviewing") return masteryProgress(intervalDays);
+function masteryFor(row: {
+  status: MemoryStatus | PassageDueStatus;
+  intervalDays: number;
+  stageReps: number;
+  ease: number;
+}): number {
+  if (row.status === "mastered") return 1;
+  if (row.status === "reviewing") {
+    return memoryProgressFraction(
+      "reviewing",
+      0,
+      row.stageReps,
+      row.intervalDays,
+      undefined,
+      row.ease,
+    );
+  }
   return 0;
 }
 
@@ -402,7 +417,7 @@ export function passageGoal<P extends string>(
     hasWorkToday,
     todayStep:
       todayIndex === null ? null : passageTodayStep(pieces, todayIndex),
-    masteryFraction: masteryFor(passage.status, passage.intervalDays),
+    masteryFraction: masteryFor(passage),
     nextDueAt: !building
       ? passage.dueAt
       : hasWorkToday
@@ -441,7 +456,7 @@ function packGoal<P extends string, V extends string>(
     if (member.status === "mastered") mastered += 1;
     if (member.status === "learning") learning += 1;
     if (member.status === "new") upNext += 1;
-    masterySum += masteryFor(member.status, member.intervalDays);
+    masterySum += masteryFor(member);
     if (isDueForLearning(member, now)) learningOpen += 1;
     if (member.status !== "new") nextDueAt = minOrNull(nextDueAt, member.dueAt);
     lastPracticedAt = maxOrNull(lastPracticedAt, member.lastReviewedAt);
@@ -498,7 +513,7 @@ function verseGoal<V extends string>(
     status: verse.status,
     learnStage: verse.learnStage,
     intervalDays: verse.intervalDays,
-    masteryFraction: masteryFor(verse.status, verse.intervalDays),
+    masteryFraction: masteryFor(verse),
     hasWorkToday: isDueForLearning(verse, now) || isDueForReview(verse, now),
     nextDueAt: verse.status === "new" ? null : verse.dueAt,
     createdAt: verse.createdAt,

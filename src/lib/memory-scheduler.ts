@@ -746,6 +746,112 @@ export function nextExactReviewIntervalDays(
 }
 
 /**
+ * Exact reviewing recalls still needed before the interval reaches
+ * {@link MASTERED_INTERVAL_DAYS}. Uses the same daily / every-other-day /
+ * growing rules as {@link scheduleNext}. Returns 0 once the interval is
+ * already at the mastered threshold.
+ */
+export function exactReviewsUntilMastered(
+  s: Pick<MemorySchedule, "intervalDays" | "ease" | "stageReps">,
+): number {
+  if (s.intervalDays >= MASTERED_INTERVAL_DAYS) return 0;
+
+  let current: Pick<
+    MemorySchedule,
+    "status" | "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+  > = {
+    status: "reviewing",
+    intervalDays: s.intervalDays,
+    ease: s.ease,
+    stageReps: Math.max(0, s.stageReps),
+    consecutiveCorrect: 0,
+  };
+  let remaining = 0;
+  const cap = 64;
+  while (remaining < cap && current.status !== "mastered") {
+    current = nextReviewingOnExact(current);
+    remaining += 1;
+  }
+  return remaining;
+}
+
+export const REVIEWING_PATH_START_EASE_CACHE_LIMIT = 512;
+
+const reviewingPathStartEaseCache = new Map<string, number>();
+
+function reviewingPathStartEaseCacheGet(key: string): number | undefined {
+  const value = reviewingPathStartEaseCache.get(key);
+  if (value === undefined) return undefined;
+  reviewingPathStartEaseCache.delete(key);
+  reviewingPathStartEaseCache.set(key, value);
+  return value;
+}
+
+function reviewingPathStartEaseCacheSet(key: string, value: number): void {
+  if (reviewingPathStartEaseCache.has(key)) {
+    reviewingPathStartEaseCache.delete(key);
+  } else if (
+    reviewingPathStartEaseCache.size >= REVIEWING_PATH_START_EASE_CACHE_LIMIT
+  ) {
+    const oldest = reviewingPathStartEaseCache.keys().next().value;
+    if (oldest !== undefined) reviewingPathStartEaseCache.delete(oldest);
+  }
+  reviewingPathStartEaseCache.set(key, value);
+}
+
+function computeReviewingPathStartEase(
+  intervalDays: number,
+  ease: number,
+): number {
+  for (let k = 0; k <= 64; k += 1) {
+    const startEase = ease - k * 0.05;
+    if (k > 0 && startEase < EASE_MIN - 1e-6) break;
+    let current: Pick<
+      MemorySchedule,
+      "status" | "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+    > = {
+      status: "reviewing",
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      ease: startEase,
+      stageReps: 0,
+      consecutiveCorrect: 0,
+    };
+    for (let i = 0; i < 64; i += 1) {
+      if (
+        Math.abs(current.intervalDays - intervalDays) <= 1e-6 &&
+        Math.abs(current.ease - ease) <= 1e-6
+      ) {
+        return startEase;
+      }
+      if (current.status === "mastered") break;
+      current = nextReviewingOnExact(current);
+    }
+  }
+  return ease;
+}
+
+export function reviewingPathStartEase(
+  intervalDays: number,
+  ease: number,
+): number {
+  if (
+    !(intervalDays > REVIEW_EVERY_OTHER_INTERVAL_DAYS) ||
+    !Number.isFinite(intervalDays) ||
+    !Number.isFinite(ease)
+  ) {
+    return ease;
+  }
+
+  const key = `${intervalDays}\0${ease}`;
+  const cached = reviewingPathStartEaseCacheGet(key);
+  if (cached !== undefined) return cached;
+
+  const startEase = computeReviewingPathStartEase(intervalDays, ease);
+  reviewingPathStartEaseCacheSet(key, startEase);
+  return startEase;
+}
+
+/**
  * Drop one post-graduation ladder step after a hard miss.
  *
  * Daily review returns to Challenge (due now, out of the review queue).

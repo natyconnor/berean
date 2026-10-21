@@ -62,19 +62,32 @@ describe("LearningJourneyBar", () => {
     expect(fill).toHaveStyle({ width: "0%" });
   });
 
-  it("fills the mastery bar from the review interval alone", () => {
-    render(
+  it("fills the mastery bar when a daily reviewing streak banks a rep", () => {
+    const { rerender } = render(
       <LearningJourneyBar
         learnStage={3}
-        stageReps={requiredRepsFor(3)}
+        stageReps={0}
         status="reviewing"
-        intervalDays={MASTERED_INTERVAL_DAYS / 2}
+        intervalDays={1}
       />,
     );
 
     expect(
-      screen.getByLabelText(/Progress to mastered: Memorized · 50%/),
+      screen.getByLabelText(/Progress to mastered: Memorized · 0%/),
     ).toBeInTheDocument();
+
+    rerender(
+      <LearningJourneyBar
+        learnStage={3}
+        stageReps={1}
+        status="reviewing"
+        intervalDays={1}
+      />,
+    );
+
+    const after = screen.getByLabelText(/Progress to mastered: Memorized/);
+    const pct = Number(after.getAttribute("aria-label")?.match(/(\d+)%/)?.[1]);
+    expect(pct).toBeGreaterThan(0);
   });
 
   it("says what each bar is working toward", () => {
@@ -86,11 +99,12 @@ describe("LearningJourneyBar", () => {
     rerender(
       <LearningJourneyBar
         learnStage={3}
+        stageReps={0}
         status="reviewing"
-        intervalDays={MASTERED_INTERVAL_DAYS / 2}
+        intervalDays={1}
       />,
     );
-    expect(screen.getByText("50% to mastered")).toBeInTheDocument();
+    expect(screen.getByText("0% to mastered")).toBeInTheDocument();
 
     rerender(
       <LearningJourneyBar

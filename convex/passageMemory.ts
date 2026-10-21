@@ -70,7 +70,7 @@ import { applyUnifiedGrade } from "../src/lib/unified-review-schedule";
  */
 export const getForPack = query({
   args: {
-    packId: v.id("packs"),
+    packId: v.string(),
     now: v.number(),
     tzOffsetMinutes: v.number(),
   },
@@ -79,7 +79,10 @@ export const getForPack = query({
     const userId = await getCurrentUserIdOrNull(ctx);
     if (!userId) return null;
 
-    const row = await loadPassageForPack(ctx, args.packId, userId);
+    const packId = ctx.db.normalizeId("packs", args.packId);
+    if (!packId) return null;
+
+    const row = await loadPassageForPack(ctx, packId, userId);
     if (!row) return null;
 
     return toPassageView(row, args.now, args.tzOffsetMinutes);
