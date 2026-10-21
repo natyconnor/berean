@@ -196,6 +196,7 @@ function ChapterMemorizeButton({
                 CHAPTER_CHROME_ICON_BUTTON_CLASS,
                 "outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+                "@max-lg/chapter-chrome:ml-auto",
               )}
             >
               <Brain aria-hidden className="size-4 shrink-0" />
