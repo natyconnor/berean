@@ -14,7 +14,6 @@ interface InlineFeatureCalloutProps {
   onPrimaryAction?: () => void;
   dismissLabel?: string;
   className?: string;
-  dismissClassName?: string;
 }
 
 /**
@@ -30,7 +29,6 @@ export function InlineFeatureCallout({
   onPrimaryAction,
   dismissLabel = "Got it",
   className,
-  dismissClassName,
 }: InlineFeatureCalloutProps) {
   const visible = state.pending;
 
@@ -79,10 +77,7 @@ export function InlineFeatureCallout({
               type="button"
               aria-label={dismissLabel}
               onClick={() => state.dismiss()}
-              className={cn(
-                "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
-                dismissClassName,
-              )}
+              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
             </button>

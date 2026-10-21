@@ -27,7 +27,6 @@ export function MemoryWelcomeCallout({
   );
 
   useEffect(() => {
-    // A queue win after this second would insert the card after the person has started reading Today.
     if (!ready || !hintsLoaded || missedSlot || state.pending) return;
     const timer = window.setTimeout(() => {
       setMissedSlot(true);
@@ -41,8 +40,6 @@ export function MemoryWelcomeCallout({
       title="Welcome to Memory"
       description={WELCOME_DESCRIPTION}
       dismissLabel="Dismiss"
-      // Shared dismiss glyph is 14px with 2px of padding. Keep the 24px target local.
-      dismissClassName="size-6"
       className={cn(
         "px-4 py-3 text-sm sm:px-5 -mb-5",
         firstRun && "mx-auto max-w-[920px]",

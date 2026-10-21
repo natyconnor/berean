@@ -44,7 +44,6 @@ vi.mock("framer-motion", () => ({
       exit?: unknown;
       transition?: unknown;
     }) => {
-      // Motion props are not DOM attributes.
       void initial;
       void animate;
       void exit;
@@ -383,8 +382,6 @@ describe("Today welcome explainer", () => {
     const view = await mountTodayWhileAnotherHintHoldsTheSlot();
 
     view.rerender(<TodayHarness showToday />);
-    // Advance only the queue tick. Running every pending timer would also
-    // fire the one-second give-up and hide the card.
     act(() => {
       vi.advanceTimersToNextTimer();
     });
