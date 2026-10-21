@@ -13,8 +13,7 @@ import type { OnboardingMilestones } from "@/lib/staged-onboarding-thresholds";
 
 import { TodayPage } from "./today-page";
 
-/** Monday, Oct 12, 2026. */
-const NOW = Date.UTC(2026, 9, 12, 18);
+const MONDAY_OCT_12_2026 = Date.UTC(2026, 9, 12, 18);
 
 const WELCOME_COPY =
   "Memorize a verse or passage and it lives here. Come back each day: Today shows what's ready, and one button starts it. Hearting a verse just saves it; it never adds work.";
@@ -105,7 +104,7 @@ vi.mock("@/hooks/use-esv-reference", () => ({
   useEsvReference: () => ({ data: null, loading: false, error: null }),
 }));
 
-vi.mock("@/hooks/use-live-now", () => ({ useLiveNow: () => NOW }));
+vi.mock("@/hooks/use-live-now", () => ({ useLiveNow: () => MONDAY_OCT_12_2026 }));
 vi.mock("@/lib/viewer-timezone", () => ({ getViewerTimeZone: () => "UTC" }));
 vi.mock("@/lib/preview-test-tools", () => ({
   isPreviewTestToolsEnabled: () => false,
@@ -143,10 +142,10 @@ const PASSAGE_GOAL = {
     ladderDay: 1,
   },
   masteryFraction: 0,
-  nextDueAt: NOW,
-  createdAt: NOW - 10 * DAY_MS,
-  lastActivityAt: NOW - DAY_MS,
-  lastPracticedAt: NOW - DAY_MS,
+  nextDueAt: MONDAY_OCT_12_2026,
+  createdAt: MONDAY_OCT_12_2026 - 10 * DAY_MS,
+  lastActivityAt: MONDAY_OCT_12_2026 - DAY_MS,
+  lastPracticedAt: MONDAY_OCT_12_2026 - DAY_MS,
 };
 
 const PACK_GOAL = {
@@ -166,10 +165,10 @@ const PACK_GOAL = {
   learningToday: 0,
   reviewTogether: false,
   hasWorkToday: true,
-  nextDueAt: NOW,
-  createdAt: NOW - 30 * DAY_MS,
-  lastActivityAt: NOW - DAY_MS,
-  lastPracticedAt: NOW - DAY_MS,
+  nextDueAt: MONDAY_OCT_12_2026,
+  createdAt: MONDAY_OCT_12_2026 - 30 * DAY_MS,
+  lastActivityAt: MONDAY_OCT_12_2026 - DAY_MS,
+  lastPracticedAt: MONDAY_OCT_12_2026 - DAY_MS,
   memberLabels: ["Luke 9:23–24", "Matthew 6:33"],
 };
 
@@ -178,7 +177,7 @@ const WORK_TODAY = {
   counts: { learningVerses: 4, passageSessions: 1, reviews: 5 },
   doneToday: { learningSteps: 0, reviews: 0 },
   startedToday: false,
-  nextReviewAt: NOW + DAY_MS,
+  nextReviewAt: MONDAY_OCT_12_2026 + DAY_MS,
   hasAnythingMemorized: true,
   totalInMemory: 17,
   statusCounts: { learning: 9, memorized: 8, mastered: 0 },
