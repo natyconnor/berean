@@ -117,9 +117,8 @@ export function ModeDock() {
     return modes;
   }, [studyUnlocked]);
 
-  // One-time reveal callouts, reusing the shared hint system. Only claim a hint
-  // while the dock can actually render its callout — on Settings/legal routes
-  // the global hint queue is never pinned by an eligible-but-unrendered callout.
+  // Only claim a hint while the dock can render it. Settings and legal pages
+  // hide the dock, and an eligible-but-unrendered callout would pin the queue.
   const studyHint = useFeatureHint(
     FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES,
     studyUnlocked && dockEnabled,
@@ -226,8 +225,6 @@ export function ModeDock() {
               aria-label={badgeLabel}
               className={cn(
                 "ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
-                // Theme primary on the card; invert against the selected
-                // primary pill so the count stays readable in every theme.
                 isMemoryRoute
                   ? "bg-primary-foreground text-primary"
                   : "bg-primary text-primary-foreground",
