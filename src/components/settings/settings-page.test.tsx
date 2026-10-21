@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "./settings-page";
@@ -218,5 +218,30 @@ describe("SettingsPage", () => {
     expect(
       screen.queryByText("The dock is hidden on Settings."),
     ).not.toBeInTheDocument();
+  });
+
+  it("resets the Memory welcome explainer with the other feature hints", async () => {
+    const user = userEvent.setup();
+    useQueryMock.mockImplementation((reference: unknown) => {
+      if (reference === "api.tags.listCatalog") {
+        return [];
+      }
+      if (reference === "api.userSettings.getTutorialStatus") {
+        return { categoryColors: {} };
+      }
+      return undefined;
+    });
+    resetHintMock.mockResolvedValue(null);
+
+    render(<SettingsPage />);
+    await user.click(
+      screen.getByRole("button", { name: "Reset feature hints" }),
+    );
+
+    await waitFor(() => {
+      expect(resetHintMock).toHaveBeenCalledWith({
+        hintId: "memory-first-open-explainer",
+      });
+    });
   });
 });
