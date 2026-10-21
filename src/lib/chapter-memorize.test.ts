@@ -154,7 +154,8 @@ describe("chapterMemorizeCopy", () => {
       {
         title: "Memorizing · 2 of 6",
         label: "Memorizing, 2 of 6 learned, Sample · Psalm 1 (start passage)",
-        tooltip: "Memorizing Sample · Psalm 1 (start passage) · 2 of 6 learned",
+        tooltip:
+          "Memorizing Sample · Psalm 1 (start passage) · 2 of 6 learned · Open pack",
       },
     ],
     [
@@ -162,7 +163,7 @@ describe("chapterMemorizeCopy", () => {
       {
         title: "Memorized ✓",
         label: "Memorized, Psalm 1",
-        tooltip: "Memorized Psalm 1",
+        tooltip: "Memorized Psalm 1 · Open pack",
       },
     ],
     [
@@ -177,7 +178,7 @@ describe("chapterMemorizeCopy", () => {
       {
         title: "Part of Sermon on the Mount",
         label: "Part of Sermon on the Mount, memorizing, 4 of 111 learned",
-        tooltip: "Part of Sermon on the Mount · Memorizing · 4 of 111 learned",
+        tooltip: "Part of Sermon on the Mount · 4 of 111 learned · Open pack",
       },
     ],
     [
@@ -192,7 +193,7 @@ describe("chapterMemorizeCopy", () => {
       {
         title: "Part of Sermon on the Mount",
         label: "Part of Sermon on the Mount, memorized",
-        tooltip: "Part of Sermon on the Mount · Memorized ✓",
+        tooltip: "Part of Sermon on the Mount · Memorized · Open pack",
       },
     ],
   ];

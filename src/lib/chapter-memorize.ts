@@ -100,16 +100,16 @@ export function chapterMemorizeState(
 }
 
 export type ChapterMemorizeCopy = {
-  /** The button's one line: "Memorize Psalm 1", "Memorizing · 2 of 6". */
+  /** The state's one line, kept for tests and copy helpers. */
   title: string;
   /**
    * The one word left when the line does not fit. Only the start state has
-   * one; the others go straight to the icon and its {@link ChapterMemorizeMark}.
+   * one; the header is icon-only and does not show it.
    */
   short?: string;
-  /** Accessible name; starts with the visible words. */
+  /** Accessible name. Unchanged when the header is icon-only. */
   label: string;
-  /** Hover text, with the passage title the line leaves out. */
+  /** Hover text. After the start state, ends with Open pack. */
   tooltip: string;
 };
 
@@ -131,14 +131,14 @@ export function chapterMemorizeCopy(
       return {
         title: `Memorizing · ${count}`,
         label: `Memorizing, ${count} learned, ${state.title}`,
-        tooltip: `Memorizing ${state.title} · ${count} learned`,
+        tooltip: `Memorizing ${state.title} · ${count} learned · Open pack`,
       };
     }
     case "memorized":
       return {
         title: "Memorized ✓",
         label: `Memorized, ${state.title}`,
-        tooltip: `Memorized ${state.title}`,
+        tooltip: `Memorized ${state.title} · Open pack`,
       };
     case "partOf": {
       const title = `Part of ${state.title}`;
@@ -149,8 +149,8 @@ export function chapterMemorizeCopy(
           ? `${title}, memorized`
           : `${title}, memorizing, ${count} learned`,
         tooltip: state.memorized
-          ? `${title} · Memorized ✓`
-          : `${title} · Memorizing · ${count} learned`,
+          ? `${title} · Memorized · Open pack`
+          : `${title} · ${count} learned · Open pack`,
       };
     }
   }
