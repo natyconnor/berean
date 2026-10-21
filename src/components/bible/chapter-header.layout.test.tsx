@@ -469,9 +469,9 @@ async function measureNoteFocus(): Promise<FocusStyle> {
       await page.keyboard.press("Tab");
       const focused = await page.evaluate(
         () =>
-          document.activeElement?.getAttribute("aria-label")?.includes(
-            "chapter note",
-          ) === true,
+          document.activeElement
+            ?.getAttribute("aria-label")
+            ?.includes("chapter note") === true,
       );
       if (focused) break;
     }

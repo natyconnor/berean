@@ -20,6 +20,8 @@
  *    about 24rem on a 768px window, so both stay; they leave only when that
  *    column itself is under 20rem. H still toggles section headings from the
  *    keyboard.
+ * 4. With Memorize on the row, the Headers switch also leaves under
+ *    `@max-lg` (32rem / 512px) so long book names keep their room.
  *
  * At a typical 1280px compose layout the header content box is still above
  * 5xl, so those words stay. They drop once the window is actually tight.

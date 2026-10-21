@@ -43,13 +43,14 @@ import {
 import {
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
 } from "@/components/passage/header-chrome";
 import { HeaderShortcutToggle } from "@/components/passage/header-shortcut-toggle";
 import { PassageNavigator } from "./passage-navigator";
 
 const CHAPTER_CHROME_ICON_BUTTON_CLASS =
-  "size-8 shrink-0 justify-center gap-0 px-0 outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "size-8 shrink-0 justify-center gap-0 px-0";
 
 /**
  * Book and chapter open different pickers, so each needs its own target. At
@@ -193,6 +194,7 @@ function ChapterMemorizeButton({
               className={cn(
                 "relative inline-flex items-center overflow-visible rounded-lg border border-primary/35 bg-primary/7 text-primary transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
                 CHAPTER_CHROME_ICON_BUTTON_CLASS,
+                "outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 CHAPTER_CHROME_TIGHT_HIDE_CLASS,
               )}
             >
@@ -201,7 +203,7 @@ function ChapterMemorizeButton({
             </button>
           </PopoverAnchor>
         </TooltipTrigger>
-        <TooltipContent>{copy.tooltip}</TooltipContent>
+        <TooltipContent side="bottom">{copy.tooltip}</TooltipContent>
       </Tooltip>
       <PopoverContent
         side="bottom"
@@ -402,6 +404,7 @@ export function ChapterHeader({
             : "border-border bg-background",
           "ml-auto",
           CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+          memorize && CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
         )}
         labelClassName={
           showSectionHeaders ? "text-foreground" : "text-muted-foreground"
@@ -428,6 +431,7 @@ export function ChapterHeader({
               className={cn(
                 "relative inline-flex items-center overflow-visible rounded-lg text-left cl-well transition-colors",
                 CHAPTER_CHROME_ICON_BUTTON_CLASS,
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                 "@max-xs/chapter-chrome:ml-auto",
                 chapterNoteSurfaceClass,
                 chapterNotesOpen
@@ -448,7 +452,7 @@ export function ChapterHeader({
               ) : null}
             </button>
           </TooltipTrigger>
-          <TooltipContent>{chapterNotesTooltip}</TooltipContent>
+          <TooltipContent side="bottom">{chapterNotesTooltip}</TooltipContent>
         </Tooltip>
       ) : null}
     </div>
