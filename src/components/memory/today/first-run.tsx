@@ -53,7 +53,7 @@ export function FirstRun({
         aria-labelledby={headingId}
         className="rounded-xl border bg-card p-5 shadow-md sm:px-7 sm:py-6"
       >
-        <p className={eyebrowClassName}>Welcome to Memory</p>
+        <p className={eyebrowClassName}>Start here</p>
         <h2
           id={headingId}
           className="mt-1.5 text-[22px] leading-tight font-semibold tracking-tight sm:text-[26px]"

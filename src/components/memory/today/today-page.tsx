@@ -14,6 +14,7 @@ import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { DoorwayCards } from "./doorway-cards";
 import { FirstRun } from "./first-run";
 import { GoalGrid } from "./goal-grid";
+import { MemoryWelcomeCallout } from "./memory-welcome-callout";
 import { StartSomethingNew } from "./start-something-new";
 import { TodayCard } from "./today-card";
 
@@ -96,6 +97,10 @@ export function TodayPage() {
       </header>
       <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRootRef}>
         <div className="mx-auto max-w-6xl space-y-8 px-4 pt-6 pb-24 sm:px-5">
+          <MemoryWelcomeCallout
+            ready={today !== undefined}
+            firstRun={today?.state === "firstRun"}
+          />
           {body}
           <PreviewMemorySeedCard
             now={now}
