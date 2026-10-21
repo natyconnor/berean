@@ -20,13 +20,6 @@ export const VERSE_LINKS_MIN_NOTES = 2;
 export const STARTER_TAGS_MIN_TAGGED_NOTES = 1;
 
 /**
- * Legacy heart threshold for Memory reveal. Memory is always available in the
- * Mode Dock now (discovery shouldn't wait on a first heart), but the constant
- * is retained so older tests and comments stay readable.
- */
-export const MEMORY_MIN_HEARTS = 0;
-
-/**
  * Minimum total notes before revealing Study. Study drills the notes you've
  * already captured, so it only becomes meaningful once there are a few notes to
  * review and teach. (This reveal used to be hearts-based; it now keys on notes.)
@@ -84,18 +77,6 @@ export function shouldRevealStarterTags(
     milestones.taggedNotesCount >= STARTER_TAGS_MIN_TAGGED_NOTES &&
     milestones.starterTagCount === 0
   );
-}
-
-/**
- * Memory is always unlocked so the Mode Dock (and Memory itself) are
- * discoverable without waiting for a first heart.
- */
-export function shouldRevealMemory(
-  // Kept for call-site compatibility with other reveal helpers.
-  _milestones?: OnboardingMilestones,
-): boolean {
-  void _milestones;
-  return true;
 }
 
 /** Was the Study reveal reached (enough notes to drill)? */
