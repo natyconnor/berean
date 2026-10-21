@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
+  CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
 } from "@/components/passage/header-chrome";
 import type { ChapterMemorizeState } from "@/lib/chapter-memorize";
@@ -66,7 +67,7 @@ describe("ChapterHeader compact chrome", () => {
     await user.hover(button);
     expect(
       await screen.findByRole("tooltip", { name: "Add a chapter note" }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute("data-side", "bottom");
   });
 
   it("tooltips existing chapter notes as Open rather than Add", async () => {
@@ -298,7 +299,7 @@ describe("ChapterHeader Memorize button", () => {
     await user.hover(button);
     expect(
       await screen.findByRole("tooltip", { name: "Memorize Psalm 1" }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute("data-side", "bottom");
 
     await user.click(button);
     expect(memorize.onMemorize).toHaveBeenCalledWith(button);
@@ -321,6 +322,7 @@ describe("ChapterHeader Memorize button", () => {
       .closest("div");
     expect(headers).toHaveClass("ml-auto");
     expect(headers).toHaveClass(CHAPTER_CHROME_TIGHT_HIDE_CLASS);
+    expect(headers).toHaveClass(CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS);
     expect(screen.getByText("Headers")).toHaveClass(
       CHAPTER_CHROME_COMPACT_LABEL_CLASS,
     );

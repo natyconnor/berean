@@ -427,6 +427,72 @@ function expectStagesInOrder(reports: MemorizeLayoutReport[]) {
   ).toBe(true);
 }
 
+interface FocusStyle {
+  outlineStyle: string;
+  outlineWidth: number;
+  boxShadow: string;
+}
+
+function hasVisibleFocusIndicator(style: FocusStyle): boolean {
+  const outlineVisible =
+    style.outlineStyle !== "none" && style.outlineWidth > 0;
+  const outerRing = style.boxShadow
+    .split(/,(?![^(]*\))/)
+    .some((part) => part.trim() !== "none" && !part.includes("inset"));
+  return outlineVisible || outerRing;
+}
+
+async function measureNoteFocus(): Promise<FocusStyle> {
+  if (!browser) throw new Error("Chrome is not running");
+  const page: Page = await browser.newPage({
+    viewport: { width: 1000, height: 400 },
+  });
+  try {
+    await page.setContent(
+      layoutDocument(
+        headerMarkup(
+          "Galatians",
+          2,
+          860,
+          memorizeControl({ kind: "memorize", title: "Galatians 2" }),
+        ),
+      ),
+      { waitUntil: "load" },
+    );
+    await page.waitForFunction(() => {
+      const well = document.querySelector("h1");
+      return !!well && getComputedStyle(well).display === "flex";
+    });
+    await page.evaluate(() => document.fonts.ready);
+
+    for (let step = 0; step < 12; step += 1) {
+      await page.keyboard.press("Tab");
+      const focused = await page.evaluate(
+        () =>
+          document.activeElement?.getAttribute("aria-label")?.includes(
+            "chapter note",
+          ) === true,
+      );
+      if (focused) break;
+    }
+
+    return await page.evaluate(() => {
+      const note = document.querySelector('[aria-label*="chapter note"]');
+      if (!(note instanceof HTMLElement) || document.activeElement !== note) {
+        throw new Error("chapter-note button is not focused");
+      }
+      const style = getComputedStyle(note);
+      return {
+        outlineStyle: style.outlineStyle,
+        outlineWidth: parseFloat(style.outlineWidth),
+        boxShadow: style.boxShadow,
+      };
+    });
+  } finally {
+    await page.close();
+  }
+}
+
 function expectIconSquare(report: MemorizeLayoutReport) {
   const json = JSON.stringify(report);
   expect(report.stage, json).toBe("icon");
@@ -480,6 +546,28 @@ describe("ChapterHeader Memorize button layout", () => {
     expect(report.markShown, json).toBe(false);
     expect(report.bookTruncated, json).toBe(false);
     expect(report.noteBadge, json).toBeNull();
+    expectTidyRow(report);
+  }, 30_000);
+
+  it("shows a visible keyboard focus indicator on the chapter-note button", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    const style = await measureNoteFocus();
+    expect(hasVisibleFocusIndicator(style), JSON.stringify(style)).toBe(true);
+  }, 30_000);
+
+  it("keeps Galatians 2 whole on a 384px column with Memorize on the row", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    const report = await measureMemorize(384, {
+      book: "Galatians",
+      chapter: 2,
+      state: { kind: "memorize", title: "Galatians 2" },
+    });
+    const json = JSON.stringify(report);
+    expect(report.stage, json).toBe("icon");
+    expect(report.bookTruncated, json).toBe(false);
+    expect(report.headers.width, json).toBe(0);
+    expect(report.memorize.width, json).toBe(32);
+    expect(report.noteWidth, json).toBe(32);
     expectTidyRow(report);
   }, 30_000);
 

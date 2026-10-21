@@ -28,6 +28,9 @@ export const CHAPTER_CHROME_CONTAINER_CLASS = "@container/chapter-chrome";
 export const CHAPTER_CHROME_COMPACT_LABEL_CLASS =
   "@max-2xl/chapter-chrome:sr-only";
 export const CHAPTER_CHROME_TIGHT_HIDE_CLASS = "@max-xs/chapter-chrome:hidden";
+/** Headers switch leaves first when Memorize shares the row. */
+export const CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS =
+  "@max-lg/chapter-chrome:hidden";
 
 export const PASSAGE_HEADER_CONTAINER_CLASS = "@container/passage-header";
 export const NOTES_CHROME_COMPACT_LABEL_CLASS =
