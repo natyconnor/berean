@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  MEMORY_MIN_HEARTS,
   READING_MIN_CHAPTER_NOTES,
   READING_MIN_NOTES_PER_VERSE,
   READING_MIN_TOTAL_NOTES,
@@ -11,7 +10,6 @@ import {
   STARTER_TAGS_MIN_TAGGED_NOTES,
   STUDY_MIN_NOTES,
   VERSE_LINKS_MIN_NOTES,
-  shouldRevealMemory,
   shouldRevealReadingMode,
   shouldRevealSearch,
   shouldRevealStarterTags,
@@ -73,13 +71,6 @@ describe("staged onboarding thresholds", () => {
         }),
       ),
     ).toBe(false);
-  });
-
-  it("always reveals Memory (dock discovery is not gated on hearts)", () => {
-    expect(shouldRevealMemory(milestones({ heartsCount: 0 }))).toBe(true);
-    expect(
-      shouldRevealMemory(milestones({ heartsCount: MEMORY_MIN_HEARTS })),
-    ).toBe(true);
   });
 
   it("reveals Study once enough notes exist (not hearts-based)", () => {

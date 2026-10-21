@@ -176,13 +176,13 @@ describe("StagedOnboardingProvider hint queue", () => {
   it("keeps a display-queue hint pending after markShown", async () => {
     function ShownProbe() {
       const state = useFeatureHint(
-        FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
+        FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES,
         true,
       );
 
       return (
-        <section aria-label="memory-reveal">
-          <div data-testid="memory-reveal-pending">{String(state.pending)}</div>
+        <section aria-label="study-reveal">
+          <div data-testid="study-reveal-pending">{String(state.pending)}</div>
           <button type="button" onClick={state.markShown}>
             Mark shown
           </button>
@@ -200,19 +200,19 @@ describe("StagedOnboardingProvider hint queue", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("memory-reveal-pending")).toHaveTextContent(
+      expect(screen.getByTestId("study-reveal-pending")).toHaveTextContent(
         "true",
       );
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Mark shown" }));
 
-    expect(screen.getByTestId("memory-reveal-pending")).toHaveTextContent(
+    expect(screen.getByTestId("study-reveal-pending")).toHaveTextContent(
       "true",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Complete" }));
-    expect(screen.getByTestId("memory-reveal-pending")).toHaveTextContent(
+    expect(screen.getByTestId("study-reveal-pending")).toHaveTextContent(
       "false",
     );
   });

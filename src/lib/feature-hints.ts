@@ -16,8 +16,6 @@ export const FEATURE_HINTS = {
    * dismissals stay valid, but it is no longer surfaced.
    */
   STUDY_REVEAL_AFTER_FIRST_HEART: "study-reveal-after-first-heart",
-  /** Memory dock callout (id retained; Memory is always available now). */
-  MEMORY_REVEAL_AFTER_FIRST_HEART: "memory-reveal-after-first-heart",
   /** Study reveal callout pointing at the Study segment once enough notes exist. */
   STUDY_REVEAL_AFTER_NOTES: "study-reveal-after-notes",
   /** Follow-up explanation shown the first time Memory is opened. */
@@ -64,7 +62,6 @@ export const FEATURE_HINT_METADATA: Record<FeatureHintId, FeatureHintMetadata> =
     [FEATURE_HINTS.VERSE_LINKS_AFTER_NOTES]: { priority: 50 },
     [FEATURE_HINTS.STARTER_TAGS_AFTER_FIRST_TAG]: { priority: 40 },
     [FEATURE_HINTS.STUDY_REVEAL_AFTER_FIRST_HEART]: { priority: 80 },
-    [FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART]: { priority: 85 },
     [FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES]: { priority: 75 },
     [FEATURE_HINTS.MEMORY_FIRST_OPEN_EXPLAINER]: { priority: 0 },
     [FEATURE_HINTS.STUDY_FIRST_OPEN_EXPLAINER]: { priority: 0 },

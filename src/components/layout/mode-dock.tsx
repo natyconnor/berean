@@ -27,7 +27,6 @@ import { shouldHideModeDock } from "@/lib/mode-dock-hidden-path";
 import { useTabs } from "@/lib/use-tabs";
 import { FEATURE_HINTS } from "@/lib/feature-hints";
 import { isStudyFeatureAccessible } from "@/lib/study-feature-access";
-import { shouldRevealMemory } from "@/lib/staged-onboarding-thresholds";
 import { useOptionalStagedOnboarding } from "@/components/tutorial/staged-onboarding-context";
 import { useFeatureHint } from "@/components/tutorial/use-feature-hint";
 import { FeatureCallout } from "@/components/tutorial/feature-callout";
@@ -118,14 +117,8 @@ export function ModeDock() {
     return modes;
   }, [studyUnlocked]);
 
-  // One-time reveal callouts, reusing the shared hint system. Only claim a hint
-  // while the dock can actually render its callout — on Settings/legal routes
-  // the global hint queue is never pinned by an eligible-but-unrendered callout.
-  // Hint id kept for persisted dismissals; Memory is always available now.
-  const memoryHint = useFeatureHint(
-    FEATURE_HINTS.MEMORY_REVEAL_AFTER_FIRST_HEART,
-    shouldRevealMemory(milestones) && dockEnabled,
-  );
+  // Only claim a hint while the dock can render it. Settings and legal pages
+  // hide the dock, and an eligible-but-unrendered callout would pin the queue.
   const studyHint = useFeatureHint(
     FEATURE_HINTS.STUDY_REVEAL_AFTER_NOTES,
     studyUnlocked && dockEnabled,
@@ -213,54 +206,34 @@ export function ModeDock() {
           <NotebookPen className="h-4 w-4" />
           <span>Notes</span>
         </a>
-        <FeatureCallout
-          state={memoryHint}
-          title="Memory lives here"
-          description="Memorize verses and passages, then come back for a few minutes each day. A badge shows when something's ready."
-          primaryActionLabel="Open Memory"
-          onPrimaryAction={() => {
-            logInteraction("mode-dock", "memory-opened", {
-              trigger: "reveal-callout",
-            });
-            void navigate({ to: "/memory" });
+        <a
+          href={memoryHref}
+          title={`Memory (${toggleShortcutLabel} cycles)`}
+          aria-label="Memory"
+          aria-current={isMemoryRoute ? "page" : undefined}
+          onClick={(event) => {
+            if (!shouldHandleSpaClick(event)) return;
+            event.preventDefault();
+            goToMode("memory", "click");
           }}
-          side="top"
-          align="center"
+          className={segmentClassName(isMemoryRoute)}
         >
-          <a
-            href={memoryHref}
-            title={`Memory (${toggleShortcutLabel} cycles)`}
-            aria-label="Memory"
-            aria-current={isMemoryRoute ? "page" : undefined}
-            onClick={(event) => {
-              if (!shouldHandleSpaClick(event)) return;
-              event.preventDefault();
-              if (!memoryHint.completed && !memoryHint.dismissed) {
-                memoryHint.complete();
-              }
-              goToMode("memory", "click");
-            }}
-            className={segmentClassName(isMemoryRoute)}
-          >
-            <Brain className="h-4 w-4" />
-            <span>Memory</span>
-            {showBadge ? (
-              <span
-                aria-label={badgeLabel}
-                className={cn(
-                  "ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
-                  // Theme primary on the card; invert against the selected
-                  // primary pill so the count stays readable in every theme.
-                  isMemoryRoute
-                    ? "bg-primary-foreground text-primary"
-                    : "bg-primary text-primary-foreground",
-                )}
-              >
-                {dueCount}
-              </span>
-            ) : null}
-          </a>
-        </FeatureCallout>
+          <Brain className="h-4 w-4" />
+          <span>Memory</span>
+          {showBadge ? (
+            <span
+              aria-label={badgeLabel}
+              className={cn(
+                "ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
+                isMemoryRoute
+                  ? "bg-primary-foreground text-primary"
+                  : "bg-primary text-primary-foreground",
+              )}
+            >
+              {dueCount}
+            </span>
+          ) : null}
+        </a>
         {studyUnlocked ? (
           <FeatureCallout
             state={studyHint}
