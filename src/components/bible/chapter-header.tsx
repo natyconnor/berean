@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -42,23 +41,16 @@ import {
   chapterNoteSurfaceClass,
 } from "@/components/passage/chapter-note-styles";
 import {
-  CHAPTER_CHROME_COMPACT_HIDE_CLASS,
-  CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
-  CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS,
   CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
-  CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS,
-  CHAPTER_CHROME_MEMORIZE_SLOT_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
-  chapterMemorizeStageClasses,
 } from "@/components/passage/header-chrome";
 import { HeaderShortcutToggle } from "@/components/passage/header-shortcut-toggle";
-import {
-  CHAPTER_CHROME_TRANSITION,
-  CHAPTER_HEADER_CTA_VARIANTS,
-} from "@/components/passage/note-animation-config";
 import { PassageNavigator } from "./passage-navigator";
+
+const CHAPTER_CHROME_ICON_BUTTON_CLASS =
+  "size-8 shrink-0 justify-center gap-0 px-0";
 
 /**
  * Book and chapter open different pickers, so each needs its own target. At
@@ -99,14 +91,7 @@ export interface ChapterMemorizeControl {
 const CHAPTER_MEMORIZE_NEW_COPY =
   "New: memorize this chapter in a few minutes a day.";
 
-/** The ring or check on the bare Memorize icon; `className` shows it only there. */
-function ChapterMemorizeMarkIcon({
-  mark,
-  className,
-}: {
-  mark: ChapterMemorizeMark;
-  className: string;
-}) {
+function ChapterMemorizeMarkIcon({ mark }: { mark: ChapterMemorizeMark }) {
   if (mark.kind === "none") return null;
   if (mark.kind === "done") {
     return (
@@ -114,10 +99,7 @@ function ChapterMemorizeMarkIcon({
         aria-hidden
         viewBox="0 0 14 14"
         data-memorize-mark="done"
-        className={cn(
-          "pointer-events-none absolute -top-1 -right-1 size-3.5",
-          className,
-        )}
+        className="pointer-events-none absolute -top-1 -right-1 size-3.5"
       >
         <circle
           cx="7"
@@ -142,10 +124,7 @@ function ChapterMemorizeMarkIcon({
       aria-hidden
       viewBox="0 0 24 24"
       data-memorize-mark="progress"
-      className={cn(
-        "pointer-events-none absolute inset-0 m-auto size-6",
-        className,
-      )}
+      className="pointer-events-none absolute inset-0 m-auto size-6"
     >
       <circle
         cx="12"
@@ -181,10 +160,6 @@ function ChapterMemorizeButton({
 }) {
   const { state, onMemorize, onOpenPack } = control;
   const copy = chapterMemorizeCopy(state);
-  const stageClasses = chapterMemorizeStageClasses(copy.title, {
-    ellipsize: state.kind === "partOf",
-    word: copy.short !== undefined,
-  });
   // People who finished the app tour before it taught Memorize.
   const tutorial = useOptionalTutorial();
   const newHint = useFeatureHint(
@@ -202,49 +177,35 @@ function ChapterMemorizeButton({
         if (!open) newHint.dismiss();
       }}
     >
-      <div className={CHAPTER_CHROME_MEMORIZE_SLOT_CLASS}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverAnchor asChild>
-              <button
-                type="button"
-                data-tour-id="chapter-memorize"
-                aria-label={copy.label}
-                onClick={(event) => {
-                  if (state.kind === "memorize") {
-                    onMemorize(event.currentTarget);
-                  } else {
-                    onOpenPack(state.packId);
-                  }
-                }}
-                className={cn(
-                  "relative inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg border border-primary/35 bg-primary/7 px-2.5 text-[13px] font-semibold whitespace-nowrap text-primary transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
-                  CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS,
-                  stageClasses.button,
-                )}
-              >
-                <Brain aria-hidden className="size-4 shrink-0" />
-                <span className={cn("min-w-0 truncate", stageClasses.line)}>
-                  {copy.title}
-                </span>
-                {copy.short && stageClasses.word ? (
-                  <span
-                    aria-hidden
-                    className={cn("min-w-0 truncate", stageClasses.word)}
-                  >
-                    {copy.short}
-                  </span>
-                ) : null}
-                <ChapterMemorizeMarkIcon
-                  mark={chapterMemorizeMark(state)}
-                  className={stageClasses.mark}
-                />
-              </button>
-            </PopoverAnchor>
-          </TooltipTrigger>
-          <TooltipContent>{copy.tooltip}</TooltipContent>
-        </Tooltip>
-      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverAnchor asChild>
+            <button
+              type="button"
+              data-tour-id="chapter-memorize"
+              aria-label={copy.label}
+              onClick={(event) => {
+                if (state.kind === "memorize") {
+                  onMemorize(event.currentTarget);
+                } else {
+                  onOpenPack(state.packId);
+                }
+              }}
+              className={cn(
+                "relative inline-flex items-center overflow-visible rounded-lg border border-primary/35 bg-primary/7 text-primary transition-colors hover:bg-primary/12 dark:bg-primary/10 dark:hover:bg-primary/15",
+                CHAPTER_CHROME_ICON_BUTTON_CLASS,
+                "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                CHAPTER_CHROME_TIGHT_HIDE_CLASS,
+                "@max-lg/chapter-chrome:ml-auto",
+              )}
+            >
+              <Brain aria-hidden className="size-4 shrink-0" />
+              <ChapterMemorizeMarkIcon mark={chapterMemorizeMark(state)} />
+            </button>
+          </PopoverAnchor>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{copy.tooltip}</TooltipContent>
+      </Tooltip>
       <PopoverContent
         side="bottom"
         align="end"
@@ -313,18 +274,16 @@ export function ChapterHeader({
     ? `Next chapter (${next.label})`
     : "Next chapter";
   const hasChapterNotes = chapterScopedNoteCount > 0;
-  const chapterNotesSubtitle = hasChapterNotes
-    ? `Notes for all of ${chapterLabel} · ${chapterScopedNoteCount}`
-    : "Add a chapter note";
   const chapterNotesAction = chapterNotesOpen
     ? "Close chapter notes"
     : hasChapterNotes
       ? "Open chapter notes"
       : "Add a chapter note";
-  // Compact chrome hides the count subtitle, so the tooltip keeps it.
   const chapterNotesTooltip = hasChapterNotes
     ? `${chapterNotesAction} · ${chapterScopedNoteCount}`
     : chapterNotesAction;
+  const chapterNotesBadge =
+    chapterScopedNoteCount > 9 ? "9+" : String(chapterScopedNoteCount);
 
   function goPrev() {
     if (!previous) return;
@@ -357,7 +316,7 @@ export function ChapterHeader({
     <div
       className={cn(
         CHAPTER_CHROME_CONTAINER_CLASS,
-        "flex w-full min-w-0 items-center gap-3 py-4 px-2 @max-2xl/chapter-chrome:gap-2",
+        "flex w-full min-w-0 items-center gap-2 overflow-visible py-4 px-2",
       )}
     >
       <div className="flex min-w-0 items-center gap-2 @max-xs/chapter-chrome:gap-1">
@@ -434,11 +393,7 @@ export function ChapterHeader({
         shortcut="H"
         checked={showSectionHeaders}
         onToggle={onToggleSectionHeaders}
-        compactLabelClassName={
-          memorize
-            ? CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS
-            : CHAPTER_CHROME_COMPACT_LABEL_CLASS
-        }
+        compactLabelClassName={CHAPTER_CHROME_COMPACT_LABEL_CLASS}
         tooltip={
           showSectionHeaders
             ? "Hide editorial section headings"
@@ -448,6 +403,7 @@ export function ChapterHeader({
           showSectionHeaders
             ? "border-border bg-muted/40 text-foreground"
             : "border-border bg-background",
+          "ml-auto",
           CHAPTER_CHROME_TIGHT_HIDE_CLASS,
           memorize && CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
         )}
@@ -474,10 +430,10 @@ export function ChapterHeader({
                     : `Add a chapter note for ${chapterLabel}`
               }
               className={cn(
-                // Match the chapter reference well: carved inset, no dashed outline.
-                "inline-flex max-w-[min(100%,18rem)] shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left cl-well transition-colors",
-                !memorize && "ml-auto",
-                CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
+                "relative inline-flex items-center overflow-visible rounded-lg text-left cl-well transition-colors",
+                CHAPTER_CHROME_ICON_BUTTON_CLASS,
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                "@max-xs/chapter-chrome:ml-auto",
                 chapterNoteSurfaceClass,
                 chapterNotesOpen
                   ? "brightness-[0.97] ring-1 ring-[oklch(0.72_0.06_200)/40] dark:brightness-110"
@@ -485,40 +441,21 @@ export function ChapterHeader({
               )}
             >
               <ScrollText
-                className={cn("h-4 w-4 shrink-0", chapterNoteInkClass)}
+                className={cn("size-4 shrink-0", chapterNoteInkClass)}
               />
-              <span
-                className={cn("min-w-0", CHAPTER_CHROME_COMPACT_HIDE_CLASS)}
-              >
+              {hasChapterNotes ? (
                 <span
-                  className={cn(
-                    "block text-[10px] font-semibold uppercase tracking-wide",
-                    chapterNoteInkClass,
-                  )}
+                  aria-hidden
+                  className="pointer-events-none absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[oklch(0.42_0.07_200)] px-1 text-[10px] font-semibold tabular-nums text-[oklch(0.985_0.012_200)] ring-2 ring-background dark:bg-[oklch(0.78_0.07_200)] dark:text-[oklch(0.20_0.03_200)]"
                 >
-                  Chapter
+                  {chapterNotesBadge}
                 </span>
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.span
-                    key={chapterNotesSubtitle}
-                    variants={CHAPTER_HEADER_CTA_VARIANTS}
-                    initial="hidden"
-                    animate="visible"
-                    exit="exit"
-                    transition={CHAPTER_CHROME_TRANSITION}
-                    className="block truncate text-sm text-muted-foreground"
-                  >
-                    {chapterNotesSubtitle}
-                  </motion.span>
-                </AnimatePresence>
-              </span>
+              ) : null}
             </button>
           </TooltipTrigger>
-          <TooltipContent>{chapterNotesTooltip}</TooltipContent>
+          <TooltipContent side="bottom">{chapterNotesTooltip}</TooltipContent>
         </Tooltip>
-      ) : memorize ? null : (
-        <div className="ml-auto" aria-hidden />
-      )}
+      ) : null}
     </div>
   );
 }

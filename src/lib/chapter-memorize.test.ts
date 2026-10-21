@@ -112,8 +112,8 @@ describe("chapterMemorizeState", () => {
     const romans8 = chapterMemorizeState("Romans", 8, [
       { passage: acrossChapters },
     ]);
-    expect(romans8 && chapterMemorizeCopy(romans8).title).toBe(
-      "Part of Romans 7:24\u20138:2",
+    expect(romans8 && chapterMemorizeCopy(romans8).label).toMatch(
+      /^Part of Romans 7:24\u20138:2/,
     );
   });
 
@@ -137,8 +137,6 @@ describe("chapterMemorizeCopy", () => {
     [
       { kind: "memorize", title: "Psalm 1" },
       {
-        title: "Memorize Psalm 1",
-        short: "Memorize",
         label: "Memorize Psalm 1",
         tooltip: "Memorize Psalm 1",
       },
@@ -152,17 +150,16 @@ describe("chapterMemorizeCopy", () => {
         totalVerses: 6,
       },
       {
-        title: "Memorizing · 2 of 6",
         label: "Memorizing, 2 of 6 learned, Sample · Psalm 1 (start passage)",
-        tooltip: "Memorizing Sample · Psalm 1 (start passage) · 2 of 6 learned",
+        tooltip:
+          "Memorizing Sample · Psalm 1 (start passage) · 2 of 6 learned · Open pack",
       },
     ],
     [
       { kind: "memorized", title: "Psalm 1", packId: "p" },
       {
-        title: "Memorized ✓",
         label: "Memorized, Psalm 1",
-        tooltip: "Memorized Psalm 1",
+        tooltip: "Memorized Psalm 1 · Open pack",
       },
     ],
     [
@@ -175,9 +172,8 @@ describe("chapterMemorizeCopy", () => {
         totalVerses: 111,
       },
       {
-        title: "Part of Sermon on the Mount",
         label: "Part of Sermon on the Mount, memorizing, 4 of 111 learned",
-        tooltip: "Part of Sermon on the Mount · Memorizing · 4 of 111 learned",
+        tooltip: "Part of Sermon on the Mount · 4 of 111 learned · Open pack",
       },
     ],
     [
@@ -190,9 +186,8 @@ describe("chapterMemorizeCopy", () => {
         totalVerses: 111,
       },
       {
-        title: "Part of Sermon on the Mount",
         label: "Part of Sermon on the Mount, memorized",
-        tooltip: "Part of Sermon on the Mount · Memorized ✓",
+        tooltip: "Part of Sermon on the Mount · Memorized · Open pack",
       },
     ],
   ];
@@ -201,7 +196,7 @@ describe("chapterMemorizeCopy", () => {
     expect(chapterMemorizeCopy(state)).toEqual(copy);
   });
 
-  it("keeps the pack title off a memorizing line", () => {
+  it("keeps the pack title off a memorizing label", () => {
     const copy = chapterMemorizeCopy({
       kind: "memorizing",
       title: "A Very Long Pack Title That Would Crowd the Header",
@@ -209,18 +204,7 @@ describe("chapterMemorizeCopy", () => {
       learnedVerses: 12,
       totalVerses: 176,
     });
-    expect(copy.title).toBe("Memorizing · 12 of 176");
     expect(copy.label.startsWith("Memorizing, 12 of 176")).toBe(true);
-  });
-
-  it("keeps a one-word fallback only for the start state", () => {
-    expect(
-      chapterMemorizeCopy({ kind: "memorize", title: "Psalm 1" }).short,
-    ).toBe("Memorize");
-    expect(
-      chapterMemorizeCopy({ kind: "memorized", title: "Psalm 1", packId: "p" })
-        .short,
-    ).toBeUndefined();
   });
 });
 
