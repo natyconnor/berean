@@ -289,7 +289,6 @@ describe("Today welcome explainer", () => {
       "py-3",
       "text-sm",
       "sm:px-5",
-      "-mb-5",
       "mx-auto",
       "max-w-[920px]",
     );
@@ -322,7 +321,7 @@ describe("Today welcome explainer", () => {
     expect(
       within(callout).getByRole("button", { name: "Dismiss" }),
     ).toBeInTheDocument();
-    expect(callout).toHaveClass("px-4", "py-3", "text-sm", "sm:px-5", "-mb-5");
+    expect(callout).toHaveClass("px-4", "py-3", "text-sm", "sm:px-5");
     expect(callout).not.toHaveClass("max-w-[920px]");
     expect(screen.queryByText("Memory lives here")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
