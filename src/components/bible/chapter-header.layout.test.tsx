@@ -86,6 +86,7 @@ function headerMarkup(
   chapter: number,
   width: number,
   memorize: ChapterMemorizeControl | null = null,
+  chapterScopedNoteCount = 0,
 ): string {
   return renderToStaticMarkup(
     <TooltipProvider>
@@ -96,6 +97,7 @@ function headerMarkup(
           showSectionHeaders={false}
           onToggleSectionHeaders={() => undefined}
           onChapterNotesClick={() => undefined}
+          chapterScopedNoteCount={chapterScopedNoteCount}
           memorize={memorize}
         />
       </div>
@@ -243,24 +245,28 @@ async function measureColumn(
   }
 }
 
-/** What the Memorize button shows: its line, one word, the icon, or nothing. */
-type MemorizeStage = "line" | "word" | "icon" | "gone";
+/** What the Memorize button shows: the icon, or nothing on the tightest column. */
+type MemorizeStage = "icon" | "gone";
 
 interface MemorizeLayoutReport {
   width: number;
   stage: MemorizeStage;
   headerScrollWidth: number;
   headerClientWidth: number;
-  fullText: string;
+  memorizeText: string;
+  noteText: string;
+  noteBadge: string | null;
   memorize: Rect;
   memorizeHeight: number;
+  noteWidth: number;
+  noteHeight: number;
   headers: Rect;
   next: Rect;
   note: Rect;
+  headersToMemorizeGap: number;
+  memorizeToNoteGap: number;
   bookTruncated: boolean;
-  fullTruncated: boolean;
-  shortTruncated: boolean;
-  /** The ring or check the bare icon wears. */
+  /** The ring or check the icon wears. */
   markShown: boolean;
 }
 
@@ -283,6 +289,7 @@ const PSALM_119: MemorizeLayoutCase = {
 async function measureMemorizeWidths(
   widths: number[],
   { book, chapter, state }: MemorizeLayoutCase = PSALM_119,
+  chapterScopedNoteCount = 0,
 ): Promise<MemorizeLayoutReport[]> {
   if (!browser) throw new Error("Chrome is not running");
   const [firstWidth = 0] = widths;
@@ -292,7 +299,13 @@ async function measureMemorizeWidths(
   try {
     await page.setContent(
       layoutDocument(
-        headerMarkup(book, chapter, firstWidth, memorizeControl(state)),
+        headerMarkup(
+          book,
+          chapter,
+          firstWidth,
+          memorizeControl(state),
+          chapterScopedNoteCount,
+        ),
       ),
       { waitUntil: "load" },
     );
@@ -325,45 +338,45 @@ async function measureMemorizeWidths(
         required("#layout-root").style.width = `${columnWidth}px`;
         const header = required("#layout-root > div");
         const memorize = required('[data-tour-id="chapter-memorize"]');
-        const [full, short] = Array.from(
-          memorize.querySelectorAll(":scope > span"),
-        );
         const mark = memorize.querySelector("[data-memorize-mark]");
         const next = document
           .querySelector(".lucide-chevron-right")
           ?.closest("button");
-        if (!full || !next) throw new Error("missing parts");
+        if (!next) throw new Error("missing parts");
         const bookLabel = required('[aria-label^="Change book"] span.truncate');
         const headersChip = document.getElementById(
           "passage-section-headers",
         )?.parentElement;
         if (!headersChip) throw new Error("missing headers switch");
+        const note = required('[aria-label*="chapter note"]');
+        const badge = note.querySelector("span[aria-hidden]");
         const truncated = (element: Element) =>
           element.scrollWidth > element.clientWidth + 1;
         const shown = (element: Element) =>
           getComputedStyle(element).display !== "none";
-        const stage = !shown(memorize)
-          ? "gone"
-          : shown(full)
-            ? "line"
-            : short && shown(short)
-              ? "word"
-              : "icon";
+        const stage = shown(memorize) ? "icon" : "gone";
+        const memorizeBox = rect(memorize);
+        const headersBox = rect(headersChip);
+        const noteBox = rect(note);
         return {
           width: columnWidth,
           stage,
           bookTruncated: truncated(bookLabel),
-          fullTruncated: truncated(full),
-          shortTruncated: short ? truncated(short) : false,
           markShown: mark ? shown(mark) : false,
           headerScrollWidth: header.scrollWidth,
           headerClientWidth: header.clientWidth,
-          fullText: full.textContent ?? "",
-          memorize: rect(memorize),
+          memorizeText: memorize.textContent?.trim() ?? "",
+          noteText: note.textContent?.trim() ?? "",
+          noteBadge: badge?.textContent ?? null,
+          memorize: memorizeBox,
           memorizeHeight: memorize.getBoundingClientRect().height,
-          headers: rect(headersChip),
+          noteWidth: noteBox.width,
+          noteHeight: note.getBoundingClientRect().height,
+          headers: headersBox,
           next: rect(next),
-          note: rect(required('[aria-label^="Add a chapter note"]')),
+          note: noteBox,
+          headersToMemorizeGap: memorizeBox.left - headersBox.right,
+          memorizeToNoteGap: noteBox.left - memorizeBox.right,
         } satisfies MemorizeLayoutReport;
       });
     }, widths);
@@ -376,8 +389,13 @@ async function measureMemorizeWidths(
 async function measureMemorize(
   width: number,
   layoutCase?: MemorizeLayoutCase,
+  chapterScopedNoteCount = 0,
 ): Promise<MemorizeLayoutReport> {
-  const [report] = await measureMemorizeWidths([width], layoutCase);
+  const [report] = await measureMemorizeWidths(
+    [width],
+    layoutCase,
+    chapterScopedNoteCount,
+  );
   if (!report) throw new Error("no layout report");
   return report;
 }
@@ -399,7 +417,7 @@ function widthsDown(from: number, to: number): number[] {
   return widths;
 }
 
-const STAGE_ORDER: MemorizeStage[] = ["line", "word", "icon", "gone"];
+const STAGE_ORDER: MemorizeStage[] = ["icon", "gone"];
 
 function expectStagesInOrder(reports: MemorizeLayoutReport[]) {
   const ranks = reports.map((report) => STAGE_ORDER.indexOf(report.stage));
@@ -409,6 +427,18 @@ function expectStagesInOrder(reports: MemorizeLayoutReport[]) {
     ),
     JSON.stringify(reports.map(({ width, stage }) => [width, stage])),
   ).toBe(true);
+}
+
+function expectIconSquare(report: MemorizeLayoutReport) {
+  const json = JSON.stringify(report);
+  expect(report.stage, json).toBe("icon");
+  expect(report.memorize.width, json).toBe(32);
+  expect(report.memorizeHeight, json).toBe(32);
+  expect(report.noteWidth, json).toBe(32);
+  expect(report.noteHeight, json).toBe(32);
+  expect(report.memorizeText, json).toBe("");
+  expect(report.headersToMemorizeGap, json).toBeCloseTo(8, 0);
+  expect(report.memorizeToNoteGap, json).toBeCloseTo(8, 0);
 }
 
 const MEMORIZING_PSALM_1: MemorizeLayoutCase = {
@@ -443,23 +473,42 @@ const PART_OF_SERMON: MemorizeLayoutCase = {
 };
 
 describe("ChapterHeader Memorize button layout", () => {
-  it("shows one short line on a wide passage column", async (ctx) => {
+  it("is a 32px icon on a wide passage column", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
     const report = await measureMemorize(860);
     const json = JSON.stringify(report);
 
-    expect(report.stage, json).toBe("line");
-    expect(report.fullText, json).toBe("Memorize Psalm 119");
-    expect(report.fullTruncated, json).toBe(false);
-    expect(report.memorizeHeight, json).toBeLessThanOrEqual(32);
+    expectIconSquare(report);
+    expect(report.markShown, json).toBe(false);
     expect(report.bookTruncated, json).toBe(false);
+    expect(report.noteBadge, json).toBeNull();
     expectTidyRow(report);
+  }, 30_000);
+
+  it("keeps a long book name whole beside the icon buttons", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    for (const layoutCase of [
+      {
+        book: "1 Thessalonians",
+        chapter: 4,
+        state: { kind: "memorize" as const, title: "1 Thessalonians 4" },
+      },
+      {
+        book: "Song of Solomon",
+        chapter: 2,
+        state: { kind: "memorize" as const, title: "Song of Solomon 2" },
+      },
+    ]) {
+      const report = await measureMemorize(860, layoutCase);
+      const json = JSON.stringify({ ...layoutCase, ...report });
+      expectIconSquare(report);
+      expect(report.bookTruncated, json).toBe(false);
+      expectTidyRow(report);
+    }
   }, 30_000);
 
   it("keeps the book name whole beside a passage being memorized", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
-    // The compose passage column at a wide window, where "Psa… 1" used to
-    // give way to a two-line "Memorizing {pack title}" button.
     const report = await measureMemorize(870, {
       book: "Psalms",
       chapter: 1,
@@ -473,37 +522,13 @@ describe("ChapterHeader Memorize button layout", () => {
     });
     const json = JSON.stringify(report);
 
+    expectIconSquare(report);
     expect(report.bookTruncated, json).toBe(false);
-    expect(report.fullText, json).toBe("Memorizing · 2 of 6");
-    expect(report.fullTruncated, json).toBe(false);
-    expect(report.memorizeHeight, json).toBeLessThanOrEqual(32);
+    expect(report.markShown, json).toBe(true);
     expectTidyRow(report);
   }, 30_000);
 
-  it("truncates a long passage title inside a capped button", async (ctx) => {
-    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
-    const report = await measureMemorize(870, {
-      book: "Matthew",
-      chapter: 6,
-      state: {
-        kind: "partOf",
-        title: "The Sermon on the Mount and the Lord's Prayer",
-        packId: "pack_sm",
-        memorized: false,
-        learnedVerses: 4,
-        totalVerses: 111,
-      },
-    });
-    const json = JSON.stringify(report);
-
-    expect(report.stage, json).toBe("line");
-    expect(report.fullTruncated, json).toBe(true);
-    expect(report.memorize.width, json).toBeLessThanOrEqual(240);
-    expect(report.bookTruncated, json).toBe(false);
-    expectTidyRow(report);
-  }, 30_000);
-
-  it("gives up its words before the book name shortens", async (ctx) => {
+  it("stays an icon while the column narrows", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
     const cases: MemorizeLayoutCase[] = [
       PSALM_119,
@@ -526,49 +551,20 @@ describe("ChapterHeader Memorize button layout", () => {
         widthsDown(880, 336),
         layoutCase,
       );
+      expectStagesInOrder(reports);
       for (const report of reports) {
         const json = JSON.stringify({ ...layoutCase, ...report });
-        if (report.bookTruncated) {
-          expect(["icon", "gone"], json).toContain(report.stage);
-        }
-        // A passage title may ellipsize; every other line shows whole.
-        if (report.stage === "line" && layoutCase !== PART_OF_SERMON) {
-          expect(report.fullTruncated, json).toBe(false);
-        }
-        if (report.stage === "word") {
-          expect(report.shortTruncated, json).toBe(false);
+        if (report.stage === "icon") {
+          expect(report.memorize.width, json).toBe(32);
+          expect(report.memorizeHeight, json).toBe(32);
+          expect(report.memorizeText, json).toBe("");
         }
         expectTidyRow(report);
       }
     }
   }, 60_000);
 
-  it("collapses to one word, then the icon alone", async (ctx) => {
-    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
-    // Below 528px the Headers switch has left, so the slot only narrows.
-    const reports = await measureMemorizeWidths(widthsDown(520, 336), {
-      book: "Psalms",
-      chapter: 1,
-      state: { kind: "memorize", title: "Psalm 1" },
-    });
-    const stages = reports.map((report) => report.stage);
-    const json = JSON.stringify(
-      reports.map(({ width, stage }) => [width, stage]),
-    );
-
-    expectStagesInOrder(reports);
-    expect(stages, json).toContain("line");
-    expect(stages, json).toContain("word");
-    expect(stages, json).toContain("icon");
-    for (const report of reports) {
-      if (report.stage === "icon") {
-        expect(report.memorize.width, JSON.stringify(report)).toBe(32);
-        expect(report.markShown, JSON.stringify(report)).toBe(false);
-      }
-    }
-  }, 30_000);
-
-  it("goes straight from its line to a marked icon once memorizing", async (ctx) => {
+  it("always shows a marked icon once memorizing", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
     for (const layoutCase of [
       MEMORIZING_PSALM_1,
@@ -585,23 +581,35 @@ describe("ChapterHeader Memorize button layout", () => {
         stages: reports.map(({ width, stage }) => [width, stage]),
       });
 
-      // Below 528px the Headers switch has left, so the slot only narrows.
-      expectStagesInOrder(reports.filter((report) => report.width <= 520));
-      expect(stages, json).toContain("line");
-      expect(stages, json).not.toContain("word");
+      expectStagesInOrder(reports);
       expect(stages, json).toContain("icon");
+      expect(stages, json).not.toContain("gone");
       for (const report of reports) {
         const reportJson = JSON.stringify({ ...layoutCase, ...report });
         if (report.stage === "icon") {
           expect(report.memorize.width, reportJson).toBe(32);
           expect(report.markShown, reportJson).toBe(true);
         }
-        if (report.stage === "line") {
-          expect(report.markShown, reportJson).toBe(false);
-        }
       }
     }
   }, 60_000);
+
+  it("shows a 3 badge, caps 12 at 9+, and hides the badge when empty", async (ctx) => {
+    if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);
+    const three = await measureMemorize(860, PSALM_119, 3);
+    expect(three.noteBadge, JSON.stringify(three)).toBe("3");
+    expect(three.note.top, JSON.stringify(three)).toBeGreaterThan(0);
+    expectTidyRow(three);
+
+    const capped = await measureMemorize(860, PSALM_119, 12);
+    expect(capped.noteBadge, JSON.stringify(capped)).toBe("9+");
+    expectTidyRow(capped);
+
+    const empty = await measureMemorize(860, PSALM_119, 0);
+    expect(empty.noteBadge, JSON.stringify(empty)).toBeNull();
+    expect(empty.noteText, JSON.stringify(empty)).toBe("");
+    expectTidyRow(empty);
+  }, 30_000);
 
   it("leaves the row with the Headers switch on the tightest column", async (ctx) => {
     if (!chromeExecutablePath) ctx.skip(CHROME_SKIP_NOTE);

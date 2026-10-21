@@ -1,19 +1,12 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
-  CHAPTER_CHROME_COMPACT_HIDE_CLASS,
-  CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
   CHAPTER_CHROME_COMPACT_LABEL_CLASS,
   CHAPTER_CHROME_CONTAINER_CLASS,
-  CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS,
-  CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
-  CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS,
-  CHAPTER_CHROME_MEMORIZE_SLOT_CLASS,
   CHAPTER_CHROME_TIGHT_HIDE_CLASS,
-  chapterMemorizeStageClasses,
 } from "@/components/passage/header-chrome";
 import type { ChapterMemorizeState } from "@/lib/chapter-memorize";
 import { ChapterHeader, type ChapterMemorizeControl } from "./chapter-header";
@@ -65,12 +58,10 @@ describe("ChapterHeader compact chrome", () => {
     const button = screen.getByRole("button", {
       name: "Add a chapter note for Mark 9",
     });
-    expect(button.className).toContain(
-      CHAPTER_CHROME_COMPACT_ICON_BUTTON_CLASS,
-    );
-    expect(button.querySelector("span.min-w-0")?.className).toContain(
-      CHAPTER_CHROME_COMPACT_HIDE_CLASS,
-    );
+    expect(button).toHaveClass("size-8", "px-0", "justify-center", "gap-0");
+    expect(button).not.toHaveTextContent("Chapter");
+    expect(button).not.toHaveTextContent("Add a chapter note");
+    expect(button.querySelector("span[aria-hidden]")).toBeNull();
 
     await user.hover(button);
     expect(
@@ -85,9 +76,54 @@ describe("ChapterHeader compact chrome", () => {
     const button = screen.getByRole("button", {
       name: "Open chapter notes for Mark 9",
     });
+    expect(button).not.toHaveTextContent("Chapter");
+    expect(within(button).getByText("2")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     await user.hover(button);
     expect(
       await screen.findByRole("tooltip", { name: "Open chapter notes · 2" }),
+    ).toBeInTheDocument();
+  });
+
+  it("caps the chapter-note badge at 9+", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderHeader({
+      chapterScopedNoteCount: 12,
+      chapterNotesOpen: true,
+    });
+
+    const open = screen.getByRole("button", {
+      name: "Close chapter notes for Mark 9",
+    });
+    expect(within(open).getByText("9+")).toHaveAttribute("aria-hidden", "true");
+    await user.hover(open);
+    expect(
+      await screen.findByRole("tooltip", { name: "Close chapter notes · 12" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider delayDuration={0}>
+        <ChapterHeader
+          book="Mark"
+          chapter={9}
+          showSectionHeaders={false}
+          onToggleSectionHeaders={vi.fn()}
+          onChapterNotesClick={vi.fn()}
+          chapterNotesOpen
+        />
+      </TooltipProvider>,
+    );
+
+    const empty = screen.getByRole("button", {
+      name: "Close chapter notes for Mark 9",
+    });
+    expect(within(empty).queryByText("9+")).not.toBeInTheDocument();
+    expect(empty.querySelector("span[aria-hidden]")).toBeNull();
+    await user.hover(empty);
+    expect(
+      await screen.findByRole("tooltip", { name: "Close chapter notes" }),
     ).toBeInTheDocument();
   });
 
@@ -205,12 +241,14 @@ describe("ChapterHeader compact chrome", () => {
 
   it("keeps the chapter-note well pushed right when there is no Memorize button", () => {
     renderHeader();
+    const headers = screen
+      .getByRole("switch", { name: /Headers/ })
+      .closest("div");
+    expect(headers).toHaveClass("ml-auto");
+    expect(headers).toHaveClass(CHAPTER_CHROME_TIGHT_HIDE_CLASS);
     expect(
       screen.getByRole("button", { name: "Add a chapter note for Mark 9" }),
-    ).toHaveClass("ml-auto");
-    expect(
-      screen.getByRole("switch", { name: /Headers/ }).closest("div")?.className,
-    ).not.toContain(CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS);
+    ).not.toHaveClass("ml-auto");
   });
 
   it("names the previous and next chapter buttons", () => {
@@ -245,22 +283,29 @@ describe("ChapterHeader Memorize button", () => {
     title: "Psalm 1",
   };
 
-  it("offers Memorize Psalm 1 on one line and opens the sheet", async () => {
+  it("offers Memorize Psalm 1 as an icon and opens the sheet", async () => {
     const user = userEvent.setup();
     const memorize = memorizeControl(MEMORIZE_PSALM_1);
     renderHeader({ book: "Psalms", chapter: 1, memorize });
 
     const button = screen.getByRole("button", { name: "Memorize Psalm 1" });
     expect(button).toHaveAttribute("data-tour-id", "chapter-memorize");
-    expect(button).toHaveTextContent("Memorize Psalm 1");
-    expect(button).not.toHaveTextContent(/verse|learn in/);
+    expect(button).toHaveClass("size-8", "px-0", "justify-center", "gap-0");
+    expect(button).toHaveClass(CHAPTER_CHROME_TIGHT_HIDE_CLASS);
+    expect(button).not.toHaveTextContent("Memorize");
+    expect(button.querySelector("[data-memorize-mark]")).toBeNull();
+
+    await user.hover(button);
+    expect(
+      await screen.findByRole("tooltip", { name: "Memorize Psalm 1" }),
+    ).toBeInTheDocument();
 
     await user.click(button);
     expect(memorize.onMemorize).toHaveBeenCalledWith(button);
     expect(memorize.onOpenPack).not.toHaveBeenCalled();
   });
 
-  it("grows into the space beside the chapter-note well and pushes it right", () => {
+  it("lets the first visible control take leftover space beside the note", () => {
     renderHeader({
       book: "Psalms",
       chapter: 1,
@@ -268,47 +313,29 @@ describe("ChapterHeader Memorize button", () => {
     });
 
     const button = screen.getByRole("button", { name: "Memorize Psalm 1" });
-    const slot = button.parentElement;
     const note = screen.getByRole("button", {
       name: "Add a chapter note for Psalm 1",
     });
-    expect(slot?.className).toBe(CHAPTER_CHROME_MEMORIZE_SLOT_CLASS);
-    expect(slot?.nextElementSibling).toBe(note);
+    const headers = screen
+      .getByRole("switch", { name: /Headers/ })
+      .closest("div");
+    expect(headers).toHaveClass("ml-auto");
+    expect(headers).toHaveClass(CHAPTER_CHROME_TIGHT_HIDE_CLASS);
+    expect(screen.getByText("Headers")).toHaveClass(
+      CHAPTER_CHROME_COMPACT_LABEL_CLASS,
+    );
+    expect(
+      (headers?.compareDocumentPosition(button) ?? 0) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      button.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(note).not.toHaveClass("ml-auto");
   });
 
-  it("collapses to a word, then the icon, and crowds out Headers first", () => {
-    renderHeader({
-      book: "Psalms",
-      chapter: 1,
-      memorize: memorizeControl(MEMORIZE_PSALM_1),
-    });
-
-    const button = screen.getByRole("button", { name: "Memorize Psalm 1" });
-    expect(button.className).toContain(CHAPTER_CHROME_MEMORIZE_BUTTON_CLASS);
-    const headersSwitch = screen.getByRole("switch", { name: /Headers/ });
-    expect(headersSwitch.closest("div")?.className).toContain(
-      CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS,
-    );
-    expect(screen.getByText("Headers").className).toContain(
-      CHAPTER_CHROME_MEMORIZE_CROWDED_LABEL_CLASS,
-    );
-
-    const stageClasses = chapterMemorizeStageClasses("Memorize Psalm 1", {
-      ellipsize: false,
-      word: true,
-    });
-    expect(button.className).toContain(stageClasses.button);
-    expect(screen.getByText("Memorize Psalm 1").className).toContain(
-      stageClasses.line,
-    );
-    const word = screen.getByText("Memorize", { exact: true });
-    expect(word.className).toContain(stageClasses.word);
-    expect(word).toHaveAttribute("aria-hidden", "true");
-    expect(button.querySelector("[data-memorize-mark]")).toBeNull();
-  });
-
-  it("goes straight to a ringed icon while memorizing", () => {
+  it("always shows a ringed icon while memorizing", async () => {
+    const user = userEvent.setup();
     renderHeader({
       book: "Psalms",
       chapter: 1,
@@ -324,20 +351,20 @@ describe("ChapterHeader Memorize button", () => {
     const button = screen.getByRole("button", {
       name: "Memorizing, 2 of 6 learned, Psalm 1",
     });
-    const stageClasses = chapterMemorizeStageClasses("Memorizing · 2 of 6", {
-      ellipsize: false,
-      word: false,
-    });
-    expect(button.className).toContain(stageClasses.button);
-    expect(
-      screen.queryByText("Memorizing", { exact: true }),
-    ).not.toBeInTheDocument();
+    expect(button).toHaveClass("size-8");
+    expect(button).not.toHaveTextContent("Memorizing");
     const mark = button.querySelector('[data-memorize-mark="progress"]');
-    expect(mark?.getAttribute("class")).toContain(stageClasses.mark);
     expect(mark).toHaveAttribute("aria-hidden", "true");
+    await user.hover(button);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Memorizing Psalm 1 · 2 of 6 learned · Open pack",
+      }),
+    ).toBeInTheDocument();
   });
 
-  it("checks the icon once memorized", () => {
+  it("checks the icon once memorized", async () => {
+    const user = userEvent.setup();
     renderHeader({
       book: "Psalms",
       chapter: 1,
@@ -349,13 +376,17 @@ describe("ChapterHeader Memorize button", () => {
     });
 
     const button = screen.getByRole("button", { name: "Memorized, Psalm 1" });
-    expect(
-      screen.queryByText("Memorized", { exact: true }),
-    ).not.toBeInTheDocument();
+    expect(button).not.toHaveTextContent("Memorized");
     expect(button.querySelector('[data-memorize-mark="done"]')).not.toBeNull();
+    await user.hover(button);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Memorized Psalm 1 · Open pack",
+      }),
+    ).toBeInTheDocument();
   });
 
-  it("shows memorizing progress without the pack title and opens the pack", async () => {
+  it("opens the pack from a memorizing icon", async () => {
     const user = userEvent.setup();
     const memorize = memorizeControl({
       kind: "memorizing",
@@ -369,13 +400,15 @@ describe("ChapterHeader Memorize button", () => {
     const button = screen.getByRole("button", {
       name: "Memorizing, 0 of 6 learned, Psalm 1",
     });
-    expect(button).toHaveTextContent("Memorizing · 0 of 6");
+    expect(
+      button.querySelector('[data-memorize-mark="progress"]'),
+    ).not.toBeNull();
     expect(button).not.toHaveTextContent("Psalm 1");
 
     await user.hover(button);
     expect(
       await screen.findByRole("tooltip", {
-        name: "Memorizing Psalm 1 · 0 of 6 learned",
+        name: "Memorizing Psalm 1 · 0 of 6 learned · Open pack",
       }),
     ).toBeInTheDocument();
 
@@ -384,7 +417,7 @@ describe("ChapterHeader Memorize button", () => {
     expect(memorize.onMemorize).not.toHaveBeenCalled();
   });
 
-  it("shows Memorized ✓ and Part of {title} as links to the pack", async () => {
+  it("opens the pack from memorized and part-of icons", async () => {
     const user = userEvent.setup();
     const memorized = memorizeControl({
       kind: "memorized",
@@ -393,7 +426,13 @@ describe("ChapterHeader Memorize button", () => {
     });
     renderHeader({ book: "Psalms", chapter: 1, memorize: memorized });
     const done = screen.getByRole("button", { name: "Memorized, Psalm 1" });
-    expect(done).toHaveTextContent("Memorized ✓");
+    expect(done).not.toHaveTextContent("Memorized");
+    await user.hover(done);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Memorized Psalm 1 · Open pack",
+      }),
+    ).toBeInTheDocument();
     await user.click(done);
     expect(memorized.onOpenPack).toHaveBeenCalledWith("pack_1");
 
@@ -410,13 +449,16 @@ describe("ChapterHeader Memorize button", () => {
     const part = screen.getByRole("button", {
       name: /^Part of Sermon on the Mount/,
     });
-    expect(part).toHaveTextContent("Part of Sermon on the Mount");
-    expect(screen.getByText("Part of Sermon on the Mount").className).toContain(
-      chapterMemorizeStageClasses("Part of Sermon on the Mount", {
-        ellipsize: true,
-        word: false,
-      }).line,
-    );
+    expect(part).not.toHaveTextContent("Part of");
+    expect(
+      part.querySelector('[data-memorize-mark="progress"]'),
+    ).not.toBeNull();
+    await user.hover(part);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Part of Sermon on the Mount · 4 of 111 learned · Open pack",
+      }),
+    ).toBeInTheDocument();
     await user.click(part);
     expect(partOf.onOpenPack).toHaveBeenCalledWith("pack_sm");
   });
