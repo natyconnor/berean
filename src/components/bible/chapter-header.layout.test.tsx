@@ -252,6 +252,7 @@ interface MemorizeLayoutReport {
   stage: MemorizeStage;
   headerScrollWidth: number;
   headerClientWidth: number;
+  headerContentRight: number;
   memorizeText: string;
   noteText: string;
   noteBadge: string | null;
@@ -356,6 +357,9 @@ async function measureMemorizeWidths(
         const memorizeBox = rect(memorize);
         const headersBox = rect(headersChip);
         const noteBox = rect(note);
+        const headerBox = header.getBoundingClientRect();
+        const headerContentRight =
+          headerBox.right - parseFloat(getComputedStyle(header).paddingRight);
         return {
           width: columnWidth,
           stage,
@@ -363,6 +367,7 @@ async function measureMemorizeWidths(
           markShown: mark ? shown(mark) : false,
           headerScrollWidth: header.scrollWidth,
           headerClientWidth: header.clientWidth,
+          headerContentRight,
           memorizeText: memorize.textContent?.trim() ?? "",
           noteText: note.textContent?.trim() ?? "",
           noteBadge: badge?.textContent ?? null,
@@ -568,6 +573,7 @@ describe("ChapterHeader Memorize button layout", () => {
     expect(report.headers.width, json).toBe(0);
     expect(report.memorize.width, json).toBe(32);
     expect(report.noteWidth, json).toBe(32);
+    expect(report.note.right, json).toBeCloseTo(report.headerContentRight, 0);
     expectTidyRow(report);
   }, 30_000);
 
