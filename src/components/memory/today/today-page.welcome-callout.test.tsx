@@ -104,7 +104,9 @@ vi.mock("@/hooks/use-esv-reference", () => ({
   useEsvReference: () => ({ data: null, loading: false, error: null }),
 }));
 
-vi.mock("@/hooks/use-live-now", () => ({ useLiveNow: () => MONDAY_OCT_12_2026 }));
+vi.mock("@/hooks/use-live-now", () => ({
+  useLiveNow: () => MONDAY_OCT_12_2026,
+}));
 vi.mock("@/lib/viewer-timezone", () => ({ getViewerTimeZone: () => "UTC" }));
 vi.mock("@/lib/preview-test-tools", () => ({
   isPreviewTestToolsEnabled: () => false,
