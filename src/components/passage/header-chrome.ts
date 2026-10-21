@@ -20,8 +20,6 @@
  *    about 24rem on a 768px window, so both stay; they leave only when that
  *    column itself is under 20rem. H still toggles section headings from the
  *    keyboard.
- * 4. With Memorize on the row, the Headers switch also leaves under
- *    `@max-lg` (32rem / 512px) so long book names keep their room.
  *
  * At a typical 1280px compose layout the header content box is still above
  * 5xl, so those words stay. They drop once the window is actually tight.
@@ -30,7 +28,6 @@ export const CHAPTER_CHROME_CONTAINER_CLASS = "@container/chapter-chrome";
 export const CHAPTER_CHROME_COMPACT_LABEL_CLASS =
   "@max-2xl/chapter-chrome:sr-only";
 export const CHAPTER_CHROME_TIGHT_HIDE_CLASS = "@max-xs/chapter-chrome:hidden";
-/** Headers switch leaves first when Memorize shares the row. */
 export const CHAPTER_CHROME_MEMORIZE_CROWDED_HIDE_CLASS =
   "@max-lg/chapter-chrome:hidden";
 
