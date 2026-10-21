@@ -30,6 +30,15 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.18.1](https://github.com/natyconnor/berean/compare/v1.18.0...v1.18.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **chapter-header:** keep Memorize and note buttons icon-only ([#325](https://github.com/natyconnor/berean/issues/325)) ([7fe30e1](https://github.com/natyconnor/berean/commit/7fe30e15ac3cae3d3cb0f3decccf65986dd22e71))
+* Fill reviewing mastery per remaining exact ([#306](https://github.com/natyconnor/berean/issues/306)) ([272b97c](https://github.com/natyconnor/berean/commit/272b97c047c55227796675bb21c3d91ae638667d))
+* **mode-dock:** remove Memory lives here FeatureCallout ([#327](https://github.com/natyconnor/berean/issues/327)) ([2f331af](https://github.com/natyconnor/berean/commit/2f331afe518ac7edc7ae5beec48fdc730b9d57de))
+
 ## [1.18.0](https://github.com/natyconnor/berean/compare/v1.17.22...v1.18.0) (2026-10-20)
 
 
