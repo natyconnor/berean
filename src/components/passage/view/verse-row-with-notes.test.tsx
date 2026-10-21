@@ -580,7 +580,6 @@ describe("VerseRowWithNotes – verse heart tooltip", () => {
     ).toBeInTheDocument();
 
     await user.unhover(heart);
-    await user.keyboard("{Escape}");
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     for (
@@ -594,6 +593,10 @@ describe("VerseRowWithNotes – verse heart tooltip", () => {
     expect(
       await screen.findByRole("tooltip", { name: "Heart Verse" }),
     ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(heart).toHaveFocus();
   });
 
   it("stays closed while the unheart confirm is open", async () => {
@@ -615,6 +618,21 @@ describe("VerseRowWithNotes – verse heart tooltip", () => {
     expect(
       screen.getByRole("alertdialog", { name: "Unheart Psalm 1:5?" }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("stays closed while the heart burst is playing", async () => {
+    const user = userEvent.setup();
+    renderHeartRow({ filled: false, onToggle: vi.fn() });
+
+    const heart = screen.getByRole("button", { name: "Heart Verse" });
+    await user.click(heart);
+
+    expect(heart).toBeDisabled();
+    expect(heart).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     await user.hover(heart);
