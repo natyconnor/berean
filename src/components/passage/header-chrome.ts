@@ -21,17 +21,12 @@
  *    column itself is under 20rem. H still toggles section headings from the
  *    keyboard.
  *
- * Memorize and the chapter-note button are always 32px icon squares. The
- * first visible control in that group takes leftover space so the reference
- * well can keep the book name.
- *
  * At a typical 1280px compose layout the header content box is still above
  * 5xl, so those words stay. They drop once the window is actually tight.
  */
 export const CHAPTER_CHROME_CONTAINER_CLASS = "@container/chapter-chrome";
 export const CHAPTER_CHROME_COMPACT_LABEL_CLASS =
   "@max-2xl/chapter-chrome:sr-only";
-/** Headers switch and Memorize leave the row once the column cannot hold them. */
 export const CHAPTER_CHROME_TIGHT_HIDE_CLASS = "@max-xs/chapter-chrome:hidden";
 
 export const PASSAGE_HEADER_CONTAINER_CLASS = "@container/passage-header";

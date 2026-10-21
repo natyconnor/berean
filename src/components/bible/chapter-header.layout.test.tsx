@@ -245,7 +245,6 @@ async function measureColumn(
   }
 }
 
-/** What the Memorize button shows: the icon, or nothing on the tightest column. */
 type MemorizeStage = "icon" | "gone";
 
 interface MemorizeLayoutReport {
@@ -266,7 +265,6 @@ interface MemorizeLayoutReport {
   headersToMemorizeGap: number;
   memorizeToNoteGap: number;
   bookTruncated: boolean;
-  /** The ring or check the icon wears. */
   markShown: boolean;
 }
 

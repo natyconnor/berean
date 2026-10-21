@@ -7,8 +7,8 @@ import { memorizeTitleLabel } from "./memory-copy";
 import type { PassageHeartInfo } from "./passage-heart-info";
 
 /**
- * What the chapter header's Memorize button shows. `memorize` opens the sheet
- * for the chapter; every other state opens the passage's pack in Memory.
+ * `memorize` opens the sheet for the chapter; every other state opens the
+ * passage's pack in Memory.
  */
 export type ChapterMemorizeState =
   | { kind: "memorize"; title: string }
@@ -100,16 +100,7 @@ export function chapterMemorizeState(
 }
 
 export type ChapterMemorizeCopy = {
-  /** The state's one line, kept for tests and copy helpers. */
-  title: string;
-  /**
-   * The one word left when the line does not fit. Only the start state has
-   * one; the header is icon-only and does not show it.
-   */
-  short?: string;
-  /** Accessible name. Unchanged when the header is icon-only. */
   label: string;
-  /** Hover text. After the start state, ends with Open pack. */
   tooltip: string;
 };
 
@@ -124,19 +115,17 @@ export function chapterMemorizeCopy(
   switch (state.kind) {
     case "memorize": {
       const title = memorizeTitleLabel(state.title);
-      return { title, short: "Memorize", label: title, tooltip: title };
+      return { label: title, tooltip: title };
     }
     case "memorizing": {
       const count = countLine(state.learnedVerses, state.totalVerses);
       return {
-        title: `Memorizing · ${count}`,
         label: `Memorizing, ${count} learned, ${state.title}`,
         tooltip: `Memorizing ${state.title} · ${count} learned · Open pack`,
       };
     }
     case "memorized":
       return {
-        title: "Memorized ✓",
         label: `Memorized, ${state.title}`,
         tooltip: `Memorized ${state.title} · Open pack`,
       };
@@ -144,7 +133,6 @@ export function chapterMemorizeCopy(
       const title = `Part of ${state.title}`;
       const count = countLine(state.learnedVerses, state.totalVerses);
       return {
-        title,
         label: state.memorized
           ? `${title}, memorized`
           : `${title}, memorizing, ${count} learned`,

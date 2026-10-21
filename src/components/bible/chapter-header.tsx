@@ -90,7 +90,6 @@ export interface ChapterMemorizeControl {
 const CHAPTER_MEMORIZE_NEW_COPY =
   "New: memorize this chapter in a few minutes a day.";
 
-/** The ring or check on the bare Memorize icon. */
 function ChapterMemorizeMarkIcon({ mark }: { mark: ChapterMemorizeMark }) {
   if (mark.kind === "none") return null;
   if (mark.kind === "done") {
