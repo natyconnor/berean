@@ -95,7 +95,6 @@ describe("resolveMemoryExit", () => {
     expect(resolveMemoryExit("/memory/progress").label).toBe(
       "Back to Progress",
     );
-    expect(resolveMemoryExit("/memory/library").label).toBe("Back to Library");
     expect(resolveMemoryExit("/memory/presets")).toEqual({
       href: "/memory/presets",
       label: "Back to Suggestions",
@@ -110,6 +109,17 @@ describe("resolveMemoryExit", () => {
       href: "/memory/new",
       label: "Back to New pack",
       name: "New pack",
+    });
+  });
+
+  it("treats /memory/library as the verses page it redirects to", () => {
+    const fromLibrary = resolveMemoryExit("/memory/library");
+    const fromVerses = resolveMemoryExit("/memory/verses");
+    expect(fromLibrary).toEqual(fromVerses);
+    expect(fromLibrary).toEqual({
+      href: "/memory/verses",
+      label: "Back to Your verses",
+      name: "Your verses",
     });
   });
 
