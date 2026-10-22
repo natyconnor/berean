@@ -1,10 +1,16 @@
-import { MEMORY_LABEL, YOUR_VERSES_LABEL } from "@/lib/memory-copy";
+import {
+  MEMORY_LABEL,
+  SUGGESTIONS_LABEL,
+  YOUR_VERSES_LABEL,
+} from "@/lib/memory-copy";
 import { parseMemoryReturn } from "@/lib/memory-return";
+import { isMemorySessionPath } from "@/lib/memory-session-path";
 import { formatBookChapter, parsePassageId } from "@/lib/verse-ref-utils";
 
 export const MEMORY_HOME = "/memory";
 
 const LIBRARY_LABEL = "Library";
+const NEW_PACK_LABEL = "New pack";
 const PROGRESS_LABEL = "Progress";
 
 export type MemoryExit = {
@@ -32,6 +38,8 @@ type Classified =
   | { type: "verses" }
   | { type: "progress" }
   | { type: "library" }
+  | { type: "presets" }
+  | { type: "new" }
   | { type: "pack"; packId: string }
   | { type: "verse"; verseRefId: string }
   | { type: "passage"; passageId: string }
@@ -46,6 +54,7 @@ function pathOf(href: string): string {
 function classify(href: string): Classified {
   const path = pathOf(href);
   if (path === "/memory") return { type: "memory" };
+  if (isMemorySessionPath(path)) return { type: "other" };
 
   if (path.startsWith("/passage/")) {
     const passageId = decodeURIComponent(path.slice("/passage/".length));
@@ -62,17 +71,9 @@ function classify(href: string): Classified {
     if (parts[0] === "verses") return { type: "verses" };
     if (parts[0] === "progress") return { type: "progress" };
     if (parts[0] === "library") return { type: "library" };
-    if (
-      parts[0] === "verse" ||
-      parts[0] === "today" ||
-      parts[0] === "learn" ||
-      parts[0] === "practice" ||
-      parts[0] === "review" ||
-      parts[0] === "new" ||
-      parts[0] === "presets"
-    ) {
-      return { type: "other" };
-    }
+    if (parts[0] === "presets") return { type: "presets" };
+    if (parts[0] === "new") return { type: "new" };
+    if (parts[0] === "verse") return { type: "other" };
     return { type: "pack", packId: decodeURIComponent(parts[0]) };
   }
   if (parts.length === 2 && parts[0] === "verse" && parts[1]) {
@@ -145,6 +146,8 @@ function resolveHref(href: string, lookups: MemoryExitLookups): MemoryExit {
   if (dest.type === "verses") return named(href, YOUR_VERSES_LABEL);
   if (dest.type === "progress") return named(href, PROGRESS_LABEL);
   if (dest.type === "library") return named(href, LIBRARY_LABEL);
+  if (dest.type === "presets") return named(href, SUGGESTIONS_LABEL);
+  if (dest.type === "new") return named(href, NEW_PACK_LABEL);
 
   if (dest.type === "passage") {
     const { book, chapter } = parsePassageId(dest.passageId);
@@ -155,5 +158,5 @@ function resolveHref(href: string, lookups: MemoryExitLookups): MemoryExit {
     return named(href, name);
   }
 
-  return named(href, "page");
+  return memoryHome();
 }

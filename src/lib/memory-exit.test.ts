@@ -96,6 +96,43 @@ describe("resolveMemoryExit", () => {
       "Back to Progress",
     );
     expect(resolveMemoryExit("/memory/library").label).toBe("Back to Library");
+    expect(resolveMemoryExit("/memory/presets")).toEqual({
+      href: "/memory/presets",
+      label: "Back to Suggestions",
+      name: "Suggestions",
+    });
+    expect(resolveMemoryExit("/memory/presets?q=1")).toEqual({
+      href: "/memory/presets?q=1",
+      label: "Back to Suggestions",
+      name: "Suggestions",
+    });
+    expect(resolveMemoryExit("/memory/new")).toEqual({
+      href: "/memory/new",
+      label: "Back to New pack",
+      name: "New pack",
+    });
+  });
+
+  it("falls back to Memory when the return is a session", () => {
+    for (const raw of [
+      "/memory/practice",
+      "/memory/review",
+      "/memory/today",
+      "/memory/learn",
+      "/memory/merced/review",
+    ]) {
+      const exit = resolveMemoryExit(raw);
+      expect(exit.href).toBe("/memory");
+      expect(exit.label).toBe("Back to Memory");
+    }
+  });
+
+  it("falls back to Memory when a valid return has no name", () => {
+    for (const raw of ["/memory/presets/psalm-23", "/memory/verse"]) {
+      const exit = resolveMemoryExit(raw);
+      expect(exit.href).toBe("/memory");
+      expect(exit.label).toBe("Back to Memory");
+    }
   });
 
   it("keeps a Memory drawer return on Memory", () => {

@@ -139,4 +139,27 @@ describe("useMemoryExit", () => {
 
     expect(navigate).toHaveBeenCalledWith({ href: "/memory", replace: true });
   });
+
+  it("names Suggestions for a presets return", async () => {
+    render(<ExitButton returnTo="/memory/presets" />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to Suggestions" }),
+    );
+
+    expect(navigate).toHaveBeenCalledWith({
+      href: "/memory/presets",
+      replace: true,
+    });
+  });
+
+  it("falls back to Memory when the return is a session", async () => {
+    render(<ExitButton returnTo="/memory/practice" />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to Memory" }),
+    );
+
+    expect(navigate).toHaveBeenCalledWith({ href: "/memory", replace: true });
+  });
 });
