@@ -256,8 +256,43 @@ describe("ModeDock route visibility", () => {
     });
     render(<ModeDock />);
 
-    await user.click(screen.getByRole("link", { name: "Memory" }));
+    const memoryLink = screen.getByRole("link", { name: "Memory" });
+    expect(memoryLink).toHaveAttribute("href", "/memory");
+    await user.click(memoryLink);
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory", search: {} });
+  });
+
+  it("points the Memory tab at home on a pack page, matching a click", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/pack-abc",
+      href: "/memory/pack-abc",
+    });
+    render(<ModeDock />);
+
+    const memoryLink = screen.getByRole("link", { name: "Memory" });
+    expect(memoryLink).toHaveAttribute("href", "/memory");
+    await user.click(memoryLink);
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory", search: {} });
+  });
+
+  it("points the Memory tab at home during a session even when last Memory was a pack", () => {
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/pack-abc",
+      href: "/memory/pack-abc",
+    });
+    const { rerender } = render(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/learn",
+      href: "/memory/learn?book=John&chapter=3&startVerse=16&endVerse=16&return=%2Fpassage%2FJohn-3",
+    });
+    rerender(<ModeDock />);
+
+    expect(screen.getByRole("link", { name: "Memory" })).toHaveAttribute(
+      "href",
+      "/memory",
+    );
   });
 
   it("does nothing when Memory is already home", async () => {
