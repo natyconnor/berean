@@ -9,9 +9,12 @@ import { formatBookChapter, parsePassageId } from "@/lib/verse-ref-utils";
 
 export const MEMORY_HOME = "/memory";
 
-const LIBRARY_LABEL = "Library";
 const NEW_PACK_LABEL = "New pack";
 const PROGRESS_LABEL = "Progress";
+
+const EXIT_PATH_ALIASES: Readonly<Record<string, string>> = {
+  "/memory/library": "/memory/verses",
+};
 
 export type MemoryExit = {
   href: string;
@@ -37,7 +40,6 @@ type Classified =
   | { type: "memory" }
   | { type: "verses" }
   | { type: "progress" }
-  | { type: "library" }
   | { type: "presets" }
   | { type: "new" }
   | { type: "pack"; packId: string }
@@ -49,6 +51,13 @@ function pathOf(href: string): string {
   const query = href.indexOf("?");
   const path = query === -1 ? href : href.slice(0, query);
   return path.replace(/\/+$/, "") || "/";
+}
+
+function canonicalHref(href: string): string {
+  const dest = EXIT_PATH_ALIASES[pathOf(href)];
+  if (!dest) return href;
+  const query = href.indexOf("?");
+  return query === -1 ? dest : `${dest}${href.slice(query)}`;
 }
 
 function classify(href: string): Classified {
@@ -70,7 +79,6 @@ function classify(href: string): Classified {
   if (parts.length === 1 && parts[0]) {
     if (parts[0] === "verses") return { type: "verses" };
     if (parts[0] === "progress") return { type: "progress" };
-    if (parts[0] === "library") return { type: "library" };
     if (parts[0] === "presets") return { type: "presets" };
     if (parts[0] === "new") return { type: "new" };
     if (parts[0] === "verse") return { type: "other" };
@@ -94,7 +102,7 @@ function candidateHref(
   returnTo: string | undefined,
   fallbackHref: string,
 ): string {
-  return parseMemoryReturn(returnTo) ?? fallbackHref;
+  return canonicalHref(parseMemoryReturn(returnTo) ?? fallbackHref);
 }
 
 /** What the resolver may need to load before it can name or drop a target. */
@@ -145,7 +153,6 @@ function resolveHref(href: string, lookups: MemoryExitLookups): MemoryExit {
   if (dest.type === "memory") return named(href, MEMORY_LABEL);
   if (dest.type === "verses") return named(href, YOUR_VERSES_LABEL);
   if (dest.type === "progress") return named(href, PROGRESS_LABEL);
-  if (dest.type === "library") return named(href, LIBRARY_LABEL);
   if (dest.type === "presets") return named(href, SUGGESTIONS_LABEL);
   if (dest.type === "new") return named(href, NEW_PACK_LABEL);
 
