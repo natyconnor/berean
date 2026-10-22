@@ -40,7 +40,9 @@ describe("SelectionMemorizeBar", () => {
       screen.queryByRole("button", { name: "Memorize" }),
     ).not.toBeInTheDocument();
 
-    const heart = screen.getByRole("button", { name: "Heart" });
+    const heart = screen.getByRole("button", { name: "Heart Verses" });
+    expect(heart).toHaveTextContent("Heart Verses");
+    expect(heart).toHaveAccessibleName("Heart Verses");
     expect(heart).toHaveAttribute("aria-pressed", "false");
     await user.click(heart);
     expect(props.onToggleHeart).toHaveBeenCalledWith(heart);
@@ -98,9 +100,22 @@ describe("SelectionMemorizeBar", () => {
     expect(props.onToggleHeart).toHaveBeenCalledWith(heart);
   });
 
+  it("labels a multi-verse heart Heart Verses and has no tooltip", async () => {
+    const user = userEvent.setup();
+    renderBar();
+
+    const heart = screen.getByRole("button", { name: "Heart Verses" });
+    expect(heart).toHaveTextContent("Heart Verses");
+    expect(heart).toHaveAccessibleName("Heart Verses");
+    await user.hover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
   it("uses 44px targets when pinned for touch", () => {
     renderBar({ pinned: true });
-    expect(screen.getByRole("button", { name: "Heart" })).toHaveClass("h-11");
+    expect(screen.getByRole("button", { name: "Heart Verses" })).toHaveClass(
+      "h-11",
+    );
     expect(screen.getByRole("button", { name: "Clear selection" })).toHaveClass(
       "size-11",
     );

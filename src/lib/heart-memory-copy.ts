@@ -6,21 +6,40 @@ import {
 import { statusLabel } from "./memory-copy";
 import type { PassageHeartInfo } from "./passage-heart-info";
 
-/** How memorizing reads on a reader heart, in place of "Heart" / "Unheart". */
+/** How memorizing reads on a reader heart, in place of "Heart Verse" / "Unheart". */
 export interface HeartMemoryCopy {
-  /** "Memorizing · Fill in the blanks". */
+  /** "Memorizing · Fill in the blanks". NBSP before · so a wrap never starts with it. */
   tooltip: string;
-  /** Appended to the heart's accessible name: "(memorizing, Fill in the blanks)". */
-  ariaSuffix: string;
+  /** Full accessible name: "Memorizing: Fill in the blanks. Unheart". */
+  ariaLabel: string;
+}
+
+export interface VerseHeartLabels {
+  tooltip: string;
+  ariaLabel: string;
 }
 
 function heartCopy(state: string, detail?: string): HeartMemoryCopy {
   return detail
     ? {
-        tooltip: `${state} · ${detail}`,
-        ariaSuffix: `(${state.toLowerCase()}, ${detail})`,
+        tooltip: `${state}\u00A0· ${detail}`,
+        ariaLabel: `${state}: ${detail}. Unheart`,
       }
-    : { tooltip: state, ariaSuffix: `(${state.toLowerCase()})` };
+    : { tooltip: state, ariaLabel: `${state}. Unheart` };
+}
+
+/** Visible tooltip and accessible name for a per-verse heart. */
+export function verseHeartLabels(
+  filled: boolean,
+  offerChoices: boolean,
+  memoryCopy?: HeartMemoryCopy,
+): VerseHeartLabels {
+  if (memoryCopy) return memoryCopy;
+  if (!filled) return { tooltip: "Heart Verse", ariaLabel: "Heart Verse" };
+  if (offerChoices) {
+    return { tooltip: "Memorize or unheart", ariaLabel: "Memorize or unheart" };
+  }
+  return { tooltip: "Unheart", ariaLabel: "Unheart" };
 }
 
 /** Tooltip and accessible-name detail for the heart of a verse in Memory. */

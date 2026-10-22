@@ -487,7 +487,7 @@ describe("VerseRowWithNotes – clicking a filled heart", () => {
     const { onToggle, onMouseDown } = renderHeart(false, onOfferChoices);
 
     const heart = screen.getByRole("button", {
-      name: "Hearted. Memorize or unheart",
+      name: "Memorize or unheart",
     });
     await user.click(heart);
     expect(onOfferChoices).toHaveBeenCalledWith(heart, expect.any(Function));
@@ -510,7 +510,7 @@ describe("VerseRowWithNotes – clicking a filled heart", () => {
     const { onToggle } = renderHeart(false);
 
     const heart = screen.getByRole("button", {
-      name: "Remove from hearted verses",
+      name: "Unheart",
     });
     await user.click(heart);
     expect(onToggle).toHaveBeenCalledWith(heart);
@@ -523,7 +523,7 @@ describe("VerseRowWithNotes – clicking a filled heart", () => {
     const { onToggle, onMouseDown } = renderHeart(true, onOfferChoices);
 
     const heart = screen.getByRole("button", {
-      name: "Remove from hearted verses",
+      name: "Unheart",
     });
     await user.click(heart);
     const dialog = screen.getByRole("alertdialog", {
@@ -542,6 +542,109 @@ describe("VerseRowWithNotes – clicking a filled heart", () => {
     expect(onOfferChoices).not.toHaveBeenCalled();
     expect(onMouseDown).not.toHaveBeenCalled();
     expect(heart).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
+describe("VerseRowWithNotes – verse heart tooltip", () => {
+  function renderHeartRow(
+    passageHeart: NonNullable<
+      ComponentProps<typeof VerseRowWithNotes>["passageHeart"]
+    >,
+    verseNumber = 5,
+  ) {
+    const props = defaultProps();
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <VerseRowWithNotes
+          {...props}
+          verseNumber={verseNumber}
+          currentChapter={{ book: "Psalms", chapter: 1 }}
+          onMouseDown={props.onMouseDown}
+          passageHeart={passageHeart}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  it("shows Heart Verse on hover and on Tab, and keeps aria-pressed", async () => {
+    const user = userEvent.setup();
+    renderHeartRow({ filled: false, onToggle: vi.fn() });
+
+    const heart = screen.getByRole("button", { name: "Heart Verse" });
+    expect(heart).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(heart);
+    expect(
+      await screen.findByRole("tooltip", { name: "Heart Verse" }),
+    ).toBeInTheDocument();
+
+    await user.unhover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    for (
+      let step = 0;
+      step < 8 && document.activeElement !== heart;
+      step += 1
+    ) {
+      await user.tab();
+    }
+    expect(heart).toHaveFocus();
+    expect(
+      await screen.findByRole("tooltip", { name: "Heart Verse" }),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(heart).toHaveFocus();
+  });
+
+  it("stays closed while the unheart confirm is open", async () => {
+    const user = userEvent.setup();
+    renderHeartRow({
+      filled: true,
+      onToggle: vi.fn(),
+      stopsMemorizing: true,
+      reference: "Psalm 1:5",
+    });
+
+    const heart = screen.getByRole("button", { name: "Unheart" });
+    await user.hover(heart);
+    expect(
+      await screen.findByRole("tooltip", { name: "Unheart" }),
+    ).toBeInTheDocument();
+
+    await user.click(heart);
+    expect(
+      screen.getByRole("alertdialog", { name: "Unheart Psalm 1:5?" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("stays closed while the heart burst is playing", async () => {
+    const user = userEvent.setup();
+    renderHeartRow({ filled: false, onToggle: vi.fn() });
+
+    const heart = screen.getByRole("button", { name: "Heart Verse" });
+    await user.click(heart);
+
+    expect(heart).toBeDisabled();
+    expect(heart).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(heart);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("stays closed while this heart's memorize popover is open", async () => {
+    const user = userEvent.setup();
+    renderHeartRow({ filled: false, onToggle: vi.fn(), nudgeOpen: true });
+
+    await user.hover(screen.getByRole("button", { name: "Heart Verse" }));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
 
