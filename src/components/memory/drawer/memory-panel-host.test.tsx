@@ -251,10 +251,16 @@ describe("MemoryPanelHost", () => {
     ).toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "Continue Psalm 16" }),
-    ).toHaveAttribute("href", "/memory/psalm16/learn?return=%2Fmemory");
+    ).toHaveAttribute(
+      "href",
+      "/memory/psalm16/learn?return=%2Fmemory%2Fverses",
+    );
     expect(
       within(dialog).getByRole("link", { name: "Review Merced Team" }),
-    ).toHaveAttribute("href", "/memory/merced/review?return=%2Fmemory");
+    ).toHaveAttribute(
+      "href",
+      "/memory/merced/review?return=%2Fmemory%2Fverses",
+    );
     expect(
       within(dialog).queryByRole("button", { name: /^Sort/ }),
     ).not.toBeInTheDocument();
@@ -272,7 +278,10 @@ describe("MemoryPanelHost", () => {
     const dialog = screen.getByRole("dialog", { name: "Your verses" });
     expect(
       within(dialog).getByRole("link", { name: "Continue Merced Team" }),
-    ).toHaveAttribute("href", "/memory/today?packId=merced&return=%2Fmemory");
+    ).toHaveAttribute(
+      "href",
+      "/memory/today?packId=merced&return=%2Fmemory%2Fverses",
+    );
   });
 
   it("offers Practice on a pack with nothing due", () => {
@@ -289,7 +298,10 @@ describe("MemoryPanelHost", () => {
     const dialog = screen.getByRole("dialog", { name: "Your verses" });
     expect(
       within(dialog).getByRole("link", { name: "Practice Merced Team" }),
-    ).toHaveAttribute("href", "/memory/merced/practice?return=%2Fmemory");
+    ).toHaveAttribute(
+      "href",
+      "/memory/merced/practice?return=%2Fmemory%2Fverses",
+    );
   });
 
   it("swaps to a goal's detail with from=verses", async () => {
@@ -350,7 +362,7 @@ describe("MemoryPanelHost", () => {
       within(dialog).getByRole("link", { name: "Review" }),
     ).toHaveAttribute(
       "href",
-      "/memory/review?book=Romans&chapter=8&startVerse=28&endVerse=28&return=%2Fmemory",
+      `/memory/review?book=Romans&chapter=8&startVerse=28&endVerse=28&return=${encodeURIComponent(`/memory/verse/${VERSE_REF_ID}`)}`,
     );
   });
 

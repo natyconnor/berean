@@ -661,7 +661,7 @@ describe("PracticeBoard learning step label", () => {
           verses={[{ ...guidedVerse, stageReps: 2 }]}
           scopeLabel="Memory"
           onExit={onExit}
-          backLabel="Back to Today"
+          backLabel="Back to Memory"
           returnTo="/memory"
           hasMemorized
         />
@@ -669,7 +669,7 @@ describe("PracticeBoard learning step label", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Back to Today" }),
+      screen.getByRole("button", { name: "Back to Memory" }),
     ).toBeInTheDocument();
     await finishLastStep();
 

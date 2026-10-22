@@ -46,7 +46,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import { useMemoryExit } from "@/hooks/use-memory-back";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
@@ -115,11 +115,10 @@ interface TodaySessionData {
  */
 export function MemoryTodayPage(): JSX.Element {
   const { packId, only, return: returnTo } = Route.useSearch();
-  const onExit = useMemoryExit(returnTo);
-  const backLabel = useMemoryExitLabel(returnTo);
+  const exit = useMemoryExit(returnTo);
   const chrome: TodayChrome = {
-    onExit,
-    backLabel,
+    onExit: exit.go,
+    backLabel: exit.label,
     returnTo,
     subtitle: SESSION_SUBTITLES[only ?? "all"],
   };
@@ -646,7 +645,6 @@ function TodaySession({
       verses={segment.kind === "learning" ? data.learning : data.reviews}
       scopeLabel={data.title}
       onExit={chrome.onExit}
-      exitTooltip="Leave today's session"
       backLabel={chrome.backLabel}
       returnTo={chrome.returnTo}
       hasMemorized={data.hasMemorized}
@@ -716,7 +714,6 @@ function TodayPassageSegment({
       packName={title}
       onExit={chrome.onExit}
       onDoneForToday={onDone}
-      exitTooltip="Leave today's session"
       backLabel={chrome.backLabel}
       progress={progress}
       aside={aside}

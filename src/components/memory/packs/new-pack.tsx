@@ -269,7 +269,7 @@ export function NewPack({
             type="button"
             variant="ghost"
             className="h-11 w-full text-muted-foreground sm:h-9"
-            onClick={exit}
+            onClick={exit.go}
           >
             Cancel
           </Button>

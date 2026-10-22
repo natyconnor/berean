@@ -15,8 +15,7 @@ interface MemorySessionRunnerProps {
   verses: ReadonlyArray<PracticeVerse>;
   scopeLabel: string;
   onExit: () => void;
-  exitTooltip?: string;
-  /** Header back button text, e.g. "Back to Today". */
+  /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
   /** The summary's primary action. */
   exitLabel?: string;

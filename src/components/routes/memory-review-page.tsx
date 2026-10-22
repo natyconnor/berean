@@ -9,7 +9,7 @@ import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-ve
 import { Button } from "@/components/ui/button";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import { useMemoryExit } from "@/hooks/use-memory-back";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
 import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
@@ -29,6 +29,7 @@ function MemoryReviewSessionPage({
   now,
   onExit,
   backLabel,
+  exitHref,
   returnTo,
   onContinueSession,
 }: {
@@ -38,6 +39,7 @@ function MemoryReviewSessionPage({
   now: number;
   onExit: () => void;
   backLabel: string;
+  exitHref: string;
   returnTo?: string;
   onContinueSession?: () => void;
 }) {
@@ -52,7 +54,12 @@ function MemoryReviewSessionPage({
       remainingDue={remainingDue}
       onContinueSession={onContinueSession}
       emptyState={
-        <ReviewEmptyState now={now} onExit={onExit} backLabel={backLabel} />
+        <ReviewEmptyState
+          now={now}
+          onExit={onExit}
+          backLabel={backLabel}
+          exitHref={exitHref}
+        />
       }
     />
   );
@@ -61,8 +68,10 @@ function MemoryReviewSessionPage({
 export function MemoryReviewPage() {
   const search = Route.useSearch();
   const returnTo = search.return;
-  const onExit = useMemoryExit(returnTo);
-  const backLabel = useMemoryExitLabel(returnTo);
+  const exit = useMemoryExit(returnTo);
+  const onExit = exit.go;
+  const backLabel = exit.label;
+  const exitHref = exit.href;
   const now = useLiveNow();
   const hasScope = hasReviewVerseScope(search);
   const [queueEpoch, setQueueEpoch] = useState(0);
@@ -121,6 +130,7 @@ export function MemoryReviewPage() {
         now={now}
         onExit={onExit}
         backLabel={backLabel}
+        exitHref={exitHref}
         returnTo={returnTo}
         onContinueSession={() => {
           setDrainedDue((value) => value + globalVerses.length);
@@ -168,6 +178,7 @@ export function MemoryReviewPage() {
       now={now}
       onExit={onExit}
       backLabel={backLabel}
+      exitHref={exitHref}
       returnTo={returnTo}
     />
   );

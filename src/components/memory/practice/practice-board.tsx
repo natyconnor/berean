@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
+import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useMutation } from "convex/react";
 
@@ -23,11 +23,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { SessionBackButton } from "@/components/memory/session-back-button";
 import {
   useEsvCompositePassage,
   type CompositePassageSegment,
@@ -220,9 +216,7 @@ interface PracticeBoardProps {
   scopeLabel: string;
   /** Leave the session for where it started. */
   onExit: () => void;
-  /** Describes the back-button destination. */
-  exitTooltip?: string;
-  /** Header back button text, e.g. "Back to Today". */
+  /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
   /** The end-of-session card's primary action. */
   exitLabel?: string;
@@ -396,7 +390,6 @@ export function PracticeBoard({
   verses,
   scopeLabel,
   onExit,
-  exitTooltip,
   backLabel,
   exitLabel = "Done",
   returnTo,
@@ -836,7 +829,6 @@ export function PracticeBoard({
     sessionLabel,
     scopeLabel,
     onExit,
-    exitTooltip,
     backLabel,
     progress: resolveSessionProgress(progress, {
       done: railVerses.filter((verse) => verse.locked).length,
@@ -1860,15 +1852,13 @@ function PracticeShell({
   sessionLabel,
   scopeLabel,
   onExit,
-  exitTooltip = "Go back",
-  backLabel = "Back",
+  backLabel = "Back to Memory",
   progress,
   children,
 }: {
   sessionLabel: MemorySessionLabel;
   scopeLabel: string;
   onExit: () => void;
-  exitTooltip?: string;
   backLabel?: string;
   progress?: SessionProgress;
   children: ReactNode;
@@ -1877,20 +1867,7 @@ function PracticeShell({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onExit}
-                className="-ml-2 shrink-0 gap-1.5"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden />
-                {backLabel}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{exitTooltip}</TooltipContent>
-          </Tooltip>
+          <SessionBackButton onExit={onExit} label={backLabel} />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
             <span className="shrink-0 font-semibold">{sessionLabel}</span>
             <span aria-hidden className="text-muted-foreground">

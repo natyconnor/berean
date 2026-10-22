@@ -20,17 +20,16 @@ import {
   type EmptyStateCopy,
   type ScheduledVerse,
 } from "@/lib/memory-empty-states";
+import { isMemoryHomeHref, MEMORY_HOME } from "@/lib/memory-exit";
 import { cn } from "@/lib/utils";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
 const ACTION_CLASS = "max-sm:h-11";
-const TODAY_HREF = "/memory";
-/** `memoryExitLabel` says this only when Back already lands on Today. */
-const BACK_TO_TODAY_LABEL = "Back to Today";
 
 interface ExitProps {
   onExit: () => void;
   backLabel: string;
+  exitHref: string;
 }
 
 function SessionEmptyState({
@@ -82,23 +81,24 @@ function EmptyStateLoading() {
 }
 
 /**
- * Back to where the session came from. When that is not Today (the reader,
- * a pack), a link to Today sits beside it so a finished side trip never
+ * Back to where the session came from. When that is not Memory (the reader,
+ * a pack), a link to Memory sits beside it so a finished side trip never
  * strands someone outside the dashboard.
  */
 function ExitActions({
   onExit,
   backLabel,
-  todayLink = true,
-}: ExitProps & { todayLink?: boolean }) {
+  exitHref,
+  memoryLink = true,
+}: ExitProps & { memoryLink?: boolean }) {
   return (
     <>
       <Button variant="outline" className={ACTION_CLASS} onClick={onExit}>
         {backLabel}
       </Button>
-      {todayLink && backLabel !== BACK_TO_TODAY_LABEL ? (
+      {memoryLink && !isMemoryHomeHref(exitHref) ? (
         <Button asChild variant="ghost" className={ACTION_CLASS}>
-          <InternalLink href={TODAY_HREF}>Go to Today</InternalLink>
+          <InternalLink href={MEMORY_HOME}>Go to Memory</InternalLink>
         </Button>
       ) : null}
     </>
@@ -115,6 +115,7 @@ export function ReviewEmptyState({
   now,
   onExit,
   backLabel,
+  exitHref,
 }: ExitProps & { now: number }) {
   const verses = useInMemorySchedules();
   if (verses === undefined) return <EmptyStateLoading />;
@@ -126,7 +127,7 @@ export function ReviewEmptyState({
   );
   return (
     <SessionEmptyState icon={Sparkles} copy={copy}>
-      <ExitActions onExit={onExit} backLabel={backLabel} />
+      <ExitActions onExit={onExit} backLabel={backLabel} exitHref={exitHref} />
     </SessionEmptyState>
   );
 }
@@ -137,6 +138,7 @@ export function LearnEmptyState({
   now,
   onExit,
   backLabel,
+  exitHref,
 }: ExitProps & { verses: readonly ScheduledVerse[]; now: number }) {
   const copy = learnEmptyCopy(
     soonestLearningUnlock(verses, now),
@@ -147,13 +149,14 @@ export function LearnEmptyState({
     <SessionEmptyState icon={Clock3} muted copy={copy}>
       {copy.startSomethingNew ? (
         <Button asChild className={ACTION_CLASS}>
-          <InternalLink href={TODAY_HREF}>Start something new</InternalLink>
+          <InternalLink href={MEMORY_HOME}>Start something new</InternalLink>
         </Button>
       ) : null}
       <ExitActions
         onExit={onExit}
         backLabel={backLabel}
-        todayLink={!copy.startSomethingNew}
+        exitHref={exitHref}
+        memoryLink={!copy.startSomethingNew}
       />
     </SessionEmptyState>
   );
@@ -164,6 +167,7 @@ export function AllLearnEmptyState({
   now,
   onExit,
   backLabel,
+  exitHref,
 }: ExitProps & { now: number }) {
   const verses = useInMemorySchedules();
   if (verses === undefined) return <EmptyStateLoading />;
@@ -173,6 +177,7 @@ export function AllLearnEmptyState({
       now={now}
       onExit={onExit}
       backLabel={backLabel}
+      exitHref={exitHref}
     />
   );
 }
@@ -182,6 +187,7 @@ export function PracticeEmptyState({
   scopeLabel,
   onExit,
   backLabel,
+  exitHref,
 }: ExitProps & { scopeLabel?: string }) {
   return (
     <SessionEmptyState
@@ -189,7 +195,7 @@ export function PracticeEmptyState({
       muted
       copy={practiceEmptyCopy(scopeLabel)}
     >
-      <ExitActions onExit={onExit} backLabel={backLabel} />
+      <ExitActions onExit={onExit} backLabel={backLabel} exitHref={exitHref} />
     </SessionEmptyState>
   );
 }

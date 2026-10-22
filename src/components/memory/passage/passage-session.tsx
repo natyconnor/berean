@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, CheckCircle2, Info, Loader2, X } from "lucide-react";
+import { CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
 
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
@@ -65,6 +65,7 @@ import {
   type SessionProgress,
 } from "@/components/memory/practice/session-header-progress";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
+import { SessionBackButton } from "@/components/memory/session-back-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -74,11 +75,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { useLiveNow } from "@/hooks/use-live-now";
 import {
@@ -137,8 +133,7 @@ interface PassageSessionProps {
    * same way.
    */
   onDoneForToday?: () => void;
-  exitTooltip?: string;
-  /** Header back button text, e.g. "Back to Today". */
+  /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
   /**
    * Header text and overall bar when this passage is one part of a session.
@@ -155,8 +150,7 @@ export function PassageSession({
   packName,
   onExit,
   onDoneForToday,
-  exitTooltip = "Go back to the pack",
-  backLabel = "Back",
+  backLabel = "Back to Memory",
   progress,
   aside,
 }: PassageSessionProps): JSX.Element {
@@ -530,7 +524,6 @@ export function PassageSession({
       phaseLabel={phaseLabel}
       packName={packName}
       onExit={leaveSession}
-      exitTooltip={exitTooltip}
       backLabel={backLabel}
       progress={headerProgress}
       persistError={persistError}
@@ -1121,7 +1114,6 @@ function PassageSessionShell({
   phaseLabel,
   packName,
   onExit,
-  exitTooltip,
   backLabel,
   progress,
   persistError,
@@ -1131,7 +1123,6 @@ function PassageSessionShell({
   phaseLabel: string;
   packName: string;
   onExit: () => void;
-  exitTooltip: string;
   backLabel: string;
   progress?: SessionProgress;
   persistError: string | null;
@@ -1142,20 +1133,7 @@ function PassageSessionShell({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onExit}
-                className="-ml-2 shrink-0 gap-1.5"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden />
-                {backLabel}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{exitTooltip}</TooltipContent>
-          </Tooltip>
+          <SessionBackButton onExit={onExit} label={backLabel} />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
             <span
               className="shrink-0 font-semibold"

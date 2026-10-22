@@ -1,39 +1,21 @@
-import { useCanGoBack, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
 import { useCallback } from "react";
 
-import { parseMemoryReturn } from "@/lib/memory-return";
+import { api } from "../../convex/_generated/api";
+import { useLiveNow } from "@/hooks/use-live-now";
+import {
+  MEMORY_HOME,
+  memoryExitLookup,
+  resolveMemoryExit,
+  type MemoryExit,
+} from "@/lib/memory-exit";
+import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
-const MEMORY_HOME = "/memory";
-
-export type MemoryExitTarget =
-  | { kind: "return"; href: string }
-  | { kind: "history" }
-  | { kind: "fallback"; href: string };
-
-/**
- * Where a session goes when it ends: its `return` (exactly where it started,
- * open drawer included), else the previous screen, else `fallbackHref`.
- */
-export function memoryExitTarget(
-  returnTo: string | undefined,
-  canGoBack: boolean,
-  fallbackHref: string = MEMORY_HOME,
-): MemoryExitTarget {
-  const href = parseMemoryReturn(returnTo);
-  if (href !== undefined) return { kind: "return", href };
-  if (canGoBack) return { kind: "history" };
-  return { kind: "fallback", href: fallbackHref };
-}
-
-/** The session back link: "Back to Today" when it lands on Today, else "Back". */
-export function memoryExitLabel(target: MemoryExitTarget): string {
-  return target.kind !== "history" && target.href === MEMORY_HOME
-    ? "Back to Today"
-    : "Back";
-}
+export type MemoryExitAction = MemoryExit & { go: () => void };
 
 /**
- * Leave a memory session for the screen that opened it. Sessions are shared
+ * Leave a memory session for a named place in the app. Sessions are shared
  * routes opened from Today, drawers, pages, and the reader, so each carries
  * a `return`. The session's history entry is replaced so Back from there does
  * not reopen a finished session.
@@ -41,25 +23,40 @@ export function memoryExitLabel(target: MemoryExitTarget): string {
 export function useMemoryExit(
   returnTo?: string,
   fallbackHref: string = MEMORY_HOME,
-): () => void {
+): MemoryExitAction {
   const navigate = useNavigate();
-  const canGoBack = useCanGoBack();
+  const now = useLiveNow();
+  const lookup = memoryExitLookup(returnTo, fallbackHref);
 
-  return useCallback(() => {
-    const target = memoryExitTarget(returnTo, canGoBack, fallbackHref);
-    if (target.kind === "history") {
-      window.history.back();
-      return;
-    }
-    void navigate({ href: target.href, replace: true });
-  }, [canGoBack, fallbackHref, navigate, returnTo]);
-}
+  const pack = useQuery(
+    api.packs.get,
+    lookup.kind === "pack" ? { id: lookup.packId } : "skip",
+  );
+  const verse = useQuery(
+    api.verseMemory.verseDetail,
+    lookup.kind === "verse" ? { verseRefId: lookup.verseRefId, now } : "skip",
+  );
 
-/** Label for {@link useMemoryExit}'s destination. */
-export function useMemoryExitLabel(
-  returnTo?: string,
-  fallbackHref: string = MEMORY_HOME,
-): string {
-  const canGoBack = useCanGoBack();
-  return memoryExitLabel(memoryExitTarget(returnTo, canGoBack, fallbackHref));
+  const exit = resolveMemoryExit(returnTo, fallbackHref, {
+    packName:
+      lookup.kind === "pack"
+        ? pack === undefined
+          ? undefined
+          : (pack?.name ?? null)
+        : undefined,
+    verseLabel:
+      lookup.kind === "verse"
+        ? verse === undefined
+          ? undefined
+          : verse === null
+            ? null
+            : formatVerseRefTitle(verse)
+        : undefined,
+  });
+
+  const go = useCallback(() => {
+    void navigate({ href: exit.href, replace: true });
+  }, [exit.href, navigate]);
+
+  return { ...exit, go };
 }

@@ -220,7 +220,9 @@ describe("PassageSession", () => {
     renderSession(practicedDueView(), onExit);
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to Memory" }),
+    );
 
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();

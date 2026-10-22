@@ -126,6 +126,12 @@ export function ModeDock() {
 
   const goToMode = useCallback(
     (mode: Mode, trigger: string) => {
+      if (mode === "memory" && trigger === "click" && isMemoryRoute) {
+        if (isPlainMemoryHome(location.pathname, location.href)) return;
+        logInteraction("mode-dock", "memory-opened", { trigger });
+        void navigate({ to: "/memory", search: {} });
+        return;
+      }
       const href =
         mode === "notes"
           ? notesHref
@@ -140,7 +146,15 @@ export function ModeDock() {
       }
       void navigate({ href });
     },
-    [navigate, notesHref, memoryHref, studyHref],
+    [
+      isMemoryRoute,
+      location.href,
+      location.pathname,
+      memoryHref,
+      navigate,
+      notesHref,
+      studyHref,
+    ],
   );
 
   const activeMode: Mode = isStudyRoute
@@ -272,6 +286,14 @@ export function ModeDock() {
       </nav>
     </div>
   );
+}
+
+function isPlainMemoryHome(pathname: string, href: string): boolean {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  if (path !== "/memory") return false;
+  const queryStart = href.indexOf("?");
+  if (queryStart === -1) return true;
+  return !new URLSearchParams(href.slice(queryStart + 1)).has("panel");
 }
 
 function segmentClassName(active: boolean): string {

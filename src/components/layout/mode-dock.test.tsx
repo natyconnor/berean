@@ -248,6 +248,63 @@ describe("ModeDock route visibility", () => {
     expect(mocks.navigate).toHaveBeenCalled();
   });
 
+  it("goes to Memory home when the active Memory tab is clicked on a session", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/review",
+      href: "/memory/review",
+    });
+    render(<ModeDock />);
+
+    await user.click(screen.getByRole("link", { name: "Memory" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory", search: {} });
+  });
+
+  it("does nothing when Memory is already home", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory",
+      href: "/memory",
+    });
+    render(<ModeDock />);
+
+    await user.click(screen.getByRole("link", { name: "Memory" }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("closes a Memory drawer when the active Memory tab is clicked", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory",
+      href: "/memory?panel=verses",
+    });
+    render(<ModeDock />);
+
+    await user.click(screen.getByRole("link", { name: "Memory" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory", search: {} });
+  });
+
+  it("still restores the last Memory screen when cycling with the keyboard", () => {
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/review",
+      href: "/memory/review",
+    });
+    const { rerender } = render(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/John-1",
+      href: "/passage/John-1",
+    });
+    rerender(<ModeDock />);
+    mocks.navigate.mockClear();
+
+    fireEvent.keyDown(document, { key: "j", ctrlKey: true });
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/review",
+      search: {},
+    });
+  });
+
   it("stays visible after downward scroll", () => {
     render(<ModeDock />);
 

@@ -12,6 +12,7 @@ import { MAX_LEARN_STAGE, type MemoryStatus } from "./memory-scheduler";
 export const MEMORIZE_LABEL = "Memorize";
 export const START_MEMORIZING_LABEL = "Start memorizing";
 export const TODAY_LABEL = "Today";
+export const MEMORY_LABEL = "Memory";
 export const START_TODAY_LABEL = "Start today";
 export const EXTRA_PRACTICE_LABEL = "Extra practice";
 export const EXTRA_PRACTICE_TOOLTIP =

@@ -39,8 +39,12 @@ vi.mock("@/routes/memory/today", () => ({
 }));
 
 vi.mock("@/hooks/use-memory-back", () => ({
-  useMemoryExit: () => onExit,
-  useMemoryExitLabel: () => "Back to Today",
+  useMemoryExit: () => ({
+    go: onExit,
+    href: "/memory",
+    label: "Back to Memory",
+    name: "Memory",
+  }),
 }));
 
 vi.mock("@/hooks/use-live-now", () => ({
@@ -325,7 +329,7 @@ describe("MemoryTodayPage", () => {
     ).toBeInTheDocument();
     expect(within(passage).getByText("Today · 0 of 4")).toBeInTheDocument();
     expect(
-      within(passage).getByRole("button", { name: "Back to Today" }),
+      within(passage).getByRole("button", { name: "Back to Memory" }),
     ).toBeInTheDocument();
     expect(queueRow(passage, "Psalm 16")).toHaveAttribute(
       "data-state",

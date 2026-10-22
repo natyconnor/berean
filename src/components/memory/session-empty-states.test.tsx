@@ -45,7 +45,12 @@ describe("ReviewEmptyState", () => {
     mocks.inMemory = [memorized(NOW + 3 * DAY_MS), memorized(NOW + 2 * DAY_MS)];
     const onExit = vi.fn();
     render(
-      <ReviewEmptyState now={NOW} onExit={onExit} backLabel="Back to Today" />,
+      <ReviewEmptyState
+        now={NOW}
+        onExit={onExit}
+        backLabel="Back to Memory"
+        exitHref="/memory"
+      />,
     );
 
     expect(
@@ -55,31 +60,45 @@ describe("ReviewEmptyState", () => {
       screen.getByText("Your next review is Thursday."),
     ).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Back to Today" }),
+      screen.getByRole("button", { name: "Back to Memory" }),
     );
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(
-      screen.queryByRole("link", { name: "Go to Today" }),
+      screen.queryByRole("link", { name: "Go to Memory" }),
     ).not.toBeInTheDocument();
   });
 
   it("offers Today beside Back when Back leaves Memory", async () => {
     mocks.inMemory = [memorized(NOW + 2 * DAY_MS)];
     const onExit = vi.fn();
-    render(<ReviewEmptyState now={NOW} onExit={onExit} backLabel="Back" />);
+    render(
+      <ReviewEmptyState
+        now={NOW}
+        onExit={onExit}
+        backLabel="Back to John 3"
+        exitHref="/passage/John-3"
+      />,
+    );
 
-    expect(screen.getByRole("link", { name: "Go to Today" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Go to Memory" })).toHaveAttribute(
       "href",
       "/memory",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to John 3" }),
+    );
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
   it("says there is nothing to review before anything is memorized", () => {
     mocks.inMemory = [];
     render(
-      <ReviewEmptyState now={NOW} onExit={vi.fn()} backLabel="Back to Today" />,
+      <ReviewEmptyState
+        now={NOW}
+        onExit={vi.fn()}
+        backLabel="Back to Memory"
+        exitHref="/memory"
+      />,
     );
 
     expect(
@@ -91,7 +110,13 @@ describe("ReviewEmptyState", () => {
 
 describe("PracticeEmptyState", () => {
   it("explains when practice opens", () => {
-    render(<PracticeEmptyState onExit={vi.fn()} backLabel="Back to Today" />);
+    render(
+      <PracticeEmptyState
+        onExit={vi.fn()}
+        backLabel="Back to Memory"
+        exitHref="/memory"
+      />,
+    );
 
     expect(
       screen.getByRole("heading", { name: "Nothing to practice yet" }),
@@ -102,18 +127,26 @@ describe("PracticeEmptyState", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Back to Today" }),
+      screen.getByRole("button", { name: "Back to Memory" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Go to Today" }),
+      screen.queryByRole("link", { name: "Go to Memory" }),
     ).not.toBeInTheDocument();
   });
 
   it("offers Today beside Back when Back leaves Memory", () => {
-    render(<PracticeEmptyState onExit={vi.fn()} backLabel="Back" />);
+    render(
+      <PracticeEmptyState
+        onExit={vi.fn()}
+        backLabel="Back to John 3"
+        exitHref="/passage/John-3"
+      />,
+    );
 
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go to Today" })).toHaveAttribute(
+    expect(
+      screen.getByRole("button", { name: "Back to John 3" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Memory" })).toHaveAttribute(
       "href",
       "/memory",
     );
@@ -134,15 +167,18 @@ describe("LearnEmptyState", () => {
         ]}
         now={NOW}
         onExit={vi.fn()}
-        backLabel="Back"
+        backLabel="Back to John 3"
+        exitHref="/passage/John-3"
       />,
     );
 
     expect(
       screen.getByRole("heading", { name: "Nothing new today" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go to Today" })).toHaveAttribute(
+    expect(
+      screen.getByRole("button", { name: "Back to John 3" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Memory" })).toHaveAttribute(
       "href",
       "/memory",
     );
@@ -154,7 +190,8 @@ describe("LearnEmptyState", () => {
         verses={[]}
         now={NOW}
         onExit={vi.fn()}
-        backLabel="Back"
+        backLabel="Back to John 3"
+        exitHref="/passage/John-3"
       />,
     );
 
@@ -162,7 +199,7 @@ describe("LearnEmptyState", () => {
       screen.getByRole("link", { name: "Start something new" }),
     ).toHaveAttribute("href", "/memory");
     expect(
-      screen.queryByRole("link", { name: "Go to Today" }),
+      screen.queryByRole("link", { name: "Go to Memory" }),
     ).not.toBeInTheDocument();
   });
 });
