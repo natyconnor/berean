@@ -40,14 +40,15 @@ import {
 import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
 import {
   holdReviewingInterval,
-  LEARN_PROGRESS_ACCURACY,
   refreshSchedule,
   SHORT_VERSE_WORDS,
 } from "../src/lib/memory-scheduler";
 import {
+  isReviewHintedCheckIn,
   isShakyVerse,
   isStaleVerse,
   recentReviewLapsed,
+  refreshRecentLapseCount,
 } from "../src/lib/memory-stale";
 import { startOverPassagePieces } from "../src/lib/memory-start-over";
 import {
@@ -59,9 +60,8 @@ import {
   isProjectedPassageDueForLearning,
 } from "../src/lib/passage-due";
 import {
-  isPassagePieceLocked,
   localDayIndex,
-  progressPassagePiece,
+  progressFrontierPieces,
   remainingIntroduces,
 } from "../src/lib/passage-frontier";
 import {
@@ -325,11 +325,18 @@ export const recordAttempt = mutation({
       durationMs: args.durationMs,
       pieceIndex: args.pieceIndex,
       hint: args.hint,
+      holdSchedule: args.holdSchedule,
     });
 
     let next;
 
-    if (args.kind === "frontier") {
+    if (args.holdSchedule) {
+      next = await patchPassageMemory(ctx, row._id, {
+        startOverUndo: undefined,
+        lastSessionAt: args.now,
+        updatedAt: args.now,
+      });
+    } else if (args.kind === "frontier") {
       if (args.pieceIndex === undefined) {
         throw new Error("pieceIndex is required for a frontier attempt");
       }
@@ -343,19 +350,14 @@ export const recordAttempt = mutation({
         );
       }
 
-      let pieces = row.pieces;
-      if (!isPassagePieceLocked(piece, args.now)) {
-        const progressed = progressPassagePiece(piece, {
-          accuracy: args.accuracy,
-          now: args.now,
-          tzOffsetMinutes: args.tzOffsetMinutes,
-          timeZone: args.timeZone,
-          wordCount: resolvedPassageWordCount(args.wordCount),
-        });
-        pieces = row.pieces.map((current, index) =>
-          index === args.pieceIndex ? progressed : current,
-        );
-      }
+      const pieces = progressFrontierPieces(row.pieces, args.pieceIndex, {
+        accuracy: args.accuracy,
+        now: args.now,
+        tzOffsetMinutes: args.tzOffsetMinutes,
+        timeZone: args.timeZone,
+        wordCount: resolvedPassageWordCount(args.wordCount),
+        holdSchedule: args.holdSchedule,
+      });
 
       const allSolid =
         pieces.length > 0 &&
@@ -384,13 +386,7 @@ export const recordAttempt = mutation({
           : {}),
       });
     } else if (args.kind === "review") {
-      if (args.holdSchedule) {
-        next = await patchPassageMemory(ctx, row._id, {
-          startOverUndo: undefined,
-          lastSessionAt: args.now,
-          updatedAt: args.now,
-        });
-      } else if (row.status === "reviewing" || row.status === "mastered") {
+      if (row.status === "reviewing" || row.status === "mastered") {
         const scheduled = applyUnifiedGrade(toPassageSchedule(row), {
           quality: args.quality,
           accuracy: args.accuracy,
@@ -400,9 +396,7 @@ export const recordAttempt = mutation({
           timeZone: args.timeZone,
           hint: args.hint,
           holdSchedule: args.holdSchedule,
-          priorHintedCheckIn:
-            lastReview?.hint === "first-letters" &&
-            lastReview.accuracy >= LEARN_PROGRESS_ACCURACY,
+          priorHintedCheckIn: isReviewHintedCheckIn(lastReview),
         });
         const nextStatus =
           scheduled.status === "mastered" || scheduled.status === "reviewing"
@@ -584,6 +578,7 @@ function snapshotPassageUndo(row: Doc<"passageMemory">) {
     lapses: row.lapses,
     stageReps: row.stageReps,
     earlyReviewApplied: row.earlyReviewApplied,
+    lastSessionAt: row.lastSessionAt,
   };
 }
 
@@ -608,7 +603,7 @@ export const startOver = mutation({
       pieces,
       status: "building",
       startedOverAt: args.now,
-      startOverUndo: snapshotPassageUndo(row),
+      startOverUndo: row.startOverUndo ?? snapshotPassageUndo(row),
       lastSessionAt: args.now,
       updatedAt: args.now,
     });
@@ -638,6 +633,7 @@ export const undoStartOver = mutation({
       lapses: undo.lapses,
       stageReps: undo.stageReps,
       earlyReviewApplied: undo.earlyReviewApplied,
+      lastSessionAt: undo.lastSessionAt,
       startedOverAt: undefined,
       startOverUndo: undefined,
       updatedAt: args.now,
@@ -650,6 +646,7 @@ export const finishRefresh = mutation({
   args: {
     packId: v.id("packs"),
     now: v.number(),
+    sittingStartedAt: v.optional(v.number()),
     tzOffsetMinutes: v.number(),
     timeZone: v.optional(v.string()),
   },
@@ -663,7 +660,7 @@ export const finishRefresh = mutation({
       .query("passageReviews")
       .withIndex("by_packId", (q) => q.eq("packId", args.packId))
       .order("desc")
-      .take(3);
+      .take(20);
     if (row.status === "building") {
       const pieces = row.pieces.map((piece) =>
         piece.attachment === "unreached"
@@ -684,9 +681,10 @@ export const finishRefresh = mutation({
     const nextSchedule = refreshSchedule(toPassageSchedule(row), {
       now: args.now,
       overdueMs: Math.max(0, args.now - row.dueAt),
-      recentLapseCount: recent.filter((review) =>
-        recentReviewLapsed(review.accuracy),
-      ).length,
+      recentLapseCount: refreshRecentLapseCount(
+        recent,
+        args.sittingStartedAt ?? args.now,
+      ),
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
     });
@@ -754,6 +752,7 @@ export const reviewFreshness = query({
     const lastReviews = recent.map((review) => ({
       accuracy: review.accuracy,
       lapsed: recentReviewLapsed(review.accuracy),
+      createdAt: review.createdAt,
     }));
     const status =
       row.status === "building"
@@ -768,6 +767,7 @@ export const reviewFreshness = query({
         intervalDays: row.intervalDays,
         lastReviewedAt: row.lastSessionAt,
         now: args.now,
+        startedOverAt: row.startedOverAt,
         lastReviews,
       }),
     };

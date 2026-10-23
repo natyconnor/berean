@@ -60,7 +60,6 @@ import {
   isLearningLocked,
   isReviewPhase,
   holdReviewingInterval,
-  LEARN_PROGRESS_ACCURACY,
   refreshSchedule,
   restoreStartOverUndo,
   scheduleNext,
@@ -68,9 +67,11 @@ import {
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
 import {
+  isReviewHintedCheckIn,
   isShakyVerse,
   isStaleVerse,
   recentReviewLapsed,
+  refreshRecentLapseCount,
 } from "../src/lib/memory-stale";
 import { formatVerseRefTitle } from "../src/lib/verse-ref-utils";
 import { snapshotSchedule } from "../src/lib/memory-start-over";
@@ -613,6 +614,7 @@ export const recordAttempt = mutation({
       durationMs: args.durationMs,
       createdAt: args.now,
       ...(args.hint ? { hint: args.hint } : {}),
+      ...(args.holdSchedule ? { holdSchedule: true } : {}),
     });
 
     if (args.timeZone) {
@@ -636,9 +638,7 @@ export const recordAttempt = mutation({
       timeZone: args.timeZone,
       hint: args.hint,
       holdSchedule: args.holdSchedule,
-      priorHintedCheckIn:
-        lastReview?.hint === "first-letters" &&
-        lastReview.accuracy >= LEARN_PROGRESS_ACCURACY,
+      priorHintedCheckIn: isReviewHintedCheckIn(lastReview),
     });
 
     if (memory.status !== next.status) {
@@ -963,10 +963,12 @@ async function applyVerseStartOver(
   await ctx.db.patch(memory._id, {
     ...next,
     startedOverAt: now,
-    startOverUndo: snapshotSchedule({
-      ...current,
-      lastReviewedAt: memory.lastReviewedAt,
-    }),
+    startOverUndo:
+      memory.startOverUndo ??
+      snapshotSchedule({
+        ...current,
+        lastReviewedAt: memory.lastReviewedAt,
+      }),
   });
   return next;
 }
@@ -1007,9 +1009,9 @@ export const startOverMany = mutation({
     const userId = await getCurrentUserId(ctx);
     for (const verseRefId of args.verseRefIds) {
       const ref = await ctx.db.get(verseRefId);
-      if (!ref || ref.userId !== userId) {
-        throw new Error("Verse reference not found");
-      }
+      if (!ref || ref.userId !== userId) continue;
+      const memory = await findVerseMemory(ctx, userId, verseRefId);
+      if (!memory || !isInMemory(memory)) continue;
       await applyVerseStartOver(ctx, userId, verseRefId, args.now);
     }
     return null;
@@ -1055,6 +1057,7 @@ export const finishRefresh = mutation({
   args: {
     verseRefId: v.id("verseRefs"),
     now: v.number(),
+    sittingStartedAt: v.optional(v.number()),
     tzOffsetMinutes: v.optional(v.number()),
     timeZone: v.optional(v.string()),
   },
@@ -1066,12 +1069,20 @@ export const finishRefresh = mutation({
       throw new Error("Verse reference not found");
     }
     const memory = await requireInMemory(ctx, userId, args.verseRefId);
-    const recent = await loadRecentReviews(ctx, userId, args.verseRefId);
+    const recent = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_verseRefId_createdAt", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .order("desc")
+      .take(20);
     const next = refreshSchedule(scheduleFromMemory(memory), {
       now: args.now,
       overdueMs: Math.max(0, args.now - memory.dueAt),
-      recentLapseCount: recent.filter((row) => recentReviewLapsed(row.accuracy))
-        .length,
+      recentLapseCount: refreshRecentLapseCount(
+        recent,
+        args.sittingStartedAt ?? args.now,
+      ),
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
     });
@@ -1178,6 +1189,7 @@ export const reviewFreshness = query({
     const lastReviews = recent.map((row) => ({
       accuracy: row.accuracy,
       lapsed: recentReviewLapsed(row.accuracy),
+      createdAt: row.createdAt,
     }));
     return {
       stale: isStaleVerse({
@@ -1187,9 +1199,13 @@ export const reviewFreshness = query({
         lastReviewedAt: memory.lastReviewedAt,
         learnStage: memory.learnStage,
         now: args.now,
+        startedOverAt: memory.startedOverAt,
         lastReviews,
       }),
-      lastReviews,
+      lastReviews: lastReviews.map(({ accuracy, lapsed }) => ({
+        accuracy,
+        lapsed,
+      })),
     };
   },
 });

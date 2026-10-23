@@ -44,7 +44,6 @@ import {
   isLearningPhase,
   isReviewPhase,
   holdReviewingInterval,
-  LEARN_PROGRESS_ACCURACY,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
 import {
@@ -57,6 +56,7 @@ import {
 } from "../src/lib/memorize-status";
 import { scopePackMatches, scopesEqual } from "../src/lib/scope-equality";
 import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
+import { isReviewHintedCheckIn } from "../src/lib/memory-stale";
 import { rangeAllowsPassageMode } from "../src/lib/passage-eligibility";
 import {
   rangeCoversWholeChapters,
@@ -954,9 +954,7 @@ export const recordUnifiedReview = mutation({
       timeZone: args.timeZone,
       hint: args.hint,
       holdSchedule: args.holdSchedule,
-      priorHintedCheckIn:
-        lastReview?.hint === "first-letters" &&
-        lastReview.accuracy >= LEARN_PROGRESS_ACCURACY,
+      priorHintedCheckIn: isReviewHintedCheckIn(lastReview),
     });
 
     for (const { member, memory } of memories) {
@@ -971,6 +969,7 @@ export const recordUnifiedReview = mutation({
         durationMs: args.durationMs,
         createdAt: args.now,
         ...(args.hint ? { hint: args.hint } : {}),
+        ...(args.holdSchedule ? { holdSchedule: true } : {}),
       });
 
       if (!args.holdSchedule) {

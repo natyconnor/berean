@@ -367,6 +367,7 @@ export default defineSchema({
       v.literal("practice"),
     ),
     hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
     durationMs: v.optional(v.number()),
     createdAt: v.number(),
   })
@@ -419,6 +420,7 @@ export default defineSchema({
         lapses: v.number(),
         stageReps: v.number(),
         earlyReviewApplied: v.optional(v.boolean()),
+        lastSessionAt: v.optional(v.number()),
       }),
     ),
     createdAt: v.number(),
@@ -442,6 +444,7 @@ export default defineSchema({
     quality: qualityValidator,
     accuracy: v.number(),
     hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
     durationMs: v.optional(v.number()),
     createdAt: v.number(),
   })
