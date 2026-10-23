@@ -18,10 +18,12 @@ const HOME_LABEL = "Go to Memory";
 /** Session header Back, plus Home when Back does not already go to Memory. */
 export function SessionBackButton({
   onExit,
+  onHome,
   label,
   exitHref = MEMORY_HOME,
 }: {
   onExit: () => void;
+  onHome?: () => void;
   label: string;
   exitHref?: string;
 }) {
@@ -56,7 +58,11 @@ export function SessionBackButton({
               size="icon-sm"
               className="size-11 shrink-0 text-muted-foreground hover:text-foreground sm:size-8"
             >
-              <InternalLink href={MEMORY_HOME} aria-label={HOME_LABEL}>
+              <InternalLink
+                href={MEMORY_HOME}
+                aria-label={HOME_LABEL}
+                onClick={onHome}
+              >
                 <House className="size-4" aria-hidden />
               </InternalLink>
             </Button>

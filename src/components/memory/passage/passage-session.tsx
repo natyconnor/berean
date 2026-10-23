@@ -170,12 +170,15 @@ export function PassageSession({
     sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
   );
 
-  const leaveSession = () => {
+  const endStep = () => {
     clearPassageStepInProgress(packId);
+  };
+  const leaveSession = () => {
+    endStep();
     onExit();
   };
   const finishForToday = () => {
-    clearPassageStepInProgress(packId);
+    endStep();
     (onDoneForToday ?? onExit)();
   };
   const [addsAtOpen] = useState(() => remainingAddsIn(state));
@@ -527,6 +530,7 @@ export function PassageSession({
       phaseLabel={phaseLabel}
       packName={packName}
       onExit={leaveSession}
+      onHome={endStep}
       backLabel={backLabel}
       exitHref={exitHref}
       progress={headerProgress}
@@ -1118,6 +1122,7 @@ function PassageSessionShell({
   phaseLabel,
   packName,
   onExit,
+  onHome,
   backLabel,
   exitHref,
   progress,
@@ -1128,6 +1133,7 @@ function PassageSessionShell({
   phaseLabel: string;
   packName: string;
   onExit: () => void;
+  onHome?: () => void;
   backLabel: string;
   exitHref?: string;
   progress?: SessionProgress;
@@ -1141,6 +1147,7 @@ function PassageSessionShell({
         <div className="flex min-w-0 items-center gap-3">
           <SessionBackButton
             onExit={onExit}
+            onHome={onHome}
             label={backLabel}
             exitHref={exitHref}
           />

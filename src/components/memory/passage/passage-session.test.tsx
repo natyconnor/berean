@@ -232,6 +232,28 @@ describe("PassageSession", () => {
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
   });
 
+  it("clears the in-progress marker when the learner goes Home", async () => {
+    const onExit = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PassageSession
+          packId={PACK_ID}
+          view={practicedDueView()}
+          packName="Psalm 23"
+          onExit={onExit}
+          backLabel="Back to John 3"
+          exitHref="/passage/John-3"
+        />
+      </TooltipProvider>,
+    );
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).not.toBeNull();
+
+    await userEvent.click(screen.getByRole("link", { name: "Go to Memory" }));
+
+    expect(onExit).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
+  });
+
   it("shows Go to Memory when Back does not go to Memory", () => {
     render(
       <TooltipProvider delayDuration={0}>
