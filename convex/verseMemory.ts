@@ -13,6 +13,8 @@ import {
 import {
   countDueUnifiedReviewPacks,
   dueUnifiedPackDueAt,
+  loadOwnedPack,
+  loadPackMembers,
   loadPackMembershipIndex,
   loadUnifiedReviewPacks,
   loadUnifiedReviewVerseRefIds,
@@ -58,9 +60,20 @@ import {
   isLearningLocked,
   isReviewPhase,
   holdReviewingInterval,
+  LEARN_PROGRESS_ACCURACY,
+  refreshSchedule,
+  restoreStartOverUndo,
   scheduleNext,
+  startOverSchedule,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
+import {
+  isShakyVerse,
+  isStaleVerse,
+  recentReviewLapsed,
+} from "../src/lib/memory-stale";
+import { formatVerseRefTitle } from "../src/lib/verse-ref-utils";
+import { snapshotSchedule } from "../src/lib/memory-start-over";
 import {
   countDuePassageReviews,
   countProjectedPassageLearning,
@@ -533,6 +546,8 @@ export const recordAttempt = mutation({
     tzOffsetMinutes: v.optional(v.number()),
     /** IANA zone for Practice heatmap day buckets; same as `reviewActivity`. */
     timeZone: v.optional(v.string()),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -579,6 +594,14 @@ export const recordAttempt = mutation({
       return current;
     }
 
+    const lastReview = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_verseRefId_createdAt", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .order("desc")
+      .first();
+
     await ctx.db.insert("verseMemoryReviews", {
       userId,
       verseRefId: args.verseRefId,
@@ -589,6 +612,7 @@ export const recordAttempt = mutation({
       mode: args.mode,
       durationMs: args.durationMs,
       createdAt: args.now,
+      ...(args.hint ? { hint: args.hint } : {}),
     });
 
     if (args.timeZone) {
@@ -610,6 +634,11 @@ export const recordAttempt = mutation({
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
+      hint: args.hint,
+      holdSchedule: args.holdSchedule,
+      priorHintedCheckIn:
+        lastReview?.hint === "first-letters" &&
+        lastReview.accuracy >= LEARN_PROGRESS_ACCURACY,
     });
 
     if (memory.status !== next.status) {
@@ -633,6 +662,7 @@ export const recordAttempt = mutation({
       lapses: next.lapses,
       earlyReviewApplied: next.earlyReviewApplied,
       lastReviewedAt: args.now,
+      startOverUndo: undefined,
     });
 
     return next;
@@ -901,6 +931,266 @@ export const stopMemorizing = mutation({
 
     await stopMemorizingVerse(ctx, userId, args.verseRefId, args.now);
     return null;
+  },
+});
+
+function scheduleFromMemory(memory: Doc<"verseMemory">): MemorySchedule {
+  return {
+    status: memory.status,
+    learnStage: memory.learnStage,
+    stageReps: memory.stageReps ?? 0,
+    ease: memory.ease,
+    intervalDays: memory.intervalDays,
+    dueAt: memory.dueAt,
+    consecutiveCorrect: memory.consecutiveCorrect,
+    lapses: memory.lapses,
+    earlyReviewApplied: memory.earlyReviewApplied ?? false,
+  };
+}
+
+async function applyVerseStartOver(
+  ctx: Parameters<typeof adjustUserMemoryStats>[0],
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+  now: number,
+): Promise<MemorySchedule> {
+  const memory = await requireInMemory(ctx, userId, verseRefId);
+  const current = scheduleFromMemory(memory);
+  const next = startOverSchedule(now);
+  if (memory.status !== next.status) {
+    await adjustUserMemoryStats(ctx, userId, now, memory.status, next.status);
+  }
+  await ctx.db.patch(memory._id, {
+    ...next,
+    startedOverAt: now,
+    startOverUndo: snapshotSchedule({
+      ...current,
+      lastReviewedAt: memory.lastReviewedAt,
+    }),
+  });
+  return next;
+}
+
+async function loadRecentReviews(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+) {
+  return await ctx.db
+    .query("verseMemoryReviews")
+    .withIndex("by_userId_verseRefId_createdAt", (q) =>
+      q.eq("userId", userId).eq("verseRefId", verseRefId),
+    )
+    .order("desc")
+    .take(3);
+}
+
+/** Reset one verse to Read. Notes, hearts, packs, and history stay. */
+export const startOver = mutation({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    return await applyVerseStartOver(ctx, userId, args.verseRefId, args.now);
+  },
+});
+
+/** Reset several verses (a pack chooser). */
+export const startOverMany = mutation({
+  args: { verseRefIds: v.array(v.id("verseRefs")), now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    for (const verseRefId of args.verseRefIds) {
+      const ref = await ctx.db.get(verseRefId);
+      if (!ref || ref.userId !== userId) {
+        throw new Error("Verse reference not found");
+      }
+      await applyVerseStartOver(ctx, userId, verseRefId, args.now);
+    }
+    return null;
+  },
+});
+
+/** Put the schedule captured at Start over back. */
+export const undoStartOver = mutation({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
+    if (!memory.startOverUndo) {
+      throw new Error("Nothing to undo");
+    }
+    const next = restoreStartOverUndo(memory.startOverUndo);
+    if (memory.status !== next.status) {
+      await adjustUserMemoryStats(
+        ctx,
+        userId,
+        args.now,
+        memory.status,
+        next.status,
+      );
+    }
+    await ctx.db.patch(memory._id, {
+      ...next,
+      lastReviewedAt: memory.startOverUndo.lastReviewedAt,
+      startedOverAt: undefined,
+      startOverUndo: undefined,
+    });
+    return next;
+  },
+});
+
+/** Apply the Refresh rung after a finished sitting. */
+export const finishRefresh = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    now: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
+  },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
+    const recent = await loadRecentReviews(ctx, userId, args.verseRefId);
+    const next = refreshSchedule(scheduleFromMemory(memory), {
+      now: args.now,
+      overdueMs: Math.max(0, args.now - memory.dueAt),
+      recentLapseCount: recent.filter((row) => recentReviewLapsed(row.accuracy))
+        .length,
+      tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
+    });
+    if (memory.status !== next.status) {
+      await adjustUserMemoryStats(
+        ctx,
+        userId,
+        args.now,
+        memory.status,
+        next.status,
+      );
+    }
+    await ctx.db.patch(memory._id, {
+      ...next,
+      lastReviewedAt: memory.lastReviewedAt,
+    });
+    return next;
+  },
+});
+
+export const undoStartOverMany = mutation({
+  args: { verseRefIds: v.array(v.id("verseRefs")), now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    for (const verseRefId of args.verseRefIds) {
+      const ref = await ctx.db.get(verseRefId);
+      if (!ref || ref.userId !== userId) continue;
+      const memory = await findVerseMemory(ctx, userId, verseRefId);
+      if (!memory?.startOverUndo) continue;
+      const next = restoreStartOverUndo(memory.startOverUndo);
+      if (memory.status !== next.status) {
+        await adjustUserMemoryStats(
+          ctx,
+          userId,
+          args.now,
+          memory.status,
+          next.status,
+        );
+      }
+      await ctx.db.patch(memory._id, {
+        ...next,
+        lastReviewedAt: memory.startOverUndo.lastReviewedAt,
+        startedOverAt: undefined,
+        startOverUndo: undefined,
+      });
+    }
+    return null;
+  },
+});
+
+export const shakyInPack = query({
+  args: { packId: v.id("packs") },
+  returns: v.array(
+    v.object({
+      verseRefId: v.id("verseRefs"),
+      label: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+    const pack = await loadOwnedPack(ctx, args.packId, userId);
+    if (!pack) return [];
+    const members = await loadPackMembers(ctx, userId, pack);
+    const shaky: Array<{ verseRefId: Id<"verseRefs">; label: string }> = [];
+    for (const member of members) {
+      const recent = await loadRecentReviews(ctx, userId, member.verseRefId);
+      if (
+        !isShakyVerse(
+          recent.map((row) => ({
+            accuracy: row.accuracy,
+            lapsed: recentReviewLapsed(row.accuracy),
+          })),
+        )
+      ) {
+        continue;
+      }
+      shaky.push({
+        verseRefId: member.verseRefId,
+        label: formatVerseRefTitle(member),
+      });
+    }
+    return shaky;
+  },
+});
+
+export const reviewFreshness = query({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: v.object({
+    stale: v.boolean(),
+    lastReviews: v.array(
+      v.object({ accuracy: v.number(), lapsed: v.boolean() }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return { stale: false, lastReviews: [] };
+    }
+    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
+    if (!memory) return { stale: false, lastReviews: [] };
+    const recent = await loadRecentReviews(ctx, userId, args.verseRefId);
+    const lastReviews = recent.map((row) => ({
+      accuracy: row.accuracy,
+      lapsed: recentReviewLapsed(row.accuracy),
+    }));
+    return {
+      stale: isStaleVerse({
+        status: memory.status,
+        dueAt: memory.dueAt,
+        intervalDays: memory.intervalDays,
+        lastReviewedAt: memory.lastReviewedAt,
+        learnStage: memory.learnStage,
+        now: args.now,
+        lastReviews,
+      }),
+      lastReviews,
+    };
   },
 });
 
@@ -1701,6 +1991,7 @@ const attemptValidator = v.object({
   accuracy: v.number(),
   stage: v.number(),
   mode: modeValidator,
+  hint: v.optional(v.literal("first-letters")),
   durationMs: v.optional(v.number()),
   createdAt: v.number(),
 });
@@ -1737,6 +2028,7 @@ const verseDetailValidator = v.object({
   lapses: v.number(),
   consecutiveCorrect: v.number(),
   lastReviewedAt: v.optional(v.number()),
+  startedOverAt: v.optional(v.number()),
   attempts: v.array(attemptValidator),
   difficulty: v.union(difficultyValidator, v.null()),
 });
@@ -1746,6 +2038,7 @@ type Attempt = {
   accuracy: number;
   stage: number;
   mode: Doc<"verseMemoryReviews">["mode"];
+  hint?: "first-letters";
   durationMs?: number;
   createdAt: number;
 };
@@ -1835,6 +2128,7 @@ export const verseDetail = query({
       mode: row.mode,
       durationMs: row.durationMs,
       createdAt: row.createdAt,
+      ...(row.hint ? { hint: row.hint } : {}),
     }));
 
     return {
@@ -1856,6 +2150,7 @@ export const verseDetail = query({
       lapses: memory.lapses,
       consecutiveCorrect: memory.consecutiveCorrect,
       lastReviewedAt: memory.lastReviewedAt,
+      startedOverAt: memory.startedOverAt,
       attempts,
       difficulty: deriveDifficulty(attempts),
     };

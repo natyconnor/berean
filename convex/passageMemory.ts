@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
   deletePassageAndReviews,
@@ -39,8 +40,16 @@ import {
 import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
 import {
   holdReviewingInterval,
+  LEARN_PROGRESS_ACCURACY,
+  refreshSchedule,
   SHORT_VERSE_WORDS,
 } from "../src/lib/memory-scheduler";
+import {
+  isShakyVerse,
+  isStaleVerse,
+  recentReviewLapsed,
+} from "../src/lib/memory-stale";
+import { startOverPassagePieces } from "../src/lib/memory-start-over";
 import {
   packAllowsPassageMode,
   rangeAllowsPassageMode,
@@ -290,6 +299,8 @@ export const recordAttempt = mutation({
     durationMs: v.optional(v.number()),
     pieceIndex: v.optional(v.number()),
     wordCount: v.optional(v.number()),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -297,6 +308,11 @@ export const recordAttempt = mutation({
     const row = withNormalizedPieces(
       await requirePassageForPack(ctx, args.packId, userId),
     );
+    const lastReview = await ctx.db
+      .query("passageReviews")
+      .withIndex("by_packId", (q) => q.eq("packId", args.packId))
+      .order("desc")
+      .first();
 
     await insertPassageReview(ctx, {
       userId,
@@ -308,6 +324,7 @@ export const recordAttempt = mutation({
       now: args.now,
       durationMs: args.durationMs,
       pieceIndex: args.pieceIndex,
+      hint: args.hint,
     });
 
     let next;
@@ -367,7 +384,13 @@ export const recordAttempt = mutation({
           : {}),
       });
     } else if (args.kind === "review") {
-      if (row.status === "reviewing" || row.status === "mastered") {
+      if (args.holdSchedule) {
+        next = await patchPassageMemory(ctx, row._id, {
+          startOverUndo: undefined,
+          lastSessionAt: args.now,
+          updatedAt: args.now,
+        });
+      } else if (row.status === "reviewing" || row.status === "mastered") {
         const scheduled = applyUnifiedGrade(toPassageSchedule(row), {
           quality: args.quality,
           accuracy: args.accuracy,
@@ -375,6 +398,11 @@ export const recordAttempt = mutation({
           now: args.now,
           tzOffsetMinutes: args.tzOffsetMinutes,
           timeZone: args.timeZone,
+          hint: args.hint,
+          holdSchedule: args.holdSchedule,
+          priorHintedCheckIn:
+            lastReview?.hint === "first-letters" &&
+            lastReview.accuracy >= LEARN_PROGRESS_ACCURACY,
         });
         const nextStatus =
           scheduled.status === "mastered" || scheduled.status === "reviewing"
@@ -392,6 +420,7 @@ export const recordAttempt = mutation({
           earlyReviewApplied: scheduled.earlyReviewApplied,
           lastSessionAt: args.now,
           updatedAt: args.now,
+          startOverUndo: undefined,
         });
       } else {
         next = await patchPassageMemory(ctx, row._id, {
@@ -541,6 +570,207 @@ export const ensureDueBackfill = mutation({
     const userId = await getCurrentUserId(ctx);
     await ensurePassageDueBackfill(ctx, userId, args.now);
     return null;
+  },
+});
+
+function snapshotPassageUndo(row: Doc<"passageMemory">) {
+  return {
+    status: row.status,
+    pieces: row.pieces,
+    ease: row.ease,
+    intervalDays: row.intervalDays,
+    dueAt: row.dueAt,
+    consecutiveCorrect: row.consecutiveCorrect,
+    lapses: row.lapses,
+    stageReps: row.stageReps,
+    earlyReviewApplied: row.earlyReviewApplied,
+  };
+}
+
+/** Reset chosen pieces to unreached so they re-enter through intake. */
+export const startOver = mutation({
+  args: {
+    packId: v.id("packs"),
+    now: v.number(),
+    pieceIndexes: v.optional(v.array(v.number())),
+  },
+  returns: passageViewValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = withNormalizedPieces(
+      await requirePassageForPack(ctx, args.packId, userId),
+    );
+    const indexes = new Set(
+      args.pieceIndexes ?? row.pieces.map((piece) => piece.index),
+    );
+    const pieces = startOverPassagePieces(row.pieces, indexes);
+    const next = await patchPassageMemory(ctx, row._id, {
+      pieces,
+      status: "building",
+      startedOverAt: args.now,
+      startOverUndo: snapshotPassageUndo(row),
+      lastSessionAt: args.now,
+      updatedAt: args.now,
+    });
+    return toPassageView(next, args.now, 0);
+  },
+});
+
+export const undoStartOver = mutation({
+  args: { packId: v.id("packs"), now: v.number(), tzOffsetMinutes: v.number() },
+  returns: passageViewValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = withNormalizedPieces(
+      await requirePassageForPack(ctx, args.packId, userId),
+    );
+    if (!row.startOverUndo) {
+      throw new Error("Nothing to undo");
+    }
+    const undo = row.startOverUndo;
+    const next = await patchPassageMemory(ctx, row._id, {
+      status: undo.status,
+      pieces: undo.pieces,
+      ease: undo.ease,
+      intervalDays: undo.intervalDays,
+      dueAt: undo.dueAt,
+      consecutiveCorrect: undo.consecutiveCorrect,
+      lapses: undo.lapses,
+      stageReps: undo.stageReps,
+      earlyReviewApplied: undo.earlyReviewApplied,
+      startedOverAt: undefined,
+      startOverUndo: undefined,
+      updatedAt: args.now,
+    });
+    return toPassageView(next, args.now, args.tzOffsetMinutes);
+  },
+});
+
+export const finishRefresh = mutation({
+  args: {
+    packId: v.id("packs"),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+    timeZone: v.optional(v.string()),
+  },
+  returns: passageViewValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = withNormalizedPieces(
+      await requirePassageForPack(ctx, args.packId, userId),
+    );
+    const recent = await ctx.db
+      .query("passageReviews")
+      .withIndex("by_packId", (q) => q.eq("packId", args.packId))
+      .order("desc")
+      .take(3);
+    if (row.status === "building") {
+      const pieces = row.pieces.map((piece) =>
+        piece.attachment === "unreached"
+          ? piece
+          : {
+              ...piece,
+              learnStage: Math.max(0, piece.learnStage - 1),
+              stageReps: 0,
+              dueAt: args.now,
+            },
+      );
+      const next = await patchPassageMemory(ctx, row._id, {
+        pieces,
+        updatedAt: args.now,
+      });
+      return toPassageView(next, args.now, args.tzOffsetMinutes);
+    }
+    const nextSchedule = refreshSchedule(toPassageSchedule(row), {
+      now: args.now,
+      overdueMs: Math.max(0, args.now - row.dueAt),
+      recentLapseCount: recent.filter((review) =>
+        recentReviewLapsed(review.accuracy),
+      ).length,
+      tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
+    });
+    const next = await patchPassageMemory(ctx, row._id, {
+      status: nextSchedule.status === "mastered" ? "mastered" : "reviewing",
+      ease: nextSchedule.ease,
+      intervalDays: nextSchedule.intervalDays,
+      dueAt: nextSchedule.dueAt,
+      consecutiveCorrect: nextSchedule.consecutiveCorrect,
+      lapses: nextSchedule.lapses,
+      stageReps: nextSchedule.stageReps,
+      earlyReviewApplied: nextSchedule.earlyReviewApplied,
+      updatedAt: args.now,
+    });
+    return toPassageView(next, args.now, args.tzOffsetMinutes);
+  },
+});
+
+export const shakyPieces = query({
+  args: { packId: v.id("packs") },
+  returns: v.array(v.number()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+    const row = await loadPassageForPack(ctx, args.packId, userId);
+    if (!row) return [];
+    const reviews = await ctx.db
+      .query("passageReviews")
+      .withIndex("by_packId", (q) => q.eq("packId", args.packId))
+      .order("desc")
+      .take(40);
+    const byPiece = new Map<
+      number,
+      Array<{ accuracy: number; lapsed: boolean }>
+    >();
+    for (const review of reviews) {
+      if (review.pieceIndex === undefined) continue;
+      const list = byPiece.get(review.pieceIndex) ?? [];
+      if (list.length >= 3) continue;
+      list.push({
+        accuracy: review.accuracy,
+        lapsed: recentReviewLapsed(review.accuracy),
+      });
+      byPiece.set(review.pieceIndex, list);
+    }
+    return row.pieces
+      .filter((piece) => isShakyVerse(byPiece.get(piece.index) ?? []))
+      .map((piece) => piece.index);
+  },
+});
+
+export const reviewFreshness = query({
+  args: { packId: v.id("packs"), now: v.number() },
+  returns: v.object({ stale: v.boolean() }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return { stale: false };
+    const row = await loadPassageForPack(ctx, args.packId, userId);
+    if (!row) return { stale: false };
+    const recent = await ctx.db
+      .query("passageReviews")
+      .withIndex("by_packId", (q) => q.eq("packId", args.packId))
+      .order("desc")
+      .take(3);
+    const lastReviews = recent.map((review) => ({
+      accuracy: review.accuracy,
+      lapsed: recentReviewLapsed(review.accuracy),
+    }));
+    const status =
+      row.status === "building"
+        ? "learning"
+        : row.status === "mastered"
+          ? "mastered"
+          : "reviewing";
+    return {
+      stale: isStaleVerse({
+        status,
+        dueAt: row.dueAt,
+        intervalDays: row.intervalDays,
+        lastReviewedAt: row.lastSessionAt,
+        now: args.now,
+        lastReviews,
+      }),
+    };
   },
 });
 
