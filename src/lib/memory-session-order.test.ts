@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   compareSessionOrderItems,
   groupSessionVersesByChapter,
+  orderRemainingSessionItems,
   orderSessionVerses,
   sessionClusterCount,
   sessionOrderRef,
@@ -158,5 +159,42 @@ describe("orderSessionVerses", () => {
       expect(ids).toContain("luke");
     }
     expect(shuffledIds.some((ids) => ids.join() !== inOrder.join())).toBe(true);
+  });
+});
+
+describe("orderRemainingSessionItems", () => {
+  const mixed = [
+    { id: "gen", reference: ref("Genesis", 1, 1) },
+    { id: "ps2", reference: ref("Psalms", 8, 2) },
+    { id: "ps5", reference: ref("Psalms", 8, 5) },
+    { id: "luke", reference: ref("Luke", 9, 23) },
+  ];
+
+  it("keeps the shown chapter set in place and only shuffles the rest", () => {
+    const pinned = new Set(["ps2"]);
+    const shuffled = [1, 2, 3, 7, 42].map((seed) =>
+      orderRemainingSessionItems(mixed, "shuffle", seed, pinned).map(
+        (item) => item.id,
+      ),
+    );
+
+    for (const ids of shuffled) {
+      expect(ids[1]).toBe("ps2");
+      expect(ids[2]).toBe("ps5");
+      expect(ids).toEqual(expect.arrayContaining(["gen", "luke"]));
+    }
+    expect(shuffled.some((ids) => ids[0] === "luke" && ids[3] === "gen")).toBe(
+      true,
+    );
+  });
+
+  it("puts remaining sets back in Scripture order without moving the pin", () => {
+    const [gen, ps2, ps5, luke] = mixed;
+    const current = [luke, ps2, ps5, gen];
+    expect(
+      orderRemainingSessionItems(current, "in-order", 0, new Set(["luke"])).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["luke", "gen", "ps2", "ps5"]);
   });
 });

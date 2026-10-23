@@ -243,6 +243,14 @@ interface PracticeBoardProps {
   initialVerseId?: string;
   /** The card now on screen, after a rail pick, Next, or Shuffle. */
   onCurrentVerseId?: (id: string) => void;
+  /** When set, this run reads card order from the session instead of its own. */
+  orderedIds?: readonly string[];
+  /** When set, this is the card on screen. */
+  shownId?: string;
+  /** Ask the session to show another card from the shared list. */
+  onShow?: (id: string) => void;
+  /** Ask the session to reshuffle or restore Scripture order. */
+  onSessionOrderChange?: (order: PracticeOrder) => void;
   /** Pick a run back up where it was left. Read once, at mount. */
   runState?: PracticeRunState;
   /** Every change to the run's state, with the results so far. */
@@ -406,6 +414,10 @@ export function PracticeBoard({
   railHeader,
   initialVerseId,
   onCurrentVerseId,
+  orderedIds,
+  shownId,
+  onShow,
+  onSessionOrderChange,
   runState,
   onRunStateChange,
 }: PracticeBoardProps): JSX.Element {
@@ -493,15 +505,27 @@ export function PracticeBoard({
       ),
   );
 
-  const orderedVerses = useMemo(
-    () => orderSessionVerses(baseVerses, order, seed),
-    [baseVerses, order, seed],
-  );
-  const [currentIndex, setCurrentIndex] = useState(() =>
-    Math.max(
-      0,
-      orderedVerses.findIndex((verse) => verse.id === initialVerseId),
-    ),
+  const orderedVerses = useMemo(() => {
+    if (orderedIds && orderedIds.length > 0) {
+      const byId = new Map(baseVerses.map((verse) => [verse.id, verse]));
+      const seen = new Set<string>();
+      const next: OrderedVerse[] = [];
+      for (const id of orderedIds) {
+        const verse = byId.get(id);
+        if (verse && !seen.has(id)) {
+          next.push(verse);
+          seen.add(id);
+        }
+      }
+      for (const verse of baseVerses) {
+        if (!seen.has(verse.id)) next.push(verse);
+      }
+      return next;
+    }
+    return orderSessionVerses(baseVerses, order, seed);
+  }, [baseVerses, order, seed, orderedIds]);
+  const [currentId, setCurrentId] = useState(
+    () => initialVerseId ?? orderedVerses[0]?.id,
   );
 
   // The rail (and shuffle overlay) need each verse's *live* progress — the
@@ -555,10 +579,10 @@ export function PracticeBoard({
     }));
   }, [baseVerses, railVerses]);
 
+  const activeId = shownId ?? currentId;
+  const foundIndex = orderedVerses.findIndex((verse) => verse.id === activeId);
   const boundedIndex =
-    orderedVerses.length === 0
-      ? 0
-      : Math.min(currentIndex, orderedVerses.length - 1);
+    orderedVerses.length === 0 ? 0 : foundIndex >= 0 ? foundIndex : 0;
   const currentVerse = orderedVerses[boundedIndex] ?? null;
   const currentProgress: VerseProgress = currentVerse
     ? (progressByVerseId[currentVerse.id] ?? {
@@ -716,21 +740,25 @@ export function PracticeBoard({
     onComplete({ verses: sessionVerses, attempts: sessionAttempts });
   }, [finished, onComplete, sessionVerses, sessionAttempts]);
 
+  function showVerse(id: string) {
+    if (onShow) onShow(id);
+    else setCurrentId(id);
+  }
+
   function handleOrderChange(nextOrder: PracticeOrder) {
     setOrder(nextOrder);
+    onSessionOrderChange?.(nextOrder);
     if (nextOrder === "shuffle") {
-      setSeed((value) => value + 1);
+      if (!onSessionOrderChange) setSeed((value) => value + 1);
       setShuffleNonce((value) => value + 1);
       if (!reduceMotion) setIsShuffling(true);
     } else {
       setIsShuffling(false);
     }
-    setCurrentIndex(0);
   }
 
   function handleSelectVerse(id: string) {
-    const index = orderedVerses.findIndex((verse) => verse.id === id);
-    if (index >= 0) setCurrentIndex(index);
+    if (orderedVerses.some((verse) => verse.id === id)) showVerse(id);
   }
 
   function adoptVerseSchedule(verseId: string, next: MemorySchedule) {
@@ -766,8 +794,10 @@ export function PracticeBoard({
     const nextAvailable = railVerses.findIndex(
       (verse, index) => index !== boundedIndex && !verse.locked,
     );
-    if (nextAvailable >= 0) {
-      setCurrentIndex(nextAvailable);
+    const nextId =
+      nextAvailable >= 0 ? railVerses[nextAvailable]?.id : undefined;
+    if (nextId) {
+      showVerse(nextId);
       return;
     }
     setFinished(true);
@@ -785,8 +815,10 @@ export function PracticeBoard({
   }
 
   function leaveSpentVerse() {
-    if (nextOpenIndex >= 0) {
-      setCurrentIndex(nextOpenIndex);
+    const nextId =
+      nextOpenIndex >= 0 ? railVerses[nextOpenIndex]?.id : undefined;
+    if (nextId) {
+      showVerse(nextId);
       return;
     }
     setFinished(true);

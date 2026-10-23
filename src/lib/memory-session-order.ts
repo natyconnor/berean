@@ -104,3 +104,41 @@ export function orderSessionVerses<T extends SessionOrderItem>(
     (cluster) => cluster.items,
   );
 }
+
+/**
+ * Reorder a group's current list for Shuffle / In order, keeping pinned cards
+ * (the shown card and spent rows, with their chapter set) where they are.
+ */
+export function orderRemainingSessionItems<
+  T extends SessionOrderItem & { id: string },
+>(
+  items: readonly T[],
+  order: PracticeOrder,
+  seed = 0,
+  pinnedIds: ReadonlySet<string> = new Set(),
+): T[] {
+  if (items.length <= 1) return [...items];
+  const clusters = groupSessionVersesByChapter(items);
+  const pinned = clusters.map((cluster) =>
+    cluster.items.some((item) => pinnedIds.has(item.id)),
+  );
+  const movable = clusters.filter((_, index) => !pinned[index]);
+  const moved =
+    order === "in-order"
+      ? [...movable].sort((left, right) => {
+          const first = left.items[0];
+          const second = right.items[0];
+          if (!first || !second) return 0;
+          return compareSessionOrderItems(first, second);
+        })
+      : movable.length <= 1
+        ? movable
+        : buildPracticeOrder(movable, "shuffle", seed);
+  let take = 0;
+  return clusters.flatMap((cluster, index) => {
+    if (pinned[index]) return cluster.items;
+    const next = moved[take];
+    take += 1;
+    return next?.items ?? [];
+  });
+}

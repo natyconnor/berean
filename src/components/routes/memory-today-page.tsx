@@ -56,7 +56,11 @@ import {
 import { withReturn } from "@/lib/memory-return";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import { hasMemorizedVerses, hasSessionWorkLeft } from "@/lib/memory-session";
-import { sortSessionVerses } from "@/lib/memory-session-order";
+import {
+  orderRemainingSessionItems,
+  sortSessionVerses,
+} from "@/lib/memory-session-order";
+import type { PracticeOrder } from "@/lib/practice-order";
 import {
   carryTodayProgress,
   planTodaySession,
@@ -368,6 +372,28 @@ function queueEntries(
   );
 }
 
+function verseOrderItem(verse: PracticeVerse) {
+  return {
+    id: verse.composite
+      ? `unified:${verse.composite.packId}`
+      : verseRefKey(verse.reference),
+    reference: verse.reference,
+    composite: verse.composite
+      ? { members: verse.composite.members }
+      : undefined,
+  };
+}
+
+function itemsInOrder<T extends { id: string }>(
+  items: readonly T[],
+  ids: readonly string[],
+): T[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((item): item is T => item !== undefined);
+}
+
 function openQueueItemId(
   step: TodayStep,
   segments: readonly TodaySegment[],
@@ -417,6 +443,19 @@ function TodaySession({
     learning: queueEntries(sortSessionVerses(data.learning), data.title),
     reviews: queueEntries(data.reviews, data.title),
   }));
+  const [learningItems] = useState(() =>
+    sortSessionVerses(data.learning.map(verseOrderItem)),
+  );
+  const [reviewItems] = useState(() => data.reviews.map(verseOrderItem));
+  const [orderSeed, setOrderSeed] = useState(0);
+  const [learningIds, setLearningIds] = useState(() =>
+    queue.learning.map((entry) => entry.id),
+  );
+  const [reviewIds, setReviewIds] = useState(() =>
+    queue.reviews.map((entry) => entry.id),
+  );
+  const learning = itemsInOrder(queue.learning, learningIds);
+  const reviews = itemsInOrder(queue.reviews, reviewIds);
   const [step, setStep] = useState<TodayStep>(() => {
     const fromItem =
       search.item === undefined
@@ -461,10 +500,35 @@ function TodaySession({
   const spent = spentCards(segments, runStates, now);
   const progressInput: TodayProgressInput = {
     segments,
-    learning: queue.learning,
-    reviews: queue.reviews,
+    learning,
+    reviews,
     done,
     spent,
+  };
+
+  const applySessionOrder = (next: PracticeOrder) => {
+    const seed = next === "shuffle" ? orderSeed + 1 : orderSeed;
+    const pinned = new Set(spent);
+    const shown =
+      shownVerseId ?? (step.kind === "segment" ? step.verseId : undefined);
+    if (shown) pinned.add(shown);
+    if (next === "shuffle") setOrderSeed(seed);
+    setLearningIds(
+      orderRemainingSessionItems(
+        itemsInOrder(learningItems, learningIds),
+        next,
+        seed,
+        pinned,
+      ).map((item) => item.id),
+    );
+    setReviewIds(
+      orderRemainingSessionItems(
+        itemsInOrder(reviewItems, reviewIds),
+        next,
+        seed,
+        pinned,
+      ).map((item) => item.id),
+    );
   };
   const doneItems = todayDoneItems(progressInput);
 
@@ -510,9 +574,9 @@ function TodaySession({
     }
     const entries =
       segment.kind === "learning"
-        ? queue.learning
+        ? learning
         : segment.kind === "review"
-          ? queue.reviews
+          ? reviews
           : [];
     const resumeAt =
       runStates[index] === undefined
@@ -728,6 +792,10 @@ function TodaySession({
         ) : undefined
       }
       initialVerseId={step.verseId}
+      orderedIds={segment.kind === "learning" ? learningIds : reviewIds}
+      shownId={shownVerseId ?? step.verseId}
+      onShow={setShownVerseId}
+      onSessionOrderChange={applySessionOrder}
       onCurrentVerseId={setShownVerseId}
       runState={runStates[index]}
       onRunStateChange={(state, result) => saveRun(index, state, result)}
