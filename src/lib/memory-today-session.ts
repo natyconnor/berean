@@ -1,4 +1,9 @@
+import {
+  orderRemainingSessionItems,
+  type SessionOrderItem,
+} from "./memory-session-order";
 import { estimateSessionMinutes } from "./memorize-plan";
+import type { PracticeOrder } from "./practice-order";
 
 /**
  * The blended Today session (`/memory/today`) as an ordered list of segments:
@@ -322,6 +327,8 @@ export interface TodayQueueInput extends TodayProgressInput {
   reopenable?: ReadonlySet<string>;
   /** The segment underway, or null between segments. */
   current: number | null;
+  /** The open card in `current`. Other unspent cards in that segment stay upcoming. */
+  currentItem?: string;
 }
 
 const QUEUE_HEADINGS: Record<TodaySegment["kind"], string> = {
@@ -337,6 +344,47 @@ function segmentState(
 ): TodayQueueState {
   if (index === current) return "current";
   return finished.has(index) ? "done" : "upcoming";
+}
+
+function currentItemId(
+  entries: readonly TodayQueueEntry[],
+  spent: ReadonlySet<string>,
+  currentItem: string | undefined,
+): string | undefined {
+  if (
+    currentItem &&
+    entries.some((entry) => entry.id === currentItem && !spent.has(entry.id))
+  ) {
+    return currentItem;
+  }
+  return entries.find((entry) => !spent.has(entry.id))?.id;
+}
+
+/**
+ * The segment (and verse card) a queue item id opens. Used to restore the
+ * open card from `/memory/today?item=`.
+ */
+export function todayQueueItemStep(
+  segments: readonly TodaySegment[],
+  learning: readonly TodayQueueEntry[],
+  reviews: readonly TodayQueueEntry[],
+  item: string,
+): { index: number; verseId?: string } | null {
+  for (const [index, segment] of segments.entries()) {
+    if (segment.kind === "passage" && segment.packId === item) {
+      return { index };
+    }
+    const entries =
+      segment.kind === "learning"
+        ? learning
+        : segment.kind === "review"
+          ? reviews
+          : [];
+    if (entries.some((entry) => entry.id === item)) {
+      return { index, verseId: item };
+    }
+  }
+  return null;
 }
 
 /**
@@ -369,9 +417,17 @@ export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
     const limit =
       segment.kind === "review" ? TODAY_QUEUE_REVIEW_LIMIT : entries.length;
     const shown = entries.length > limit + 1 ? limit : entries.length;
+    const currentId =
+      state === "current"
+        ? currentItemId(entries, spent, input.currentItem)
+        : undefined;
     const items = entries.map((entry): TodayQueueItem => {
       const itemState =
-        state === "done" || spent.has(entry.id) ? "done" : state;
+        state === "done" || spent.has(entry.id)
+          ? "done"
+          : state === "current" && entry.id === currentId
+            ? "current"
+            : "upcoming";
       return {
         ...entry,
         state: itemState,
@@ -414,6 +470,38 @@ export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
     },
     ...groups,
   ];
+}
+
+/**
+ * Shuffle remaining verse rows in each group. Passages, finished items, and
+ * the open card keep their seats. In-order returns the groups unchanged.
+ */
+export function orderTodayQueueGroups(
+  groups: readonly TodayQueueGroup[],
+  order: PracticeOrder,
+  seed: number,
+  verses: ReadonlyMap<string, SessionOrderItem>,
+): TodayQueueGroup[] {
+  if (order === "in-order") return [...groups];
+  return groups.map((group) => {
+    if (group.kind === "passage") return group;
+    const pinnedIds = new Set(
+      group.items
+        .filter((item) => item.state === "done" || item.state === "current")
+        .map((item) => item.id),
+    );
+    const keyed = group.items.flatMap((item) => {
+      const verse = verses.get(item.id);
+      return verse ? [{ ...verse, id: item.id, item }] : [];
+    });
+    if (keyed.length !== group.items.length) return group;
+    return {
+      ...group,
+      items: orderRemainingSessionItems(keyed, pinnedIds, order, seed).map(
+        (row) => row.item,
+      ),
+    };
+  });
 }
 
 export interface TodaySessionTally {

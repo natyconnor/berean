@@ -1,4 +1,12 @@
-import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type JSX,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { ArrowLeft, CheckCircle2, Loader2, SearchX } from "lucide-react";
 
@@ -19,10 +27,7 @@ import {
   SessionHeaderProgress,
   type SessionProgress,
 } from "@/components/memory/practice/session-header-progress";
-import {
-  TodayQueueOverview,
-  TodayQueueRail,
-} from "@/components/memory/practice/today-queue-rail";
+import { TodayQueueRail } from "@/components/memory/practice/today-queue-rail";
 import {
   hasTodayCarry,
   mergeTodayCarry,
@@ -63,18 +68,23 @@ import {
   todayFinishedSegments,
   todayInterstitialCopy,
   todayNextSegment,
+  orderTodayQueueGroups,
   todayQueueGroups,
+  todayQueueItemStep,
   todaySessionCountLabel,
   todaySessionCounts,
   todaySessionProgress,
   type TodayPassageInput,
   type TodayProgressInput,
   type TodayQueueEntry,
-  type TodayQueueGroup,
   type TodayQueueItem,
   type TodaySegment,
   type TodaySessionOnly,
 } from "@/lib/memory-today-session";
+import {
+  readPracticeOrderPreference,
+  togglePracticeOrderPreference,
+} from "@/lib/practice-order";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { Route } from "@/routes/memory/today";
 
@@ -366,6 +376,20 @@ function queueEntries(
   );
 }
 
+function openQueueItemId(
+  step: TodayStep,
+  segments: readonly TodaySegment[],
+  queue: { learning: TodayQueueEntry[]; reviews: TodayQueueEntry[] },
+): string | undefined {
+  if (step.kind !== "segment") return undefined;
+  const segment = segments[step.index];
+  if (!segment) return undefined;
+  if (segment.kind === "passage") return segment.packId;
+  if (step.verseId) return step.verseId;
+  const entries = segment.kind === "learning" ? queue.learning : queue.reviews;
+  return entries[0]?.id;
+}
+
 function TodaySession({
   data,
   only,
@@ -381,6 +405,8 @@ function TodaySession({
   chrome: TodayChrome;
 }): JSX.Element {
   const now = useLiveNow();
+  const navigate = useNavigate();
+  const search = Route.useSearch();
   // Planned once at mount. A passage set aside earlier today ("That's enough
   // for today") stays set aside, like it does in Learn.
   const [segments] = useState(() => {
@@ -397,9 +423,41 @@ function TodaySession({
     learning: queueEntries(sortSessionVerses(data.learning), data.title),
     reviews: queueEntries(data.reviews, data.title),
   }));
-  const [step, setStep] = useState<TodayStep>(
-    segments.length > 0 ? { kind: "segment", index: 0 } : { kind: "summary" },
-  );
+  const [step, setStep] = useState<TodayStep>(() => {
+    const fromItem =
+      search.item === undefined
+        ? null
+        : todayQueueItemStep(
+            segments,
+            queue.learning,
+            queue.reviews,
+            search.item,
+          );
+    if (fromItem) {
+      return {
+        kind: "segment",
+        index: fromItem.index,
+        verseId: fromItem.verseId,
+      };
+    }
+    return segments.length > 0
+      ? { kind: "segment", index: 0 }
+      : { kind: "summary" };
+  });
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [verseOrder, setVerseOrder] = useState(readPracticeOrderPreference);
+  const versesById = useMemo(() => {
+    const map = new Map<string, PracticeVerse>();
+    for (const verse of [...data.learning, ...data.reviews]) {
+      map.set(
+        verse.composite
+          ? `unified:${verse.composite.packId}`
+          : verseRefKey(verse.reference),
+        verse,
+      );
+    }
+    return map;
+  }, [data.learning, data.reviews]);
   // Segments run in plan order, but the queue can jump anywhere, so progress
   // is what's finished plus each verse run's live state.
   const [done, setDone] = useState<ReadonlySet<number>>(() => new Set());
@@ -482,14 +540,34 @@ function TodaySession({
     setStep({ kind: "segment", index, verseId: verseId ?? resumeAt });
   };
   const openQueueItem = (item: TodayQueueItem) => {
+    setQueueOpen(false);
     openSegment(
       item.segment,
       segments[item.segment]?.kind === "passage" ? undefined : item.id,
     );
   };
-  const openQueueGroup = (group: TodayQueueGroup) => {
-    if (group.target !== null) openSegment(group.target);
-  };
+
+  const currentItemId = openQueueItemId(step, segments, queue);
+  useEffect(() => {
+    if (search.item === currentItemId) return;
+    void navigate({
+      to: "/memory/today",
+      search: {
+        ...(search.packId === undefined ? {} : { packId: search.packId }),
+        ...(only === undefined ? {} : { only }),
+        ...(search.return === undefined ? {} : { return: search.return }),
+        ...(currentItemId === undefined ? {} : { item: currentItemId }),
+      },
+      replace: true,
+    });
+  }, [
+    currentItemId,
+    navigate,
+    only,
+    search.item,
+    search.packId,
+    search.return,
+  ]);
 
   const doneCount = todaySessionCounts(segments, doneItems).done;
   const day = dayCarry(segments, tally, earlier, doneCount);
@@ -567,15 +645,25 @@ function TodaySession({
     );
     return { label: todaySessionCountLabel(counts), fraction };
   };
-  const queueGroups = (current: number | null) =>
-    todayQueueGroups({ ...progressInput, reopenable, current });
+  const queueGroups = (current: number | null, currentItem?: string) =>
+    orderTodayQueueGroups(
+      todayQueueGroups({
+        ...progressInput,
+        reopenable,
+        current,
+        currentItem,
+      }),
+      verseOrder.order,
+      verseOrder.seed,
+      versesById,
+    );
   // A queue of one is just the thing on screen.
   const showQueue =
     segments.length > 1 || queue.learning.length + queue.reviews.length > 1;
-  const queueRail = (current: number | null) =>
+  const queueRail = (current: number | null, currentItem?: string) =>
     showQueue ? (
       <TodayQueueRail
-        groups={queueGroups(current)}
+        groups={queueGroups(current, currentItem)}
         counts={
           carryTodayProgress(
             todaySessionCounts(segments, doneItems),
@@ -584,6 +672,10 @@ function TodaySession({
           ).counts
         }
         onSelect={openQueueItem}
+        open={queueOpen}
+        onOpenChange={setQueueOpen}
+        order={verseOrder.order}
+        onToggleOrder={() => setVerseOrder(togglePracticeOrderPreference())}
       />
     ) : undefined;
 
@@ -624,7 +716,7 @@ function TodaySession({
             ),
           )
         }
-        aside={queueRail(index)}
+        aside={queueRail(index, segment.packId)}
         chrome={chrome}
         onDone={() => {
           dismissLearnPackForToday(segment.packId, dayKey);
@@ -642,7 +734,7 @@ function TodaySession({
 
   return (
     <MemorySessionRunner
-      key={`${segment.kind}:${step.verseId ?? ""}`}
+      key={segment.kind}
       kind={segment.kind}
       verses={segment.kind === "learning" ? data.learning : data.reviews}
       scopeLabel={data.title}
@@ -656,15 +748,12 @@ function TodaySession({
           doneItems.map((count, item) => (item === index ? run.done : count)),
         )
       }
-      railHeader={
-        segments.length > 1 ? (
-          <TodayQueueOverview
-            groups={queueGroups(index)}
-            onSelect={openQueueGroup}
-          />
-        ) : undefined
-      }
+      aside={queueRail(index, step.verseId ?? currentItemId)}
       initialVerseId={step.verseId}
+      selectedVerseId={step.verseId}
+      onSelectVerse={(verseId) => setStep({ kind: "segment", index, verseId })}
+      order={verseOrder.order}
+      orderSeed={verseOrder.seed}
       runState={runStates[index]}
       onRunStateChange={(state, result) => saveRun(index, state, result)}
       onComplete={(result) => recordRun(index, result)}

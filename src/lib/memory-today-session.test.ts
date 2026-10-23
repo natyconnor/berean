@@ -9,6 +9,8 @@ import {
   todayInterstitialCopy,
   todayNextSegment,
   todayQueueGroups,
+  todayQueueItemStep,
+  orderTodayQueueGroups,
   todaySegmentMinutes,
   todaySessionCountLabel,
   todaySessionCounts,
@@ -337,7 +339,7 @@ describe("todayQueueGroups", () => {
         heading: "Verses to learn",
         state: "current",
         target: null,
-        items: ["John 1:1:current@2", "John 1:2:current@2"],
+        items: ["John 1:1:current@2", "John 1:2:upcoming:open@2"],
       },
       {
         heading: "Reviews",
@@ -371,6 +373,109 @@ describe("todayQueueGroups", () => {
       "Luke 9:23:done@3",
       "Romans 8:28:current@3",
     ]);
+  });
+
+  it("marks only the open card current in a verse segment", () => {
+    expect(
+      todayQueueGroups({
+        ...progressInput([0, 1]),
+        current: 2,
+        currentItem: "jn2",
+      }).find((group) => group.kind === "learning")?.items,
+    ).toEqual([
+      expect.objectContaining({
+        id: "jn1",
+        state: "upcoming",
+        openable: true,
+      }),
+      expect.objectContaining({
+        id: "jn2",
+        state: "current",
+        openable: false,
+      }),
+    ]);
+  });
+
+  it("shuffles remaining verses in a group and leaves passages and pinned cards", () => {
+    const groups = todayQueueGroups({
+      ...progressInput([0], ["jn1"]),
+      current: 2,
+      currentItem: "jn2",
+    });
+    const verses = new Map([
+      [
+        "jn1",
+        { reference: { book: "John", chapter: 1, startVerse: 1, endVerse: 1 } },
+      ],
+      [
+        "jn2",
+        { reference: { book: "John", chapter: 1, startVerse: 2, endVerse: 2 } },
+      ],
+      [
+        "lk9",
+        {
+          reference: { book: "Luke", chapter: 9, startVerse: 23, endVerse: 23 },
+        },
+      ],
+      [
+        "rm8",
+        {
+          reference: {
+            book: "Romans",
+            chapter: 8,
+            startVerse: 28,
+            endVerse: 28,
+          },
+        },
+      ],
+    ]);
+    const shuffled = orderTodayQueueGroups(groups, "shuffle", 7, verses);
+    expect(
+      shuffled
+        .find((group) => group.kind === "passage")
+        ?.items.map((item) => item.id),
+    ).toEqual(
+      groups
+        .find((group) => group.kind === "passage")
+        ?.items.map((item) => item.id),
+    );
+    expect(
+      shuffled
+        .find((group) => group.kind === "learning")
+        ?.items.map((item) => item.id),
+    ).toEqual(["jn1", "jn2"]);
+    const reviewIds =
+      shuffled
+        .find((group) => group.kind === "review")
+        ?.items.map((item) => item.id) ?? [];
+    expect(reviewIds.slice().sort()).toEqual(["lk9", "rm8"]);
+    expect(
+      orderTodayQueueGroups(groups, "in-order", 7, verses)
+        .find((group) => group.kind === "review")
+        ?.items.map((item) => item.id),
+    ).toEqual(["lk9", "rm8"]);
+  });
+
+  it("opens the segment and verse a queue item id names", () => {
+    expect(
+      todayQueueItemStep(QUEUE_SEGMENTS, QUEUE_LEARNING, QUEUE_REVIEWS, "jn2"),
+    ).toEqual({ index: 2, verseId: "jn2" });
+    expect(
+      todayQueueItemStep(
+        QUEUE_SEGMENTS,
+        QUEUE_LEARNING,
+        QUEUE_REVIEWS,
+        "psalm16",
+      ),
+    ).toEqual({ index: 1 });
+    expect(
+      todayQueueItemStep(
+        QUEUE_SEGMENTS,
+        QUEUE_LEARNING,
+        QUEUE_REVIEWS,
+        "missing",
+      ),
+    ).toBeNull();
   });
 
   it("marks a verse segment's spent cards done and keeps the rest open", () => {

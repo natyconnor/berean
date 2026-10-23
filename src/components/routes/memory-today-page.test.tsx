@@ -8,6 +8,7 @@ import {
   dismissLearnPackForToday,
   learnDismissDayKey,
 } from "@/lib/learn-dismissed-packs";
+import { resetPracticeOrderPreference } from "@/lib/practice-order";
 
 import { verseRefKey } from "../../../shared/verse-ref-key";
 import { MemoryTodayPage } from "./memory-today-page";
@@ -17,6 +18,7 @@ const NOW = Date.UTC(2026, 9, 12, 18);
 type TodaySearch = {
   packId?: string;
   only?: "learning" | "review";
+  item?: string;
   return?: string;
 };
 
@@ -24,15 +26,18 @@ type StubProgress =
   | { label: string }
   | ((run: { done: number; total: number }) => { label: string });
 
-const { frozenResults, liveResults, search, onExit } = vi.hoisted(() => {
-  const initial: TodaySearch = {};
-  return {
-    frozenResults: new Map<string, unknown>(),
-    liveResults: new Map<string, unknown>(),
-    search: { current: initial },
-    onExit: vi.fn(),
-  };
-});
+const { frozenResults, liveResults, search, onExit, navigate } = vi.hoisted(
+  () => {
+    const initial: TodaySearch = {};
+    return {
+      frozenResults: new Map<string, unknown>(),
+      liveResults: new Map<string, unknown>(),
+      search: { current: initial },
+      onExit: vi.fn(),
+      navigate: vi.fn(),
+    };
+  },
+);
 
 vi.mock("@/routes/memory/today", () => ({
   Route: { useSearch: () => search.current },
@@ -61,7 +66,7 @@ vi.mock("convex-helpers/react/cache", () => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
 }));
 
 vi.mock("@/components/memory/passage/passage-session", () => ({
@@ -113,18 +118,20 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     kind,
     verses,
     progress,
-    railHeader,
+    aside,
     onComplete,
     initialVerseId,
+    selectedVerseId,
     runState,
     onRunStateChange,
   }: {
     kind: string;
     verses: StubVerse[];
     progress?: StubProgress;
-    railHeader?: ReactNode;
+    aside?: ReactNode;
     onComplete?: (result: unknown) => void;
     initialVerseId?: string;
+    selectedVerseId?: string;
     runState?: unknown;
     onRunStateChange?: (state: unknown, result: unknown) => void;
   }) => {
@@ -164,6 +171,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
       <div
         data-testid={`${kind}-session`}
         data-initial-verse={initialVerseId ?? ""}
+        data-selected-verse={selectedVerseId ?? ""}
         data-resumed={runState ? "true" : "false"}
       >
         <p>
@@ -171,7 +179,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
             ? progress({ done: 1, total: verses.length }).label
             : progress?.label}
         </p>
-        {railHeader}
+        {aside}
         <ul>
           {verses.map((verse) => (
             <li key={verse.verseRefId}>{verse.verseRefId}</li>
@@ -314,7 +322,9 @@ describe("MemoryTodayPage", () => {
     frozenResults.clear();
     liveResults.clear();
     localStorage.clear();
+    resetPracticeOrderPreference();
     onExit.mockReset();
+    navigate.mockReset();
     search.current = { return: "/memory" };
     liveResults.set("passageMemory.getForPack", { _id: "passage_1" });
   });
@@ -371,12 +381,24 @@ describe("MemoryTodayPage", () => {
 
     const learning = screen.getByTestId("learning-session");
     expect(within(learning).getByText("Today · 2 of 4")).toBeInTheDocument();
-    const overview = within(learning).getByRole("region", { name: "Today" });
     expect(
-      within(overview)
-        .getAllByRole("listitem")
-        .map((part) => part.dataset.state),
-    ).toEqual(["done", "current", "upcoming"]);
+      within(learning).getByRole("region", { name: "Today's queue" }),
+    ).toBeInTheDocument();
+    expect(
+      within(learning).queryByRole("region", { name: "Today" }),
+    ).not.toBeInTheDocument();
+    expect(queueRow(learning, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "done",
+    );
+    expect(queueRow(learning, "John 15:1")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(learning, "John 15:2")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
     expect(within(learning).getByText("jn15_1")).toBeInTheDocument();
     expect(within(learning).getByText("jn15_2")).toBeInTheDocument();
     await userEvent.click(
@@ -473,15 +495,21 @@ describe("MemoryTodayPage", () => {
       "data-initial-verse",
       verseRefKey({ book: "John", chapter: 15, startVerse: 2, endVerse: 2 }),
     );
-    const overview = within(learning).getByRole("region", { name: "Today" });
-    expect(
-      within(overview)
-        .getAllByRole("listitem")
-        .map((part) => part.dataset.state),
-    ).toEqual(["upcoming", "current", "upcoming"]);
+    expect(queueRow(learning, "John 15:2")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(learning, "John 15:1")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+    expect(queueRow(learning, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
 
     await userEvent.click(
-      within(overview).getByRole("button", { name: "Go to Passages" }),
+      screen.getByRole("button", { name: "Go to Psalm 16" }),
     );
     expect(
       screen.getByRole("heading", { name: "Psalm 16" }),
@@ -530,7 +558,7 @@ describe("MemoryTodayPage", () => {
       screen.getByRole("button", { name: "Spend the first learning card" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Go to Passages" }),
+      screen.getByRole("button", { name: "Go to Psalm 16" }),
     );
 
     expect(screen.getByText("Today · 1 of 4")).toBeInTheDocument();
@@ -570,19 +598,17 @@ describe("MemoryTodayPage", () => {
     );
     // Leave before the last result is dismissed, so the run never finishes.
     await userEvent.click(
-      screen.getByRole("button", { name: "Go to Reviews" }),
+      screen.getByRole("button", { name: "Go to Luke 9:23" }),
     );
-    const overview = within(screen.getByTestId("review-session")).getByRole(
-      "region",
-      { name: "Today" },
+    const review = screen.getByTestId("review-session");
+    expect(queueRow(review, "Luke 9:23")).toHaveAttribute(
+      "data-state",
+      "current",
     );
+    expect(queueRow(review, "John 15:1")).toHaveAttribute("data-state", "done");
+    expect(queueRow(review, "John 15:2")).toHaveAttribute("data-state", "done");
     expect(
-      within(overview)
-        .getAllByRole("listitem")
-        .map((part) => part.dataset.state),
-    ).toEqual(["upcoming", "done", "current"]);
-    expect(
-      within(overview).queryByRole("button", { name: "Go to Verses to learn" }),
+      within(review).queryByRole("button", { name: "Go to John 15:1" }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(
@@ -804,8 +830,13 @@ describe("MemoryTodayPage", () => {
     const learning = screen.getByTestId("learning-session");
     expect(within(learning).getByText("Today · 1 of 4")).toBeInTheDocument();
     expect(
-      within(learning).getByRole("region", { name: "Today" }),
-    ).toHaveTextContent("Verses to learn(now)Reviews1");
+      within(learning).getByRole("region", { name: "Today's queue" }),
+    ).toBeInTheDocument();
+    expect(queueRow(learning, "Romans 8:1")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(within(learning).getByText("Reviews")).toBeInTheDocument();
     expect(within(learning).queryByText("d")).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Finish learning" }),
@@ -886,5 +917,153 @@ describe("MemoryTodayPage", () => {
       screen.queryByRole("region", { name: "Today's queue" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/^Next up/)).not.toBeInTheDocument();
+  });
+
+  it("keeps Today's queue when opening a verse and marks only that card current", async () => {
+    setToday();
+    renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to John 15:1" }),
+    );
+    const learning = screen.getByTestId("learning-session");
+    expect(
+      within(learning).getByRole("region", { name: "Today's queue" }),
+    ).toBeInTheDocument();
+    expect(within(learning).queryByText("Order")).not.toBeInTheDocument();
+    expect(within(learning).queryByText("Progress")).not.toBeInTheDocument();
+    expect(queueRow(learning, "John 15:1")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(learning, "John 15:2")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+    expect(queueRow(learning, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+  });
+
+  it("switches the open verse in place and writes it onto the URL", async () => {
+    setToday();
+    renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to John 15:1" }),
+    );
+    const firstKey = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 1,
+      endVerse: 1,
+    });
+    const secondKey = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-selected-verse",
+      firstKey,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to John 15:2" }),
+    );
+    const learning = screen.getByTestId("learning-session");
+    expect(learning).toHaveAttribute("data-selected-verse", secondKey);
+    expect(queueRow(learning, "John 15:2")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(learning, "John 15:1")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+    const last = navigate.mock.calls.at(-1)?.[0] as
+      | { to?: string; replace?: boolean; search?: { item?: string } }
+      | undefined;
+    expect(last?.to).toBe("/memory/today");
+    expect(last?.replace).toBe(true);
+    expect(last?.search?.item).toBe(secondKey);
+  });
+
+  it("reopens the exact queue item from the today search", () => {
+    const item = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    search.current = { return: "/memory", item };
+    setToday();
+    renderToday();
+
+    const learning = screen.getByTestId("learning-session");
+    expect(learning).toHaveAttribute("data-initial-verse", item);
+    expect(queueRow(learning, "John 15:2")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(learning, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+  });
+
+  it("shuffles remaining verses from the queue header and keeps the open card", async () => {
+    setToday({
+      learning: [
+        inMemory("jn15_1", 1, "learning"),
+        {
+          ...inMemory("rm8_28", 28, "new"),
+          book: "Romans",
+          chapter: 8,
+        },
+        {
+          ...inMemory("ps23_1", 1, "new"),
+          book: "Psalms",
+          chapter: 23,
+        },
+        {
+          ...inMemory("lk1_1", 1, "new"),
+          book: "Luke",
+          chapter: 1,
+        },
+      ],
+    });
+    renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to John 15:1" }),
+    );
+
+    const labelsBefore = within(
+      screen.getByRole("region", { name: "Today's queue" }),
+    )
+      .getAllByRole("listitem")
+      .map((row) => row.textContent);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Shuffle verses" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Shuffle verses" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(queueRow(document.body, "John 15:1")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-selected-verse",
+      verseRefKey({ book: "John", chapter: 15, startVerse: 1, endVerse: 1 }),
+    );
+    const labelsAfter = within(
+      screen.getByRole("region", { name: "Today's queue" }),
+    )
+      .getAllByRole("listitem")
+      .map((row) => row.textContent);
+    expect(labelsAfter[0]).toEqual(labelsBefore[0]);
+    expect(labelsAfter).not.toEqual(labelsBefore);
   });
 });

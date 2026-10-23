@@ -3,19 +3,26 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  resetPracticeOrderPreference,
+  writePracticeOrderPreference,
+} from "@/lib/practice-order";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
-
 import {
   PracticeBoard,
   type PracticeRunState,
   type PracticeSessionResult,
   type PracticeVerse,
 } from "./practice-board";
+
+beforeEach(() => {
+  resetPracticeOrderPreference();
+});
 
 const {
   queryResults,
@@ -1482,5 +1489,93 @@ describe("PracticeBoard session Home", () => {
     expect(
       screen.queryByRole("link", { name: "Go to Memory" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("PracticeBoard queue aside", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockImplementation(({ query }: { query: string }) =>
+      Promise.resolve(query === "Luke 9" ? luke9 : psalm8),
+    );
+  });
+
+  it("shows the given aside instead of Order, Progress, and Verses", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[learningRef("Psalms", 8, 2), learningRef("Luke", 9, 23, 24)]}
+          scopeLabel="Today"
+          onExit={() => {}}
+          aside={
+            <section aria-labelledby="queue-h">
+              <h2 id="queue-h">Today&apos;s queue</h2>
+            </section>
+          }
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("region", { name: "Today's queue" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Order")).not.toBeInTheDocument();
+    expect(screen.queryByText("Progress")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Shuffle" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a selected verse without remounting away from the shared shuffle preference", async () => {
+    writePracticeOrderPreference({ order: "shuffle", seed: 1 });
+    const first = verseRefKey({
+      book: "Psalms",
+      chapter: 8,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    const second = verseRefKey({
+      book: "Luke",
+      chapter: 9,
+      startVerse: 23,
+      endVerse: 24,
+    });
+    const { rerender } = render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[learningRef("Psalms", 8, 2), learningRef("Luke", 9, 23, 24)]}
+          scopeLabel="Today"
+          onExit={() => {}}
+          aside={<p>Queue</p>}
+          selectedVerseId={first}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("Verse 1 of 2")).toBeInTheDocument();
+    rerender(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[learningRef("Psalms", 8, 2), learningRef("Luke", 9, 23, 24)]}
+          scopeLabel="Today"
+          onExit={() => {}}
+          aside={<p>Queue</p>}
+          selectedVerseId={second}
+          order="shuffle"
+          orderSeed={1}
+        />
+      </TooltipProvider>,
+    );
+    expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
   });
 });

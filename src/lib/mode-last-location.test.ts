@@ -119,6 +119,14 @@ describe("mode-last-location", () => {
     ).toEqual({ memory: "/memory/today?return=%2Fmemory" });
     expect(
       rememberModeLocation(
+        "/memory/today",
+        "/memory/today?return=%2Fmemory&item=Genesis%7C1%7C1%7C1",
+      ),
+    ).toEqual({
+      memory: "/memory/today?return=%2Fmemory&item=Genesis%7C1%7C1%7C1",
+    });
+    expect(
+      rememberModeLocation(
         "/memory/pack-1/learn",
         "/memory/pack-1/learn?return=%2Fmemory%2Fpack-1",
       ),

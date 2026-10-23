@@ -60,10 +60,15 @@ import {
   type MemorySessionLabel,
 } from "@/lib/memory-session";
 import {
+  orderRemainingSessionItems,
   orderSessionVerses,
   sessionClusterCount,
 } from "@/lib/memory-session-order";
-import type { PracticeOrder } from "@/lib/practice-order";
+import {
+  readPracticeOrderPreference,
+  writePracticeOrderPreference,
+  type PracticeOrder,
+} from "@/lib/practice-order";
 import {
   READER_MEASURE_CLASS,
   READER_REFERENCE_CLASS,
@@ -113,6 +118,7 @@ import {
   practiceChromeFor,
 } from "./practice-stages";
 import { PracticeVerseRail } from "./practice-verse-rail";
+import { SessionColumns } from "./session-columns";
 import { ReviewSummary } from "../review-summary";
 import { PreviewFillExactAnswerButton } from "../preview-fill-exact-answer-button";
 import { SessionComplete, type SessionCompleteVerse } from "./session-complete";
@@ -237,10 +243,17 @@ interface PracticeBoardProps {
   progress?: SessionProgressSource;
   /** One part of a longer session: hand the results up instead of a summary. */
   onComplete?: (result: PracticeSessionResult) => void;
-  /** Shown above the verse rail, e.g. an overview of the whole session. */
-  railHeader?: ReactNode;
+  /** Replaces the Order / Progress / Verses rail, e.g. Today's queue. */
+  aside?: ReactNode;
   /** Card id to open first; the first card in order when absent or unknown. */
   initialVerseId?: string;
+  /** Open this card when it changes. The board keeps its run state. */
+  selectedVerseId?: string;
+  /** The open card changed, from the rail or Next. */
+  onSelectVerse?: (id: string) => void;
+  /** Shared Shuffle / In order setting, when the parent owns it. */
+  order?: PracticeOrder;
+  orderSeed?: number;
   /** Pick a run back up where it was left. Read once, at mount. */
   runState?: PracticeRunState;
   /** Every change to the run's state, with the results so far. */
@@ -401,17 +414,27 @@ export function PracticeBoard({
   onContinueSession,
   progress,
   onComplete,
-  railHeader,
+  aside,
   initialVerseId,
+  selectedVerseId,
+  onSelectVerse,
+  order: orderProp,
+  orderSeed: orderSeedProp,
   runState,
   onRunStateChange,
 }: PracticeBoardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const now = useLiveNow();
-  const [order, setOrder] = useState<PracticeOrder>("in-order");
+  const [localOrder, setLocalOrder] = useState(
+    () => readPracticeOrderPreference().order,
+  );
   // Bumped each time the user (re-)selects Shuffle so repeated presses reshuffle
   // deterministically without depending on Math.random().
-  const [seed, setSeed] = useState(0);
+  const [localSeed, setLocalSeed] = useState(
+    () => readPracticeOrderPreference().seed,
+  );
+  const order = orderProp ?? localOrder;
+  const seed = orderSeedProp ?? localSeed;
   const [shuffleNonce, setShuffleNonce] = useState(0);
   const [isShuffling, setIsShuffling] = useState(false);
   const [sessionAttempts, setSessionAttempts] = useState<
@@ -490,10 +513,27 @@ export function PracticeBoard({
       ),
   );
 
-  const orderedVerses = useMemo(
-    () => orderSessionVerses(baseVerses, order, seed),
-    [baseVerses, order, seed],
-  );
+  const orderedVerses = useMemo(() => {
+    if (!aside) return orderSessionVerses(baseVerses, order, seed);
+    const pinned = new Set<string>();
+    const openId = selectedVerseId ?? initialVerseId;
+    if (openId) pinned.add(openId);
+    for (const verse of baseVerses) {
+      const progress = progressByVerseId[verse.id] ?? verse;
+      if (!hasSessionWorkLeft(kind, progress, now)) pinned.add(verse.id);
+    }
+    return orderRemainingSessionItems(baseVerses, pinned, order, seed);
+  }, [
+    aside,
+    baseVerses,
+    initialVerseId,
+    kind,
+    now,
+    order,
+    progressByVerseId,
+    seed,
+    selectedVerseId,
+  ]);
   const [currentIndex, setCurrentIndex] = useState(() =>
     Math.max(
       0,
@@ -552,10 +592,16 @@ export function PracticeBoard({
     }));
   }, [baseVerses, railVerses]);
 
+  const selectedIndex =
+    selectedVerseId === undefined
+      ? -1
+      : orderedVerses.findIndex((verse) => verse.id === selectedVerseId);
   const boundedIndex =
-    orderedVerses.length === 0
-      ? 0
-      : Math.min(currentIndex, orderedVerses.length - 1);
+    selectedIndex >= 0
+      ? selectedIndex
+      : orderedVerses.length === 0
+        ? 0
+        : Math.min(currentIndex, orderedVerses.length - 1);
   const currentVerse = orderedVerses[boundedIndex] ?? null;
   const currentProgress: VerseProgress = currentVerse
     ? (progressByVerseId[currentVerse.id] ?? {
@@ -706,20 +752,24 @@ export function PracticeBoard({
   }, [finished, onComplete, sessionVerses, sessionAttempts]);
 
   function handleOrderChange(nextOrder: PracticeOrder) {
-    setOrder(nextOrder);
+    const nextSeed = nextOrder === "shuffle" ? seed + 1 : seed;
+    writePracticeOrderPreference({ order: nextOrder, seed: nextSeed });
+    setLocalOrder(nextOrder);
+    setLocalSeed(nextSeed);
     if (nextOrder === "shuffle") {
-      setSeed((value) => value + 1);
       setShuffleNonce((value) => value + 1);
       if (!reduceMotion) setIsShuffling(true);
     } else {
       setIsShuffling(false);
     }
-    setCurrentIndex(0);
+    if (selectedVerseId === undefined) setCurrentIndex(0);
   }
 
   function handleSelectVerse(id: string) {
     const index = orderedVerses.findIndex((verse) => verse.id === id);
-    if (index >= 0) setCurrentIndex(index);
+    if (index < 0) return;
+    setCurrentIndex(index);
+    onSelectVerse?.(id);
   }
 
   function adoptVerseSchedule(verseId: string, next: MemorySchedule) {
@@ -756,7 +806,9 @@ export function PracticeBoard({
       (verse, index) => index !== boundedIndex && !verse.locked,
     );
     if (nextAvailable >= 0) {
+      const nextId = railVerses[nextAvailable]?.id;
       setCurrentIndex(nextAvailable);
+      if (nextId) onSelectVerse?.(nextId);
       return;
     }
     setFinished(true);
@@ -894,171 +946,169 @@ export function PracticeBoard({
 
   return (
     <PracticeShell {...shellProps}>
-      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="order-2 md:order-1">
-          <div className="relative">
-            <PracticeCard
-              key={currentVerse.id}
+      <SessionColumns
+        aside={
+          aside ?? (
+            <PracticeVerseRail
               sessionLabel={sessionLabel}
-              reference={currentVerse.reference}
-              learnStage={currentProgress.learnStage}
-              stageReps={currentProgress.stageReps}
-              status={currentProgress.status}
-              scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
-              locked={currentLocked}
-              nextStep={nextStepCopy(currentProgress, now, getViewerTimeZone())}
-              reviewedOutcome={
-                currentReviewed
-                  ? reviewedOutcomeLine(currentProgress, now)
-                  : undefined
+              verses={railVerses}
+              activeId={currentVerse.id}
+              onSelectVerse={handleSelectVerse}
+              order={order}
+              onOrderChange={handleOrderChange}
+              shuffleNonce={shuffleNonce}
+              currentLearnStage={currentProgress.learnStage}
+              currentStageReps={currentProgress.stageReps}
+              currentStatus={currentProgress.status}
+              currentIntervalDays={currentProgress.intervalDays}
+              currentEase={currentProgress.ease}
+              currentWordCount={currentWordCount}
+              currentLocked={currentLocked}
+              allowReorder={sessionClusterCount(baseVerses) > 1}
+            />
+          )
+        }
+      >
+        <div className="relative">
+          <PracticeCard
+            key={currentVerse.id}
+            sessionLabel={sessionLabel}
+            reference={currentVerse.reference}
+            learnStage={currentProgress.learnStage}
+            stageReps={currentProgress.stageReps}
+            status={currentProgress.status}
+            scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
+            locked={currentLocked}
+            nextStep={nextStepCopy(currentProgress, now, getViewerTimeZone())}
+            reviewedOutcome={
+              currentReviewed
+                ? reviewedOutcomeLine(currentProgress, now)
+                : undefined
+            }
+            onLeaveDone={leaveSpentVerse}
+            leaveDoneLabel={nextOpenIndex >= 0 ? "Next" : "Continue"}
+            position={boundedIndex}
+            total={orderedVerses.length}
+            showScheduleOutcome={isReview}
+            composite={
+              composite
+                ? {
+                    title: composite.packName ?? scopeLabel,
+                    // The verses the learner actually recites, not the number
+                    // of memory units they were learned in.
+                    verseCount: composite.members.reduce(
+                      (total, member) =>
+                        total + member.endVerse - member.startVerse + 1,
+                      0,
+                    ),
+                    text: compositePassage.text,
+                    segments: compositePassage.segments,
+                    loading: compositePassage.loading,
+                    error: compositePassage.error,
+                    retry: compositePassage.retry,
+                  }
+                : null
+            }
+            onRecord={(tokens, wordCount) => {
+              const verseId = currentVerse.id;
+              const accuracy = verseAttemptAccuracy(tokens);
+              setGradedIds((prev) =>
+                prev.has(verseId) ? prev : new Set(prev).add(verseId),
+              );
+              if (isReview) {
+                const nextAttempt = {
+                  reference: currentVerse.reference,
+                  accuracy,
+                  // One recitation, one row: the pack name, and no
+                  // per-verse practice shortcut to a single member.
+                  label: composite
+                    ? (composite.packName ?? scopeLabel)
+                    : undefined,
+                  offerPractice: composite === null,
+                };
+                // Keep every recitation, including an 80%+ retry. The
+                // summary averages them instead of replacing the first try.
+                setSessionAttempts((prev) => [...prev, nextAttempt]);
               }
-              onLeaveDone={leaveSpentVerse}
-              leaveDoneLabel={nextOpenIndex >= 0 ? "Next" : "Continue"}
-              position={boundedIndex}
-              total={orderedVerses.length}
-              showScheduleOutcome={isReview}
-              composite={
-                composite
-                  ? {
-                      title: composite.packName ?? scopeLabel,
-                      // The verses the learner actually recites, not the number
-                      // of memory units they were learned in.
-                      verseCount: composite.members.reduce(
-                        (total, member) =>
-                          total + member.endVerse - member.startVerse + 1,
-                        0,
-                      ),
-                      text: compositePassage.text,
-                      segments: compositePassage.segments,
-                      loading: compositePassage.loading,
-                      error: compositePassage.error,
-                      retry: compositePassage.retry,
-                    }
-                  : null
+              if (composite) {
+                return recordComposite(
+                  composite.packId,
+                  tokens,
+                  wordCount,
+                  composite.passageStatus,
+                ).then((next) => {
+                  if (!next) return null;
+                  adoptVerseSchedule(verseId, next);
+                  return next;
+                });
               }
-              onRecord={(tokens, wordCount) => {
-                const verseId = currentVerse.id;
-                const accuracy = verseAttemptAccuracy(tokens);
-                setGradedIds((prev) =>
-                  prev.has(verseId) ? prev : new Set(prev).add(verseId),
-                );
-                if (isReview) {
-                  const nextAttempt = {
-                    reference: currentVerse.reference,
-                    accuracy,
-                    // One recitation, one row: the pack name, and no
-                    // per-verse practice shortcut to a single member.
-                    label: composite
-                      ? (composite.packName ?? scopeLabel)
-                      : undefined,
-                    offerPractice: composite === null,
-                  };
-                  // Keep every recitation, including an 80%+ retry. The
-                  // summary averages them instead of replacing the first try.
-                  setSessionAttempts((prev) => [...prev, nextAttempt]);
-                }
-                if (composite) {
-                  return recordComposite(
-                    composite.packId,
-                    tokens,
-                    wordCount,
-                    composite.passageStatus,
-                  ).then((next) => {
-                    if (!next) return null;
-                    adoptVerseSchedule(verseId, next);
-                    return next;
-                  });
-                }
-                return recordWithSeqAdopt(
-                  verseId,
-                  {
-                    reference: currentVerse.reference,
-                    verseRefId: currentVerse.verseRefId,
-                    tokens,
-                    stage: currentProgress.learnStage,
-                    wordCount,
-                  },
-                  (schedule) => {
-                    adoptVerseSchedule(verseId, schedule);
-                  },
-                );
-              }}
-              advancesOnContinue={!currentHasWorkLeft}
-              onContinueAfterResult={() => {
-                // A spent verse (learning lock, or a review that just
-                // rescheduled) should hand off to the next verse that still
-                // has a session left rather than parking on a dead end.
-                if (currentHasWorkLeft) return;
-                advancePastCurrentVerse();
-              }}
-              onKeepWait={async () => {
-                const verseId = currentVerse.id;
-                const attemptedAt = Date.now();
-                const tzOffsetMinutes = new Date(
-                  attemptedAt,
-                ).getTimezoneOffset();
-                const timeZone = getViewerTimeZone();
-                const snapshot = memoryScheduleFromSnapshot(
-                  scheduleSnapshotFrom(currentProgress),
-                );
-                const localHold = snapshot
-                  ? holdReviewingInterval(
-                      snapshot,
-                      attemptedAt,
-                      tzOffsetMinutes,
-                      timeZone,
-                    )
-                  : null;
-                if (localHold) adoptVerseSchedule(verseId, localHold);
-                try {
-                  const next = await persistRetryHold(
+              return recordWithSeqAdopt(
+                verseId,
+                {
+                  reference: currentVerse.reference,
+                  verseRefId: currentVerse.verseRefId,
+                  tokens,
+                  stage: currentProgress.learnStage,
+                  wordCount,
+                },
+                (schedule) => {
+                  adoptVerseSchedule(verseId, schedule);
+                },
+              );
+            }}
+            advancesOnContinue={!currentHasWorkLeft}
+            onContinueAfterResult={() => {
+              // A spent verse (learning lock, or a review that just
+              // rescheduled) should hand off to the next verse that still
+              // has a session left rather than parking on a dead end.
+              if (currentHasWorkLeft) return;
+              advancePastCurrentVerse();
+            }}
+            onKeepWait={async () => {
+              const verseId = currentVerse.id;
+              const attemptedAt = Date.now();
+              const tzOffsetMinutes = new Date(attemptedAt).getTimezoneOffset();
+              const timeZone = getViewerTimeZone();
+              const snapshot = memoryScheduleFromSnapshot(
+                scheduleSnapshotFrom(currentProgress),
+              );
+              const localHold = snapshot
+                ? holdReviewingInterval(
+                    snapshot,
                     attemptedAt,
                     tzOffsetMinutes,
                     timeZone,
-                  );
-                  if (next) adoptVerseSchedule(verseId, next);
-                } catch (error) {
-                  devLog.warn("verseMemory", "acceptRetryHold failed", error);
-                }
-                advancePastCurrentVerse();
-              }}
-            />
-            <AnimatePresence>
-              {isShuffling && (
-                <PracticeShuffleOverlay
-                  key={`practice-shuffle-${shuffleNonce}`}
-                  sessionLabel={sessionLabel}
-                  verses={railVerses}
-                  firstVerse={
-                    railVerses.find((v) => v.id === currentVerse.id) ??
-                    currentVerse
-                  }
-                />
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-        <div className="order-1 space-y-3 md:order-2">
-          {railHeader}
-          <PracticeVerseRail
-            sessionLabel={sessionLabel}
-            verses={railVerses}
-            activeId={currentVerse.id}
-            onSelectVerse={handleSelectVerse}
-            order={order}
-            onOrderChange={handleOrderChange}
-            shuffleNonce={shuffleNonce}
-            currentLearnStage={currentProgress.learnStage}
-            currentStageReps={currentProgress.stageReps}
-            currentStatus={currentProgress.status}
-            currentIntervalDays={currentProgress.intervalDays}
-            currentEase={currentProgress.ease}
-            currentWordCount={currentWordCount}
-            currentLocked={currentLocked}
-            allowReorder={sessionClusterCount(baseVerses) > 1}
+                  )
+                : null;
+              if (localHold) adoptVerseSchedule(verseId, localHold);
+              try {
+                const next = await persistRetryHold(
+                  attemptedAt,
+                  tzOffsetMinutes,
+                  timeZone,
+                );
+                if (next) adoptVerseSchedule(verseId, next);
+              } catch (error) {
+                devLog.warn("verseMemory", "acceptRetryHold failed", error);
+              }
+              advancePastCurrentVerse();
+            }}
           />
+          <AnimatePresence>
+            {isShuffling && (
+              <PracticeShuffleOverlay
+                key={`practice-shuffle-${shuffleNonce}`}
+                sessionLabel={sessionLabel}
+                verses={railVerses}
+                firstVerse={
+                  railVerses.find((v) => v.id === currentVerse.id) ??
+                  currentVerse
+                }
+              />
+            )}
+          </AnimatePresence>
         </div>
-      </div>
+      </SessionColumns>
     </PracticeShell>
   );
 }
