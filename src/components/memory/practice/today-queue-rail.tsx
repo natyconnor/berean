@@ -1,7 +1,6 @@
 import { type JSX, type ReactNode, useId, useState } from "react";
-import { Check, ChevronDown, Shuffle } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -13,7 +12,6 @@ import type {
   TodayQueueState,
   TodaySessionCounts,
 } from "@/lib/memory-today-session";
-import type { PracticeOrder } from "@/lib/practice-order";
 import { cn } from "@/lib/utils";
 
 const headingClassName =
@@ -26,48 +24,6 @@ const STATE_TEXT: Record<TodayQueueState, string> = {
 };
 
 const DONE_FOR_TODAY_LABEL = "Done for today";
-const SHUFFLE_VERSES_LABEL = "Shuffle verses";
-const PUT_VERSES_IN_ORDER_LABEL = "Put verses in order";
-
-function canShuffleGroups(groups: readonly TodayQueueGroup[]): boolean {
-  return groups.some(
-    (group) =>
-      group.kind !== "passage" &&
-      group.items.filter((item) => item.state === "upcoming").length >= 2,
-  );
-}
-
-function QueueShuffleToggle({
-  order,
-  onToggle,
-}: {
-  order: PracticeOrder;
-  onToggle: () => void;
-}): JSX.Element {
-  const shuffled = order === "shuffle";
-  const tooltip = shuffled ? PUT_VERSES_IN_ORDER_LABEL : SHUFFLE_VERSES_LABEL;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={SHUFFLE_VERSES_LABEL}
-          aria-pressed={shuffled}
-          onClick={onToggle}
-          className={cn(
-            "text-muted-foreground hover:text-foreground",
-            shuffled && "bg-accent text-foreground",
-          )}
-        >
-          <Shuffle className="size-4" aria-hidden />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 function StateMark({ state }: { state: TodayQueueState }): JSX.Element {
   if (state === "done") {
@@ -177,33 +133,13 @@ export function TodayQueueRail({
   counts,
   onSelect,
   className,
-  open,
-  onOpenChange,
-  order = "in-order",
-  onToggleOrder,
 }: {
   groups: readonly TodayQueueGroup[];
   counts: TodaySessionCounts;
   onSelect?: (item: TodayQueueItem) => void;
   className?: string;
-  /** Mobile list. Lifted so it survives item changes. */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  order?: PracticeOrder;
-  onToggleOrder?: () => void;
 }): JSX.Element {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const expanded = open ?? uncontrolledOpen;
-  const setExpanded = (next: boolean) => {
-    onOpenChange?.(next);
-    if (open === undefined) setUncontrolledOpen(next);
-  };
-  const selectItem = onSelect
-    ? (item: TodayQueueItem) => {
-        onSelect(item);
-        setExpanded(false);
-      }
-    : undefined;
+  const [open, setOpen] = useState(false);
   const listId = useId();
   const headingId = useId();
 
@@ -212,38 +148,33 @@ export function TodayQueueRail({
       aria-labelledby={headingId}
       className={cn("rounded-xl border bg-card p-4 shadow-sm", className)}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-baseline justify-between gap-2">
         <h2 id={headingId} className={headingClassName}>
           Today&apos;s queue
         </h2>
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] tabular-nums text-muted-foreground">
-            {doneLine(counts)}
-          </span>
-          {onToggleOrder && canShuffleGroups(groups) ? (
-            <QueueShuffleToggle order={order} onToggle={onToggleOrder} />
-          ) : null}
-        </div>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {doneLine(counts)}
+        </span>
       </div>
       <button
         type="button"
         className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground md:hidden"
-        aria-expanded={expanded}
+        aria-expanded={open}
         aria-controls={listId}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => setOpen((value) => !value)}
       >
-        {expanded ? "Hide the queue" : "Show the queue"}
+        {open ? "Hide the queue" : "Show the queue"}
         <ChevronDown
           className={cn(
             "h-3.5 w-3.5 transition-transform",
-            expanded && "rotate-180",
+            open && "rotate-180",
           )}
           aria-hidden
         />
       </button>
       <div
         id={listId}
-        className={cn("mt-3 space-y-4", !expanded && "max-md:hidden")}
+        className={cn("mt-3 space-y-4", !open && "max-md:hidden")}
       >
         {groups.map((group) => (
           <div key={group.kind} className="space-y-2">
@@ -260,7 +191,7 @@ export function TodayQueueRail({
                   data-state={item.state}
                   aria-current={item.state === "current" ? "step" : undefined}
                 >
-                  <QueueItem item={item} onSelect={selectItem} />
+                  <QueueItem item={item} onSelect={onSelect} />
                 </li>
               ))}
               {group.moreCount > 0 ? (
@@ -272,6 +203,76 @@ export function TodayQueueRail({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/**
+ * One-line view of today's parts above a verse board's own rail, so the
+ * whole day stays in sight: "Passages ✓ · Verses to learn (now) · Reviews 5".
+ * With `onSelect`, a part with something left to open jumps there.
+ */
+export function TodayQueueOverview({
+  groups,
+  onSelect,
+  className,
+}: {
+  groups: readonly TodayQueueGroup[];
+  onSelect?: (group: TodayQueueGroup) => void;
+  className?: string;
+}): JSX.Element {
+  const headingId = useId();
+  return (
+    <section
+      aria-labelledby={headingId}
+      className={cn("rounded-xl border bg-card px-4 py-3 shadow-sm", className)}
+    >
+      <h2 id={headingId} className={headingClassName}>
+        Today
+      </h2>
+      <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
+        {groups.map((group) => {
+          const content = (
+            <>
+              <StateMark state={group.state} />
+              {group.heading}
+              {group.state === "current" ? (
+                <span className="text-muted-foreground">(now)</span>
+              ) : group.state === "upcoming" ? (
+                <span className="tabular-nums">{group.total - group.done}</span>
+              ) : (
+                <span className="sr-only">, done</span>
+              )}
+            </>
+          );
+          return (
+            <li
+              key={group.kind}
+              data-state={group.state}
+              aria-current={group.state === "current" ? "step" : undefined}
+              className={cn(
+                "inline-flex items-center gap-1.5 text-xs",
+                group.state === "current"
+                  ? "font-medium text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              {onSelect && group.target !== null ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-sm underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  aria-label={`Go to ${group.heading}`}
+                  onClick={() => onSelect(group)}
+                >
+                  {content}
+                </button>
+              ) : (
+                content
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

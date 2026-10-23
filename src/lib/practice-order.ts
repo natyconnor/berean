@@ -10,47 +10,6 @@
 
 export type PracticeOrder = "in-order" | "shuffle";
 
-export interface PracticeOrderPreference {
-  order: PracticeOrder;
-  seed: number;
-}
-
-const DEFAULT_PREFERENCE: PracticeOrderPreference = {
-  order: "in-order",
-  seed: 0,
-};
-
-let preference: PracticeOrderPreference = { ...DEFAULT_PREFERENCE };
-
-/** Shared Shuffle / In order choice for the queue and the standalone boards. */
-export function readPracticeOrderPreference(): PracticeOrderPreference {
-  return preference;
-}
-
-export function writePracticeOrderPreference(
-  next: PracticeOrderPreference,
-): PracticeOrderPreference {
-  preference = { order: next.order, seed: next.seed };
-  return preference;
-}
-
-export function resetPracticeOrderPreference(): void {
-  preference = { ...DEFAULT_PREFERENCE };
-}
-
-export function togglePracticeOrderPreference(): PracticeOrderPreference {
-  if (preference.order === "shuffle") {
-    return writePracticeOrderPreference({
-      order: "in-order",
-      seed: preference.seed,
-    });
-  }
-  return writePracticeOrderPreference({
-    order: "shuffle",
-    seed: preference.seed + 1,
-  });
-}
-
 /**
  * `mulberry32` — a tiny, fast, deterministic PRNG. Given the same seed it emits
  * the same stream of floats in `[0, 1)`, which is all a seeded shuffle needs.

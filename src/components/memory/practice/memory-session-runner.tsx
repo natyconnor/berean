@@ -6,9 +6,8 @@ import {
   type PracticeSessionResult,
   type PracticeVerse,
 } from "@/components/memory/practice/practice-board";
-import type { MemorySessionKind } from "@/lib/memory-session";
-import type { PracticeOrder } from "@/lib/practice-order";
 import type { SessionProgressSource } from "@/lib/session-progress";
+import type { MemorySessionKind } from "@/lib/memory-session";
 
 interface MemorySessionRunnerProps {
   kind: MemorySessionKind;
@@ -34,17 +33,10 @@ interface MemorySessionRunnerProps {
   progress?: SessionProgressSource;
   /** One part of a longer session: hand the results up instead of a summary. */
   onComplete?: (result: PracticeSessionResult) => void;
-  /** Replaces the Order / Progress / Verses rail, e.g. Today's queue. */
-  aside?: ReactNode;
+  /** Shown above the verse rail, e.g. an overview of the whole session. */
+  railHeader?: ReactNode;
   /** Card id to open first; the first card in order when absent. */
   initialVerseId?: string;
-  /** Open this card when it changes. The board keeps its run state. */
-  selectedVerseId?: string;
-  /** The open card changed, from the rail or Next. */
-  onSelectVerse?: (id: string) => void;
-  /** Shared Shuffle / In order setting, when the parent owns it. */
-  order?: PracticeOrder;
-  orderSeed?: number;
   /** Pick a run back up where it was left. Read once, at mount. */
   runState?: PracticeRunState;
   /** Every change to the run's state, with the results so far. */

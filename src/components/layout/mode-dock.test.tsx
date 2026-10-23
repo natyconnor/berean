@@ -248,27 +248,6 @@ describe("ModeDock route visibility", () => {
     expect(mocks.navigate).toHaveBeenCalled();
   });
 
-  it("reopens the exact today queue item from the last Memory href", async () => {
-    const user = userEvent.setup();
-    const todayHref = "/memory/today?return=%2Fmemory&item=Genesis%7C1%7C1%7C1";
-    mocks.useLocation.mockReturnValue({
-      pathname: "/memory/today",
-      href: todayHref,
-    });
-    const { rerender } = render(<ModeDock />);
-
-    mocks.useLocation.mockReturnValue({
-      pathname: "/passage/Genesis-1",
-      href: "/passage/Genesis-1",
-    });
-    rerender(<ModeDock />);
-
-    const memoryLink = screen.getByRole("link", { name: "Memory" });
-    expect(memoryLink).toHaveAttribute("href", todayHref);
-    await user.click(memoryLink);
-    expect(mocks.navigate).toHaveBeenCalledWith({ href: todayHref });
-  });
-
   it("reopens the last Memory screen when the Memory tab is clicked on a session", async () => {
     const user = userEvent.setup();
     mocks.useLocation.mockReturnValue({

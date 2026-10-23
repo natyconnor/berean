@@ -1,13 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   buildPracticeOrder,
   createSeededRandom,
   nextIndex,
   prevIndex,
-  readPracticeOrderPreference,
-  resetPracticeOrderPreference,
-  togglePracticeOrderPreference,
 } from "./practice-order";
 
 describe("buildPracticeOrder", () => {
@@ -102,30 +99,5 @@ describe("nextIndex / prevIndex", () => {
   it("is safe for empty lists", () => {
     expect(nextIndex(0, 0)).toBe(0);
     expect(prevIndex(0, 0)).toBe(0);
-  });
-});
-
-describe("practice order preference", () => {
-  afterEach(() => {
-    resetPracticeOrderPreference();
-  });
-
-  it("starts in order and toggles to a new shuffle seed", () => {
-    expect(readPracticeOrderPreference()).toEqual({
-      order: "in-order",
-      seed: 0,
-    });
-    expect(togglePracticeOrderPreference()).toEqual({
-      order: "shuffle",
-      seed: 1,
-    });
-    expect(togglePracticeOrderPreference()).toEqual({
-      order: "in-order",
-      seed: 1,
-    });
-    expect(togglePracticeOrderPreference()).toEqual({
-      order: "shuffle",
-      seed: 2,
-    });
   });
 });

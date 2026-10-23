@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   compareSessionOrderItems,
   groupSessionVersesByChapter,
-  orderRemainingSessionItems,
   orderSessionVerses,
   sessionClusterCount,
   sessionOrderRef,
@@ -159,34 +158,5 @@ describe("orderSessionVerses", () => {
       expect(ids).toContain("luke");
     }
     expect(shuffledIds.some((ids) => ids.join() !== inOrder.join())).toBe(true);
-  });
-
-  it("shuffles only unpinned cards and keeps pinned seats", () => {
-    const items = [
-      { id: "gen", reference: ref("Genesis", 1, 1) },
-      { id: "john", reference: ref("John", 3, 16) },
-      { id: "rom", reference: ref("Romans", 8, 28) },
-      { id: "rev", reference: ref("Revelation", 21, 1) },
-    ];
-    const pinned = new Set(["gen", "john"]);
-    expect(
-      orderRemainingSessionItems(items, pinned, "in-order").map(
-        (item) => item.id,
-      ),
-    ).toEqual(["gen", "john", "rom", "rev"]);
-
-    const shuffled = [1, 2, 3, 7, 42].map((seed) =>
-      orderRemainingSessionItems(items, pinned, "shuffle", seed).map(
-        (item) => item.id,
-      ),
-    );
-    for (const ids of shuffled) {
-      expect(ids[0]).toBe("gen");
-      expect(ids[1]).toBe("john");
-      expect(ids.slice(2).sort()).toEqual(["rev", "rom"]);
-    }
-    expect(shuffled.some((ids) => ids.join() !== "gen,john,rom,rev")).toBe(
-      true,
-    );
   });
 });

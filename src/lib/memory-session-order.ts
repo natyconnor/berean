@@ -104,28 +104,3 @@ export function orderSessionVerses<T extends SessionOrderItem>(
     (cluster) => cluster.items,
   );
 }
-
-/**
- * Scripture order, or a shuffle of the unpinned cards. Pinned cards (done or
- * the open card) keep their seats; only the rest move.
- */
-export function orderRemainingSessionItems<
-  T extends SessionOrderItem & { id: string },
->(
-  items: readonly T[],
-  pinnedIds: ReadonlySet<string>,
-  order: PracticeOrder,
-  seed = 0,
-): T[] {
-  const base = sortSessionVerses(items);
-  if (order === "in-order") return base;
-  const remaining = orderSessionVerses(
-    base.filter((item) => !pinnedIds.has(item.id)),
-    "shuffle",
-    seed,
-  );
-  let next = 0;
-  return base.map((item) =>
-    pinnedIds.has(item.id) ? item : (remaining[next++] ?? item),
-  );
-}
