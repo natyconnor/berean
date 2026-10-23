@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const MISSED_SLOT_MS = 1000;
 
 const WELCOME_DESCRIPTION =
-  "Memorize a verse or passage and it lives here. Come back each day: Today shows what's ready, and one button starts it. Hearting a verse just saves it; it never adds work.";
+  "Store up God's word in your heart. Work on your verses a little each day, and slowly but surely you'll learn and master them, whether it's one verse or a whole chapter.";
 
 export function MemoryWelcomeCallout({
   ready,

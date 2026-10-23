@@ -16,7 +16,7 @@ import { TodayPage } from "./today-page";
 const MONDAY_OCT_12_2026 = Date.UTC(2026, 9, 12, 18);
 
 const WELCOME_COPY =
-  "Memorize a verse or passage and it lives here. Come back each day: Today shows what's ready, and one button starts it. Hearting a verse just saves it; it never adds work.";
+  "Store up God's word in your heart. Work on your verses a little each day, and slowly but surely you'll learn and master them, whether it's one verse or a whole chapter.";
 
 const STUDY_HINT_TITLE = "Study is ready";
 
@@ -294,6 +294,9 @@ describe("Today welcome explainer", () => {
     );
     expect(callout).not.toHaveClass("sticky");
     expect(callout).not.toHaveClass("fixed");
+    const viewport = callout.closest("[data-slot=scroll-area-viewport]");
+    expect(viewport).toHaveAttribute("data-contain-inline-size");
+    expect(viewport?.parentElement).toHaveClass("min-w-0");
 
     expect(screen.getByText("Start here")).toBeInTheDocument();
     expect(screen.getAllByText("Welcome to Memory")).toHaveLength(1);

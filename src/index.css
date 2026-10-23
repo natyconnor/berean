@@ -823,6 +823,17 @@
   }
 }
 
+/*
+ * Radix ScrollArea writes display:table;min-width:100% on the viewport
+ * child so it can measure scroll size. That sizes the page to a banner's
+ * max-content width. containInlineSize opts a scroller out.
+ */
+[data-slot="scroll-area-viewport"][data-contain-inline-size] > div {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
 @keyframes heart-burst-spark {
   from {
     opacity: 1;
