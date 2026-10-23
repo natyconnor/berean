@@ -48,6 +48,7 @@ interface MemorySessionRunnerProps {
   ) => void;
   /** Shown when the session had nothing to run in the first place. */
   emptyState: ReactNode;
+  refresh?: boolean;
 }
 
 /**

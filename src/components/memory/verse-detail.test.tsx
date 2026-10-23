@@ -46,6 +46,9 @@ vi.mock("../../../convex/_generated/api", () => ({
     verseMemory: {
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
+      startOver: "verseMemory.startOver",
+      undoStartOver: "verseMemory.undoStartOver",
+      finishRefresh: "verseMemory.finishRefresh",
     },
   },
 }));
@@ -74,6 +77,7 @@ function detail(overrides: Partial<VerseDetailData> = {}): VerseDetailData {
     lapses: 0,
     consecutiveCorrect: 4,
     lastReviewedAt: NOW - 8 * DAY_MS,
+    startedOverAt: undefined,
     attempts: [
       {
         quality: "exact",

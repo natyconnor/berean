@@ -5,38 +5,16 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import {
-  Brain,
-  CircleStop,
-  Dumbbell,
-  GraduationCap,
-  MoreHorizontal,
-  Play,
-} from "lucide-react";
+import { Brain, Dumbbell, GraduationCap, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
-import { useMutation } from "convex/react";
+import { useSearch } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
-import { toast } from "sonner";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useSubmitLock } from "@/hooks/use-submit-lock";
+import { VerseRestartMenu } from "@/components/memory/memory-restart-menu";
 import { formatAccuracyPercent, hoverIndexFromX } from "@/lib/accuracy-trend";
 import {
   learnActionLabel,
@@ -125,6 +103,7 @@ export function VerseDetailPanel({
 }) {
   const now = useLiveNow();
   const frame = useMemoryPanelFrame();
+  const search = useSearch({ strict: false });
   const id = asTableId<"verseRefs">(verseRefId);
   const detail = useQuery(
     api.verseMemory.verseDetail,
@@ -168,9 +147,30 @@ export function VerseDetailPanel({
       subtitle={verseSubtitle(detail)}
       actions={
         detail.inMemory ? (
-          <StopMemorizingMenu
+          <VerseRestartMenu
             verseRefId={id}
             reference={reference}
+            status={detail.status}
+            learnHref={withReturn(
+              memoryVerseSessionHref("learn", detail),
+              frame.returnTo,
+            )}
+            refreshHref={withReturn(
+              `${memoryVerseSessionHref("practice", detail)}&refresh=1`,
+              frame.returnTo,
+            )}
+            fullPageHref={frame.fullPageHref}
+            isDrawer={frame.surface === "drawer"}
+            openStartOver={
+              search !== undefined &&
+              "startOver" in search &&
+              search.startOver === true
+            }
+            initiallyStarted={
+              detail.startedOverAt !== undefined &&
+              (detail.attempts[0] === undefined ||
+                detail.attempts[0].createdAt < detail.startedOverAt)
+            }
             onStopped={frame.exit}
           />
         ) : undefined
@@ -419,6 +419,7 @@ export function VerseDetailBody({
         <AccuracySparkline
           attemptsNewestFirst={detail.attempts}
           timeZone={timeZone}
+          startedOverAt={detail.startedOverAt}
         />
       </section>
     </div>
@@ -464,6 +465,27 @@ type SparkAttempt = Pick<
 const sparkY = (pct: number) =>
   scaleLinear(pct, 0, 100, SPARK_H - SPARK_PAD, SPARK_PAD);
 
+function startedOverMarkerX(
+  chronological: readonly SparkAttempt[],
+  startedOverAt: number,
+): number {
+  const last = chronological.length - 1;
+  if (last <= 0) return SPARK_W - SPARK_PAD;
+  if (chronological.every((attempt) => attempt.createdAt < startedOverAt)) {
+    return SPARK_W - SPARK_PAD;
+  }
+  const index = chronological.findIndex(
+    (attempt) => attempt.createdAt >= startedOverAt,
+  );
+  return scaleLinear(
+    index === -1 ? last : index,
+    0,
+    last,
+    SPARK_PAD,
+    SPARK_W - SPARK_PAD,
+  );
+}
+
 function formatAttemptDay(createdAt: number, timeZone: string): string {
   return new Date(createdAt).toLocaleDateString(undefined, {
     weekday: "short",
@@ -487,9 +509,11 @@ function sparkTooltipTranslateX(x: number): string {
 function AccuracySparkline({
   attemptsNewestFirst,
   timeZone,
+  startedOverAt,
 }: {
   attemptsNewestFirst: readonly SparkAttempt[];
   timeZone: string;
+  startedOverAt?: number;
 }) {
   const [active, setActive] = useState<number | null>(null);
   const [focused, setFocused] = useState(false);
@@ -546,7 +570,7 @@ function AccuracySparkline({
       <svg
         role="img"
         tabIndex={0}
-        aria-label={`Accuracy across the last ${points.length} tries. Use the arrow keys to step through them.`}
+        aria-label={`Accuracy across the last ${points.length} tries. Use the arrow keys to step through them.${startedOverAt ? " Started over is marked on the chart." : ""}`}
         aria-describedby={activeCopy ? tooltipId : undefined}
         viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
         preserveAspectRatio="none"
@@ -577,6 +601,18 @@ function AccuracySparkline({
             vectorEffect="non-scaling-stroke"
           />
         ))}
+        {startedOverAt !== undefined ? (
+          <line
+            x1={startedOverMarkerX(chronological, startedOverAt)}
+            y1={SPARK_PAD}
+            x2={startedOverMarkerX(chronological, startedOverAt)}
+            y2={SPARK_H - SPARK_PAD}
+            stroke="var(--chart-1)"
+            strokeWidth={1.5}
+            strokeDasharray="3 3"
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
         <path
           d={linePath(points)}
           fill="none"
@@ -630,85 +666,5 @@ function AccuracySparkline({
           : ""}
       </p>
     </div>
-  );
-}
-
-function StopMemorizingMenu({
-  verseRefId,
-  reference,
-  onStopped,
-}: {
-  verseRefId: Id<"verseRefs">;
-  reference: string;
-  onStopped: () => void;
-}) {
-  const stopMemorizing = useMutation(api.verseMemory.stopMemorizing);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const { submit, pending } = useSubmitLock();
-
-  const handleStop = () =>
-    submit(async () => {
-      try {
-        await stopMemorizing({ verseRefId, now: Date.now() });
-        setConfirmOpen(false);
-        toast.success(`Stopped memorizing ${reference}.`);
-        onStopped();
-      } catch {
-        toast.error("Couldn't stop memorizing. Please try again.");
-      }
-    });
-
-  return (
-    <>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 text-muted-foreground sm:size-8"
-            aria-label="More actions"
-          >
-            <MoreHorizontal aria-hidden />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setConfirmOpen(true)}
-          >
-            <CircleStop aria-hidden />
-            Stop memorizing
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Stop memorizing {reference}?</DialogTitle>
-            <DialogDescription>
-              Your progress is saved if you start again.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Keep
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              loading={pending}
-              onClick={handleStop}
-            >
-              Stop memorizing
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }

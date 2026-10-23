@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   BookOpen,
   CircleStop,
   Dumbbell,
   GraduationCap,
   Heart,
-  MoreHorizontal,
   Pencil,
   Play,
   Plus,
@@ -25,22 +24,7 @@ import { MemoryPanelFrame } from "@/components/memory/drawer/memory-panel-frame"
 import { InternalLink } from "@/components/memory/internal-link";
 import { FRONTIER_LOCKED_COPY } from "@/components/memory/passage/passage-session-model";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -51,12 +35,14 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { useStartPassage } from "@/hooks/use-start-passage";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { asTableId } from "@/lib/convex-id";
+import { MemoryRestartMenu } from "@/components/memory/memory-restart-menu";
 import {
   EXTRA_PRACTICE_TOOLTIP,
   PRACTICE_ANYTIME_LABEL,
   learnActionLabel,
   todayStepParts,
 } from "@/lib/memory-copy";
+import { isLearningPhase, isReviewPhase } from "@/lib/memory-scheduler";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
 import { spanDisplayTitle } from "@/lib/memorize-target";
@@ -90,6 +76,7 @@ import {
   type ReviewTogetherOption,
 } from "@/lib/pack-detail-model";
 import { moveItem, orderByKeys } from "@/lib/pack-order";
+import { MINUTES_PER_LEARNING_VERSE } from "@/lib/memorize-plan";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
 import { cn } from "@/lib/utils";
 import {
@@ -220,6 +207,7 @@ function PackDetailContent({
   tzOffsetMinutes: number;
 }) {
   const frame = useMemoryPanelFrame();
+  const search = useSearch({ strict: false });
   const timeZone = getViewerTimeZone() ?? "UTC";
   const detailPack = toDetailPack(pack);
   const goal = packDetailGoal({
@@ -280,11 +268,24 @@ function PackDetailContent({
       actions={
         <PackDetailMenu
           pack={pack}
+          passage={passage}
           isPassage={passage !== null}
           reviewTogether={reviewTogetherOption(detailPack, passage, members)}
           members={members}
           now={now}
           reciteHref={sessionHref("review")}
+          learnHref={sessionHref("learn")}
+          refreshHref={withReturn(
+            `${memoryPackSessionHref("practice", pack._id)}?refresh=1`,
+            frame.returnTo,
+          )}
+          fullPageHref={frame.fullPageHref}
+          isDrawer={frame.surface === "drawer"}
+          openStartOver={
+            search !== undefined &&
+            "startOver" in search &&
+            search.startOver === true
+          }
           onRemoved={frame.exit}
         />
       }
@@ -1161,26 +1162,51 @@ function PassageChapterRows({
 
 function PackDetailMenu({
   pack,
+  passage,
   isPassage,
   reviewTogether,
   members,
   now,
   reciteHref,
+  learnHref,
+  refreshHref,
+  fullPageHref,
+  isDrawer,
+  openStartOver,
   onRemoved,
 }: {
   pack: Pack;
+  passage: Passage | null;
   isPassage: boolean;
   reviewTogether: ReviewTogetherOption | null;
   members: Member[];
   now: number;
   reciteHref: string;
+  learnHref: string;
+  refreshHref: string;
+  fullPageHref?: string;
+  isDrawer: boolean;
+  openStartOver?: boolean;
   onRemoved: () => void;
 }) {
   const navigate = useNavigate();
   const stopMemorizing = useMutation(api.packs.stopMemorizing);
   const deletePack = useMutation(api.packs.remove);
   const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const startOverPassage = useMutation(api.passageMemory.startOver);
+  const undoPassage = useMutation(api.passageMemory.undoStartOver);
+  const finishPassageRefresh = useMutation(api.passageMemory.finishRefresh);
+  const startOverMany = useMutation(api.verseMemory.startOverMany);
+  const undoStartOverMany = useMutation(api.verseMemory.undoStartOverMany);
+  const finishVerseRefresh = useMutation(api.verseMemory.finishRefresh);
+  const shakyPieces = useQuery(
+    api.passageMemory.shakyPieces,
+    isPassage ? { packId: pack._id } : "skip",
+  );
+  const shakyVerses = useQuery(
+    api.verseMemory.shakyInPack,
+    isPassage ? "skip" : { packId: pack._id },
+  );
   const [togetherOpen, setTogetherOpen] = useState(false);
   const [togetherError, setTogetherError] = useState<string | null>(null);
   const removeLock = useSubmitLock();
@@ -1215,7 +1241,6 @@ function PackDetailMenu({
         } else {
           await deletePack({ id: pack._id });
         }
-        setConfirmOpen(false);
         toast.success(removal.done);
         onRemoved();
       } catch {
@@ -1245,82 +1270,118 @@ function PackDetailMenu({
       }
     });
 
+  const shakyLabels = isPassage
+    ? (passage?.pieces ?? [])
+        .filter((piece) => (shakyPieces ?? []).includes(piece.index))
+        .map((piece) => String(piece.startVerse))
+    : (shakyVerses ?? []).map((verse) => verse.label);
+  const reviewingMembers = members.filter((member) =>
+    isReviewPhase(member.status),
+  );
+  const learningOnly =
+    reviewingMembers.length === 0 &&
+    (passage?.status === "building" ||
+      members.some((member) => isLearningPhase(member.status)));
+  const tzOffsetMinutes = new Date(now).getTimezoneOffset();
+
   return (
     <>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 text-muted-foreground sm:size-8"
-            aria-label="More actions"
-          >
-            <MoreHorizontal aria-hidden />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="max-w-72">
-          {reviewTogether ? (
-            <>
-              <DropdownMenuCheckboxItem
-                checked={reviewTogether.checked}
-                disabled={reviewTogether.disabled || togetherLock.pending}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setTogetherError(null);
-                    setTogetherOpen(true);
-                  } else {
-                    disableTogether();
-                  }
-                }}
-              >
-                <span className="flex flex-col">
-                  Review together as one recitation
-                  {reviewTogether.disabled ? (
-                    <span className="text-xs text-muted-foreground">
-                      Once every verse is memorized
-                    </span>
-                  ) : null}
-                </span>
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-            </>
-          ) : null}
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setConfirmOpen(true)}
-          >
-            {removal.icon}
-            {removal.label}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{removal.title}</DialogTitle>
-            <DialogDescription>{removal.description}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
+      <MemoryRestartMenu
+        name={pack.name}
+        fullPageHref={fullPageHref}
+        isDrawer={isDrawer}
+        refreshHref={learningOnly ? learnHref : refreshHref}
+        learnHref={learnHref}
+        openStartOver={openStartOver}
+        shakyLabels={shakyLabels}
+        wholeLabel={isPassage ? "passage" : "pack"}
+        learnMinutes={
+          (isPassage ? (passage?.pieces.length ?? 1) : members.length) *
+          MINUTES_PER_LEARNING_VERSE
+        }
+        onRefresh={async () => {
+          if (!learningOnly) return;
+          if (isPassage) {
+            await finishPassageRefresh({
+              packId: pack._id,
+              now: Date.now(),
+              tzOffsetMinutes,
+            });
+            return;
+          }
+          for (const member of members) {
+            if (!isLearningPhase(member.status)) continue;
+            await finishVerseRefresh({
+              verseRefId: member.verseRefId,
+              now: Date.now(),
+              tzOffsetMinutes,
+            });
+          }
+        }}
+        onStartOver={async (choice) => {
+          if (isPassage) {
+            const pieceIndexes =
+              choice === "shaky" ? (shakyPieces ?? []).slice() : undefined;
+            await startOverPassage({
+              packId: pack._id,
+              now: Date.now(),
+              ...(pieceIndexes ? { pieceIndexes } : {}),
+            });
+            return;
+          }
+          const verseRefIds =
+            choice === "shaky"
+              ? (shakyVerses ?? []).map((verse) => verse.verseRefId)
+              : members.map((member) => member.verseRefId);
+          await startOverMany({ verseRefIds, now: Date.now() });
+        }}
+        onUndo={async () => {
+          if (isPassage) {
+            await undoPassage({
+              packId: pack._id,
+              now: Date.now(),
+              tzOffsetMinutes,
+            });
+            return;
+          }
+          await undoStartOverMany({
+            verseRefIds: members.map((member) => member.verseRefId),
+            now: Date.now(),
+          });
+        }}
+        extraItems={
+          reviewTogether ? (
+            <DropdownMenuCheckboxItem
+              checked={reviewTogether.checked}
+              disabled={reviewTogether.disabled || togetherLock.pending}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  setTogetherError(null);
+                  setTogetherOpen(true);
+                } else {
+                  disableTogether();
+                }
+              }}
             >
-              Keep
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              loading={removeLock.pending}
-              onClick={handleRemove}
-            >
-              {removal.label}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <span className="flex flex-col">
+                Review together as one recitation
+                {reviewTogether.disabled ? (
+                  <span className="text-xs text-muted-foreground">
+                    Once every verse is memorized
+                  </span>
+                ) : null}
+              </span>
+            </DropdownMenuCheckboxItem>
+          ) : null
+        }
+        stop={{
+          label: removal.label,
+          title: removal.title,
+          description: removal.description,
+          icon: removal.icon,
+          onConfirm: handleRemove,
+        }}
+      />
 
       {reviewTogether ? (
         <EnableUnifiedReviewDialog

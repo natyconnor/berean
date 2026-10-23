@@ -32,6 +32,8 @@ interface RecordVerseAttemptInput {
   durationMs?: number;
   /** Word count of the verse text; forwarded to the scheduler's length curve. */
   wordCount?: number;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
 }
 
 interface PendingAttempt {
@@ -116,6 +118,8 @@ export function useRecordVerseAttempt(
         durationMs: input.durationMs,
         now,
         wordCount: input.wordCount,
+        hint: input.hint,
+        holdSchedule: input.holdSchedule,
         // Lets the scheduler land a learning soft lock on the start of the
         // learner's next local day instead of a rolling 24 hours.
         tzOffsetMinutes: new Date(now).getTimezoneOffset(),

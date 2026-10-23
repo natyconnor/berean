@@ -7,8 +7,9 @@ import {
   useState,
 } from "react";
 import { CheckCircle2, Info, Loader2, X } from "lucide-react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 
+import { PassageRefreshSitting } from "@/components/memory/passage/passage-refresh-sitting";
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
 import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
 import {
@@ -144,9 +145,30 @@ interface PassageSessionProps {
   progress?: SessionProgress | ((todayShare: number) => SessionProgress);
   /** A side column beside the passage, e.g. the rest of today's queue. */
   aside?: ReactNode;
+  /** Menu Refresh sitting for a reviewing passage. */
+  refresh?: boolean;
 }
 
-export function PassageSession({
+export function PassageSession(props: PassageSessionProps): JSX.Element {
+  if (
+    props.refresh &&
+    (props.view.status === "reviewing" || props.view.status === "mastered")
+  ) {
+    return (
+      <PassageRefreshSitting
+        packId={props.packId}
+        view={props.view}
+        packName={props.packName}
+        onExit={props.onExit}
+        backLabel={props.backLabel}
+        exitHref={props.exitHref}
+      />
+    );
+  }
+  return <PassageSessionRun {...props} />;
+}
+
+function PassageSessionRun({
   packId,
   view,
   packName,
@@ -162,6 +184,10 @@ export function PassageSession({
   const timeZone = getViewerTimeZone();
   const introduceNext = useMutation(api.passageMemory.introduceNext);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
+  const freshness = useQuery(api.passageMemory.reviewFreshness, {
+    packId,
+    now,
+  });
 
   const [status, setStatus] = useState(view.status);
   const isMaintenance = status === "reviewing" || status === "mastered";
@@ -273,6 +299,8 @@ export function PassageSession({
     next: PassageSessionState,
     quality: VerseAttemptQuality | undefined,
     durationMs?: number,
+    hint?: "first-letters",
+    holdSchedule?: boolean,
   ): Promise<boolean> {
     const pending = next.pendingMutation;
     if (!pending) {
@@ -317,6 +345,8 @@ export function PassageSession({
           pending.kind === "frontier"
             ? (next.pieceWordCounts?.[pending.pieceIndex ?? 0] ?? undefined)
             : undefined,
+        hint,
+        holdSchedule,
       });
       const remaining = remainingIntroduces({
         addsOnDay: nextView.addsOnDay,
@@ -378,6 +408,8 @@ export function PassageSession({
         },
         result.quality,
         result.durationMs,
+        result.hint,
+        result.holdSchedule,
       );
       if (!saved) return false;
       if (result.via === "typed") {
@@ -393,7 +425,13 @@ export function PassageSession({
       tokens: result.tokens,
       now: Date.now(),
     });
-    const saved = await persist(next, result.quality, result.durationMs);
+    const saved = await persist(
+      next,
+      result.quality,
+      result.durationMs,
+      result.hint,
+      result.holdSchedule,
+    );
     if (!saved) return false;
     if (result.via === "typed" && liveRecall) {
       // Freeze hint/prompt chrome on the pre-check snapshot, but adopt the
@@ -683,6 +721,11 @@ export function PassageSession({
             readContinue={recall.readContinue}
             onSubmit={handleGraded}
             onContinueAfterResult={handleContinueAfterResult}
+            offerRefresher={
+              freshness?.stale === true &&
+              (recall.mode === "review" ||
+                (recall.mode === "frontier" && recall.learnStage === 3))
+            }
           />
         </div>
       ) : null}

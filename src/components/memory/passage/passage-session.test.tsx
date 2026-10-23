@@ -51,6 +51,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
+  useQuery: () => ({ stale: false }),
   useAction: (name: string) =>
     name === "esv.getChaptersBatch" ? fetchChaptersBatchMock : vi.fn(),
 }));
@@ -65,6 +66,8 @@ vi.mock("../../../../convex/_generated/api", () => ({
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
       markCelebrated: "passageMemory.markCelebrated",
+      reviewFreshness: "passageMemory.reviewFreshness",
+      finishRefresh: "passageMemory.finishRefresh",
     },
   },
 }));
