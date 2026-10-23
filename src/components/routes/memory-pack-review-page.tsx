@@ -106,6 +106,7 @@ export function MemoryPackReviewPage() {
         packName={pack.name}
         onExit={onExit}
         backLabel={backLabel}
+        exitHref={exit.href}
       />
     );
   }
@@ -130,6 +131,7 @@ export function MemoryPackReviewPage() {
       scopeLabel={pack.name}
       onExit={onExit}
       backLabel={backLabel}
+      exitHref={exit.href}
       returnTo={returnTo}
       remainingDue={remainingDue}
       onContinueSession={() => setSessionEpoch((value) => value + 1)}

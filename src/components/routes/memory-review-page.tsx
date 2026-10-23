@@ -50,6 +50,7 @@ function MemoryReviewSessionPage({
       scopeLabel={scopeLabel}
       onExit={onExit}
       backLabel={backLabel}
+      exitHref={exitHref}
       returnTo={returnTo}
       remainingDue={remainingDue}
       onContinueSession={onContinueSession}

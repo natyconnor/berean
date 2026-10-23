@@ -99,6 +99,7 @@ export function MemoryAllSessionPage({
       scopeLabel={scopeLabel}
       onExit={onExit}
       backLabel={backLabel}
+      exitHref={exit.href}
       returnTo={returnTo}
       hasMemorized={hasMemorized}
       emptyState={

@@ -218,6 +218,8 @@ interface PracticeBoardProps {
   onExit: () => void;
   /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
+  /** Where Back goes. Home shows when this is not `/memory`. */
+  exitHref?: string;
   /** The end-of-session card's primary action. */
   exitLabel?: string;
   /** Where this session returns; Extra practice and per-verse Practice return there too. */
@@ -391,6 +393,7 @@ export function PracticeBoard({
   scopeLabel,
   onExit,
   backLabel,
+  exitHref,
   exitLabel = "Done",
   returnTo,
   hasMemorized = false,
@@ -830,6 +833,7 @@ export function PracticeBoard({
     scopeLabel,
     onExit,
     backLabel,
+    exitHref,
     progress: resolveSessionProgress(progress, {
       done: railVerses.filter((verse) => verse.locked).length,
       total: railVerses.length,
@@ -1853,6 +1857,7 @@ function PracticeShell({
   scopeLabel,
   onExit,
   backLabel = "Back to Memory",
+  exitHref,
   progress,
   children,
 }: {
@@ -1860,6 +1865,7 @@ function PracticeShell({
   scopeLabel: string;
   onExit: () => void;
   backLabel?: string;
+  exitHref?: string;
   progress?: SessionProgress;
   children: ReactNode;
 }): JSX.Element {
@@ -1867,7 +1873,11 @@ function PracticeShell({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <SessionBackButton onExit={onExit} label={backLabel} />
+          <SessionBackButton
+            onExit={onExit}
+            label={backLabel}
+            exitHref={exitHref}
+          />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
             <span className="shrink-0 font-semibold">{sessionLabel}</span>
             <span aria-hidden className="text-muted-foreground">

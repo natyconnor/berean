@@ -193,6 +193,7 @@ export function MemoryPackSessionPage({
             : undefined
         }
         backLabel={backLabel}
+        exitHref={exit.href}
       />
     );
   }
@@ -211,6 +212,7 @@ export function MemoryPackSessionPage({
       verses={sessionVerses}
       scopeLabel={pack.name}
       backLabel={backLabel}
+      exitHref={exit.href}
       returnTo={returnTo}
       hasMemorized={hasMemorized}
       onExit={onExit}

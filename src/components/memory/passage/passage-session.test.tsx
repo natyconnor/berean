@@ -45,6 +45,10 @@ function mutationMock(name: string) {
   return created;
 }
 
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
+}));
+
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
   useAction: (name: string) =>
@@ -226,6 +230,40 @@ describe("PassageSession", () => {
 
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBeNull();
+  });
+
+  it("shows Go to Memory when Back does not go to Memory", () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PassageSession
+          packId={PACK_ID}
+          view={practicedDueView()}
+          packName="Psalm 23"
+          onExit={() => {}}
+          backLabel="Back to John 3"
+          exitHref="/passage/John-3"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Back to John 3" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Memory" })).toHaveAttribute(
+      "href",
+      "/memory",
+    );
+  });
+
+  it("hides Go to Memory when Back already goes to Memory", () => {
+    renderSession(practicedDueView());
+
+    expect(
+      screen.getByRole("button", { name: "Back to Memory" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Go to Memory" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the warm-up after leaving without Back and opening on a later page load", async () => {

@@ -135,6 +135,8 @@ interface PassageSessionProps {
   onDoneForToday?: () => void;
   /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
+  /** Where Back goes. Home shows when this is not `/memory`. */
+  exitHref?: string;
   /**
    * Header text and overall bar when this passage is one part of a session.
    * A function gets the share of today's new verses added so far.
@@ -151,6 +153,7 @@ export function PassageSession({
   onExit,
   onDoneForToday,
   backLabel = "Back to Memory",
+  exitHref,
   progress,
   aside,
 }: PassageSessionProps): JSX.Element {
@@ -525,6 +528,7 @@ export function PassageSession({
       packName={packName}
       onExit={leaveSession}
       backLabel={backLabel}
+      exitHref={exitHref}
       progress={headerProgress}
       persistError={persistError}
       aside={aside}
@@ -1115,6 +1119,7 @@ function PassageSessionShell({
   packName,
   onExit,
   backLabel,
+  exitHref,
   progress,
   persistError,
   aside,
@@ -1124,6 +1129,7 @@ function PassageSessionShell({
   packName: string;
   onExit: () => void;
   backLabel: string;
+  exitHref?: string;
   progress?: SessionProgress;
   persistError: string | null;
   aside?: ReactNode;
@@ -1133,7 +1139,11 @@ function PassageSessionShell({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <SessionBackButton onExit={onExit} label={backLabel} />
+          <SessionBackButton
+            onExit={onExit}
+            label={backLabel}
+            exitHref={exitHref}
+          />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
             <span
               className="shrink-0 font-semibold"

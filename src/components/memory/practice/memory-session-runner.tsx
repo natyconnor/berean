@@ -17,6 +17,8 @@ interface MemorySessionRunnerProps {
   onExit: () => void;
   /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
+  /** Where Back goes. Home shows when this is not `/memory`. */
+  exitHref?: string;
   /** The summary's primary action. */
   exitLabel?: string;
   /** Where the session returns; Extra practice returns there too. */

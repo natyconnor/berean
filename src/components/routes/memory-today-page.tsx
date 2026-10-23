@@ -85,6 +85,7 @@ import { verseRefKey } from "../../../shared/verse-ref-key";
 interface TodayChrome {
   onExit: () => void;
   backLabel: string;
+  exitHref: string;
   returnTo: string | undefined;
   /** Header text after the title: what this session covers. */
   subtitle: string;
@@ -119,6 +120,7 @@ export function MemoryTodayPage(): JSX.Element {
   const chrome: TodayChrome = {
     onExit: exit.go,
     backLabel: exit.label,
+    exitHref: exit.href,
     returnTo,
     subtitle: SESSION_SUBTITLES[only ?? "all"],
   };
@@ -646,6 +648,7 @@ function TodaySession({
       scopeLabel={data.title}
       onExit={chrome.onExit}
       backLabel={chrome.backLabel}
+      exitHref={chrome.exitHref}
       returnTo={chrome.returnTo}
       hasMemorized={data.hasMemorized}
       progress={(run) =>
@@ -715,6 +718,7 @@ function TodayPassageSegment({
       onExit={chrome.onExit}
       onDoneForToday={onDone}
       backLabel={chrome.backLabel}
+      exitHref={chrome.exitHref}
       progress={progress}
       aside={aside}
     />

@@ -1425,3 +1425,62 @@ describe("PracticeBoard spent reviews", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("PracticeBoard session Home", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+  });
+
+  it("shows Go to Memory when Back does not go to Memory", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[compositeVerse]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          backLabel="Back to John 3"
+          exitHref="/passage/John-3"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Back to John 3" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Memory" })).toHaveAttribute(
+      "href",
+      "/memory",
+    );
+  });
+
+  it("hides Go to Memory when Back already goes to Memory", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[compositeVerse]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          backLabel="Back to Memory"
+          exitHref="/memory"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Back to Memory" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Go to Memory" }),
+    ).not.toBeInTheDocument();
+  });
+});
