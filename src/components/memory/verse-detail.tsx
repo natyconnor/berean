@@ -166,11 +166,6 @@ export function VerseDetailPanel({
               "startOver" in search &&
               search.startOver === true
             }
-            initiallyStarted={
-              detail.startedOverAt !== undefined &&
-              (detail.attempts[0] === undefined ||
-                detail.attempts[0].createdAt < detail.startedOverAt)
-            }
             onStopped={frame.exit}
           />
         ) : undefined

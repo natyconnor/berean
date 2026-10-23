@@ -7,6 +7,7 @@ import {
 } from "@/components/memory/passage/passage-recall-card";
 import { SessionBackButton } from "@/components/memory/session-back-button";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
+import { REFRESH_FINISH_ERROR } from "@/lib/memory-copy";
 import { LEARN_PROGRESS_ACCURACY } from "@/lib/memory-scheduler";
 import { maskVerseText } from "@/lib/verse-hint";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
@@ -32,6 +33,8 @@ export function PassageRefreshSitting({
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [lastAccuracy, setLastAccuracy] = useState(0);
+  const [startedAt] = useState(() => Date.now());
+  const [finishError, setFinishError] = useState<string | null>(null);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
   const finishRefresh = useMutation(api.passageMemory.finishRefresh);
   const members = view.pieces.map((piece) => ({
@@ -118,11 +121,22 @@ export function PassageRefreshSitting({
             void finishRefresh({
               packId,
               now,
+              sittingStartedAt: startedAt,
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
               timeZone: getViewerTimeZone(),
-            }).then(() => onExit());
+            })
+              .then(() => {
+                setFinishError(null);
+                onExit();
+              })
+              .catch(() => {
+                setFinishError(REFRESH_FINISH_ERROR);
+              });
           }}
         />
+        {finishError ? (
+          <p className="mt-3 text-xs text-destructive">{finishError}</p>
+        ) : null}
       </div>
     </div>
   );

@@ -36,7 +36,11 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
-import { SESSION_COMPLETE_FOOTER, stepShortLabel } from "@/lib/memory-copy";
+import {
+  REFRESH_FINISH_ERROR,
+  SESSION_COMPLETE_FOOTER,
+  stepShortLabel,
+} from "@/lib/memory-copy";
 import {
   EnterToCheckHint,
   FirstLettersPanel,
@@ -462,6 +466,7 @@ export function PracticeBoard({
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);
   const finishRefresh = useMutation(api.verseMemory.finishRefresh);
+  const [refreshStartedAt] = useState(() => Date.now());
   const acceptVerseRetryHold = useMutation(api.verseMemory.acceptRetryHold);
   const acceptUnifiedRetryHold = useMutation(api.packs.acceptRetryHold);
   const acceptPassageRetryHold = useMutation(api.passageMemory.acceptRetryHold);
@@ -1079,6 +1084,7 @@ export function PracticeBoard({
                 const next = await finishRefresh({
                   verseRefId: currentVerse.verseRefId,
                   now: attemptedAt,
+                  sittingStartedAt: refreshStartedAt,
                   tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
                   timeZone: getViewerTimeZone(),
                 });
@@ -1280,6 +1286,7 @@ function PracticeCard({
   const [rescue, setRescue] = useState<"off" | "letters" | "memory">("off");
   const [rescueHold, setRescueHold] = useState(false);
   const [refreshStep, setRefreshStep] = useState<1 | 2 | 3>(1);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   // Serializes attempt submission for this card: the synchronous in-flight lock
@@ -1346,7 +1353,8 @@ function PracticeCard({
   // Hold the graded result until the learner continues so the feedback they
   // just earned isn't swapped out from under them.
   const reviewed = reviewedOutcome !== undefined;
-  const showReviewed = reviewed && !checked;
+  const refresherOpen = rescue !== "off" || refreshSitting;
+  const showReviewed = reviewed && !checked && !refresherOpen;
   const showLocked = locked && !checked && !showReviewed;
   const showDone = showLocked || showReviewed;
 
@@ -1368,13 +1376,17 @@ function PracticeCard({
 
   const canCheckAnswer =
     !locked &&
-    !reviewed &&
+    (!reviewed || refresherOpen) &&
     !loading &&
     !error &&
     typedAnswer.trim().length > 0 &&
     versePlainText !== "";
   const canContinueRead =
-    !locked && !reviewed && !loading && !error && versePlainText !== "";
+    !locked &&
+    (!reviewed || refresherOpen) &&
+    !loading &&
+    !error &&
+    versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
@@ -1494,9 +1506,14 @@ function PracticeCard({
     if (refreshSitting && madeRefreshProgress && refreshStep === 3) {
       setSubmitKind("keep");
       submit(async () => {
-        await onRefreshFinished?.();
-        resetCard();
-        onContinueAfterResult?.();
+        try {
+          await onRefreshFinished?.();
+          setRefreshError(null);
+          resetCard();
+          onContinueAfterResult?.();
+        } catch {
+          setRefreshError(REFRESH_FINISH_ERROR);
+        }
       });
       return;
     }
@@ -1814,6 +1831,11 @@ function PracticeCard({
               <span className="hidden sm:block" />
             )}
             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+              {refreshError ? (
+                <p className="w-full text-xs text-destructive sm:mr-auto sm:w-auto">
+                  {refreshError}
+                </p>
+              ) : null}
               {!showDone && !checked && !isReadPrime ? (
                 <PreviewFillExactAnswerButton
                   versePlainText={versePlainText}

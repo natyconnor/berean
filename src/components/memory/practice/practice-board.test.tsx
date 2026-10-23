@@ -1600,6 +1600,56 @@ describe("PracticeBoard refresher", () => {
     expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
   });
 
+  it("runs First letters then From memory after Need a refresher on a miss", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+    expect(screen.getByText("First letters")).toBeInTheDocument();
+
+    const hinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(hinted);
+    await userEvent.paste(PASSAGE_ONE);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Check answer/ }),
+      ).toBeEnabled();
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(
+      await screen.findByText(/Review\s*·\s*From memory/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+  });
+
   it("holds the schedule through a Refresh sitting and applies the rung at the end", async () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
     mutationMock("verseMemory.finishRefresh").mockResolvedValue({

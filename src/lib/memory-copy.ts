@@ -163,6 +163,7 @@ export const UNDO_LABEL = "Undo";
 export const START_OVER_ERROR = "Couldn't start over. Try again.";
 export const UNDO_START_OVER_ERROR = "Couldn't undo. Try again.";
 export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
+export const REFRESH_FINISH_ERROR = "Couldn't finish the refresher. Try again.";
 export const START_OVER_CONFIRM_BODY =
   "You'll learn it again from the beginning. Your notes and hearts stay.";
 export const WHOLE_PASSAGE_OPTION = "The whole passage";

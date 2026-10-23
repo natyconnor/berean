@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Check,
@@ -85,7 +85,6 @@ export function MemoryRestartMenu({
   shakyLabels = [],
   wholeLabel,
   openStartOver = false,
-  initiallyStarted = false,
   extraItems,
   learnMinutes = MINUTES_PER_LEARNING_VERSE,
 }: {
@@ -101,7 +100,6 @@ export function MemoryRestartMenu({
   shakyLabels?: readonly string[];
   wholeLabel?: "passage" | "pack";
   openStartOver?: boolean;
-  initiallyStarted?: boolean;
   extraItems?: ReactNode;
   learnMinutes?: number;
 }) {
@@ -112,8 +110,9 @@ export function MemoryRestartMenu({
   const [choice, setChoice] = useState<ShakyChoice>(
     shakyLabels.length > 0 ? "shaky" : "whole",
   );
-  const [started, setStarted] = useState(initiallyStarted);
+  const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const openingConfirm = useRef(false);
   const startLock = useSubmitLock();
   const refreshLock = useSubmitLock();
   const undoLock = useSubmitLock();
@@ -141,6 +140,7 @@ export function MemoryRestartMenu({
       return;
     }
     setError(null);
+    openingConfirm.current = true;
     setConfirmOpen(true);
   };
 
@@ -173,34 +173,31 @@ export function MemoryRestartMenu({
       ? Math.max(1, shakyLabels.length) * MINUTES_PER_LEARNING_VERSE
       : learnMinutes;
 
-  if (started) {
-    return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
-        <Check className="size-4 text-emerald-700" aria-hidden />
-        <span className="font-semibold">{STARTED_OVER_LABEL}</span>
-        <Button asChild size="sm" className="h-7 px-2 text-xs">
-          <a href={learnHref}>
-            <GraduationCap className="size-3.5" aria-hidden />
-            Learn · {startedLearnMinutes} min
-          </a>
-        </Button>
-        <button
-          type="button"
-          className="text-[12.5px] font-medium text-primary"
-          onClick={handleUndo}
-          disabled={undoLock.pending}
-        >
-          {UNDO_LABEL}
-        </button>
-        {error ? (
-          <p className="w-full text-xs text-destructive">{error}</p>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
-    <>
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {started ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
+          <Check className="size-4 text-emerald-700" aria-hidden />
+          <span className="font-semibold">{STARTED_OVER_LABEL}</span>
+          <Button asChild size="sm" className="h-7 px-2 text-xs">
+            <a href={learnHref}>
+              <GraduationCap className="size-3.5" aria-hidden />
+              Learn · {startedLearnMinutes} min
+            </a>
+          </Button>
+          <button
+            type="button"
+            className="text-[12.5px] font-medium text-primary"
+            onClick={handleUndo}
+            disabled={undoLock.pending}
+          >
+            {UNDO_LABEL}
+          </button>
+          {error ? (
+            <p className="w-full text-xs text-destructive">{error}</p>
+          ) : null}
+        </div>
+      ) : null}
       <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverAnchor asChild>
@@ -219,6 +216,12 @@ export function MemoryRestartMenu({
           <DropdownMenuContent
             align="end"
             className="max-w-[min(18rem,calc(100vw-32px))]"
+            onCloseAutoFocus={(event) => {
+              if (openingConfirm.current) {
+                event.preventDefault();
+                openingConfirm.current = false;
+              }
+            }}
           >
             <DropdownMenuItem
               disabled={refreshLock.pending || startLock.pending}
@@ -264,7 +267,22 @@ export function MemoryRestartMenu({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <PopoverContent align="end" className="w-[min(21rem,calc(100vw-32px))]">
+        <PopoverContent
+          align="end"
+          className="w-[min(21rem,calc(100vw-32px))]"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+          }}
+          onFocusOutside={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest('[aria-label="More actions"]')
+            ) {
+              event.preventDefault();
+            }
+          }}
+        >
           <h3 className="text-[15px] font-semibold tracking-tight text-pretty">
             {startOverTitle(name)}
           </h3>
@@ -285,7 +303,7 @@ export function MemoryRestartMenu({
                 }
               />
             </div>
-          ) : (
+          ) : wholeLabel ? null : (
             <p className="mt-1.5 text-[13px] leading-5 text-foreground/80">
               {START_OVER_CONFIRM_BODY}
             </p>
@@ -345,7 +363,7 @@ export function MemoryRestartMenu({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
 
@@ -393,7 +411,6 @@ export function VerseRestartMenu({
   fullPageHref,
   isDrawer,
   openStartOver,
-  initiallyStarted,
   onStopped,
 }: {
   verseRefId: Id<"verseRefs">;
@@ -404,7 +421,6 @@ export function VerseRestartMenu({
   fullPageHref?: string;
   isDrawer: boolean;
   openStartOver?: boolean;
-  initiallyStarted?: boolean;
   onStopped: () => void;
 }) {
   const startOver = useMutation(api.verseMemory.startOver);
@@ -420,7 +436,6 @@ export function VerseRestartMenu({
       refreshHref={isLearningPhase(status) ? learnHref : refreshHref}
       learnHref={learnHref}
       openStartOver={openStartOver}
-      initiallyStarted={initiallyStarted}
       onRefresh={async () => {
         if (isLearningPhase(status)) {
           await finishRefresh({

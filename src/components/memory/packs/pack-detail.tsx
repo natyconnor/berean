@@ -1209,6 +1209,9 @@ function PackDetailMenu({
   );
   const [togetherOpen, setTogetherOpen] = useState(false);
   const [togetherError, setTogetherError] = useState<string | null>(null);
+  const [undoVerseRefIds, setUndoVerseRefIds] = useState<
+    Member["verseRefId"][] | null
+  >(null);
   const removeLock = useSubmitLock();
   const togetherLock = useSubmitLock();
 
@@ -1332,8 +1335,15 @@ function PackDetailMenu({
           const verseRefIds =
             choice === "shaky"
               ? (shakyVerses ?? []).map((verse) => verse.verseRefId)
-              : members.map((member) => member.verseRefId);
+              : members
+                  .filter(
+                    (member) =>
+                      isLearningPhase(member.status) ||
+                      isReviewPhase(member.status),
+                  )
+                  .map((member) => member.verseRefId);
           await startOverMany({ verseRefIds, now: Date.now() });
+          setUndoVerseRefIds(verseRefIds);
         }}
         onUndo={async () => {
           if (isPassage) {
@@ -1345,9 +1355,10 @@ function PackDetailMenu({
             return;
           }
           await undoStartOverMany({
-            verseRefIds: members.map((member) => member.verseRefId),
+            verseRefIds: undoVerseRefIds ?? [],
             now: Date.now(),
           });
+          setUndoVerseRefIds(null);
         }}
         extraItems={
           reviewTogether ? (
