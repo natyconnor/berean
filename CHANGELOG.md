@@ -30,6 +30,21 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.19.0](https://github.com/natyconnor/berean/compare/v1.18.1...v1.19.0) (2026-10-23)
+
+
+### Features
+
+* **memory:** rewrite Welcome to Memory banner body ([#340](https://github.com/natyconnor/berean/issues/340)) ([f42b1c6](https://github.com/natyconnor/berean/commit/f42b1c6987406c982e73d42ee0a647e32fbedc33))
+* **passage:** replace verse heart CSS label with shared tooltip ([#332](https://github.com/natyconnor/berean/issues/332)) ([43941b3](https://github.com/natyconnor/berean/commit/43941b351b857a4d99352d4190e23a21908705f7))
+
+
+### Bug Fixes
+
+* **memory:** keep Today's queue panel for every item ([#339](https://github.com/natyconnor/berean/issues/339)) ([570a8ca](https://github.com/natyconnor/berean/commit/570a8ca693ada3badb0806d2ef6b02fad85be9de))
+* **memory:** send session Back to a named destination ([#335](https://github.com/natyconnor/berean/issues/335)) ([6f551e9](https://github.com/natyconnor/berean/commit/6f551e94f18d4d61f14f978899e3a51bbd5e9ed6))
+* **memory:** show Welcome to Memory on first Today visit ([#329](https://github.com/natyconnor/berean/issues/329)) ([9b547a6](https://github.com/natyconnor/berean/commit/9b547a683bd187d104871e740165a565cc091e76))
+
 ## [1.18.1](https://github.com/natyconnor/berean/compare/v1.18.0...v1.18.1) (2026-10-21)
 
 
