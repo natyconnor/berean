@@ -1,4 +1,5 @@
 import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { ArrowLeft, CheckCircle2, Loader2, SearchX } from "lucide-react";
 
@@ -46,7 +47,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import { useMemoryExit } from "@/hooks/use-memory-back";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
@@ -64,6 +65,7 @@ import {
   todayInterstitialCopy,
   todayNextSegment,
   todayQueueGroups,
+  todayQueueItemStep,
   todaySessionCountLabel,
   todaySessionCounts,
   todaySessionProgress,
@@ -85,6 +87,7 @@ import { verseRefKey } from "../../../shared/verse-ref-key";
 interface TodayChrome {
   onExit: () => void;
   backLabel: string;
+  exitHref: string;
   returnTo: string | undefined;
   /** Header text after the title: what this session covers. */
   subtitle: string;
@@ -115,11 +118,11 @@ interface TodaySessionData {
  */
 export function MemoryTodayPage(): JSX.Element {
   const { packId, only, return: returnTo } = Route.useSearch();
-  const onExit = useMemoryExit(returnTo);
-  const backLabel = useMemoryExitLabel(returnTo);
+  const exit = useMemoryExit(returnTo);
   const chrome: TodayChrome = {
-    onExit,
-    backLabel,
+    onExit: exit.go,
+    backLabel: exit.label,
+    exitHref: exit.href,
     returnTo,
     subtitle: SESSION_SUBTITLES[only ?? "all"],
   };
@@ -365,6 +368,22 @@ function queueEntries(
   );
 }
 
+function openQueueItemId(
+  step: TodayStep,
+  segments: readonly TodaySegment[],
+  queue: { learning: TodayQueueEntry[]; reviews: TodayQueueEntry[] },
+  shownVerseId?: string,
+): string | undefined {
+  if (step.kind !== "segment") return undefined;
+  const segment = segments[step.index];
+  if (!segment) return undefined;
+  if (segment.kind === "passage") return segment.packId;
+  if (shownVerseId) return shownVerseId;
+  if (step.verseId) return step.verseId;
+  const entries = segment.kind === "learning" ? queue.learning : queue.reviews;
+  return entries[0]?.id;
+}
+
 function TodaySession({
   data,
   only,
@@ -380,6 +399,8 @@ function TodaySession({
   chrome: TodayChrome;
 }): JSX.Element {
   const now = useLiveNow();
+  const navigate = useNavigate();
+  const search = Route.useSearch();
   // Planned once at mount. A passage set aside earlier today ("That's enough
   // for today") stays set aside, like it does in Learn.
   const [segments] = useState(() => {
@@ -396,9 +417,28 @@ function TodaySession({
     learning: queueEntries(sortSessionVerses(data.learning), data.title),
     reviews: queueEntries(data.reviews, data.title),
   }));
-  const [step, setStep] = useState<TodayStep>(
-    segments.length > 0 ? { kind: "segment", index: 0 } : { kind: "summary" },
-  );
+  const [step, setStep] = useState<TodayStep>(() => {
+    const fromItem =
+      search.item === undefined
+        ? null
+        : todayQueueItemStep(
+            segments,
+            queue.learning,
+            queue.reviews,
+            search.item,
+          );
+    if (fromItem) {
+      return {
+        kind: "segment",
+        index: fromItem.index,
+        verseId: fromItem.verseId,
+      };
+    }
+    return segments.length > 0
+      ? { kind: "segment", index: 0 }
+      : { kind: "summary" };
+  });
+  const [shownVerseId, setShownVerseId] = useState<string | undefined>();
   // Segments run in plan order, but the queue can jump anywhere, so progress
   // is what's finished plus each verse run's live state.
   const [done, setDone] = useState<ReadonlySet<number>>(() => new Set());
@@ -478,7 +518,9 @@ function TodaySession({
       runStates[index] === undefined
         ? undefined
         : entries.find((entry) => !spent.has(entry.id))?.id;
-    setStep({ kind: "segment", index, verseId: verseId ?? resumeAt });
+    const nextVerseId = verseId ?? resumeAt;
+    setStep({ kind: "segment", index, verseId: nextVerseId });
+    setShownVerseId(segment.kind === "passage" ? undefined : nextVerseId);
   };
   const openQueueItem = (item: TodayQueueItem) => {
     openSegment(
@@ -489,6 +531,28 @@ function TodaySession({
   const openQueueGroup = (group: TodayQueueGroup) => {
     if (group.target !== null) openSegment(group.target);
   };
+
+  const currentItemId = openQueueItemId(step, segments, queue, shownVerseId);
+  useEffect(() => {
+    if (search.item === currentItemId) return;
+    void navigate({
+      to: "/memory/today",
+      search: {
+        ...(search.packId === undefined ? {} : { packId: search.packId }),
+        ...(only === undefined ? {} : { only }),
+        ...(search.return === undefined ? {} : { return: search.return }),
+        ...(currentItemId === undefined ? {} : { item: currentItemId }),
+      },
+      replace: true,
+    });
+  }, [
+    currentItemId,
+    navigate,
+    only,
+    search.item,
+    search.packId,
+    search.return,
+  ]);
 
   const doneCount = todaySessionCounts(segments, doneItems).done;
   const day = dayCarry(segments, tally, earlier, doneCount);
@@ -646,8 +710,8 @@ function TodaySession({
       verses={segment.kind === "learning" ? data.learning : data.reviews}
       scopeLabel={data.title}
       onExit={chrome.onExit}
-      exitTooltip="Leave today's session"
       backLabel={chrome.backLabel}
+      exitHref={chrome.exitHref}
       returnTo={chrome.returnTo}
       hasMemorized={data.hasMemorized}
       progress={(run) =>
@@ -664,6 +728,7 @@ function TodaySession({
         ) : undefined
       }
       initialVerseId={step.verseId}
+      onCurrentVerseId={setShownVerseId}
       runState={runStates[index]}
       onRunStateChange={(state, result) => saveRun(index, state, result)}
       onComplete={(result) => recordRun(index, result)}
@@ -716,8 +781,8 @@ function TodayPassageSegment({
       packName={title}
       onExit={chrome.onExit}
       onDoneForToday={onDone}
-      exitTooltip="Leave today's session"
       backLabel={chrome.backLabel}
+      exitHref={chrome.exitHref}
       progress={progress}
       aside={aside}
     />

@@ -13,7 +13,7 @@ import {
 } from "@/components/memory/to-practice-verse";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import { useMemoryExit } from "@/hooks/use-memory-back";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
@@ -49,13 +49,14 @@ export function MemoryPackSessionPage({
 }: {
   kind: MemorySessionKind;
   packId: Id<"packs">;
-  /** Where Done and Back go; else history, else the pack page. */
+  /** Where Done and Back go; else the pack page. */
   returnTo?: string;
 }) {
   const now = useLiveNow();
   const packHref = `/memory/${encodeURIComponent(typedPackId)}`;
-  const onExit = useMemoryExit(returnTo, packHref);
-  const backLabel = useMemoryExitLabel(returnTo, packHref);
+  const exit = useMemoryExit(returnTo, packHref);
+  const onExit = exit.go;
+  const backLabel = exit.label;
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
   const members = useFrozenQuery(api.packs.resolveMembers, {
@@ -192,7 +193,7 @@ export function MemoryPackSessionPage({
             : undefined
         }
         backLabel={backLabel}
-        exitTooltip="Go back to the pack"
+        exitHref={exit.href}
       />
     );
   }
@@ -210,8 +211,8 @@ export function MemoryPackSessionPage({
       kind={kind}
       verses={sessionVerses}
       scopeLabel={pack.name}
-      exitTooltip="Go back to the pack"
       backLabel={backLabel}
+      exitHref={exit.href}
       returnTo={returnTo}
       hasMemorized={hasMemorized}
       onExit={onExit}

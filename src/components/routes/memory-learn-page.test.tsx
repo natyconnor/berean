@@ -70,8 +70,12 @@ vi.mock("convex-helpers/react/cache", () => ({
 }));
 
 vi.mock("@/hooks/use-memory-back", () => ({
-  useMemoryExit: () => onExitHome,
-  useMemoryExitLabel: () => "Back",
+  useMemoryExit: () => ({
+    go: onExitHome,
+    href: "/memory",
+    label: "Back to Memory",
+    name: "Memory",
+  }),
 }));
 
 vi.mock("@/routes/memory/learn", () => ({
@@ -419,7 +423,9 @@ describe("MemoryLearnPage", () => {
       screen.getByRole("link", { name: "Start something new" }),
     ).toHaveAttribute("href", "/memory");
 
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to Memory" }),
+    );
     expect(onExitHome).toHaveBeenCalledTimes(1);
   });
 
@@ -455,7 +461,9 @@ describe("MemoryLearnPage", () => {
   it("opens the same pack again after Back", async () => {
     const first = renderLearn(nextVerseView());
 
-    await userEvent.click(await screen.findByRole("button", { name: "Back" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Back to Memory" }),
+    );
     expect(onExitHome).toHaveBeenCalledTimes(1);
 
     first.unmount();
@@ -486,7 +494,9 @@ describe("MemoryLearnPage", () => {
     expect(screen.queryByText(JUDE)).not.toBeInTheDocument();
     expect(screen.queryByText(THIRD_JOHN)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to Memory" }),
+    );
 
     expect(onExitHome).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Passage not found")).toBeInTheDocument();

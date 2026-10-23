@@ -53,10 +53,12 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
 
 vi.mock("../../../convex/_generated/api", () => ({
   api: {
+    packs: { get: "packs.get" },
     verseMemory: {
       dueQueue: "verseMemory.dueQueue",
       dueForVerse: "verseMemory.dueForVerse",
       memoryStats: "verseMemory.memoryStats",
+      verseDetail: "verseMemory.verseDetail",
     },
   },
 }));

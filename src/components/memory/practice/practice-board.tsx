@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
+import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useMutation } from "convex/react";
 
@@ -23,11 +23,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { SessionBackButton } from "@/components/memory/session-back-button";
 import {
   useEsvCompositePassage,
   type CompositePassageSegment,
@@ -220,10 +216,10 @@ interface PracticeBoardProps {
   scopeLabel: string;
   /** Leave the session for where it started. */
   onExit: () => void;
-  /** Describes the back-button destination. */
-  exitTooltip?: string;
-  /** Header back button text, e.g. "Back to Today". */
+  /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
+  /** Where Back goes. Home shows when this is not `/memory`. */
+  exitHref?: string;
   /** The end-of-session card's primary action. */
   exitLabel?: string;
   /** Where this session returns; Extra practice and per-verse Practice return there too. */
@@ -245,6 +241,8 @@ interface PracticeBoardProps {
   railHeader?: ReactNode;
   /** Card id to open first; the first card in order when absent or unknown. */
   initialVerseId?: string;
+  /** The card now on screen, after a rail pick, Next, or Shuffle. */
+  onCurrentVerseId?: (id: string) => void;
   /** Pick a run back up where it was left. Read once, at mount. */
   runState?: PracticeRunState;
   /** Every change to the run's state, with the results so far. */
@@ -396,8 +394,8 @@ export function PracticeBoard({
   verses,
   scopeLabel,
   onExit,
-  exitTooltip,
   backLabel,
+  exitHref,
   exitLabel = "Done",
   returnTo,
   hasMemorized = false,
@@ -407,6 +405,7 @@ export function PracticeBoard({
   onComplete,
   railHeader,
   initialVerseId,
+  onCurrentVerseId,
   runState,
   onRunStateChange,
 }: PracticeBoardProps): JSX.Element {
@@ -684,6 +683,14 @@ export function PracticeBoard({
     return () => window.clearTimeout(timer);
   }, [isShuffling, shuffleNonce]);
 
+  const currentVerseId = currentVerse?.id;
+  const reportCurrentVerseId = useEffectEvent((id: string) => {
+    onCurrentVerseId?.(id);
+  });
+  useEffect(() => {
+    if (currentVerseId) reportCurrentVerseId(currentVerseId);
+  }, [currentVerseId]);
+
   const reportRunState = useEffectEvent(
     (state: PracticeRunState, result: PracticeSessionResult) => {
       onRunStateChange?.(state, result);
@@ -836,8 +843,8 @@ export function PracticeBoard({
     sessionLabel,
     scopeLabel,
     onExit,
-    exitTooltip,
     backLabel,
+    exitHref,
     progress: resolveSessionProgress(progress, {
       done: railVerses.filter((verse) => verse.locked).length,
       total: railVerses.length,
@@ -1860,16 +1867,16 @@ function PracticeShell({
   sessionLabel,
   scopeLabel,
   onExit,
-  exitTooltip = "Go back",
-  backLabel = "Back",
+  backLabel = "Back to Memory",
+  exitHref,
   progress,
   children,
 }: {
   sessionLabel: MemorySessionLabel;
   scopeLabel: string;
   onExit: () => void;
-  exitTooltip?: string;
   backLabel?: string;
+  exitHref?: string;
   progress?: SessionProgress;
   children: ReactNode;
 }): JSX.Element {
@@ -1877,20 +1884,11 @@ function PracticeShell({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onExit}
-                className="-ml-2 shrink-0 gap-1.5"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden />
-                {backLabel}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{exitTooltip}</TooltipContent>
-          </Tooltip>
+          <SessionBackButton
+            onExit={onExit}
+            label={backLabel}
+            exitHref={exitHref}
+          />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
             <span className="shrink-0 font-semibold">{sessionLabel}</span>
             <span aria-hidden className="text-muted-foreground">

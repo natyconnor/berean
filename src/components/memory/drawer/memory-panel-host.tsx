@@ -184,7 +184,7 @@ export function MemoryPanelHost({
         surface: "drawer",
         panel: shown.panel,
         from: shown.from,
-        returnTo: "/memory",
+        returnTo: memoryPanelFullPagePath(shown.panel),
         hrefFor: memoryPanelDrawerHref,
         back:
           shown.from === "verses" && shown.panel.kind !== "verses"

@@ -6,13 +6,23 @@ export interface MemoryTodaySearch {
   packId?: string;
   /** Run only one half of today: passages and new verses, or reviews. */
   only?: TodaySessionOnly;
+  item?: string;
   /** Where Done, Stop for today, and the back link go. */
   return?: string;
 }
 
 const PACK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** `/memory/today` search: an optional pack scope, half of the day, and the session return. */
+function validateTodayItem(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const item = value.trim();
+  if (item.length === 0 || item.length > 128) return undefined;
+  if (item.includes("/") || item.includes("\\") || item.includes("..")) {
+    return undefined;
+  }
+  return item;
+}
+
 export function validateMemoryTodaySearch(
   search: Record<string, unknown>,
 ): MemoryTodaySearch {
@@ -24,9 +34,11 @@ export function validateMemoryTodaySearch(
     search.only === "learning" || search.only === "review"
       ? search.only
       : undefined;
+  const item = validateTodayItem(search.item);
   return {
     ...(packId === undefined ? {} : { packId }),
     ...(only === undefined ? {} : { only }),
+    ...(item === undefined ? {} : { item }),
     ...validateMemoryReturnSearch(search),
   };
 }

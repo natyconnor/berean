@@ -661,7 +661,7 @@ describe("PracticeBoard learning step label", () => {
           verses={[{ ...guidedVerse, stageReps: 2 }]}
           scopeLabel="Memory"
           onExit={onExit}
-          backLabel="Back to Today"
+          backLabel="Back to Memory"
           returnTo="/memory"
           hasMemorized
         />
@@ -669,7 +669,7 @@ describe("PracticeBoard learning step label", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Back to Today" }),
+      screen.getByRole("button", { name: "Back to Memory" }),
     ).toBeInTheDocument();
     await finishLastStep();
 
@@ -1279,6 +1279,17 @@ describe("PracticeBoard spent reviews", () => {
     });
   });
 
+  it("reports the card on screen when the learner moves in the run", async () => {
+    const onCurrentVerseId = vi.fn<(id: string) => void>();
+    renderBoard("review", { onCurrentVerseId });
+
+    await waitFor(() => {
+      expect(onCurrentVerseId).toHaveBeenCalledWith(FIRST_ID);
+    });
+    await userEvent.click(railButton("Psalm 23:2"));
+    expect(onCurrentVerseId).toHaveBeenLastCalledWith(SECOND_ID);
+  });
+
   it("opens at the chosen verse and reports its run so it can resume", async () => {
     const onRunStateChange =
       vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
@@ -1423,5 +1434,64 @@ describe("PracticeBoard spent reviews", () => {
     expect(
       await screen.findByLabelText("Your recalled verse"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("PracticeBoard session Home", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+  });
+
+  it("shows Go to Memory when Back does not go to Memory", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[compositeVerse]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          backLabel="Back to John 3"
+          exitHref="/passage/John-3"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Back to John 3" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Memory" })).toHaveAttribute(
+      "href",
+      "/memory",
+    );
+  });
+
+  it("hides Go to Memory when Back already goes to Memory", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[compositeVerse]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          backLabel="Back to Memory"
+          exitHref="/memory"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Back to Memory" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Go to Memory" }),
+    ).not.toBeInTheDocument();
   });
 });

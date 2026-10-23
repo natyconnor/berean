@@ -208,6 +208,29 @@ export function todayNextSegment(
   return null;
 }
 
+export function todayQueueItemStep(
+  segments: readonly TodaySegment[],
+  learning: readonly TodayQueueEntry[],
+  reviews: readonly TodayQueueEntry[],
+  item: string,
+): { index: number; verseId?: string } | null {
+  for (const [index, segment] of segments.entries()) {
+    if (segment.kind === "passage" && segment.packId === item) {
+      return { index };
+    }
+    const entries =
+      segment.kind === "learning"
+        ? learning
+        : segment.kind === "review"
+          ? reviews
+          : [];
+    if (entries.some((entry) => entry.id === item)) {
+      return { index, verseId: item };
+    }
+  }
+  return null;
+}
+
 function clampDone(done: number | undefined, items: number): number {
   return Math.min(Math.max(Math.trunc(done ?? 0), 0), items);
 }

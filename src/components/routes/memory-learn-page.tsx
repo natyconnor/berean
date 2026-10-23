@@ -10,7 +10,7 @@ import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { MemoryAllSessionPage } from "@/components/routes/memory-practice-page";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import { useMemoryExit } from "@/hooks/use-memory-back";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
@@ -38,8 +38,9 @@ function GlobalMemoryLearnPage({
 }: {
   returnTo: string | undefined;
 }): JSX.Element {
-  const onExitHome = useMemoryExit(returnTo);
-  const backLabel = useMemoryExitLabel(returnTo);
+  const exit = useMemoryExit(returnTo);
+  const onExitHome = exit.go;
+  const backLabel = exit.label;
   const now = useLiveNow();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
   const learnQueue = useFrozenQuery(api.verseMemory.learnQueue, {
@@ -82,6 +83,7 @@ function GlobalMemoryLearnPage({
       dayKey={learnDismissDayKey(now)}
       onExitHome={onExitHome}
       backLabel={backLabel}
+      exitHref={exit.href}
       returnTo={returnTo}
       hasMemorized={hasMemorizedVerses(stats)}
     />
@@ -95,6 +97,7 @@ function GlobalLearnSession({
   dayKey,
   onExitHome,
   backLabel,
+  exitHref,
   returnTo,
   hasMemorized,
 }: {
@@ -104,6 +107,7 @@ function GlobalLearnSession({
   dayKey: number;
   onExitHome: () => void;
   backLabel: string;
+  exitHref: string;
   returnTo: string | undefined;
   hasMemorized: boolean;
 }): JSX.Element {
@@ -131,13 +135,19 @@ function GlobalLearnSession({
         packName={passage.packName}
         onExitHome={onExitHome}
         backLabel={backLabel}
+        exitHref={exitHref}
         onDismissPack={dismissAndLeave}
       />
     );
   }
 
   const emptyState = (
-    <AllLearnEmptyState now={now} onExit={onExitHome} backLabel={backLabel} />
+    <AllLearnEmptyState
+      now={now}
+      onExit={onExitHome}
+      backLabel={backLabel}
+      exitHref={exitHref}
+    />
   );
 
   return (
@@ -147,6 +157,7 @@ function GlobalLearnSession({
       scopeLabel="Today's learning"
       onExit={onExitHome}
       backLabel={backLabel}
+      exitHref={exitHref}
       returnTo={returnTo}
       hasMemorized={hasMemorized}
       emptyState={emptyState}
@@ -159,12 +170,14 @@ function BuildingPassageLearnCard({
   packName,
   onExitHome,
   backLabel,
+  exitHref,
   onDismissPack,
 }: {
   packId: Id<"packs">;
   packName: string;
   onExitHome: () => void;
   backLabel: string;
+  exitHref: string;
   /** "That's enough for today", or Back from a pack this query cannot load. */
   onDismissPack: () => void;
 }): JSX.Element {
@@ -209,8 +222,8 @@ function BuildingPassageLearnCard({
       packName={packName}
       onExit={onExitHome}
       onDoneForToday={onDismissPack}
-      exitTooltip="Go back"
       backLabel={backLabel}
+      exitHref={exitHref}
     />
   );
 }

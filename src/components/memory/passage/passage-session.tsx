@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, CheckCircle2, Info, Loader2, X } from "lucide-react";
+import { CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
 
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
@@ -65,6 +65,7 @@ import {
   type SessionProgress,
 } from "@/components/memory/practice/session-header-progress";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
+import { SessionBackButton } from "@/components/memory/session-back-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -74,11 +75,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { useLiveNow } from "@/hooks/use-live-now";
 import {
@@ -137,9 +133,10 @@ interface PassageSessionProps {
    * same way.
    */
   onDoneForToday?: () => void;
-  exitTooltip?: string;
-  /** Header back button text, e.g. "Back to Today". */
+  /** Header back button text, e.g. "Back to Memory". */
   backLabel?: string;
+  /** Where Back goes. Home shows when this is not `/memory`. */
+  exitHref?: string;
   /**
    * Header text and overall bar when this passage is one part of a session.
    * A function gets the share of today's new verses added so far.
@@ -155,8 +152,8 @@ export function PassageSession({
   packName,
   onExit,
   onDoneForToday,
-  exitTooltip = "Go back to the pack",
-  backLabel = "Back",
+  backLabel = "Back to Memory",
+  exitHref,
   progress,
   aside,
 }: PassageSessionProps): JSX.Element {
@@ -173,12 +170,15 @@ export function PassageSession({
     sessionFromView(view, now, tzOffsetMinutes, undefined, timeZone),
   );
 
-  const leaveSession = () => {
+  const endStep = () => {
     clearPassageStepInProgress(packId);
+  };
+  const leaveSession = () => {
+    endStep();
     onExit();
   };
   const finishForToday = () => {
-    clearPassageStepInProgress(packId);
+    endStep();
     (onDoneForToday ?? onExit)();
   };
   const [addsAtOpen] = useState(() => remainingAddsIn(state));
@@ -530,8 +530,9 @@ export function PassageSession({
       phaseLabel={phaseLabel}
       packName={packName}
       onExit={leaveSession}
-      exitTooltip={exitTooltip}
+      onHome={endStep}
       backLabel={backLabel}
+      exitHref={exitHref}
       progress={headerProgress}
       persistError={persistError}
       aside={aside}
@@ -1121,8 +1122,9 @@ function PassageSessionShell({
   phaseLabel,
   packName,
   onExit,
-  exitTooltip,
+  onHome,
   backLabel,
+  exitHref,
   progress,
   persistError,
   aside,
@@ -1131,8 +1133,9 @@ function PassageSessionShell({
   phaseLabel: string;
   packName: string;
   onExit: () => void;
-  exitTooltip: string;
+  onHome?: () => void;
   backLabel: string;
+  exitHref?: string;
   progress?: SessionProgress;
   persistError: string | null;
   aside?: ReactNode;
@@ -1142,20 +1145,12 @@ function PassageSessionShell({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onExit}
-                className="-ml-2 shrink-0 gap-1.5"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden />
-                {backLabel}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{exitTooltip}</TooltipContent>
-          </Tooltip>
+          <SessionBackButton
+            onExit={onExit}
+            onHome={onHome}
+            label={backLabel}
+            exitHref={exitHref}
+          />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
             <span
               className="shrink-0 font-semibold"

@@ -248,6 +248,107 @@ describe("ModeDock route visibility", () => {
     expect(mocks.navigate).toHaveBeenCalled();
   });
 
+  it("reopens the last Memory screen when the Memory tab is clicked on a session", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/review",
+      href: "/memory/review",
+    });
+    render(<ModeDock />);
+
+    const memoryLink = screen.getByRole("link", { name: "Memory" });
+    expect(memoryLink).toHaveAttribute("href", "/memory/review");
+    await user.click(memoryLink);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/review",
+      search: {},
+    });
+  });
+
+  it("points the Memory tab at the current pack page, matching a click", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/pack-abc",
+      href: "/memory/pack-abc",
+    });
+    render(<ModeDock />);
+
+    const memoryLink = screen.getByRole("link", { name: "Memory" });
+    expect(memoryLink).toHaveAttribute("href", "/memory/pack-abc");
+    await user.click(memoryLink);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/$packId",
+      params: { packId: "pack-abc" },
+      search: {},
+    });
+  });
+
+  it("keeps the Memory tab on a review after a pack visit, matching its href", () => {
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/pack-abc",
+      href: "/memory/pack-abc",
+    });
+    const { rerender } = render(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/review",
+      href: "/memory/review",
+    });
+    rerender(<ModeDock />);
+
+    expect(screen.getByRole("link", { name: "Memory" })).toHaveAttribute(
+      "href",
+      "/memory/review",
+    );
+  });
+
+  it("points the Memory tab at home when Memory is already home", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory",
+      href: "/memory",
+    });
+    render(<ModeDock />);
+
+    const memoryLink = screen.getByRole("link", { name: "Memory" });
+    expect(memoryLink).toHaveAttribute("href", "/memory");
+    await user.click(memoryLink);
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory" });
+  });
+
+  it("closes a Memory drawer when the active Memory tab is clicked", async () => {
+    const user = userEvent.setup();
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory",
+      href: "/memory?panel=verses",
+    });
+    render(<ModeDock />);
+
+    await user.click(screen.getByRole("link", { name: "Memory" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/memory" });
+  });
+
+  it("still restores the last Memory screen when cycling with the keyboard", () => {
+    mocks.useLocation.mockReturnValue({
+      pathname: "/memory/review",
+      href: "/memory/review",
+    });
+    const { rerender } = render(<ModeDock />);
+
+    mocks.useLocation.mockReturnValue({
+      pathname: "/passage/John-1",
+      href: "/passage/John-1",
+    });
+    rerender(<ModeDock />);
+    mocks.navigate.mockClear();
+
+    fireEvent.keyDown(document, { key: "j", ctrlKey: true });
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/review",
+      search: {},
+    });
+  });
+
   it("stays visible after downward scroll", () => {
     render(<ModeDock />);
 

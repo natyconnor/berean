@@ -369,7 +369,10 @@ describe("PackDetail for a passage", () => {
     ).toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "Continue · about 7 min" }),
-    ).toHaveAttribute("href", "/memory/psalm16x/learn?return=%2Fmemory");
+    ).toHaveAttribute(
+      "href",
+      "/memory/psalm16x/learn?return=%2Fmemory%2Fpsalm16x",
+    );
     expect(
       within(dialog).getByRole("link", { name: "Open in reader" }),
     ).toHaveAttribute("href", "/passage/Psalms-16");
@@ -461,7 +464,10 @@ describe("PackDetail for a passage", () => {
 
     expect(
       screen.getByRole("link", { name: "Review Psalm 16" }),
-    ).toHaveAttribute("href", "/memory/psalm16x/review?return=%2Fmemory");
+    ).toHaveAttribute(
+      "href",
+      "/memory/psalm16x/review?return=%2Fmemory%2Fpsalm16x",
+    );
     expect(
       screen.getByRole("progressbar", {
         name: `Mastery ${Math.round(
@@ -515,7 +521,7 @@ describe("PackDetail for a passage", () => {
 });
 
 describe("PackDetail for a pack", () => {
-  const RETURN = "return=%2Fmemory";
+  const RETURN = "return=%2Fmemory%2Fmercedxx";
 
   it("shows both bars and per-verse Review, Practice and Learn", () => {
     renderHost("pack:mercedxx", "verses");
@@ -652,7 +658,7 @@ describe("PackDetail for a pack", () => {
     );
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenLastCalledWith({
-        href: "/memory/psalm23x/review?return=%2Fmemory",
+        href: "/memory/psalm23x/review?return=%2Fmemory%2Fpsalm23x",
       }),
     );
   });

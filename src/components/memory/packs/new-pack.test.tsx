@@ -35,6 +35,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: () => mocks.createAndMemorize,
+  useQuery: () => undefined,
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -48,7 +49,11 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
-    packs: { createAndMemorize: "packs.createAndMemorize" },
+    packs: {
+      createAndMemorize: "packs.createAndMemorize",
+      get: "packs.get",
+    },
+    verseMemory: { verseDetail: "verseMemory.verseDetail" },
     savedVerses: {
       listHearted: "savedVerses.listHearted",
       listForChapter: "savedVerses.listForChapter",

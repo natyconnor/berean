@@ -17,6 +17,7 @@ const NOW = Date.UTC(2026, 9, 12, 18);
 type TodaySearch = {
   packId?: string;
   only?: "learning" | "review";
+  item?: string;
   return?: string;
 };
 
@@ -24,23 +25,30 @@ type StubProgress =
   | { label: string }
   | ((run: { done: number; total: number }) => { label: string });
 
-const { frozenResults, liveResults, search, onExit } = vi.hoisted(() => {
-  const initial: TodaySearch = {};
-  return {
-    frozenResults: new Map<string, unknown>(),
-    liveResults: new Map<string, unknown>(),
-    search: { current: initial },
-    onExit: vi.fn(),
-  };
-});
+const { frozenResults, liveResults, search, onExit, navigate } = vi.hoisted(
+  () => {
+    const initial: TodaySearch = {};
+    return {
+      frozenResults: new Map<string, unknown>(),
+      liveResults: new Map<string, unknown>(),
+      search: { current: initial },
+      onExit: vi.fn(),
+      navigate: vi.fn(),
+    };
+  },
+);
 
 vi.mock("@/routes/memory/today", () => ({
   Route: { useSearch: () => search.current },
 }));
 
 vi.mock("@/hooks/use-memory-back", () => ({
-  useMemoryExit: () => onExit,
-  useMemoryExitLabel: () => "Back to Today",
+  useMemoryExit: () => ({
+    go: onExit,
+    href: "/memory",
+    label: "Back to Memory",
+    name: "Memory",
+  }),
 }));
 
 vi.mock("@/hooks/use-live-now", () => ({
@@ -57,7 +65,7 @@ vi.mock("convex-helpers/react/cache", () => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
 }));
 
 vi.mock("@/components/memory/passage/passage-session", () => ({
@@ -114,6 +122,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     initialVerseId,
     runState,
     onRunStateChange,
+    onCurrentVerseId,
   }: {
     kind: string;
     verses: StubVerse[];
@@ -123,6 +132,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     initialVerseId?: string;
     runState?: unknown;
     onRunStateChange?: (state: unknown, result: unknown) => void;
+    onCurrentVerseId?: (id: string) => void;
   }) => {
     // Grade the first `count` cards past today's work (graduated, or
     // rescheduled days out) and report the run, as the board does.
@@ -178,6 +188,15 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
         </button>
         <button type="button" onClick={() => spend(verses.length)}>
           Spend every {kind} card
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = verses[1];
+            if (next) onCurrentVerseId?.(verseRefKey(next.reference));
+          }}
+        >
+          Show the second {kind} card
         </button>
         <button
           type="button"
@@ -311,6 +330,7 @@ describe("MemoryTodayPage", () => {
     liveResults.clear();
     localStorage.clear();
     onExit.mockReset();
+    navigate.mockReset();
     search.current = { return: "/memory" };
     liveResults.set("passageMemory.getForPack", { _id: "passage_1" });
   });
@@ -325,7 +345,7 @@ describe("MemoryTodayPage", () => {
     ).toBeInTheDocument();
     expect(within(passage).getByText("Today · 0 of 4")).toBeInTheDocument();
     expect(
-      within(passage).getByRole("button", { name: "Back to Today" }),
+      within(passage).getByRole("button", { name: "Back to Memory" }),
     ).toBeInTheDocument();
     expect(queueRow(passage, "Psalm 16")).toHaveAttribute(
       "data-state",
@@ -409,6 +429,109 @@ describe("MemoryTodayPage", () => {
     expect(onExit).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopens the queue item named in the URL after a remount", async () => {
+    setToday({ passages: [PSALM_16, PSALM_23] });
+    const { unmount } = renderToday();
+
+    expect(
+      screen.getByRole("heading", { name: "Psalm 16" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Psalm 23" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Psalm 23" }),
+    ).toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/memory/today",
+      search: { return: "/memory", item: "psalm23" },
+      replace: true,
+    });
+
+    unmount();
+    search.current = { return: "/memory", item: "psalm23" };
+    renderToday();
+
+    expect(
+      screen.getByRole("heading", { name: "Psalm 23" }),
+    ).toBeInTheDocument();
+    expect(queueRow(document.body, "Psalm 23")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(queueRow(document.body, "Psalm 16")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+  });
+
+  it("reopens a verse card named in the URL", () => {
+    setToday();
+    const item = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    search.current = { return: "/memory", item };
+    renderToday();
+
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-initial-verse",
+      item,
+    );
+  });
+
+  it("reopens the card the runner was showing after a remount", async () => {
+    setToday({ passages: [] });
+    const first = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 1,
+      endVerse: 1,
+    });
+    const second = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    search.current = { return: "/memory", item: first };
+    const { unmount } = renderToday();
+
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-initial-verse",
+      first,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show the second learning card" }),
+    );
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/memory/today",
+      search: { return: "/memory", item: second },
+      replace: true,
+    });
+
+    unmount();
+    search.current = { return: "/memory", item: second };
+    renderToday();
+
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-initial-verse",
+      second,
+    );
+  });
+
+  it("falls back to the first item when the URL names an unknown item", () => {
+    setToday({ passages: [PSALM_16, PSALM_23] });
+    search.current = { return: "/memory", item: "nope" };
+    renderToday();
+
+    expect(
+      screen.getByRole("heading", { name: "Psalm 16" }),
+    ).toBeInTheDocument();
   });
 
   it("jumps to another passage from the queue, moving the current marker", async () => {

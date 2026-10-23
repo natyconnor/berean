@@ -15,7 +15,7 @@ import { MemorySessionRunner } from "@/components/memory/practice/memory-session
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
-import { useMemoryExit, useMemoryExitLabel } from "@/hooks/use-memory-back";
+import { useMemoryExit } from "@/hooks/use-memory-back";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { Route } from "@/routes/memory_.$packId.review";
@@ -31,8 +31,9 @@ export function MemoryPackReviewPage() {
   const now = useLiveNow();
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const packHref = `/memory/${encodeURIComponent(packId)}`;
-  const onExit = useMemoryExit(returnTo, packHref);
-  const backLabel = useMemoryExitLabel(returnTo, packHref);
+  const exit = useMemoryExit(returnTo, packHref);
+  const onExit = exit.go;
+  const backLabel = exit.label;
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
   const members = useFrozenQuery(api.packs.resolveMembers, {
@@ -105,7 +106,7 @@ export function MemoryPackReviewPage() {
         packName={pack.name}
         onExit={onExit}
         backLabel={backLabel}
-        exitTooltip="Go back to the pack"
+        exitHref={exit.href}
       />
     );
   }
@@ -129,8 +130,8 @@ export function MemoryPackReviewPage() {
       verses={review.verses}
       scopeLabel={pack.name}
       onExit={onExit}
-      exitTooltip="Go back to the pack"
       backLabel={backLabel}
+      exitHref={exit.href}
       returnTo={returnTo}
       remainingDue={remainingDue}
       onContinueSession={() => setSessionEpoch((value) => value + 1)}

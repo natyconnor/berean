@@ -19,7 +19,7 @@ export interface MemoryPanelFrameValue {
   surface: MemoryPanelSurface;
   panel: MemoryPanel;
   from: MemoryPanelFrom | undefined;
-  /** Where session links return: plain Today from a drawer, else this page. */
+  /** Where session links return: this view's full page, never a drawer. */
   returnTo: string;
   /** Shows another panel on this surface: a drawer swap, or its full page. */
   hrefFor: (panel: MemoryPanel, opts?: { from?: MemoryPanelFrom }) => string;

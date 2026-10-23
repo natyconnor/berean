@@ -27,6 +27,21 @@ describe("validateMemoryTodaySearch", () => {
     expect(validateMemoryTodaySearch({ only: 1 })).toEqual({});
   });
 
+  it("keeps a queue item id so the dock can reopen that card", () => {
+    expect(
+      validateMemoryTodaySearch({
+        item: "Genesis|1|1|1",
+        return: "/memory",
+      }),
+    ).toEqual({ item: "Genesis|1|1|1", return: "/memory" });
+    expect(
+      validateMemoryTodaySearch({ item: "unified:k57abc", only: "learning" }),
+    ).toEqual({ item: "unified:k57abc", only: "learning" });
+    expect(validateMemoryTodaySearch({ item: "../settings" })).toEqual({});
+    expect(validateMemoryTodaySearch({ item: "/memory" })).toEqual({});
+    expect(validateMemoryTodaySearch({ item: "" })).toEqual({});
+  });
+
   it("drops a malformed pack id and an unsafe return", () => {
     expect(
       validateMemoryTodaySearch({
