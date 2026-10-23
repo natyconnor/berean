@@ -88,15 +88,19 @@ export function TodayPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
       <header className="shrink-0 border-b px-4 py-4 sm:px-5">
         <h1 className="text-lg font-semibold tracking-tight">Memory</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
           Review verses and passages, or start something new
         </p>
       </header>
-      <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRootRef}>
-        <div className="mx-auto max-w-6xl space-y-8 px-4 pt-6 pb-24 sm:px-5">
+      <ScrollArea
+        className="min-h-0 min-w-0 flex-1"
+        containInlineSize
+        viewportRef={scrollRootRef}
+      >
+        <div className="mx-auto w-full min-w-0 max-w-6xl space-y-8 px-4 pt-6 pb-24 sm:px-5">
           <MemoryWelcomeCallout
             ready={today !== undefined}
             firstRun={today?.state === "firstRun"}

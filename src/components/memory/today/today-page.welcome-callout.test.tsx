@@ -294,6 +294,9 @@ describe("Today welcome explainer", () => {
     );
     expect(callout).not.toHaveClass("sticky");
     expect(callout).not.toHaveClass("fixed");
+    const viewport = callout.closest("[data-slot=scroll-area-viewport]");
+    expect(viewport).toHaveAttribute("data-contain-inline-size");
+    expect(viewport?.parentElement).toHaveClass("min-w-0");
 
     expect(screen.getByText("Start here")).toBeInTheDocument();
     expect(screen.getAllByText("Welcome to Memory")).toHaveLength(1);
