@@ -101,9 +101,6 @@ export function ModeDock() {
     `/passage/${backPassageId}`,
   );
   const memoryHref = resolveModeHref("memory", storedLocations);
-  const memoryClickGoesHome =
-    isMemoryRoute && !isPlainMemoryHome(location.pathname, location.href);
-  const memoryTabHref = memoryClickGoesHome ? "/memory" : memoryHref;
   const studyHref = resolveModeHref("study", storedLocations);
 
   const hideForRoute = shouldHideModeDock(location.pathname);
@@ -129,12 +126,6 @@ export function ModeDock() {
 
   const goToMode = useCallback(
     (mode: Mode, trigger: string) => {
-      if (mode === "memory" && trigger === "click" && isMemoryRoute) {
-        if (!memoryClickGoesHome) return;
-        logInteraction("mode-dock", "memory-opened", { trigger });
-        void navigate({ to: "/memory", search: {} });
-        return;
-      }
       const href =
         mode === "notes"
           ? notesHref
@@ -149,14 +140,7 @@ export function ModeDock() {
       }
       void navigate({ href });
     },
-    [
-      isMemoryRoute,
-      memoryClickGoesHome,
-      memoryHref,
-      navigate,
-      notesHref,
-      studyHref,
-    ],
+    [navigate, notesHref, memoryHref, studyHref],
   );
 
   const activeMode: Mode = isStudyRoute
@@ -223,7 +207,7 @@ export function ModeDock() {
           <span>Notes</span>
         </a>
         <a
-          href={memoryTabHref}
+          href={memoryHref}
           title={`Memory (${toggleShortcutLabel} cycles)`}
           aria-label="Memory"
           aria-current={isMemoryRoute ? "page" : undefined}
@@ -288,14 +272,6 @@ export function ModeDock() {
       </nav>
     </div>
   );
-}
-
-function isPlainMemoryHome(pathname: string, href: string): boolean {
-  const path = pathname.replace(/\/+$/, "") || "/";
-  if (path !== "/memory") return false;
-  const queryStart = href.indexOf("?");
-  if (queryStart === -1) return true;
-  return !new URLSearchParams(href.slice(queryStart + 1)).has("panel");
 }
 
 function segmentClassName(active: boolean): string {
