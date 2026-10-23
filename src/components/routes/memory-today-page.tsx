@@ -438,8 +438,6 @@ function TodaySession({
       ? { kind: "segment", index: 0 }
       : { kind: "summary" };
   });
-  // The runner's live card. step.verseId is only the open-at target; writing
-  // the live card there remounts the runner.
   const [shownVerseId, setShownVerseId] = useState<string | undefined>();
   // Segments run in plan order, but the queue can jump anywhere, so progress
   // is what's finished plus each verse run's live state.
