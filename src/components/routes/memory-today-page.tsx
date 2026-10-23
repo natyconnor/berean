@@ -1,4 +1,5 @@
 import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { ArrowLeft, CheckCircle2, Loader2, SearchX } from "lucide-react";
 
@@ -64,6 +65,7 @@ import {
   todayInterstitialCopy,
   todayNextSegment,
   todayQueueGroups,
+  todayQueueItemStep,
   todaySessionCountLabel,
   todaySessionCounts,
   todaySessionProgress,
@@ -366,6 +368,20 @@ function queueEntries(
   );
 }
 
+function openQueueItemId(
+  step: TodayStep,
+  segments: readonly TodaySegment[],
+  queue: { learning: TodayQueueEntry[]; reviews: TodayQueueEntry[] },
+): string | undefined {
+  if (step.kind !== "segment") return undefined;
+  const segment = segments[step.index];
+  if (!segment) return undefined;
+  if (segment.kind === "passage") return segment.packId;
+  if (step.verseId) return step.verseId;
+  const entries = segment.kind === "learning" ? queue.learning : queue.reviews;
+  return entries[0]?.id;
+}
+
 function TodaySession({
   data,
   only,
@@ -381,6 +397,8 @@ function TodaySession({
   chrome: TodayChrome;
 }): JSX.Element {
   const now = useLiveNow();
+  const navigate = useNavigate();
+  const search = Route.useSearch();
   // Planned once at mount. A passage set aside earlier today ("That's enough
   // for today") stays set aside, like it does in Learn.
   const [segments] = useState(() => {
@@ -397,9 +415,27 @@ function TodaySession({
     learning: queueEntries(sortSessionVerses(data.learning), data.title),
     reviews: queueEntries(data.reviews, data.title),
   }));
-  const [step, setStep] = useState<TodayStep>(
-    segments.length > 0 ? { kind: "segment", index: 0 } : { kind: "summary" },
-  );
+  const [step, setStep] = useState<TodayStep>(() => {
+    const fromItem =
+      search.item === undefined
+        ? null
+        : todayQueueItemStep(
+            segments,
+            queue.learning,
+            queue.reviews,
+            search.item,
+          );
+    if (fromItem) {
+      return {
+        kind: "segment",
+        index: fromItem.index,
+        verseId: fromItem.verseId,
+      };
+    }
+    return segments.length > 0
+      ? { kind: "segment", index: 0 }
+      : { kind: "summary" };
+  });
   // Segments run in plan order, but the queue can jump anywhere, so progress
   // is what's finished plus each verse run's live state.
   const [done, setDone] = useState<ReadonlySet<number>>(() => new Set());
@@ -490,6 +526,28 @@ function TodaySession({
   const openQueueGroup = (group: TodayQueueGroup) => {
     if (group.target !== null) openSegment(group.target);
   };
+
+  const currentItemId = openQueueItemId(step, segments, queue);
+  useEffect(() => {
+    if (search.item === currentItemId) return;
+    void navigate({
+      to: "/memory/today",
+      search: {
+        ...(search.packId === undefined ? {} : { packId: search.packId }),
+        ...(only === undefined ? {} : { only }),
+        ...(search.return === undefined ? {} : { return: search.return }),
+        ...(currentItemId === undefined ? {} : { item: currentItemId }),
+      },
+      replace: true,
+    });
+  }, [
+    currentItemId,
+    navigate,
+    only,
+    search.item,
+    search.packId,
+    search.return,
+  ]);
 
   const doneCount = todaySessionCounts(segments, doneItems).done;
   const day = dayCarry(segments, tally, earlier, doneCount);

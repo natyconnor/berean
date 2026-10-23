@@ -9,6 +9,7 @@ import {
   todayInterstitialCopy,
   todayNextSegment,
   todayQueueGroups,
+  todayQueueItemStep,
   todaySegmentMinutes,
   todaySessionCountLabel,
   todaySessionCounts,
@@ -439,6 +440,30 @@ describe("todayQueueGroups", () => {
     });
     expect(group?.items).toHaveLength(TODAY_QUEUE_REVIEW_LIMIT + 1);
     expect(group?.moreCount).toBe(0);
+  });
+});
+
+describe("todayQueueItemStep", () => {
+  it("opens the segment and verse a queue item id names", () => {
+    expect(
+      todayQueueItemStep(QUEUE_SEGMENTS, QUEUE_LEARNING, QUEUE_REVIEWS, "jn2"),
+    ).toEqual({ index: 2, verseId: "jn2" });
+    expect(
+      todayQueueItemStep(
+        QUEUE_SEGMENTS,
+        QUEUE_LEARNING,
+        QUEUE_REVIEWS,
+        "psalm16",
+      ),
+    ).toEqual({ index: 1 });
+    expect(
+      todayQueueItemStep(
+        QUEUE_SEGMENTS,
+        QUEUE_LEARNING,
+        QUEUE_REVIEWS,
+        "missing",
+      ),
+    ).toBeNull();
   });
 });
 
