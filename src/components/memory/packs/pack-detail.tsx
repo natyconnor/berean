@@ -1321,13 +1321,14 @@ function PackDetailMenu({
             });
           }
         }}
-        onStartOver={async (choice) => {
+        onStartOver={async (choice, opts) => {
           if (isPassage) {
             const pieceIndexes =
               choice === "shaky" ? (shakyPieces ?? []).slice() : undefined;
             await startOverPassage({
               packId: pack._id,
               now: Date.now(),
+              replaceUndo: opts?.replaceUndo,
               ...(pieceIndexes ? { pieceIndexes } : {}),
             });
             return;
@@ -1342,7 +1343,11 @@ function PackDetailMenu({
                       isReviewPhase(member.status),
                   )
                   .map((member) => member.verseRefId);
-          await startOverMany({ verseRefIds, now: Date.now() });
+          await startOverMany({
+            verseRefIds,
+            now: Date.now(),
+            replaceUndo: opts?.replaceUndo,
+          });
           setUndoVerseRefIds(verseRefIds);
         }}
         onUndo={async () => {

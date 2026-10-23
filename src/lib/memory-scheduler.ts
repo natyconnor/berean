@@ -1093,6 +1093,15 @@ export function startOverSchedule(now: number): MemorySchedule {
   return initialSchedule(now);
 }
 
+export function nextStartOverUndo<T>(
+  existing: T | undefined,
+  snapshot: T,
+  replaceUndo = true,
+): T {
+  if (!replaceUndo && existing !== undefined) return existing;
+  return snapshot;
+}
+
 /** Undo Start over by putting the captured schedule back. */
 export function restoreStartOverUndo(
   snapshot: MemorySchedule & { lastReviewedAt?: number },

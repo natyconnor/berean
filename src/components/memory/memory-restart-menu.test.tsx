@@ -8,6 +8,8 @@ import {
   START_OVER_MENU_LABEL,
   STARTED_OVER_LABEL,
   UNDO_LABEL,
+  WHOLE_PACK_OPTION,
+  shakyVersesOption,
 } from "@/lib/memory-copy";
 
 import { MemoryRestartMenu } from "./memory-restart-menu";
@@ -46,7 +48,13 @@ function renderMenu(
       {...overrides}
     />,
   );
-  return { onStartOver, onUndo, onRefresh, unmount: view.unmount };
+  return {
+    onStartOver,
+    onUndo,
+    onRefresh,
+    unmount: view.unmount,
+    rerender: view.rerender,
+  };
 }
 
 async function openStartOverConfirm() {
@@ -139,7 +147,9 @@ describe("MemoryRestartMenu", () => {
     );
 
     expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
-    expect(first.onStartOver).toHaveBeenCalled();
+    expect(first.onStartOver).toHaveBeenCalledWith("whole", {
+      replaceUndo: true,
+    });
     expect(
       screen.getByRole("button", { name: "More actions" }),
     ).toBeInTheDocument();
@@ -175,5 +185,81 @@ describe("MemoryRestartMenu", () => {
         name: START_OVER_CONFIRM_LABEL,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("defaults to the shaky verses once they load", async () => {
+    const view = renderMenu({ wholeLabel: "pack", shakyLabels: [] });
+    await openStartOverConfirm();
+    expect(
+      screen.queryByRole("button", { name: /Just the shaky verses/ }),
+    ).not.toBeInTheDocument();
+
+    view.rerender(
+      <MemoryRestartMenu
+        name="Romans 8:28"
+        isDrawer={false}
+        refreshHref="/memory/practice"
+        learnHref="/memory/learn"
+        onRefresh={view.onRefresh}
+        onStartOver={view.onStartOver}
+        onUndo={view.onUndo}
+        stop={{
+          label: "Stop memorizing",
+          title: "Stop memorizing Romans 8:28?",
+          description: "Your progress is saved if you start again.",
+          onConfirm: async () => {},
+        }}
+        wholeLabel="pack"
+        shakyLabels={["Psalm 119:105"]}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: shakyVersesOption("Psalm 119:105"),
+      }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    expect(view.onStartOver).toHaveBeenCalledWith("shaky", {
+      replaceUndo: true,
+    });
+  });
+
+  it("keeps a whole-pack pick after shaky verses load again", async () => {
+    const view = renderMenu({
+      wholeLabel: "pack",
+      shakyLabels: ["Psalm 119:105"],
+    });
+    await openStartOverConfirm();
+    await userEvent.click(
+      screen.getByRole("button", { name: WHOLE_PACK_OPTION }),
+    );
+    view.rerender(
+      <MemoryRestartMenu
+        name="Romans 8:28"
+        isDrawer={false}
+        refreshHref="/memory/practice"
+        learnHref="/memory/learn"
+        onRefresh={view.onRefresh}
+        onStartOver={view.onStartOver}
+        onUndo={view.onUndo}
+        stop={{
+          label: "Stop memorizing",
+          title: "Stop memorizing Romans 8:28?",
+          description: "Your progress is saved if you start again.",
+          onConfirm: async () => {},
+        }}
+        wholeLabel="pack"
+        shakyLabels={["Psalm 119:105"]}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    expect(view.onStartOver).toHaveBeenCalledWith("whole", {
+      replaceUndo: true,
+    });
   });
 });

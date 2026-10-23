@@ -9,6 +9,7 @@ import {
   REVIEW_EVERY_OTHER_INTERVAL_DAYS,
   dueAtInCalendarDays,
   initialSchedule,
+  nextStartOverUndo,
   refreshSchedule,
   restoreStartOverUndo,
   scheduleNext,
@@ -302,5 +303,13 @@ describe("start over and undo", () => {
     });
     expect(restored).toEqual(prior);
     expect(restored).not.toHaveProperty("lastReviewedAt");
+  });
+
+  it("keeps the live snapshot and replaces it once Undo is gone", () => {
+    const first = reviewing({ intervalDays: 40, dueAt: NOW - DAY_MS });
+    const later = startOverSchedule(NOW);
+    expect(nextStartOverUndo(undefined, first, true)).toEqual(first);
+    expect(nextStartOverUndo(first, later, false)).toBe(first);
+    expect(nextStartOverUndo(first, later, true)).toBe(later);
   });
 });

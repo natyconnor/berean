@@ -8,7 +8,9 @@ import { SessionSummaryActions } from "@/components/memory/practice/session-comp
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { REFRESH_LABEL } from "@/lib/memory-copy";
+import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
+import { isLearningPhase } from "@/lib/memory-scheduler";
 import {
   groupReviewSessionAttempts,
   recalledCopy,
@@ -160,11 +162,18 @@ export function ReviewResultRows({
                   size="sm"
                   className="text-primary"
                   onClick={() => {
+                    const learning = isLearningPhase(
+                      attempt.status ?? "reviewing",
+                    );
                     void navigate({
-                      to: "/memory/practice",
+                      to: learning ? "/memory/learn" : "/memory/practice",
                       search: {
-                        ...memoryPracticeSearch(attempt.reference),
-                        refresh: true,
+                        ...(learning
+                          ? memoryLearnSearch(attempt.reference)
+                          : {
+                              ...memoryPracticeSearch(attempt.reference),
+                              refresh: true,
+                            }),
                         ...(returnTo === undefined ? {} : { return: returnTo }),
                       },
                     });

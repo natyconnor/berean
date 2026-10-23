@@ -40,6 +40,7 @@ import {
 import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
 import {
   holdReviewingInterval,
+  nextStartOverUndo,
   refreshSchedule,
   SHORT_VERSE_WORDS,
 } from "../src/lib/memory-scheduler";
@@ -588,6 +589,7 @@ export const startOver = mutation({
     packId: v.id("packs"),
     now: v.number(),
     pieceIndexes: v.optional(v.array(v.number())),
+    replaceUndo: v.optional(v.boolean()),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -603,7 +605,11 @@ export const startOver = mutation({
       pieces,
       status: "building",
       startedOverAt: args.now,
-      startOverUndo: row.startOverUndo ?? snapshotPassageUndo(row),
+      startOverUndo: nextStartOverUndo(
+        row.startOverUndo,
+        snapshotPassageUndo(row),
+        args.replaceUndo,
+      ),
       lastSessionAt: args.now,
       updatedAt: args.now,
     });

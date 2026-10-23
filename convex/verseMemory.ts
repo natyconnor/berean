@@ -61,6 +61,7 @@ import {
   isReviewPhase,
   holdReviewingInterval,
   refreshSchedule,
+  nextStartOverUndo,
   restoreStartOverUndo,
   scheduleNext,
   startOverSchedule,
@@ -953,6 +954,7 @@ async function applyVerseStartOver(
   userId: Id<"users">,
   verseRefId: Id<"verseRefs">,
   now: number,
+  replaceUndo = true,
 ): Promise<MemorySchedule> {
   const memory = await requireInMemory(ctx, userId, verseRefId);
   const current = scheduleFromMemory(memory);
@@ -963,12 +965,14 @@ async function applyVerseStartOver(
   await ctx.db.patch(memory._id, {
     ...next,
     startedOverAt: now,
-    startOverUndo:
-      memory.startOverUndo ??
+    startOverUndo: nextStartOverUndo(
+      memory.startOverUndo,
       snapshotSchedule({
         ...current,
         lastReviewedAt: memory.lastReviewedAt,
       }),
+      replaceUndo,
+    ),
   });
   return next;
 }
@@ -989,7 +993,11 @@ async function loadRecentReviews(
 
 /** Reset one verse to Read. Notes, hearts, packs, and history stay. */
 export const startOver = mutation({
-  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  args: {
+    verseRefId: v.id("verseRefs"),
+    now: v.number(),
+    replaceUndo: v.optional(v.boolean()),
+  },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
@@ -997,13 +1005,23 @@ export const startOver = mutation({
     if (!ref || ref.userId !== userId) {
       throw new Error("Verse reference not found");
     }
-    return await applyVerseStartOver(ctx, userId, args.verseRefId, args.now);
+    return await applyVerseStartOver(
+      ctx,
+      userId,
+      args.verseRefId,
+      args.now,
+      args.replaceUndo,
+    );
   },
 });
 
 /** Reset several verses (a pack chooser). */
 export const startOverMany = mutation({
-  args: { verseRefIds: v.array(v.id("verseRefs")), now: v.number() },
+  args: {
+    verseRefIds: v.array(v.id("verseRefs")),
+    now: v.number(),
+    replaceUndo: v.optional(v.boolean()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
@@ -1012,7 +1030,13 @@ export const startOverMany = mutation({
       if (!ref || ref.userId !== userId) continue;
       const memory = await findVerseMemory(ctx, userId, verseRefId);
       if (!memory || !isInMemory(memory)) continue;
-      await applyVerseStartOver(ctx, userId, verseRefId, args.now);
+      await applyVerseStartOver(
+        ctx,
+        userId,
+        verseRefId,
+        args.now,
+        args.replaceUndo,
+      );
     }
     return null;
   },

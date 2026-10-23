@@ -1,5 +1,8 @@
 import type { CardReference } from "@/components/study/study-card-model";
-import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
+import {
+  REVIEW_LAPSE_ACCURACY,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export interface ReviewSessionAttempt {
@@ -9,6 +12,7 @@ export interface ReviewSessionAttempt {
   label?: string;
   /** Whether to offer the per-verse Practice shortcut. Defaults to true. */
   offerPractice?: boolean;
+  status?: MemoryStatus;
 }
 
 /** Mean accuracy across every recitation, including retries. */

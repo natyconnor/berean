@@ -1650,6 +1650,16 @@ describe("PracticeBoard refresher", () => {
     ).toBeInTheDocument();
   });
 
+  async function completeRefreshStep() {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+  }
+
   it("holds the schedule through a Refresh sitting and applies the rung at the end", async () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
     mutationMock("verseMemory.finishRefresh").mockResolvedValue({
@@ -1669,19 +1679,52 @@ describe("PracticeBoard refresher", () => {
     );
 
     expect(await screen.findByText("First letters")).toBeInTheDocument();
-    const first = await screen.findByLabelText("Your recalled verse");
-    await userEvent.click(first);
-    await userEvent.paste(PASSAGE_ONE);
-    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Continue/ }),
-    );
+    await completeRefreshStep();
 
     await waitFor(() => {
       expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
         expect.objectContaining({ holdSchedule: true }),
       );
     });
+  });
+
+  it("ends a Refresh sitting after From memory and leaves the session", async () => {
+    const onExit = vi.fn();
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    mutationMock("verseMemory.finishRefresh").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={onExit}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    await completeRefreshStep();
+    expect(
+      await screen.findByText("Type what you remember"),
+    ).toBeInTheDocument();
+    await completeRefreshStep();
+    expect(
+      await screen.findByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+    await completeRefreshStep();
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(1);
   });
 });
 

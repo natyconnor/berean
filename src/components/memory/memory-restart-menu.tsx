@@ -94,7 +94,10 @@ export function MemoryRestartMenu({
   refreshHref: string;
   learnHref: string;
   onRefresh?: () => Promise<void>;
-  onStartOver: (choice: ShakyChoice) => Promise<void>;
+  onStartOver: (
+    choice: ShakyChoice,
+    opts?: { replaceUndo?: boolean },
+  ) => Promise<void>;
   onUndo: () => Promise<void>;
   stop: MemoryRestartStop;
   shakyLabels?: readonly string[];
@@ -107,12 +110,12 @@ export function MemoryRestartMenu({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(openStartOver);
   const [stopOpen, setStopOpen] = useState(false);
-  const [choice, setChoice] = useState<ShakyChoice>(
-    shakyLabels.length > 0 ? "shaky" : "whole",
-  );
+  const [pickedChoice, setPickedChoice] = useState<ShakyChoice | null>(null);
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const openingConfirm = useRef(false);
+  const pendingConfirm = useRef(false);
+  const choice: ShakyChoice =
+    pickedChoice ?? (shakyLabels.length > 0 ? "shaky" : "whole");
   const startLock = useSubmitLock();
   const refreshLock = useSubmitLock();
   const undoLock = useSubmitLock();
@@ -140,15 +143,17 @@ export function MemoryRestartMenu({
       return;
     }
     setError(null);
-    openingConfirm.current = true;
-    setConfirmOpen(true);
+    pendingConfirm.current = true;
+    setMenuOpen(false);
   };
 
   const handleConfirm = () =>
     startLock.submit(async () => {
       setError(null);
       try {
-        await onStartOver(shakyLabels.length > 0 ? choice : "whole");
+        await onStartOver(shakyLabels.length > 0 ? choice : "whole", {
+          replaceUndo: !started,
+        });
         setConfirmOpen(false);
         setStarted(true);
       } catch {
@@ -217,10 +222,10 @@ export function MemoryRestartMenu({
             align="end"
             className="max-w-[min(18rem,calc(100vw-32px))]"
             onCloseAutoFocus={(event) => {
-              if (openingConfirm.current) {
-                event.preventDefault();
-                openingConfirm.current = false;
-              }
+              if (!pendingConfirm.current) return;
+              event.preventDefault();
+              pendingConfirm.current = false;
+              setConfirmOpen(true);
             }}
           >
             <DropdownMenuItem
@@ -243,7 +248,6 @@ export function MemoryRestartMenu({
               disabled={refreshLock.pending || startLock.pending}
               onSelect={(event) => {
                 event.preventDefault();
-                setMenuOpen(false);
                 handleStartOverSelect();
               }}
             >
@@ -277,7 +281,8 @@ export function MemoryRestartMenu({
             const target = event.target;
             if (
               target instanceof Element &&
-              target.closest('[aria-label="More actions"]')
+              (target.closest('[aria-label="More actions"]') ||
+                target.closest("[role='menu']"))
             ) {
               event.preventDefault();
             }
@@ -290,12 +295,12 @@ export function MemoryRestartMenu({
             <div className="mt-3 grid gap-2">
               <Choice
                 selected={choice === "shaky"}
-                onSelect={() => setChoice("shaky")}
+                onSelect={() => setPickedChoice("shaky")}
                 label={shakyVersesOption(formatShakyVerseList(shakyLabels))}
               />
               <Choice
                 selected={choice === "whole"}
-                onSelect={() => setChoice("whole")}
+                onSelect={() => setPickedChoice("whole")}
                 label={
                   wholeLabel === "pack"
                     ? WHOLE_PACK_OPTION
@@ -445,8 +450,12 @@ export function VerseRestartMenu({
           });
         }
       }}
-      onStartOver={async () => {
-        await startOver({ verseRefId, now: Date.now() });
+      onStartOver={async (_choice, opts) => {
+        await startOver({
+          verseRefId,
+          now: Date.now(),
+          replaceUndo: opts?.replaceUndo,
+        });
       }}
       onUndo={async () => {
         await undoStartOver({ verseRefId, now: Date.now() });

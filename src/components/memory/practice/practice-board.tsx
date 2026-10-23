@@ -956,7 +956,12 @@ export function PracticeBoard({
       <PracticeShell {...shellProps}>
         {isReview ? (
           <ReviewSummary
-            attempts={sessionAttempts}
+            attempts={sessionAttempts.map((attempt) => ({
+              ...attempt,
+              status:
+                attempt.status ??
+                progressByVerseId[verseRefKey(attempt.reference)]?.status,
+            }))}
             averageAccuracy={averageAccuracy}
             remaining={remaining}
             onDone={onExit}
@@ -1097,6 +1102,10 @@ export function PracticeBoard({
               }}
               advancesOnContinue={!currentHasWorkLeft}
               onContinueAfterResult={() => {
+                if (refresh) {
+                  onExit();
+                  return;
+                }
                 // A spent verse (learning lock, or a review that just
                 // rescheduled) should hand off to the next verse that still
                 // has a session left rather than parking on a dead end.
