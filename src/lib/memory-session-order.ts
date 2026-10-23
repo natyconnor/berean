@@ -104,3 +104,33 @@ export function orderSessionVerses<T extends SessionOrderItem>(
     (cluster) => cluster.items,
   );
 }
+
+/**
+ * Reorder one Today group: finished cards stay at the front in the order they
+ * were finished, and only unfinished cards move. Shuffle puts the shown card
+ * first among those unfinished cards, then permutes the rest as chapter sets.
+ */
+export function orderRemainingSessionItems<
+  T extends SessionOrderItem & { id: string },
+>(
+  items: readonly T[],
+  order: PracticeOrder,
+  seed = 0,
+  spentIds: ReadonlySet<string> = new Set(),
+  shownId?: string,
+): T[] {
+  const finished = items.filter((item) => spentIds.has(item.id));
+  const unfinished = items.filter((item) => !spentIds.has(item.id));
+  if (order === "in-order") {
+    return [...finished, ...sortSessionVerses(unfinished)];
+  }
+  const shown = unfinished.find((item) => item.id === shownId);
+  const rest = shown
+    ? unfinished.filter((item) => item.id !== shown.id)
+    : unfinished;
+  return [
+    ...finished,
+    ...(shown ? [shown] : []),
+    ...orderSessionVerses(rest, "shuffle", seed),
+  ];
+}

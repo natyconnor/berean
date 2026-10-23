@@ -10,6 +10,7 @@ import {
 } from "@/lib/learn-dismissed-packs";
 
 import { verseRefKey } from "../../../shared/verse-ref-key";
+import { formatVerseRef } from "@/lib/verse-ref-utils";
 import { MemoryTodayPage } from "./memory-today-page";
 
 const NOW = Date.UTC(2026, 9, 12, 18);
@@ -118,31 +119,58 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     verses,
     progress,
     railHeader,
+    rail,
     onComplete,
     initialVerseId,
     runState,
     onRunStateChange,
     onCurrentVerseId,
+    orderedIds,
+    shownId,
+    onShow,
+    onSessionOrderChange,
   }: {
     kind: string;
     verses: StubVerse[];
     progress?: StubProgress;
     railHeader?: ReactNode;
+    rail?:
+      | ReactNode
+      | ((api: {
+          changeOrder: (order: "in-order" | "shuffle") => void;
+        }) => ReactNode);
     onComplete?: (result: unknown) => void;
     initialVerseId?: string;
     runState?: unknown;
     onRunStateChange?: (state: unknown, result: unknown) => void;
     onCurrentVerseId?: (id: string) => void;
+    orderedIds?: readonly string[];
+    shownId?: string;
+    onShow?: (id: string) => void;
+    onSessionOrderChange?: (order: "in-order" | "shuffle") => void;
   }) => {
     // Grade the first `count` cards past today's work (graduated, or
     // rescheduled days out) and report the run, as the board does.
+    const ids =
+      orderedIds ?? verses.map((verse) => verseRefKey(verse.reference));
+    const byId = new Map(
+      verses.map((verse) => [verseRefKey(verse.reference), verse]),
+    );
+    const orderedVerses = ids
+      .map((id) => byId.get(id))
+      .filter((verse): verse is StubVerse => verse !== undefined);
+    const currentId = shownId ?? initialVerseId ?? ids[0];
+    const report = (id: string) => {
+      onShow?.(id);
+      onCurrentVerseId?.(id);
+    };
     const spend = (count: number) => {
-      const graded = verses.slice(0, count);
-      const ids = graded.map((verse) => verseRefKey(verse.reference));
+      const graded = orderedVerses.slice(0, count);
+      const spentIds = graded.map((verse) => verseRefKey(verse.reference));
       onRunStateChange?.(
         {
           progress: Object.fromEntries(
-            ids.map((id) => [
+            spentIds.map((id) => [
               id,
               {
                 learnStage: 3,
@@ -153,7 +181,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
             ]),
           ),
           attempts: [],
-          graded: ids,
+          graded: spentIds,
         },
         {
           verses: graded.map((verse) => ({
@@ -170,6 +198,8 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
       <div
         data-testid={`${kind}-session`}
         data-initial-verse={initialVerseId ?? ""}
+        data-shown={currentId ?? ""}
+        data-order={ids.join(",")}
         data-resumed={runState ? "true" : "false"}
       >
         <p>
@@ -177,14 +207,80 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
             ? progress({ done: 1, total: verses.length }).label
             : progress?.label}
         </p>
-        {railHeader}
+        {typeof rail === "function"
+          ? rail({
+              changeOrder: (next) => onSessionOrderChange?.(next),
+            })
+          : (rail ?? railHeader)}
         <ul>
-          {verses.map((verse) => (
-            <li key={verse.verseRefId}>{verse.verseRefId}</li>
+          {orderedVerses.map((verse) => (
+            <li
+              key={verse.verseRefId}
+              data-verse-id={verseRefKey(verse.reference)}
+            >
+              {verse.verseRefId}
+            </li>
           ))}
         </ul>
+        {orderedVerses.map((verse) => {
+          const id = verseRefKey(verse.reference);
+          return (
+            <button key={id} type="button" onClick={() => report(id)}>
+              Show {formatVerseRef(verse.reference)}
+            </button>
+          );
+        })}
+        <button type="button" onClick={() => onSessionOrderChange?.("shuffle")}>
+          Shuffle verses
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentId) return;
+            const index = ids.indexOf(currentId);
+            const next = ids[(index + 1) % ids.length];
+            if (next) report(next);
+          }}
+        >
+          Show the next card
+        </button>
         <button type="button" onClick={() => spend(1)}>
           Spend the first {kind} card
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentId) return;
+            const verse = byId.get(currentId);
+            if (!verse) return;
+            onRunStateChange?.(
+              {
+                progress: {
+                  [currentId]: {
+                    learnStage: 3,
+                    stageReps: 0,
+                    status: "reviewing",
+                    dueAt: NOW + 3 * 24 * 60 * 60 * 1000,
+                  },
+                },
+                attempts: [],
+                graded: [currentId],
+              },
+              {
+                verses: [
+                  {
+                    id: currentId,
+                    reference: verse.reference,
+                    learnStage: 2,
+                    status: "learning",
+                  },
+                ],
+                attempts: [],
+              },
+            );
+          }}
+        >
+          Spend the shown {kind} card
         </button>
         <button type="button" onClick={() => spend(verses.length)}>
           Spend every {kind} card
@@ -193,7 +289,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
           type="button"
           onClick={() => {
             const next = verses[1];
-            if (next) onCurrentVerseId?.(verseRefKey(next.reference));
+            if (next) report(verseRefKey(next.reference));
           }}
         >
           Show the second {kind} card
@@ -275,17 +371,51 @@ function inMemory(id: string, verse: number, status: "new" | "learning") {
 }
 
 function dueVerse(id: string, verse: number) {
+  return dueVerseBook(id, "Luke", 9, verse);
+}
+
+function dueVerseBook(
+  id: string,
+  book: string,
+  chapter: number,
+  verse: number,
+) {
   return {
     kind: "verse" as const,
     verseRefId: id,
-    book: "Luke",
-    chapter: 9,
+    book,
+    chapter,
     startVerse: verse,
     endVerse: verse,
     learnStage: 3,
     status: "reviewing" as const,
     dueAt: NOW - 1000,
   };
+}
+
+function inMemoryBook(
+  id: string,
+  book: string,
+  chapter: number,
+  verse: number,
+  status: "new" | "learning",
+) {
+  return {
+    ...inMemory(id, verse, status),
+    book,
+    chapter,
+    startVerse: verse,
+    endVerse: verse,
+  };
+}
+
+function verseId(book: string, chapter: number, verse: number): string {
+  return verseRefKey({
+    book,
+    chapter,
+    startVerse: verse,
+    endVerse: verse,
+  });
 }
 
 const PSALM_16 = { packId: "psalm16", packName: "Psalm 16", dueAt: NOW - 10 };
@@ -387,11 +517,13 @@ describe("MemoryTodayPage", () => {
 
     const learning = screen.getByTestId("learning-session");
     expect(within(learning).getByText("Today · 2 of 4")).toBeInTheDocument();
-    const overview = within(learning).getByRole("region", { name: "Today" });
+    const rail = within(learning).getByRole("region", {
+      name: "Today's queue",
+    });
     expect(
-      within(overview)
-        .getAllByRole("listitem")
-        .map((part) => part.dataset.state),
+      [...rail.querySelectorAll("[data-group]")].map((part) =>
+        part instanceof HTMLElement ? part.dataset.state : undefined,
+      ),
     ).toEqual(["done", "current", "upcoming"]);
     expect(within(learning).getByText("jn15_1")).toBeInTheDocument();
     expect(within(learning).getByText("jn15_2")).toBeInTheDocument();
@@ -592,15 +724,17 @@ describe("MemoryTodayPage", () => {
       "data-initial-verse",
       verseRefKey({ book: "John", chapter: 15, startVerse: 2, endVerse: 2 }),
     );
-    const overview = within(learning).getByRole("region", { name: "Today" });
+    const rail = within(learning).getByRole("region", {
+      name: "Today's queue",
+    });
     expect(
-      within(overview)
-        .getAllByRole("listitem")
-        .map((part) => part.dataset.state),
+      [...rail.querySelectorAll("[data-group]")].map((part) =>
+        part instanceof HTMLElement ? part.dataset.state : undefined,
+      ),
     ).toEqual(["upcoming", "current", "upcoming"]);
 
     await userEvent.click(
-      within(overview).getByRole("button", { name: "Go to Passages" }),
+      within(rail).getByRole("button", { name: "Go to Passages" }),
     );
     expect(
       screen.getByRole("heading", { name: "Psalm 16" }),
@@ -691,17 +825,17 @@ describe("MemoryTodayPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Go to Reviews" }),
     );
-    const overview = within(screen.getByTestId("review-session")).getByRole(
+    const rail = within(screen.getByTestId("review-session")).getByRole(
       "region",
-      { name: "Today" },
+      { name: "Today's queue" },
     );
     expect(
-      within(overview)
-        .getAllByRole("listitem")
-        .map((part) => part.dataset.state),
+      [...rail.querySelectorAll("[data-group]")].map((part) =>
+        part instanceof HTMLElement ? part.dataset.state : undefined,
+      ),
     ).toEqual(["upcoming", "done", "current"]);
     expect(
-      within(overview).queryByRole("button", { name: "Go to Verses to learn" }),
+      within(rail).queryByRole("button", { name: "Go to Verses to learn" }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(
@@ -923,8 +1057,8 @@ describe("MemoryTodayPage", () => {
     const learning = screen.getByTestId("learning-session");
     expect(within(learning).getByText("Today · 1 of 4")).toBeInTheDocument();
     expect(
-      within(learning).getByRole("region", { name: "Today" }),
-    ).toHaveTextContent("Verses to learn(now)Reviews1");
+      within(learning).getByRole("region", { name: "Today's queue" }),
+    ).toHaveTextContent("Verses to learn");
     expect(within(learning).queryByText("d")).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Finish learning" }),
@@ -1005,5 +1139,213 @@ describe("MemoryTodayPage", () => {
       screen.queryByRole("region", { name: "Today's queue" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/^Next up/)).not.toBeInTheDocument();
+  });
+
+  it("keeps Shuffle, Next, a rail pick, and ?item= on one Today list", async () => {
+    const gen = verseId("Genesis", 1, 1);
+    const psalm = verseId("Psalms", 8, 2);
+    const luke = verseId("Luke", 9, 23);
+    setToday({
+      passages: [PSALM_16],
+      learning: [
+        inMemoryBook("gen1_1", "Genesis", 1, 1, "learning"),
+        inMemoryBook("ps8_2", "Psalms", 8, 2, "new"),
+        inMemoryBook("lk9_23", "Luke", 9, 23, "learning"),
+      ],
+      due: [dueVerse("lk9_24", 24)],
+    });
+    search.current = { return: "/memory", item: gen };
+    const { unmount } = renderToday();
+
+    const learning = screen.getByTestId("learning-session");
+    expect(learning).toHaveAttribute("data-shown", gen);
+    expect(learning).toHaveAttribute("data-order", `${gen},${psalm},${luke}`);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show Psalm 8:2" }),
+    );
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/memory/today",
+      search: { return: "/memory", item: psalm },
+      replace: true,
+    });
+    search.current = { return: "/memory", item: psalm };
+
+    await userEvent.click(screen.getByRole("radio", { name: "Shuffle" }));
+    let shuffled = screen.getByTestId("learning-session").dataset.order ?? "";
+    for (
+      let attempt = 0;
+      attempt < 8 && shuffled === `${psalm},${gen},${luke}`;
+      attempt += 1
+    ) {
+      await userEvent.click(screen.getByRole("radio", { name: "Shuffle" }));
+      shuffled = screen.getByTestId("learning-session").dataset.order ?? "";
+    }
+    expect(shuffled.split(",")).toEqual(
+      expect.arrayContaining([gen, psalm, luke]),
+    );
+    expect(shuffled.split(",")[0]).toBe(psalm);
+    expect(shuffled).not.toBe(`${gen},${psalm},${luke}`);
+
+    const rail = screen.getByRole("region", { name: "Today's queue" });
+    const learningRows = ["Genesis 1:1", "Psalm 8:2", "Luke 9:23"].map(
+      (label) => within(rail).getByText(label).closest("li"),
+    );
+    expect(learningRows.every((row) => row !== null)).toBe(true);
+    const railOrder = [...rail.querySelectorAll("li")]
+      .map((row) => row.textContent ?? "")
+      .filter((text) => /Genesis 1:1|Psalm 8:2|Luke 9:23/.test(text));
+    expect(railOrder[0]).toMatch(/Psalm 8:2/);
+    expect(railOrder.join()).not.toMatch(/Genesis 1:1.*Psalm 8:2.*Luke 9:23/);
+
+    const afterJump = screen.getByTestId("learning-session");
+    const orderAfter = (afterJump.dataset.order ?? "").split(",");
+    expect(orderAfter).toEqual(shuffled.split(","));
+    expect(afterJump).toHaveAttribute("data-shown", psalm);
+    const nextId =
+      orderAfter[(orderAfter.indexOf(psalm) + 1) % orderAfter.length];
+    await userEvent.click(
+      within(afterJump).getByRole("button", { name: "Show the next card" }),
+    );
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-shown",
+      nextId,
+    );
+    expect(navigate).toHaveBeenLastCalledWith({
+      to: "/memory/today",
+      search: { return: "/memory", item: nextId },
+      replace: true,
+    });
+
+    unmount();
+    search.current = { return: "/memory", item: psalm };
+    renderToday();
+    const restored = screen.getByTestId("learning-session");
+    expect(restored).toHaveAttribute("data-shown", psalm);
+    expect(restored).toHaveAttribute("data-initial-verse", psalm);
+    expect(restored).toHaveAttribute("data-order", `${gen},${psalm},${luke}`);
+  });
+
+  it("keeps finished verses at the top of their group under Shuffle", async () => {
+    const gen = verseId("Genesis", 1, 1);
+    const john = verseId("John", 3, 16);
+    const psalm = verseId("Psalms", 8, 2);
+    const luke = verseId("Luke", 9, 23);
+    setToday({
+      passages: [],
+      learning: [
+        inMemoryBook("gen1_1", "Genesis", 1, 1, "learning"),
+        inMemoryBook("jn3_16", "John", 3, 16, "new"),
+        inMemoryBook("ps8_2", "Psalms", 8, 2, "learning"),
+        inMemoryBook("lk9_23", "Luke", 9, 23, "learning"),
+      ],
+      due: [],
+    });
+    search.current = { return: "/memory", item: psalm };
+    renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Spend the shown learning card" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show John 3:16" }),
+    );
+    await userEvent.click(screen.getByRole("radio", { name: "Shuffle" }));
+
+    let order = (
+      screen.getByTestId("learning-session").dataset.order ?? ""
+    ).split(",");
+    for (
+      let attempt = 0;
+      attempt < 8 &&
+      order[0] === psalm &&
+      order[1] === john &&
+      order.slice(2).join() === `${gen},${luke}`;
+      attempt += 1
+    ) {
+      await userEvent.click(screen.getByRole("radio", { name: "Shuffle" }));
+      order = (
+        screen.getByTestId("learning-session").dataset.order ?? ""
+      ).split(",");
+    }
+
+    expect(order[0]).toBe(psalm);
+    expect(order[1]).toBe(john);
+    expect(order.slice(2).sort()).toEqual([gen, luke].sort());
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-shown",
+      john,
+    );
+
+    const rail = screen.getByRole("region", { name: "Today's queue" });
+    const learningRows = [...rail.querySelectorAll("li")]
+      .map((row) => row.textContent ?? "")
+      .filter((text) => /Genesis 1:1|John 3:16|Psalm 8:2|Luke 9:23/.test(text));
+    expect(learningRows[0]).toMatch(/Psalm 8:2/);
+    expect(learningRows[1]).toMatch(/John 3:16/);
+  });
+
+  it("shuffles only the current group's unfinished verses", async () => {
+    const gen = verseId("Genesis", 1, 1);
+    const psalm = verseId("Psalms", 8, 2);
+    const luke = verseId("Luke", 9, 23);
+    const isaiah = verseId("Isaiah", 40, 31);
+    const matt = verseId("Matthew", 6, 33);
+    const john = verseId("John", 11, 35);
+    const reviewOrder = `${isaiah},${matt},${john}`;
+    setToday({
+      passages: [],
+      learning: [
+        inMemoryBook("gen1_1", "Genesis", 1, 1, "learning"),
+        inMemoryBook("ps8_2", "Psalms", 8, 2, "new"),
+        inMemoryBook("lk9_23", "Luke", 9, 23, "learning"),
+      ],
+      due: [
+        dueVerseBook("is40_31", "Isaiah", 40, 31),
+        dueVerseBook("mt6_33", "Matthew", 6, 33),
+        dueVerseBook("jn11_35", "John", 11, 35),
+      ],
+    });
+    search.current = { return: "/memory", item: psalm };
+    renderToday();
+
+    await userEvent.click(screen.getByRole("radio", { name: "Shuffle" }));
+    let shuffled = screen.getByTestId("learning-session").dataset.order ?? "";
+    for (
+      let attempt = 0;
+      attempt < 8 && shuffled === `${psalm},${gen},${luke}`;
+      attempt += 1
+    ) {
+      await userEvent.click(screen.getByRole("radio", { name: "Shuffle" }));
+      shuffled = screen.getByTestId("learning-session").dataset.order ?? "";
+    }
+    expect(shuffled.split(",")[0]).toBe(psalm);
+    expect(shuffled).not.toBe(`${gen},${psalm},${luke}`);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Reviews" }),
+    );
+    const review = screen.getByTestId("review-session");
+    expect(review).toHaveAttribute("data-order", reviewOrder);
+    expect(screen.getByRole("radio", { name: "In order" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("radio", { name: "Shuffle" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Go to Verses to learn" }),
+    );
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-order",
+      shuffled,
+    );
+    expect(screen.getByRole("radio", { name: "Shuffle" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 });

@@ -8,6 +8,7 @@ import {
 } from "@/components/memory/practice/practice-board";
 import type { SessionProgressSource } from "@/lib/session-progress";
 import type { MemorySessionKind } from "@/lib/memory-session";
+import type { PracticeOrder } from "@/lib/practice-order";
 
 interface MemorySessionRunnerProps {
   kind: MemorySessionKind;
@@ -35,10 +36,22 @@ interface MemorySessionRunnerProps {
   onComplete?: (result: PracticeSessionResult) => void;
   /** Shown above the verse rail, e.g. an overview of the whole session. */
   railHeader?: ReactNode;
+  /** Replaces the board's own sidebar. */
+  rail?:
+    | ReactNode
+    | ((api: { changeOrder: (order: PracticeOrder) => void }) => ReactNode);
   /** Card id to open first; the first card in order when absent. */
   initialVerseId?: string;
   /** The card now on screen, after a rail pick, Next, or Shuffle. */
   onCurrentVerseId?: (id: string) => void;
+  /** When set, this run reads card order from the session instead of its own. */
+  orderedIds?: readonly string[];
+  /** When set, this is the card on screen. */
+  shownId?: string;
+  /** Ask the session to show another card from the shared list. */
+  onShow?: (id: string) => void;
+  /** Ask the session to reshuffle or restore Scripture order. */
+  onSessionOrderChange?: (order: PracticeOrder) => void;
   /** Pick a run back up where it was left. Read once, at mount. */
   runState?: PracticeRunState;
   /** Every change to the run's state, with the results so far. */

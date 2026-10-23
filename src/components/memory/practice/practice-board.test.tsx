@@ -1495,3 +1495,133 @@ describe("PracticeBoard session Home", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("PracticeBoard session order", () => {
+  const genesis1: EsvChapterData = {
+    canonical: "Genesis 1",
+    copyright: "test",
+    verses: [{ number: 1, text: "In the beginning, God created." }],
+  };
+
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockImplementation(({ query }: { query: string }) =>
+      Promise.resolve(
+        query === "Luke 9" ? luke9 : query === "Genesis 1" ? genesis1 : psalm8,
+      ),
+    );
+  });
+
+  function sessionVerses(): PracticeVerse[] {
+    return [
+      learningRef("Genesis", 1, 1),
+      learningRef("Psalms", 8, 2),
+      learningRef("Luke", 9, 23, 24),
+    ];
+  }
+
+  function railRow(reference: string): HTMLElement {
+    return screen.getByRole("button", {
+      name: new RegExp(`^${reference} \\(`),
+    });
+  }
+
+  it("keeps the shown card, rail highlight, and deal landing after Shuffle", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={sessionVerses()}
+          scopeLabel="Today's learning"
+          onExit={() => {}}
+          initialVerseId={verseRefKey({
+            book: "Psalms",
+            chapter: 8,
+            startVerse: 2,
+            endVerse: 2,
+          })}
+        />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => {
+      expect(railRow("Psalm 8:2")).toBeVisible();
+    });
+    expect(railRow("Psalm 8:2")).toHaveAttribute("aria-current", "true");
+    await waitFor(() => {
+      expect(screen.getByText("Verse 2 of 3")).toBeVisible();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Shuffle" }));
+
+    expect(railRow("Psalm 8:2")).toHaveAttribute("aria-current", "true");
+    const faces = screen.getAllByText("Shuffling your learning order");
+    expect(faces.length).toBeGreaterThan(0);
+    const lastFace = faces[faces.length - 1]?.closest("div");
+    expect(lastFace).not.toBeNull();
+    await waitFor(() => {
+      expect(
+        within(lastFace as HTMLElement).getByRole("heading", {
+          name: "Psalm 8:2",
+        }),
+      ).toBeVisible();
+    });
+  });
+
+  it("moves Next and a rail pick with the same list and highlight", async () => {
+    const shown = verseRefKey({
+      book: "Psalms",
+      chapter: 8,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    const luke = verseRefKey({
+      book: "Luke",
+      chapter: 9,
+      startVerse: 23,
+      endVerse: 24,
+    });
+    const onShow = vi.fn<(id: string) => void>();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={sessionVerses()}
+          scopeLabel="Today's learning"
+          onExit={() => {}}
+          orderedIds={[
+            shown,
+            luke,
+            verseRefKey({
+              book: "Genesis",
+              chapter: 1,
+              startVerse: 1,
+              endVerse: 1,
+            }),
+          ]}
+          shownId={shown}
+          onShow={onShow}
+        />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => {
+      expect(railRow("Psalm 8:2")).toBeVisible();
+    });
+    expect(railRow("Psalm 8:2")).toHaveAttribute("aria-current", "true");
+    expect(verseRailLabels()[0]).toBe("Psalm 8:2");
+    await waitFor(() => {
+      expect(screen.getByText("Verse 1 of 3")).toBeVisible();
+    });
+
+    await userEvent.click(railRow("Luke 9:23–24"));
+    expect(onShow).toHaveBeenCalledWith(luke);
+  });
+});

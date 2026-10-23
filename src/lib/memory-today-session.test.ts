@@ -338,7 +338,7 @@ describe("todayQueueGroups", () => {
         heading: "Verses to learn",
         state: "current",
         target: null,
-        items: ["John 1:1:current@2", "John 1:2:current@2"],
+        items: ["John 1:1:current@2", "John 1:2:upcoming:open@2"],
       },
       {
         heading: "Reviews",
@@ -372,6 +372,12 @@ describe("todayQueueGroups", () => {
       "Luke 9:23:done@3",
       "Romans 8:28:current@3",
     ]);
+    const shown = todayQueueGroups({
+      ...progressInput([], ["lk9"]),
+      current: 3,
+      shownId: "rm8",
+    })[2]?.items.map((item) => `${item.label}:${item.state}`);
+    expect(shown).toEqual(["Luke 9:23:done", "Romans 8:28:current"]);
   });
 
   it("marks a verse segment's spent cards done and keeps the rest open", () => {
@@ -440,6 +446,25 @@ describe("todayQueueGroups", () => {
     });
     expect(group?.items).toHaveLength(TODAY_QUEUE_REVIEW_LIMIT + 1);
     expect(group?.moreCount).toBe(0);
+  });
+
+  it("keeps the shown review in the list when it would fall under +N more", () => {
+    const many = Array.from({ length: 20 }, (_, index) => ({
+      id: `r${index}`,
+      label: `Review ${index}`,
+    }));
+    const [group] = todayQueueGroups({
+      segments: [{ kind: "review", reviewCount: many.length }],
+      learning: [],
+      reviews: many,
+      done: new Set(),
+      current: 0,
+      shownId: "r18",
+    });
+    expect(group?.items.map((item) => item.id)).toContain("r18");
+    expect(group?.items.at(-1)?.id).toBe("r18");
+    expect(group?.items).toHaveLength(TODAY_QUEUE_REVIEW_LIMIT);
+    expect(group?.moreCount).toBe(8);
   });
 });
 
