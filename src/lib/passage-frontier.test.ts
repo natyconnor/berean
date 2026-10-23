@@ -22,6 +22,7 @@ import {
   PASSAGE_PASS_ACCURACY,
   PASSAGE_REHEARSAL_MAX_PIECES,
   PASSAGE_REHEARSAL_MAX_WORDS,
+  progressFrontierPieces,
   progressPassagePiece,
   rehearsalStartIndex,
   remainingIntroduces,
@@ -456,6 +457,28 @@ describe("progressPassagePiece", () => {
     expect(current.attachment).toBe("attached");
     expect(current.learnStage).toBe(2);
     expect(current.dueAt).toBeGreaterThan(now);
+  });
+
+  it("leaves pieces unchanged when a frontier attempt holds the schedule", () => {
+    const now = 1_700_000_000_000;
+    const pieces = [piece(0, "learning", { learnStage: 2, stageReps: 0 })];
+    expect(
+      progressFrontierPieces(pieces, 0, {
+        accuracy: 92,
+        now,
+        tzOffsetMinutes: 0,
+        wordCount: 10,
+        holdSchedule: true,
+      }),
+    ).toEqual(pieces);
+    const advanced = progressFrontierPieces(pieces, 0, {
+      accuracy: 92,
+      now,
+      tzOffsetMinutes: 0,
+      wordCount: 10,
+    });
+    expect(advanced[0]?.stageReps).toBe(1);
+    expect(advanced[0]).not.toEqual(pieces[0]);
   });
 
   it("does not skip a locked attached piece when a later learning piece is due", () => {

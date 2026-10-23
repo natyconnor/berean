@@ -55,6 +55,20 @@ describe("validateMemoryPracticeSearch", () => {
     expect(validateMemoryPracticeSearch({ return: "/memory" })).toEqual({
       return: "/memory",
     });
+    expect(
+      validateMemoryPracticeSearch({
+        book: "John",
+        chapter: 3,
+        startVerse: 16,
+        refresh: "1",
+      }),
+    ).toEqual({
+      book: "John",
+      chapter: 3,
+      startVerse: 16,
+      endVerse: 16,
+      refresh: true,
+    });
     expect(validateMemoryPracticeSearch({ return: "//evil.com" })).toEqual({});
   });
 

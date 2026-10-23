@@ -1,16 +1,20 @@
 import type { JSX } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
+import { CheckCircle2, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { AddToPack } from "@/components/memory/packs/add-to-pack";
 import { SessionSummaryActions } from "@/components/memory/practice/session-complete";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { REFRESH_LABEL } from "@/lib/memory-copy";
+import { memoryLearnSearch } from "@/lib/memory-learn-search";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
+import { isLearningPhase } from "@/lib/memory-scheduler";
 import {
   groupReviewSessionAttempts,
   recalledCopy,
+  slippedThisSession,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
@@ -149,7 +153,36 @@ export function ReviewResultRows({
                   variant="icon"
                 />
               ) : null}
-              {attempt.offerPractice === false ? null : (
+              {attempt.offerPractice === false ? null : slippedThisSession(
+                  attempt.accuracies,
+                ) ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-primary"
+                  onClick={() => {
+                    const learning = isLearningPhase(
+                      attempt.status ?? "reviewing",
+                    );
+                    void navigate({
+                      to: learning ? "/memory/learn" : "/memory/practice",
+                      search: {
+                        ...(learning
+                          ? memoryLearnSearch(attempt.reference)
+                          : {
+                              ...memoryPracticeSearch(attempt.reference),
+                              refresh: true,
+                            }),
+                        ...(returnTo === undefined ? {} : { return: returnTo }),
+                      },
+                    });
+                  }}
+                >
+                  <Lightbulb className="size-3.5" aria-hidden />
+                  {REFRESH_LABEL}
+                </Button>
+              ) : (
                 <Button
                   type="button"
                   variant="outline"

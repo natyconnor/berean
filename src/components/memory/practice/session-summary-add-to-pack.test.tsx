@@ -178,4 +178,42 @@ describe("Add to pack on session summaries", () => {
       screen.queryByRole("button", { name: /Psalm 23/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("sends a learning-phase Refresh to Learn", async () => {
+    renderWithTooltips(
+      <ReviewSummary
+        attempts={[
+          { reference: JOHN_3_16, accuracy: 34, status: "learning" },
+          { reference: GENESIS_33_9, accuracy: 40, status: "reviewing" },
+        ]}
+        averageAccuracy={37}
+        remaining={0}
+        onDone={() => {}}
+      />,
+    );
+
+    const refreshButtons = screen.getAllByRole("button", { name: "Refresh" });
+    await userEvent.click(refreshButtons[0]);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/learn",
+      search: {
+        book: "John",
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+      },
+    });
+
+    await userEvent.click(refreshButtons[1]);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/practice",
+      search: {
+        book: "Genesis",
+        chapter: 33,
+        startVerse: 9,
+        endVerse: 9,
+        refresh: true,
+      },
+    });
+  });
 });

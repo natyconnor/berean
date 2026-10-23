@@ -102,6 +102,7 @@ export function MemoryAllSessionPage({
       exitHref={exit.href}
       returnTo={returnTo}
       hasMemorized={hasMemorized}
+      refresh={search.refresh === true}
       emptyState={
         kind === "learning" ? (
           <LearnEmptyState

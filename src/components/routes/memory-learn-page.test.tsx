@@ -50,6 +50,13 @@ function mutationMock(name: string) {
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
   useAction: (name: string) => actionMock(name),
+  useQuery: (name: string, args: unknown) => {
+    if (args === "skip") return undefined;
+    if (name === "passageMemory.reviewFreshness") {
+      return queryResults.get(name) ?? { stale: false };
+    }
+    return queryResults.get(name);
+  },
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -107,6 +114,7 @@ vi.mock("../../../convex/_generated/api", () => ({
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
       acceptRetryHold: "passageMemory.acceptRetryHold",
+      reviewFreshness: "passageMemory.reviewFreshness",
     },
   },
 }));

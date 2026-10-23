@@ -7,6 +7,13 @@ import {
   useState,
 } from "react";
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
+import {
+  EnterToCheckHint,
+  FirstLettersPanel,
+  NeedARefresherButton,
+  NeedARefresherLink,
+} from "@/components/memory/memory-refresher-controls";
+import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
@@ -52,6 +59,8 @@ export type PassageRecallResult = {
   quality: VerseAttemptQuality;
   durationMs: number;
   via: "read" | "typed";
+  hint?: "first-letters";
+  holdSchedule?: boolean;
 };
 
 export type PassageRecallHint =
@@ -86,6 +95,7 @@ interface PassageRecallCardProps {
   readContinue?: boolean;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
   onContinueAfterResult?: () => void;
+  offerRefresher?: boolean;
 }
 
 export function PassageRecallCard({
@@ -110,6 +120,7 @@ export function PassageRecallCard({
   readContinue = false,
   onSubmit,
   onContinueAfterResult,
+  offerRefresher = false,
 }: PassageRecallCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -118,6 +129,8 @@ export function PassageRecallCard({
   // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
+  const [rescue, setRescue] = useState<"off" | "letters" | "memory">("off");
+  const [rescueHold, setRescueHold] = useState(false);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
   const { submit, pending: submitPending } = useSubmitLock();
@@ -169,6 +182,8 @@ export function PassageRecallCard({
         quality,
         durationMs: Math.max(0, Date.now() - startedAt),
         via: "typed",
+        hint: rescue === "letters" ? "first-letters" : undefined,
+        holdSchedule: rescueHold || undefined,
       });
       if (saved === false) return;
       setHeldGoalLabel(goalAtCheck);
@@ -191,6 +206,16 @@ export function PassageRecallCard({
   }
 
   function continueAttempt() {
+    if (rescue === "letters" && rescueHold) {
+      setRescue("memory");
+      setChecked(false);
+      setHeldGoalLabel(null);
+      setTypedAnswer("");
+      window.requestAnimationFrame(() => answerInputRef.current?.focus());
+      return;
+    }
+    setRescue("off");
+    setRescueHold(false);
     setChecked(false);
     setHeldGoalLabel(null);
     setTypedAnswer("");
@@ -296,10 +321,14 @@ export function PassageRecallCard({
                       Retry
                     </Button>
                   </div>
-                ) : hint.type === "hidden" ? (
+                ) : rescue === "letters" ? (
+                  <FirstLettersPanel text={versePlainText} />
+                ) : rescue === "memory" || hint.type === "hidden" ? (
                   <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
                     <p className="max-w-sm text-sm text-muted-foreground">
-                      {hint.message}
+                      {hint.type === "hidden"
+                        ? hint.message
+                        : "No hint text. Type the passage from memory — verse numbers not needed — then check your answer."}
                     </p>
                   </div>
                 ) : hint.type === "tokens" ? (
@@ -349,69 +378,114 @@ export function PassageRecallCard({
         </CardContent>
 
         <CardFooter className="flex justify-end border-t">
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
             {!checked && !isReadPrime ? (
-              <PreviewFillExactAnswerButton
-                versePlainText={versePlainText}
-                onFill={setTypedAnswer}
-                disabled={loading || Boolean(error)}
-              />
-            ) : null}
-            {checked ? (
-              <Button
-                ref={actionRef}
-                type="button"
-                variant="default"
-                className="flex-1 sm:flex-none"
-                onClick={continueAttempt}
-                loading={submitPending}
-              >
-                {submitPending ? (
-                  "Saving..."
-                ) : offerTryAgain ? (
-                  <>
-                    <RotateCcw className="h-4 w-4" aria-hidden />
-                    Try again
-                  </>
-                ) : (
-                  <>
+              <EnterToCheckHint className="sm:mr-auto" />
+            ) : (
+              <span className="hidden sm:block" />
+            )}
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+              {!checked && !isReadPrime ? (
+                <PreviewFillExactAnswerButton
+                  versePlainText={versePlainText}
+                  onFill={setTypedAnswer}
+                  disabled={loading || Boolean(error)}
+                />
+              ) : null}
+              {checked &&
+              !submitPending &&
+              checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
+              rescue === "off" &&
+              (mode === "review" || learnStage >= 3) ? (
+                <>
+                  <NeedARefresherButton
+                    onClick={() => {
+                      setRescue("letters");
+                      setRescueHold(true);
+                      setChecked(false);
+                      setTypedAnswer("");
+                    }}
+                    disabled={submitPending}
+                  />
+                  <Button
+                    ref={actionRef}
+                    type="button"
+                    variant="default"
+                    className="h-11 flex-1 sm:flex-none"
+                    onClick={continueAttempt}
+                    loading={submitPending}
+                  >
                     <ArrowRight className="h-4 w-4" aria-hidden />
                     Continue
-                  </>
-                )}
-              </Button>
-            ) : isReadPrime ? (
-              <Button
-                ref={actionRef}
-                type="button"
-                variant="default"
-                className="flex-1 sm:flex-none"
-                onClick={continueRead}
-                disabled={!canContinueRead}
-                loading={submitPending}
-              >
-                Continue
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="default"
-                className="flex-1 sm:flex-none"
-                onClick={checkAnswer}
-                disabled={!canCheckAnswer}
-                loading={submitPending}
-              >
-                {submitPending ? (
-                  "Saving..."
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" aria-hidden />
-                    Check answer
-                  </>
-                )}
-              </Button>
-            )}
+                  </Button>
+                </>
+              ) : checked ? (
+                <Button
+                  ref={actionRef}
+                  type="button"
+                  variant="default"
+                  className="flex-1 sm:flex-none"
+                  onClick={continueAttempt}
+                  loading={submitPending}
+                >
+                  {submitPending ? (
+                    "Saving..."
+                  ) : offerTryAgain ? (
+                    <>
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      Try again
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                      Continue
+                    </>
+                  )}
+                </Button>
+              ) : isReadPrime ? (
+                <Button
+                  ref={actionRef}
+                  type="button"
+                  variant="default"
+                  className="flex-1 sm:flex-none"
+                  onClick={continueRead}
+                  disabled={!canContinueRead}
+                  loading={submitPending}
+                >
+                  Continue
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </Button>
+              ) : (
+                <>
+                  {offerRefresher && rescue === "off" ? (
+                    <NeedARefresherLink
+                      onClick={() => {
+                        setRescue("letters");
+                        setRescueHold(false);
+                      }}
+                      disabled={submitPending}
+                    />
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="h-11 flex-1 sm:flex-none"
+                    onClick={checkAnswer}
+                    disabled={!canCheckAnswer}
+                    loading={submitPending}
+                  >
+                    {submitPending ? (
+                      "Saving..."
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" aria-hidden />
+                        Check answer
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </CardFooter>
       </Card>

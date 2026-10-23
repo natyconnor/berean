@@ -31,13 +31,14 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 export function MemoryPackPracticePage() {
   const { packId } = Route.useParams();
-  const { return: returnTo } = Route.useSearch();
+  const { return: returnTo, refresh } = Route.useSearch();
 
   return (
     <MemoryPackSessionPage
       kind="practice"
       packId={packId as Id<"packs">}
       returnTo={returnTo}
+      refresh={refresh === true}
     />
   );
 }
@@ -46,11 +47,13 @@ export function MemoryPackSessionPage({
   kind,
   packId: typedPackId,
   returnTo,
+  refresh = false,
 }: {
   kind: MemorySessionKind;
   packId: Id<"packs">;
   /** Where Done and Back go; else the pack page. */
   returnTo?: string;
+  refresh?: boolean;
 }) {
   const now = useLiveNow();
   const packHref = `/memory/${encodeURIComponent(typedPackId)}`;
@@ -70,6 +73,10 @@ export function MemoryPackSessionPage({
   });
 
   const unifiedEnabled = pack?.unifiedReviewEnabled === true;
+  const shakyVerses = useQuery(
+    api.verseMemory.shakyInPack,
+    refresh && kind === "practice" ? { packId: typedPackId } : "skip",
+  );
   const sessionVerses = useMemo<PracticeVerse[]>(() => {
     if (members === undefined) return [];
     if (kind === "learning") return packLearningSessionVerses(members, now);
@@ -137,6 +144,20 @@ export function MemoryPackSessionPage({
         }),
     );
   }, [members, kind, now, unifiedEnabled, pack?.name, typedPackId]);
+  const refreshVerses = useMemo(() => {
+    if (!refresh) return sessionVerses;
+    const reviewing = sessionVerses.filter(
+      (verse) => verse.status !== undefined && isReviewPhase(verse.status),
+    );
+    const shakyIds = new Set(
+      (shakyVerses ?? []).map((verse) => verse.verseRefId),
+    );
+    if (shakyIds.size === 0) return reviewing;
+    const targeted = reviewing.filter(
+      (verse) => verse.verseRefId && shakyIds.has(verse.verseRefId),
+    );
+    return targeted.length > 0 ? targeted : reviewing;
+  }, [refresh, sessionVerses, shakyVerses]);
   const isLearning = kind === "learning";
   const hasMemorized = (members ?? []).some((member) =>
     isReviewPhase(member.status),
@@ -183,6 +204,7 @@ export function MemoryPackSessionPage({
         packId={typedPackId}
         view={passage}
         packName={pack.name}
+        refresh={refresh}
         onExit={onExit}
         onDoneForToday={
           isLearning
@@ -209,7 +231,8 @@ export function MemoryPackSessionPage({
   return (
     <MemorySessionRunner
       kind={kind}
-      verses={sessionVerses}
+      verses={refresh ? refreshVerses : sessionVerses}
+      refresh={refresh}
       scopeLabel={pack.name}
       backLabel={backLabel}
       exitHref={exit.href}

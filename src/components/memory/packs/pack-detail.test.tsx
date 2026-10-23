@@ -39,6 +39,7 @@ function mutation(name: string) {
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
+  useSearch: () => ({}),
   useCanGoBack: () => false,
   Link: ({
     to,
@@ -93,6 +94,10 @@ vi.mock("../../../../convex/_generated/api", () => ({
     passageMemory: {
       getForPack: "passageMemory.getForPack",
       ensureDueBackfill: "passageMemory.ensureDueBackfill",
+      startOver: "passageMemory.startOver",
+      undoStartOver: "passageMemory.undoStartOver",
+      finishRefresh: "passageMemory.finishRefresh",
+      shakyPieces: "passageMemory.shakyPieces",
     },
     savedVerses: {
       listForChapter: "savedVerses.listForChapter",
@@ -101,6 +106,12 @@ vi.mock("../../../../convex/_generated/api", () => ({
     verseMemory: {
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
+      startOver: "verseMemory.startOver",
+      startOverMany: "verseMemory.startOverMany",
+      undoStartOver: "verseMemory.undoStartOver",
+      undoStartOverMany: "verseMemory.undoStartOverMany",
+      finishRefresh: "verseMemory.finishRefresh",
+      shakyInPack: "verseMemory.shakyInPack",
     },
   },
 }));
@@ -474,6 +485,21 @@ describe("PackDetail for a passage", () => {
           memoryProgressFraction("reviewing", 3, 0, 6.6, undefined, 2.5) * 100,
         )}%`,
       }),
+    ).toBeInTheDocument();
+  });
+
+  it("lists Refresh and Start over on the passage menu", async () => {
+    renderHost("pack:psalm16x");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    ).toHaveTextContent("Practice with hints");
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toHaveTextContent("Learn it again from the start");
+    expect(
+      screen.getByRole("menuitem", { name: "Stop memorizing" }),
     ).toBeInTheDocument();
   });
 
