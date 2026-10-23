@@ -1,8 +1,23 @@
-import { DAY_MS, isLearningPhase, isReviewPhase } from "./memory-scheduler";
+import {
+  DAY_MS,
+  LEARN_PROGRESS_ACCURACY,
+  isLearningPhase,
+  isReviewPhase,
+} from "./memory-scheduler";
 
 export type RecentReview = {
   accuracy: number;
   lapsed: boolean;
+  createdAt?: number;
+};
+
+export type ReviewHistoryRow = {
+  accuracy: number;
+  createdAt?: number;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
+  mode?: "learn" | "review" | "deck" | "practice";
+  kind?: "rope" | "repair" | "review" | "frontier";
 };
 
 const STALE_MIN_DAYS = 7;
@@ -37,9 +52,25 @@ export function isStaleVerse(input: {
   lastReviewedAt?: number;
   learnStage?: number;
   now: number;
+  startedOverAt?: number;
   lastReviews: readonly RecentReview[];
 }): boolean {
-  if (lapseCount(input.lastReviews) >= 2) return true;
+  const lastReviews =
+    input.startedOverAt === undefined
+      ? input.lastReviews
+      : input.lastReviews.filter(
+          (review) =>
+            review.createdAt === undefined ||
+            review.createdAt >= input.startedOverAt!,
+        );
+  const lastReviewedAt =
+    input.startedOverAt !== undefined &&
+    input.lastReviewedAt !== undefined &&
+    input.lastReviewedAt < input.startedOverAt
+      ? undefined
+      : input.lastReviewedAt;
+
+  if (lapseCount(lastReviews) >= 2) return true;
 
   if (isReviewPhase(input.status)) {
     const overdueMs = input.now - input.dueAt;
@@ -49,11 +80,47 @@ export function isStaleVerse(input: {
   }
 
   if (!isLearningPhase(input.status)) return false;
-  if (input.lastReviewedAt === undefined) return false;
-  const midLadder =
-    (input.learnStage ?? 0) > 0 || input.lastReviewedAt !== undefined;
+  if (lastReviewedAt === undefined) return false;
+  const midLadder = (input.learnStage ?? 0) > 0 || lastReviewedAt !== undefined;
   if (!midLadder) return false;
-  return input.now - input.lastReviewedAt >= STALE_MIN_DAYS * DAY_MS;
+  return input.now - lastReviewedAt >= STALE_MIN_DAYS * DAY_MS;
+}
+
+/** A ≥85% first-letters try that should restore the kept interval tomorrow. */
+export function isReviewHintedCheckIn(
+  row: ReviewHistoryRow | null | undefined,
+): boolean {
+  if (!row || row.holdSchedule) return false;
+  if (row.hint !== "first-letters") return false;
+  if (row.accuracy < LEARN_PROGRESS_ACCURACY) return false;
+  if (row.mode !== undefined) return row.mode === "review";
+  if (row.kind !== undefined) return row.kind === "review";
+  return false;
+}
+
+/**
+ * Lapses among the last three review-mode tries recorded before a Refresh
+ * sitting started. Practice and the sitting's own passes do not count.
+ */
+export function refreshRecentLapseCount(
+  rows: readonly ReviewHistoryRow[],
+  sittingStartedAt: number,
+): number {
+  return lapseCount(
+    rows
+      .filter((row) => {
+        const reviewMode = row.mode === "review" || row.kind === "review";
+        return (
+          reviewMode &&
+          row.createdAt !== undefined &&
+          row.createdAt < sittingStartedAt
+        );
+      })
+      .map((row) => ({
+        accuracy: row.accuracy,
+        lapsed: recentReviewLapsed(row.accuracy),
+      })),
+  );
 }
 
 /**

@@ -421,6 +421,33 @@ export function dueFrontierIndex(
  * banks a rep (including From Memory — exact is not required). Clearing Guided
  * attaches; clearing From Memory solids; Guided/Challenge clears soft-lock.
  */
+export type FrontierAttemptInput = {
+  accuracy: number;
+  now: number;
+  tzOffsetMinutes: number;
+  timeZone?: string;
+  wordCount: number;
+  holdSchedule?: boolean;
+};
+
+/**
+ * Bank a frontier attempt, or leave every piece alone when the try is a
+ * held-schedule refresher.
+ */
+export function progressFrontierPieces(
+  pieces: readonly PassagePiece[],
+  pieceIndex: number,
+  input: FrontierAttemptInput,
+): PassagePiece[] {
+  if (input.holdSchedule) return pieces.slice();
+  const piece = pieces[pieceIndex];
+  if (!piece || isPassagePieceLocked(piece, input.now)) return pieces.slice();
+  const progressed = progressPassagePiece(piece, input);
+  return pieces.map((current, index) =>
+    index === pieceIndex ? progressed : current,
+  );
+}
+
 export function progressPassagePiece(
   piece: PassagePiece,
   input: {

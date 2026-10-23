@@ -1094,8 +1094,20 @@ export function startOverSchedule(now: number): MemorySchedule {
 }
 
 /** Undo Start over by putting the captured schedule back. */
-export function restoreStartOverUndo(snapshot: MemorySchedule): MemorySchedule {
-  return { ...snapshot };
+export function restoreStartOverUndo(
+  snapshot: MemorySchedule & { lastReviewedAt?: number },
+): MemorySchedule {
+  return {
+    status: snapshot.status,
+    learnStage: snapshot.learnStage,
+    stageReps: snapshot.stageReps,
+    ease: snapshot.ease,
+    intervalDays: snapshot.intervalDays,
+    dueAt: snapshot.dueAt,
+    consecutiveCorrect: snapshot.consecutiveCorrect,
+    lapses: snapshot.lapses,
+    earlyReviewApplied: snapshot.earlyReviewApplied,
+  };
 }
 
 /**

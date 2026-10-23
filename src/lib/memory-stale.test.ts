@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { DAY_MS } from "./memory-scheduler";
-import { isShakyVerse, isStaleVerse, type RecentReview } from "./memory-stale";
+import { DAY_MS, LEARN_PROGRESS_ACCURACY } from "./memory-scheduler";
+import {
+  isReviewHintedCheckIn,
+  isShakyVerse,
+  isStaleVerse,
+  refreshRecentLapseCount,
+  type RecentReview,
+} from "./memory-stale";
 
 const NOW = 1_700_000_000_000;
 
@@ -86,6 +92,68 @@ describe("isStaleVerse", () => {
         lastReviews: [],
       }),
     ).toBe(false);
+  });
+
+  it("ignores misses from before the latest Start over", () => {
+    expect(
+      isStaleVerse({
+        status: "learning",
+        dueAt: NOW,
+        intervalDays: 0,
+        lastReviewedAt: NOW - 14 * DAY_MS,
+        learnStage: 0,
+        now: NOW,
+        startedOverAt: NOW - 60_000,
+        lastReviews: [
+          { ...lapse(), createdAt: NOW - 10 * DAY_MS },
+          { ...lapse(), createdAt: NOW - 8 * DAY_MS },
+          { ...hold(), createdAt: NOW - 7 * DAY_MS },
+        ],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isReviewHintedCheckIn", () => {
+  const hinted = {
+    hint: "first-letters" as const,
+    accuracy: LEARN_PROGRESS_ACCURACY,
+    mode: "review" as const,
+  };
+
+  it("counts only a review-mode hinted check-in", () => {
+    expect(isReviewHintedCheckIn(hinted)).toBe(true);
+  });
+
+  it("ignores practice and held-schedule hinted tries", () => {
+    expect(isReviewHintedCheckIn({ ...hinted, mode: "practice" })).toBe(false);
+    expect(isReviewHintedCheckIn({ ...hinted, holdSchedule: true })).toBe(
+      false,
+    );
+    expect(
+      isReviewHintedCheckIn({
+        hint: "first-letters",
+        accuracy: LEARN_PROGRESS_ACCURACY,
+        kind: "frontier",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("refreshRecentLapseCount", () => {
+  it("counts only review-mode tries from before the sitting", () => {
+    expect(
+      refreshRecentLapseCount(
+        [
+          { accuracy: 20, createdAt: NOW + 10, mode: "review" },
+          { accuracy: 30, createdAt: NOW - 10, mode: "practice" },
+          { accuracy: 25, createdAt: NOW - 20, mode: "review" },
+          { accuracy: 40, createdAt: NOW - 30, mode: "review" },
+          { accuracy: 90, createdAt: NOW - 40, mode: "review" },
+        ],
+        NOW,
+      ),
+    ).toBe(2);
   });
 });
 

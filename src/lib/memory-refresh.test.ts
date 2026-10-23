@@ -287,4 +287,20 @@ describe("start over and undo", () => {
     expect(reset.status).toBe("new");
     expect(restoreStartOverUndo(prior)).toEqual(prior);
   });
+
+  it("drops lastReviewedAt from a reviewed-verse snapshot so undo can return a schedule", () => {
+    const prior = reviewing({
+      intervalDays: 24,
+      ease: 2.1,
+      lapses: 1,
+      consecutiveCorrect: 5,
+      dueAt: NOW - 3 * DAY_MS,
+    });
+    const restored = restoreStartOverUndo({
+      ...prior,
+      lastReviewedAt: NOW - 10 * DAY_MS,
+    });
+    expect(restored).toEqual(prior);
+    expect(restored).not.toHaveProperty("lastReviewedAt");
+  });
 });
