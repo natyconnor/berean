@@ -239,6 +239,10 @@ interface PracticeBoardProps {
   onComplete?: (result: PracticeSessionResult) => void;
   /** Shown above the verse rail, e.g. an overview of the whole session. */
   railHeader?: ReactNode;
+  /** Replaces the board's own sidebar. Today uses this for the queue panel. */
+  rail?:
+    | ReactNode
+    | ((api: { changeOrder: (order: PracticeOrder) => void }) => ReactNode);
   /** Card id to open first; the first card in order when absent or unknown. */
   initialVerseId?: string;
   /** The card now on screen, after a rail pick, Next, or Shuffle. */
@@ -412,6 +416,7 @@ export function PracticeBoard({
   progress,
   onComplete,
   railHeader,
+  rail,
   initialVerseId,
   onCurrentVerseId,
   orderedIds,
@@ -741,6 +746,7 @@ export function PracticeBoard({
   }, [finished, onComplete, sessionVerses, sessionAttempts]);
 
   function showVerse(id: string) {
+    setIsShuffling(false);
     if (onShow) onShow(id);
     else setCurrentId(id);
   }
@@ -1082,24 +1088,30 @@ export function PracticeBoard({
           </div>
         </div>
         <div className="order-1 space-y-3 md:order-2">
-          {railHeader}
-          <PracticeVerseRail
-            sessionLabel={sessionLabel}
-            verses={railVerses}
-            activeId={currentVerse.id}
-            onSelectVerse={handleSelectVerse}
-            order={order}
-            onOrderChange={handleOrderChange}
-            shuffleNonce={shuffleNonce}
-            currentLearnStage={currentProgress.learnStage}
-            currentStageReps={currentProgress.stageReps}
-            currentStatus={currentProgress.status}
-            currentIntervalDays={currentProgress.intervalDays}
-            currentEase={currentProgress.ease}
-            currentWordCount={currentWordCount}
-            currentLocked={currentLocked}
-            allowReorder={sessionClusterCount(baseVerses) > 1}
-          />
+          {typeof rail === "function"
+            ? rail({ changeOrder: handleOrderChange })
+            : (rail ?? (
+                <>
+                  {railHeader}
+                  <PracticeVerseRail
+                    sessionLabel={sessionLabel}
+                    verses={railVerses}
+                    activeId={currentVerse.id}
+                    onSelectVerse={handleSelectVerse}
+                    order={order}
+                    onOrderChange={handleOrderChange}
+                    shuffleNonce={shuffleNonce}
+                    currentLearnStage={currentProgress.learnStage}
+                    currentStageReps={currentProgress.stageReps}
+                    currentStatus={currentProgress.status}
+                    currentIntervalDays={currentProgress.intervalDays}
+                    currentEase={currentProgress.ease}
+                    currentWordCount={currentWordCount}
+                    currentLocked={currentLocked}
+                    allowReorder={sessionClusterCount(baseVerses) > 1}
+                  />
+                </>
+              ))}
         </div>
       </div>
     </PracticeShell>

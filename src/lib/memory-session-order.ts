@@ -106,8 +106,9 @@ export function orderSessionVerses<T extends SessionOrderItem>(
 }
 
 /**
- * Reorder a group's current list for Shuffle / In order, keeping pinned cards
- * (the shown card and spent rows, with their chapter set) where they are.
+ * Reorder one Today group: finished cards stay at the front in the order they
+ * were finished, and only unfinished cards move. Shuffle puts the shown card
+ * first among those unfinished cards, then permutes the rest as chapter sets.
  */
 export function orderRemainingSessionItems<
   T extends SessionOrderItem & { id: string },
@@ -115,30 +116,21 @@ export function orderRemainingSessionItems<
   items: readonly T[],
   order: PracticeOrder,
   seed = 0,
-  pinnedIds: ReadonlySet<string> = new Set(),
+  spentIds: ReadonlySet<string> = new Set(),
+  shownId?: string,
 ): T[] {
-  if (items.length <= 1) return [...items];
-  const clusters = groupSessionVersesByChapter(items);
-  const pinned = clusters.map((cluster) =>
-    cluster.items.some((item) => pinnedIds.has(item.id)),
-  );
-  const movable = clusters.filter((_, index) => !pinned[index]);
-  const moved =
-    order === "in-order"
-      ? [...movable].sort((left, right) => {
-          const first = left.items[0];
-          const second = right.items[0];
-          if (!first || !second) return 0;
-          return compareSessionOrderItems(first, second);
-        })
-      : movable.length <= 1
-        ? movable
-        : buildPracticeOrder(movable, "shuffle", seed);
-  let take = 0;
-  return clusters.flatMap((cluster, index) => {
-    if (pinned[index]) return cluster.items;
-    const next = moved[take];
-    take += 1;
-    return next?.items ?? [];
-  });
+  const finished = items.filter((item) => spentIds.has(item.id));
+  const unfinished = items.filter((item) => !spentIds.has(item.id));
+  if (order === "in-order") {
+    return [...finished, ...sortSessionVerses(unfinished)];
+  }
+  const shown = unfinished.find((item) => item.id === shownId);
+  const rest = shown
+    ? unfinished.filter((item) => item.id !== shown.id)
+    : unfinished;
+  return [
+    ...finished,
+    ...(shown ? [shown] : []),
+    ...orderSessionVerses(rest, "shuffle", seed),
+  ];
 }

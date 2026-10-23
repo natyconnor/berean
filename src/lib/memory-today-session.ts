@@ -345,6 +345,8 @@ export interface TodayQueueInput extends TodayProgressInput {
   reopenable?: ReadonlySet<string>;
   /** The segment underway, or null between segments. */
   current: number | null;
+  /** The card on screen; only this row is current in a verse group. */
+  shownId?: string;
 }
 
 const QUEUE_HEADINGS: Record<TodaySegment["kind"], string> = {
@@ -367,10 +369,49 @@ function segmentState(
  * Passages, then Verses to learn, then Reviews, each item done, current, or
  * upcoming, and whether choosing it can open it.
  */
+function verseItemState(
+  entryId: string,
+  segmentState: TodayQueueState,
+  spent: ReadonlySet<string>,
+  shownId: string | undefined,
+  firstUnspentId: string | undefined,
+): TodayQueueState {
+  if (segmentState === "done" || spent.has(entryId)) return "done";
+  if (shownId === entryId) return "current";
+  if (
+    shownId === undefined &&
+    segmentState === "current" &&
+    entryId === firstUnspentId
+  ) {
+    return "current";
+  }
+  return "upcoming";
+}
+
+function visibleQueueItems(
+  items: TodayQueueItem[],
+  limit: number,
+  shownId: string | undefined,
+): { items: TodayQueueItem[]; moreCount: number } {
+  if (items.length <= limit + 1) {
+    return { items, moreCount: 0 };
+  }
+  const visible = items.slice(0, limit);
+  const shownIndex = shownId
+    ? items.findIndex((item) => item.id === shownId)
+    : -1;
+  if (shownIndex >= limit) {
+    const shown = items[shownIndex];
+    if (shown) visible[limit - 1] = shown;
+  }
+  return { items: visible, moreCount: items.length - limit };
+}
+
 export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
   const { segments, current } = input;
   const spent = input.spent ?? NO_IDS;
   const reopenable = input.reopenable ?? NO_IDS;
+  const shownId = input.shownId;
   const finished = todayFinishedSegments(input);
   const passages: TodayQueueItem[] = [];
   const groups: TodayQueueGroup[] = [];
@@ -389,12 +430,15 @@ export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
       return;
     }
     const entries = segmentEntries(segment, input);
-    const limit =
-      segment.kind === "review" ? TODAY_QUEUE_REVIEW_LIMIT : entries.length;
-    const shown = entries.length > limit + 1 ? limit : entries.length;
+    const firstUnspent = entries.find((entry) => !spent.has(entry.id))?.id;
     const items = entries.map((entry): TodayQueueItem => {
-      const itemState =
-        state === "done" || spent.has(entry.id) ? "done" : state;
+      const itemState = verseItemState(
+        entry.id,
+        state,
+        spent,
+        shownId,
+        firstUnspent,
+      );
       return {
         ...entry,
         state: itemState,
@@ -402,14 +446,18 @@ export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
         openable: itemState === "upcoming",
       };
     });
+    const limited =
+      segment.kind === "review"
+        ? visibleQueueItems(items, TODAY_QUEUE_REVIEW_LIMIT, shownId)
+        : { items, moreCount: 0 };
     groups.push({
       kind: segment.kind,
       heading: QUEUE_HEADINGS[segment.kind],
       state,
       total: entries.length,
       done: items.filter((item) => item.state === "done").length,
-      items: items.slice(0, shown),
-      moreCount: entries.length - shown,
+      items: limited.items,
+      moreCount: limited.moreCount,
       target: state === "upcoming" ? index : null,
     });
   });

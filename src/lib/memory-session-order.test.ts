@@ -168,33 +168,40 @@ describe("orderRemainingSessionItems", () => {
     { id: "ps2", reference: ref("Psalms", 8, 2) },
     { id: "ps5", reference: ref("Psalms", 8, 5) },
     { id: "luke", reference: ref("Luke", 9, 23) },
+    { id: "rom", reference: ref("Romans", 8, 28) },
   ];
 
-  it("keeps the shown chapter set in place and only shuffles the rest", () => {
-    const pinned = new Set(["ps2"]);
+  it("keeps finished verses at the top and shuffles only the rest, shown first", () => {
+    const spent = new Set(["ps5", "luke"]);
     const shuffled = [1, 2, 3, 7, 42].map((seed) =>
-      orderRemainingSessionItems(mixed, "shuffle", seed, pinned).map(
+      orderRemainingSessionItems(mixed, "shuffle", seed, spent, "rom").map(
         (item) => item.id,
       ),
     );
 
     for (const ids of shuffled) {
-      expect(ids[1]).toBe("ps2");
-      expect(ids[2]).toBe("ps5");
-      expect(ids).toEqual(expect.arrayContaining(["gen", "luke"]));
+      expect(ids.slice(0, 3)).toEqual(["ps5", "luke", "rom"]);
+      expect(ids).toEqual(expect.arrayContaining(["gen", "ps2"]));
+      expect(ids).toHaveLength(5);
     }
-    expect(shuffled.some((ids) => ids[0] === "luke" && ids[3] === "gen")).toBe(
+    expect(shuffled.some((ids) => ids[3] === "gen" && ids[4] === "ps2")).toBe(
+      true,
+    );
+    expect(shuffled.some((ids) => ids.join() !== "ps5,luke,rom,gen,ps2")).toBe(
       true,
     );
   });
 
-  it("puts remaining sets back in Scripture order without moving the pin", () => {
-    const [gen, ps2, ps5, luke] = mixed;
-    const current = [luke, ps2, ps5, gen];
+  it("puts unfinished verses back in Scripture order under the finished block", () => {
+    const current = [mixed[3], mixed[4], mixed[0], mixed[1], mixed[2]];
     expect(
-      orderRemainingSessionItems(current, "in-order", 0, new Set(["luke"])).map(
-        (item) => item.id,
-      ),
-    ).toEqual(["luke", "gen", "ps2", "ps5"]);
+      orderRemainingSessionItems(
+        current,
+        "in-order",
+        0,
+        new Set(["luke"]),
+        "rom",
+      ).map((item) => item.id),
+    ).toEqual(["luke", "gen", "ps2", "ps5", "rom"]);
   });
 });

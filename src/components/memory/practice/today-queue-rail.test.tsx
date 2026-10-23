@@ -11,7 +11,7 @@ import {
   type TodayQueueItem,
 } from "@/lib/memory-today-session";
 
-import { TodayQueueOverview, TodayQueueRail } from "./today-queue-rail";
+import { TodayQueueRail } from "./today-queue-rail";
 
 const SEGMENTS = planTodaySession({
   passages: [
@@ -103,13 +103,15 @@ describe("TodayQueueRail", () => {
     const list = document.getElementById(
       toggle.getAttribute("aria-controls") ?? "",
     );
-    expect(list).toHaveClass("max-md:hidden");
+    expect(list?.querySelector("ul")).toHaveClass("max-md:hidden");
+    expect(screen.getByText("Passages")).toBeInTheDocument();
+    expect(screen.getByText("Verses to learn")).toBeInTheDocument();
 
     await userEvent.click(toggle);
     expect(
       screen.getByRole("button", { name: /Hide the queue/ }),
     ).toHaveAttribute("aria-expanded", "true");
-    expect(list).not.toHaveClass("max-md:hidden");
+    expect(list?.querySelector("ul")).not.toHaveClass("max-md:hidden");
   });
 
   it("jumps to anything still to come, but not to what's underway", async () => {
@@ -142,6 +144,71 @@ describe("TodayQueueRail", () => {
       ["jn2", 2],
       ["r3", 3],
     ]);
+  });
+
+  it("selects In order until Shuffle is chosen on the current verse group", async () => {
+    const onOrderChange = vi.fn<(order: "in-order" | "shuffle") => void>();
+    const { rerender } = render(
+      <TooltipProvider delayDuration={0}>
+        <TodayQueueRail
+          groups={groupsAt([0, 1], 2)}
+          counts={countsAt([0, 1])}
+          order="in-order"
+          onOrderChange={onOrderChange}
+        />
+      </TooltipProvider>,
+    );
+
+    const switchGroup = screen.getByRole("radiogroup", { name: "Order" });
+    const inOrder = within(switchGroup).getByRole("radio", {
+      name: "In order",
+    });
+    const shuffle = within(switchGroup).getByRole("radio", { name: "Shuffle" });
+    expect(inOrder).toHaveAttribute("aria-checked", "true");
+    expect(shuffle).toHaveAttribute("aria-checked", "false");
+    expect(screen.getAllByRole("radiogroup", { name: "Order" })).toHaveLength(
+      1,
+    );
+
+    await userEvent.click(shuffle);
+    expect(onOrderChange).toHaveBeenCalledWith("shuffle");
+
+    rerender(
+      <TooltipProvider delayDuration={0}>
+        <TodayQueueRail
+          groups={groupsAt([0, 1], 2)}
+          counts={countsAt([0, 1])}
+          order="shuffle"
+          onOrderChange={onOrderChange}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("radio", { name: "Shuffle" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("radio", { name: "In order" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  it("hides the order switch on Passages and when fewer than two verses remain", () => {
+    const passages = render(
+      <TodayQueueRail groups={groupsAt([], 0)} counts={countsAt([])} />,
+    );
+    expect(screen.queryByRole("radiogroup", { name: "Order" })).toBeNull();
+    passages.unmount();
+
+    render(
+      <TodayQueueRail
+        groups={groupsAt([0, 1], 2, { spent: ["jn1"] })}
+        counts={countsAt([0, 1], ["jn1"])}
+        order="in-order"
+        onOrderChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("radiogroup", { name: "Order" })).toBeNull();
   });
 
   it("keeps finished items in place, reopening a passage with work left", async () => {
@@ -179,47 +246,6 @@ describe("TodayQueueRail", () => {
     );
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ id: "psalm3", segment: 1 }),
-    );
-  });
-});
-
-describe("TodayQueueOverview", () => {
-  it("names each part of today and which one is underway", () => {
-    render(<TodayQueueOverview groups={groupsAt([0, 1], 2)} />);
-
-    const overview = screen.getByRole("region", { name: "Today" });
-    const parts = within(overview).getAllByRole("listitem");
-    expect(parts.map((part) => part.dataset.state)).toEqual([
-      "done",
-      "current",
-      "upcoming",
-    ]);
-    expect(parts[0]).toHaveTextContent("Passages, done");
-    expect(parts[1]).toHaveTextContent("Verses to learn(now)");
-    expect(parts[1]).toHaveAttribute("aria-current", "step");
-    expect(parts[2]).toHaveTextContent("Reviews14");
-  });
-
-  it("jumps to a part with something left, counting what remains", async () => {
-    const onSelect = vi.fn();
-    render(
-      <TodayQueueOverview
-        groups={groupsAt([], 3, { spent: ["r0", "r1"] })}
-        onSelect={onSelect}
-      />,
-    );
-
-    expect(
-      screen.queryByRole("button", { name: "Go to Reviews" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Go to Verses to learn" }),
-    ).toHaveTextContent("Verses to learn2");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Go to Passages" }),
-    );
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "passage", target: 0 }),
     );
   });
 });

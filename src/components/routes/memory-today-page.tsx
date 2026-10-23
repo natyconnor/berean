@@ -20,10 +20,7 @@ import {
   SessionHeaderProgress,
   type SessionProgress,
 } from "@/components/memory/practice/session-header-progress";
-import {
-  TodayQueueOverview,
-  TodayQueueRail,
-} from "@/components/memory/practice/today-queue-rail";
+import { TodayQueueRail } from "@/components/memory/practice/today-queue-rail";
 import {
   hasTodayCarry,
   mergeTodayCarry,
@@ -76,7 +73,6 @@ import {
   type TodayPassageInput,
   type TodayProgressInput,
   type TodayQueueEntry,
-  type TodayQueueGroup,
   type TodayQueueItem,
   type TodaySegment,
   type TodaySessionOnly,
@@ -394,6 +390,20 @@ function itemsInOrder<T extends { id: string }>(
     .filter((item): item is T => item !== undefined);
 }
 
+function finishedFirst(ids: string[], spent: ReadonlySet<string>): string[] {
+  const next = [
+    ...ids.filter((id) => spent.has(id)),
+    ...ids.filter((id) => !spent.has(id)),
+  ];
+  if (
+    next.length === ids.length &&
+    next.every((id, index) => id === ids[index])
+  ) {
+    return ids;
+  }
+  return next;
+}
+
 function openQueueItemId(
   step: TodayStep,
   segments: readonly TodaySegment[],
@@ -448,6 +458,9 @@ function TodaySession({
   );
   const [reviewItems] = useState(() => data.reviews.map(verseOrderItem));
   const [orderSeed, setOrderSeed] = useState(0);
+  const [learningOrder, setLearningOrder] = useState<PracticeOrder>("in-order");
+  const [reviewOrder, setReviewOrder] = useState<PracticeOrder>("in-order");
+  const [queueOpen, setQueueOpen] = useState(false);
   const [learningIds, setLearningIds] = useState(() =>
     queue.learning.map((entry) => entry.id),
   );
@@ -508,27 +521,34 @@ function TodaySession({
 
   const applySessionOrder = (next: PracticeOrder) => {
     const seed = next === "shuffle" ? orderSeed + 1 : orderSeed;
-    const pinned = new Set(spent);
     const shown =
       shownVerseId ?? (step.kind === "segment" ? step.verseId : undefined);
-    if (shown) pinned.add(shown);
+    const currentKind =
+      step.kind === "segment" ? segments[step.index]?.kind : undefined;
     if (next === "shuffle") setOrderSeed(seed);
-    setLearningIds(
-      orderRemainingSessionItems(
-        itemsInOrder(learningItems, learningIds),
-        next,
-        seed,
-        pinned,
-      ).map((item) => item.id),
-    );
-    setReviewIds(
-      orderRemainingSessionItems(
-        itemsInOrder(reviewItems, reviewIds),
-        next,
-        seed,
-        pinned,
-      ).map((item) => item.id),
-    );
+    if (currentKind === "learning") setLearningOrder(next);
+    if (currentKind === "review") setReviewOrder(next);
+    if (currentKind === "learning") {
+      setLearningIds(
+        orderRemainingSessionItems(
+          itemsInOrder(learningItems, learningIds),
+          next,
+          seed,
+          spent,
+          shown,
+        ).map((item) => item.id),
+      );
+    } else if (currentKind === "review") {
+      setReviewIds(
+        orderRemainingSessionItems(
+          itemsInOrder(reviewItems, reviewIds),
+          next,
+          seed,
+          spent,
+          shown,
+        ).map((item) => item.id),
+      );
+    }
   };
   const doneItems = todayDoneItems(progressInput);
 
@@ -552,6 +572,17 @@ function TodaySession({
       ...current,
       runs: { ...current.runs, [index]: result },
     }));
+    const nextSpent = new Set(spent);
+    const segment = segments[index];
+    if (segment && segment.kind !== "passage") {
+      for (const [id, progress] of Object.entries(state.progress)) {
+        if (!hasSessionWorkLeft(segment.kind, progress, now)) {
+          nextSpent.add(id);
+        }
+      }
+    }
+    setLearningIds((ids) => finishedFirst(ids, nextSpent));
+    setReviewIds((ids) => finishedFirst(ids, nextSpent));
   };
   const recordRun = (index: number, result: PracticeSessionResult) => {
     setTally((current) => ({
@@ -592,10 +623,6 @@ function TodaySession({
       segments[item.segment]?.kind === "passage" ? undefined : item.id,
     );
   };
-  const openQueueGroup = (group: TodayQueueGroup) => {
-    if (group.target !== null) openSegment(group.target);
-  };
-
   const currentItemId = openQueueItemId(step, segments, queue, shownVerseId);
   useEffect(() => {
     if (search.item === currentItemId) return;
@@ -695,7 +722,12 @@ function TodaySession({
     return { label: todaySessionCountLabel(counts), fraction };
   };
   const queueGroups = (current: number | null) =>
-    todayQueueGroups({ ...progressInput, reopenable, current });
+    todayQueueGroups({
+      ...progressInput,
+      reopenable,
+      current,
+      shownId: currentItemId,
+    });
   // A queue of one is just the thing on screen.
   const showQueue =
     segments.length > 1 || queue.learning.length + queue.reviews.length > 1;
@@ -711,6 +743,16 @@ function TodaySession({
           ).counts
         }
         onSelect={openQueueItem}
+        order={
+          current === null
+            ? "in-order"
+            : segments[current]?.kind === "review"
+              ? reviewOrder
+              : learningOrder
+        }
+        onOrderChange={applySessionOrder}
+        open={queueOpen}
+        onOpenChange={setQueueOpen}
       />
     ) : undefined;
 
@@ -744,6 +786,7 @@ function TodaySession({
         key={`passage:${segment.packId}`}
         packId={segment.packId}
         title={segment.title}
+        sessionTitle={data.title}
         progress={(todayShare) =>
           sessionProgress(
             doneItems.map((count, item) =>
@@ -783,13 +826,30 @@ function TodaySession({
           doneItems.map((count, item) => (item === index ? run.done : count)),
         )
       }
-      railHeader={
-        segments.length > 1 ? (
-          <TodayQueueOverview
-            groups={queueGroups(index)}
-            onSelect={openQueueGroup}
-          />
-        ) : undefined
+      rail={
+        showQueue
+          ? (api) => (
+              <TodayQueueRail
+                groups={queueGroups(index)}
+                counts={
+                  carryTodayProgress(
+                    todaySessionCounts(segments, doneItems),
+                    0,
+                    earlier.doneItems,
+                  ).counts
+                }
+                onSelect={openQueueItem}
+                order={
+                  segments[index]?.kind === "review"
+                    ? reviewOrder
+                    : learningOrder
+                }
+                onOrderChange={api.changeOrder}
+                open={queueOpen}
+                onOpenChange={setQueueOpen}
+              />
+            )
+          : undefined
       }
       initialVerseId={step.verseId}
       orderedIds={segment.kind === "learning" ? learningIds : reviewIds}
@@ -808,6 +868,7 @@ function TodaySession({
 function TodayPassageSegment({
   packId,
   title,
+  sessionTitle,
   progress,
   aside,
   chrome,
@@ -816,6 +877,7 @@ function TodayPassageSegment({
 }: {
   packId: Id<"packs">;
   title: string;
+  sessionTitle: string;
   /** The day's bar, given the share of today's new verses added so far. */
   progress: (todayShare: number) => SessionProgress;
   /** The rest of today's queue beside the passage. */
@@ -840,7 +902,17 @@ function TodayPassageSegment({
     onSkip();
   }, [view, onSkip]);
 
-  if (!view) return <SessionLoading />;
+  if (!view) {
+    return (
+      <TodayShell title={sessionTitle} chrome={chrome} progress={progress(0)}>
+        <SessionColumns aside={aside}>
+          <div className="flex min-h-[55vh] items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        </SessionColumns>
+      </TodayShell>
+    );
+  }
 
   return (
     <PassageSession

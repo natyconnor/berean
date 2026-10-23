@@ -36,6 +36,10 @@ interface MemorySessionRunnerProps {
   onComplete?: (result: PracticeSessionResult) => void;
   /** Shown above the verse rail, e.g. an overview of the whole session. */
   railHeader?: ReactNode;
+  /** Replaces the board's own sidebar. Today uses this for the queue panel. */
+  rail?:
+    | ReactNode
+    | ((api: { changeOrder: (order: PracticeOrder) => void }) => ReactNode);
   /** Card id to open first; the first card in order when absent. */
   initialVerseId?: string;
   /** The card now on screen, after a rail pick, Next, or Shuffle. */
