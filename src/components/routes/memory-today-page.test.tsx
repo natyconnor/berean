@@ -122,6 +122,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     initialVerseId,
     runState,
     onRunStateChange,
+    onCurrentVerseId,
   }: {
     kind: string;
     verses: StubVerse[];
@@ -131,6 +132,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     initialVerseId?: string;
     runState?: unknown;
     onRunStateChange?: (state: unknown, result: unknown) => void;
+    onCurrentVerseId?: (id: string) => void;
   }) => {
     // Grade the first `count` cards past today's work (graduated, or
     // rescheduled days out) and report the run, as the board does.
@@ -186,6 +188,15 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
         </button>
         <button type="button" onClick={() => spend(verses.length)}>
           Spend every {kind} card
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = verses[1];
+            if (next) onCurrentVerseId?.(verseRefKey(next.reference));
+          }}
+        >
+          Show the second {kind} card
         </button>
         <button
           type="button"
@@ -470,6 +481,46 @@ describe("MemoryTodayPage", () => {
     expect(screen.getByTestId("learning-session")).toHaveAttribute(
       "data-initial-verse",
       item,
+    );
+  });
+
+  it("reopens the card the runner was showing after a remount", async () => {
+    setToday({ passages: [] });
+    const first = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 1,
+      endVerse: 1,
+    });
+    const second = verseRefKey({
+      book: "John",
+      chapter: 15,
+      startVerse: 2,
+      endVerse: 2,
+    });
+    search.current = { return: "/memory", item: first };
+    const { unmount } = renderToday();
+
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-initial-verse",
+      first,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show the second learning card" }),
+    );
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/memory/today",
+      search: { return: "/memory", item: second },
+      replace: true,
+    });
+
+    unmount();
+    search.current = { return: "/memory", item: second };
+    renderToday();
+
+    expect(screen.getByTestId("learning-session")).toHaveAttribute(
+      "data-initial-verse",
+      second,
     );
   });
 

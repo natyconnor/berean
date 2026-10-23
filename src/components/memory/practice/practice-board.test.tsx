@@ -1279,6 +1279,17 @@ describe("PracticeBoard spent reviews", () => {
     });
   });
 
+  it("reports the card on screen when the learner moves in the run", async () => {
+    const onCurrentVerseId = vi.fn<(id: string) => void>();
+    renderBoard("review", { onCurrentVerseId });
+
+    await waitFor(() => {
+      expect(onCurrentVerseId).toHaveBeenCalledWith(FIRST_ID);
+    });
+    await userEvent.click(railButton("Psalm 23:2"));
+    expect(onCurrentVerseId).toHaveBeenLastCalledWith(SECOND_ID);
+  });
+
   it("opens at the chosen verse and reports its run so it can resume", async () => {
     const onRunStateChange =
       vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
