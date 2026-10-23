@@ -208,7 +208,6 @@ export function todayNextSegment(
   return null;
 }
 
-/** The segment (and verse card) a queue item id opens. */
 export function todayQueueItemStep(
   segments: readonly TodaySegment[],
   learning: readonly TodayQueueEntry[],

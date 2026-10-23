@@ -6,7 +6,6 @@ export interface MemoryTodaySearch {
   packId?: string;
   /** Run only one half of today: passages and new verses, or reviews. */
   only?: TodaySessionOnly;
-  /** The open queue item (passage pack id or verse key). */
   item?: string;
   /** Where Done, Stop for today, and the back link go. */
   return?: string;
@@ -14,7 +13,6 @@ export interface MemoryTodaySearch {
 
 const PACK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** Passage pack ids, `unified:packId`, or a `verseRefKey`. */
 function validateTodayItem(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const item = value.trim();
@@ -25,7 +23,6 @@ function validateTodayItem(value: unknown): string | undefined {
   return item;
 }
 
-/** `/memory/today` search: pack scope, half of the day, open item, and return. */
 export function validateMemoryTodaySearch(
   search: Record<string, unknown>,
 ): MemoryTodaySearch {
