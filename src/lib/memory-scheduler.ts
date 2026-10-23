@@ -165,6 +165,12 @@ export interface ReviewInput {
   accuracy: number;
   mode: "learn" | "review" | "deck" | "practice";
   now: number; // pass `now` IN (Convex forbids Date.now() in queries)
+  /** First-letters support used on this recall. */
+  hint?: "first-letters";
+  /** True when the last review was a ≥85% hinted check-in. */
+  priorHintedCheckIn?: boolean;
+  /** Log the try without moving the schedule (refresh sitting, after-miss). */
+  holdSchedule?: boolean;
   /** Word count of the verse text; drives the length-based rep curve. */
   wordCount?: number;
   /**
@@ -895,9 +901,49 @@ function lapseReviewingOneStep(
   };
 }
 
+function hintedCheckIn(s: MemorySchedule, r: ReviewInput): MemorySchedule {
+  return {
+    ...s,
+    dueAt: dueAtInCalendarDays(r.now, 1, r.tzOffsetMinutes, r.timeZone),
+    earlyReviewApplied: false,
+  };
+}
+
+function restoreKeptInterval(
+  s: MemorySchedule,
+  r: ReviewInput,
+): MemorySchedule {
+  return {
+    ...s,
+    dueAt: computeDueAt(
+      r,
+      Math.max(REVIEW_DAILY_INTERVAL_DAYS, s.intervalDays),
+    ),
+    earlyReviewApplied: r.now < s.dueAt,
+  };
+}
+
+function applyHintedReview(
+  s: MemorySchedule,
+  r: ReviewInput,
+): MemorySchedule | null {
+  if (r.hint !== "first-letters") return null;
+  if (r.accuracy >= LEARN_PROGRESS_ACCURACY) {
+    return hintedCheckIn(s, r);
+  }
+  return null;
+}
+
 function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
+  const hinted = applyHintedReview(s, r);
+  if (hinted) return hinted;
+
   const isEarly = r.now < s.dueAt;
   const outcome = reviewGradeOutcome(r.quality, r.accuracy);
+
+  if (r.priorHintedCheckIn && outcome === "exact") {
+    return restoreKeptInterval(s, r);
+  }
 
   if (outcome === "lapse") {
     // Always applies even when early — a hard miss should not be ignored.
@@ -974,10 +1020,82 @@ export function scheduleNext(
   s: MemorySchedule,
   r: ReviewInput,
 ): MemorySchedule {
+  if (r.holdSchedule) return s;
+  if (r.mode === "practice" && r.hint) return s;
   if (isLearningPhase(s.status)) {
+    const hinted = applyHintedReview(s, r);
+    if (hinted) return hinted;
     return scheduleLearning(s, r);
   }
   return scheduleReviewing(s, r);
+}
+
+export type RefreshContext = {
+  now: number;
+  overdueMs: number;
+  recentLapseCount: number;
+  tzOffsetMinutes?: number;
+  timeZone?: string;
+};
+
+function refreshReviewingIntervalDays(
+  s: MemorySchedule,
+  ctx: RefreshContext,
+): number {
+  const intervalDays = Math.max(REVIEW_DAILY_INTERVAL_DAYS, s.intervalDays);
+  const overdueHeavy = ctx.overdueMs >= 2 * intervalDays * DAY_MS;
+  if (overdueHeavy || ctx.recentLapseCount >= 2) {
+    return REVIEW_DAILY_INTERVAL_DAYS;
+  }
+  const step = reviewingIntervalStep(s.intervalDays);
+  if (step === 1) return REVIEW_DAILY_INTERVAL_DAYS;
+  if (step === 2) return REVIEW_DAILY_INTERVAL_DAYS;
+  return REVIEW_EVERY_OTHER_INTERVAL_DAYS;
+}
+
+/**
+ * Finish a Refresh sitting. Learning steps back one band and is due now.
+ * Memorized / Mastered drops one rung, or to daily when badly overdue or
+ * twice lapsed. Ease and lapse count stay put.
+ */
+export function refreshSchedule(
+  s: MemorySchedule,
+  ctx: RefreshContext,
+): MemorySchedule {
+  if (isLearningPhase(s.status)) {
+    return {
+      ...s,
+      learnStage: Math.max(0, s.learnStage - 1),
+      stageReps: 0,
+      dueAt: ctx.now,
+      earlyReviewApplied: false,
+    };
+  }
+
+  const intervalDays = refreshReviewingIntervalDays(s, ctx);
+  return {
+    ...s,
+    status: "reviewing",
+    intervalDays,
+    stageReps: 0,
+    dueAt: dueAtInCalendarDays(
+      ctx.now,
+      intervalDays,
+      ctx.tzOffsetMinutes,
+      ctx.timeZone,
+    ),
+    earlyReviewApplied: false,
+  };
+}
+
+/** Start over: back to new / Read, due now. History stays with the caller. */
+export function startOverSchedule(now: number): MemorySchedule {
+  return initialSchedule(now);
+}
+
+/** Undo Start over by putting the captured schedule back. */
+export function restoreStartOverUndo(snapshot: MemorySchedule): MemorySchedule {
+  return { ...snapshot };
 }
 
 /**
