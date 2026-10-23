@@ -239,7 +239,7 @@ interface PracticeBoardProps {
   onComplete?: (result: PracticeSessionResult) => void;
   /** Shown above the verse rail, e.g. an overview of the whole session. */
   railHeader?: ReactNode;
-  /** Replaces the board's own sidebar. Today uses this for the queue panel. */
+  /** Replaces the board's own sidebar. */
   rail?:
     | ReactNode
     | ((api: { changeOrder: (order: PracticeOrder) => void }) => ReactNode);

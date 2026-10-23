@@ -364,11 +364,6 @@ function segmentState(
   return finished.has(index) ? "done" : "upcoming";
 }
 
-/**
- * Everything in today's frozen session, grouped like the segments run:
- * Passages, then Verses to learn, then Reviews, each item done, current, or
- * upcoming, and whether choosing it can open it.
- */
 function verseItemState(
   entryId: string,
   segmentState: TodayQueueState,
@@ -407,6 +402,11 @@ function visibleQueueItems(
   return { items: visible, moreCount: items.length - limit };
 }
 
+/**
+ * Everything in today's frozen session, grouped like the segments run:
+ * Passages, then Verses to learn, then Reviews, each item done, current, or
+ * upcoming, and whether choosing it can open it.
+ */
 export function todayQueueGroups(input: TodayQueueInput): TodayQueueGroup[] {
   const { segments, current } = input;
   const spent = input.spent ?? NO_IDS;

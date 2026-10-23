@@ -728,7 +728,6 @@ function TodaySession({
       current,
       shownId: currentItemId,
     });
-  // A queue of one is just the thing on screen.
   const showQueue =
     segments.length > 1 || queue.learning.length + queue.reviews.length > 1;
   const queueRail = (current: number | null) =>
