@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseMemoryReturn,
+  validateMemoryPackPracticeSearch,
   validateMemoryReturnSearch,
   withReturn,
 } from "./memory-return";
@@ -62,6 +63,17 @@ describe("validateMemoryReturnSearch", () => {
     expect(
       validateMemoryReturnSearch({ return: "https://evil.com/memory" }),
     ).toEqual({});
+  });
+});
+
+describe("validateMemoryPackPracticeSearch", () => {
+  it("keeps refresh with an allowed return", () => {
+    expect(
+      validateMemoryPackPracticeSearch({
+        return: "/memory/psalm1",
+        refresh: "1",
+      }),
+    ).toEqual({ return: "/memory/psalm1", refresh: true });
   });
 });
 

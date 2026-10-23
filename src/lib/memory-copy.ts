@@ -147,3 +147,37 @@ const STATUS_LABELS: Record<MemoryStatus, StatusLabel> = {
 export function statusLabel(status: MemoryStatus): StatusLabel {
   return STATUS_LABELS[status];
 }
+
+export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
+export const FIRST_LETTERS_HINT_LABEL = "First letters";
+export const ENTER_TO_CHECK_HINT =
+  "Enter to check · Shift+Enter for a new line";
+export const REFRESH_LABEL = "Refresh";
+export const REFRESH_MENU_DETAIL = "Practice with hints";
+export const START_OVER_MENU_LABEL = "Start over…";
+export const START_OVER_MENU_DETAIL = "Learn it again from the start";
+export const START_OVER_CONFIRM_LABEL = "Start over";
+export const START_OVER_CANCEL_LABEL = "Cancel";
+export const STARTED_OVER_LABEL = "Started over.";
+export const UNDO_LABEL = "Undo";
+export const START_OVER_ERROR = "Couldn't start over. Try again.";
+export const UNDO_START_OVER_ERROR = "Couldn't undo. Try again.";
+export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
+export const START_OVER_CONFIRM_BODY =
+  "You'll learn it again from the beginning. Your notes and hearts stay.";
+export const WHOLE_PASSAGE_OPTION = "The whole passage";
+export const WHOLE_PACK_OPTION = "The whole pack";
+
+export function startOverTitle(name: string): string {
+  return `Start ${name} over?`;
+}
+
+export function shakyVersesOption(list: string): string {
+  return `Just the shaky verses · ${list}`;
+}
+
+/** Up to four refs, then "+N more". */
+export function formatShakyVerseList(refs: readonly string[], max = 4): string {
+  if (refs.length <= max) return refs.join(", ");
+  return `${refs.slice(0, max).join(", ")} +${refs.length - max} more`;
+}

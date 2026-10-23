@@ -81,6 +81,9 @@ describe("validateMemoryHomeSearch", () => {
       from: "verses",
     });
     expect(validateMemoryPanelPageSearch({ from: "today" })).toEqual({});
+    expect(validateMemoryPanelPageSearch({ startOver: "1" })).toEqual({
+      startOver: true,
+    });
   });
 });
 

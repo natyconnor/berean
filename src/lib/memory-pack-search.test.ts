@@ -18,4 +18,10 @@ describe("validateMemoryPackSearch", () => {
       }),
     ).toEqual({});
   });
+
+  it("keeps startOver from the drawer handoff", () => {
+    expect(validateMemoryPackSearch({ startOver: "1" })).toEqual({
+      startOver: true,
+    });
+  });
 });

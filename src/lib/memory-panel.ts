@@ -5,6 +5,8 @@
  * "‹ Your verses" back link.
  */
 
+import { parseTruthySearchFlag } from "./memory-practice-search";
+
 export type MemoryPanel =
   | { kind: "progress" }
   | { kind: "verses" }
@@ -77,6 +79,7 @@ export function validateMemoryHomeSearch(
 
 export interface MemoryPanelPageSearch {
   from?: MemoryPanelFrom;
+  startOver?: boolean;
 }
 
 /** Search for the full pages (`/memory/progress`, `/memory/verse/$id`, …). */
@@ -84,7 +87,11 @@ export function validateMemoryPanelPageSearch(
   search: Record<string, unknown>,
 ): MemoryPanelPageSearch {
   const from = parseMemoryPanelFrom(search.from);
-  return from ? { from } : {};
+  const startOver = parseTruthySearchFlag(search.startOver) ? true : undefined;
+  return {
+    ...(from ? { from } : {}),
+    ...(startOver ? { startOver } : {}),
+  };
 }
 
 /** The drawer over Today, e.g. `/memory?panel=pack%3Aabc&from=verses`. */

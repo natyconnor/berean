@@ -4,6 +4,7 @@ import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
   recalledCopy,
+  slippedThisSession,
   type ReviewSessionAttempt,
 } from "./review-session-attempts";
 
@@ -41,5 +42,13 @@ describe("groupReviewSessionAttempts", () => {
 describe("recalledCopy", () => {
   it("names a retry as a second score", () => {
     expect(recalledCopy([85, 100])).toBe("85%, then 100% recalled");
+  });
+});
+
+describe("slippedThisSession", () => {
+  it("is true when any recitation lapsed", () => {
+    expect(slippedThisSession([34])).toBe(true);
+    expect(slippedThisSession([90, 40])).toBe(true);
+    expect(slippedThisSession([92, 88])).toBe(false);
   });
 });

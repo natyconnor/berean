@@ -1,4 +1,5 @@
 import type { CardReference } from "@/components/study/study-card-model";
+import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export interface ReviewSessionAttempt {
@@ -53,4 +54,9 @@ export function recalledCopy(accuracies: readonly number[]): string {
     return `${accuracies[0] ?? 0}% recalled`;
   }
   return `${accuracies.join("%, then ")}% recalled`;
+}
+
+/** True when any recitation this session dropped below the lapse bar. */
+export function slippedThisSession(accuracies: readonly number[]): boolean {
+  return accuracies.some((accuracy) => accuracy < REVIEW_LAPSE_ACCURACY);
 }

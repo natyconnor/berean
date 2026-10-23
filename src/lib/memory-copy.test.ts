@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ENTER_TO_CHECK_HINT,
+  formatShakyVerseList,
   memorizeTitleLabel,
   passageStepLine,
+  shakyVersesOption,
+  startOverTitle,
   statusLabel,
   stepAction,
   stepActionLine,
@@ -104,5 +108,26 @@ describe("statusLabel", () => {
 describe("memorizeTitleLabel", () => {
   it("names the target", () => {
     expect(memorizeTitleLabel("Psalm 1")).toBe("Memorize Psalm 1");
+  });
+});
+
+describe("refresher copy", () => {
+  it("keeps the check-answer hint plain", () => {
+    expect(ENTER_TO_CHECK_HINT).toBe(
+      "Enter to check · Shift+Enter for a new line",
+    );
+  });
+});
+
+describe("start over copy", () => {
+  it("names the verse in the confirm title", () => {
+    expect(startOverTitle("Romans 8:28")).toBe("Start Romans 8:28 over?");
+  });
+
+  it("lists shaky verses and caps the list", () => {
+    expect(shakyVersesOption("3, 5")).toBe("Just the shaky verses · 3, 5");
+    expect(formatShakyVerseList(["3", "5", "7", "9", "11"])).toBe(
+      "3, 5, 7, 9 +1 more",
+    );
   });
 });
