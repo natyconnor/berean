@@ -372,11 +372,13 @@ function openQueueItemId(
   step: TodayStep,
   segments: readonly TodaySegment[],
   queue: { learning: TodayQueueEntry[]; reviews: TodayQueueEntry[] },
+  shownVerseId?: string,
 ): string | undefined {
   if (step.kind !== "segment") return undefined;
   const segment = segments[step.index];
   if (!segment) return undefined;
   if (segment.kind === "passage") return segment.packId;
+  if (shownVerseId) return shownVerseId;
   if (step.verseId) return step.verseId;
   const entries = segment.kind === "learning" ? queue.learning : queue.reviews;
   return entries[0]?.id;
@@ -436,6 +438,9 @@ function TodaySession({
       ? { kind: "segment", index: 0 }
       : { kind: "summary" };
   });
+  // The runner's live card. step.verseId is only the open-at target; writing
+  // the live card there remounts the runner.
+  const [shownVerseId, setShownVerseId] = useState<string | undefined>();
   // Segments run in plan order, but the queue can jump anywhere, so progress
   // is what's finished plus each verse run's live state.
   const [done, setDone] = useState<ReadonlySet<number>>(() => new Set());
@@ -515,7 +520,9 @@ function TodaySession({
       runStates[index] === undefined
         ? undefined
         : entries.find((entry) => !spent.has(entry.id))?.id;
-    setStep({ kind: "segment", index, verseId: verseId ?? resumeAt });
+    const nextVerseId = verseId ?? resumeAt;
+    setStep({ kind: "segment", index, verseId: nextVerseId });
+    setShownVerseId(segment.kind === "passage" ? undefined : nextVerseId);
   };
   const openQueueItem = (item: TodayQueueItem) => {
     openSegment(
@@ -527,7 +534,7 @@ function TodaySession({
     if (group.target !== null) openSegment(group.target);
   };
 
-  const currentItemId = openQueueItemId(step, segments, queue);
+  const currentItemId = openQueueItemId(step, segments, queue, shownVerseId);
   useEffect(() => {
     if (search.item === currentItemId) return;
     void navigate({
@@ -723,6 +730,7 @@ function TodaySession({
         ) : undefined
       }
       initialVerseId={step.verseId}
+      onCurrentVerseId={setShownVerseId}
       runState={runStates[index]}
       onRunStateChange={(state, result) => saveRun(index, state, result)}
       onComplete={(result) => recordRun(index, result)}

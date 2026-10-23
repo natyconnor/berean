@@ -37,6 +37,8 @@ interface MemorySessionRunnerProps {
   railHeader?: ReactNode;
   /** Card id to open first; the first card in order when absent. */
   initialVerseId?: string;
+  /** The card now on screen, after a rail pick, Next, or Shuffle. */
+  onCurrentVerseId?: (id: string) => void;
   /** Pick a run back up where it was left. Read once, at mount. */
   runState?: PracticeRunState;
   /** Every change to the run's state, with the results so far. */

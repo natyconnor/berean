@@ -241,6 +241,8 @@ interface PracticeBoardProps {
   railHeader?: ReactNode;
   /** Card id to open first; the first card in order when absent or unknown. */
   initialVerseId?: string;
+  /** The card now on screen, after a rail pick, Next, or Shuffle. */
+  onCurrentVerseId?: (id: string) => void;
   /** Pick a run back up where it was left. Read once, at mount. */
   runState?: PracticeRunState;
   /** Every change to the run's state, with the results so far. */
@@ -403,6 +405,7 @@ export function PracticeBoard({
   onComplete,
   railHeader,
   initialVerseId,
+  onCurrentVerseId,
   runState,
   onRunStateChange,
 }: PracticeBoardProps): JSX.Element {
@@ -679,6 +682,14 @@ export function PracticeBoard({
     );
     return () => window.clearTimeout(timer);
   }, [isShuffling, shuffleNonce]);
+
+  const currentVerseId = currentVerse?.id;
+  const reportCurrentVerseId = useEffectEvent((id: string) => {
+    onCurrentVerseId?.(id);
+  });
+  useEffect(() => {
+    if (currentVerseId) reportCurrentVerseId(currentVerseId);
+  }, [currentVerseId]);
 
   const reportRunState = useEffectEvent(
     (state: PracticeRunState, result: PracticeSessionResult) => {
