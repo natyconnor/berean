@@ -172,6 +172,9 @@ export async function loadTodayModel(
       verseRefId: log.verseRefId,
       mode: log.mode,
       createdAt: log.createdAt,
+      hint: log.hint,
+      accuracy: log.accuracy,
+      stage: log.stage,
     })),
     passageLogs: passageLogs.map((log) => ({
       passageMemoryId: log.passageMemoryId,

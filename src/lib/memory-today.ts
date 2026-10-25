@@ -11,7 +11,11 @@ import {
   estimateSessionMinutes,
   formatShortDate,
 } from "./memorize-plan";
-import { isDueForLearning, isDueForReview } from "./memory-scheduler";
+import {
+  isDueForLearning,
+  isDueForReview,
+  isLearnFromMemoryHintedPass,
+} from "./memory-scheduler";
 
 /**
  * The Today home in one model: what is left today, what was done today, the
@@ -76,6 +80,9 @@ export interface TodayVerseLog {
   verseRefId: string;
   mode: "learn" | "review" | "deck" | "practice";
   createdAt: number;
+  hint?: "first-letters";
+  accuracy?: number;
+  stage?: number;
 }
 
 export interface TodayPassageLog {
@@ -128,6 +135,16 @@ function summarizeToday(
 
   for (const log of verseLogs) {
     if (log.createdAt < dayStart) continue;
+    if (
+      log.mode === "learn" &&
+      isLearnFromMemoryHintedPass({
+        learnStage: log.stage ?? 0,
+        hint: log.hint,
+        accuracy: log.accuracy ?? 0,
+      })
+    ) {
+      continue;
+    }
     if (log.mode === "learn") learnedVerses.add(log.verseRefId);
     else if (log.mode === "review") reviewedVerses.add(log.verseRefId);
     else continue;

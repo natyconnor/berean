@@ -45,6 +45,8 @@ interface VerseMemoryFeedbackProps {
   errors?: AttemptErrorCounts;
   /** Trails the percentage, e.g. "Pass at 85%". */
   note?: string;
+  /** Replaces the usual praise line when this result has its own next step. */
+  praiseLine?: string;
 }
 
 const BANNER_TONE: Record<AccuracyBand, string> = {
@@ -89,6 +91,7 @@ export function VerseMemoryFeedback({
   accuracy,
   errors,
   note,
+  praiseLine,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
   const scored =
@@ -98,9 +101,10 @@ export function VerseMemoryFeedback({
   const { band } = feedback;
   const celebrate = band === "exact";
   const praise =
-    !showScheduleOutcome && requireExactToAdvance && quality === "close"
+    praiseLine ??
+    (!showScheduleOutcome && requireExactToAdvance && quality === "close"
       ? FROM_MEMORY_CLOSE_MESSAGE
-      : attemptPraiseLine({ accuracy: scored, outcome, errors });
+      : attemptPraiseLine({ accuracy: scored, outcome, errors }));
   const consequence = showScheduleOutcome
     ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
     : null;

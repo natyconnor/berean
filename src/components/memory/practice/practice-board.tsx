@@ -1802,12 +1802,12 @@ function PracticeCard({
                     )}
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
+                    praiseLine={
+                      offerUnhintedFromMemoryRetry
+                        ? FROM_MEMORY_HINT_PASS_MESSAGE
+                        : undefined
+                    }
                   />
-                  {offerUnhintedFromMemoryRetry ? (
-                    <p className="text-sm text-muted-foreground">
-                      {FROM_MEMORY_HINT_PASS_MESSAGE}
-                    </p>
-                  ) : null}
                   {checkedQuality !== "exact" && (
                     <div
                       className={cn(

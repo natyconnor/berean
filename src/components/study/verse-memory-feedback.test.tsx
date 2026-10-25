@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
+import {
+  FROM_MEMORY_CLOSE_MESSAGE,
+  FROM_MEMORY_HINT_PASS_MESSAGE,
+} from "./from-memory-messages";
 import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
 const { useReducedMotion } = vi.hoisted(() => ({
@@ -159,6 +162,21 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       FROM_MEMORY_CLOSE_MESSAGE,
     );
+  });
+
+  it("replaces the 100% graduation line when a hinted pass can be retried", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={92}
+        attemptKey="hinted-retry"
+        requireExactToAdvance
+        praiseLine={FROM_MEMORY_HINT_PASS_MESSAGE}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveTextContent(FROM_MEMORY_HINT_PASS_MESSAGE);
+    expect(banner).not.toHaveTextContent(FROM_MEMORY_CLOSE_MESSAGE);
   });
 
   it("tells Review to retry at 80%+ so the interval can still stretch", () => {

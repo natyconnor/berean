@@ -324,6 +324,75 @@ describe("buildTodayModel: done today", () => {
     expect(model.startedToday).toBe(true);
   });
 
+  it("does not count a hinted From memory pass that made no progress", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("open", 1)],
+        verseLogs: [
+          {
+            verseRefId: "a",
+            mode: "learn",
+            createdAt: NOW - HOUR_MS,
+            hint: "first-letters",
+            accuracy: 92,
+            stage: 3,
+          },
+        ],
+      }),
+    );
+
+    expect(model.doneToday).toEqual({ learningSteps: 0, reviews: 0 });
+    expect(model.startedToday).toBe(false);
+  });
+
+  it("still counts the unhinted From memory pass after a hinted one", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("open", 1)],
+        verseLogs: [
+          {
+            verseRefId: "a",
+            mode: "learn",
+            createdAt: NOW - 2 * HOUR_MS,
+            hint: "first-letters",
+            accuracy: 92,
+            stage: 3,
+          },
+          {
+            verseRefId: "a",
+            mode: "learn",
+            createdAt: NOW - HOUR_MS,
+            accuracy: 100,
+            stage: 3,
+          },
+        ],
+      }),
+    );
+
+    expect(model.doneToday).toEqual({ learningSteps: 1, reviews: 0 });
+    expect(model.startedToday).toBe(true);
+  });
+
+  it("still counts a hinted Guided learn try", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("open", 1)],
+        verseLogs: [
+          {
+            verseRefId: "a",
+            mode: "learn",
+            createdAt: NOW - HOUR_MS,
+            hint: "first-letters",
+            accuracy: 92,
+            stage: 1,
+          },
+        ],
+      }),
+    );
+
+    expect(model.doneToday).toEqual({ learningSteps: 1, reviews: 0 });
+  });
+
   it("is not started by extra practice or yesterday's work", () => {
     const model = buildTodayModel(
       input({

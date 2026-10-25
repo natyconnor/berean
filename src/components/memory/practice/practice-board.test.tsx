@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
+  FROM_MEMORY_CLOSE_MESSAGE,
   FROM_MEMORY_HINT_PASS_ACTION,
   FROM_MEMORY_HINT_PASS_MESSAGE,
   FROM_MEMORY_SECOND_ROUND_PROMPT,
@@ -1789,6 +1790,9 @@ describe("PracticeBoard refresher", () => {
       .calls[0] as [{ holdSchedule?: boolean }];
     expect(hintedArgs.holdSchedule).toBeFalsy();
     expect(screen.getByText(FROM_MEMORY_HINT_PASS_MESSAGE)).toBeVisible();
+    expect(
+      screen.queryByText(FROM_MEMORY_CLOSE_MESSAGE),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
 
     await userEvent.click(
@@ -1822,6 +1826,55 @@ describe("PracticeBoard refresher", () => {
     );
     expect(screen.getByText(FROM_MEMORY_SECOND_ROUND_PROMPT)).toBeVisible();
     expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+  });
+
+  it("shows only the hinted-pass line on a graduating From memory close", async () => {
+    const fromMemoryVerse: PracticeVerse = {
+      ...learningVerse,
+      learnStage: 3,
+      stageReps: 1,
+    };
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 3,
+      stageReps: 1,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() - 1000,
+      consecutiveCorrect: 2,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+    queryResults.set("verseMemory.reviewFreshness", {
+      stale: true,
+      lastReviews: [],
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[fromMemoryVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    const hinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(hinted);
+    await userEvent.paste("The Lord is my shepherd I shall not eat");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(
+      await screen.findByText(FROM_MEMORY_HINT_PASS_MESSAGE),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(FROM_MEMORY_CLOSE_MESSAGE),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText(FROM_MEMORY_HINT_PASS_MESSAGE)).toHaveLength(1);
   });
 });
 

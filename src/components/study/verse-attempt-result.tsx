@@ -29,6 +29,8 @@ interface VerseAttemptResultProps {
   now?: number;
   /** Trails the banner's percentage, e.g. "Pass at 85%". */
   note?: string;
+  /** Replaces the usual praise line when this result has its own next step. */
+  praiseLine?: string;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -147,6 +149,7 @@ export function VerseAttemptResult({
   nextSchedule = null,
   now,
   note,
+  praiseLine,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -173,6 +176,7 @@ export function VerseAttemptResult({
           accuracy={attemptAccuracy}
           errors={attemptErrors}
           note={note}
+          praiseLine={praiseLine}
         />
       ) : null}
       <motion.div
