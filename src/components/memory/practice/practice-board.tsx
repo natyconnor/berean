@@ -106,6 +106,8 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
 import {
+  FROM_MEMORY_HINT_PASS_ACTION,
+  FROM_MEMORY_HINT_PASS_MESSAGE,
   fromMemoryPromptLine,
   isFromMemoryLearning,
   requiresExactToAdvance,
@@ -1402,6 +1404,13 @@ function PracticeCard({
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
+  const offerUnhintedFromMemoryRetry =
+    fromMemoryLearn &&
+    rescue === "letters" &&
+    !rescueHold &&
+    !refreshSitting &&
+    checked &&
+    (checkedAccuracy >= LEARN_PROGRESS_ACCURACY || checkedQuality === "exact");
   const madeLearningProgress =
     checkedQuality !== null &&
     isLearningProgressAttempt(
@@ -1526,7 +1535,7 @@ function PracticeCard({
       });
       return;
     }
-    if (rescue === "letters" && rescueHold) {
+    if (rescue === "letters" && (rescueHold || offerUnhintedFromMemoryRetry)) {
       setRescue("memory");
       resetCard();
       window.requestAnimationFrame(() => answerInputRef.current?.focus());
@@ -1598,6 +1607,11 @@ function PracticeCard({
     (checkedAccuracy >= LEARN_PROGRESS_ACCURACY || checkedQuality === "exact");
   const resultActionLabel = gradePending ? (
     "Saving..."
+  ) : offerUnhintedFromMemoryRetry ? (
+    <>
+      <RotateCcw className="h-4 w-4" aria-hidden />
+      {FROM_MEMORY_HINT_PASS_ACTION}
+    </>
   ) : refreshStepDone ? (
     <>
       <ArrowRight className="h-4 w-4" aria-hidden />
@@ -1789,6 +1803,11 @@ function PracticeCard({
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
                   />
+                  {offerUnhintedFromMemoryRetry ? (
+                    <p className="text-sm text-muted-foreground">
+                      {FROM_MEMORY_HINT_PASS_MESSAGE}
+                    </p>
+                  ) : null}
                   {checkedQuality !== "exact" && (
                     <div
                       className={cn(

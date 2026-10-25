@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   FROM_MEMORY_CLOSE_MESSAGE,
   FROM_MEMORY_FIRST_ROUND_PROMPT,
+  FROM_MEMORY_HINT_PASS_ACTION,
+  FROM_MEMORY_HINT_PASS_MESSAGE,
   FROM_MEMORY_SECOND_ROUND_PROMPT,
   fromMemoryPromptLine,
   isFromMemoryLearning,
@@ -42,5 +44,13 @@ describe("FROM_MEMORY_CLOSE_MESSAGE", () => {
   it("tells the learner that 100% is required to lock the verse in", () => {
     expect(FROM_MEMORY_CLOSE_MESSAGE).toMatch(/100%/);
     expect(FROM_MEMORY_CLOSE_MESSAGE).toMatch(/lock this verse in/i);
+  });
+});
+
+describe("FROM_MEMORY_HINT_PASS_MESSAGE", () => {
+  it("asks for one more try from memory so the step can count", () => {
+    expect(FROM_MEMORY_HINT_PASS_MESSAGE).toMatch(/from memory/i);
+    expect(FROM_MEMORY_HINT_PASS_MESSAGE).toMatch(/count/i);
+    expect(FROM_MEMORY_HINT_PASS_ACTION).toMatch(/from memory/i);
   });
 });

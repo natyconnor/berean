@@ -1023,6 +1023,13 @@ export function scheduleNext(
   if (r.holdSchedule) return s;
   if (r.mode === "practice" && r.hint) return s;
   if (isLearningPhase(s.status)) {
+    if (
+      s.learnStage >= MAX_LEARN_STAGE &&
+      r.hint === "first-letters" &&
+      r.accuracy >= LEARN_PROGRESS_ACCURACY
+    ) {
+      return s;
+    }
     const hinted = applyHintedReview(s, r);
     if (hinted) return hinted;
     return scheduleLearning(s, r);

@@ -173,6 +173,69 @@ describe("hinted review", () => {
     );
     expect(next).toEqual(prior);
   });
+
+  it("still due-tomorrows a hinted Guided learning pass", () => {
+    const prior = learning({ learnStage: 1, stageReps: 0, dueAt: NOW });
+    const next = scheduleNext(
+      prior,
+      review({
+        mode: "learn",
+        quality: "close",
+        accuracy: LEARN_PROGRESS_ACCURACY,
+        hint: "first-letters",
+      }),
+    );
+    expect(next.learnStage).toBe(1);
+    expect(next.stageReps).toBe(0);
+    expect(next.dueAt).toBe(dueAtInCalendarDays(NOW, 1));
+  });
+
+  it("leaves a hinted From memory learning pass unlocked with no progress", () => {
+    const prior = learning({
+      learnStage: MAX_LEARN_STAGE,
+      stageReps: 0,
+      dueAt: NOW,
+    });
+    const next = scheduleNext(
+      prior,
+      review({
+        mode: "learn",
+        quality: "close",
+        accuracy: LEARN_PROGRESS_ACCURACY,
+        hint: "first-letters",
+      }),
+    );
+    expect(next).toEqual(prior);
+  });
+
+  it("banks a later unhinted From memory pass after a hinted one", () => {
+    const prior = learning({
+      learnStage: MAX_LEARN_STAGE,
+      stageReps: 0,
+      dueAt: NOW,
+    });
+    const afterHint = scheduleNext(
+      prior,
+      review({
+        mode: "learn",
+        quality: "close",
+        accuracy: 92,
+        hint: "first-letters",
+      }),
+    );
+    const next = scheduleNext(
+      afterHint,
+      review({
+        mode: "learn",
+        quality: "close",
+        accuracy: 92,
+      }),
+    );
+    expect(next.status).toBe("learning");
+    expect(next.learnStage).toBe(MAX_LEARN_STAGE);
+    expect(next.stageReps).toBe(1);
+    expect(next.dueAt).toBe(NOW);
+  });
 });
 
 describe("refreshSchedule", () => {

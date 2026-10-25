@@ -3,6 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  FROM_MEMORY_HINT_PASS_ACTION,
+  FROM_MEMORY_HINT_PASS_MESSAGE,
+  FROM_MEMORY_SECOND_ROUND_PROMPT,
+} from "@/components/study/from-memory-messages";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
@@ -1725,6 +1730,98 @@ describe("PracticeBoard refresher", () => {
     });
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers an immediate unhinted From memory retry after a hinted learning pass", async () => {
+    const fromMemoryVerse: PracticeVerse = {
+      ...learningVerse,
+      learnStage: 3,
+      stageReps: 0,
+    };
+    const stillOpen = {
+      status: "learning" as const,
+      learnStage: 3,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() - 1000,
+      consecutiveCorrect: 2,
+      lapses: 0,
+      earlyReviewApplied: false,
+    };
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(stillOpen)
+      .mockResolvedValueOnce({ ...stillOpen, stageReps: 1 });
+    queryResults.set("verseMemory.reviewFreshness", {
+      stale: true,
+      lastReviews: [],
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[fromMemoryVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    expect(screen.getByText("First letters")).toBeInTheDocument();
+
+    const hinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(hinted);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hint: "first-letters",
+          mode: "learn",
+        }),
+      );
+    });
+    const [hintedArgs] = mutationMock("verseMemory.recordAttempt").mock
+      .calls[0] as [{ holdSchedule?: boolean }];
+    expect(hintedArgs.holdSchedule).toBeFalsy();
+    expect(screen.getByText(FROM_MEMORY_HINT_PASS_MESSAGE)).toBeVisible();
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: FROM_MEMORY_HINT_PASS_ACTION,
+      }),
+    );
+
+    expect(
+      await screen.findByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("First letters")).not.toBeInTheDocument();
+
+    const unhinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(unhinted);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+    const [unhintedArgs] = mutationMock("verseMemory.recordAttempt").mock
+      .calls[1] as [{ hint?: string; holdSchedule?: boolean }];
+    expect(unhintedArgs.hint).toBeUndefined();
+    expect(unhintedArgs.holdSchedule).toBeFalsy();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(screen.getByText(FROM_MEMORY_SECOND_ROUND_PROMPT)).toBeVisible();
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
   });
 });
 
