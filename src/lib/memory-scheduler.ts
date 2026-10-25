@@ -934,6 +934,17 @@ function applyHintedReview(
   return null;
 }
 
+function isLearnFromMemoryHintedPass(
+  s: Pick<MemorySchedule, "learnStage">,
+  r: Pick<ReviewInput, "hint" | "accuracy">,
+): boolean {
+  return (
+    s.learnStage >= MAX_LEARN_STAGE &&
+    r.hint === "first-letters" &&
+    r.accuracy >= LEARN_PROGRESS_ACCURACY
+  );
+}
+
 function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   const hinted = applyHintedReview(s, r);
   if (hinted) return hinted;
@@ -1023,13 +1034,7 @@ export function scheduleNext(
   if (r.holdSchedule) return s;
   if (r.mode === "practice" && r.hint) return s;
   if (isLearningPhase(s.status)) {
-    if (
-      s.learnStage >= MAX_LEARN_STAGE &&
-      r.hint === "first-letters" &&
-      r.accuracy >= LEARN_PROGRESS_ACCURACY
-    ) {
-      return s;
-    }
+    if (isLearnFromMemoryHintedPass(s, r)) return s;
     const hinted = applyHintedReview(s, r);
     if (hinted) return hinted;
     return scheduleLearning(s, r);

@@ -14,7 +14,6 @@ export const FROM_MEMORY_FIRST_ROUND_PROMPT = "Recall the verse from memory";
 export const FROM_MEMORY_SECOND_ROUND_PROMPT =
   "Let's do it one more time to really show you've got this one down!";
 
-/** After a hinted From Memory pass that did not count. */
 export const FROM_MEMORY_HINT_PASS_MESSAGE =
   "Nice work with a little help. Try it once more from memory so this step can count.";
 
