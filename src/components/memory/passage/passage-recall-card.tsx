@@ -10,7 +10,7 @@ import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import {
   EnterToCheckHint,
   FirstLettersPanel,
-  NeedARefresherButton,
+  NeedARefresherInlineOffer,
   NeedARefresherLink,
 } from "@/components/memory/memory-refresher-controls";
 import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
@@ -133,6 +133,7 @@ export function PassageRecallCard({
   const [rescueHold, setRescueHold] = useState(false);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
+  const resultBannerRef = useRef<HTMLDivElement>(null);
   const { submit, pending: submitPending } = useSubmitLock();
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
@@ -227,7 +228,13 @@ export function PassageRecallCard({
 
   useEffect(() => {
     if (!checked && !isReadPrime) return;
-    actionRef.current?.focus();
+    actionRef.current?.focus({ preventScroll: true });
+    if (checked) {
+      resultBannerRef.current?.scrollIntoView?.({
+        block: "start",
+        inline: "nearest",
+      });
+    }
   }, [checked, isReadPrime]);
 
   // After Read advances into a typing band, focus the answer box. Continue is
@@ -245,6 +252,12 @@ export function PassageRecallCard({
 
   const fieldLabel =
     mode === "frontier" ? "Your recalled verse" : "Your recited passage";
+  const afterMissOffer =
+    checked &&
+    checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
+    rescue === "off" &&
+    (mode === "review" || learnStage >= 3);
+  const showAfterMiss = afterMissOffer && !submitPending;
 
   return (
     <motion.div
@@ -372,6 +385,21 @@ export function PassageRecallCard({
                 versePlainText={versePlainText}
                 diffTokens={checkedDiffTokens}
                 note={passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`}
+                bannerRef={resultBannerRef}
+                refresherOffer={
+                  afterMissOffer ? (
+                    <NeedARefresherInlineOffer
+                      onClick={() => {
+                        setRescue("letters");
+                        setRescueHold(true);
+                        setChecked(false);
+                        setTypedAnswer("");
+                      }}
+                      disabled={submitPending}
+                      visible={showAfterMiss}
+                    />
+                  ) : undefined
+                }
               />
             </div>
           )}
@@ -392,34 +420,7 @@ export function PassageRecallCard({
                   disabled={loading || Boolean(error)}
                 />
               ) : null}
-              {checked &&
-              !submitPending &&
-              checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
-              rescue === "off" &&
-              (mode === "review" || learnStage >= 3) ? (
-                <>
-                  <NeedARefresherButton
-                    onClick={() => {
-                      setRescue("letters");
-                      setRescueHold(true);
-                      setChecked(false);
-                      setTypedAnswer("");
-                    }}
-                    disabled={submitPending}
-                  />
-                  <Button
-                    ref={actionRef}
-                    type="button"
-                    variant="default"
-                    className="h-11 flex-1 sm:flex-none"
-                    onClick={continueAttempt}
-                    loading={submitPending}
-                  >
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                    Continue
-                  </Button>
-                </>
-              ) : checked ? (
+              {checked ? (
                 <Button
                   ref={actionRef}
                   type="button"

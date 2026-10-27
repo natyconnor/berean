@@ -1577,12 +1577,57 @@ describe("PracticeBoard refresher", () => {
     });
   });
 
-  it("offers Need a refresher beside Continue after a miss", async () => {
+  it("offers Need a refresher on the result banner after a miss", async () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue({
       ...heldSchedule,
       intervalDays: 2,
       lapses: 1,
     });
+    const { container } = render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const offer = await screen.findByRole("button", {
+      name: "Need a refresher?",
+    });
+    expect(offer).toBeVisible();
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "Need a refresher?",
+    );
+    expect(
+      screen.getAllByRole("button", { name: "Need a refresher?" }),
+    ).toHaveLength(1);
+    const footer = container.querySelector('[data-slot="card-footer"]');
+    expect(footer).not.toBeNull();
+    expect(
+      within(footer as HTMLElement).queryByRole("button", {
+        name: "Need a refresher?",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(footer as HTMLElement).getByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+  });
+
+  it("reserves Need a refresher on the banner while a miss is saving", async () => {
+    let resolveRecord!: (value: unknown) => void;
+    const pendingRecord = new Promise((resolve) => {
+      resolveRecord = resolve;
+    });
+    mutationMock("verseMemory.recordAttempt").mockReturnValue(pendingRecord);
     render(
       <TooltipProvider delayDuration={0}>
         <PracticeBoard
@@ -1600,10 +1645,51 @@ describe("PracticeBoard refresher", () => {
     await userEvent.paste("nope");
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
+    expect(await screen.findByText("0% recalled")).toBeVisible();
+    const reserved = screen.getByRole("button", {
+      name: "Need a refresher?",
+    });
+    expect(reserved).toBeDisabled();
+    expect(reserved.closest("span")).toHaveClass("invisible");
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeVisible();
+
+    resolveRecord({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+
+    const offer = await screen.findByRole("button", {
+      name: "Need a refresher?",
+    });
+    expect(offer).toBeVisible();
+    expect(offer).toBeEnabled();
+    expect(offer.closest("span")).not.toHaveClass("invisible");
+  });
+
+  it("hides Need a refresher on a 60% or better hold", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("The Lord is my shepherd I");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText(/recalled/)).toBeVisible();
     expect(
-      await screen.findByRole("button", { name: "Need a refresher?" }),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
   });
 
   it("runs First letters then From memory after Need a refresher on a miss", async () => {
@@ -1644,6 +1730,9 @@ describe("PracticeBoard refresher", () => {
       ).toBeEnabled();
     });
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );

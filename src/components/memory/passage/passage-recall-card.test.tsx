@@ -102,6 +102,110 @@ describe("PassageRecallCard result banner", () => {
     expect(banner).not.toHaveAttribute("data-tone", "exact");
     expect(banner).toHaveTextContent(/\d+% recalled · Pass at 85%/);
     expect(screen.getByTestId("result-emoji")).not.toHaveTextContent("🎉");
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Need a refresher on the review banner after a miss", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="From memory"
+        title="Psalm 23"
+        promptLine="Type the passage from memory"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const offer = await screen.findByRole("button", {
+      name: "Need a refresher?",
+    });
+    expect(offer).toBeVisible();
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "Need a refresher?",
+    );
+    expect(
+      screen.getAllByRole("button", { name: "Need a refresher?" }),
+    ).toHaveLength(1);
+    const footer = container.querySelector('[data-slot="card-footer"]');
+    expect(footer).not.toBeNull();
+    expect(footer?.textContent?.includes("Need a refresher?")).toBe(false);
+    expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
+  });
+
+  it("opens First letters from the banner offer after a miss", async () => {
+    const user = userEvent.setup();
+    render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="From memory"
+        title="Psalm 23"
+        promptLine="Type the passage from memory"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+
+    expect(screen.getByText("First letters")).toBeInTheDocument();
+    expect(screen.getByLabelText("Your recited passage")).toHaveFocus();
+  });
+
+  it("hides Need a refresher on a 60% or better recall", async () => {
+    const user = userEvent.setup();
+    render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="From memory"
+        title="Psalm 16:1"
+        promptLine="Type the passage from memory"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("Preserve me, O God, for in you I hide.");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
   });
 });
 

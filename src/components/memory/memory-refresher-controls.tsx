@@ -1,6 +1,5 @@
 import { Lightbulb } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   ENTER_TO_CHECK_HINT,
   FIRST_LETTERS_HINT_LABEL,
@@ -20,14 +19,19 @@ export function EnterToCheckHint({ className }: { className?: string }) {
 export function NeedARefresherLink({
   onClick,
   disabled,
+  className,
 }: {
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
     <button
       type="button"
-      className="inline-flex h-11 items-center gap-1 text-[12.5px] font-medium text-foreground sm:h-auto"
+      className={cn(
+        "inline-flex h-11 items-center gap-1 rounded-sm text-[12.5px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-auto",
+        className,
+      )}
       onClick={onClick}
       disabled={disabled}
     >
@@ -37,24 +41,31 @@ export function NeedARefresherLink({
   );
 }
 
-export function NeedARefresherButton({
+export function NeedARefresherInlineOffer({
   onClick,
   disabled,
+  visible,
 }: {
   onClick: () => void;
   disabled?: boolean;
+  visible: boolean;
 }) {
   return (
-    <Button
-      type="button"
-      variant="outline"
-      className="h-11 flex-1 sm:flex-none"
-      onClick={onClick}
-      disabled={disabled}
+    <span
+      className={cn(
+        "inline-flex items-start gap-x-1.5 sm:items-center",
+        !visible && "invisible",
+      )}
     >
-      <Lightbulb className="h-4 w-4" aria-hidden />
-      {NEED_A_REFRESHER_LABEL}
-    </Button>
+      <span aria-hidden className="text-xs text-muted-foreground">
+        ·
+      </span>
+      <NeedARefresherLink
+        onClick={onClick}
+        disabled={disabled || !visible}
+        className="items-start sm:items-center"
+      />
+    </span>
   );
 }
 

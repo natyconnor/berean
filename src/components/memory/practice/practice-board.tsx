@@ -44,7 +44,7 @@ import {
 import {
   EnterToCheckHint,
   FirstLettersPanel,
-  NeedARefresherButton,
+  NeedARefresherInlineOffer,
   NeedARefresherLink,
 } from "@/components/memory/memory-refresher-controls";
 import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
@@ -1300,6 +1300,7 @@ function PracticeCard({
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
+  const resultBannerRef = useRef<HTMLDivElement>(null);
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
   // click) into a single recorded attempt, and `submitPending` shows a spinner
@@ -1574,7 +1575,13 @@ function PracticeCard({
 
   useEffect(() => {
     if (showDone || (!checked && !isReadPrime)) return;
-    reviewActionRef.current?.focus();
+    reviewActionRef.current?.focus({ preventScroll: true });
+    if (checked) {
+      resultBannerRef.current?.scrollIntoView?.({
+        block: "start",
+        inline: "nearest",
+      });
+    }
   }, [checked, isReadPrime, showDone]);
 
   // After Read advances into a typing band (or when landing mid-ladder), put
@@ -1620,9 +1627,8 @@ function PracticeCard({
   ) : (
     settledResultAction
   );
-  const showAfterMiss =
+  const afterMissOffer =
     checked &&
-    !gradePending &&
     checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
     rescue === "off" &&
     !refreshSitting &&
@@ -1630,6 +1636,7 @@ function PracticeCard({
       fromMemoryLearn ||
       status === "reviewing" ||
       status === "mastered");
+  const showAfterMiss = afterMissOffer && !gradePending;
 
   return (
     <motion.div
@@ -1807,6 +1814,16 @@ function PracticeCard({
                         ? FROM_MEMORY_HINT_PASS_MESSAGE
                         : undefined
                     }
+                    bannerRef={resultBannerRef}
+                    refresherOffer={
+                      afterMissOffer ? (
+                        <NeedARefresherInlineOffer
+                          onClick={() => openRefresher(true)}
+                          disabled={submitPending}
+                          visible={showAfterMiss}
+                        />
+                      ) : undefined
+                    }
                   />
                   {checkedQuality !== "exact" && (
                     <div
@@ -1884,24 +1901,6 @@ function PracticeCard({
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </Button>
                 ) : null
-              ) : showAfterMiss ? (
-                <>
-                  <NeedARefresherButton
-                    onClick={() => openRefresher(true)}
-                    disabled={submitPending}
-                  />
-                  <Button
-                    ref={reviewActionRef}
-                    type="button"
-                    variant="default"
-                    className="h-11 flex-1 sm:flex-none"
-                    onClick={continueAttempt}
-                    loading={submitPending}
-                  >
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                    Continue
-                  </Button>
-                </>
               ) : checked ? (
                 reviewRetryOffer && onKeepWait && rescue === "off" ? (
                   <>

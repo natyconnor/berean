@@ -13,6 +13,7 @@ export default defineConfig([
     "electron-dist",
     "scripts/start-over-confirm-browser",
     "scripts/pr341-tester-fixes-browser",
+    "scripts/pr341-refresher-inline-browser",
   ]),
   {
     files: ["**/*.{ts,tsx}"],

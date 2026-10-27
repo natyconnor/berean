@@ -309,4 +309,36 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByText("Nailed it!")).toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent(/review/i);
   });
+
+  it("keeps Need a refresher on the score row and out of the live region", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="off"
+        accuracy={0}
+        attemptKey="after-miss"
+        showScheduleOutcome
+        nextSchedule={{
+          status: "learning",
+          learnStage: 2,
+          stageReps: 0,
+          ease: 2.1,
+          intervalDays: 0,
+          dueAt: NOW,
+          consecutiveCorrect: 0,
+          lapses: 1,
+          earlyReviewApplied: false,
+        }}
+        now={NOW}
+        refresherOffer={<button type="button">Need a refresher?</button>}
+      />,
+    );
+    const offer = screen.getByRole("button", { name: "Need a refresher?" });
+    expect(offer).toBeVisible();
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "Need a refresher?",
+    );
+    expect(screen.getByText("0% recalled").compareDocumentPosition(offer)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
 });
