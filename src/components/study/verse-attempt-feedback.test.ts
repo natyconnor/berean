@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { diffWords } from "@/lib/diff-words";
-import { DAY_MS } from "@/lib/memory-scheduler";
+import { DAY_MS, reviewGradeOutcome } from "@/lib/memory-scheduler";
 
-import { countAttemptErrors } from "./study-attempt-quality";
+import {
+  classifyVerseAttempt,
+  countAttemptErrors,
+  verseAttemptAccuracy,
+} from "./study-attempt-quality";
 import {
   attemptFeedbackLead,
   attemptPraiseLine,
@@ -13,6 +17,17 @@ import {
   reviewOutcomeMessage,
   specialMissLead,
 } from "./verse-attempt-feedback";
+
+function leadForTyped(typed: string, actual: string): string {
+  const tokens = diffWords(typed, actual);
+  const accuracy = verseAttemptAccuracy(tokens);
+  const quality = classifyVerseAttempt(tokens) ?? "off";
+  return attemptFeedbackLead({
+    accuracy,
+    outcome: reviewGradeOutcome(quality, accuracy),
+    errors: countAttemptErrors(tokens),
+  });
+}
 
 const NOW = 1_700_000_000_000;
 
@@ -191,6 +206,34 @@ describe("attemptFeedbackLead", () => {
     expect(attemptFeedbackLead({ accuracy: 0, outcome: "lapse" })).toBe(
       LAPSE_ACCURACY_LEADS[7].lead,
     );
+  });
+
+  it("uses the lapse band for a 0% miss on a two-word verse", () => {
+    expect(leadForTyped("nope nope 0", "Jesus wept.")).toBe(
+      "Blank slate this round — we'll rebuild it",
+    );
+  });
+
+  it("uses the lapse band for a 0% miss on a three-word verse", () => {
+    expect(leadForTyped("nope nope 0", "God is love.")).toBe(
+      "Blank slate this round — we'll rebuild it",
+    );
+  });
+
+  it("keeps the close-call line for a one-word miss at retry accuracy", () => {
+    expect(
+      leadForTyped("The Lord is my helper", "The Lord is my shepherd"),
+    ).toBe("Oh so close! Just one word off");
+  });
+
+  it("keeps the close-call line for a one-word miss at hold accuracy", () => {
+    expect(leadForTyped("The Lord is kind", "The Lord is good")).toBe(
+      "Oh so close! Just one word off",
+    );
+  });
+
+  it("uses the lapse band when a one-word miss is still below 60%", () => {
+    expect(leadForTyped("Jesus slept", "Jesus wept.")).toBe("Halfway home");
   });
 });
 
