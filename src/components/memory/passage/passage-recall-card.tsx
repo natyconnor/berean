@@ -13,6 +13,7 @@ import {
   NeedARefresherInlineOffer,
   NeedARefresherLink,
 } from "@/components/memory/memory-refresher-controls";
+import { scrollResultBannerIntoView } from "@/components/memory/scroll-result-banner";
 import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 import { motion, useReducedMotion } from "framer-motion";
 
@@ -230,10 +231,7 @@ export function PassageRecallCard({
     if (!checked && !isReadPrime) return;
     actionRef.current?.focus({ preventScroll: true });
     if (checked) {
-      resultBannerRef.current?.scrollIntoView?.({
-        block: "start",
-        inline: "nearest",
-      });
+      scrollResultBannerIntoView(resultBannerRef.current);
     }
   }, [checked, isReadPrime]);
 

@@ -29,7 +29,7 @@ export function NeedARefresherLink({
     <button
       type="button"
       className={cn(
-        "inline-flex h-11 items-center gap-1 rounded-sm text-[12.5px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring/50 sm:h-auto",
+        "inline-flex min-h-11 items-center gap-1 rounded-sm text-[12.5px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring/50 sm:min-h-0",
         className,
       )}
       onClick={onClick}

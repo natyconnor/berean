@@ -47,6 +47,7 @@ import {
   NeedARefresherInlineOffer,
   NeedARefresherLink,
 } from "@/components/memory/memory-refresher-controls";
+import { scrollResultBannerIntoView } from "@/components/memory/scroll-result-banner";
 import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
@@ -1577,10 +1578,7 @@ function PracticeCard({
     if (showDone || (!checked && !isReadPrime)) return;
     reviewActionRef.current?.focus({ preventScroll: true });
     if (checked) {
-      resultBannerRef.current?.scrollIntoView?.({
-        block: "start",
-        inline: "nearest",
-      });
+      scrollResultBannerIntoView(resultBannerRef.current);
     }
   }, [checked, isReadPrime, showDone]);
 

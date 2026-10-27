@@ -170,7 +170,7 @@ export function VerseAttemptResult({
   return (
     <div className="w-full max-w-xl mx-auto space-y-3">
       {attemptQuality ? (
-        <div ref={bannerRef}>
+        <div ref={bannerRef} className="scroll-mt-4">
           <VerseMemoryFeedback
             quality={attemptQuality}
             attemptKey={attemptKey}
