@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 
 function regionOverflows(element: HTMLElement): boolean {
   return (
@@ -19,10 +19,10 @@ export function useOverflowTabIndex(): {
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const [overflowing, setOverflowing] = useState(false);
 
-  const ref = (node: HTMLDivElement | null) => {
+  const ref = useCallback((node: HTMLDivElement | null) => {
     setElement(node);
     setOverflowing(node ? regionOverflows(node) : false);
-  };
+  }, []);
 
   useLayoutEffect(() => {
     if (!element) return;

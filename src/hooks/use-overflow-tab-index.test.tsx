@@ -106,6 +106,13 @@ describe("useOverflowTabIndex", () => {
     expect(region).toHaveAttribute("tabindex", "0");
   });
 
+  it("does not reconnect the observer on a rerender", () => {
+    const { rerender } = render(<Region />);
+    expect(observers).toHaveLength(1);
+    rerender(<Region />);
+    expect(observers).toHaveLength(1);
+  });
+
   it("keeps focus on the region when overflow (and tabindex) go away", () => {
     render(<Region />);
     const region = screen.getByTestId("region");
