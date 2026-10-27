@@ -229,11 +229,13 @@ export function PassageRecallCard({
 
   useEffect(() => {
     if (!checked && !isReadPrime) return;
-    actionRef.current?.focus({ preventScroll: true });
     if (checked) {
       scrollResultBannerIntoView(resultBannerRef.current);
     }
-  }, [checked, isReadPrime]);
+    // Saving... is disabled, so wait until the save clears before focusing.
+    if (submitPending) return;
+    actionRef.current?.focus({ preventScroll: true });
+  }, [checked, isReadPrime, submitPending]);
 
   // After Read advances into a typing band, focus the answer box. Continue is
   // unmounted on that transition, so without this focus is left on body.

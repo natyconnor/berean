@@ -24,6 +24,7 @@ const server = await createServer({
       { find: "convex-helpers/react/cache", replacement: stub },
       { find: "@/hooks/use-esv-reference", replacement: stub },
       { find: "@/hooks/use-esv-composite-passage", replacement: stub },
+      { find: "@/hooks/use-live-now", replacement: stub },
       { find: "@", replacement: path.join(repo, "src") },
     ],
   },
@@ -84,7 +85,10 @@ async function readActiveElement(page) {
   });
 }
 
-async function sampleFocusAfterCheck(page, delays = [50, 150, 400, 1000, 3000]) {
+async function sampleFocusAfterCheck(
+  page,
+  delays = [50, 150, 400, 1000, 3000],
+) {
   const samples = [];
   let elapsed = 0;
   for (const atMs of delays) {
@@ -102,7 +106,10 @@ function continueFocusFailures(samples, saveDelayMs, label) {
       (sample) =>
         sample.tag !== "BUTTON" || !/\bContinue\b/.test(sample.text ?? ""),
     )
-    .map((sample) => `${label} focus@${sample.atMs}ms=${sample.tag}:${sample.text}`);
+    .map(
+      (sample) =>
+        `${label} focus@${sample.atMs}ms=${sample.tag}:${sample.text}`,
+    );
 }
 
 async function measureResult(page) {
@@ -211,11 +218,7 @@ async function runViewport(width, height) {
   await boardPage.screenshot({ path: boardShot, fullPage: false });
   shots.push(boardShot);
   await boardPage.close();
-  const boardFailed = continueFocusFailures(
-    boardFocus,
-    2000,
-    `${width}-board`,
-  );
+  const boardFailed = continueFocusFailures(boardFocus, 2000, `${width}-board`);
 
   const reservePage = await openPage(`case=reserve&delay=2000`, width, height);
   const saving = await assertBannerLayout(

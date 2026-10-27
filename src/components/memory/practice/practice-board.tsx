@@ -1578,11 +1578,13 @@ function PracticeCard({
 
   useEffect(() => {
     if (showDone || (!checked && !isReadPrime)) return;
-    reviewActionRef.current?.focus({ preventScroll: true });
     if (checked) {
       scrollResultBannerIntoView(resultBannerRef.current);
     }
-  }, [checked, isReadPrime, showDone]);
+    // Saving... is disabled, so wait until the save clears before focusing.
+    if (gradePending) return;
+    reviewActionRef.current?.focus({ preventScroll: true });
+  }, [checked, isReadPrime, showDone, gradePending]);
 
   // After Read advances into a typing band (or when landing mid-ladder), put
   // the caret in the answer box. Continue is unmounted, so without this the
