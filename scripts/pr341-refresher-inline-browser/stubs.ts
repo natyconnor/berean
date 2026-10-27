@@ -16,6 +16,10 @@ export function useQuery(name?: string, args?: unknown) {
   return { stale: false, lastReviews: [] };
 }
 
+export function usePaginatedQuery() {
+  return { results: [], status: "Exhausted", loadMore: () => {} };
+}
+
 export const api = {
   packs: {
     recordUnifiedReview: "packs.recordUnifiedReview",

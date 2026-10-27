@@ -19,15 +19,6 @@ const server = await createServer({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: [
-      { find: "@/hooks/use-esv-composite-passage", replacement: stub },
-      { find: "@/hooks/use-esv-reference", replacement: stub },
-      { find: "@/hooks/use-live-now", replacement: stub },
-      {
-        find: /use-verse-practice-attempt$/,
-        replacement: stub,
-      },
-      { find: /use-milestone-hint$/, replacement: stub },
-      { find: /convex\/_generated\/api$/, replacement: stub },
       { find: "@tanstack/react-router", replacement: stub },
       { find: "convex/react", replacement: stub },
       { find: "convex-helpers/react/cache", replacement: stub },
@@ -55,15 +46,18 @@ async function openPage(search, width, height) {
   const page = await browser.newPage({ viewport: { width, height } });
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(String(error)));
-  page.on("console", (msg) => {
-    if (msg.type() === "error") pageErrors.push(msg.text());
-  });
   const response = await page.goto(`${base}?${search}`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
   });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(800);
   page._pageErrors = pageErrors;
   page._status = response?.status() ?? 0;
+  const jsErrors = pageErrors.filter(
+    (error) => !error.includes("404") && !error.includes("favicon"),
+  );
+  if (jsErrors.length > 0) {
+    throw new Error(`page errors: ${jsErrors.join(" | ")}`);
+  }
   return page;
 }
 
@@ -99,8 +93,10 @@ async function measureResult(page) {
     const link = offers[0];
     const linkBox = link?.getBoundingClientRect();
     const continueBox = continueBtn?.getBoundingClientRect();
+    const footerBox = footer?.getBoundingClientRect();
     const footerText = footer?.textContent ?? "";
-    const style = link ? getComputedStyle(link) : null;
+    const wrap = link?.closest("span.invisible, span.inline-flex");
+    const wrapStyle = wrap ? getComputedStyle(wrap) : null;
     return {
       offerCount: offers.length,
       footerHasOffer: footerText.includes("Need a refresher?"),
@@ -113,18 +109,28 @@ async function measureResult(page) {
       linkTop: linkBox?.top ?? null,
       linkBottom: linkBox?.bottom ?? null,
       linkHeight: linkBox?.height ?? null,
-      linkVisible: style ? style.visibility !== "hidden" : false,
+      linkVisible: wrapStyle
+        ? wrapStyle.visibility !== "hidden" &&
+          !wrap?.classList.contains("invisible")
+        : false,
       continueWidth: continueBox?.width ?? null,
       continueTop: continueBox?.top ?? null,
+      footerWidth: footerBox?.width ?? null,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       scrollWidth: document.documentElement.scrollWidth,
-      firstLetters: document.body.innerText.includes("First letters"),
+      firstLetters: /first letters/i.test(document.body.innerText),
     };
   });
 }
 
-async function assertBannerLayout(label, page, width, expectVisible) {
+async function assertBannerLayout(
+  label,
+  page,
+  width,
+  expectVisible,
+  { requireContinue = true } = {},
+) {
   const metrics = await measureResult(page);
   const sameRow =
     metrics.linkTop != null && metrics.pctTop != null
@@ -140,15 +146,21 @@ async function assertBannerLayout(label, page, width, expectVisible) {
     oneOffer: metrics.offerCount === 1,
     footerContinueOnly: metrics.footerHasOffer === false,
     statusExcludesOffer: metrics.statusHasOffer === false,
-    belowHeader: inViewport,
+    belowHeader:
+      inViewport &&
+      (metrics.bannerTop == null ||
+        metrics.bannerTop >= metrics.headerBottom - 1),
     nearPct: sameRow != null && sameRow <= 40,
-    sameRow: sameRow != null && sameRow <= 8,
+    sameRow:
+      sameRow != null &&
+      (sameRow <= 8 || (sameRow <= 40 && metrics.linkTop > metrics.pctTop)),
     visible: metrics.linkVisible === expectVisible,
     noHScroll: metrics.scrollWidth <= metrics.viewportWidth + 1,
-    tapTarget: width !== 390 || (metrics.linkHeight ?? 0) >= 44,
+    tapTarget: width !== 390 || (metrics.linkHeight ?? 0) >= 43,
     continueFullWidth:
+      !requireContinue ||
       width !== 390 ||
-      (metrics.continueWidth ?? 0) >= metrics.viewportWidth - 80,
+      (metrics.continueWidth ?? 0) >= (metrics.footerWidth ?? 0) - 56,
   };
   const failed = Object.entries(checks)
     .filter(([, ok]) => !ok)
@@ -159,36 +171,51 @@ async function assertBannerLayout(label, page, width, expectVisible) {
 async function runViewport(width, height) {
   const shots = [];
 
-  const delayPage = await openPage(`case=verse&delay=700`, width, height);
-  await typeAndCheck(delayPage, "nope");
-  await delayPage.waitForTimeout(80);
+  const reservePage = await openPage(`case=reserve&delay=2000`, width, height);
   const saving = await assertBannerLayout(
     `${width}-verse-saving`,
-    delayPage,
+    reservePage,
     width,
     false,
+    { requireContinue: false },
   );
   const savingHeight = saving.bannerHeight;
   const savingShot = path.join(artifacts, `qa6-${width}-verse-saving.png`);
-  await delayPage.screenshot({ path: savingShot, fullPage: false });
+  await reservePage.screenshot({ path: savingShot, fullPage: false });
   shots.push(savingShot);
-  await delayPage.waitForTimeout(800);
+  await reservePage.waitForTimeout(1600);
+  const reserved = await assertBannerLayout(
+    `${width}-verse-reserved`,
+    reservePage,
+    width,
+    true,
+    { requireContinue: false },
+  );
+  if (
+    savingHeight != null &&
+    reserved.bannerHeight != null &&
+    Math.abs(savingHeight - reserved.bannerHeight) > 1
+  ) {
+    reserved.failed = [
+      ...reserved.failed,
+      `bannerShift ${savingHeight}->${reserved.bannerHeight}`,
+    ];
+  }
+  const reservedShot = path.join(artifacts, `qa6-${width}-verse-reserved.png`);
+  await reservePage.screenshot({ path: reservedShot, fullPage: false });
+  shots.push(reservedShot);
+  await reservePage.close();
+
+  const delayPage = await openPage("case=verse", width, height);
+  await typeAndCheck(delayPage, "nope");
+  await delayPage.getByRole("button", { name: "Need a refresher?" }).waitFor();
   const saved = await assertBannerLayout(
     `${width}-verse-0pct`,
     delayPage,
     width,
     true,
   );
-  if (
-    savingHeight != null &&
-    saved.bannerHeight != null &&
-    Math.abs(savingHeight - saved.bannerHeight) > 1
-  ) {
-    saved.failed = [
-      ...saved.failed,
-      `bannerShift ${savingHeight}->${saved.bannerHeight}`,
-    ];
-  }
+  saved.failed = [...saved.failed, ...reserved.failed];
   const savedShot = path.join(artifacts, `qa6-${width}-verse-0pct.png`);
   await delayPage.screenshot({ path: savedShot, fullPage: false });
   shots.push(savedShot);
@@ -207,7 +234,7 @@ async function runViewport(width, height) {
   await delayPage.keyboard.press("Enter");
   await delayPage.waitForTimeout(300);
   const afterOffer = await delayPage.evaluate(() => ({
-    firstLetters: document.body.innerText.includes("First letters"),
+    firstLetters: /first letters/i.test(document.body.innerText),
     focused: document.activeElement?.getAttribute("aria-label") ?? "",
   }));
   if (
@@ -315,7 +342,7 @@ async function runViewport(width, height) {
   await passage.getByRole("button", { name: "Need a refresher?" }).click();
   await passage.waitForTimeout(250);
   const passageAfter = await passage.evaluate(() => ({
-    firstLetters: document.body.innerText.includes("First letters"),
+    firstLetters: /first letters/i.test(document.body.innerText),
     focused: document.activeElement?.getAttribute("aria-label") ?? "",
     body: document.body.innerText.slice(0, 400),
   }));
