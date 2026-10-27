@@ -228,6 +228,33 @@ describe("PassageRecallCard result banner", () => {
       expect(container.querySelector("[data-result-scroll='full-text']")).toBe(
         null,
       );
+
+      Object.defineProperties(region, {
+        clientHeight: { configurable: true, value: 200 },
+        scrollHeight: { configurable: true, value: 200 },
+      });
+      act(() => {
+        for (const callback of observers) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+      const continueButton = screen.getByRole("button", { name: /Continue/ });
+      continueButton.focus();
+      await user.tab({ shift: true });
+      expect(offer).toHaveFocus();
+
+      Object.defineProperties(region, {
+        clientHeight: { configurable: true, value: 80 },
+        scrollHeight: { configurable: true, value: 360 },
+      });
+      act(() => {
+        for (const callback of observers) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+      continueButton.focus();
+      await user.tab({ shift: true });
+      expect(region).toHaveFocus();
     } finally {
       vi.unstubAllGlobals();
     }

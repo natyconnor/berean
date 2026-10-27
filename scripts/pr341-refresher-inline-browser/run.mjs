@@ -85,31 +85,30 @@ async function readActiveElement(page) {
   });
 }
 
-async function sampleFocusAfterCheck(
-  page,
-  delays = [50, 150, 400, 1000, 3000],
-) {
-  const samples = [];
-  let elapsed = 0;
-  for (const atMs of delays) {
-    await page.waitForTimeout(atMs - elapsed);
-    elapsed = atMs;
-    samples.push({ atMs, ...(await readActiveElement(page)) });
-  }
-  return samples;
+async function waitForSavingToClear(page) {
+  await page.waitForFunction(() => {
+    const buttons = [...document.querySelectorAll("button")];
+    const saving = buttons.some((button) =>
+      (button.textContent ?? "").includes("Saving..."),
+    );
+    const cont = buttons.find(
+      (button) =>
+        /\bContinue\b/.test(button.textContent ?? "") && !button.disabled,
+    );
+    return !saving && !!cont;
+  });
 }
 
-function continueFocusFailures(samples, saveDelayMs, label) {
-  return samples
-    .filter((sample) => sample.atMs > saveDelayMs)
-    .filter(
-      (sample) =>
-        sample.tag !== "BUTTON" || !/\bContinue\b/.test(sample.text ?? ""),
-    )
-    .map(
-      (sample) =>
-        `${label} focus@${sample.atMs}ms=${sample.tag}:${sample.text}`,
-    );
+async function focusAfterSavingClears(page) {
+  await waitForSavingToClear(page);
+  return readActiveElement(page);
+}
+
+function continueFocusFailures(focus, label) {
+  if (focus.tag === "BUTTON" && /\bContinue\b/.test(focus.text ?? "")) {
+    return [];
+  }
+  return [`${label} focus=${focus.tag}:${focus.text}`];
 }
 
 async function measureResult(page) {
@@ -213,12 +212,12 @@ async function runViewport(width, height) {
 
   const boardPage = await openPage("case=board&delay=2000", width, height);
   await typeAndCheck(boardPage, "zzz qqq xxx");
-  const boardFocus = await sampleFocusAfterCheck(boardPage);
+  const boardFocus = await focusAfterSavingClears(boardPage);
   const boardShot = path.join(artifacts, `qa6-${width}-board-focus.png`);
   await boardPage.screenshot({ path: boardShot, fullPage: false });
   shots.push(boardShot);
   await boardPage.close();
-  const boardFailed = continueFocusFailures(boardFocus, 2000, `${width}-board`);
+  const boardFailed = continueFocusFailures(boardFocus, `${width}-board`);
 
   const reservePage = await openPage(`case=reserve&delay=2000`, width, height);
   const saving = await assertBannerLayout(
@@ -257,7 +256,7 @@ async function runViewport(width, height) {
 
   const delayPage = await openPage("case=verse&delay=2000", width, height);
   await typeAndCheck(delayPage, "nope");
-  const verseFocus = await sampleFocusAfterCheck(delayPage);
+  const verseFocus = await focusAfterSavingClears(delayPage);
   await delayPage.getByRole("button", { name: "Need a refresher?" }).waitFor();
   const saved = await assertBannerLayout(
     `${width}-verse-0pct`,
@@ -269,7 +268,7 @@ async function runViewport(width, height) {
   saved.failed = [
     ...saved.failed,
     ...reserved.failed,
-    ...continueFocusFailures(verseFocus, 2000, `${width}-verse`),
+    ...continueFocusFailures(verseFocus, `${width}-verse`),
   ];
   const savedShot = path.join(artifacts, `qa6-${width}-verse-0pct.png`);
   await delayPage.screenshot({ path: savedShot, fullPage: false });
@@ -370,7 +369,7 @@ async function runViewport(width, height) {
 
   const passage = await openPage("case=passage&delay=2000", width, height);
   await typeAndCheck(passage, "nope");
-  const passageFocus = await sampleFocusAfterCheck(passage);
+  const passageFocus = await focusAfterSavingClears(passage);
   await passage.getByRole("button", { name: "Need a refresher?" }).waitFor();
   const passageLayout = await assertBannerLayout(
     `${width}-passage-0pct`,
@@ -381,7 +380,7 @@ async function runViewport(width, height) {
   passageLayout.focus = passageFocus;
   passageLayout.failed = [
     ...passageLayout.failed,
-    ...continueFocusFailures(passageFocus, 2000, `${width}-passage`),
+    ...continueFocusFailures(passageFocus, `${width}-passage`),
   ];
   const passageShot = path.join(artifacts, `qa6-${width}-passage-0pct.png`);
   await passage.screenshot({ path: passageShot, fullPage: false });

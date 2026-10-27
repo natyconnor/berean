@@ -1812,6 +1812,92 @@ describe("PracticeBoard refresher", () => {
       expect(fullTextAt).toBeGreaterThan(offerAt);
       expect(continueAt).toBeGreaterThan(fullTextAt);
     });
+
+    it("Shift+Tabs from Continue to Need a refresher when nothing overflows", async () => {
+      const user = userEvent.setup();
+      render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await user.click(answer);
+      await user.paste("nope");
+      await user.click(screen.getByRole("button", { name: /Check answer/ }));
+      const offer = await screen.findByRole("button", {
+        name: "Need a refresher?",
+      });
+      const continueButton = await screen.findByRole("button", {
+        name: /Continue/,
+      });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      setBox(fullText, 200, 200);
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      fireResize();
+
+      continueButton.focus();
+      await user.tab({ shift: true });
+      expect(offer).toHaveFocus();
+    });
+
+    it("Shift+Tabs from Continue onto overflowing Full text", async () => {
+      const user = userEvent.setup();
+      render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await user.click(answer);
+      await user.paste("nope");
+      await user.click(screen.getByRole("button", { name: /Check answer/ }));
+      await screen.findByRole("button", { name: "Need a refresher?" });
+      const continueButton = await screen.findByRole("button", {
+        name: /Continue/,
+      });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      setBox(fullText, 80, 400);
+      fireResize();
+
+      continueButton.focus();
+      await user.tab({ shift: true });
+      expect(fullText).toHaveFocus();
+    });
   });
 
   it("reserves Need a refresher on the banner while a miss is saving", async () => {
