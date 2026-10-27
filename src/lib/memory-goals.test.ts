@@ -227,10 +227,42 @@ describe("buildGoalCards: passages", () => {
 
     expect(goal.learnedVerses).toBe(0);
     expect(goal.hasWorkToday).toBe(true);
+    expect(goal.lastPracticedAt).toBeNull();
     expect(goal.todayStep).toEqual({
       label: "Read verses 1–2, then type them with first letters",
       ladderDay: 1,
     });
+    expect(goal.pieceStates.every((piece) => piece.today === false)).toBe(true);
+  });
+
+  it("after a whole-passage Start over looks unstarted and keeps today's first step", () => {
+    const goal = only(
+      buildGoalCards(
+        input({
+          passages: [
+            passage(
+              "psalm1",
+              [
+                piece(0, 1, 1, 2, "unreached"),
+                piece(1, 1, 3, 4, "unreached"),
+                piece(2, 1, 5, 6, "unreached"),
+              ],
+              { lastSessionAt: undefined, addsOnDay: 0, addDayKey: undefined },
+            ),
+          ],
+        }),
+      ),
+      "passage",
+    );
+
+    expect(goal.lastPracticedAt).toBeNull();
+    expect(goal.learnedVerses).toBe(0);
+    expect(goal.hasWorkToday).toBe(true);
+    expect(goal.todayStep).toEqual({
+      label: "Read verses 1–2, then type them with first letters",
+      ladderDay: 1,
+    });
+    expect(goal.pieceStates.every((piece) => piece.today === false)).toBe(true);
   });
 
   it("names the chapter when the passage spans chapters", () => {

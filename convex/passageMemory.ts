@@ -51,7 +51,10 @@ import {
   recentReviewLapsed,
   refreshRecentLapseCount,
 } from "../src/lib/memory-stale";
-import { startOverPassagePieces } from "../src/lib/memory-start-over";
+import {
+  startOverPassagePieces,
+  startOverPassageSession,
+} from "../src/lib/memory-start-over";
 import {
   packAllowsPassageMode,
   rangeAllowsPassageMode,
@@ -580,6 +583,8 @@ function snapshotPassageUndo(row: Doc<"passageMemory">) {
     stageReps: row.stageReps,
     earlyReviewApplied: row.earlyReviewApplied,
     lastSessionAt: row.lastSessionAt,
+    addsOnDay: row.addsOnDay,
+    addDayKey: row.addDayKey,
   };
 }
 
@@ -601,6 +606,11 @@ export const startOver = mutation({
       args.pieceIndexes ?? row.pieces.map((piece) => piece.index),
     );
     const pieces = startOverPassagePieces(row.pieces, indexes);
+    const session = startOverPassageSession(row.pieces, indexes, {
+      lastSessionAt: row.lastSessionAt,
+      addsOnDay: row.addsOnDay,
+      addDayKey: row.addDayKey,
+    });
     const next = await patchPassageMemory(ctx, row._id, {
       pieces,
       status: "building",
@@ -610,7 +620,9 @@ export const startOver = mutation({
         snapshotPassageUndo(row),
         args.replaceUndo,
       ),
-      lastSessionAt: args.now,
+      lastSessionAt: session.lastSessionAt,
+      addsOnDay: session.addsOnDay,
+      addDayKey: session.addDayKey,
       updatedAt: args.now,
     });
     return toPassageView(next, args.now, 0);
@@ -640,6 +652,8 @@ export const undoStartOver = mutation({
       stageReps: undo.stageReps,
       earlyReviewApplied: undo.earlyReviewApplied,
       lastSessionAt: undo.lastSessionAt,
+      addsOnDay: undo.addsOnDay ?? 0,
+      addDayKey: undo.addDayKey,
       startedOverAt: undefined,
       startOverUndo: undefined,
       updatedAt: args.now,

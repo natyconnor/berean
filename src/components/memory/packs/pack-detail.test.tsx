@@ -8,7 +8,13 @@ import {
   MemoryPanelPage,
 } from "@/components/memory/drawer/memory-panel-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { START_OVER_CONFIRM_LABEL } from "@/lib/memory-copy";
 import { memoryProgressFraction } from "@/lib/mastery-ring";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+  readLearnPacksDismissedToday,
+} from "@/lib/learn-dismissed-packs";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import { localDayIndex } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
@@ -323,6 +329,7 @@ function renderHost(panel: string, from?: "verses") {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   mocks.queryResults.clear();
   mocks.queryByArgs.clear();
   mocks.queryCalls.length = 0;
@@ -416,6 +423,32 @@ describe("PackDetail for a passage", () => {
     expect(
       within(dialog).getAllByRole("img", { name: "Also hearted on its own" }),
     ).toHaveLength(1);
+  });
+
+  it("after Start over looks like a passage that has never been started", () => {
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 2, "unreached"),
+          piece(1, 3, 4, "unreached"),
+          piece(2, 5, 6, "unreached"),
+          piece(3, 7, 11, "unreached"),
+        ],
+        lastSessionAt: undefined,
+        addsOnDay: 0,
+        addDayKey: undefined,
+      }),
+    };
+    renderHost("pack:psalm16x");
+    const dialog = screen.getByRole("dialog", { name: "Psalm 16" });
+
+    expect(
+      within(dialog).getByRole("link", { name: "Start · about 7 min" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText("Continue · about 7 min")).toBeNull();
+    expect(within(dialog).queryByText("Learning today")).toBeNull();
+    expect(within(dialog).queryByText("Today:")).toBeNull();
+    expect(within(dialog).getAllByText("Up next")).toHaveLength(11);
   });
 
   it("says which memorized verses came from before the passage", () => {
@@ -698,6 +731,50 @@ describe("PackDetail for a pack", () => {
 });
 
 describe("PackDetail on its full page", () => {
+  async function startOverOnPage() {
+    render(
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "pack", packId: "psalm16x" }}
+          from={undefined}
+        />
+      </TooltipProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Start over/ }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Start Psalm 16 over?" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    await waitFor(() => {
+      expect(mutation("passageMemory.startOver")).toHaveBeenCalled();
+    });
+  }
+
+  it("clears That's enough for today when Start over runs", async () => {
+    const dayKey = learnDismissDayKey(Date.now());
+    dismissLearnPackForToday("psalm16x", dayKey);
+    await startOverOnPage();
+    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(false);
+  });
+
+  it("restores That's enough for today when Undo runs after Start over", async () => {
+    const dayKey = learnDismissDayKey(Date.now());
+    dismissLearnPackForToday("psalm16x", dayKey);
+    await startOverOnPage();
+    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(false);
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => {
+      expect(mutation("passageMemory.undoStartOver")).toHaveBeenCalled();
+    });
+    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(true);
+  });
+
   it("shows Not found for a junk pack id without querying packs.get", () => {
     render(
       <TooltipProvider>

@@ -76,7 +76,15 @@ import {
   type ReviewTogetherOption,
 } from "@/lib/pack-detail-model";
 import { moveItem, orderByKeys } from "@/lib/pack-order";
-import { MINUTES_PER_LEARNING_VERSE } from "@/lib/memorize-plan";
+import {
+  estimateSessionMinutes,
+  MINUTES_PER_LEARNING_VERSE,
+} from "@/lib/memorize-plan";
+import {
+  clearLearnPackDismissal,
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+} from "@/lib/learn-dismissed-packs";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
 import { cn } from "@/lib/utils";
 import {
@@ -314,7 +322,13 @@ function PackDetailContent({
         {progress ? (
           <ProgressCard
             progress={progress}
-            todayStep={passageGoal?.todayStep ?? null}
+            todayStep={
+              passageGoal &&
+              (passageGoal.lastPracticedAt !== null ||
+                passageGoal.learnedVerses > 0)
+                ? passageGoal.todayStep
+                : null
+            }
           />
         ) : null}
 
@@ -1212,6 +1226,7 @@ function PackDetailMenu({
   const [undoVerseRefIds, setUndoVerseRefIds] = useState<
     Member["verseRefId"][] | null
   >(null);
+  const restoreLearnDismissal = useRef(false);
   const removeLock = useSubmitLock();
   const togetherLock = useSubmitLock();
 
@@ -1299,8 +1314,13 @@ function PackDetailMenu({
         shakyLabels={shakyLabels}
         wholeLabel={isPassage ? "passage" : "pack"}
         learnMinutes={
-          (isPassage ? (passage?.pieces.length ?? 1) : members.length) *
-          MINUTES_PER_LEARNING_VERSE
+          isPassage
+            ? estimateSessionMinutes({
+                learningVerses: 0,
+                reviewVerses: 0,
+                passageSessions: 1,
+              })
+            : members.length * MINUTES_PER_LEARNING_VERSE
         }
         onRefresh={async () => {
           if (!learningOnly) return;
@@ -1325,6 +1345,10 @@ function PackDetailMenu({
           if (isPassage) {
             const pieceIndexes =
               choice === "shaky" ? (shakyPieces ?? []).slice() : undefined;
+            restoreLearnDismissal.current = clearLearnPackDismissal(
+              pack._id,
+              learnDismissDayKey(Date.now()),
+            );
             await startOverPassage({
               packId: pack._id,
               now: Date.now(),
@@ -1357,6 +1381,13 @@ function PackDetailMenu({
               now: Date.now(),
               tzOffsetMinutes,
             });
+            if (restoreLearnDismissal.current) {
+              dismissLearnPackForToday(
+                pack._id,
+                learnDismissDayKey(Date.now()),
+              );
+              restoreLearnDismissal.current = false;
+            }
             return;
           }
           await undoStartOverMany({

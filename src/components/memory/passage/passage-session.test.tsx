@@ -807,6 +807,28 @@ describe("PassageSession", () => {
     });
   });
 
+  it("puts a reviewing Refresh sitting in the same scroll shell as Learn", () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PassageSession
+          packId={PACK_ID}
+          view={passageView(
+            Array.from({ length: 6 }, (_, index) =>
+              piece(index, "solid", { learnStage: 3 }),
+            ),
+            { status: "reviewing" },
+          )}
+          packName="Psalm 23"
+          onExit={() => {}}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(document.querySelector('[data-slot="scroll-area"]')).not.toBeNull();
+    expect(screen.getByText("Refresh")).toBeInTheDocument();
+  });
+
   it("uses plain language for the remaining session copy", () => {
     expect(DONE_FOR_NOW_LABEL).toBe("That's enough for today");
     expect(FRONTIER_LOCKED_COPY).toBe(

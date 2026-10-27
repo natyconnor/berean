@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { EASE_START, startOverSchedule } from "./memory-scheduler";
-import { snapshotSchedule, startOverPassagePieces } from "./memory-start-over";
+import {
+  snapshotSchedule,
+  startOverPassagePieces,
+  startOverPassageSession,
+} from "./memory-start-over";
 import type { PassagePiece } from "./passage-pieces";
 
 const NOW = 1_700_000_000_000;
@@ -36,6 +40,28 @@ describe("startOverPassagePieces", () => {
     });
     expect(next[1]?.dueAt).toBeUndefined();
     expect(next[2]?.attachment).toBe("unreached");
+  });
+});
+
+describe("startOverPassageSession", () => {
+  const current = {
+    lastSessionAt: NOW,
+    addsOnDay: 1,
+    addDayKey: 42,
+  };
+
+  it("clears practice and today's introduce budget on a whole-passage reset", () => {
+    const pieces = [piece(0, "solid"), piece(1, "learning")];
+    expect(startOverPassageSession(pieces, new Set([0, 1]), current)).toEqual({
+      addsOnDay: 0,
+    });
+  });
+
+  it("keeps practice and introduce budget when only some pieces reset", () => {
+    const pieces = [piece(0, "solid"), piece(1, "learning")];
+    expect(startOverPassageSession(pieces, new Set([1]), current)).toEqual(
+      current,
+    );
   });
 });
 

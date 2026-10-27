@@ -269,11 +269,12 @@ export function passageDetailActions(
       reviewVerses: 0,
       passageSessions: 1,
     });
+    const started = goal.lastPracticedAt !== null || goal.learnedVerses > 0;
     return {
       main: {
         kind: "session",
         emphasis: "primary",
-        label: `Continue · about ${minutes} min`,
+        label: `${started ? "Continue" : "Start"} · about ${minutes} min`,
         session: "learn",
       },
       practice: false,
@@ -566,17 +567,20 @@ function learningChip(when: "today" | "tomorrow"): PassageVerseRow["chip"] {
  * A memorized piece the passage kept from before it started says so.
  */
 export function passageVerseRows(
-  passage: Pick<PackDetailPassage, "pieces" | "addsOnDay" | "addDayKey">,
+  passage: Pick<
+    PackDetailPassage,
+    "pieces" | "addsOnDay" | "addDayKey" | "lastSessionAt"
+  >,
   now: number,
   tzOffsetMinutes: number,
 ): PassageVerseRow[] {
   const pieces = coerceUnstartedLearningPieces(passage.pieces);
-  const todayIndex = passageTodayPieceIndex(
-    passage,
-    pieces,
-    now,
-    tzOffsetMinutes,
-  );
+  const started =
+    passage.lastSessionAt != null ||
+    pieces.some((piece) => piece.attachment !== "unreached");
+  const todayIndex = started
+    ? passageTodayPieceIndex(passage, pieces, now, tzOffsetMinutes)
+    : null;
 
   return pieces.flatMap((piece, index) => {
     let chip: PassageVerseRow["chip"];

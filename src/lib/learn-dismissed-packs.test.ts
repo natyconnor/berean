@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearLearnPackDismissal,
   dismissLearnPackForToday,
   learnDismissDayKey,
   readLearnPacksDismissedToday,
@@ -50,6 +51,21 @@ describe("learn dismissed packs", () => {
     localStorage.setItem(STORAGE_KEY, "{not json");
 
     expect(readLearnPacksDismissedToday(1).size).toBe(0);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("clears one pack and leaves the rest of today's dismissals", () => {
+    const dayKey = learnDismissDayKey(1_700_000_000_000);
+    dismissLearnPackForToday("pack_jude", dayKey);
+    dismissLearnPackForToday("pack_psalm1", dayKey);
+
+    expect(clearLearnPackDismissal("pack_psalm1", dayKey)).toBe(true);
+    expect(readLearnPacksDismissedToday(dayKey)).toEqual(
+      new Set(["pack_jude"]),
+    );
+    expect(clearLearnPackDismissal("pack_missing", dayKey)).toBe(false);
+    expect(clearLearnPackDismissal("pack_jude", dayKey)).toBe(true);
+    expect(readLearnPacksDismissedToday(dayKey).size).toBe(0);
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 

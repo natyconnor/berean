@@ -6,6 +6,7 @@ import {
   type PassageRecallResult,
 } from "@/components/memory/passage/passage-recall-card";
 import { SessionBackButton } from "@/components/memory/session-back-button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { REFRESH_FINISH_ERROR } from "@/lib/memory-copy";
 import { LEARN_PROGRESS_ACCURACY } from "@/lib/memory-scheduler";
@@ -90,54 +91,56 @@ export function PassageRefreshSitting({
           exitHref={exitHref}
         />
       </header>
-      <div className="mx-auto w-full max-w-xl flex-1 px-5 py-8">
-        <PassageRecallCard
-          mode="review"
-          phaseLabel="Refresh"
-          title={packName}
-          promptLine={
-            step === 1
-              ? "Type it with first letters"
-              : step === 2
-                ? "Fill in the blanks"
-                : "Recall the passage from memory"
-          }
-          versePlainText={passage.text}
-          loading={passage.loading}
-          error={passage.error}
-          retry={passage.retry}
-          hint={hint}
-          learnStage={step}
-          stageReps={0}
-          status={view.status === "mastered" ? "mastered" : "reviewing"}
-          onSubmit={onSubmit}
-          onContinueAfterResult={() => {
-            if (lastAccuracy < LEARN_PROGRESS_ACCURACY) return;
-            if (step < 3) {
-              setStep((current) => (current === 1 ? 2 : 3));
-              return;
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="mx-auto w-full max-w-xl px-5 py-8 pb-24">
+          <PassageRecallCard
+            mode="review"
+            phaseLabel="Refresh"
+            title={packName}
+            promptLine={
+              step === 1
+                ? "Type it with first letters"
+                : step === 2
+                  ? "Fill in the blanks"
+                  : "Recall the passage from memory"
             }
-            const now = Date.now();
-            void finishRefresh({
-              packId,
-              now,
-              sittingStartedAt: startedAt,
-              tzOffsetMinutes: new Date(now).getTimezoneOffset(),
-              timeZone: getViewerTimeZone(),
-            })
-              .then(() => {
-                setFinishError(null);
-                onExit();
+            versePlainText={passage.text}
+            loading={passage.loading}
+            error={passage.error}
+            retry={passage.retry}
+            hint={hint}
+            learnStage={step}
+            stageReps={0}
+            status={view.status === "mastered" ? "mastered" : "reviewing"}
+            onSubmit={onSubmit}
+            onContinueAfterResult={() => {
+              if (lastAccuracy < LEARN_PROGRESS_ACCURACY) return;
+              if (step < 3) {
+                setStep((current) => (current === 1 ? 2 : 3));
+                return;
+              }
+              const now = Date.now();
+              void finishRefresh({
+                packId,
+                now,
+                sittingStartedAt: startedAt,
+                tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+                timeZone: getViewerTimeZone(),
               })
-              .catch(() => {
-                setFinishError(REFRESH_FINISH_ERROR);
-              });
-          }}
-        />
-        {finishError ? (
-          <p className="mt-3 text-xs text-destructive">{finishError}</p>
-        ) : null}
-      </div>
+                .then(() => {
+                  setFinishError(null);
+                  onExit();
+                })
+                .catch(() => {
+                  setFinishError(REFRESH_FINISH_ERROR);
+                });
+            }}
+          />
+          {finishError ? (
+            <p className="mt-3 text-xs text-destructive">{finishError}</p>
+          ) : null}
+        </div>
+      </ScrollArea>
     </div>
   );
 }

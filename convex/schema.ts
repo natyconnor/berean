@@ -421,6 +421,8 @@ export default defineSchema({
         stageReps: v.number(),
         earlyReviewApplied: v.optional(v.boolean()),
         lastSessionAt: v.optional(v.number()),
+        addsOnDay: v.optional(v.number()),
+        addDayKey: v.optional(v.number()),
       }),
     ),
     createdAt: v.number(),

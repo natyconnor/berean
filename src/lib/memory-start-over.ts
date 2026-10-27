@@ -39,3 +39,30 @@ export function startOverPassagePieces(
     };
   });
 }
+
+export type PassageSessionCounters = {
+  lastSessionAt?: number;
+  addsOnDay: number;
+  addDayKey?: number;
+};
+
+/** True when every piece is in the Start over set. */
+export function isWholePassageStartOver(
+  pieces: readonly PassagePiece[],
+  indexes: ReadonlySet<number>,
+): boolean {
+  return pieces.length > 0 && pieces.every((piece) => indexes.has(piece.index));
+}
+
+/**
+ * Whole-passage Start over returns the session counters to never-started.
+ * A shaky-only reset keeps the counters so remaining pieces stay mid-progress.
+ */
+export function startOverPassageSession(
+  pieces: readonly PassagePiece[],
+  indexes: ReadonlySet<number>,
+  current: PassageSessionCounters,
+): PassageSessionCounters {
+  if (!isWholePassageStartOver(pieces, indexes)) return current;
+  return { addsOnDay: 0 };
+}

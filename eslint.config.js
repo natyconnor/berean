@@ -12,6 +12,7 @@ export default defineConfig([
     "convex/_generated",
     "electron-dist",
     "scripts/start-over-confirm-browser",
+    "scripts/pr341-tester-fixes-browser",
   ]),
   {
     files: ["**/*.{ts,tsx}"],

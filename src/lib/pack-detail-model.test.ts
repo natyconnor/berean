@@ -193,6 +193,29 @@ describe("primary action", () => {
     });
   });
 
+  it("unstarted passage: Start · about N min from the same estimate as Continue", () => {
+    const goal = passageGoal({
+      pieces: [
+        piece(0, 1, 2, "unreached"),
+        piece(1, 3, 4, "unreached"),
+        piece(2, 5, 6, "unreached"),
+      ],
+      lastSessionAt: undefined,
+    });
+    expect(goal.lastPracticedAt).toBeNull();
+    expect(goal.learnedVerses).toBe(0);
+    expect(passageDetailActions(goal, NOW, TZ)).toEqual({
+      main: {
+        kind: "session",
+        emphasis: "primary",
+        label: "Start · about 7 min",
+        session: "learn",
+      },
+      practice: false,
+      note: null,
+    });
+  });
+
   it("passage building, waiting: disabled Up next tomorrow", () => {
     const goal = passageGoal({
       pieces: [
@@ -565,6 +588,31 @@ describe("passageVerseRows", () => {
     );
     expect(rows[4]?.chip).toEqual({ kind: "tomorrow", label: "Learning" });
     expect(rows[6]?.chip.kind).toBe("upNext");
+  });
+
+  it("leaves every verse Up next after a whole-passage Start over", () => {
+    const rows = passageVerseRows(
+      passage({
+        pieces: [
+          piece(0, 1, 2, "unreached"),
+          piece(1, 3, 4, "unreached"),
+          piece(2, 5, 6, "unreached"),
+        ],
+        lastSessionAt: undefined,
+        addsOnDay: 0,
+        addDayKey: undefined,
+      }),
+      NOW,
+      0,
+    );
+    expect(rows.map((row) => row.chip.label)).toEqual([
+      "Up next",
+      "Up next",
+      "Up next",
+      "Up next",
+      "Up next",
+      "Up next",
+    ]);
   });
 
   it("marks memorized verses the passage kept from before", () => {
