@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -145,6 +145,92 @@ describe("PassageRecallCard result banner", () => {
     expect(footer).not.toBeNull();
     expect(footer?.textContent?.includes("Need a refresher?")).toBe(false);
     expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
+  });
+
+  it("tabs How you did only while that region overflows", async () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          observers.push(callback);
+        }
+        disconnect() {}
+        observe() {}
+        unobserve() {}
+      },
+    );
+
+    try {
+      const user = userEvent.setup();
+      const { container } = render(
+        <PassageRecallCard
+          mode="review"
+          phaseLabel="From memory"
+          title="Psalm 23"
+          promptLine="Type the passage from memory"
+          versePlainText={VERSE}
+          loading={false}
+          error={null}
+          retry={() => undefined}
+          hint={{ type: "hidden", message: "No hint text." }}
+          learnStage={3}
+          stageReps={0}
+          status="reviewing"
+          onSubmit={() => Promise.resolve(true)}
+        />,
+      );
+
+      await user.click(screen.getByLabelText("Your recited passage"));
+      await user.paste("nope");
+      await user.click(screen.getByRole("button", { name: /Check answer/ }));
+      const offer = await screen.findByRole("button", {
+        name: "Need a refresher?",
+      });
+      const region = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (!(region instanceof HTMLElement)) {
+        throw new Error("Expected a How you did scroll region");
+      }
+
+      Object.defineProperties(region, {
+        clientHeight: { configurable: true, value: 200 },
+        scrollHeight: { configurable: true, value: 200 },
+        clientWidth: { configurable: true, value: 320 },
+        scrollWidth: { configurable: true, value: 320 },
+      });
+      act(() => {
+        for (const callback of observers) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+      expect(region).not.toHaveAttribute("tabindex");
+
+      Object.defineProperties(region, {
+        clientHeight: { configurable: true, value: 80 },
+        scrollHeight: { configurable: true, value: 360 },
+      });
+      act(() => {
+        for (const callback of observers) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+      expect(region).toHaveAttribute("tabindex", "0");
+      expect(offer.compareDocumentPosition(region)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(
+        region.compareDocumentPosition(
+          screen.getByRole("button", { name: /Continue/ }),
+        ),
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(container.querySelector("[data-result-scroll='full-text']")).toBe(
+        null,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("opens First letters from the banner offer after a miss", async () => {

@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -1663,6 +1663,155 @@ describe("PracticeBoard refresher", () => {
     expect(
       within(footer as HTMLElement).getByRole("button", { name: /Continue/ }),
     ).toBeVisible();
+  });
+
+  describe("result scroll tab stops", () => {
+    let observers: ResizeObserverCallback[] = [];
+
+    function fireResize() {
+      act(() => {
+        for (const callback of observers) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+    }
+
+    function setBox(
+      element: HTMLElement,
+      clientHeight: number,
+      scrollHeight: number,
+    ) {
+      Object.defineProperties(element, {
+        clientHeight: { configurable: true, value: clientHeight },
+        scrollHeight: { configurable: true, value: scrollHeight },
+        clientWidth: { configurable: true, value: 320 },
+        scrollWidth: { configurable: true, value: 320 },
+      });
+    }
+
+    function tabStops(root: ParentNode) {
+      return [...root.querySelectorAll<HTMLElement>("*")].filter((element) => {
+        if (element.hasAttribute("disabled")) return false;
+        if (element.getAttribute("tabindex") === "-1") return false;
+        if (element.hasAttribute("tabindex")) return true;
+        const tag = element.tagName;
+        return tag === "BUTTON" || tag === "A" || tag === "TEXTAREA";
+      });
+    }
+
+    beforeEach(() => {
+      observers = [];
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(callback: ResizeObserverCallback) {
+            observers.push(callback);
+          }
+          disconnect() {}
+          observe() {}
+          unobserve() {}
+        },
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("leaves Full text out of the tab order when it does not overflow", async () => {
+      const { container } = render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await userEvent.click(answer);
+      await userEvent.paste("nope");
+      await userEvent.click(
+        screen.getByRole("button", { name: /Check answer/ }),
+      );
+      const offer = await screen.findByRole("button", {
+        name: "Need a refresher?",
+      });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      setBox(fullText, 200, 200);
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      fireResize();
+
+      expect(fullText).not.toHaveAttribute("tabindex");
+      const labels = tabStops(container).map((node) =>
+        node.textContent?.trim(),
+      );
+      expect(labels).toContain("Need a refresher?");
+      expect(labels).toContain("Continue");
+      expect(labels.some((label) => label?.includes("Full text"))).toBe(false);
+      expect(offer.compareDocumentPosition(fullText)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    });
+
+    it("inserts overflowing Full text between the banner link and Continue", async () => {
+      const { container } = render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await userEvent.click(answer);
+      await userEvent.paste("nope");
+      await userEvent.click(
+        screen.getByRole("button", { name: /Check answer/ }),
+      );
+      await screen.findByRole("button", { name: "Need a refresher?" });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      setBox(fullText, 80, 400);
+      fireResize();
+
+      expect(fullText).toHaveAttribute("tabindex", "0");
+      const stops = tabStops(container);
+      const labels = stops.map((node) => node.textContent?.trim());
+      const offerAt = labels.indexOf("Need a refresher?");
+      const fullTextAt = stops.indexOf(fullText);
+      const continueAt = labels.indexOf("Continue");
+      expect(offerAt).toBeGreaterThan(-1);
+      expect(fullTextAt).toBeGreaterThan(offerAt);
+      expect(continueAt).toBeGreaterThan(fullTextAt);
+    });
   });
 
   it("reserves Need a refresher on the banner while a miss is saving", async () => {

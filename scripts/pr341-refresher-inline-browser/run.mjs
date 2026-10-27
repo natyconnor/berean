@@ -388,13 +388,27 @@ async function runViewport(width, height) {
   await passage.keyboard.down("Shift");
   await passage.keyboard.press("Tab");
   await passage.keyboard.up("Shift");
-  const passageShift = await passage.evaluate(
-    () => document.activeElement?.textContent ?? "",
-  );
-  if (!passageShift.includes("Need a refresher?")) {
+  const passageShift = await passage.evaluate(() => {
+    const active = document.activeElement;
+    const howYouDid = document.querySelector(
+      "[data-result-scroll='how-you-did']",
+    );
+    const overflowing =
+      howYouDid instanceof HTMLElement &&
+      howYouDid.scrollHeight > howYouDid.clientHeight;
+    return {
+      text: active?.textContent ?? "",
+      scroll: active?.getAttribute("data-result-scroll") ?? null,
+      overflowing,
+    };
+  });
+  const passageShiftOk = passageShift.overflowing
+    ? passageShift.scroll === "how-you-did"
+    : passageShift.text.includes("Need a refresher?");
+  if (!passageShiftOk) {
     passageLayout.failed = [
       ...passageLayout.failed,
-      `shiftTab=${passageShift}`,
+      `shiftTab=${JSON.stringify(passageShift)}`,
     ];
   }
   await passage.getByRole("button", { name: "Need a refresher?" }).click();

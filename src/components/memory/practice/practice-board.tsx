@@ -32,6 +32,7 @@ import {
 import { useEnterToClick } from "@/hooks/use-enter-to-click";
 import { useEsvReference } from "@/hooks/use-esv-reference";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useOverflowTabIndex } from "@/hooks/use-overflow-tab-index";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
@@ -1302,6 +1303,7 @@ function PracticeCard({
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   const resultBannerRef = useRef<HTMLDivElement>(null);
+  const fullTextRegion = useOverflowTabIndex();
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
   // click) into a single recorded attempt, and `submitPending` shows a spinner
@@ -1825,11 +1827,13 @@ function PracticeCard({
                   />
                   {checkedQuality !== "exact" && (
                     <div
+                      ref={fullTextRegion.ref}
+                      tabIndex={fullTextRegion.tabIndex}
+                      data-result-scroll="full-text"
                       className={cn(
-                        "mx-auto rounded-xl border bg-card/60 px-4 py-3 text-left",
+                        "mx-auto max-h-[45vh] overflow-y-auto rounded-xl border bg-card/60 px-4 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                         READER_VERSE_SIZE_CLASS,
                         READER_MEASURE_CLASS,
-                        composite && "max-h-[45vh] overflow-y-auto",
                       )}
                     >
                       <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
