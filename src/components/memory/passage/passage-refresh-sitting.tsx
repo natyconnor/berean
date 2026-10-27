@@ -6,7 +6,6 @@ import {
   type PassageRecallResult,
 } from "@/components/memory/passage/passage-recall-card";
 import { SessionBackButton } from "@/components/memory/session-back-button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { REFRESH_FINISH_ERROR } from "@/lib/memory-copy";
 import { LEARN_PROGRESS_ACCURACY } from "@/lib/memory-scheduler";
@@ -83,7 +82,7 @@ export function PassageRefreshSitting({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <SessionBackButton
           onExit={onExit}
@@ -91,7 +90,10 @@ export function PassageRefreshSitting({
           exitHref={exitHref}
         />
       </header>
-      <ScrollArea className="min-h-0 flex-1">
+      <div
+        data-slot="scroll-area-viewport"
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         <div className="mx-auto w-full max-w-xl px-5 py-8 pb-24">
           <PassageRecallCard
             mode="review"
@@ -140,7 +142,7 @@ export function PassageRefreshSitting({
             <p className="mt-3 text-xs text-destructive">{finishError}</p>
           ) : null}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

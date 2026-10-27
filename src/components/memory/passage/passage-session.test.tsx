@@ -825,7 +825,9 @@ describe("PassageSession", () => {
       </TooltipProvider>,
     );
 
-    expect(document.querySelector('[data-slot="scroll-area"]')).not.toBeNull();
+    expect(
+      document.querySelector('[data-slot="scroll-area-viewport"]'),
+    ).not.toBeNull();
     expect(screen.getByText("Refresh")).toBeInTheDocument();
   });
 

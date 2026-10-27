@@ -18,12 +18,18 @@ const server = await createServer({
   root,
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": path.join(repo, "src"),
-      "@tanstack/react-router": stub,
-      "convex/react": stub,
-      [path.join(repo, "src/hooks/use-esv-composite-passage")]: stub,
-    },
+    alias: [
+      {
+        find: "@/hooks/use-esv-composite-passage",
+        replacement: stub,
+      },
+      { find: "@", replacement: path.join(repo, "src") },
+      { find: "@tanstack/react-router", replacement: stub },
+      { find: "convex/react", replacement: stub },
+    ],
+  },
+  define: {
+    __IS_PREVIEW__: "false",
   },
   server: { host: "127.0.0.1", port: 4175, strictPort: true },
 });
@@ -41,8 +47,19 @@ const results = [];
 
 async function openPage(search, width, height) {
   const page = await browser.newPage({ viewport: { width, height } });
-  await page.goto(`${base}?case=${search}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(300);
+  const pageErrors = [];
+  page.on("pageerror", (error) => {
+    pageErrors.push(String(error));
+  });
+  page.on("console", (msg) => {
+    if (msg.type() === "error") pageErrors.push(msg.text());
+  });
+  const response = await page.goto(`${base}?case=${search}`, {
+    waitUntil: "networkidle",
+  });
+  await page.waitForTimeout(400);
+  page._pageErrors = pageErrors;
+  page._status = response?.status() ?? 0;
   return page;
 }
 
@@ -57,7 +74,6 @@ async function measureRefresh(width, height) {
       (button) => (button.textContent ?? "").includes("Check"),
     );
     const dock = document.querySelector('[data-testid="notes-dock"]');
-    const text = document.querySelector('[data-slot="scroll-area"]');
     if (!(viewport instanceof HTMLElement)) {
       return { hasScrollArea: false };
     }
@@ -74,27 +90,44 @@ async function measureRefresh(width, height) {
       dockTop: dockBox?.top ?? null,
       windowHeight: window.innerHeight,
       documentScrollHeight: document.documentElement.scrollHeight,
-      hasText: Boolean(text),
     };
   });
-  if (metrics.canScroll) {
-    await page.evaluate(() => {
-      const viewport = document.querySelector(
-        '[data-slot="scroll-area-viewport"]',
-      );
-      if (viewport instanceof HTMLElement) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
-    });
-    await page.waitForTimeout(200);
-  }
-  const shot = path.join(
-    artifacts,
-    `i1-${width}-refresh${metrics.canScroll ? "-scrolled" : ""}.png`,
-  );
+  const shot = path.join(artifacts, `i1-${width}-refresh.png`);
   await page.screenshot({ path: shot, fullPage: false });
+
+  const scrolled = await page.evaluate(() => {
+    const viewport = document.querySelector(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      return { canScroll: false, scrolled: false };
+    }
+    const before = viewport.scrollTop;
+    viewport.scrollTop = viewport.scrollHeight;
+    return {
+      canScroll: viewport.scrollHeight > viewport.clientHeight + 8,
+      scrolled: viewport.scrollTop > before + 8,
+      viewportClientHeight: viewport.clientHeight,
+      viewportScrollHeight: viewport.scrollHeight,
+      scrollTop: viewport.scrollTop,
+    };
+  });
+  await page.waitForTimeout(200);
+  const scrolledShot = path.join(artifacts, `i1-${width}-refresh-scrolled.png`);
+  await page.screenshot({ path: scrolledShot, fullPage: false });
+  const html = (await page.locator("body").innerText()).slice(0, 400);
+  const errors = page._pageErrors ?? [];
   await page.close();
-  return { width, height, shot, ...metrics };
+  return {
+    width,
+    height,
+    shot,
+    scrolledShot,
+    html,
+    errors,
+    ...metrics,
+    scrolled,
+  };
 }
 
 async function measurePack(width, height) {
@@ -134,9 +167,9 @@ try {
     if (!refresh.hasScrollArea) {
       throw new Error(`item 1 @${viewport.width}: missing ScrollArea`);
     }
-    if (!refresh.canScroll) {
+    if (!refresh.scrolled?.canScroll || !refresh.scrolled?.scrolled) {
       throw new Error(
-        `item 1 @${viewport.width}: sitting does not scroll (${refresh.viewportScrollHeight} <= ${refresh.viewportClientHeight})`,
+        `item 1 @${viewport.width}: long Refresh sitting did not scroll (client=${refresh.scrolled?.viewportClientHeight} scroll=${refresh.scrolled?.viewportScrollHeight} top=${refresh.scrolled?.scrollTop})`,
       );
     }
     const pack = await measurePack(viewport.width, viewport.height);

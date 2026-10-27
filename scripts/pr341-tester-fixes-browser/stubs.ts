@@ -24,7 +24,7 @@ export function useEsvCompositePassage() {
   };
 }
 
-const PSALM_23 = [
+const PSALM_23_ONCE = [
   "The Lord is my shepherd; I shall not want.",
   "He makes me lie down in green pastures. He leads me beside still waters.",
   "He restores my soul. He leads me in paths of righteousness for his name's sake.",
@@ -32,3 +32,5 @@ const PSALM_23 = [
   "You prepare a table before me in the presence of my enemies; you anoint my head with oil; my cup overflows.",
   "Surely goodness and mercy shall follow me all the days of my life, and I shall dwell in the house of the Lord forever.",
 ].join(" ");
+
+const PSALM_23 = [PSALM_23_ONCE, PSALM_23_ONCE, PSALM_23_ONCE].join(" ");

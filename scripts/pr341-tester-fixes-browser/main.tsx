@@ -12,7 +12,7 @@ import {
 import type { PassagePiece } from "@/lib/passage-pieces";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
-import "@/index.css";
+import "./harness.css";
 
 const NOW = Date.UTC(2026, 9, 12, 18);
 const PACK_ID = "pack_psalm23" as Id<"packs">;
@@ -93,13 +93,16 @@ const unstartedGoal: PassageGoalCard = {
 
 function RefreshCase() {
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden">
-      <PassageRefreshSitting
-        packId={PACK_ID}
-        view={reviewingView}
-        packName="Psalm 23"
-        onExit={() => {}}
-      />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b px-5 py-3 text-sm">Memory</div>
+      <div className="min-h-0 flex-1">
+        <PassageRefreshSitting
+          packId={PACK_ID}
+          view={reviewingView}
+          packName="Psalm 23"
+          onExit={() => {}}
+        />
+      </div>
       <div
         data-testid="notes-dock"
         className="pointer-events-none absolute inset-x-0 bottom-0 h-20 border-t bg-background/95"
