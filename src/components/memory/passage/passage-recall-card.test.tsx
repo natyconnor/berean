@@ -353,4 +353,48 @@ describe("PassageRecallCard step label and focus", () => {
       screen.queryByRole("button", { name: "Saving..." }),
     ).not.toBeInTheDocument();
   });
+
+  it("focuses Continue after Check answer once saving finishes", async () => {
+    const user = userEvent.setup();
+    let resolveSubmit!: (value: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => {
+      resolveSubmit = resolve;
+    });
+
+    render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="From memory"
+        title="Psalm 23"
+        promptLine="Type the passage from memory"
+        versePlainText="The Lord is my shepherd; I shall not want."
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        onSubmit={() => pending}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("zzz qqq xxx");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(
+      await screen.findByRole("button", { name: "Saving..." }),
+    ).toBeDisabled();
+
+    resolveSubmit(true);
+
+    const continueButton = await screen.findByRole("button", {
+      name: /Continue/,
+    });
+    await waitFor(() => {
+      expect(continueButton).toBeEnabled();
+      expect(continueButton).toHaveFocus();
+    });
+  });
 });

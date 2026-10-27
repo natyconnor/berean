@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 
 import { NeedARefresherInlineOffer } from "@/components/memory/memory-refresher-controls";
 import { PassageRecallCard } from "@/components/memory/passage/passage-recall-card";
+import {
+  PracticeBoard,
+  type PracticeVerse,
+} from "@/components/memory/practice/practice-board";
 import { VerseMemoryFeedback } from "@/components/study/verse-memory-feedback";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PSALM_23, PSALM_119 } from "./stubs";
@@ -36,6 +40,32 @@ function delayedSubmit() {
   return new Promise<true>((resolve) => {
     setTimeout(() => resolve(true), delayMs);
   });
+}
+
+const reviewVerse: PracticeVerse = {
+  verseRefId: "vr_119_105" as PracticeVerse["verseRefId"],
+  reference: { book: "Psalms", chapter: 119, startVerse: 105, endVerse: 105 },
+  learnStage: 3,
+  stageReps: 0,
+  status: "reviewing",
+  dueAt: NOW - 1000,
+  ease: 2.3,
+  intervalDays: 5,
+  consecutiveCorrect: 3,
+  lapses: 0,
+  earlyReviewApplied: false,
+};
+
+function BoardCase() {
+  return (
+    <PracticeBoard
+      kind="review"
+      verses={[reviewVerse]}
+      scopeLabel="Memory"
+      onExit={() => undefined}
+      remainingDue={0}
+    />
+  );
 }
 
 function VerseCase() {
@@ -130,6 +160,8 @@ createRoot(root).render(
       <PassageCase />
     ) : page === "reserve" ? (
       <ReserveCase />
+    ) : page === "board" ? (
+      <BoardCase />
     ) : (
       <VerseCase />
     )}

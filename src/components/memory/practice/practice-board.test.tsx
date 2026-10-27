@@ -878,6 +878,49 @@ describe("PracticeBoard recall submit loading", () => {
       screen.queryByRole("button", { name: "Saving..." }),
     ).not.toBeInTheDocument();
   });
+
+  it("focuses Continue after Check answer once saving finishes", async () => {
+    let resolveRecord!: (value: unknown) => void;
+    const pendingRecord = new Promise((resolve) => {
+      resolveRecord = resolve;
+    });
+    mutationMock("verseMemory.recordAttempt").mockReturnValue(pendingRecord);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("zzz qqq xxx");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(
+      await screen.findByRole("button", { name: "Saving..." }),
+    ).toBeDisabled();
+
+    resolveRecord({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+
+    const continueButton = await screen.findByRole("button", {
+      name: /Continue/,
+    });
+    await waitFor(() => {
+      expect(continueButton).toBeEnabled();
+      expect(continueButton).toHaveFocus();
+    });
+  });
 });
 
 function learningRef(

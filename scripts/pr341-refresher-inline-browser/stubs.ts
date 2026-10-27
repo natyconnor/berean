@@ -3,7 +3,15 @@ export function useNavigate() {
 }
 
 export function useMutation() {
-  return async () => lapseSchedule();
+  return async () => {
+    const delayMs = Number(
+      new URLSearchParams(window.location.search).get("delay") ?? "0",
+    );
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    return lapseSchedule();
+  };
 }
 
 export function useAction() {
