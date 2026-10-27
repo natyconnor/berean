@@ -101,6 +101,15 @@ async function waitForSavingToClear(page) {
 
 async function focusAfterSavingClears(page) {
   await waitForSavingToClear(page);
+  await page.waitForFunction(
+    () => {
+      const el = document.activeElement;
+      return (
+        el?.tagName === "BUTTON" && /\bContinue\b/.test(el.textContent ?? "")
+      );
+    },
+    { timeout: 500 },
+  );
   return readActiveElement(page);
 }
 
