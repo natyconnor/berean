@@ -19,11 +19,13 @@ export function useOverflowTabIndex(): {
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const [overflowing, setOverflowing] = useState(false);
 
+  const ref = (node: HTMLDivElement | null) => {
+    setElement(node);
+    setOverflowing(node ? regionOverflows(node) : false);
+  };
+
   useLayoutEffect(() => {
-    if (!element) {
-      setOverflowing((current) => (current ? false : current));
-      return;
-    }
+    if (!element) return;
 
     const update = () => {
       const next = regionOverflows(element);
@@ -35,9 +37,8 @@ export function useOverflowTabIndex(): {
     for (const child of element.children) {
       observer.observe(child);
     }
-    update();
     return () => observer.disconnect();
   }, [element]);
 
-  return { ref: setElement, tabIndex: overflowing ? 0 : undefined };
+  return { ref, tabIndex: overflowing ? 0 : undefined };
 }

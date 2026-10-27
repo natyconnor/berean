@@ -7,7 +7,7 @@ import {
   type PracticeVerse,
 } from "@/components/memory/practice/practice-board";
 import { NeedARefresherInlineOffer } from "@/components/memory/memory-refresher-controls";
-import { useOverflowTabIndex } from "@/hooks/use-overflow-tab-index";
+import { OverflowRegion } from "@/components/study/overflow-region";
 import { VerseAttemptResult } from "@/components/study/verse-attempt-result";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -59,14 +59,11 @@ const passageVerse: PracticeVerse = {
 };
 
 function FullTextPreview({ text }: { text: string }) {
-  const region = useOverflowTabIndex();
   return (
-    <div
-      ref={region.ref}
-      tabIndex={region.tabIndex}
-      data-result-scroll="full-text"
+    <OverflowRegion
+      name="full-text"
       className={cn(
-        "mx-auto max-h-[45vh] overflow-y-auto rounded-xl border bg-card/60 px-4 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "mx-auto max-h-[45vh] rounded-xl border bg-card/60 px-4 py-3 text-left",
         READER_VERSE_SIZE_CLASS,
         READER_MEASURE_CLASS,
       )}
@@ -75,7 +72,7 @@ function FullTextPreview({ text }: { text: string }) {
         Full text
       </p>
       <p>{text}</p>
-    </div>
+    </OverflowRegion>
   );
 }
 

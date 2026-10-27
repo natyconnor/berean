@@ -14,6 +14,7 @@ export default defineConfig([
     "scripts/start-over-confirm-browser",
     "scripts/pr341-tester-fixes-browser",
     "scripts/pr341-refresher-inline-browser",
+    "scripts/pr341-overflow-tabstops-browser",
   ]),
   {
     files: ["**/*.{ts,tsx}"],

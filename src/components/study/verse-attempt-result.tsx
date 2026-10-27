@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import type { JSX, ReactNode, Ref } from "react";
 
-import { useOverflowTabIndex } from "@/hooks/use-overflow-tab-index";
+import { OverflowRegion } from "@/components/study/overflow-region";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import type { MemorySchedule } from "@/lib/memory-scheduler";
 import { READER_VERSE_TEXT_CLASS } from "@/lib/reader-typography";
@@ -156,7 +156,6 @@ export function VerseAttemptResult({
   refresherOffer,
   bannerRef,
 }: VerseAttemptResultProps): JSX.Element | null {
-  const howYouDid = useOverflowTabIndex();
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
 
@@ -189,25 +188,26 @@ export function VerseAttemptResult({
         </div>
       ) : null}
       <motion.div
-        ref={howYouDid.ref}
-        tabIndex={howYouDid.tabIndex}
-        data-result-scroll="how-you-did"
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.24, ease: "easeOut" }}
-        className={cn(
-          "max-h-[45vh] space-y-3 overflow-y-auto rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-          attemptQuality === "exact"
-            ? "border-emerald-500/40"
-            : attemptQuality === "close"
-              ? "border-amber-500/40"
-              : "border-primary/25",
-        )}
       >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          How you did
-        </p>
-        <VerseAttemptDiff tokens={diffTokens} />
+        <OverflowRegion
+          name="how-you-did"
+          className={cn(
+            "max-h-[45vh] space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
+            attemptQuality === "exact"
+              ? "border-emerald-500/40"
+              : attemptQuality === "close"
+                ? "border-amber-500/40"
+                : "border-primary/25",
+          )}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            How you did
+          </p>
+          <VerseAttemptDiff tokens={diffTokens} />
+        </OverflowRegion>
       </motion.div>
     </div>
   );
