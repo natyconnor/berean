@@ -536,6 +536,61 @@ describe("PackDetail for a passage", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the Refresh sitting for a building passage with learned verses", async () => {
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 4, "solid", { learnStage: 3 }),
+          piece(1, 5, 5, "learning", { learnStage: 2 }),
+          piece(2, 6, 11, "unreached"),
+        ],
+      }),
+    };
+    renderHost("pack:psalm16x");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        href: "/memory/psalm16x/practice?refresh=1&return=%2Fmemory%2Fpsalm16x",
+      }),
+    );
+    expect(mutation("passageMemory.finishRefresh")).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    );
+    expect(mutation("passageMemory.finishRefresh")).not.toHaveBeenCalled();
+  });
+
+  it("still drops a learning-only building passage one step into Learn", async () => {
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 4, "learning", { learnStage: 2 }),
+          piece(1, 5, 11, "unreached"),
+        ],
+      }),
+    };
+    renderHost("pack:psalm16x");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    );
+
+    await waitFor(() =>
+      expect(mutation("passageMemory.finishRefresh")).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      href: "/memory/psalm16x/learn?return=%2Fmemory%2Fpsalm16x",
+    });
+  });
+
   it("confirms Stop memorizing, clears it and closes the drawer", async () => {
     renderHost("pack:psalm16x");
 

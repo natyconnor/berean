@@ -81,6 +81,7 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import {
   compositeHintForWindow,
   dueFrontierIndex,
+  learnedPassagePieces,
   localDayIndex,
   rehearsalStartIndex,
   remainingIntroduces,
@@ -152,7 +153,9 @@ interface PassageSessionProps {
 export function PassageSession(props: PassageSessionProps): JSX.Element {
   if (
     props.refresh &&
-    (props.view.status === "reviewing" || props.view.status === "mastered")
+    (props.view.status === "reviewing" ||
+      props.view.status === "mastered" ||
+      learnedPassagePieces(props.view.pieces).length > 0)
   ) {
     return (
       <PassageRefreshSitting

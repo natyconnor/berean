@@ -64,6 +64,8 @@ import {
   isProjectedPassageDueForLearning,
 } from "../src/lib/passage-due";
 import {
+  applyBuildingPassageRefresh,
+  learnedPassagePieces,
   localDayIndex,
   progressFrontierPieces,
   remainingIntroduces,
@@ -682,16 +684,10 @@ export const finishRefresh = mutation({
       .order("desc")
       .take(20);
     if (row.status === "building") {
-      const pieces = row.pieces.map((piece) =>
-        piece.attachment === "unreached"
-          ? piece
-          : {
-              ...piece,
-              learnStage: Math.max(0, piece.learnStage - 1),
-              stageReps: 0,
-              dueAt: args.now,
-            },
-      );
+      const pieces = applyBuildingPassageRefresh(row.pieces, args.now);
+      if (learnedPassagePieces(row.pieces).length > 0) {
+        return toPassageView(row, args.now, args.tzOffsetMinutes);
+      }
       const next = await patchPassageMemory(ctx, row._id, {
         pieces,
         updatedAt: args.now,

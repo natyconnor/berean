@@ -9,6 +9,7 @@ import { SessionBackButton } from "@/components/memory/session-back-button";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { REFRESH_FINISH_ERROR } from "@/lib/memory-copy";
 import { LEARN_PROGRESS_ACCURACY } from "@/lib/memory-scheduler";
+import { learnedPassagePieces } from "@/lib/passage-frontier";
 import { maskVerseText } from "@/lib/verse-hint";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 
@@ -37,12 +38,15 @@ export function PassageRefreshSitting({
   const [finishError, setFinishError] = useState<string | null>(null);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
   const finishRefresh = useMutation(api.passageMemory.finishRefresh);
-  const members = view.pieces.map((piece) => ({
-    book: piece.book,
-    chapter: piece.chapter,
-    startVerse: piece.startVerse,
-    endVerse: piece.endVerse,
-  }));
+  const refreshPieces = learnedPassagePieces(view.pieces);
+  const members = (refreshPieces.length > 0 ? refreshPieces : view.pieces).map(
+    (piece) => ({
+      book: piece.book,
+      chapter: piece.chapter,
+      startVerse: piece.startVerse,
+      endVerse: piece.endVerse,
+    }),
+  );
   const passage = useEsvCompositePassage(members);
   const hint = useMemo(() => {
     if (step === 1) {

@@ -85,7 +85,10 @@ import {
   dismissLearnPackForToday,
   learnDismissDayKey,
 } from "@/lib/learn-dismissed-packs";
-import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
+import {
+  learnedPassagePieces,
+  PASSAGE_MAX_ADDS_PER_DAY,
+} from "@/lib/passage-frontier";
 import { cn } from "@/lib/utils";
 import {
   formatBookChapter,
@@ -1296,8 +1299,11 @@ function PackDetailMenu({
   const reviewingMembers = members.filter((member) =>
     isReviewPhase(member.status),
   );
+  const hasLearnedPassagePieces =
+    learnedPassagePieces(passage?.pieces ?? []).length > 0;
   const learningOnly =
     reviewingMembers.length === 0 &&
+    !hasLearnedPassagePieces &&
     (passage?.status === "building" ||
       members.some((member) => isLearningPhase(member.status)));
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();

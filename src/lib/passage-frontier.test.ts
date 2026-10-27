@@ -11,9 +11,11 @@ import {
   compositeHintForWindow,
   connectPairForPiece,
   connectPairIndexes,
+  applyBuildingPassageRefresh,
   coerceUnstartedLearningPieces,
   dueFrontierIndex,
   frontierIndex,
+  learnedPassagePieces,
   inferPieceLearningState,
   localDayIndex,
   looksLikeAutoHeartedPassage,
@@ -479,6 +481,32 @@ describe("progressPassagePiece", () => {
     });
     expect(advanced[0]?.stageReps).toBe(1);
     expect(advanced[0]).not.toEqual(pieces[0]);
+  });
+
+  it("Refresh on a partly learned passage holds every piece", () => {
+    const now = 1_700_000_000_000;
+    const pieces = [
+      piece(0, "solid", { learnStage: 3, stageReps: 1, dueAt: now + DAY_MS }),
+      piece(1, "learning", { learnStage: 2, stageReps: 0, dueAt: now }),
+      piece(2, "unreached"),
+    ];
+
+    expect(learnedPassagePieces(pieces).map((item) => item.index)).toEqual([0]);
+    expect(applyBuildingPassageRefresh(pieces, now)).toEqual(pieces);
+  });
+
+  it("Refresh on a building passage with no learned verses still drops a stage", () => {
+    const now = 1_700_000_000_000;
+    const pieces = [
+      piece(0, "learning", { learnStage: 2, stageReps: 1, dueAt: now }),
+      piece(1, "unreached"),
+    ];
+
+    expect(learnedPassagePieces(pieces)).toEqual([]);
+    expect(applyBuildingPassageRefresh(pieces, now)).toEqual([
+      { ...pieces[0], learnStage: 1, stageReps: 0, dueAt: now },
+      pieces[1],
+    ]);
   });
 
   it("does not skip a locked attached piece when a later learning piece is due", () => {

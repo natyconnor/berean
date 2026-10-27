@@ -85,6 +85,40 @@ export function remainingIntroduces(args: {
   return Math.max(0, PASSAGE_MAX_ADDS_PER_DAY - usedToday);
 }
 
+/** Pieces already memorized. Refresh sits over these and leaves the rest alone. */
+export function learnedPassagePieces<T extends { attachment: PieceAttachment }>(
+  pieces: readonly T[],
+): T[] {
+  return pieces.filter((piece) => piece.attachment === "solid");
+}
+
+/**
+ * Refresh on a building passage with no learned verses still drops a learning
+ * piece one stage. Once any verse is learned, every piece stays as it is.
+ */
+export function applyBuildingPassageRefresh<
+  T extends {
+    attachment: PieceAttachment;
+    learnStage: number;
+    stageReps: number;
+    dueAt?: number;
+  },
+>(pieces: readonly T[], now: number): T[] {
+  if (learnedPassagePieces(pieces).length > 0) {
+    return [...pieces];
+  }
+  return pieces.map((piece) =>
+    piece.attachment === "unreached"
+      ? piece
+      : {
+          ...piece,
+          learnStage: Math.max(0, piece.learnStage - 1),
+          stageReps: 0,
+          dueAt: now,
+        },
+  );
+}
+
 /** Lowest index with attachment !== "solid"; or `pieces.length` if all solid. */
 export function frontierIndex(pieces: readonly PassagePiece[]): number {
   const index = pieces.findIndex((piece) => piece.attachment !== "solid");

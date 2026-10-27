@@ -807,6 +807,33 @@ describe("PassageSession", () => {
     });
   });
 
+  it("opens a Refresh sitting over only the learned verses of a building passage", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PassageSession
+          packId={PACK_ID}
+          view={passageView([
+            piece(0, "solid", { learnStage: 3 }),
+            piece(1, "learning", { learnStage: 2 }),
+          ])}
+          packName="Psalm 23"
+          onExit={() => {}}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText("Refresh")).toBeInTheDocument();
+    expect(screen.getByText("Type it with first letters")).toBeInTheDocument();
+    expect(screen.queryByText(/Warm up/i)).not.toBeInTheDocument();
+    expect(
+      await screen.findByText((_, node) => node?.textContent === "T__"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText((_, node) => node?.textContent === "H_"),
+    ).not.toBeInTheDocument();
+  });
+
   it("puts a reviewing Refresh sitting in the same scroll shell as Learn", () => {
     render(
       <TooltipProvider delayDuration={0}>
