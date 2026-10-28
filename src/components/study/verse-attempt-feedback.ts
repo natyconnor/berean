@@ -119,7 +119,7 @@ export function attemptFeedbackLead(input: AttemptFeedbackInput): string {
     return exactLead(input.errors);
   }
 
-  if (input.errors) {
+  if (input.errors && (input.outcome === "retry" || input.outcome === "hold")) {
     const special = specialMissLead(input.errors);
     if (special) return special;
   }
