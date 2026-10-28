@@ -30,6 +30,13 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.19.1](https://github.com/natyconnor/berean/compare/v1.19.0...v1.19.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **study:** keep close-call leads off lapse attempts ([#344](https://github.com/natyconnor/berean/issues/344)) ([4c4eaa1](https://github.com/natyconnor/berean/commit/4c4eaa158c2cce924a6453cacc90fa7f814091bb))
+
 ## [1.19.0](https://github.com/natyconnor/berean/compare/v1.18.1...v1.19.0) (2026-10-23)
 
 
