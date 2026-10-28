@@ -159,6 +159,7 @@ export const START_OVER_MENU_DETAIL = "Learn it again from the start";
 export const START_OVER_CONFIRM_LABEL = "Start over";
 export const START_OVER_CANCEL_LABEL = "Cancel";
 export const STARTED_OVER_LABEL = "Started over.";
+export const STARTED_OVER_TODAY_COPY = "Started over today";
 export const UNDO_LABEL = "Undo";
 export const START_OVER_ERROR = "Couldn't start over. Try again.";
 export const UNDO_START_OVER_ERROR = "Couldn't undo. Try again.";

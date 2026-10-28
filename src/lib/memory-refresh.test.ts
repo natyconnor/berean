@@ -10,13 +10,13 @@ import {
   dueAtInCalendarDays,
   initialSchedule,
   nextStartOverUndo,
-  refreshSchedule,
   restoreStartOverUndo,
   scheduleNext,
   startOverSchedule,
   type MemorySchedule,
   type ReviewInput,
 } from "./memory-scheduler";
+import { planRefreshFinish } from "./memory-way-back";
 
 const NOW = 1_700_000_000_000;
 
@@ -238,13 +238,50 @@ describe("hinted review", () => {
   });
 });
 
-describe("refreshSchedule", () => {
+function finishRefresh(
+  schedule: MemorySchedule,
+  ctx: {
+    now: number;
+    overdueMs: number;
+    recentLapseCount: number;
+  },
+  grade: { accuracy: number; quality: "exact" | "close" | "off" } = {
+    accuracy: 70,
+    quality: "close",
+  },
+) {
+  const plan = planRefreshFinish(
+    {
+      kind: "verse",
+      schedule,
+      rows: [
+        {
+          createdAt: ctx.now,
+          accuracy: grade.accuracy,
+          quality: grade.quality,
+          holdSchedule: true,
+          stage: schedule.learnStage,
+        },
+      ],
+    },
+    {
+      sittingStartedAt: ctx.now,
+      ...ctx,
+    },
+  );
+  if (plan.status !== "apply-schedule") {
+    throw new Error(plan.status);
+  }
+  return plan;
+}
+
+describe("planRefreshFinish", () => {
   it("drops a growing verse one rung to every other day", () => {
-    const next = refreshSchedule(reviewing({ intervalDays: 12 }), {
+    const next = finishRefresh(reviewing({ intervalDays: 12 }), {
       now: NOW,
       overdueMs: 3 * DAY_MS,
       recentLapseCount: 0,
-    });
+    }).schedule;
     expect(next.status).toBe("reviewing");
     expect(next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
     expect(next.stageReps).toBe(0);
@@ -256,56 +293,58 @@ describe("refreshSchedule", () => {
   });
 
   it("drops every-other-day to daily", () => {
-    const next = refreshSchedule(
+    const next = finishRefresh(
       reviewing({ intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS }),
       { now: NOW, overdueMs: 0, recentLapseCount: 0 },
-    );
+    ).schedule;
     expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
   });
 
   it("keeps a daily verse daily", () => {
-    const next = refreshSchedule(
+    const next = finishRefresh(
       reviewing({ intervalDays: REVIEW_DAILY_INTERVAL_DAYS }),
       { now: NOW, overdueMs: 0, recentLapseCount: 0 },
-    );
+    ).schedule;
     expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
     expect(next.status).toBe("reviewing");
   });
 
   it("puts a badly overdue verse on the daily rung", () => {
-    const next = refreshSchedule(reviewing({ intervalDays: 10 }), {
+    const next = finishRefresh(reviewing({ intervalDays: 10 }), {
       now: NOW,
       overdueMs: 20 * DAY_MS,
       recentLapseCount: 0,
-    });
+    }).schedule;
     expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
     expect(next.stageReps).toBe(0);
   });
 
   it("puts a twice-lapsed verse on the daily rung", () => {
-    const next = refreshSchedule(reviewing({ intervalDays: 24 }), {
+    const next = finishRefresh(reviewing({ intervalDays: 24 }), {
       now: NOW,
       overdueMs: 0,
       recentLapseCount: 2,
-    });
+    }).schedule;
     expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
   });
 
   it("turns Mastered into Memorized when the gap falls under 30 days", () => {
-    const next = refreshSchedule(
+    const next = finishRefresh(
       reviewing({ status: "mastered", intervalDays: 30 }),
       { now: NOW, overdueMs: 0, recentLapseCount: 0 },
-    );
+    ).schedule;
     expect(next.status).toBe("reviewing");
     expect(next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
   });
 
   it("steps a learning verse back one band and clears the soft lock", () => {
-    const next = refreshSchedule(learning(), {
+    const plan = finishRefresh(learning(), {
       now: NOW,
       overdueMs: 0,
       recentLapseCount: 0,
     });
+    const next = plan.schedule;
+    expect(plan.reviewCopy).toBeNull();
     expect(next.status).toBe("learning");
     expect(next.learnStage).toBe(1);
     expect(next.stageReps).toBe(0);
@@ -313,13 +352,83 @@ describe("refreshSchedule", () => {
   });
 
   it("does not step a Read verse below Read", () => {
-    const next = refreshSchedule(learning({ learnStage: 0, stageReps: 0 }), {
+    const next = finishRefresh(learning({ learnStage: 0, stageReps: 0 }), {
       now: NOW,
       overdueMs: 0,
       recentLapseCount: 0,
-    });
+    }).schedule;
     expect(next.learnStage).toBe(0);
     expect(next.dueAt).toBe(NOW);
+  });
+
+  it("keeps a good Refresh at the same stage and gap, due tomorrow", () => {
+    const prior = reviewing({
+      intervalDays: 12,
+      stageReps: 3,
+      ease: 2.1,
+      lapses: 1,
+      dueAt: NOW,
+    });
+    const plan = finishRefresh(
+      prior,
+      { now: NOW, overdueMs: 0, recentLapseCount: 0 },
+      { accuracy: LEARN_PROGRESS_ACCURACY, quality: "close" },
+    );
+    expect(plan.outcome).toBe("keep-level");
+    expect(plan.schedule.status).toBe("reviewing");
+    expect(plan.schedule.learnStage).toBe(prior.learnStage);
+    expect(plan.schedule.stageReps).toBe(3);
+    expect(plan.schedule.intervalDays).toBe(12);
+    expect(plan.schedule.ease).toBe(2.1);
+    expect(plan.schedule.lapses).toBe(1);
+    expect(plan.schedule.dueAt).toBe(dueAtInCalendarDays(NOW, 1));
+    expect(plan.schedule.earlyReviewApplied).toBe(true);
+    expect(plan.reviewCopy).toMatchObject({
+      accuracy: LEARN_PROGRESS_ACCURACY,
+      quality: "close",
+    });
+    const again = scheduleNext(plan.schedule, review({ quality: "exact" }));
+    expect(again.intervalDays).toBe(12);
+  });
+
+  it("keeps the level when an exact finish is under 85%", () => {
+    const prior = reviewing({ intervalDays: 12, stageReps: 2, dueAt: NOW });
+    const plan = finishRefresh(
+      prior,
+      { now: NOW, overdueMs: 0, recentLapseCount: 0 },
+      { accuracy: 80, quality: "exact" },
+    );
+    expect(plan.outcome).toBe("keep-level");
+    expect(plan.schedule.intervalDays).toBe(12);
+    expect(plan.schedule.stageReps).toBe(2);
+    expect(plan.schedule.earlyReviewApplied).toBe(true);
+  });
+
+  it("leaves a keep that is already past tomorrow on its due date", () => {
+    const later = dueAtInCalendarDays(NOW, 1) + 2 * DAY_MS;
+    const plan = finishRefresh(
+      reviewing({ intervalDays: 12, dueAt: later }),
+      { now: NOW, overdueMs: 0, recentLapseCount: 0 },
+      { accuracy: 100, quality: "exact" },
+    );
+    expect(plan.schedule.dueAt).toBe(later);
+    expect(plan.schedule.earlyReviewApplied).toBe(true);
+  });
+
+  it("soft-locks a learning keep without clearing stage reps", () => {
+    const prior = learning({ learnStage: 2, stageReps: 1, dueAt: NOW });
+    const plan = finishRefresh(
+      prior,
+      { now: NOW, overdueMs: 0, recentLapseCount: 0 },
+      { accuracy: 90, quality: "close" },
+    );
+    expect(plan.outcome).toBe("keep-level");
+    expect(plan.schedule.status).toBe("learning");
+    expect(plan.schedule.learnStage).toBe(2);
+    expect(plan.schedule.stageReps).toBe(1);
+    expect(plan.schedule.dueAt).toBe(dueAtInCalendarDays(NOW, 1));
+    expect(plan.schedule.earlyReviewApplied).toBe(false);
+    expect(plan.reviewCopy).toBeNull();
   });
 });
 

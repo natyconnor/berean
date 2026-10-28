@@ -10,7 +10,7 @@ import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import {
   EnterToCheckHint,
   FirstLettersPanel,
-  NeedARefresherInlineOffer,
+  NeedARefresherButton,
   NeedARefresherLink,
 } from "@/components/memory/memory-refresher-controls";
 import { scrollResultBannerIntoView } from "@/components/memory/scroll-result-banner";
@@ -43,6 +43,8 @@ import { useEnterToClick } from "@/hooks/use-enter-to-click";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { requiredRepsFor, type MemoryStatus } from "@/lib/memory-scheduler";
+import { refreshStepGate } from "@/lib/memory-way-back";
+import { WARMUP_SKIP_LABEL } from "@/components/memory/passage/passage-session-model";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
 import {
   READER_MEASURE_CLASS,
@@ -76,6 +78,7 @@ interface PassageRecallCardProps {
   subtitle?: string;
   promptLine: string;
   versePlainText: string;
+  hintPlainText?: string;
   loading: boolean;
   error: string | null;
   retry: () => void;
@@ -97,6 +100,8 @@ interface PassageRecallCardProps {
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
   onContinueAfterResult?: () => void;
   offerRefresher?: boolean;
+  refreshSitting?: boolean;
+  onSkipWarmup?: () => void;
 }
 
 export function PassageRecallCard({
@@ -106,6 +111,7 @@ export function PassageRecallCard({
   subtitle,
   promptLine,
   versePlainText,
+  hintPlainText,
   loading,
   error,
   retry,
@@ -122,6 +128,8 @@ export function PassageRecallCard({
   onSubmit,
   onContinueAfterResult,
   offerRefresher = false,
+  refreshSitting = false,
+  onSkipWarmup,
 }: PassageRecallCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -137,17 +145,24 @@ export function PassageRecallCard({
   const resultBannerRef = useRef<HTMLDivElement>(null);
   const { submit, pending: submitPending } = useSubmitLock();
 
-  const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
-  const stageColor = practiceChromeFor(learnStage, status);
+  const displayStage =
+    rescue === "letters" ? 1 : rescue === "memory" ? 3 : learnStage;
+  const stageInfo = PRACTICE_STAGES[displayStage] ?? PRACTICE_STAGES[0];
+  const stageColor = practiceChromeFor(displayStage, status);
   const wordCount = countVerseWords(versePlainText);
   const isReadPrime = readContinue;
   const compositeField =
     mode === "rope" || mode === "review" || mode === "repair";
   const requiredToday = requiredRepsFor(learnStage, wordCount);
-  const liveGoalLabel =
-    showJourneyBar && status !== "reviewing" && status !== "mastered"
-      ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
-      : null;
+  const liveGoalLabel = refreshSitting
+    ? `${stageInfo.label} · ${learnStage} of 3`
+    : rescue === "letters"
+      ? `${PRACTICE_STAGES[1]?.label ?? "First letters"} · 1 of 2`
+      : rescue === "memory"
+        ? `${PRACTICE_STAGES[3]?.label ?? "From memory"} · 2 of 2`
+        : showJourneyBar && status !== "reviewing" && status !== "mastered"
+          ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
+          : null;
   const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
   const canCheckAnswer =
@@ -164,7 +179,19 @@ export function PassageRecallCard({
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
+  const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
   const passed = checkedAccuracy >= PASSAGE_PASS_ACCURACY;
+  const refreshStep =
+    refreshSitting && (learnStage === 1 || learnStage === 2 || learnStage === 3)
+      ? learnStage
+      : null;
+  const refreshGate =
+    refreshStep && checked && checkedQuality
+      ? refreshStepGate(refreshStep, {
+          accuracy: checkedAccuracy,
+          quality: checkedQuality,
+        })
+      : null;
   const offerTryAgain = checked && !passed && mode === "frontier";
 
   function checkAnswer() {
@@ -184,8 +211,11 @@ export function PassageRecallCard({
         quality,
         durationMs: Math.max(0, Date.now() - startedAt),
         via: "typed",
-        hint: rescue === "letters" ? "first-letters" : undefined,
-        holdSchedule: rescueHold || undefined,
+        hint:
+          rescue === "letters" || (refreshSitting && learnStage === 1)
+            ? "first-letters"
+            : undefined,
+        holdSchedule: rescueHold || refreshSitting || undefined,
       });
       if (saved === false) return;
       setHeldGoalLabel(goalAtCheck);
@@ -207,22 +237,28 @@ export function PassageRecallCard({
     });
   }
 
+  function resetTyped() {
+    setChecked(false);
+    setHeldGoalLabel(null);
+    setTypedAnswer("");
+    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+  }
+
   function continueAttempt() {
+    if (refreshGate?.type === "retry") {
+      resetTyped();
+      return;
+    }
+    if (refreshGate?.type === "weak-final") return;
     if (rescue === "letters" && rescueHold) {
       setRescue("memory");
-      setChecked(false);
-      setHeldGoalLabel(null);
-      setTypedAnswer("");
-      window.requestAnimationFrame(() => answerInputRef.current?.focus());
+      resetTyped();
       return;
     }
     setRescue("off");
     setRescueHold(false);
-    setChecked(false);
-    setHeldGoalLabel(null);
-    setTypedAnswer("");
+    resetTyped();
     onContinueAfterResult?.();
-    window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
 
   useEnterToClick(actionRef, !checked ? isReadPrime : true);
@@ -256,6 +292,7 @@ export function PassageRecallCard({
     checked &&
     checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
     rescue === "off" &&
+    !refreshSitting &&
     (mode === "review" || learnStage >= 3);
   const showAfterMiss = afterMissOffer && !submitPending;
 
@@ -334,8 +371,12 @@ export function PassageRecallCard({
                       Retry
                     </Button>
                   </div>
-                ) : rescue === "letters" ? (
-                  <FirstLettersPanel text={versePlainText} />
+                ) : rescue === "letters" ||
+                  (refreshSitting && learnStage === 1) ? (
+                  <FirstLettersPanel
+                    text={hintPlainText ?? versePlainText}
+                    className="border-0 bg-transparent p-0"
+                  />
                 ) : rescue === "memory" || hint.type === "hidden" ? (
                   <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
                     <p className="max-w-sm text-sm text-muted-foreground">
@@ -386,9 +427,10 @@ export function PassageRecallCard({
                 diffTokens={checkedDiffTokens}
                 note={passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`}
                 bannerRef={resultBannerRef}
+                scheduleHeld={refreshSitting || rescueHold}
                 refresherOffer={
-                  afterMissOffer ? (
-                    <NeedARefresherInlineOffer
+                  showAfterMiss ? (
+                    <NeedARefresherButton
                       onClick={() => {
                         setRescue("letters");
                         setRescueHold(true);
@@ -396,7 +438,6 @@ export function PassageRecallCard({
                         setTypedAnswer("");
                       }}
                       disabled={submitPending}
-                      visible={showAfterMiss}
                     />
                   ) : undefined
                 }
@@ -420,7 +461,46 @@ export function PassageRecallCard({
                   disabled={loading || Boolean(error)}
                 />
               ) : null}
-              {checked ? (
+              {checked && onSkipWarmup && !passed ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex-1 sm:flex-none"
+                  onClick={onSkipWarmup}
+                >
+                  {WARMUP_SKIP_LABEL}
+                </Button>
+              ) : null}
+              {checked && refreshGate?.type === "weak-final" ? (
+                <>
+                  <Button
+                    ref={actionRef}
+                    type="button"
+                    variant="outline"
+                    className="flex-1 sm:flex-none"
+                    onClick={resetTyped}
+                    disabled={submitPending}
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden />
+                    Try again
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="flex-1 sm:flex-none"
+                    onClick={() => {
+                      setRescue("off");
+                      setRescueHold(false);
+                      resetTyped();
+                      onContinueAfterResult?.();
+                    }}
+                    loading={submitPending}
+                  >
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                    Continue
+                  </Button>
+                </>
+              ) : checked ? (
                 <Button
                   ref={actionRef}
                   type="button"
@@ -431,7 +511,7 @@ export function PassageRecallCard({
                 >
                   {submitPending ? (
                     "Saving..."
-                  ) : offerTryAgain ? (
+                  ) : refreshGate?.type === "retry" || offerTryAgain ? (
                     <>
                       <RotateCcw className="h-4 w-4" aria-hidden />
                       Try again
@@ -458,7 +538,7 @@ export function PassageRecallCard({
                 </Button>
               ) : (
                 <>
-                  {offerRefresher && rescue === "off" ? (
+                  {offerRefresher && rescue === "off" && !refreshSitting ? (
                     <NeedARefresherLink
                       onClick={() => {
                         setRescue("letters");

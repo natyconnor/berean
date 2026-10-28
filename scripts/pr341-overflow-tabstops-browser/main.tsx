@@ -6,7 +6,7 @@ import {
   PracticeBoard,
   type PracticeVerse,
 } from "@/components/memory/practice/practice-board";
-import { NeedARefresherInlineOffer } from "@/components/memory/memory-refresher-controls";
+import { NeedARefresherButton } from "@/components/memory/memory-refresher-controls";
 import { OverflowRegion } from "@/components/study/overflow-region";
 import { VerseAttemptResult } from "@/components/study/verse-attempt-result";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -148,9 +148,7 @@ function ResizeCase() {
         <VerseAttemptResult
           typedAnswer="nope"
           versePlainText={PSALM_119}
-          refresherOffer={
-            <NeedARefresherInlineOffer onClick={() => {}} visible />
-          }
+          refresherOffer={<NeedARefresherButton onClick={() => {}} />}
         />
         <FullTextPreview text={`${PSALM_23}\n\n${PSALM_23}\n\n${PSALM_23}`} />
         <button type="button">Continue</button>

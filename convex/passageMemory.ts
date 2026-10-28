@@ -41,9 +41,9 @@ import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
 import {
   holdReviewingInterval,
   nextStartOverUndo,
-  refreshSchedule,
   SHORT_VERSE_WORDS,
 } from "../src/lib/memory-scheduler";
+import { planRefreshFinish } from "../src/lib/memory-way-back";
 import {
   isReviewHintedCheckIn,
   isShakyVerse,
@@ -64,8 +64,6 @@ import {
   isProjectedPassageDueForLearning,
 } from "../src/lib/passage-due";
 import {
-  applyBuildingPassageRefresh,
-  learnedPassagePieces,
   localDayIndex,
   progressFrontierPieces,
   remainingIntroduces,
@@ -668,7 +666,7 @@ export const finishRefresh = mutation({
   args: {
     packId: v.id("packs"),
     now: v.number(),
-    sittingStartedAt: v.optional(v.number()),
+    sittingStartedAt: v.number(),
     tzOffsetMinutes: v.number(),
     timeZone: v.optional(v.string()),
   },
@@ -683,36 +681,84 @@ export const finishRefresh = mutation({
       .withIndex("by_packId", (q) => q.eq("packId", args.packId))
       .order("desc")
       .take(20);
+    const rows = recent.map((review) => ({
+      createdAt: review.createdAt,
+      accuracy: review.accuracy,
+      quality: review.quality,
+      holdSchedule: review.holdSchedule,
+      hint: review.hint,
+      kind: review.kind,
+    }));
+    const context = {
+      sittingStartedAt: args.sittingStartedAt,
+      now: args.now,
+      overdueMs: Math.max(0, args.now - row.dueAt),
+      recentLapseCount: refreshRecentLapseCount(recent, args.sittingStartedAt),
+      tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
+    };
     if (row.status === "building") {
-      const pieces = applyBuildingPassageRefresh(row.pieces, args.now);
-      if (learnedPassagePieces(row.pieces).length > 0) {
+      const plan = planRefreshFinish(
+        {
+          kind: "passage-building",
+          pieces: row.pieces,
+          rows,
+          appliedSittingAt: row.refreshAppliedSittingAt,
+        },
+        context,
+      );
+      if (plan.status === "already-applied") {
         return toPassageView(row, args.now, args.tzOffsetMinutes);
       }
+      if (plan.status === "missing-finish-grade") {
+        throw new Error("Refresh sitting has no held finish");
+      }
       const next = await patchPassageMemory(ctx, row._id, {
-        pieces,
+        pieces: plan.pieces,
+        refreshAppliedSittingAt: plan.appliedSittingAt,
         updatedAt: args.now,
       });
       return toPassageView(next, args.now, args.tzOffsetMinutes);
     }
-    const nextSchedule = refreshSchedule(toPassageSchedule(row), {
-      now: args.now,
-      overdueMs: Math.max(0, args.now - row.dueAt),
-      recentLapseCount: refreshRecentLapseCount(
-        recent,
-        args.sittingStartedAt ?? args.now,
-      ),
-      tzOffsetMinutes: args.tzOffsetMinutes,
-      timeZone: args.timeZone,
-    });
+    const plan = planRefreshFinish(
+      {
+        kind: "passage-review",
+        schedule: toPassageSchedule(row),
+        rows,
+        appliedSittingAt: row.refreshAppliedSittingAt,
+      },
+      context,
+    );
+    if (plan.status === "already-applied") {
+      return toPassageView(row, args.now, args.tzOffsetMinutes);
+    }
+    if (plan.status === "missing-finish-grade") {
+      throw new Error("Refresh sitting has no held finish");
+    }
+    if (plan.reviewCopy) {
+      await insertPassageReview(ctx, {
+        userId,
+        packId: row.packId,
+        passageMemoryId: row._id,
+        kind: "review",
+        quality: plan.reviewCopy.quality,
+        accuracy: plan.reviewCopy.accuracy,
+        now: args.now,
+        hint: plan.reviewCopy.hint,
+      });
+    }
+    const status =
+      plan.schedule.status === "mastered" ? "mastered" : "reviewing";
     const next = await patchPassageMemory(ctx, row._id, {
-      status: nextSchedule.status === "mastered" ? "mastered" : "reviewing",
-      ease: nextSchedule.ease,
-      intervalDays: nextSchedule.intervalDays,
-      dueAt: nextSchedule.dueAt,
-      consecutiveCorrect: nextSchedule.consecutiveCorrect,
-      lapses: nextSchedule.lapses,
-      stageReps: nextSchedule.stageReps,
-      earlyReviewApplied: nextSchedule.earlyReviewApplied,
+      status,
+      ease: plan.schedule.ease,
+      intervalDays: plan.schedule.intervalDays,
+      dueAt: plan.schedule.dueAt,
+      consecutiveCorrect: plan.schedule.consecutiveCorrect,
+      lapses: plan.schedule.lapses,
+      stageReps: plan.schedule.stageReps,
+      earlyReviewApplied: plan.schedule.earlyReviewApplied,
+      refreshAppliedSittingAt: plan.appliedSittingAt,
       updatedAt: args.now,
     });
     return toPassageView(next, args.now, args.tzOffsetMinutes);

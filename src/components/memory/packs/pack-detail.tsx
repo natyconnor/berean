@@ -77,18 +77,11 @@ import {
 } from "@/lib/pack-detail-model";
 import { moveItem, orderByKeys } from "@/lib/pack-order";
 import {
-  estimateSessionMinutes,
-  MINUTES_PER_LEARNING_VERSE,
-} from "@/lib/memorize-plan";
-import {
   clearLearnPackDismissal,
   dismissLearnPackForToday,
   learnDismissDayKey,
 } from "@/lib/learn-dismissed-packs";
-import {
-  learnedPassagePieces,
-  PASSAGE_MAX_ADDS_PER_DAY,
-} from "@/lib/passage-frontier";
+import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
 import { cn } from "@/lib/utils";
 import {
   formatBookChapter,
@@ -285,7 +278,6 @@ function PackDetailContent({
           members={members}
           now={now}
           reciteHref={sessionHref("review")}
-          learnHref={sessionHref("learn")}
           refreshHref={withReturn(
             `${memoryPackSessionHref("practice", pack._id)}?refresh=1`,
             frame.returnTo,
@@ -496,7 +488,10 @@ function PackDetailActionRow({
         variant={main.emphasis === "primary" ? "default" : "outline"}
         className="max-sm:h-11 max-sm:w-full"
       >
-        <InternalLink href={sessionHref(main.session)}>
+        <InternalLink
+          href={sessionHref(main.session)}
+          data-memory-main-action=""
+        >
           <SessionIcon session={main.session} />
           {main.label}
         </InternalLink>
@@ -1185,7 +1180,6 @@ function PackDetailMenu({
   members,
   now,
   reciteHref,
-  learnHref,
   refreshHref,
   fullPageHref,
   isDrawer,
@@ -1199,7 +1193,6 @@ function PackDetailMenu({
   members: Member[];
   now: number;
   reciteHref: string;
-  learnHref: string;
   refreshHref: string;
   fullPageHref?: string;
   isDrawer: boolean;
@@ -1212,10 +1205,8 @@ function PackDetailMenu({
   const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
   const startOverPassage = useMutation(api.passageMemory.startOver);
   const undoPassage = useMutation(api.passageMemory.undoStartOver);
-  const finishPassageRefresh = useMutation(api.passageMemory.finishRefresh);
   const startOverMany = useMutation(api.verseMemory.startOverMany);
   const undoStartOverMany = useMutation(api.verseMemory.undoStartOverMany);
-  const finishVerseRefresh = useMutation(api.verseMemory.finishRefresh);
   const shakyPieces = useQuery(
     api.passageMemory.shakyPieces,
     isPassage ? { packId: pack._id } : "skip",
@@ -1296,16 +1287,6 @@ function PackDetailMenu({
         .filter((piece) => (shakyPieces ?? []).includes(piece.index))
         .map((piece) => String(piece.startVerse))
     : (shakyVerses ?? []).map((verse) => verse.label);
-  const reviewingMembers = members.filter((member) =>
-    isReviewPhase(member.status),
-  );
-  const hasLearnedPassagePieces =
-    learnedPassagePieces(passage?.pieces ?? []).length > 0;
-  const learningOnly =
-    reviewingMembers.length === 0 &&
-    !hasLearnedPassagePieces &&
-    (passage?.status === "building" ||
-      members.some((member) => isLearningPhase(member.status)));
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
 
   return (
@@ -1314,39 +1295,24 @@ function PackDetailMenu({
         name={pack.name}
         fullPageHref={fullPageHref}
         isDrawer={isDrawer}
-        refreshHref={learningOnly ? learnHref : refreshHref}
-        learnHref={learnHref}
+        refreshHref={refreshHref}
+        refreshTarget={{
+          scope: "group",
+          verses: members.map((member) => ({
+            status: member.status,
+            learnStage: member.learnStage,
+          })),
+          pieces: (passage?.pieces ?? []).map((piece) => ({
+            attachment: piece.attachment,
+            learnStage: piece.learnStage,
+          })),
+        }}
         openStartOver={openStartOver}
         shakyLabels={shakyLabels}
         wholeLabel={isPassage ? "passage" : "pack"}
-        learnMinutes={
-          isPassage
-            ? estimateSessionMinutes({
-                learningVerses: 0,
-                reviewVerses: 0,
-                passageSessions: 1,
-              })
-            : members.length * MINUTES_PER_LEARNING_VERSE
+        showRestart={
+          isPassage ? (passage?.pieces.length ?? 0) > 0 : members.length > 0
         }
-        onRefresh={async () => {
-          if (!learningOnly) return;
-          if (isPassage) {
-            await finishPassageRefresh({
-              packId: pack._id,
-              now: Date.now(),
-              tzOffsetMinutes,
-            });
-            return;
-          }
-          for (const member of members) {
-            if (!isLearningPhase(member.status)) continue;
-            await finishVerseRefresh({
-              verseRefId: member.verseRefId,
-              now: Date.now(),
-              tzOffsetMinutes,
-            });
-          }
-        }}
         onStartOver={async (choice, opts) => {
           if (isPassage) {
             const pieceIndexes =

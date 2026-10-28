@@ -173,6 +173,7 @@ export async function loadTodayModel(
       mode: log.mode,
       createdAt: log.createdAt,
       hint: log.hint,
+      holdSchedule: log.holdSchedule,
       accuracy: log.accuracy,
       stage: log.stage,
     })),
@@ -180,6 +181,7 @@ export async function loadTodayModel(
       passageMemoryId: log.passageMemoryId,
       kind: log.kind,
       pieceIndex: log.pieceIndex,
+      holdSchedule: log.holdSchedule,
       createdAt: log.createdAt,
     })),
   });

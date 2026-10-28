@@ -1,3 +1,4 @@
+import { REFRESH_LABEL } from "./memory-copy";
 import {
   isDueForLearning,
   isDueForReview,
@@ -9,7 +10,18 @@ import {
 
 export type MemorySessionKind = "learning" | "practice" | "review";
 
-export type MemorySessionLabel = "Learning" | "Practice" | "Review";
+export type MemorySessionLabel = "Learning" | "Practice" | "Review" | "Refresh";
+
+/** Header word for a sitting. Refresh overlays Practice without becoming its own kind. */
+export function sessionLabelFor(
+  kind: MemorySessionKind,
+  refresh = false,
+): MemorySessionLabel {
+  if (refresh) return REFRESH_LABEL;
+  if (kind === "learning") return "Learning";
+  if (kind === "review") return "Review";
+  return "Practice";
+}
 
 export interface MemorySessionCandidate {
   status?: MemoryStatus;

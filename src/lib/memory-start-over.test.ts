@@ -5,6 +5,7 @@ import {
   snapshotSchedule,
   startOverPassagePieces,
   startOverPassageSession,
+  startOverVersePatch,
 } from "./memory-start-over";
 import type { PassagePiece } from "./passage-pieces";
 
@@ -62,6 +63,15 @@ describe("startOverPassageSession", () => {
     expect(startOverPassageSession(pieces, new Set([1]), current)).toEqual(
       current,
     );
+  });
+});
+
+describe("startOverVersePatch", () => {
+  it("clears lastReviewedAt so the verse looks never-started", () => {
+    const next = startOverVersePatch(NOW);
+    expect(next).toMatchObject(startOverSchedule(NOW));
+    expect(next.lastReviewedAt).toBeUndefined();
+    expect("lastReviewedAt" in next).toBe(true);
   });
 });
 

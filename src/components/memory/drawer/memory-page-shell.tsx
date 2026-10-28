@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
 
 import { InternalLink } from "@/components/memory/internal-link";
 import { GoalKindMark } from "@/components/memory/today/goal-kind-icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { GoalCard } from "@/lib/memory-goals";
+import { takeMemoryReturnFocus } from "@/lib/memory-return-focus";
 
 import type { MemoryPanelBackLink } from "./memory-panel-context";
 
@@ -30,8 +31,20 @@ export function MemoryPageShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const main = root.querySelector<HTMLElement>("[data-memory-main-action]");
+    const more = root.querySelector<HTMLElement>('[aria-label="More actions"]');
+    const target = main ?? more;
+    if (!target) return;
+    if (!takeMemoryReturnFocus()) return;
+    target.focus();
+  }, [actions, children]);
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b px-5 py-3 sm:py-4">
         <div className="mx-auto flex max-w-5xl items-start gap-3">
           <div className="min-w-0 flex-1">

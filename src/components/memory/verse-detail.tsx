@@ -17,8 +17,10 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { VerseRestartMenu } from "@/components/memory/memory-restart-menu";
 import { formatAccuracyPercent, hoverIndexFromX } from "@/lib/accuracy-trend";
 import {
+  hasLearningProgress,
   learnActionLabel,
   memorizeTitleLabel,
+  STARTED_OVER_TODAY_COPY,
   statusLabel,
   stepShortLabel,
 } from "@/lib/memory-copy";
@@ -38,7 +40,12 @@ import {
 import { nextStepCopy } from "@/lib/memorize-plan";
 import { cn } from "@/lib/utils";
 import { asTableId } from "@/lib/convex-id";
-import { howItsGoing, verseDetailFacts } from "@/lib/verse-detail-copy";
+import {
+  accuraciesForHowItsGoing,
+  unhintedAttempts,
+  howItsGoing,
+  verseDetailFacts,
+} from "@/lib/verse-detail-copy";
 import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
@@ -151,10 +158,7 @@ export function VerseDetailPanel({
             verseRefId={id}
             reference={reference}
             status={detail.status}
-            learnHref={withReturn(
-              memoryVerseSessionHref("learn", detail),
-              frame.returnTo,
-            )}
+            learnStage={detail.learnStage}
             refreshHref={withReturn(
               `${memoryVerseSessionHref("practice", detail)}&refresh=1`,
               frame.returnTo,
@@ -248,7 +252,11 @@ export function VerseDetailBody({
 
   const reviewPhase = isReviewPhase(detail.status);
   const facts = verseDetailFacts(detail, now, timeZone);
-  const going = howItsGoing(detail.attempts.map((attempt) => attempt.accuracy));
+  const sparkAttempts = unhintedAttempts(detail.attempts);
+  const going = howItsGoing(
+    accuraciesForHowItsGoing(detail.attempts, detail.startedOverAt),
+  );
+  const showGoingChart = sparkAttempts.length >= 2;
   const sessionHref = (kind: MemorySessionKind) =>
     withReturn(memoryVerseSessionHref(kind, reference), returnTo);
 
@@ -257,7 +265,7 @@ export function VerseDetailBody({
     actions = (
       <>
         <Button asChild size="sm" className="max-sm:h-11">
-          <InternalLink href={sessionHref("review")}>
+          <InternalLink href={sessionHref("review")} data-memory-main-action="">
             <Play aria-hidden />
             Review
           </InternalLink>
@@ -278,7 +286,7 @@ export function VerseDetailBody({
   } else if (reviewPhase) {
     actions = (
       <Button asChild size="sm" variant="outline" className="max-sm:h-11">
-        <InternalLink href={sessionHref("practice")}>
+        <InternalLink href={sessionHref("practice")} data-memory-main-action="">
           <Dumbbell aria-hidden />
           Practice
         </InternalLink>
@@ -287,7 +295,7 @@ export function VerseDetailBody({
   } else if (!isLearningLocked(detail, now)) {
     actions = (
       <Button asChild size="sm" className="max-sm:h-11">
-        <InternalLink href={sessionHref("learn")}>
+        <InternalLink href={sessionHref("learn")} data-memory-main-action="">
           <GraduationCap aria-hidden />
           {learnActionLabel(detail)}
         </InternalLink>
@@ -352,7 +360,9 @@ export function VerseDetailBody({
         </h3>
         <ol className="grid grid-cols-4 gap-1.5">
           {STEP_LABELS.map((label, stage) => {
-            const reached = reviewPhase || detail.learnStage >= stage;
+            const reached =
+              reviewPhase ||
+              (hasLearningProgress(detail) && detail.learnStage >= stage);
             const current = !reviewPhase && detail.learnStage === stage;
             return (
               <li
@@ -398,9 +408,15 @@ export function VerseDetailBody({
           How it&apos;s going
         </h3>
         {going === null ? (
-          <p className="text-sm text-muted-foreground">
-            This fills in after you practice it.
-          </p>
+          showGoingChart && detail.startedOverAt !== undefined ? (
+            <p className="text-sm text-muted-foreground">
+              {STARTED_OVER_TODAY_COPY}
+            </p>
+          ) : showGoingChart ? null : (
+            <p className="text-sm text-muted-foreground">
+              This fills in after you practice it.
+            </p>
+          )
         ) : (
           <p className="text-sm">
             <span className="font-semibold">{going.label}</span>
@@ -412,7 +428,7 @@ export function VerseDetailBody({
           </p>
         )}
         <AccuracySparkline
-          attemptsNewestFirst={detail.attempts}
+          attemptsNewestFirst={sparkAttempts}
           timeZone={timeZone}
           startedOverAt={detail.startedOverAt}
         />

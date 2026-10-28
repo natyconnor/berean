@@ -670,7 +670,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
  * Anything longer (including leftover SM-2 growth from before this ladder)
  * multiplies by ease on each exact.
  */
-function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
+export function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
   const rounded = Math.max(1, Math.round(intervalDays));
   if (rounded <= 1) return 1;
   if (rounded === 2) return 2;
@@ -1049,64 +1049,6 @@ export function scheduleNext(
     return scheduleLearning(s, r);
   }
   return scheduleReviewing(s, r);
-}
-
-export type RefreshContext = {
-  now: number;
-  overdueMs: number;
-  recentLapseCount: number;
-  tzOffsetMinutes?: number;
-  timeZone?: string;
-};
-
-function refreshReviewingIntervalDays(
-  s: MemorySchedule,
-  ctx: RefreshContext,
-): number {
-  const intervalDays = Math.max(REVIEW_DAILY_INTERVAL_DAYS, s.intervalDays);
-  const overdueHeavy = ctx.overdueMs >= 2 * intervalDays * DAY_MS;
-  if (overdueHeavy || ctx.recentLapseCount >= 2) {
-    return REVIEW_DAILY_INTERVAL_DAYS;
-  }
-  const step = reviewingIntervalStep(s.intervalDays);
-  if (step === 1) return REVIEW_DAILY_INTERVAL_DAYS;
-  if (step === 2) return REVIEW_DAILY_INTERVAL_DAYS;
-  return REVIEW_EVERY_OTHER_INTERVAL_DAYS;
-}
-
-/**
- * Finish a Refresh sitting. Learning steps back one band and is due now.
- * Memorized / Mastered drops one rung, or to daily when badly overdue or
- * twice lapsed. Ease and lapse count stay put.
- */
-export function refreshSchedule(
-  s: MemorySchedule,
-  ctx: RefreshContext,
-): MemorySchedule {
-  if (isLearningPhase(s.status)) {
-    return {
-      ...s,
-      learnStage: Math.max(0, s.learnStage - 1),
-      stageReps: 0,
-      dueAt: ctx.now,
-      earlyReviewApplied: false,
-    };
-  }
-
-  const intervalDays = refreshReviewingIntervalDays(s, ctx);
-  return {
-    ...s,
-    status: "reviewing",
-    intervalDays,
-    stageReps: 0,
-    dueAt: dueAtInCalendarDays(
-      ctx.now,
-      intervalDays,
-      ctx.tzOffsetMinutes,
-      ctx.timeZone,
-    ),
-    earlyReviewApplied: false,
-  };
 }
 
 /** Start over: back to new / Read, due now. History stays with the caller. */

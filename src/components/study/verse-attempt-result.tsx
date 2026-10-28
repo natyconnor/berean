@@ -32,6 +32,7 @@ interface VerseAttemptResultProps {
   note?: string;
   /** Replaces the usual praise line when this result has its own next step. */
   praiseLine?: string;
+  scheduleHeld?: boolean;
   refresherOffer?: ReactNode;
   bannerRef?: Ref<HTMLDivElement>;
 }
@@ -155,6 +156,7 @@ export function VerseAttemptResult({
   praiseLine,
   refresherOffer,
   bannerRef,
+  scheduleHeld = false,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -184,6 +186,7 @@ export function VerseAttemptResult({
             note={note}
             praiseLine={praiseLine}
             refresherOffer={refresherOffer}
+            scheduleHeld={scheduleHeld}
           />
         </div>
       ) : null}

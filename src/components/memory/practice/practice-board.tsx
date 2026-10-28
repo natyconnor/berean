@@ -45,7 +45,7 @@ import {
 import {
   EnterToCheckHint,
   FirstLettersPanel,
-  NeedARefresherInlineOffer,
+  NeedARefresherButton,
   NeedARefresherLink,
 } from "@/components/memory/memory-refresher-controls";
 import { scrollResultBannerIntoView } from "@/components/memory/scroll-result-banner";
@@ -71,9 +71,11 @@ import {
 } from "@/lib/memory-schedule-preview";
 import {
   hasSessionWorkLeft,
+  sessionLabelFor,
   type MemorySessionKind,
   type MemorySessionLabel,
 } from "@/lib/memory-session";
+import { refreshStepGate } from "@/lib/memory-way-back";
 import {
   orderSessionVerses,
   sessionClusterCount,
@@ -377,12 +379,6 @@ function reviewedOutcomeLine(
   return `Next review ${formatDueDay(progress.dueAt, now)}`;
 }
 
-function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
-  if (kind === "learning") return "Learning";
-  if (kind === "review") return "Review";
-  return "Practice";
-}
-
 function recordModeFor(
   kind: MemorySessionKind,
 ): "learn" | "practice" | "review" {
@@ -470,12 +466,13 @@ export function PracticeBoard({
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);
   const finishRefresh = useMutation(api.verseMemory.finishRefresh);
+  const spendDailyRescue = useMutation(api.verseMemory.spendDailyRescue);
   const [refreshStartedAt] = useState(() => Date.now());
   const acceptVerseRetryHold = useMutation(api.verseMemory.acceptRetryHold);
   const acceptUnifiedRetryHold = useMutation(api.packs.acceptRetryHold);
   const acceptPassageRetryHold = useMutation(api.passageMemory.acceptRetryHold);
   const celebrateMastered = useFirstMasteredToast();
-  const sessionLabel = sessionLabelFor(kind);
+  const sessionLabel = sessionLabelFor(kind, refresh);
   const isReview = kind === "review";
 
   // Snapshot the practice set once when the board mounts. Like ReviewPlayer
@@ -1025,6 +1022,7 @@ export function PracticeBoard({
                         0,
                       ),
                       text: compositePassage.text,
+                      hintText: compositePassage.hintText,
                       segments: compositePassage.segments,
                       loading: compositePassage.loading,
                       error: compositePassage.error,
@@ -1103,6 +1101,24 @@ export function PracticeBoard({
                     ? prev
                     : new Set(prev).add(currentVerse.id),
                 );
+              }}
+              onAfterMissRescueFinished={async () => {
+                if (!currentVerse.verseRefId) return;
+                const attemptedAt = Date.now();
+                const result = await spendDailyRescue({
+                  verseRefId: currentVerse.verseRefId,
+                  now: attemptedAt,
+                  tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+                  timeZone: getViewerTimeZone(),
+                });
+                adoptVerseSchedule(currentVerse.id, result.schedule);
+                if (!result.sessionSpent) return;
+                setGradedIds((prev) =>
+                  prev.has(currentVerse.id)
+                    ? prev
+                    : new Set(prev).add(currentVerse.id),
+                );
+                advancePastCurrentVerse();
               }}
               advancesOnContinue={!currentHasWorkLeft}
               onContinueAfterResult={() => {
@@ -1200,6 +1216,7 @@ interface CompositeCardPassage {
   title: string;
   verseCount: number;
   text: string;
+  hintText: string;
   segments: CompositePassageSegment[];
   loading: boolean;
   error: string | null;
@@ -1247,6 +1264,7 @@ interface PracticeCardProps {
   offerRefresher?: boolean;
   refreshSitting?: boolean;
   onRefreshFinished?: () => Promise<void>;
+  onAfterMissRescueFinished?: () => Promise<void>;
   /**
    * This verse is spent for the session, so dismissing the result leaves the
    * card instead of setting up another rep.
@@ -1284,6 +1302,7 @@ function PracticeCard({
   offerRefresher = false,
   refreshSitting = false,
   onRefreshFinished,
+  onAfterMissRescueFinished,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -1515,39 +1534,60 @@ function PracticeCard({
     setNextSchedule(null);
   }
 
+  const refreshGate =
+    refreshSitting && checked && checkedQuality
+      ? refreshStepGate(refreshStep, {
+          accuracy: checkedAccuracy,
+          quality: checkedQuality,
+        })
+      : null;
+
+  function finishRefreshSitting() {
+    setSubmitKind("keep");
+    submit(async () => {
+      try {
+        await onRefreshFinished?.();
+        setRefreshError(null);
+        resetCard();
+        onContinueAfterResult?.();
+      } catch {
+        setRefreshError(REFRESH_FINISH_ERROR);
+      }
+    });
+  }
+
   function continueAttempt() {
-    const madeRefreshProgress =
-      checkedAccuracy >= LEARN_PROGRESS_ACCURACY || checkedQuality === "exact";
-    if (refreshSitting && madeRefreshProgress && refreshStep < 3) {
-      setRefreshStep((step) => (step === 1 ? 2 : 3));
+    if (refreshGate?.type === "retry") {
       resetCard();
       window.requestAnimationFrame(() => answerInputRef.current?.focus());
       return;
     }
-    if (refreshSitting && madeRefreshProgress && refreshStep === 3) {
-      setSubmitKind("keep");
-      submit(async () => {
-        try {
-          await onRefreshFinished?.();
-          setRefreshError(null);
-          resetCard();
-          onContinueAfterResult?.();
-        } catch {
-          setRefreshError(REFRESH_FINISH_ERROR);
-        }
-      });
+    if (refreshGate?.type === "advance") {
+      setRefreshStep(refreshGate.next);
+      resetCard();
+      window.requestAnimationFrame(() => answerInputRef.current?.focus());
       return;
     }
+    if (refreshGate?.type === "passed-final") {
+      finishRefreshSitting();
+      return;
+    }
+    if (refreshGate?.type === "weak-final") return;
     if (rescue === "letters" && (rescueHold || offerUnhintedFromMemoryRetry)) {
       setRescue("memory");
       resetCard();
       window.requestAnimationFrame(() => answerInputRef.current?.focus());
       return;
     }
+    const heldRescue = rescueHold;
     resetCard();
     if (rescue !== "off") {
       setRescue("off");
       setRescueHold(false);
+    }
+    if (heldRescue) {
+      void onAfterMissRescueFinished?.();
+      return;
     }
     onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
@@ -1610,9 +1650,6 @@ function PracticeCard({
       Continue
     </>
   );
-  const refreshStepDone =
-    refreshSitting &&
-    (checkedAccuracy >= LEARN_PROGRESS_ACCURACY || checkedQuality === "exact");
   const resultActionLabel = gradePending ? (
     "Saving..."
   ) : offerUnhintedFromMemoryRetry ? (
@@ -1620,7 +1657,12 @@ function PracticeCard({
       <RotateCcw className="h-4 w-4" aria-hidden />
       {FROM_MEMORY_HINT_PASS_ACTION}
     </>
-  ) : refreshStepDone ? (
+  ) : refreshGate?.type === "retry" ? (
+    <>
+      <RotateCcw className="h-4 w-4" aria-hidden />
+      Try again
+    </>
+  ) : refreshGate ? (
     <>
       <ArrowRight className="h-4 w-4" aria-hidden />
       Continue
@@ -1760,7 +1802,10 @@ function PracticeCard({
                       </div>
                     ) : rescue === "letters" ||
                       (refreshSitting && refreshStep === 1) ? (
-                      <FirstLettersPanel text={versePlainText} />
+                      <FirstLettersPanel
+                        text={composite?.hintText || versePlainText}
+                        className="border-0 bg-transparent p-0"
+                      />
                     ) : (
                       <HintTokenText tokens={tokens} />
                     )}
@@ -1816,12 +1861,12 @@ function PracticeCard({
                         : undefined
                     }
                     bannerRef={resultBannerRef}
+                    scheduleHeld={refreshSitting || rescueHold}
                     refresherOffer={
-                      afterMissOffer ? (
-                        <NeedARefresherInlineOffer
+                      showAfterMiss ? (
+                        <NeedARefresherButton
                           onClick={() => openRefresher(true)}
                           disabled={submitPending}
-                          visible={showAfterMiss}
                         />
                       ) : undefined
                     }
@@ -1902,6 +1947,35 @@ function PracticeCard({
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </Button>
                 ) : null
+              ) : checked && refreshGate?.type === "weak-final" ? (
+                <>
+                  <Button
+                    ref={reviewActionRef}
+                    type="button"
+                    variant="outline"
+                    className="flex-1 sm:flex-none"
+                    onClick={() => {
+                      resetCard();
+                      window.requestAnimationFrame(() =>
+                        answerInputRef.current?.focus(),
+                      );
+                    }}
+                    disabled={submitPending}
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden />
+                    Try again
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="flex-1 sm:flex-none"
+                    onClick={finishRefreshSitting}
+                    loading={submitPending}
+                  >
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                    Continue
+                  </Button>
+                </>
               ) : checked ? (
                 reviewRetryOffer && onKeepWait && rescue === "off" ? (
                   <>

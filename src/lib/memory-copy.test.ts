@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   ENTER_TO_CHECK_HINT,
   formatShakyVerseList,
+  hasLearningProgress,
+  learnActionLabel,
   memorizeTitleLabel,
   passageStepLine,
   shakyVersesOption,
@@ -93,6 +95,22 @@ describe("todayStepParts", () => {
       lead: "Today:",
       rest: "read verse 3, then type it with first letters.",
     });
+  });
+});
+
+describe("hasLearningProgress", () => {
+  it("is false for a never-started Read verse", () => {
+    expect(hasLearningProgress({ learnStage: 0 })).toBe(false);
+    expect(learnActionLabel({ learnStage: 0 })).toBe("Learn");
+  });
+
+  it("stays true when lastReviewedAt is the only leftover", () => {
+    expect(
+      hasLearningProgress({ learnStage: 0, lastReviewedAt: 1_700_000_000_000 }),
+    ).toBe(true);
+    expect(
+      learnActionLabel({ learnStage: 0, lastReviewedAt: 1_700_000_000_000 }),
+    ).toBe("Continue learning");
   });
 });
 

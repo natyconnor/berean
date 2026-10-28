@@ -100,7 +100,8 @@ export function isReviewHintedCheckIn(
 
 /**
  * Lapses among the last three review-mode tries recorded before a Refresh
- * sitting started. Practice and the sitting's own passes do not count.
+ * sitting started. Practice, held sittings, and the sitting's own passes
+ * do not count.
  */
 export function refreshRecentLapseCount(
   rows: readonly ReviewHistoryRow[],
@@ -112,6 +113,7 @@ export function refreshRecentLapseCount(
         const reviewMode = row.mode === "review" || row.kind === "review";
         return (
           reviewMode &&
+          !row.holdSchedule &&
           row.createdAt !== undefined &&
           row.createdAt < sittingStartedAt
         );

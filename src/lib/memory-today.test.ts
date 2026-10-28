@@ -373,6 +373,100 @@ describe("buildTodayModel: done today", () => {
     expect(model.startedToday).toBe(true);
   });
 
+  it("does not count a held Refresh sitting as a review done today", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("waiting", 1, lockedLearning)],
+        verseLogs: [
+          {
+            verseRefId: "c",
+            mode: "review",
+            createdAt: NOW - HOUR_MS,
+            hint: "first-letters",
+            holdSchedule: true,
+            accuracy: 0,
+            stage: 1,
+          },
+          {
+            verseRefId: "d",
+            mode: "practice",
+            createdAt: NOW - HOUR_MS,
+          },
+        ],
+      }),
+    );
+
+    expect(model.doneToday).toEqual({ learningSteps: 0, reviews: 0 });
+  });
+
+  it("counts a finished Refresh that logged an unheld review", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("waiting", 1, lockedLearning)],
+        verseLogs: [
+          {
+            verseRefId: "c",
+            mode: "review",
+            createdAt: NOW - HOUR_MS,
+            holdSchedule: true,
+            accuracy: 100,
+            stage: 1,
+          },
+          {
+            verseRefId: "c",
+            mode: "review",
+            createdAt: NOW - HOUR_MS + 1,
+            accuracy: 100,
+            stage: 3,
+          },
+        ],
+      }),
+    );
+
+    expect(model.doneToday).toEqual({ learningSteps: 0, reviews: 1 });
+  });
+
+  it("does not count a held passage Refresh sitting as a review done today", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("waiting", 1, lockedLearning)],
+        passageLogs: [
+          {
+            passageMemoryId: "q",
+            kind: "review",
+            holdSchedule: true,
+            createdAt: NOW - HOUR_MS,
+          },
+        ],
+      }),
+    );
+
+    expect(model.doneToday).toEqual({ learningSteps: 0, reviews: 0 });
+  });
+
+  it("counts a finished passage Refresh that logged an unheld review", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [verse("waiting", 1, lockedLearning)],
+        passageLogs: [
+          {
+            passageMemoryId: "q",
+            kind: "review",
+            holdSchedule: true,
+            createdAt: NOW - HOUR_MS,
+          },
+          {
+            passageMemoryId: "q",
+            kind: "review",
+            createdAt: NOW - HOUR_MS + 1,
+          },
+        ],
+      }),
+    );
+
+    expect(model.doneToday).toEqual({ learningSteps: 0, reviews: 1 });
+  });
+
   it("still counts a hinted Guided learn try", () => {
     const model = buildTodayModel(
       input({

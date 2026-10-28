@@ -321,6 +321,7 @@ export default defineSchema({
     inMemory: v.optional(v.boolean()),
     lastReviewedAt: v.optional(v.number()),
     startedOverAt: v.optional(v.number()),
+    refreshAppliedSittingAt: v.optional(v.number()),
     startOverUndo: v.optional(
       v.object({
         status: v.union(
@@ -409,6 +410,7 @@ export default defineSchema({
     // before it was shown. Older passages have neither and never celebrate.
     celebrationPendingAt: v.optional(v.number()),
     startedOverAt: v.optional(v.number()),
+    refreshAppliedSittingAt: v.optional(v.number()),
     startOverUndo: v.optional(
       v.object({
         status: passageStatusValidator,

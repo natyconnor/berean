@@ -88,6 +88,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       acceptRetryHold: "verseMemory.acceptRetryHold",
       reviewFreshness: "verseMemory.reviewFreshness",
       finishRefresh: "verseMemory.finishRefresh",
+      spendDailyRescue: "verseMemory.spendDailyRescue",
     },
   },
 }));
@@ -1900,7 +1901,7 @@ describe("PracticeBoard refresher", () => {
     });
   });
 
-  it("reserves Need a refresher on the banner while a miss is saving", async () => {
+  it("shows Need a refresher after a miss finishes saving", async () => {
     let resolveRecord!: (value: unknown) => void;
     const pendingRecord = new Promise((resolve) => {
       resolveRecord = resolve;
@@ -1924,12 +1925,10 @@ describe("PracticeBoard refresher", () => {
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
 
     expect(await screen.findByText("0% recalled")).toBeVisible();
-    const reserved = screen.getByRole("button", {
-      name: "Need a refresher?",
-    });
-    expect(reserved).toBeDisabled();
-    expect(reserved.closest("span")).toHaveClass("invisible");
     expect(screen.getByRole("button", { name: "Saving..." })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
 
     resolveRecord({
       ...heldSchedule,
@@ -1942,7 +1941,7 @@ describe("PracticeBoard refresher", () => {
     });
     expect(offer).toBeVisible();
     expect(offer).toBeEnabled();
-    expect(offer.closest("span")).not.toHaveClass("invisible");
+    expect(offer.closest("[data-slot='card-footer']")).toBeNull();
   });
 
   it("hides Need a refresher on a 60% or better hold", async () => {
@@ -2021,6 +2020,23 @@ describe("PracticeBoard refresher", () => {
     expect(
       screen.getByText("Recall the verse from memory"),
     ).toBeInTheDocument();
+
+    const fromMemory = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(fromMemory);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
+      schedule: heldSchedule,
+      sessionSpent: true,
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.spendDailyRescue")).toHaveBeenCalledWith(
+        expect.objectContaining({ verseRefId: reviewingVerse.verseRefId }),
+      );
+    });
   });
 
   async function completeRefreshStep() {
@@ -2051,7 +2067,9 @@ describe("PracticeBoard refresher", () => {
       </TooltipProvider>,
     );
 
-    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Refresh · First letters/),
+    ).toBeInTheDocument();
     await completeRefreshStep();
 
     await waitFor(() => {
@@ -2098,6 +2116,73 @@ describe("PracticeBoard refresher", () => {
     });
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a weak early Refresh step and hides Need a refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    expect(mutationMock("verseMemory.finishRefresh")).not.toHaveBeenCalled();
+  });
+
+  it("finishes a weak From memory Refresh on Continue", async () => {
+    const onExit = vi.fn();
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    mutationMock("verseMemory.finishRefresh").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={onExit}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    await completeRefreshStep();
+    await completeRefreshStep();
+    expect(
+      await screen.findByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByRole("button", { name: /Try again/ }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(onExit).toHaveBeenCalledTimes(1);
   });
 
   it("offers an immediate unhinted From memory retry after a hinted learning pass", async () => {

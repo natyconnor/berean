@@ -1,9 +1,18 @@
-import type { MemorySchedule } from "./memory-scheduler";
+import { startOverSchedule, type MemorySchedule } from "./memory-scheduler";
 import type { PassagePiece } from "./passage-pieces";
 
 export type StartOverSnapshot = MemorySchedule & {
   lastReviewedAt?: number;
 };
+
+export function startOverVersePatch(now: number): MemorySchedule & {
+  lastReviewedAt: undefined;
+} {
+  return {
+    ...startOverSchedule(now),
+    lastReviewedAt: undefined,
+  };
+}
 
 export function snapshotSchedule(
   row: MemorySchedule & { lastReviewedAt?: number },

@@ -14,6 +14,8 @@ import {
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
+import { isMemoryReturnFocusHref } from "@/lib/memory-exit";
+import { markMemoryReturnFocus } from "@/lib/memory-return-focus";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
@@ -58,7 +60,12 @@ export function MemoryPackSessionPage({
   const now = useLiveNow();
   const packHref = `/memory/${encodeURIComponent(typedPackId)}`;
   const exit = useMemoryExit(returnTo, packHref);
-  const onExit = exit.go;
+  const onExit = () => {
+    if (refresh && isMemoryReturnFocusHref(exit.href)) {
+      markMemoryReturnFocus();
+    }
+    exit.go();
+  };
   const backLabel = exit.label;
 
   const pack = useQuery(api.packs.get, { id: typedPackId });

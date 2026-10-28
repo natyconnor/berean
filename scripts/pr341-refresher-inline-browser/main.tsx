@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { NeedARefresherInlineOffer } from "@/components/memory/memory-refresher-controls";
+import { NeedARefresherButton } from "@/components/memory/memory-refresher-controls";
 import { PassageRecallCard } from "@/components/memory/passage/passage-recall-card";
 import {
   PracticeBoard,
@@ -142,7 +142,7 @@ function ReserveCase() {
         }}
         now={NOW}
         refresherOffer={
-          <NeedARefresherInlineOffer onClick={() => {}} visible={visible} />
+          visible ? <NeedARefresherButton onClick={() => {}} /> : null
         }
       />
     </SessionFrame>

@@ -81,6 +81,7 @@ export interface TodayVerseLog {
   mode: "learn" | "review" | "deck" | "practice";
   createdAt: number;
   hint?: "first-letters";
+  holdSchedule?: boolean;
   accuracy?: number;
   stage?: number;
 }
@@ -89,6 +90,7 @@ export interface TodayPassageLog {
   passageMemoryId: string;
   kind: "rope" | "repair" | "review" | "frontier";
   pieceIndex?: number;
+  holdSchedule?: boolean;
   createdAt: number;
 }
 
@@ -146,12 +148,14 @@ function summarizeToday(
       continue;
     }
     if (log.mode === "learn") learnedVerses.add(log.verseRefId);
-    else if (log.mode === "review") reviewedVerses.add(log.verseRefId);
+    else if (log.mode === "review" && !log.holdSchedule)
+      reviewedVerses.add(log.verseRefId);
     else continue;
     started = true;
   }
   for (const log of passageLogs) {
     if (log.createdAt < dayStart) continue;
+    if (log.holdSchedule) continue;
     started = true;
     if (log.kind === "frontier" && log.pieceIndex !== undefined) {
       learnedPieces.add(`${log.passageMemoryId}:${log.pieceIndex}`);

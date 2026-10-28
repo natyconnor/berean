@@ -341,4 +341,23 @@ describe("VerseMemoryFeedback", () => {
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
+
+  it("does not promise a sooner return when the schedule is held", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="off"
+        accuracy={0}
+        attemptKey="held-miss"
+        showScheduleOutcome
+        scheduleHeld
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveTextContent("This one needs another pass.");
+    expect(banner).toHaveTextContent("Another look will help it stick.");
+    expect(banner).not.toHaveTextContent("We'll bring it back sooner.");
+    expect(banner).not.toHaveTextContent(/Next review/);
+  });
 });

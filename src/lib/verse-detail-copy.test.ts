@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DAY_MS } from "./memory-scheduler";
 import {
+  accuraciesForHowItsGoing,
   formatFactDay,
   howItsGoing,
   verseDetailFacts,
@@ -123,5 +124,54 @@ describe("howItsGoing", () => {
       averageAccuracy: 100,
       attempts: 5,
     });
+  });
+
+  it("drops hinted tries from the accuracy readout", () => {
+    expect(
+      howItsGoing(
+        accuraciesForHowItsGoing([
+          { accuracy: 0, hint: "first-letters" },
+          { accuracy: 0, hint: "first-letters" },
+          { accuracy: 100 },
+          { accuracy: 97 },
+          { accuracy: 97 },
+        ]),
+      ),
+    ).toEqual({
+      label: "Solid",
+      averageAccuracy: 98,
+      attempts: 3,
+    });
+  });
+
+  it("drops held Refresh sitting tries from the accuracy readout", () => {
+    expect(
+      howItsGoing(
+        accuraciesForHowItsGoing([
+          { accuracy: 100, holdSchedule: true },
+          { accuracy: 100, holdSchedule: true },
+          { accuracy: 100, hint: "first-letters", holdSchedule: true },
+          { accuracy: 100 },
+        ]),
+      ),
+    ).toEqual({
+      label: "Solid",
+      averageAccuracy: 100,
+      attempts: 1,
+    });
+  });
+
+  it("drops tries from before Start over", () => {
+    expect(
+      howItsGoing(
+        accuraciesForHowItsGoing(
+          [
+            { accuracy: 40, createdAt: NOW - 1000 },
+            { accuracy: 98, createdAt: NOW - DAY_MS },
+          ],
+          NOW,
+        ),
+      ),
+    ).toBeNull();
   });
 });

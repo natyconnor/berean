@@ -11,6 +11,8 @@ import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
+import { isMemoryReturnFocusHref } from "@/lib/memory-exit";
+import { markMemoryReturnFocus } from "@/lib/memory-return-focus";
 import {
   hasPracticeVerseScope,
   type MemoryPracticeSearch,
@@ -42,7 +44,12 @@ export function MemoryAllSessionPage({
 }) {
   const returnTo = search.return;
   const exit = useMemoryExit(returnTo);
-  const onExit = exit.go;
+  const onExit = () => {
+    if (search.refresh === true && isMemoryReturnFocusHref(exit.href)) {
+      markMemoryReturnFocus();
+    }
+    exit.go();
+  };
   const backLabel = exit.label;
   const scoped = hasPracticeVerseScope(search);
   const library = useFrozenQuery(
@@ -168,6 +175,7 @@ function scopeMemorySessionVerses(
     }
 
     if (
+      !(search.refresh === true && scoped) &&
       !isMemorySessionCandidate(
         {
           status: verse.memory?.status,

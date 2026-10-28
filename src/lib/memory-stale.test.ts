@@ -155,6 +155,31 @@ describe("refreshRecentLapseCount", () => {
       ),
     ).toBe(2);
   });
+
+  it("ignores held misses from an earlier abandoned Refresh sitting", () => {
+    expect(
+      refreshRecentLapseCount(
+        [
+          {
+            accuracy: 0,
+            createdAt: NOW - 10,
+            mode: "review",
+            holdSchedule: true,
+            hint: "first-letters",
+          },
+          {
+            accuracy: 0,
+            createdAt: NOW - 20,
+            mode: "review",
+            holdSchedule: true,
+            hint: "first-letters",
+          },
+          { accuracy: 90, createdAt: NOW - 40, mode: "review" },
+        ],
+        NOW,
+      ),
+    ).toBe(0);
+  });
 });
 
 describe("isShakyVerse", () => {

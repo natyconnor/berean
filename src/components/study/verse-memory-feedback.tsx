@@ -47,6 +47,7 @@ interface VerseMemoryFeedbackProps {
   note?: string;
   /** Replaces the usual praise line when this result has its own next step. */
   praiseLine?: string;
+  scheduleHeld?: boolean;
   /**
    * Quiet after-miss offer, rendered on the percentage row and kept outside
    * the status live region so it is not announced as part of the score.
@@ -98,12 +99,16 @@ export function VerseMemoryFeedback({
   note,
   praiseLine,
   refresherOffer,
+  scheduleHeld = false,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
   const scored =
     accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
   const outcome = reviewGradeOutcome(quality, scored);
-  const feedback = accuracyFeedback(scored, { exact: quality === "exact" });
+  const feedback = accuracyFeedback(scored, {
+    exact: quality === "exact",
+    scheduleHeld,
+  });
   const { band } = feedback;
   const celebrate = band === "exact";
   const praise =
@@ -111,9 +116,10 @@ export function VerseMemoryFeedback({
     (!showScheduleOutcome && requireExactToAdvance && quality === "close"
       ? FROM_MEMORY_CLOSE_MESSAGE
       : attemptPraiseLine({ accuracy: scored, outcome, errors }));
-  const consequence = showScheduleOutcome
-    ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
-    : null;
+  const consequence =
+    showScheduleOutcome && !scheduleHeld
+      ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
+      : null;
   const scoreLine = `${scored}% recalled${note ? ` · ${note}` : ""}`;
   const statusCopy = [
     feedback.lead,

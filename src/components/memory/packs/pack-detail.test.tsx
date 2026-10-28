@@ -567,7 +567,7 @@ describe("PackDetail for a passage", () => {
     expect(mutation("passageMemory.finishRefresh")).not.toHaveBeenCalled();
   });
 
-  it("still drops a learning-only building passage one step into Learn", async () => {
+  it("opens Refresh for a learning-only building passage", async () => {
     passages = {
       psalm16x: passageView({
         pieces: [
@@ -584,11 +584,11 @@ describe("PackDetail for a passage", () => {
     );
 
     await waitFor(() =>
-      expect(mutation("passageMemory.finishRefresh")).toHaveBeenCalledTimes(1),
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        href: "/memory/psalm16x/practice?refresh=1&return=%2Fmemory%2Fpsalm16x",
+      }),
     );
-    expect(mocks.navigate).toHaveBeenCalledWith({
-      href: "/memory/psalm16x/learn?return=%2Fmemory%2Fpsalm16x",
-    });
+    expect(mutation("passageMemory.finishRefresh")).not.toHaveBeenCalled();
   });
 
   it("confirms Stop memorizing, clears it and closes the drawer", async () => {
@@ -1092,6 +1092,14 @@ describe("PackDetail editing a pack", () => {
         "No verses yet. Add verses from the reader with Memorize, or tap Add verses.",
       ),
     ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Start over/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     await userEvent.click(screen.getByRole("button", { name: "Add verses" }));
     expect(
       screen.getByRole("searchbox", { name: "Search by reference" }),

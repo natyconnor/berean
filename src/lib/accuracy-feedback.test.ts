@@ -38,6 +38,9 @@ describe("accuracyFeedback", () => {
     expect(accuracyFeedback(40, { exact: false }).headline).toBe(
       "This one needs another pass. We'll bring it back sooner.",
     );
+    expect(
+      accuracyFeedback(40, { exact: false, scheduleHeld: true }).headline,
+    ).toBe("This one needs another pass. Another look will help it stick.");
   });
 
   it("splits the bold lead from the rest", () => {

@@ -81,7 +81,6 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import {
   compositeHintForWindow,
   dueFrontierIndex,
-  learnedPassagePieces,
   localDayIndex,
   rehearsalStartIndex,
   remainingIntroduces,
@@ -111,6 +110,7 @@ type BuiltRecall = {
   subtitle?: string;
   promptLine: string;
   versePlainText: string;
+  hintPlainText?: string;
   loading: boolean;
   error: string | null;
   retry: () => void;
@@ -151,12 +151,7 @@ interface PassageSessionProps {
 }
 
 export function PassageSession(props: PassageSessionProps): JSX.Element {
-  if (
-    props.refresh &&
-    (props.view.status === "reviewing" ||
-      props.view.status === "mastered" ||
-      learnedPassagePieces(props.view.pieces).length > 0)
-  ) {
+  if (props.refresh) {
     return (
       <PassageRefreshSitting
         packId={props.packId}
@@ -709,6 +704,7 @@ function PassageSessionRun({
             subtitle={recall.subtitle}
             promptLine={recall.promptLine}
             versePlainText={recall.versePlainText}
+            hintPlainText={recall.hintPlainText}
             loading={recall.loading}
             error={recall.error}
             retry={recall.retry}
@@ -724,6 +720,12 @@ function PassageSessionRun({
             readContinue={recall.readContinue}
             onSubmit={handleGraded}
             onContinueAfterResult={handleContinueAfterResult}
+            onSkipWarmup={
+              recall.mode === "rope" &&
+              (effectivePhase === "rope" || effectivePhase === "stall-repair")
+                ? handleSkipWarmup
+                : undefined
+            }
             offerRefresher={
               freshness?.stale === true &&
               (recall.mode === "review" ||
@@ -941,7 +943,12 @@ function reviewRecall(
   packName: string,
   pieces: readonly PassagePiece[],
   texts: readonly string[],
-  composite: { loading: boolean; error: string | null; retry: () => void },
+  composite: {
+    loading: boolean;
+    error: string | null;
+    retry: () => void;
+    hintText: string;
+  },
 ): BuiltRecall {
   const indexes = pieces.map((_, index) => index);
   return {
@@ -950,6 +957,7 @@ function reviewRecall(
     subtitle: `${verseCountIn(pieces)} verses · whole passage`,
     promptLine: "Recite the whole passage from memory",
     versePlainText: joinPieceTexts(pieces, indexes, texts),
+    hintPlainText: composite.hintText || undefined,
     loading: composite.loading,
     error: composite.error,
     retry: composite.retry,
@@ -965,6 +973,16 @@ function reviewRecall(
     showJourneyBar: false,
     readContinue: false,
   };
+}
+
+function joinHintPlainText(
+  indexes: readonly number[],
+  texts: readonly string[],
+): string | undefined {
+  const lines = indexes
+    .map((index) => texts[index])
+    .filter((text): text is string => Boolean(text && text.length > 0));
+  return lines.length === 0 ? undefined : lines.join("\n");
 }
 
 function ropeRecall(
@@ -991,6 +1009,7 @@ function ropeRecall(
     subtitle,
     promptLine,
     versePlainText: joinPieceTexts(pieces, indexes, pieceTexts),
+    hintPlainText: joinHintPlainText(indexes, pieceTexts),
     loading: compositeLoading,
     error: compositeError,
     retry,
@@ -1089,6 +1108,7 @@ function buildingRecall(args: {
       subtitle: "Try this part again",
       promptLine: "Type this part from memory",
       versePlainText: joinPieceTexts(state.pieces, indexes, pieceTexts),
+      hintPlainText: joinHintPlainText(indexes, pieceTexts),
       loading: compositeLoading,
       error: compositeError,
       retry,
@@ -1124,6 +1144,7 @@ function buildingRecall(args: {
             ? "Recall the verse from memory"
             : "Type what you remember",
       versePlainText: text,
+      hintPlainText: text || undefined,
       loading: compositeLoading,
       error: compositeError,
       retry,

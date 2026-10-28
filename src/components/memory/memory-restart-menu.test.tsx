@@ -12,16 +12,40 @@ import {
   shakyVersesOption,
 } from "@/lib/memory-copy";
 
-import { MemoryRestartMenu } from "./memory-restart-menu";
+import { MemoryRestartMenu, VerseRestartMenu } from "./memory-restart-menu";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 const navigateMock = vi.fn();
+const mutations = vi.hoisted(() => ({
+  byName: new Map<string, ReturnType<typeof vi.fn>>(),
+}));
+
+function mutation(name: string) {
+  let fn = mutations.byName.get(name);
+  if (!fn) {
+    fn = vi.fn().mockResolvedValue({});
+    mutations.byName.set(name, fn);
+  }
+  return fn;
+}
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
 }));
 
 vi.mock("convex/react", () => ({
-  useMutation: () => vi.fn(),
+  useMutation: (name: string) => mutation(name),
+}));
+
+vi.mock("../../../convex/_generated/api", () => ({
+  api: {
+    verseMemory: {
+      startOver: "verseMemory.startOver",
+      undoStartOver: "verseMemory.undoStartOver",
+      finishRefresh: "verseMemory.finishRefresh",
+      stopMemorizing: "verseMemory.stopMemorizing",
+    },
+  },
 }));
 
 function renderMenu(
@@ -35,7 +59,10 @@ function renderMenu(
       name="Romans 8:28"
       isDrawer={false}
       refreshHref="/memory/practice"
-      learnHref="/memory/learn"
+      refreshTarget={{
+        scope: "verse",
+        mark: { status: "reviewing", learnStage: 3 },
+      }}
       onRefresh={onRefresh}
       onStartOver={onStartOver}
       onUndo={onUndo}
@@ -69,6 +96,35 @@ async function openStartOverConfirm() {
 describe("MemoryRestartMenu", () => {
   beforeEach(() => {
     navigateMock.mockReset();
+    mutations.byName.clear();
+  });
+
+  it("hides Refresh and Start over when there is nothing to restart", async () => {
+    renderMenu({ showRestart: false });
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Start over/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Stop memorizing" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+  });
+
+  it("hides Refresh on a new verse and keeps Start over", async () => {
+    renderMenu({
+      refreshTarget: { scope: "verse", mark: { status: "new", learnStage: 0 } },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the Start over confirm open after a mouse click", async () => {
@@ -139,6 +195,32 @@ describe("MemoryRestartMenu", () => {
     ).toBeInTheDocument();
   });
 
+  it("returns focus to More actions after Cancel", async () => {
+    renderMenu();
+    await openStartOverConfirm();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: "Start Romans 8:28 over?" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus();
+  });
+
+  it("returns focus to More actions after Undo", async () => {
+    renderMenu();
+    await openStartOverConfirm();
+    await userEvent.click(
+      screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: UNDO_LABEL }));
+    await waitFor(() => {
+      expect(screen.queryByText(STARTED_OVER_LABEL)).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus();
+  });
+
   it("keeps the menu after Start over and hides Undo after leaving the page", async () => {
     const first = renderMenu();
     await openStartOverConfirm();
@@ -147,6 +229,10 @@ describe("MemoryRestartMenu", () => {
     );
 
     expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
     expect(first.onStartOver).toHaveBeenCalledWith("whole", {
       replaceUndo: true,
     });
@@ -156,6 +242,9 @@ describe("MemoryRestartMenu", () => {
     expect(
       screen.getByRole("button", { name: UNDO_LABEL }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Learn/ }),
+    ).not.toBeInTheDocument();
 
     first.unmount();
     renderMenu();
@@ -199,7 +288,10 @@ describe("MemoryRestartMenu", () => {
         name="Romans 8:28"
         isDrawer={false}
         refreshHref="/memory/practice"
-        learnHref="/memory/learn"
+        refreshTarget={{
+          scope: "verse",
+          mark: { status: "reviewing", learnStage: 3 },
+        }}
         onRefresh={view.onRefresh}
         onStartOver={view.onStartOver}
         onUndo={view.onUndo}
@@ -241,7 +333,10 @@ describe("MemoryRestartMenu", () => {
         name="Romans 8:28"
         isDrawer={false}
         refreshHref="/memory/practice"
-        learnHref="/memory/learn"
+        refreshTarget={{
+          scope: "verse",
+          mark: { status: "reviewing", learnStage: 3 },
+        }}
         onRefresh={view.onRefresh}
         onStartOver={view.onStartOver}
         onUndo={view.onUndo}
@@ -261,5 +356,80 @@ describe("MemoryRestartMenu", () => {
     expect(view.onStartOver).toHaveBeenCalledWith("whole", {
       replaceUndo: true,
     });
+  });
+});
+
+describe("VerseRestartMenu", () => {
+  beforeEach(() => {
+    navigateMock.mockReset();
+    mutations.byName.clear();
+  });
+
+  it("opens a learning verse Refresh sitting without applying the rung", async () => {
+    render(
+      <VerseRestartMenu
+        verseRefId={"vr_1" as Id<"verseRefs">}
+        reference="Romans 8:28"
+        status="learning"
+        learnStage={1}
+        refreshHref="/memory/practice?refresh=1"
+        isDrawer={false}
+        onStopped={() => {}}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    );
+
+    expect(mutation("verseMemory.finishRefresh")).not.toHaveBeenCalled();
+    expect(navigateMock).toHaveBeenCalledWith({
+      href: "/memory/practice?refresh=1",
+    });
+  });
+
+  it("keeps Start over and hides Refresh on Read", async () => {
+    render(
+      <VerseRestartMenu
+        verseRefId={"vr_1" as Id<"verseRefs">}
+        reference="Romans 8:28"
+        status="learning"
+        learnStage={0}
+        refreshHref="/memory/practice?refresh=1"
+        isDrawer={false}
+        onStopped={() => {}}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps Start over and hides Refresh on a new verse", async () => {
+    render(
+      <VerseRestartMenu
+        verseRefId={"vr_1" as Id<"verseRefs">}
+        reference="Romans 8:28"
+        status="new"
+        learnStage={0}
+        refreshHref="/memory/practice?refresh=1"
+        isDrawer={false}
+        onStopped={() => {}}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toBeInTheDocument();
   });
 });

@@ -8,7 +8,6 @@ import {
 import { SessionBackButton } from "@/components/memory/session-back-button";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { REFRESH_FINISH_ERROR } from "@/lib/memory-copy";
-import { LEARN_PROGRESS_ACCURACY } from "@/lib/memory-scheduler";
 import { learnedPassagePieces } from "@/lib/passage-frontier";
 import { maskVerseText } from "@/lib/verse-hint";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
@@ -33,7 +32,6 @@ export function PassageRefreshSitting({
   exitHref?: string;
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [lastAccuracy, setLastAccuracy] = useState(0);
   const [startedAt] = useState(() => Date.now());
   const [finishError, setFinishError] = useState<string | null>(null);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
@@ -48,17 +46,18 @@ export function PassageRefreshSitting({
     }),
   );
   const passage = useEsvCompositePassage(members);
+  const hintSource = passage.hintText || passage.text;
   const hint = useMemo(() => {
     if (step === 1) {
       return {
         type: "tokens" as const,
-        tokens: maskVerseText(passage.text, "first-letters"),
+        tokens: maskVerseText(hintSource, "first-letters"),
       };
     }
     if (step === 2) {
       return {
         type: "tokens" as const,
-        tokens: maskVerseText(passage.text, "cloze"),
+        tokens: maskVerseText(hintSource, "cloze"),
       };
     }
     return {
@@ -66,10 +65,9 @@ export function PassageRefreshSitting({
       message:
         "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
     };
-  }, [passage.text, step]);
+  }, [hintSource, step]);
 
   const onSubmit = async (result: PassageRecallResult) => {
-    setLastAccuracy(result.accuracy);
     const now = Date.now();
     await recordAttempt({
       packId,
@@ -111,6 +109,7 @@ export function PassageRefreshSitting({
                   : "Recall the passage from memory"
             }
             versePlainText={passage.text}
+            hintPlainText={hintSource}
             loading={passage.loading}
             error={passage.error}
             retry={passage.retry}
@@ -118,9 +117,9 @@ export function PassageRefreshSitting({
             learnStage={step}
             stageReps={0}
             status={view.status === "mastered" ? "mastered" : "reviewing"}
+            refreshSitting
             onSubmit={onSubmit}
             onContinueAfterResult={() => {
-              if (lastAccuracy < LEARN_PROGRESS_ACCURACY) return;
               if (step < 3) {
                 setStep((current) => (current === 1 ? 2 : 3));
                 return;

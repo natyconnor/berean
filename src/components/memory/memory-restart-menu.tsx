@@ -1,9 +1,8 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Check,
   CircleStop,
-  GraduationCap,
   Lightbulb,
   MoreHorizontal,
   RotateCcw,
@@ -56,8 +55,8 @@ import {
   shakyVersesOption,
   startOverTitle,
 } from "@/lib/memory-copy";
-import { MINUTES_PER_LEARNING_VERSE } from "@/lib/memorize-plan";
-import { isLearningPhase, type MemoryStatus } from "@/lib/memory-scheduler";
+import { refreshEligibility, type RefreshTarget } from "@/lib/memory-way-back";
+import type { MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
 export { FIRST_LETTERS_HINT_LABEL, NEED_A_REFRESHER_LABEL, REFRESH_LABEL };
@@ -77,7 +76,7 @@ export function MemoryRestartMenu({
   fullPageHref,
   isDrawer,
   refreshHref,
-  learnHref,
+  refreshTarget,
   onRefresh,
   onStartOver,
   onUndo,
@@ -86,13 +85,13 @@ export function MemoryRestartMenu({
   wholeLabel,
   openStartOver = false,
   extraItems,
-  learnMinutes = MINUTES_PER_LEARNING_VERSE,
+  showRestart = true,
 }: {
   name: string;
   fullPageHref?: string;
   isDrawer: boolean;
   refreshHref: string;
-  learnHref: string;
+  refreshTarget?: RefreshTarget;
   onRefresh?: () => Promise<void>;
   onStartOver: (
     choice: ShakyChoice,
@@ -104,7 +103,7 @@ export function MemoryRestartMenu({
   wholeLabel?: "passage" | "pack";
   openStartOver?: boolean;
   extraItems?: ReactNode;
-  learnMinutes?: number;
+  showRestart?: boolean;
 }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -114,6 +113,14 @@ export function MemoryRestartMenu({
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pendingConfirm = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const pendingTriggerFocus = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!pendingTriggerFocus.current) return;
+    pendingTriggerFocus.current = false;
+    triggerRef.current?.focus();
+  });
   const choice: ShakyChoice =
     pickedChoice ?? (shakyLabels.length > 0 ? "shaky" : "whole");
   const startLock = useSubmitLock();
@@ -166,6 +173,7 @@ export function MemoryRestartMenu({
       setError(null);
       try {
         await onUndo();
+        pendingTriggerFocus.current = true;
         setStarted(false);
       } catch {
         setError(UNDO_START_OVER_ERROR);
@@ -173,10 +181,11 @@ export function MemoryRestartMenu({
     });
 
   const showChooser = shakyLabels.length > 0 && wholeLabel !== undefined;
-  const startedLearnMinutes =
-    showChooser && choice === "shaky"
-      ? Math.max(1, shakyLabels.length) * MINUTES_PER_LEARNING_VERSE
-      : learnMinutes;
+  const showRefresh =
+    showRestart &&
+    !started &&
+    refreshTarget !== undefined &&
+    refreshEligibility(refreshTarget) === "learned";
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -184,12 +193,9 @@ export function MemoryRestartMenu({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
           <Check className="size-4 text-emerald-700" aria-hidden />
           <span className="font-semibold">{STARTED_OVER_LABEL}</span>
-          <Button asChild size="sm" className="h-7 px-2 text-xs">
-            <a href={learnHref}>
-              <GraduationCap className="size-3.5" aria-hidden />
-              Learn · {startedLearnMinutes} min
-            </a>
-          </Button>
+          <span aria-hidden className="text-muted-foreground">
+            {" · "}
+          </span>
           <button
             type="button"
             className="text-[12.5px] font-medium text-primary"
@@ -208,6 +214,7 @@ export function MemoryRestartMenu({
           <PopoverAnchor asChild>
             <DropdownMenuTrigger asChild>
               <Button
+                ref={triggerRef}
                 type="button"
                 variant="ghost"
                 size="icon"
@@ -228,39 +235,43 @@ export function MemoryRestartMenu({
               setConfirmOpen(true);
             }}
           >
-            <DropdownMenuItem
-              disabled={refreshLock.pending || startLock.pending}
-              onSelect={(event) => {
-                event.preventDefault();
-                setMenuOpen(false);
-                void handleRefresh();
-              }}
-            >
-              <Lightbulb aria-hidden />
-              <span className="flex flex-col">
-                <span>{REFRESH_LABEL}</span>
-                <span className="text-xs text-muted-foreground">
-                  {REFRESH_MENU_DETAIL}
+            {showRefresh ? (
+              <DropdownMenuItem
+                disabled={refreshLock.pending || startLock.pending}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setMenuOpen(false);
+                  void handleRefresh();
+                }}
+              >
+                <Lightbulb aria-hidden />
+                <span className="flex flex-col">
+                  <span>{REFRESH_LABEL}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {REFRESH_MENU_DETAIL}
+                  </span>
                 </span>
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={refreshLock.pending || startLock.pending}
-              onSelect={(event) => {
-                event.preventDefault();
-                handleStartOverSelect();
-              }}
-            >
-              <RotateCcw aria-hidden />
-              <span className="flex flex-col">
-                <span>{START_OVER_MENU_LABEL}</span>
-                <span className="text-xs text-muted-foreground">
-                  {START_OVER_MENU_DETAIL}
+              </DropdownMenuItem>
+            ) : null}
+            {showRestart ? (
+              <DropdownMenuItem
+                disabled={refreshLock.pending || startLock.pending}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  handleStartOverSelect();
+                }}
+              >
+                <RotateCcw aria-hidden />
+                <span className="flex flex-col">
+                  <span>{START_OVER_MENU_LABEL}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {START_OVER_MENU_DETAIL}
+                  </span>
                 </span>
-              </span>
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            ) : null}
             {extraItems}
-            <DropdownMenuSeparator />
+            {showRestart || extraItems ? <DropdownMenuSeparator /> : null}
             <DropdownMenuItem
               variant="destructive"
               disabled={startLock.pending}
@@ -276,6 +287,7 @@ export function MemoryRestartMenu({
           className="w-[min(21rem,calc(100vw-32px))]"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
+            triggerRef.current?.focus();
           }}
           onFocusOutside={(event) => {
             const target = event.target;
@@ -411,7 +423,7 @@ export function VerseRestartMenu({
   verseRefId,
   reference,
   status,
-  learnHref,
+  learnStage,
   refreshHref,
   fullPageHref,
   isDrawer,
@@ -421,7 +433,7 @@ export function VerseRestartMenu({
   verseRefId: Id<"verseRefs">;
   reference: string;
   status: MemoryStatus;
-  learnHref: string;
+  learnStage: number;
   refreshHref: string;
   fullPageHref?: string;
   isDrawer: boolean;
@@ -430,7 +442,6 @@ export function VerseRestartMenu({
 }) {
   const startOver = useMutation(api.verseMemory.startOver);
   const undoStartOver = useMutation(api.verseMemory.undoStartOver);
-  const finishRefresh = useMutation(api.verseMemory.finishRefresh);
   const stopMemorizing = useMutation(api.verseMemory.stopMemorizing);
 
   return (
@@ -438,18 +449,9 @@ export function VerseRestartMenu({
       name={reference}
       fullPageHref={fullPageHref}
       isDrawer={isDrawer}
-      refreshHref={isLearningPhase(status) ? learnHref : refreshHref}
-      learnHref={learnHref}
+      refreshHref={refreshHref}
+      refreshTarget={{ scope: "verse", mark: { status, learnStage } }}
       openStartOver={openStartOver}
-      onRefresh={async () => {
-        if (isLearningPhase(status)) {
-          await finishRefresh({
-            verseRefId,
-            now: Date.now(),
-            tzOffsetMinutes: new Date().getTimezoneOffset(),
-          });
-        }
-      }}
       onStartOver={async (_choice, opts) => {
         await startOver({
           verseRefId,

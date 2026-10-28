@@ -60,13 +60,17 @@ import {
   isLearningLocked,
   isReviewPhase,
   holdReviewingInterval,
-  refreshSchedule,
   nextStartOverUndo,
   restoreStartOverUndo,
   scheduleNext,
-  startOverSchedule,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
+import {
+  modeToStore,
+  planRefreshFinish,
+  planRescueSpend,
+  sameSchedule,
+} from "../src/lib/memory-way-back";
 import {
   isReviewHintedCheckIn,
   isShakyVerse,
@@ -75,7 +79,10 @@ import {
   refreshRecentLapseCount,
 } from "../src/lib/memory-stale";
 import { formatVerseRefTitle } from "../src/lib/verse-ref-utils";
-import { snapshotSchedule } from "../src/lib/memory-start-over";
+import {
+  snapshotSchedule,
+  startOverVersePatch,
+} from "../src/lib/memory-start-over";
 import {
   countDuePassageReviews,
   countProjectedPassageLearning,
@@ -604,32 +611,7 @@ export const recordAttempt = mutation({
       .order("desc")
       .first();
 
-    await ctx.db.insert("verseMemoryReviews", {
-      userId,
-      verseRefId: args.verseRefId,
-      verseMemoryId: memory._id,
-      quality: args.quality,
-      accuracy: args.accuracy,
-      stage: args.stage,
-      mode: args.mode,
-      durationMs: args.durationMs,
-      createdAt: args.now,
-      ...(args.hint ? { hint: args.hint } : {}),
-      ...(args.holdSchedule ? { holdSchedule: true } : {}),
-    });
-
-    if (args.timeZone) {
-      await noteVerseReviewForActivity(ctx, {
-        userId,
-        createdAt: args.now,
-        accuracy: args.accuracy,
-        mode: args.mode,
-        stage: args.stage,
-        timeZone: args.timeZone,
-      });
-    }
-
-    const next = scheduleNext(current, {
+    const scheduled = scheduleNext(current, {
       quality: args.quality,
       accuracy: args.accuracy,
       mode: args.mode,
@@ -641,6 +623,41 @@ export const recordAttempt = mutation({
       holdSchedule: args.holdSchedule,
       priorHintedCheckIn: isReviewHintedCheckIn(lastReview),
     });
+    const mode = modeToStore({
+      requestedMode: args.mode,
+      hint: args.hint,
+      holdSchedule: args.holdSchedule,
+      wasDueForReview: isDueForReview(current, args.now),
+      scheduleChanged: !sameSchedule(current, scheduled),
+    });
+
+    await ctx.db.insert("verseMemoryReviews", {
+      userId,
+      verseRefId: args.verseRefId,
+      verseMemoryId: memory._id,
+      quality: args.quality,
+      accuracy: args.accuracy,
+      stage: args.stage,
+      mode,
+      durationMs: args.durationMs,
+      createdAt: args.now,
+      ...(args.hint ? { hint: args.hint } : {}),
+      ...(args.holdSchedule ? { holdSchedule: true } : {}),
+    });
+
+    if (args.timeZone) {
+      await noteVerseReviewForActivity(ctx, {
+        userId,
+        createdAt: args.now,
+        accuracy: args.accuracy,
+        mode,
+        stage: args.stage,
+        timeZone: args.timeZone,
+        holdSchedule: args.holdSchedule,
+      });
+    }
+
+    const next = scheduled;
 
     if (memory.status !== next.status) {
       await adjustUserMemoryStats(
@@ -958,7 +975,7 @@ async function applyVerseStartOver(
 ): Promise<MemorySchedule> {
   const memory = await requireInMemory(ctx, userId, verseRefId);
   const current = scheduleFromMemory(memory);
-  const next = startOverSchedule(now);
+  const next = startOverVersePatch(now);
   if (memory.status !== next.status) {
     await adjustUserMemoryStats(ctx, userId, now, memory.status, next.status);
   }
@@ -974,7 +991,17 @@ async function applyVerseStartOver(
       replaceUndo,
     ),
   });
-  return next;
+  return {
+    status: next.status,
+    learnStage: next.learnStage,
+    stageReps: next.stageReps,
+    ease: next.ease,
+    intervalDays: next.intervalDays,
+    dueAt: next.dueAt,
+    consecutiveCorrect: next.consecutiveCorrect,
+    lapses: next.lapses,
+    earlyReviewApplied: next.earlyReviewApplied,
+  };
 }
 
 async function loadRecentReviews(
@@ -1081,7 +1108,7 @@ export const finishRefresh = mutation({
   args: {
     verseRefId: v.id("verseRefs"),
     now: v.number(),
-    sittingStartedAt: v.optional(v.number()),
+    sittingStartedAt: v.number(),
     tzOffsetMinutes: v.optional(v.number()),
     timeZone: v.optional(v.string()),
   },
@@ -1100,30 +1127,136 @@ export const finishRefresh = mutation({
       )
       .order("desc")
       .take(20);
-    const next = refreshSchedule(scheduleFromMemory(memory), {
-      now: args.now,
-      overdueMs: Math.max(0, args.now - memory.dueAt),
-      recentLapseCount: refreshRecentLapseCount(
-        recent,
-        args.sittingStartedAt ?? args.now,
-      ),
-      tzOffsetMinutes: args.tzOffsetMinutes,
-      timeZone: args.timeZone,
-    });
-    if (memory.status !== next.status) {
+    const current = scheduleFromMemory(memory);
+    const plan = planRefreshFinish(
+      {
+        kind: "verse",
+        schedule: current,
+        rows: recent.map((row) => ({
+          createdAt: row.createdAt,
+          accuracy: row.accuracy,
+          quality: row.quality,
+          holdSchedule: row.holdSchedule,
+          hint: row.hint,
+          stage: row.stage,
+          mode: row.mode,
+        })),
+        appliedSittingAt: memory.refreshAppliedSittingAt,
+      },
+      {
+        sittingStartedAt: args.sittingStartedAt,
+        now: args.now,
+        overdueMs: Math.max(0, args.now - memory.dueAt),
+        recentLapseCount: refreshRecentLapseCount(
+          recent,
+          args.sittingStartedAt,
+        ),
+        tzOffsetMinutes: args.tzOffsetMinutes,
+        timeZone: args.timeZone,
+      },
+    );
+    if (plan.status === "already-applied") return current;
+    if (plan.status === "missing-finish-grade") {
+      throw new Error("Refresh sitting has no held finish");
+    }
+    if (plan.reviewCopy) {
+      if (plan.reviewCopy.stage === undefined) {
+        throw new Error("verse refresh copy is missing stage");
+      }
+      await ctx.db.insert("verseMemoryReviews", {
+        userId,
+        verseRefId: args.verseRefId,
+        verseMemoryId: memory._id,
+        quality: plan.reviewCopy.quality,
+        accuracy: plan.reviewCopy.accuracy,
+        stage: plan.reviewCopy.stage,
+        mode: "review",
+        createdAt: args.now,
+        ...(plan.reviewCopy.hint ? { hint: plan.reviewCopy.hint } : {}),
+      });
+      if (args.timeZone) {
+        await noteVerseReviewForActivity(ctx, {
+          userId,
+          createdAt: args.now,
+          accuracy: plan.reviewCopy.accuracy,
+          mode: "review",
+          stage: plan.reviewCopy.stage,
+          timeZone: args.timeZone,
+        });
+      }
+    }
+    if (memory.status !== plan.schedule.status) {
       await adjustUserMemoryStats(
         ctx,
         userId,
         args.now,
         memory.status,
-        next.status,
+        plan.schedule.status,
       );
     }
     await ctx.db.patch(memory._id, {
-      ...next,
+      ...plan.schedule,
+      refreshAppliedSittingAt: plan.appliedSittingAt,
       lastReviewedAt: memory.lastReviewedAt,
     });
-    return next;
+    return plan.schedule;
+  },
+});
+
+export const spendDailyRescue = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    now: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
+  },
+  returns: v.object({
+    schedule: memoryScheduleValidator,
+    sessionSpent: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
+    const recent = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_verseRefId_createdAt", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .order("desc")
+      .take(20);
+    const current = scheduleFromMemory(memory);
+    const plan = planRescueSpend({
+      schedule: current,
+      recent: recent.map((row) => ({
+        mode: row.mode,
+        accuracy: row.accuracy,
+        holdSchedule: row.holdSchedule,
+      })),
+      now: args.now,
+      tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
+    });
+    if (plan.status === "unchanged") {
+      return { schedule: current, sessionSpent: plan.sessionSpent };
+    }
+    if (memory.status !== plan.schedule.status) {
+      await adjustUserMemoryStats(
+        ctx,
+        userId,
+        args.now,
+        memory.status,
+        plan.schedule.status,
+      );
+    }
+    await ctx.db.patch(memory._id, {
+      ...plan.schedule,
+      lastReviewedAt: memory.lastReviewedAt,
+    });
+    return { schedule: plan.schedule, sessionSpent: plan.sessionSpent };
   },
 });
 
@@ -1681,6 +1814,7 @@ export const reviewActivity = query({
         accuracy: row.accuracy,
         mode: row.mode,
         stage: row.stage,
+        ...(row.holdSchedule ? { holdSchedule: true } : {}),
       })),
       args.now,
       heatmapDays,
@@ -2032,6 +2166,7 @@ const attemptValidator = v.object({
   stage: v.number(),
   mode: modeValidator,
   hint: v.optional(v.literal("first-letters")),
+  holdSchedule: v.optional(v.boolean()),
   durationMs: v.optional(v.number()),
   createdAt: v.number(),
 });
@@ -2079,6 +2214,7 @@ type Attempt = {
   stage: number;
   mode: Doc<"verseMemoryReviews">["mode"];
   hint?: "first-letters";
+  holdSchedule?: boolean;
   durationMs?: number;
   createdAt: number;
 };
@@ -2169,6 +2305,7 @@ export const verseDetail = query({
       durationMs: row.durationMs,
       createdAt: row.createdAt,
       ...(row.hint ? { hint: row.hint } : {}),
+      ...(row.holdSchedule ? { holdSchedule: true } : {}),
     }));
 
     return {

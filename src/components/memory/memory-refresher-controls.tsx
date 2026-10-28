@@ -1,5 +1,6 @@
 import { Lightbulb } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import {
   ENTER_TO_CHECK_HINT,
   FIRST_LETTERS_HINT_LABEL,
@@ -41,31 +42,24 @@ export function NeedARefresherLink({
   );
 }
 
-export function NeedARefresherInlineOffer({
+export function NeedARefresherButton({
   onClick,
   disabled,
-  visible,
 }: {
   onClick: () => void;
   disabled?: boolean;
-  visible: boolean;
 }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-start gap-x-1.5 sm:items-center",
-        !visible && "invisible",
-      )}
+    <Button
+      type="button"
+      variant="outline"
+      className="h-11 flex-1 sm:flex-none"
+      onClick={onClick}
+      disabled={disabled}
     >
-      <span aria-hidden className="text-xs text-muted-foreground">
-        ·
-      </span>
-      <NeedARefresherLink
-        onClick={onClick}
-        disabled={disabled || !visible}
-        className="items-start sm:items-center"
-      />
-    </span>
+      <Lightbulb className="h-4 w-4" aria-hidden />
+      {NEED_A_REFRESHER_LABEL}
+    </Button>
   );
 }
 

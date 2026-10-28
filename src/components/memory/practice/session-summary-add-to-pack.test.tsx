@@ -179,7 +179,7 @@ describe("Add to pack on session summaries", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("sends a learning-phase Refresh to Learn", async () => {
+  it("sends a learning-phase Refresh to a Refresh sitting", async () => {
     renderWithTooltips(
       <ReviewSummary
         attempts={[
@@ -195,12 +195,13 @@ describe("Add to pack on session summaries", () => {
     const refreshButtons = screen.getAllByRole("button", { name: "Refresh" });
     await userEvent.click(refreshButtons[0]);
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/memory/learn",
+      to: "/memory/practice",
       search: {
         book: "John",
         chapter: 3,
         startVerse: 16,
         endVerse: 16,
+        refresh: true,
       },
     });
 

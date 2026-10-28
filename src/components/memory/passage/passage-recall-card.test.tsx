@@ -511,3 +511,97 @@ describe("PassageRecallCard step label and focus", () => {
     });
   });
 });
+
+describe("PassageRecallCard Refresh and skip", () => {
+  const VERSE = "Preserve me, O God, for in you I take refuge.";
+
+  it("hints First letters one verse per line", () => {
+    render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="Refresh"
+        title="Psalm 23"
+        promptLine="Type it with first letters"
+        versePlainText="The Lord is my shepherd. He makes me lie down."
+        hintPlainText={"The Lord is my shepherd.\nHe makes me lie down."}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={1}
+        stageReps={0}
+        status="reviewing"
+        refreshSitting
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+
+    const hint = screen.getByText("First letters").closest("div");
+    const lineBox = hint?.querySelector("p.whitespace-pre-wrap");
+    expect(lineBox?.textContent).toContain("\n");
+  });
+
+  it("shows Skip warm-up on a held rope miss", async () => {
+    const user = userEvent.setup();
+    const onSkipWarmup = vi.fn();
+    render(
+      <PassageRecallCard
+        mode="rope"
+        phaseLabel="Warm up"
+        title="Psalm 23:1–2"
+        promptLine="Warm up with what you know"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="learning"
+        onSubmit={() => Promise.resolve(true)}
+        onSkipWarmup={onSkipWarmup}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Skip warm-up" }),
+    );
+    expect(onSkipWarmup).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a weak From memory Refresh finish on Continue", async () => {
+    const user = userEvent.setup();
+    const onContinue = vi.fn();
+    render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="Refresh"
+        title="Psalm 23"
+        promptLine="Recall the passage from memory"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        refreshSitting
+        onSubmit={() => Promise.resolve(true)}
+        onContinueAfterResult={onContinue}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByRole("button", { name: /Try again/ }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+});

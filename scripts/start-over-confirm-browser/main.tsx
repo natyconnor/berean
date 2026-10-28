@@ -12,7 +12,6 @@ createRoot(root).render(
       name="Psalm 46:10"
       isDrawer={false}
       refreshHref="/memory/practice"
-      learnHref="/memory/learn"
       onRefresh={async () => {}}
       onStartOver={async () => {}}
       onUndo={async () => {}}

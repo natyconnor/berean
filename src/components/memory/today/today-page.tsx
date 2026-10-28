@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useQuery } from "convex-helpers/react/cache";
 
 import { api } from "../../../../convex/_generated/api";
@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useElementSize } from "@/hooks/use-element-size";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useTodayModel } from "@/hooks/use-today-model";
+import { takeMemoryReturnFocus } from "@/lib/memory-return-focus";
 import { isPreviewTestToolsEnabled } from "@/lib/preview-test-tools";
 import { goalLayoutFor } from "@/lib/today-goal-layout";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
@@ -35,6 +36,16 @@ export function TodayPage() {
   const today = useTodayModel(now);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const viewport = useElementSize(scrollRootRef);
+
+  useLayoutEffect(() => {
+    if (today === undefined || today.state === "firstRun") return;
+    const target = document.querySelector<HTMLElement>(
+      "[data-memory-main-action]",
+    );
+    if (!target) return;
+    if (!takeMemoryReturnFocus()) return;
+    target.focus();
+  }, [today]);
   const previewTools = isPreviewTestToolsEnabled();
   const status = useQuery(
     api.verseMemory.memoryStatus,

@@ -10,9 +10,17 @@ import {
   isReviewSessionCandidate,
   remainingDueAfterQueue,
   reviewPhaseListAction,
+  sessionLabelFor,
 } from "./memory-session";
 
 const NOW = 1_700_000_000_000;
+
+describe("sessionLabelFor", () => {
+  it("names a Refresh sitting Refresh and leaves Practice as Practice", () => {
+    expect(sessionLabelFor("practice", true)).toBe("Refresh");
+    expect(sessionLabelFor("practice")).toBe("Practice");
+  });
+});
 
 describe("hasMemorizedVerses", () => {
   it("is true once any verse is memorized or mastered", () => {
