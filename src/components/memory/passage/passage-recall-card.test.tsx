@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PassageRecallCard } from "./passage-recall-card";
 
+const scrollMocks = vi.hoisted(() => ({
+  scrollResultBannerIntoView: vi.fn(),
+  scrollBelowSessionHeader: vi.fn(),
+  scrollClearOfModeDock: vi.fn(),
+}));
+
+vi.mock("@/components/memory/scroll-result-banner", () => ({
+  scrollResultBannerIntoView: scrollMocks.scrollResultBannerIntoView,
+  scrollBelowSessionHeader: scrollMocks.scrollBelowSessionHeader,
+  scrollClearOfModeDock: scrollMocks.scrollClearOfModeDock,
+}));
+
 vi.mock("framer-motion", async () => {
   const actual =
     await vi.importActual<typeof import("framer-motion")>("framer-motion");
@@ -539,10 +551,46 @@ describe("PassageRecallCard Refresh and skip", () => {
     const hint = screen.getByText("First letters").closest("div");
     const lineBox = hint?.querySelector("p.whitespace-pre-wrap");
     expect(lineBox?.textContent).toContain("\n");
-    expect(hint?.parentElement).toHaveClass("max-h-[45vh]");
+    expect(hint?.parentElement).toHaveClass("max-h-[140px]");
     expect(
       screen.getByRole("textbox", { name: "Your recited passage" }),
     ).toBeInTheDocument();
+  });
+
+  it("scrolls the typing box after the first-letters hint loads", async () => {
+    const props = {
+      mode: "review" as const,
+      phaseLabel: "Refresh",
+      title: "Psalm 23",
+      promptLine: "Type it with first letters",
+      error: null,
+      retry: () => undefined,
+      hint: { type: "hidden" as const, message: "" },
+      learnStage: 1,
+      stageReps: 0,
+      status: "reviewing" as const,
+      refreshSitting: true,
+      onSubmit: () => Promise.resolve(true),
+    };
+    const { rerender } = render(
+      <PassageRecallCard {...props} versePlainText="" loading />,
+    );
+
+    scrollMocks.scrollClearOfModeDock.mockClear();
+    rerender(
+      <PassageRecallCard
+        {...props}
+        versePlainText="The Lord is my shepherd; I shall not want."
+        loading={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(scrollMocks.scrollClearOfModeDock).toHaveBeenCalled();
+    });
+    expect(scrollMocks.scrollClearOfModeDock).toHaveBeenCalledWith(
+      screen.getByLabelText("Your recited passage"),
+    );
   });
 
   it("shows Skip warm-up on a held rope miss", async () => {

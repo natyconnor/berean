@@ -2,6 +2,7 @@ import {
   type JSX,
   type KeyboardEvent,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -13,7 +14,11 @@ import {
   FirstLettersPanel,
   NeedARefresherButton,
 } from "@/components/memory/memory-refresher-controls";
-import { scrollResultBannerIntoView } from "@/components/memory/scroll-result-banner";
+import {
+  scrollBelowSessionHeader,
+  scrollClearOfModeDock,
+  scrollResultBannerIntoView,
+} from "@/components/memory/scroll-result-banner";
 import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 import { motion, useReducedMotion } from "framer-motion";
 
@@ -149,6 +154,7 @@ export function PassageRecallCard({
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
   const resultBannerRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   const { submit, pending: submitPending } = useSubmitLock();
 
   const refresherStep: RefreshStep | null = refreshSitting
@@ -260,11 +266,18 @@ export function PassageRecallCard({
     });
   }
 
+  function focusAnswerKeepingTitle() {
+    const field = answerInputRef.current;
+    field?.focus({ preventScroll: true });
+    scrollBelowSessionHeader(titleRef.current);
+    scrollClearOfModeDock(field);
+  }
+
   function resetTyped() {
     setChecked(false);
     setHeldGoalLabel(null);
     setTypedAnswer("");
-    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+    window.requestAnimationFrame(focusAnswerKeepingTitle);
   }
 
   function continueAttempt() {
@@ -298,10 +311,20 @@ export function PassageRecallCard({
 
   // After Read advances into a typing band, focus the answer box. Continue is
   // unmounted on that transition, so without this focus is left on body.
-  useEffect(() => {
-    if (checked || isReadPrime) return;
-    answerInputRef.current?.focus();
-  }, [checked, isReadPrime]);
+  // Wait until the first-letters hint has real text so the field isn't left
+  // under the Mode dock after a tall hint lands.
+  useLayoutEffect(() => {
+    if (checked || isReadPrime || loading) return;
+    focusAnswerKeepingTitle();
+  }, [
+    checked,
+    isReadPrime,
+    rescue,
+    learnStage,
+    loading,
+    versePlainText,
+    hintPlainText,
+  ]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -327,7 +350,7 @@ export function PassageRecallCard({
     >
       <Card className={cn("mx-auto w-full overflow-hidden", stageColor.panel)}>
         <CardHeader className="gap-3 text-center">
-          <div>
+          <div ref={titleRef}>
             <p
               className={cn(
                 "inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]",
@@ -373,7 +396,7 @@ export function PassageRecallCard({
             <>
               <div
                 className={cn(
-                  "mx-auto min-h-[140px] max-h-[45vh] overflow-y-auto rounded-xl border bg-background/75 px-5 py-5 text-left",
+                  "mx-auto min-h-[140px] max-h-[140px] overflow-y-auto rounded-xl border bg-background/75 px-5 py-5 text-left",
                   SESSION_VERSE_TEXT_CLASS,
                   READER_MEASURE_CLASS,
                   stageColor.panel,
