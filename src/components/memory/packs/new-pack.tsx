@@ -198,15 +198,25 @@ export function NewPack({
                       dragRowClassName(drag.rowState(index, picked.length)),
                     )}
                   >
-                    <DragHandle {...drag.handleProps(index)} />
+                    <DragHandle
+                      label={label}
+                      picked={drag.picked === index}
+                      onToggle={() => drag.togglePick(index)}
+                      onMovePicked={(delta) =>
+                        drag.movePicked(
+                          delta,
+                          picked.length,
+                          drag.picked ?? index,
+                        )
+                      }
+                      onCancel={drag.cancelPick}
+                      {...drag.handleProps(index)}
+                    />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {label}
                     </span>
                     <RowEditControls
                       label={label}
-                      index={index}
-                      count={picked.length}
-                      onMove={move}
                       onRemove={() => remove(index)}
                     />
                   </li>

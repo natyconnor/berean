@@ -179,6 +179,32 @@ describe("Add to pack on session summaries", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers Practice when the last try recovered", () => {
+    renderWithTooltips(
+      <ReviewSummary
+        attempts={[
+          { reference: JOHN_3_16, accuracy: 0 },
+          { reference: JOHN_3_16, accuracy: 100 },
+          { reference: JOHN_3_16, accuracy: 100 },
+        ]}
+        averageAccuracy={67}
+        remaining={0}
+        onDone={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("67%")).toBeInTheDocument();
+    expect(
+      screen.getByText("0%, 100%, then 100% recalled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Refresh" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Practice" }),
+    ).toBeInTheDocument();
+  });
+
   it("sends a learning-phase Refresh to a Refresh sitting", async () => {
     renderWithTooltips(
       <ReviewSummary

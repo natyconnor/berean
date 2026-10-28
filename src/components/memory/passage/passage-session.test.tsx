@@ -823,7 +823,9 @@ describe("PassageSession", () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText("Refresh")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Session phase: Refresh" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Type it with first letters")).toBeInTheDocument();
     expect(screen.queryByText(/Warm up/i)).not.toBeInTheDocument();
     expect(
@@ -855,7 +857,9 @@ describe("PassageSession", () => {
     expect(
       document.querySelector('[data-slot="scroll-area-viewport"]'),
     ).not.toBeNull();
-    expect(screen.getByText("Refresh")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Session phase: Refresh" }),
+    ).toBeInTheDocument();
   });
 
   it("uses plain language for the remaining session copy", () => {

@@ -1566,7 +1566,7 @@ describe("PracticeBoard refresher", () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
   });
 
-  it("hides Need a refresher on a normally due review", async () => {
+  it("puts Need a refresher in the empty hint box on a due review", async () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PracticeBoard
@@ -1579,12 +1579,15 @@ describe("PracticeBoard refresher", () => {
       </TooltipProvider>,
     );
 
+    const offer = await screen.findByRole("button", {
+      name: "Need a refresher?",
+    });
+    expect(offer).toBeInTheDocument();
+    expect(screen.getByText("Type it as you remember it.")).toBeInTheDocument();
+    const answer = screen.getByLabelText("Your recalled verse");
     expect(
-      await screen.findByRole("button", { name: /Check answer/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Need a refresher?" }),
-    ).not.toBeInTheDocument();
+      offer.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("opens first letters from Need a refresher on a stale review", async () => {
@@ -2039,6 +2042,56 @@ describe("PracticeBoard refresher", () => {
     });
   });
 
+  it("averages the miss and both refresher tries on the summary", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
+      schedule: heldSchedule,
+      sessionSpent: true,
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Fill in the blanks 42% learned/),
+    ).not.toBeInTheDocument();
+
+    await completeRefreshStep();
+    expect(screen.getByText("From memory · 2 of 2")).toBeInTheDocument();
+    await completeRefreshStep();
+
+    expect(await screen.findByText("67%")).toBeInTheDocument();
+    expect(
+      screen.getByText("0%, 100%, then 100% recalled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Refresh" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Practice" }),
+    ).toBeInTheDocument();
+  });
+
   async function completeRefreshStep() {
     const answer = await screen.findByLabelText("Your recalled verse");
     await userEvent.click(answer);
@@ -2099,14 +2152,12 @@ describe("PracticeBoard refresher", () => {
     );
 
     expect(await screen.findByText("First letters")).toBeInTheDocument();
-    await completeRefreshStep();
-    expect(
-      await screen.findByText("Type what you remember"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
     await completeRefreshStep();
     expect(
       await screen.findByText("Recall the verse from memory"),
     ).toBeInTheDocument();
+    expect(screen.getByText("From memory · 2 of 2")).toBeInTheDocument();
     await completeRefreshStep();
 
     await waitFor(() => {
@@ -2164,7 +2215,6 @@ describe("PracticeBoard refresher", () => {
     );
 
     expect(await screen.findByText("First letters")).toBeInTheDocument();
-    await completeRefreshStep();
     await completeRefreshStep();
     expect(
       await screen.findByText("Recall the verse from memory"),

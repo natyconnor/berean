@@ -149,6 +149,9 @@ export function statusLabel(status: MemoryStatus): StatusLabel {
 }
 
 export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
+export const TYPE_AS_YOU_REMEMBER = "Type it as you remember it.";
+export const TYPE_AS_YOU_REMEMBER_PASSAGE =
+  "Type it as you remember it. Verse numbers aren't needed.";
 export const FIRST_LETTERS_HINT_LABEL = "First letters";
 export const ENTER_TO_CHECK_HINT =
   "Enter to check · Shift+Enter for a new line";

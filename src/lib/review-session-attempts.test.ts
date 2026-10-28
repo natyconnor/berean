@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
+  lastTryNeedsRefresh,
   recalledCopy,
-  slippedThisSession,
   type ReviewSessionAttempt,
 } from "./review-session-attempts";
 
@@ -43,12 +43,17 @@ describe("recalledCopy", () => {
   it("names a retry as a second score", () => {
     expect(recalledCopy([85, 100])).toBe("85%, then 100% recalled");
   });
+
+  it("puts then only before the last of three scores", () => {
+    expect(recalledCopy([0, 100, 100])).toBe("0%, 100%, then 100% recalled");
+  });
 });
 
-describe("slippedThisSession", () => {
-  it("is true when any recitation lapsed", () => {
-    expect(slippedThisSession([34])).toBe(true);
-    expect(slippedThisSession([90, 40])).toBe(true);
-    expect(slippedThisSession([92, 88])).toBe(false);
+describe("lastTryNeedsRefresh", () => {
+  it("gates Refresh on the latest recitation", () => {
+    expect(lastTryNeedsRefresh([34])).toBe(true);
+    expect(lastTryNeedsRefresh([90, 40])).toBe(true);
+    expect(lastTryNeedsRefresh([0, 100, 100])).toBe(false);
+    expect(lastTryNeedsRefresh([92, 88])).toBe(false);
   });
 });

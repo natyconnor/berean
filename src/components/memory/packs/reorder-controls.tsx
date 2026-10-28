@@ -1,119 +1,141 @@
-import {
-  ArrowDown,
-  ArrowUp,
-  GripVertical,
-  MoreHorizontal,
-  X,
-} from "lucide-react";
+import type { KeyboardEvent, ReactNode } from "react";
+import { GripVertical, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { DragReorder } from "./use-drag-reorder";
+
+const REMOVE_TOOLTIP = "Remove from pack";
 
 /**
  * Editing controls for an ordered verse list (a pack's verses, New pack's
  * "In this pack"). Rows are `group` list items.
  */
 
-/** Mouse-only grip; keyboard and touch use the row menu instead. */
-export function DragHandle(props: ReturnType<DragReorder["handleProps"]>) {
+export function DragHandle({
+  label,
+  picked,
+  onToggle,
+  onMovePicked,
+  onCancel,
+  ...props
+}: ReturnType<DragReorder["handleProps"]> & {
+  label: string;
+  picked: boolean;
+  onToggle: () => void;
+  onMovePicked: (delta: number) => void;
+  onCancel: () => void;
+}) {
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      onMovePicked(-1);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      onMovePicked(1);
+      return;
+    }
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      onToggle();
+    }
+  };
+
   return (
-    <span
+    <button
+      type="button"
       {...props}
-      aria-hidden
-      title="Drag to reorder"
-      className="hidden shrink-0 cursor-grab items-center text-muted-foreground/60 transition-colors hover:text-muted-foreground active:cursor-grabbing pointer-fine:flex"
+      aria-label={`Reorder ${label}`}
+      aria-pressed={picked}
+      title={`Reorder ${label}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      onKeyDown={onKeyDown}
+      className={cn(
+        "flex size-11 shrink-0 items-center justify-center text-muted-foreground/60 transition-colors hover:text-muted-foreground active:cursor-grabbing sm:size-8",
+        "cursor-grab pointer-fine:size-8",
+        picked && "text-foreground",
+      )}
     >
       <GripVertical className="size-4" />
-    </span>
+    </button>
   );
 }
 
 const revealOnRowHover =
   "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:focus-visible:opacity-100";
 
-/** × (on hover or focus with a mouse) and ⋯ with Move up / Move down / Remove. */
-export function RowEditControls({
+export function RemoveFromPackButton({
   label,
-  index,
-  count,
   removing = false,
-  onMove,
   onRemove,
 }: {
-  /** The row's reference, for accessible names. */
   label: string;
-  index: number;
-  count: number;
   removing?: boolean;
-  onMove: (from: number, to: number) => void;
   onRemove: () => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label={`Remove ${label}`}
-        disabled={removing}
-        onClick={onRemove}
-        className={cn(
-          "hidden size-8 text-muted-foreground pointer-fine:inline-flex",
-          revealOnRowHover,
-        )}
-      >
-        <X aria-hidden />
-      </Button>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={`Options for ${label}`}
-            className={cn(
-              "size-11 text-muted-foreground sm:size-8 data-[state=open]:opacity-100",
-              revealOnRowHover,
-            )}
-          >
-            <MoreHorizontal aria-hidden />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            disabled={index === 0}
-            onSelect={() => onMove(index, index - 1)}
-          >
-            <ArrowUp aria-hidden />
-            Move up
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={index >= count - 1}
-            onSelect={() => onMove(index, index + 1)}
-          >
-            <ArrowDown aria-hidden />
-            Move down
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={removing}
-            onSelect={onRemove}
-          >
-            <X aria-hidden />
-            Remove
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Remove ${label} from pack`}
+          disabled={removing}
+          onClick={onRemove}
+          className={cn(
+            "size-11 text-muted-foreground sm:size-8",
+            "pointer-fine:size-8",
+            revealOnRowHover,
+          )}
+        >
+          <Trash2 aria-hidden />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{REMOVE_TOOLTIP}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Hover/focus trash on desktop, always-on on phones. Optional ⋯ slot. */
+export function RowEditControls({
+  label,
+  removing = false,
+  onRemove,
+  menu,
+}: {
+  label: string;
+  removing?: boolean;
+  onRemove: () => void;
+  menu?: ReactNode;
+}) {
+  return (
+    <div
+      className="flex shrink-0 items-center"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <RemoveFromPackButton
+        label={label}
+        removing={removing}
+        onRemove={onRemove}
+      />
+      {menu}
     </div>
   );
 }

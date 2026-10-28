@@ -113,11 +113,8 @@ vi.mock("../../../../convex/_generated/api", () => ({
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
       startOver: "verseMemory.startOver",
-      startOverMany: "verseMemory.startOverMany",
       undoStartOver: "verseMemory.undoStartOver",
-      undoStartOverMany: "verseMemory.undoStartOverMany",
       finishRefresh: "verseMemory.finishRefresh",
-      shakyInPack: "verseMemory.shakyInPack",
     },
   },
 }));
@@ -637,7 +634,7 @@ describe("PackDetail for a passage", () => {
 describe("PackDetail for a pack", () => {
   const RETURN = "return=%2Fmemory%2Fmercedxx";
 
-  it("shows both bars and per-verse Review, Practice and Learn", () => {
+  it("shows both bars and per-verse Review, Practice and Learn", async () => {
     renderHost("pack:mercedxx", "verses");
     const dialog = screen.getByRole("dialog", { name: "Merced Team" });
 
@@ -699,6 +696,22 @@ describe("PackDetail for a pack", () => {
       "href",
       `/memory/learn?book=Isaiah&chapter=41&startVerse=10&endVerse=10&${RETURN}`,
     );
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Options for Luke 9:23–24" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: /Refresh/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(
+      within(dialog).queryByRole("button", {
+        name: "Options for Isaiah 41:10",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("deletes a pack without stopping its verses, then goes back to Your verses", async () => {
@@ -707,6 +720,12 @@ describe("PackDetail for a pack", () => {
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
       screen.queryByRole("menuitem", { name: "Stop memorizing" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Start over/ }),
     ).not.toBeInTheDocument();
     await userEvent.click(
       await screen.findByRole("menuitem", { name: "Delete pack" }),
@@ -951,9 +970,7 @@ describe("PackDetail editing a pack", () => {
     ).toBeInTheDocument();
   });
 
-  it("moves verses with Move up / Move down and announces each move", async () => {
-    // Like the server: the saved order is what resolveMembers returns next,
-    // and each save finishes when the test says so.
+  it("reorders verses from the grip and announces each move", async () => {
     const saves: Array<() => void> = [];
     mocks.mutations.set(
       "packs.reorder",
@@ -975,14 +992,11 @@ describe("PackDetail editing a pack", () => {
     const view = render(host());
     expect(rowNames()).toEqual(["Luke 9:23–24", "Joshua 1:9", "Isaiah 41:10"]);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Options for Luke 9:23–24" }),
-    );
-    expect(
-      await screen.findByRole("menuitem", { name: "Move up" }),
-    ).toHaveAttribute("data-disabled");
-    await userEvent.click(screen.getByRole("menuitem", { name: "Move down" }));
-
+    const grip = screen.getByRole("button", {
+      name: "Reorder Luke 9:23–24",
+    });
+    grip.focus();
+    await userEvent.keyboard("{ArrowDown}");
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
     expect(mocks.mutations.get("packs.reorder")).toHaveBeenCalledWith({
       id: "mercedxx",
@@ -991,52 +1005,34 @@ describe("PackDetail editing a pack", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Moved Luke 9:23–24 to 2 of 3.",
     );
-    // The query pushes the saved order, then the save finishes.
     view.rerender(host());
     await act(async () => {
       saves.shift()?.();
       await Promise.resolve();
     });
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("New order saved", {
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith("New order saved", {
       id: "pack-order-mercedxx",
     });
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Options for Isaiah 41:10" }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Move up" }),
-    );
-    expect(mocks.mutations.get("packs.reorder")).toHaveBeenLastCalledWith({
-      id: "mercedxx",
-      orderedVerseRefIds: ["josh", "isa", "luke"],
-    });
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Moved Isaiah 41:10 to 2 of 3.",
-    );
   });
 
   it("removes a verse with an Undo that puts it back at its old place", async () => {
     mutation("packs.removeVerse").mockResolvedValue(1);
     renderHost("pack:mercedxx");
 
+    const josh = screen.getByText("Joshua 1:9").closest("li");
+    expect(josh).not.toBeNull();
+    await userEvent.hover(josh as HTMLElement);
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove Joshua 1:9" }),
+      screen.getByRole("button", { name: "Remove Joshua 1:9 from pack" }),
     );
     expect(mocks.mutations.get("packs.removeVerse")).toHaveBeenCalledWith({
       id: "mercedxx",
       verseRefId: "josh",
     });
-    await waitFor(() => expect(mocks.toast).toHaveBeenCalledTimes(1));
-    const [message, options] = mocks.toast.mock.calls[0] as [
-      string,
-      { action: { label: string; onClick: () => void } },
-    ];
-    expect(message).toBe("Removed Joshua 1:9.");
-    expect(options.action.label).toBe("Undo");
-
-    options.action.onClick();
+    expect(await screen.findByText("Removed Joshua 1:9")).toBeInTheDocument();
+    expect(mocks.toast).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(mocks.mutations.get("packs.restoreVerse")).toHaveBeenCalledWith({
       id: "mercedxx",
       verseRefId: "josh",

@@ -86,6 +86,7 @@ export function MemoryRestartMenu({
   openStartOver = false,
   extraItems,
   showRestart = true,
+  triggerLabel = "More actions",
 }: {
   name: string;
   fullPageHref?: string;
@@ -93,17 +94,18 @@ export function MemoryRestartMenu({
   refreshHref: string;
   refreshTarget?: RefreshTarget;
   onRefresh?: () => Promise<void>;
-  onStartOver: (
+  onStartOver?: (
     choice: ShakyChoice,
     opts?: { replaceUndo?: boolean },
   ) => Promise<void>;
-  onUndo: () => Promise<void>;
-  stop: MemoryRestartStop;
+  onUndo?: () => Promise<void>;
+  stop?: MemoryRestartStop;
   shakyLabels?: readonly string[];
   wholeLabel?: "passage" | "pack";
   openStartOver?: boolean;
   extraItems?: ReactNode;
   showRestart?: boolean;
+  triggerLabel?: string;
 }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -158,7 +160,7 @@ export function MemoryRestartMenu({
     startLock.submit(async () => {
       setError(null);
       try {
-        await onStartOver(shakyLabels.length > 0 ? choice : "whole", {
+        await onStartOver?.(shakyLabels.length > 0 ? choice : "whole", {
           replaceUndo: !started,
         });
         setConfirmOpen(false);
@@ -172,7 +174,7 @@ export function MemoryRestartMenu({
     undoLock.submit(async () => {
       setError(null);
       try {
-        await onUndo();
+        await onUndo?.();
         pendingTriggerFocus.current = true;
         setStarted(false);
       } catch {
@@ -186,6 +188,7 @@ export function MemoryRestartMenu({
     !started &&
     refreshTarget !== undefined &&
     refreshEligibility(refreshTarget) === "learned";
+  if (!showRestart && !extraItems && !stop) return null;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -219,7 +222,7 @@ export function MemoryRestartMenu({
                 variant="ghost"
                 size="icon"
                 className="size-11 text-muted-foreground sm:size-8"
-                aria-label="More actions"
+                aria-label={triggerLabel}
               >
                 <MoreHorizontal aria-hidden />
               </Button>
@@ -271,15 +274,19 @@ export function MemoryRestartMenu({
               </DropdownMenuItem>
             ) : null}
             {extraItems}
-            {showRestart || extraItems ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={startLock.pending}
-              onSelect={() => setStopOpen(true)}
-            >
-              {stop.icon ?? <CircleStop aria-hidden />}
-              {stop.label}
-            </DropdownMenuItem>
+            {stop && (showRestart || extraItems) ? (
+              <DropdownMenuSeparator />
+            ) : null}
+            {stop ? (
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={startLock.pending}
+                onSelect={() => setStopOpen(true)}
+              >
+                {stop.icon ?? <CircleStop aria-hidden />}
+                {stop.label}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
         <PopoverContent
@@ -293,7 +300,7 @@ export function MemoryRestartMenu({
             const target = event.target;
             if (
               target instanceof Element &&
-              (target.closest('[aria-label="More actions"]') ||
+              (target.closest(`[aria-label="${triggerLabel}"]`) ||
                 target.closest("[role='menu']"))
             ) {
               event.preventDefault();
@@ -350,36 +357,38 @@ export function MemoryRestartMenu({
         </PopoverContent>
       </Popover>
 
-      <Dialog open={stopOpen} onOpenChange={setStopOpen}>
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{stop.title}</DialogTitle>
-            <DialogDescription>{stop.description}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStopOpen(false)}
-            >
-              Keep
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              loading={stopLock.pending}
-              onClick={() =>
-                stopLock.submit(async () => {
-                  await stop.onConfirm();
-                  setStopOpen(false);
-                })
-              }
-            >
-              {stop.label}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {stop ? (
+        <Dialog open={stopOpen} onOpenChange={setStopOpen}>
+          <DialogContent showCloseButton={false} className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{stop.title}</DialogTitle>
+              <DialogDescription>{stop.description}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setStopOpen(false)}
+              >
+                Keep
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                loading={stopLock.pending}
+                onClick={() =>
+                  stopLock.submit(async () => {
+                    await stop.onConfirm();
+                    setStopOpen(false);
+                  })
+                }
+              >
+                {stop.label}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

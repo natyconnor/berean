@@ -1,3 +1,4 @@
+import { formatDueDay } from "./memorize-plan";
 import { applyBuildingPassageRefresh } from "./passage-frontier";
 import type { PieceAttachment } from "./passage-pieces";
 import {
@@ -56,9 +57,11 @@ export type RefreshFinishGrade = {
   quality: "exact" | "close" | "off";
 };
 
+export type RefreshStep = 1 | 2;
+
 export type RefreshStepGate =
   | { type: "retry" }
-  | { type: "advance"; next: 2 | 3 }
+  | { type: "advance"; next: 2 }
   | { type: "passed-final" }
   | { type: "weak-final" };
 
@@ -173,15 +176,40 @@ export function refreshOutcome(finish: RefreshFinishGrade): RefreshOutcome {
 }
 
 export function refreshStepGate(
-  step: 1 | 2 | 3,
+  step: RefreshStep,
   finish: RefreshFinishGrade,
 ): RefreshStepGate {
   const passed = refreshKeepsLevel(finish);
-  if (step === 3) {
+  if (step === 2) {
     return passed ? { type: "passed-final" } : { type: "weak-final" };
   }
   if (!passed) return { type: "retry" };
-  return { type: "advance", next: step === 1 ? 2 : 3 };
+  return { type: "advance", next: 2 };
+}
+
+/** First letters is stage 1; From memory is stage 3. There is no cloze step. */
+export function refreshDisplayStage(step: RefreshStep): 1 | 3 {
+  return step === 1 ? 1 : 3;
+}
+
+export function keepLevelDueAt(
+  dueAt: number,
+  now: number,
+  tzOffsetMinutes?: number,
+  timeZone?: string,
+): number {
+  const tomorrow = dueAtInCalendarDays(now, 1, tzOffsetMinutes, timeZone);
+  return dueAt > tomorrow ? dueAt : tomorrow;
+}
+
+export function backOnTrackCopy(
+  dueAt: number,
+  now: number,
+  timeZone?: string,
+): string {
+  const day = formatDueDay(dueAt, now, timeZone);
+  if (day === "today") return "Back on track.";
+  return `Back on track. We'll check in again ${day}.`;
 }
 
 export function planRefreshFinish<T extends BuildingPiece>(

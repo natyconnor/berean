@@ -10,6 +10,7 @@ import {
   type MemorySchedule,
 } from "./memory-scheduler";
 import {
+  backOnTrackCopy,
   modeToStore,
   planRefreshFinish,
   planRescueSpend,
@@ -190,19 +191,28 @@ describe("modeToStore", () => {
   });
 });
 
+describe("backOnTrackCopy", () => {
+  it("names tomorrow and stays quiet when due today", () => {
+    expect(backOnTrackCopy(NOW, NOW, "UTC")).toBe("Back on track.");
+    expect(backOnTrackCopy(NOW + DAY_MS, NOW, "UTC")).toBe(
+      "Back on track. We'll check in again tomorrow.",
+    );
+  });
+});
+
 describe("refreshStepGate", () => {
-  it("retries an early miss and finishes a weak From memory pass", () => {
+  it("retries an early miss and finishes on From memory", () => {
     expect(refreshStepGate(1, { accuracy: 40, quality: "off" })).toEqual({
       type: "retry",
     });
-    expect(refreshStepGate(2, { accuracy: 90, quality: "close" })).toEqual({
+    expect(refreshStepGate(1, { accuracy: 90, quality: "close" })).toEqual({
       type: "advance",
-      next: 3,
+      next: 2,
     });
-    expect(refreshStepGate(3, { accuracy: 40, quality: "off" })).toEqual({
+    expect(refreshStepGate(2, { accuracy: 40, quality: "off" })).toEqual({
       type: "weak-final",
     });
-    expect(refreshStepGate(3, { accuracy: 90, quality: "close" })).toEqual({
+    expect(refreshStepGate(2, { accuracy: 90, quality: "close" })).toEqual({
       type: "passed-final",
     });
   });

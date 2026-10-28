@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { CheckCircle2, Info, Loader2, X } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 
 import { PassageRefreshSitting } from "@/components/memory/passage/passage-refresh-sitting";
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
@@ -59,14 +59,10 @@ import {
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
+import { PassageSessionShell } from "@/components/memory/passage/passage-session-shell";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
-import { SessionColumns } from "@/components/memory/practice/session-columns";
-import {
-  SessionHeaderProgress,
-  type SessionProgress,
-} from "@/components/memory/practice/session-header-progress";
+import { type SessionProgress } from "@/components/memory/practice/session-header-progress";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
-import { SessionBackButton } from "@/components/memory/session-back-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -75,7 +71,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { useLiveNow } from "@/hooks/use-live-now";
 import {
@@ -182,10 +177,6 @@ function PassageSessionRun({
   const timeZone = getViewerTimeZone();
   const introduceNext = useMutation(api.passageMemory.introduceNext);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
-  const freshness = useQuery(api.passageMemory.reviewFreshness, {
-    packId,
-    now,
-  });
 
   const [status, setStatus] = useState(view.status);
   const isMaintenance = status === "reviewing" || status === "mastered";
@@ -726,11 +717,6 @@ function PassageSessionRun({
                 ? handleSkipWarmup
                 : undefined
             }
-            offerRefresher={
-              freshness?.stale === true &&
-              (recall.mode === "review" ||
-                (recall.mode === "frontier" && recall.learnStage === 3))
-            }
           />
         </div>
       ) : null}
@@ -1182,73 +1168,5 @@ function buildingRecall(args: {
     retry,
     undefined,
     phase === "rope" ? WARMUP_PROMPT_COPY : PRACTICE_ROPE_PROMPT_COPY,
-  );
-}
-
-function PassageSessionShell({
-  phaseLabel,
-  packName,
-  onExit,
-  onHome,
-  backLabel,
-  exitHref,
-  progress,
-  persistError,
-  aside,
-  children,
-}: {
-  phaseLabel: string;
-  packName: string;
-  onExit: () => void;
-  onHome?: () => void;
-  backLabel: string;
-  exitHref?: string;
-  progress?: SessionProgress;
-  persistError: string | null;
-  aside?: ReactNode;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="shrink-0 border-b px-5 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <SessionBackButton
-            onExit={onExit}
-            onHome={onHome}
-            label={backLabel}
-            exitHref={exitHref}
-          />
-          <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
-            <span
-              className="shrink-0 font-semibold"
-              role="status"
-              aria-label={`Session phase: ${phaseLabel}`}
-            >
-              {phaseLabel}
-            </span>
-            <span aria-hidden className="text-muted-foreground">
-              ·
-            </span>
-            <span className="truncate font-medium text-muted-foreground">
-              {packName}
-            </span>
-          </h1>
-          {progress ? <SessionHeaderProgress progress={progress} /> : null}
-        </div>
-      </header>
-      {persistError ? (
-        <div
-          role="alert"
-          className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-sm text-destructive"
-        >
-          {persistError}
-        </div>
-      ) : null}
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">
-          <SessionColumns aside={aside}>{children}</SessionColumns>
-        </div>
-      </ScrollArea>
-    </div>
   );
 }

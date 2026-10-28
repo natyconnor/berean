@@ -11,8 +11,8 @@ import { REFRESH_LABEL } from "@/lib/memory-copy";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   groupReviewSessionAttempts,
+  lastTryNeedsRefresh,
   recalledCopy,
-  slippedThisSession,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
@@ -151,7 +151,7 @@ export function ReviewResultRows({
                   variant="icon"
                 />
               ) : null}
-              {attempt.offerPractice === false ? null : slippedThisSession(
+              {attempt.offerPractice === false ? null : lastTryNeedsRefresh(
                   attempt.accuracies,
                 ) ? (
                 <Button

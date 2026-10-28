@@ -586,7 +586,7 @@ describe("PassageRecallCard Refresh and skip", () => {
         error={null}
         retry={() => undefined}
         hint={{ type: "hidden", message: "No hint text." }}
-        learnStage={3}
+        learnStage={2}
         stageReps={0}
         status="reviewing"
         refreshSitting

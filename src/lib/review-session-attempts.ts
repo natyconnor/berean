@@ -57,10 +57,13 @@ export function recalledCopy(accuracies: readonly number[]): string {
   if (accuracies.length <= 1) {
     return `${accuracies[0] ?? 0}% recalled`;
   }
-  return `${accuracies.join("%, then ")}% recalled`;
+  const last = accuracies[accuracies.length - 1] ?? 0;
+  const earlier = accuracies.slice(0, -1).join("%, ");
+  return `${earlier}%, then ${last}% recalled`;
 }
 
-/** True when any recitation this session dropped below the lapse bar. */
-export function slippedThisSession(accuracies: readonly number[]): boolean {
-  return accuracies.some((accuracy) => accuracy < REVIEW_LAPSE_ACCURACY);
+/** True when the latest recitation dropped below the lapse bar. */
+export function lastTryNeedsRefresh(accuracies: readonly number[]): boolean {
+  const last = accuracies[accuracies.length - 1];
+  return last !== undefined && last < REVIEW_LAPSE_ACCURACY;
 }

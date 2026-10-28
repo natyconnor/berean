@@ -13,8 +13,6 @@ import {
 import {
   countDueUnifiedReviewPacks,
   dueUnifiedPackDueAt,
-  loadOwnedPack,
-  loadPackMembers,
   loadPackMembershipIndex,
   loadUnifiedReviewPacks,
   loadUnifiedReviewVerseRefIds,
@@ -73,12 +71,10 @@ import {
 } from "../src/lib/memory-way-back";
 import {
   isReviewHintedCheckIn,
-  isShakyVerse,
   isStaleVerse,
   recentReviewLapsed,
   refreshRecentLapseCount,
 } from "../src/lib/memory-stale";
-import { formatVerseRefTitle } from "../src/lib/verse-ref-utils";
 import {
   snapshotSchedule,
   startOverVersePatch,
@@ -1042,33 +1038,6 @@ export const startOver = mutation({
   },
 });
 
-/** Reset several verses (a pack chooser). */
-export const startOverMany = mutation({
-  args: {
-    verseRefIds: v.array(v.id("verseRefs")),
-    now: v.number(),
-    replaceUndo: v.optional(v.boolean()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-    for (const verseRefId of args.verseRefIds) {
-      const ref = await ctx.db.get(verseRefId);
-      if (!ref || ref.userId !== userId) continue;
-      const memory = await findVerseMemory(ctx, userId, verseRefId);
-      if (!memory || !isInMemory(memory)) continue;
-      await applyVerseStartOver(
-        ctx,
-        userId,
-        verseRefId,
-        args.now,
-        args.replaceUndo,
-      );
-    }
-    return null;
-  },
-});
-
 /** Put the schedule captured at Start over back. */
 export const undoStartOver = mutation({
   args: { verseRefId: v.id("verseRefs"), now: v.number() },
@@ -1257,73 +1226,6 @@ export const spendDailyRescue = mutation({
       lastReviewedAt: memory.lastReviewedAt,
     });
     return { schedule: plan.schedule, sessionSpent: plan.sessionSpent };
-  },
-});
-
-export const undoStartOverMany = mutation({
-  args: { verseRefIds: v.array(v.id("verseRefs")), now: v.number() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-    for (const verseRefId of args.verseRefIds) {
-      const ref = await ctx.db.get(verseRefId);
-      if (!ref || ref.userId !== userId) continue;
-      const memory = await findVerseMemory(ctx, userId, verseRefId);
-      if (!memory?.startOverUndo) continue;
-      const next = restoreStartOverUndo(memory.startOverUndo);
-      if (memory.status !== next.status) {
-        await adjustUserMemoryStats(
-          ctx,
-          userId,
-          args.now,
-          memory.status,
-          next.status,
-        );
-      }
-      await ctx.db.patch(memory._id, {
-        ...next,
-        lastReviewedAt: memory.startOverUndo.lastReviewedAt,
-        startedOverAt: undefined,
-        startOverUndo: undefined,
-      });
-    }
-    return null;
-  },
-});
-
-export const shakyInPack = query({
-  args: { packId: v.id("packs") },
-  returns: v.array(
-    v.object({
-      verseRefId: v.id("verseRefs"),
-      label: v.string(),
-    }),
-  ),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserIdOrNull(ctx);
-    if (!userId) return [];
-    const pack = await loadOwnedPack(ctx, args.packId, userId);
-    if (!pack) return [];
-    const members = await loadPackMembers(ctx, userId, pack);
-    const shaky: Array<{ verseRefId: Id<"verseRefs">; label: string }> = [];
-    for (const member of members) {
-      const recent = await loadRecentReviews(ctx, userId, member.verseRefId);
-      if (
-        !isShakyVerse(
-          recent.map((row) => ({
-            accuracy: row.accuracy,
-            lapsed: recentReviewLapsed(row.accuracy),
-          })),
-        )
-      ) {
-        continue;
-      }
-      shaky.push({
-        verseRefId: member.verseRefId,
-        label: formatVerseRefTitle(member),
-      });
-    }
-    return shaky;
   },
 });
 

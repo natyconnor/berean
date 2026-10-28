@@ -24,7 +24,10 @@ import { MemoryPanelFrame } from "@/components/memory/drawer/memory-panel-frame"
 import { InternalLink } from "@/components/memory/internal-link";
 import { FRONTIER_LOCKED_COPY } from "@/components/memory/passage/passage-session-model";
 import { Button } from "@/components/ui/button";
-import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -42,7 +45,6 @@ import {
   learnActionLabel,
   todayStepParts,
 } from "@/lib/memory-copy";
-import { isLearningPhase, isReviewPhase } from "@/lib/memory-scheduler";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
 import { spanDisplayTitle } from "@/lib/memorize-target";
@@ -718,6 +720,13 @@ function usePackEditor(pack: Pack, members: Member[]) {
   const [adding, setAdding] = useState<ReadonlySet<string>>(new Set());
   const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [removed, setRemoved] = useState<{
+    member: Member;
+    order: number;
+    index: number;
+    reference: string;
+  } | null>(null);
   const latestMove = useRef(0);
 
   const ordered = orderByKeys(members, localOrder, (m) => m.verseRefId);
@@ -735,10 +744,10 @@ function usePackEditor(pack: Pack, members: Member[]) {
     void reorder({ id: pack._id, orderedVerseRefIds: ids })
       .then(
         () => {
-          toast.success("New order saved", { id: `pack-order-${pack._id}` });
+          setOrderError(null);
         },
         () => {
-          toast.error("Couldn't save the new order. Please try again.");
+          setOrderError("Couldn't save the new order. Please try again.");
         },
       )
       .finally(() => {
@@ -749,26 +758,14 @@ function usePackEditor(pack: Pack, members: Member[]) {
   const remove = (member: Member) => {
     const id = member.verseRefId;
     if (removing.has(id)) return;
+    const index = ordered.findIndex((row) => row.verseRefId === id);
     setRemoving((current) => new Set(current).add(id));
     const reference = formatVerseRefTitle(member);
     void removeVerse({ id: pack._id, verseRefId: id })
       .then(
         (order) => {
           if (order === null) return;
-          toast(`Removed ${reference}.`, {
-            action: {
-              label: "Undo",
-              onClick: () => {
-                void restoreVerse({
-                  id: pack._id,
-                  verseRefId: id,
-                  order,
-                }).catch(() => {
-                  toast.error("Couldn't undo. Please try again.");
-                });
-              },
-            },
-          });
+          setRemoved({ member, order, index, reference });
         },
         () => {
           toast.error(`Couldn't remove ${reference}. Please try again.`);
@@ -781,6 +778,21 @@ function usePackEditor(pack: Pack, members: Member[]) {
           return next;
         }),
       );
+  };
+
+  const undoRemove = () => {
+    if (!removed) return;
+    const slot = removed;
+    void restoreVerse({
+      id: pack._id,
+      verseRefId: slot.member.verseRefId,
+      order: slot.order,
+    }).then(
+      () => setRemoved(null),
+      () => {
+        toast.error("Couldn't undo. Please try again.");
+      },
+    );
   };
 
   const add = (span: VerseSpan) => {
@@ -811,8 +823,11 @@ function usePackEditor(pack: Pack, members: Member[]) {
     adding,
     removing,
     announcement,
+    orderError,
+    removed,
     move,
     remove,
+    undoRemove,
     add,
   };
 }
@@ -835,6 +850,8 @@ function PackVerses({
   const reviewTogether = pack.unifiedReviewEnabled === true;
   const editor = usePackEditor(pack, members);
   const drag = useDragReorder(editor.move);
+  const startOver = useMutation(api.verseMemory.startOver);
+  const undoStartOver = useMutation(api.verseMemory.undoStartOver);
   const [addOpen, setAddOpen] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const closeAdd = () => {
@@ -917,22 +934,33 @@ function PackVerses({
       action={editable ? addButton : undefined}
     >
       {addRow}
-      <ul className="space-y-1.5">
-        {editor.ordered.map((member, index) => {
+      <ul className="min-w-0 space-y-1.5 overflow-x-hidden">
+        {editor.ordered.flatMap((member, index) => {
           const row = packMemberRow(member, { now, timeZone, reviewTogether });
           const reference = formatVerseRefTitle(member);
           const href = (session: MemorySessionKind) =>
             withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
-          return (
+          const items = [
             <li
               key={member.verseRefId}
               {...(editable ? drag.rowProps(index) : {})}
               className={cn(
-                "group flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5",
+                "group flex min-w-0 items-center gap-2 rounded-lg border bg-card px-3 py-2.5 sm:gap-3",
                 editable && dragRowClassName(drag.rowState(index, count)),
               )}
             >
-              {editable ? <DragHandle {...drag.handleProps(index)} /> : null}
+              {editable ? (
+                <DragHandle
+                  label={reference}
+                  picked={drag.picked === index}
+                  onToggle={() => drag.togglePick(index)}
+                  onMovePicked={(delta) =>
+                    drag.movePicked(delta, count, drag.picked ?? index)
+                  }
+                  onCancel={drag.cancelPick}
+                  {...drag.handleProps(index)}
+                />
+              ) : null}
               <span
                 aria-hidden
                 className={cn(
@@ -950,7 +978,9 @@ function PackVerses({
                 >
                   {reference}
                 </InternalLink>
-                <p className="text-xs text-muted-foreground">{row.line}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {row.line}
+                </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {row.actions.includes("practice") ? (
@@ -960,7 +990,7 @@ function PackVerses({
                         asChild
                         size="sm"
                         variant="ghost"
-                        className="text-muted-foreground max-sm:h-11"
+                        className="hidden text-muted-foreground sm:inline-flex"
                       >
                         <InternalLink
                           href={href("practice")}
@@ -1011,17 +1041,95 @@ function PackVerses({
               {editable ? (
                 <RowEditControls
                   label={reference}
-                  index={index}
-                  count={count}
                   removing={editor.removing.has(member.verseRefId)}
-                  onMove={editor.move}
                   onRemove={() => editor.remove(member)}
+                  menu={
+                    <MemoryRestartMenu
+                      name={reference}
+                      triggerLabel={`Options for ${reference}`}
+                      isDrawer={frame.surface === "drawer"}
+                      fullPageHref={frame.fullPageHref}
+                      refreshHref={withReturn(
+                        `${memoryVerseSessionHref("practice", member)}?refresh=1`,
+                        frame.returnTo,
+                      )}
+                      refreshTarget={{
+                        scope: "verse",
+                        mark: {
+                          status: member.status,
+                          learnStage: member.learnStage,
+                        },
+                      }}
+                      showRestart={member.status !== "new"}
+                      extraItems={
+                        row.actions.includes("practice") ? (
+                          <DropdownMenuItem asChild className="sm:hidden">
+                            <InternalLink href={href("practice")}>
+                              Practice
+                            </InternalLink>
+                          </DropdownMenuItem>
+                        ) : null
+                      }
+                      onStartOver={async (_choice, opts) => {
+                        await startOver({
+                          verseRefId: member.verseRefId,
+                          now: Date.now(),
+                          replaceUndo: opts?.replaceUndo,
+                        });
+                      }}
+                      onUndo={async () => {
+                        await undoStartOver({
+                          verseRefId: member.verseRefId,
+                          now: Date.now(),
+                        });
+                      }}
+                    />
+                  }
                 />
               ) : null}
-            </li>
-          );
+            </li>,
+          ];
+          if (editor.removed && editor.removed.index === index) {
+            items.push(
+              <li
+                key={`removed-${editor.removed.member.verseRefId}`}
+                className="flex min-h-11 items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm"
+              >
+                <span className="min-w-0 flex-1">
+                  Removed {editor.removed.reference}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={editor.undoRemove}
+                >
+                  Undo
+                </Button>
+              </li>,
+            );
+          }
+          return items;
         })}
+        {editor.removed && editor.removed.index >= editor.ordered.length ? (
+          <li className="flex min-h-11 items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm">
+            <span className="min-w-0 flex-1">
+              Removed {editor.removed.reference}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={editor.undoRemove}
+            >
+              Undo
+            </Button>
+          </li>
+        ) : null}
       </ul>
+      {editor.orderError ? (
+        <p className="text-xs text-destructive">{editor.orderError}</p>
+      ) : null}
       {editable ? <MoveAnnouncer message={editor.announcement} /> : null}
     </VersesSection>
   );
@@ -1205,21 +1313,12 @@ function PackDetailMenu({
   const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
   const startOverPassage = useMutation(api.passageMemory.startOver);
   const undoPassage = useMutation(api.passageMemory.undoStartOver);
-  const startOverMany = useMutation(api.verseMemory.startOverMany);
-  const undoStartOverMany = useMutation(api.verseMemory.undoStartOverMany);
   const shakyPieces = useQuery(
     api.passageMemory.shakyPieces,
     isPassage ? { packId: pack._id } : "skip",
   );
-  const shakyVerses = useQuery(
-    api.verseMemory.shakyInPack,
-    isPassage ? "skip" : { packId: pack._id },
-  );
   const [togetherOpen, setTogetherOpen] = useState(false);
   const [togetherError, setTogetherError] = useState<string | null>(null);
-  const [undoVerseRefIds, setUndoVerseRefIds] = useState<
-    Member["verseRefId"][] | null
-  >(null);
   const restoreLearnDismissal = useRef(false);
   const removeLock = useSubmitLock();
   const togetherLock = useSubmitLock();
@@ -1286,7 +1385,7 @@ function PackDetailMenu({
     ? (passage?.pieces ?? [])
         .filter((piece) => (shakyPieces ?? []).includes(piece.index))
         .map((piece) => String(piece.startVerse))
-    : (shakyVerses ?? []).map((verse) => verse.label);
+    : [];
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
 
   return (
@@ -1296,78 +1395,61 @@ function PackDetailMenu({
         fullPageHref={fullPageHref}
         isDrawer={isDrawer}
         refreshHref={refreshHref}
-        refreshTarget={{
-          scope: "group",
-          verses: members.map((member) => ({
-            status: member.status,
-            learnStage: member.learnStage,
-          })),
-          pieces: (passage?.pieces ?? []).map((piece) => ({
-            attachment: piece.attachment,
-            learnStage: piece.learnStage,
-          })),
-        }}
+        refreshTarget={
+          isPassage
+            ? {
+                scope: "group",
+                verses: members.map((member) => ({
+                  status: member.status,
+                  learnStage: member.learnStage,
+                })),
+                pieces: (passage?.pieces ?? []).map((piece) => ({
+                  attachment: piece.attachment,
+                  learnStage: piece.learnStage,
+                })),
+              }
+            : undefined
+        }
         openStartOver={openStartOver}
         shakyLabels={shakyLabels}
-        wholeLabel={isPassage ? "passage" : "pack"}
-        showRestart={
-          isPassage ? (passage?.pieces.length ?? 0) > 0 : members.length > 0
+        wholeLabel={isPassage ? "passage" : undefined}
+        showRestart={isPassage && (passage?.pieces.length ?? 0) > 0}
+        onStartOver={
+          isPassage
+            ? async (choice, opts) => {
+                const pieceIndexes =
+                  choice === "shaky" ? (shakyPieces ?? []).slice() : undefined;
+                restoreLearnDismissal.current = clearLearnPackDismissal(
+                  pack._id,
+                  learnDismissDayKey(Date.now()),
+                );
+                await startOverPassage({
+                  packId: pack._id,
+                  now: Date.now(),
+                  replaceUndo: opts?.replaceUndo,
+                  ...(pieceIndexes ? { pieceIndexes } : {}),
+                });
+              }
+            : undefined
         }
-        onStartOver={async (choice, opts) => {
-          if (isPassage) {
-            const pieceIndexes =
-              choice === "shaky" ? (shakyPieces ?? []).slice() : undefined;
-            restoreLearnDismissal.current = clearLearnPackDismissal(
-              pack._id,
-              learnDismissDayKey(Date.now()),
-            );
-            await startOverPassage({
-              packId: pack._id,
-              now: Date.now(),
-              replaceUndo: opts?.replaceUndo,
-              ...(pieceIndexes ? { pieceIndexes } : {}),
-            });
-            return;
-          }
-          const verseRefIds =
-            choice === "shaky"
-              ? (shakyVerses ?? []).map((verse) => verse.verseRefId)
-              : members
-                  .filter(
-                    (member) =>
-                      isLearningPhase(member.status) ||
-                      isReviewPhase(member.status),
-                  )
-                  .map((member) => member.verseRefId);
-          await startOverMany({
-            verseRefIds,
-            now: Date.now(),
-            replaceUndo: opts?.replaceUndo,
-          });
-          setUndoVerseRefIds(verseRefIds);
-        }}
-        onUndo={async () => {
-          if (isPassage) {
-            await undoPassage({
-              packId: pack._id,
-              now: Date.now(),
-              tzOffsetMinutes,
-            });
-            if (restoreLearnDismissal.current) {
-              dismissLearnPackForToday(
-                pack._id,
-                learnDismissDayKey(Date.now()),
-              );
-              restoreLearnDismissal.current = false;
-            }
-            return;
-          }
-          await undoStartOverMany({
-            verseRefIds: undoVerseRefIds ?? [],
-            now: Date.now(),
-          });
-          setUndoVerseRefIds(null);
-        }}
+        onUndo={
+          isPassage
+            ? async () => {
+                await undoPassage({
+                  packId: pack._id,
+                  now: Date.now(),
+                  tzOffsetMinutes,
+                });
+                if (restoreLearnDismissal.current) {
+                  dismissLearnPackForToday(
+                    pack._id,
+                    learnDismissDayKey(Date.now()),
+                  );
+                  restoreLearnDismissal.current = false;
+                }
+              }
+            : undefined
+        }
         extraItems={
           reviewTogether ? (
             <DropdownMenuCheckboxItem

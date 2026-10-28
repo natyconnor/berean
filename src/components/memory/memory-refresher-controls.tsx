@@ -5,6 +5,8 @@ import {
   ENTER_TO_CHECK_HINT,
   FIRST_LETTERS_HINT_LABEL,
   NEED_A_REFRESHER_LABEL,
+  TYPE_AS_YOU_REMEMBER,
+  TYPE_AS_YOU_REMEMBER_PASSAGE,
 } from "@/lib/memory-copy";
 import { cn } from "@/lib/utils";
 import { maskVerseText, type HintToken } from "@/lib/verse-hint";
@@ -14,6 +16,29 @@ export function EnterToCheckHint({ className }: { className?: string }) {
     <span className={cn("text-xs text-muted-foreground", className)}>
       {ENTER_TO_CHECK_HINT}
     </span>
+  );
+}
+
+export function EmptyHintPrompt({
+  passage,
+  onRefresher,
+  showRefresher,
+  disabled,
+}: {
+  passage?: boolean;
+  onRefresher?: () => void;
+  showRefresher?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex h-full min-h-[140px] flex-col items-center justify-center gap-3 text-center font-sans">
+      <p className="max-w-sm text-sm text-muted-foreground">
+        {passage ? TYPE_AS_YOU_REMEMBER_PASSAGE : TYPE_AS_YOU_REMEMBER}
+      </p>
+      {showRefresher && onRefresher ? (
+        <NeedARefresherLink onClick={onRefresher} disabled={disabled} />
+      ) : null}
+    </div>
   );
 }
 
