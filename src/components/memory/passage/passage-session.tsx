@@ -10,6 +10,7 @@ import { CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
 
 import { PassageRefreshSitting } from "@/components/memory/passage/passage-refresh-sitting";
+import { PassageSessionShell } from "@/components/memory/passage/passage-session-shell";
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
 import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
 import {
@@ -59,9 +60,8 @@ import {
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
-import { PassageSessionShell } from "@/components/memory/passage/passage-session-shell";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
-import { type SessionProgress } from "@/components/memory/practice/session-header-progress";
+import type { SessionProgress } from "@/components/memory/practice/session-header-progress";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
 import { Button } from "@/components/ui/button";
 import {

@@ -1,4 +1,3 @@
-import type { KeyboardEvent, ReactNode } from "react";
 import { GripVertical, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -7,11 +6,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 
 import type { DragReorder } from "./use-drag-reorder";
-
-const REMOVE_TOOLTIP = "Remove from pack";
 
 /**
  * Editing controls for an ordered verse list (a pack's verses, New pack's
@@ -20,67 +16,25 @@ const REMOVE_TOOLTIP = "Remove from pack";
 
 export function DragHandle({
   label,
-  picked,
-  onToggle,
-  onMovePicked,
-  onCancel,
   ...props
-}: ReturnType<DragReorder["handleProps"]> & {
-  label: string;
-  picked: boolean;
-  onToggle: () => void;
-  onMovePicked: (delta: number) => void;
-  onCancel: () => void;
-}) {
-  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onCancel();
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      onMovePicked(-1);
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      onMovePicked(1);
-      return;
-    }
-    if (event.key === " " || event.key === "Enter") {
-      event.preventDefault();
-      onToggle();
-    }
-  };
-
+}: ReturnType<DragReorder["handleProps"]> & { label: string }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon-sm"
       {...props}
+      data-keep-drawer-on-escape=""
       aria-label={`Reorder ${label}`}
-      aria-pressed={picked}
-      title={`Reorder ${label}`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      onKeyDown={onKeyDown}
-      className={cn(
-        "flex size-11 shrink-0 items-center justify-center text-muted-foreground/60 transition-colors hover:text-muted-foreground active:cursor-grabbing sm:size-8",
-        "cursor-grab pointer-fine:size-8",
-        picked && "text-foreground",
-      )}
+      title="Drag to reorder"
+      className="shrink-0 cursor-grab text-muted-foreground/60 transition-colors hover:text-muted-foreground active:cursor-grabbing"
     >
-      <GripVertical className="size-4" />
-    </button>
+      <GripVertical className="size-4" aria-hidden />
+    </Button>
   );
 }
 
-const revealOnRowHover =
-  "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:focus-visible:opacity-100";
-
-export function RemoveFromPackButton({
+export function RowEditControls({
   label,
   removing = false,
   onRemove,
@@ -95,48 +49,17 @@ export function RemoveFromPackButton({
         <Button
           type="button"
           variant="ghost"
-          size="icon"
-          aria-label={`Remove ${label} from pack`}
+          size="icon-sm"
+          aria-label={`Remove ${label}`}
           disabled={removing}
           onClick={onRemove}
-          className={cn(
-            "size-11 text-muted-foreground sm:size-8",
-            "pointer-fine:size-8",
-            revealOnRowHover,
-          )}
+          className="hidden text-muted-foreground opacity-0 md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:focus-visible:opacity-100"
         >
           <Trash2 aria-hidden />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{REMOVE_TOOLTIP}</TooltipContent>
+      <TooltipContent>Remove from pack</TooltipContent>
     </Tooltip>
-  );
-}
-
-/** Hover/focus trash on desktop, always-on on phones. Optional ⋯ slot. */
-export function RowEditControls({
-  label,
-  removing = false,
-  onRemove,
-  menu,
-}: {
-  label: string;
-  removing?: boolean;
-  onRemove: () => void;
-  menu?: ReactNode;
-}) {
-  return (
-    <div
-      className="flex shrink-0 items-center"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <RemoveFromPackButton
-        label={label}
-        removing={removing}
-        onRemove={onRemove}
-      />
-      {menu}
-    </div>
   );
 }
 

@@ -444,6 +444,8 @@ export function VerseRestartMenu({
   fullPageHref,
   isDrawer,
   openStartOver,
+  showStop = true,
+  triggerLabel,
   onStopped,
 }: {
   verseRefId: Id<"verseRefs">;
@@ -454,7 +456,9 @@ export function VerseRestartMenu({
   fullPageHref?: string;
   isDrawer: boolean;
   openStartOver?: boolean;
-  onStopped: () => void;
+  showStop?: boolean;
+  triggerLabel?: string;
+  onStopped?: () => void;
 }) {
   const startOver = useMutation(api.verseMemory.startOver);
   const undoStartOver = useMutation(api.verseMemory.undoStartOver);
@@ -468,6 +472,7 @@ export function VerseRestartMenu({
       refreshHref={refreshHref}
       refreshTarget={{ scope: "verse", mark: { status, learnStage } }}
       openStartOver={openStartOver}
+      triggerLabel={triggerLabel}
       onStartOver={async (_choice, opts) => {
         await startOver({
           verseRefId,
@@ -478,16 +483,20 @@ export function VerseRestartMenu({
       onUndo={async () => {
         await undoStartOver({ verseRefId, now: Date.now() });
       }}
-      stop={{
-        label: "Stop memorizing",
-        title: `Stop memorizing ${reference}?`,
-        description: "Your progress is saved if you start again.",
-        onConfirm: async () => {
-          await stopMemorizing({ verseRefId, now: Date.now() });
-          toast.success(`Stopped memorizing ${reference}.`);
-          onStopped();
-        },
-      }}
+      stop={
+        showStop
+          ? {
+              label: "Stop memorizing",
+              title: `Stop memorizing ${reference}?`,
+              description: "Your progress is saved if you start again.",
+              onConfirm: async () => {
+                await stopMemorizing({ verseRefId, now: Date.now() });
+                toast.success(`Stopped memorizing ${reference}.`);
+                onStopped?.();
+              },
+            }
+          : undefined
+      }
     />
   );
 }

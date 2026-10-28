@@ -638,7 +638,7 @@ describe("PackDetail for a passage", () => {
 describe("PackDetail for a pack", () => {
   const RETURN = "return=%2Fmemory%2Fmercedxx";
 
-  it("shows both bars and per-verse Review, Practice and Learn", async () => {
+  it("shows both bars and per-verse Review, Practice and Learn", () => {
     renderHost("pack:mercedxx", "verses");
     const dialog = screen.getByRole("dialog", { name: "Merced Team" });
 
@@ -700,22 +700,6 @@ describe("PackDetail for a pack", () => {
       "href",
       `/memory/learn?book=Isaiah&chapter=41&startVerse=10&endVerse=10&${RETURN}`,
     );
-
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "Options for Luke 9:23–24" }),
-    );
-    expect(
-      screen.getByRole("menuitem", { name: /Refresh/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: /Start over/ }),
-    ).toBeInTheDocument();
-    await userEvent.keyboard("{Escape}");
-    expect(
-      within(dialog).queryByRole("button", {
-        name: "Options for Isaiah 41:10",
-      }),
-    ).not.toBeInTheDocument();
   });
 
   it("keeps Undo on a verse row after Start over turns it into Up next", async () => {
@@ -729,7 +713,7 @@ describe("PackDetail for a pack", () => {
     );
     const view = render(host());
     await userEvent.click(
-      screen.getByRole("button", { name: "Options for Luke 9:23–24" }),
+      screen.getByRole("button", { name: "More actions for Luke 9:23–24" }),
     );
     await userEvent.click(
       await screen.findByRole("menuitem", { name: /Start over/ }),
@@ -768,7 +752,7 @@ describe("PackDetail for a pack", () => {
       within(luke as HTMLElement).getByRole("button", { name: UNDO_LABEL }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Options for Luke 9:23–24" }),
+      screen.queryByRole("button", { name: "More actions for Luke 9:23–24" }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: UNDO_LABEL }));
@@ -784,12 +768,6 @@ describe("PackDetail for a pack", () => {
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
       screen.queryByRole("menuitem", { name: "Stop memorizing" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("menuitem", { name: /Refresh/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("menuitem", { name: /Start over/ }),
     ).not.toBeInTheDocument();
     await userEvent.click(
       await screen.findByRole("menuitem", { name: "Delete pack" }),
@@ -1034,7 +1012,12 @@ describe("PackDetail editing a pack", () => {
     ).toBeInTheDocument();
   });
 
-  it("reorders verses from the grip and announces each move", async () => {
+  async function reorderWithKeyboard(label: string, keys: string) {
+    screen.getByRole("button", { name: `Reorder ${label}` }).focus();
+    await userEvent.keyboard(` ${keys} `);
+  }
+
+  it("reorders verses from the Reorder button and announces each move", async () => {
     const saves: Array<() => void> = [];
     mocks.mutations.set(
       "packs.reorder",
@@ -1056,11 +1039,8 @@ describe("PackDetail editing a pack", () => {
     const view = render(host());
     expect(rowNames()).toEqual(["Luke 9:23–24", "Joshua 1:9", "Isaiah 41:10"]);
 
-    const grip = screen.getByRole("button", {
-      name: "Reorder Luke 9:23–24",
-    });
-    grip.focus();
-    await userEvent.keyboard("{ArrowDown}");
+    await reorderWithKeyboard("Luke 9:23–24", "{ArrowDown}");
+
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
     expect(mocks.mutations.get("packs.reorder")).toHaveBeenCalledWith({
       id: "mercedxx",
@@ -1069,26 +1049,42 @@ describe("PackDetail editing a pack", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Moved Luke 9:23–24 to 2 of 3.",
     );
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith(
+      "New order saved",
+      expect.anything(),
+    );
     view.rerender(host());
     await act(async () => {
       saves.shift()?.();
       await Promise.resolve();
     });
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
-    expect(mocks.toastSuccess).not.toHaveBeenCalledWith("New order saved", {
-      id: "pack-order-mercedxx",
+
+    await reorderWithKeyboard("Isaiah 41:10", "{ArrowUp}");
+    expect(mocks.mutations.get("packs.reorder")).toHaveBeenLastCalledWith({
+      id: "mercedxx",
+      orderedVerseRefIds: ["josh", "isa", "luke"],
     });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Moved Isaiah 41:10 to 2 of 3.",
+    );
+  });
+
+  it("cancels a keyboard reorder with Escape", async () => {
+    renderHost("pack:mercedxx");
+    screen.getByRole("button", { name: "Reorder Luke 9:23–24" }).focus();
+    await userEvent.keyboard(" {ArrowDown}{Escape}");
+    expect(rowNames()).toEqual(["Luke 9:23–24", "Joshua 1:9", "Isaiah 41:10"]);
+    expect(mocks.mutations.get("packs.reorder")).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Reorder cancelled.");
   });
 
   it("removes a verse with an Undo that puts it back at its old place", async () => {
     mutation("packs.removeVerse").mockResolvedValue(1);
     renderHost("pack:mercedxx");
 
-    const josh = screen.getByText("Joshua 1:9").closest("li");
-    expect(josh).not.toBeNull();
-    await userEvent.hover(josh as HTMLElement);
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove Joshua 1:9 from pack" }),
+      screen.getByRole("button", { name: "Remove Joshua 1:9" }),
     );
     expect(mocks.mutations.get("packs.removeVerse")).toHaveBeenCalledWith({
       id: "mercedxx",
@@ -1096,12 +1092,45 @@ describe("PackDetail editing a pack", () => {
     });
     expect(await screen.findByText("Removed Joshua 1:9")).toBeInTheDocument();
     expect(mocks.toast).not.toHaveBeenCalled();
+
     await userEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(mocks.mutations.get("packs.restoreVerse")).toHaveBeenCalledWith({
       id: "mercedxx",
       verseRefId: "josh",
       order: 1,
     });
+  });
+
+  it("keeps Refresh and Start over on verse rows, not the pack menu", async () => {
+    renderHost("pack:mercedxx");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Start over/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete pack" }),
+    ).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "More actions for Luke 9:23–24" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Stop memorizing" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Move up" }),
+    ).not.toBeInTheDocument();
   });
 
   it("adds a verse by reference from the inline row, and Esc closes only the row", async () => {
@@ -1172,7 +1201,7 @@ describe("PackDetail editing a pack", () => {
       screen.queryByRole("button", { name: "Add verses" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^Options for/ }),
+      screen.queryByRole("button", { name: /^Reorder / }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Remove / }),

@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   ENTER_TO_CHECK_HINT,
+  backOnTrackCopy,
   formatShakyVerseList,
+  fromMemoryHintCopy,
   hasLearningProgress,
   learnActionLabel,
   memorizeTitleLabel,
   passageStepLine,
+  refresherGoalLabel,
   shakyVersesOption,
   startOverTitle,
   statusLabel,
@@ -133,6 +136,25 @@ describe("refresher copy", () => {
   it("keeps the check-answer hint plain", () => {
     expect(ENTER_TO_CHECK_HINT).toBe(
       "Enter to check · Shift+Enter for a new line",
+    );
+  });
+
+  it("names the empty hint box and the two sitting steps", () => {
+    expect(fromMemoryHintCopy(false)).toBe("Type it as you remember it.");
+    expect(fromMemoryHintCopy(true)).toBe(
+      "Type it as you remember it. Verse numbers aren't needed.",
+    );
+    expect(refresherGoalLabel(1)).toBe("First letters · 1 of 2");
+    expect(refresherGoalLabel(2)).toBe("From memory · 2 of 2");
+  });
+
+  it("names the next check-in from the real due day", () => {
+    expect(backOnTrackCopy("today")).toBe("Back on track.");
+    expect(backOnTrackCopy("tomorrow")).toBe(
+      "Back on track. We'll check in again tomorrow.",
+    );
+    expect(backOnTrackCopy("Thu")).toBe(
+      "Back on track. We'll check in again Thu.",
     );
   });
 });

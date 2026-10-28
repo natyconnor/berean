@@ -21,6 +21,16 @@ describe("averageReviewAccuracy", () => {
   it("averages every recitation, including retries", () => {
     expect(averageReviewAccuracy([john, { ...john, accuracy: 100 }])).toBe(93);
   });
+
+  it("counts a miss and both refresher passes as 67%", () => {
+    expect(
+      averageReviewAccuracy([
+        { ...john, accuracy: 0 },
+        { ...john, accuracy: 100 },
+        { ...john, accuracy: 100 },
+      ]),
+    ).toBe(67);
+  });
 });
 
 describe("groupReviewSessionAttempts", () => {
@@ -44,16 +54,16 @@ describe("recalledCopy", () => {
     expect(recalledCopy([85, 100])).toBe("85%, then 100% recalled");
   });
 
-  it("puts then only before the last of three scores", () => {
+  it("puts then only before the last of three or more scores", () => {
     expect(recalledCopy([0, 100, 100])).toBe("0%, 100%, then 100% recalled");
   });
 });
 
 describe("lastTryNeedsRefresh", () => {
-  it("gates Refresh on the latest recitation", () => {
-    expect(lastTryNeedsRefresh([34])).toBe(true);
-    expect(lastTryNeedsRefresh([90, 40])).toBe(true);
+  it("gates Refresh on the last try, not an earlier miss", () => {
     expect(lastTryNeedsRefresh([0, 100, 100])).toBe(false);
-    expect(lastTryNeedsRefresh([92, 88])).toBe(false);
+    expect(lastTryNeedsRefresh([0, 100, 40])).toBe(true);
+    expect(lastTryNeedsRefresh([90, 40])).toBe(true);
+    expect(lastTryNeedsRefresh([])).toBe(false);
   });
 });

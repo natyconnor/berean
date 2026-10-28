@@ -52,7 +52,7 @@ import {
 } from "@/lib/learn-dismissed-packs";
 import { withReturn } from "@/lib/memory-return";
 import { isReviewPhase } from "@/lib/memory-scheduler";
-import { hasMemorizedVerses, hasSessionWorkLeft } from "@/lib/memory-session";
+import { hasMemorizedVerses } from "@/lib/memory-session";
 import {
   orderRemainingSessionItems,
   sortSessionVerses,
@@ -309,19 +309,15 @@ interface TodayTally {
   runs: Readonly<Record<number, PracticeSessionResult>>;
 }
 
-/** Verse cards with nothing left today in the runs opened so far. */
 function spentCards(
   segments: readonly TodaySegment[],
   runStates: Readonly<Record<number, PracticeRunState>>,
-  now: number,
 ): Set<string> {
   const spent = new Set<string>();
   segments.forEach((segment, index) => {
     const run = runStates[index];
     if (!run || segment.kind === "passage") return;
-    for (const [id, progress] of Object.entries(run.progress)) {
-      if (!hasSessionWorkLeft(segment.kind, progress, now)) spent.add(id);
-    }
+    for (const id of run.graded) spent.add(id);
   });
   return spent;
 }
@@ -510,7 +506,7 @@ function TodaySession({
   // A finished passage that still has work today can be opened again.
   const reopenable = new Set(livePassages?.map((item) => item.packId));
 
-  const spent = spentCards(segments, runStates, now);
+  const spent = spentCards(segments, runStates);
   const progressInput: TodayProgressInput = {
     segments,
     learning,
@@ -575,11 +571,7 @@ function TodaySession({
     const nextSpent = new Set(spent);
     const segment = segments[index];
     if (segment && segment.kind !== "passage") {
-      for (const [id, progress] of Object.entries(state.progress)) {
-        if (!hasSessionWorkLeft(segment.kind, progress, now)) {
-          nextSpent.add(id);
-        }
-      }
+      for (const id of state.graded) nextSpent.add(id);
     }
     setLearningIds((ids) => finishedFirst(ids, nextSpent));
     setReviewIds((ids) => finishedFirst(ids, nextSpent));

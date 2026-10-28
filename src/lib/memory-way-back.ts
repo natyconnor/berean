@@ -1,4 +1,3 @@
-import { formatDueDay } from "./memorize-plan";
 import { applyBuildingPassageRefresh } from "./passage-frontier";
 import type { PieceAttachment } from "./passage-pieces";
 import {
@@ -36,11 +35,9 @@ export type PieceLearnMark = {
 
 export type RefreshTarget =
   | { scope: "verse"; mark: VerseLearnMark }
-  | {
-      scope: "group";
-      verses: readonly VerseLearnMark[];
-      pieces: readonly PieceLearnMark[];
-    };
+  | { scope: "passage"; pieces: readonly PieceLearnMark[] };
+
+export type RefreshStep = 1 | 2;
 
 export type AttemptKind =
   "unheld-review" | "held-sitting" | "hinted-check-in" | "practice";
@@ -56,8 +53,6 @@ export type RefreshFinishGrade = {
   accuracy: number;
   quality: "exact" | "close" | "off";
 };
-
-export type RefreshStep = 1 | 2;
 
 export type RefreshStepGate =
   | { type: "retry" }
@@ -156,13 +151,11 @@ export function verseRefreshEligibility(
 
 export function refreshEligibility(target: RefreshTarget): RefreshEligibility {
   if (target.scope === "verse") return verseRefreshEligibility(target.mark);
-  const verseLearned = target.verses.some(
-    (verse) => verseRefreshEligibility(verse) === "learned",
-  );
-  const pieceLearned = target.pieces.some(
+  return target.pieces.some(
     (piece) => piece.learnStage > 0 || piece.attachment === "solid",
-  );
-  return verseLearned || pieceLearned ? "learned" : "new-or-read";
+  )
+    ? "learned"
+    : "new-or-read";
 }
 
 export function refreshKeepsLevel(finish: RefreshFinishGrade): boolean {
@@ -187,29 +180,12 @@ export function refreshStepGate(
   return { type: "advance", next: 2 };
 }
 
-/** First letters is stage 1; From memory is stage 3. There is no cloze step. */
-export function refreshDisplayStage(step: RefreshStep): 1 | 3 {
+export function refreshStepFromLearnStage(learnStage: number): RefreshStep {
+  return learnStage <= 1 ? 1 : 2;
+}
+
+export function refreshLearnStageForStep(step: RefreshStep): 1 | 3 {
   return step === 1 ? 1 : 3;
-}
-
-export function keepLevelDueAt(
-  dueAt: number,
-  now: number,
-  tzOffsetMinutes?: number,
-  timeZone?: string,
-): number {
-  const tomorrow = dueAtInCalendarDays(now, 1, tzOffsetMinutes, timeZone);
-  return dueAt > tomorrow ? dueAt : tomorrow;
-}
-
-export function backOnTrackCopy(
-  dueAt: number,
-  now: number,
-  timeZone?: string,
-): string {
-  const day = formatDueDay(dueAt, now, timeZone);
-  if (day === "today") return "Back on track.";
-  return `Back on track. We'll check in again ${day}.`;
 }
 
 export function planRefreshFinish<T extends BuildingPiece>(

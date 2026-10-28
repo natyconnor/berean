@@ -58,11 +58,9 @@ export function recalledCopy(accuracies: readonly number[]): string {
     return `${accuracies[0] ?? 0}% recalled`;
   }
   const last = accuracies[accuracies.length - 1] ?? 0;
-  const earlier = accuracies.slice(0, -1).join("%, ");
-  return `${earlier}%, then ${last}% recalled`;
+  return `${accuracies.slice(0, -1).join("%, ")}%, then ${last}% recalled`;
 }
 
-/** True when the latest recitation dropped below the lapse bar. */
 export function lastTryNeedsRefresh(accuracies: readonly number[]): boolean {
   const last = accuracies[accuracies.length - 1];
   return last !== undefined && last < REVIEW_LAPSE_ACCURACY;

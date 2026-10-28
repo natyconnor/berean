@@ -39,11 +39,13 @@ import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
   REFRESH_FINISH_ERROR,
   SESSION_COMPLETE_FOOTER,
+  backOnTrackCopy,
+  refresherGoalLabel,
   stepShortLabel,
 } from "@/lib/memory-copy";
 import {
-  EnterToCheckHint,
   EmptyHintPrompt,
+  EnterToCheckHint,
   FirstLettersPanel,
   NeedARefresherButton,
 } from "@/components/memory/memory-refresher-controls";
@@ -75,9 +77,7 @@ import {
   type MemorySessionLabel,
 } from "@/lib/memory-session";
 import {
-  backOnTrackCopy,
-  keepLevelDueAt,
-  refreshDisplayStage,
+  refreshLearnStageForStep,
   refreshStepGate,
   type RefreshStep,
 } from "@/lib/memory-way-back";
@@ -576,18 +576,22 @@ export function PracticeBoard({
           status: progress?.status ?? verse.status,
           dueAt: progress?.dueAt ?? verse.dueAt,
           lastReviewedAt: progress?.lastReviewedAt ?? verse.lastReviewedAt,
-          locked: !hasSessionWorkLeft(
-            kind,
-            {
-              status: progress?.status ?? verse.status,
-              dueAt: progress?.dueAt ?? verse.dueAt,
-              lastReviewedAt: progress?.lastReviewedAt ?? verse.lastReviewedAt,
-            },
-            now,
-          ),
+          locked:
+            kind === "review"
+              ? gradedIds.has(verse.id)
+              : !hasSessionWorkLeft(
+                  kind,
+                  {
+                    status: progress?.status ?? verse.status,
+                    dueAt: progress?.dueAt ?? verse.dueAt,
+                    lastReviewedAt:
+                      progress?.lastReviewedAt ?? verse.lastReviewedAt,
+                  },
+                  now,
+                ),
         };
       }),
-    [orderedVerses, progressByVerseId, now, kind, scopeLabel],
+    [orderedVerses, progressByVerseId, now, kind, scopeLabel, gradedIds],
   );
 
   // What the summary lists: each verse where it landed, flagged when it
@@ -775,6 +779,14 @@ export function PracticeBoard({
 
   function showVerse(id: string) {
     setIsShuffling(false);
+    if (
+      isReview &&
+      currentVerse &&
+      id !== currentVerse.id &&
+      !currentHasWorkLeft
+    ) {
+      markVerseGraded(currentVerse.id);
+    }
     if (onShow) onShow(id);
     else setCurrentId(id);
   }
@@ -793,6 +805,12 @@ export function PracticeBoard({
 
   function handleSelectVerse(id: string) {
     if (orderedVerses.some((verse) => verse.id === id)) showVerse(id);
+  }
+
+  function markVerseGraded(verseId: string) {
+    setGradedIds((prev) =>
+      prev.has(verseId) ? prev : new Set(prev).add(verseId),
+    );
   }
 
   function adoptVerseSchedule(verseId: string, next: MemorySchedule) {
@@ -849,11 +867,6 @@ export function PracticeBoard({
   }
 
   function leaveSpentVerse() {
-    if (currentVerse) {
-      setGradedIds((prev) =>
-        prev.has(currentVerse.id) ? prev : new Set(prev).add(currentVerse.id),
-      );
-    }
     const nextId =
       nextOpenIndex >= 0 ? railVerses[nextOpenIndex]?.id : undefined;
     if (nextId) {
@@ -1028,11 +1041,6 @@ export function PracticeBoard({
                 const verseId = currentVerse.id;
                 const accuracy = verseAttemptAccuracy(tokens);
                 const hold = opts?.holdSchedule === true || refresh;
-                if (!hold && accuracy >= REVIEW_LAPSE_ACCURACY) {
-                  setGradedIds((prev) =>
-                    prev.has(verseId) ? prev : new Set(prev).add(verseId),
-                  );
-                }
                 if (isReview) {
                   const nextAttempt = {
                     reference: currentVerse.reference,
@@ -1044,9 +1052,6 @@ export function PracticeBoard({
                       : undefined,
                     offerPractice: composite === null,
                   };
-                  // Keep every recitation, including an 80%+ retry and a
-                  // held refresher. The summary averages them instead of
-                  // replacing the first try.
                   setSessionAttempts((prev) => [...prev, nextAttempt]);
                 }
                 if (composite) {
@@ -1090,29 +1095,20 @@ export function PracticeBoard({
                   timeZone: getViewerTimeZone(),
                 });
                 adoptVerseSchedule(currentVerse.id, next);
-                setGradedIds((prev) =>
-                  prev.has(currentVerse.id)
-                    ? prev
-                    : new Set(prev).add(currentVerse.id),
-                );
+                markVerseGraded(currentVerse.id);
               }}
-              onAfterMissRescueFinished={async (restore) => {
-                if (restore && currentVerse.verseRefId) {
-                  const attemptedAt = Date.now();
-                  const result = await spendDailyRescue({
-                    verseRefId: currentVerse.verseRefId,
-                    now: attemptedAt,
-                    tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
-                    timeZone: getViewerTimeZone(),
-                  });
-                  adoptVerseSchedule(currentVerse.id, result.schedule);
-                  if (!result.sessionSpent) return;
-                }
-                setGradedIds((prev) =>
-                  prev.has(currentVerse.id)
-                    ? prev
-                    : new Set(prev).add(currentVerse.id),
-                );
+              onAfterMissRescueFinished={async () => {
+                if (!currentVerse.verseRefId) return;
+                const attemptedAt = Date.now();
+                const result = await spendDailyRescue({
+                  verseRefId: currentVerse.verseRefId,
+                  now: attemptedAt,
+                  tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+                  timeZone: getViewerTimeZone(),
+                });
+                adoptVerseSchedule(currentVerse.id, result.schedule);
+                if (!result.sessionSpent) return;
+                markVerseGraded(currentVerse.id);
                 advancePastCurrentVerse();
               }}
               advancesOnContinue={!currentHasWorkLeft}
@@ -1121,22 +1117,12 @@ export function PracticeBoard({
                   onExit();
                   return;
                 }
-                setGradedIds((prev) =>
-                  currentVerse && !prev.has(currentVerse.id)
-                    ? new Set(prev).add(currentVerse.id)
-                    : prev,
-                );
-                // A spent verse (learning lock, or a review that just
-                // rescheduled) should hand off to the next verse that still
-                // has a session left rather than parking on a dead end.
                 if (currentHasWorkLeft) return;
+                markVerseGraded(currentVerse.id);
                 advancePastCurrentVerse();
               }}
               onKeepWait={async () => {
                 const verseId = currentVerse.id;
-                setGradedIds((prev) =>
-                  prev.has(verseId) ? prev : new Set(prev).add(verseId),
-                );
                 const attemptedAt = Date.now();
                 const tzOffsetMinutes = new Date(
                   attemptedAt,
@@ -1164,6 +1150,7 @@ export function PracticeBoard({
                 } catch (error) {
                   devLog.warn("verseMemory", "acceptRetryHold failed", error);
                 }
+                markVerseGraded(verseId);
                 advancePastCurrentVerse();
               }}
             />
@@ -1266,7 +1253,7 @@ interface PracticeCardProps {
   ) => Promise<MemorySchedule | null>;
   refreshSitting?: boolean;
   onRefreshFinished?: () => Promise<void>;
-  onAfterMissRescueFinished?: (restore: boolean) => Promise<void>;
+  onAfterMissRescueFinished?: () => Promise<void>;
   /**
    * This verse is spent for the session, so dismissing the result leaves the
    * card instead of setting up another rep.
@@ -1353,16 +1340,13 @@ function PracticeCard({
       ? data.verses.map((v) => v.text).join(" ")
       : "";
 
-  const refresherStep: RefreshStep | null = refreshSitting
-    ? refreshStep
+  const displayStage = refreshSitting
+    ? refreshLearnStageForStep(refreshStep)
     : rescue === "letters"
       ? 1
       : rescue === "memory"
-        ? 2
-        : null;
-  const displayStage = refresherStep
-    ? refreshDisplayStage(refresherStep)
-    : learnStage;
+        ? 3
+        : learnStage;
   const hintReps = refreshSitting || rescue !== "off" ? 0 : stageReps;
   const stageInfo = PRACTICE_STAGES[displayStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(displayStage, status);
@@ -1380,11 +1364,19 @@ function PracticeCard({
   }, [versePlainText, displayStage, hintReps]);
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
-  const liveGoalLabel = refresherStep
-    ? `${stageInfo.label} · ${refresherStep} of 2`
-    : status === "reviewing" || status === "mastered"
-      ? null
-      : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
+  const sittingStep: RefreshStep | null = refreshSitting
+    ? refreshStep
+    : rescueHold && rescue === "letters"
+      ? 1
+      : rescueHold && rescue === "memory"
+        ? 2
+        : null;
+  const liveGoalLabel =
+    sittingStep !== null
+      ? refresherGoalLabel(sittingStep)
+      : status === "reviewing" || status === "mastered"
+        ? null
+        : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
   const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
   // A session-ending clear locks the verse the instant its attempt is adopted.
@@ -1496,7 +1488,13 @@ function PracticeCard({
           : null;
       // Freeze the step label on the step being graded; journey props may adopt
       // as soon as `onRecord` settles, but the label waits for Continue.
-      if (liveGoalLabel) setHeldGoalLabel(liveGoalLabel);
+      if (sittingStep !== null) {
+        setHeldGoalLabel(refresherGoalLabel(sittingStep));
+      } else if (status !== "reviewing" && status !== "mastered") {
+        setHeldGoalLabel(
+          `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`,
+        );
+      }
       setChecked(true);
       setOutcomeNow(now);
       setNextSchedule(preview);
@@ -1535,26 +1533,13 @@ function PracticeCard({
     setNextSchedule(null);
   }
 
-  const gateStep: RefreshStep | null = refreshSitting
-    ? refreshStep
-    : rescueHold && rescue !== "off"
-      ? rescue === "letters"
-        ? 1
-        : 2
-      : null;
   const refreshGate =
-    gateStep && checked && checkedQuality
-      ? refreshStepGate(gateStep, {
+    sittingStep && checked && checkedQuality
+      ? refreshStepGate(sittingStep, {
           accuracy: checkedAccuracy,
           quality: checkedQuality,
         })
       : null;
-  const passedFinalDueAt = keepLevelDueAt(
-    scheduleSnapshot.dueAt,
-    outcomeNow,
-    new Date(outcomeNow).getTimezoneOffset(),
-    getViewerTimeZone(),
-  );
 
   function finishRefreshSitting() {
     setSubmitKind("keep");
@@ -1588,38 +1573,32 @@ function PracticeCard({
         finishRefreshSitting();
         return;
       }
-      resetCard();
-      setRescue("off");
-      setRescueHold(false);
-      void onAfterMissRescueFinished?.(true);
-      return;
     }
     if (refreshGate?.type === "weak-final") return;
-    if (offerUnhintedFromMemoryRetry) {
+    if (rescue === "letters" && (rescueHold || offerUnhintedFromMemoryRetry)) {
       setRescue("memory");
       resetCard();
       window.requestAnimationFrame(() => answerInputRef.current?.focus());
       return;
     }
+    const heldRescue = rescueHold;
     resetCard();
     if (rescue !== "off") {
       setRescue("off");
       setRescueHold(false);
     }
+    if (heldRescue) {
+      void onAfterMissRescueFinished?.();
+      return;
+    }
     onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
 
-  function openRefresher(hold: boolean, keepTyped = false) {
+  function openRefresher(hold: boolean) {
     setRescue("letters");
     setRescueHold(hold);
-    if (keepTyped) {
-      setHeldGoalLabel(null);
-      setChecked(false);
-      setNextSchedule(null);
-    } else {
-      resetCard();
-    }
+    if (hold) resetCard();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
 
@@ -1742,7 +1721,7 @@ function PracticeCard({
               {sessionGoalLabel}
             </p>
           ) : null}
-          {!refresherOpen ? (
+          {refresherOpen ? null : (
             <LearningJourneyBar
               learnStage={learnStage}
               stageReps={stageReps}
@@ -1751,7 +1730,7 @@ function PracticeCard({
               intervalDays={scheduleSnapshot.intervalDays}
               ease={scheduleSnapshot.ease}
             />
-          ) : null}
+          )}
           {locked ? (
             <p className="text-xs text-muted-foreground">
               Tomorrow: {stageInfo.label}
@@ -1820,8 +1799,11 @@ function PracticeCard({
                       !(refreshSitting && refreshStep === 1) ? (
                       <EmptyHintPrompt
                         passage={Boolean(composite)}
-                        showRefresher={!refreshSitting && rescue === "off"}
-                        onRefresher={() => openRefresher(false, true)}
+                        onRefresher={
+                          !refreshSitting && rescue === "off"
+                            ? () => openRefresher(false)
+                            : undefined
+                        }
                         disabled={submitPending}
                       />
                     ) : rescue === "letters" ||
@@ -1884,9 +1866,11 @@ function PracticeCard({
                         ? FROM_MEMORY_HINT_PASS_MESSAGE
                         : refreshGate?.type === "passed-final"
                           ? backOnTrackCopy(
-                              passedFinalDueAt,
-                              outcomeNow,
-                              getViewerTimeZone(),
+                              formatDueDay(
+                                nextSchedule?.dueAt ?? scheduleSnapshot.dueAt,
+                                outcomeNow,
+                                getViewerTimeZone(),
+                              ),
                             )
                           : undefined
                     }
@@ -2007,7 +1991,7 @@ function PracticeCard({
                       resetCard();
                       setRescue("off");
                       setRescueHold(false);
-                      void onAfterMissRescueFinished?.(false);
+                      onContinueAfterResult?.();
                     }}
                     loading={submitPending}
                   >
@@ -2064,23 +2048,25 @@ function PracticeCard({
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </Button>
               ) : (
-                <Button
-                  type="button"
-                  variant="default"
-                  className="h-11 flex-1 sm:flex-none"
-                  onClick={checkAnswer}
-                  disabled={!canCheckAnswer}
-                  loading={submitPending}
-                >
-                  {gradePending ? (
-                    "Saving..."
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" aria-hidden />
-                      Check answer
-                    </>
-                  )}
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="h-11 flex-1 sm:flex-none"
+                    onClick={checkAnswer}
+                    disabled={!canCheckAnswer}
+                    loading={submitPending}
+                  >
+                    {gradePending ? (
+                      "Saving..."
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" aria-hidden />
+                        Check answer
+                      </>
+                    )}
+                  </Button>
+                </>
               )}
             </div>
           </div>

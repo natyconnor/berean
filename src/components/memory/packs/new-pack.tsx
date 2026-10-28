@@ -94,7 +94,7 @@ export function NewPack({
       moveAnnouncement(spanDisplayTitle(span), to, picked.length),
     );
   };
-  const drag = useDragReorder(move);
+  const drag = useDragReorder(move, picked.length);
 
   const create = () =>
     createLock.submit(async () => {
@@ -200,17 +200,7 @@ export function NewPack({
                   >
                     <DragHandle
                       label={label}
-                      picked={drag.picked === index}
-                      onToggle={() => drag.togglePick(index)}
-                      onMovePicked={(delta) =>
-                        drag.movePicked(
-                          delta,
-                          picked.length,
-                          drag.picked ?? index,
-                        )
-                      }
-                      onCancel={drag.cancelPick}
-                      {...drag.handleProps(index)}
+                      {...drag.handleProps(index, label)}
                     />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {label}
@@ -224,7 +214,7 @@ export function NewPack({
               })}
             </ul>
           )}
-          <MoveAnnouncer message={announcement} />
+          <MoveAnnouncer message={drag.liveMessage || announcement} />
 
           {passage ? (
             <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-sm">

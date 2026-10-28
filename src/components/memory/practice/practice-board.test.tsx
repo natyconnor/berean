@@ -1353,6 +1353,7 @@ describe("PracticeBoard spent reviews", () => {
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
     await recite(PASSAGE_TWO);
     expect(await screen.findByText("Word for word.")).toBeVisible();
+    await userEvent.click(railButton("Psalm 23:1"));
     await waitFor(() => {
       const [state] = onRunStateChange.mock.lastCall ?? [];
       expect(state?.graded).toEqual([SECOND_ID]);
@@ -1405,6 +1406,22 @@ describe("PracticeBoard spent reviews", () => {
     );
     expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+  });
+
+  it("keeps Verse 1 of 2 on screen after a miss until Continue", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderBoard("review");
+    expect(await screen.findByText("Verse 1 of 2")).toBeInTheDocument();
+    await recite("nope");
+    expect(
+      await screen.findByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+    expect(screen.getByText("Verse 1 of 2")).toBeInTheDocument();
+    expect(screen.queryByText("Verse 2 of 2")).not.toBeInTheDocument();
   });
 
   it("moves from a reviewed card to the next one with work left", async () => {
@@ -1566,7 +1583,7 @@ describe("PracticeBoard refresher", () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
   });
 
-  it("puts Need a refresher in the empty hint box on a due review", async () => {
+  it("shows Need a refresher in the empty from-memory hint box", async () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PracticeBoard
@@ -1579,22 +1596,16 @@ describe("PracticeBoard refresher", () => {
       </TooltipProvider>,
     );
 
-    const offer = await screen.findByRole("button", {
-      name: "Need a refresher?",
-    });
-    expect(offer).toBeInTheDocument();
-    expect(screen.getByText("Type it as you remember it.")).toBeInTheDocument();
-    const answer = screen.getByLabelText("Your recalled verse");
     expect(
-      offer.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      await screen.findByRole("button", { name: /Check answer/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Type it as you remember it.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Need a refresher?" }),
+    ).toBeInTheDocument();
   });
 
-  it("opens first letters from Need a refresher on a stale review", async () => {
-    queryResults.set("verseMemory.reviewFreshness", {
-      stale: true,
-      lastReviews: [],
-    });
+  it("opens first letters from Need a refresher in the hint box", async () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PracticeBoard
@@ -2042,56 +2053,6 @@ describe("PracticeBoard refresher", () => {
     });
   });
 
-  it("averages the miss and both refresher tries on the summary", async () => {
-    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
-      ...heldSchedule,
-      intervalDays: 2,
-      lapses: 1,
-    });
-    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
-      schedule: heldSchedule,
-      sessionSpent: true,
-    });
-    render(
-      <TooltipProvider delayDuration={0}>
-        <PracticeBoard
-          kind="review"
-          verses={[reviewingVerse]}
-          scopeLabel="Memory"
-          onExit={() => {}}
-          remainingDue={0}
-        />
-      </TooltipProvider>,
-    );
-
-    const answer = await screen.findByLabelText("Your recalled verse");
-    await userEvent.click(answer);
-    await userEvent.paste("nope");
-    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Need a refresher?" }),
-    );
-    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
-    expect(
-      screen.queryByText(/Fill in the blanks 42% learned/),
-    ).not.toBeInTheDocument();
-
-    await completeRefreshStep();
-    expect(screen.getByText("From memory · 2 of 2")).toBeInTheDocument();
-    await completeRefreshStep();
-
-    expect(await screen.findByText("67%")).toBeInTheDocument();
-    expect(
-      screen.getByText("0%, 100%, then 100% recalled"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Refresh" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Practice" }),
-    ).toBeInTheDocument();
-  });
-
   async function completeRefreshStep() {
     const answer = await screen.findByLabelText("Your recalled verse");
     await userEvent.click(answer);
@@ -2152,12 +2113,10 @@ describe("PracticeBoard refresher", () => {
     );
 
     expect(await screen.findByText("First letters")).toBeInTheDocument();
-    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
     await completeRefreshStep();
     expect(
       await screen.findByText("Recall the verse from memory"),
     ).toBeInTheDocument();
-    expect(screen.getByText("From memory · 2 of 2")).toBeInTheDocument();
     await completeRefreshStep();
 
     await waitFor(() => {

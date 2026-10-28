@@ -49,13 +49,11 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { requiredRepsFor, type MemoryStatus } from "@/lib/memory-scheduler";
 import {
-  backOnTrackCopy,
-  keepLevelDueAt,
-  refreshDisplayStage,
+  refreshStepFromLearnStage,
   refreshStepGate,
   type RefreshStep,
 } from "@/lib/memory-way-back";
-import { getViewerTimeZone } from "@/lib/viewer-timezone";
+import { backOnTrackCopy, refresherGoalLabel } from "@/lib/memory-copy";
 import { WARMUP_SKIP_LABEL } from "@/components/memory/passage/passage-session-model";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
 import {
@@ -148,7 +146,6 @@ export function PassageRecallCard({
   // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
-  const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const [rescue, setRescue] = useState<"off" | "letters" | "memory">("off");
   const [rescueHold, setRescueHold] = useState(false);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -157,18 +154,8 @@ export function PassageRecallCard({
   const titleRef = useRef<HTMLDivElement>(null);
   const { submit, pending: submitPending } = useSubmitLock();
 
-  const refresherStep: RefreshStep | null = refreshSitting
-    ? learnStage === 1 || learnStage === 2
-      ? learnStage
-      : null
-    : rescue === "letters"
-      ? 1
-      : rescue === "memory"
-        ? 2
-        : null;
-  const displayStage = refresherStep
-    ? refreshDisplayStage(refresherStep)
-    : learnStage;
+  const displayStage =
+    rescue === "letters" ? 1 : rescue === "memory" ? 3 : learnStage;
   const stageInfo = PRACTICE_STAGES[displayStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(displayStage, status);
   const wordCount = countVerseWords(versePlainText);
@@ -176,11 +163,19 @@ export function PassageRecallCard({
   const compositeField =
     mode === "rope" || mode === "review" || mode === "repair";
   const requiredToday = requiredRepsFor(learnStage, wordCount);
-  const liveGoalLabel = refresherStep
-    ? `${stageInfo.label} · ${refresherStep} of 2`
-    : showJourneyBar && status !== "reviewing" && status !== "mastered"
-      ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
-      : null;
+  const sittingStep: RefreshStep | null = refreshSitting
+    ? refreshStepFromLearnStage(learnStage)
+    : rescueHold && rescue === "letters"
+      ? 1
+      : rescueHold && rescue === "memory"
+        ? 2
+        : null;
+  const liveGoalLabel =
+    sittingStep !== null
+      ? refresherGoalLabel(sittingStep)
+      : showJourneyBar && status !== "reviewing" && status !== "mastered"
+        ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
+        : null;
   const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
   const canCheckAnswer =
@@ -199,26 +194,13 @@ export function PassageRecallCard({
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
   const passed = checkedAccuracy >= PASSAGE_PASS_ACCURACY;
-  const gateStep: RefreshStep | null = refreshSitting
-    ? refresherStep
-    : rescueHold && rescue !== "off"
-      ? rescue === "letters"
-        ? 1
-        : 2
-      : null;
   const refreshGate =
-    gateStep && checked && checkedQuality
-      ? refreshStepGate(gateStep, {
+    sittingStep && checked && checkedQuality
+      ? refreshStepGate(sittingStep, {
           accuracy: checkedAccuracy,
           quality: checkedQuality,
         })
       : null;
-  const passedFinalDueAt = keepLevelDueAt(
-    outcomeNow,
-    outcomeNow,
-    new Date(outcomeNow).getTimezoneOffset(),
-    getViewerTimeZone(),
-  );
   const offerTryAgain = checked && !passed && mode === "frontier";
 
   function checkAnswer() {
@@ -229,7 +211,6 @@ export function PassageRecallCard({
     // switches to Saving... for that wait instead of sitting on Check answer.
     const goalAtCheck = liveGoalLabel;
     submit(async () => {
-      const now = Date.now();
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       if (!quality) return;
@@ -247,7 +228,6 @@ export function PassageRecallCard({
       });
       if (saved === false) return;
       setHeldGoalLabel(goalAtCheck);
-      setOutcomeNow(now);
       setChecked(true);
     });
   }
@@ -285,12 +265,22 @@ export function PassageRecallCard({
       resetTyped();
       return;
     }
-    if (refreshGate?.type === "advance" && !refreshSitting) {
+    if (refreshGate?.type === "advance") {
+      if (refreshSitting) {
+        resetTyped();
+        onContinueAfterResult?.();
+        return;
+      }
       setRescue("memory");
       resetTyped();
       return;
     }
     if (refreshGate?.type === "weak-final") return;
+    if (rescue === "letters" && rescueHold) {
+      setRescue("memory");
+      resetTyped();
+      return;
+    }
     setRescue("off");
     setRescueHold(false);
     resetTyped();
@@ -378,7 +368,7 @@ export function PassageRecallCard({
               {sessionGoalLabel}
             </p>
           ) : null}
-          {showJourneyBar && rescue === "off" && !refreshSitting ? (
+          {showJourneyBar && sittingStep === null && rescue === "off" ? (
             <LearningJourneyBar
               learnStage={learnStage}
               stageReps={stageReps}
@@ -424,27 +414,18 @@ export function PassageRecallCard({
                     className="border-0 bg-transparent p-0"
                   />
                 ) : rescue === "memory" || hint.type === "hidden" ? (
-                  mode === "review" || mode === "frontier" ? (
-                    <EmptyHintPrompt
-                      passage={mode === "review"}
-                      showRefresher={
-                        !refreshSitting && rescue === "off" && !isReadPrime
-                      }
-                      onRefresher={() => {
-                        setRescue("letters");
-                        setRescueHold(false);
-                      }}
-                      disabled={submitPending}
-                    />
-                  ) : (
-                    <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
-                      <p className="max-w-sm text-sm text-muted-foreground">
-                        {hint.type === "hidden"
-                          ? hint.message
-                          : "No hint text. Type the passage from memory — verse numbers not needed — then check your answer."}
-                      </p>
-                    </div>
-                  )
+                  <EmptyHintPrompt
+                    passage={compositeField}
+                    onRefresher={
+                      !refreshSitting && rescue === "off"
+                        ? () => {
+                            setRescue("letters");
+                            setRescueHold(false);
+                          }
+                        : undefined
+                    }
+                    disabled={submitPending}
+                  />
                 ) : hint.type === "tokens" ? (
                   <HintTokenText tokens={hint.tokens} />
                 ) : (
@@ -490,11 +471,7 @@ export function PassageRecallCard({
                 scheduleHeld={refreshSitting || rescueHold}
                 praiseLine={
                   refreshGate?.type === "passed-final"
-                    ? backOnTrackCopy(
-                        passedFinalDueAt,
-                        outcomeNow,
-                        getViewerTimeZone(),
-                      )
+                    ? backOnTrackCopy("tomorrow")
                     : undefined
                 }
                 refresherOffer={
@@ -558,6 +535,10 @@ export function PassageRecallCard({
                     variant="default"
                     className="flex-1 sm:flex-none"
                     onClick={() => {
+                      if (refreshSitting) {
+                        onContinueAfterResult?.();
+                        return;
+                      }
                       setRescue("off");
                       setRescueHold(false);
                       resetTyped();
@@ -606,23 +587,25 @@ export function PassageRecallCard({
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </Button>
               ) : (
-                <Button
-                  type="button"
-                  variant="default"
-                  className="h-11 flex-1 sm:flex-none"
-                  onClick={checkAnswer}
-                  disabled={!canCheckAnswer}
-                  loading={submitPending}
-                >
-                  {submitPending ? (
-                    "Saving..."
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" aria-hidden />
-                      Check answer
-                    </>
-                  )}
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="h-11 flex-1 sm:flex-none"
+                    onClick={checkAnswer}
+                    disabled={!canCheckAnswer}
+                    loading={submitPending}
+                  >
+                    {submitPending ? (
+                      "Saving..."
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" aria-hidden />
+                        Check answer
+                      </>
+                    )}
+                  </Button>
+                </>
               )}
             </div>
           </div>

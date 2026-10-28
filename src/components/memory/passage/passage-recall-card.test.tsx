@@ -159,6 +159,35 @@ describe("PassageRecallCard result banner", () => {
     expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
   });
 
+  it("shows Need a refresher in the empty from-memory hint box", () => {
+    render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="From memory"
+        title="Psalm 23"
+        promptLine="Type the passage from memory"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Type it as you remember it. Verse numbers aren't needed.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Need a refresher?" }),
+    ).toBeInTheDocument();
+  });
+
   it("tabs How you did only while that region overflows", async () => {
     const observers: ResizeObserverCallback[] = [];
     vi.stubGlobal(
@@ -638,7 +667,7 @@ describe("PassageRecallCard Refresh and skip", () => {
         error={null}
         retry={() => undefined}
         hint={{ type: "hidden", message: "No hint text." }}
-        learnStage={2}
+        learnStage={3}
         stageReps={0}
         status="reviewing"
         refreshSitting

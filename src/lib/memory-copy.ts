@@ -149,10 +149,10 @@ export function statusLabel(status: MemoryStatus): StatusLabel {
 }
 
 export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
-export const TYPE_AS_YOU_REMEMBER = "Type it as you remember it.";
-export const TYPE_AS_YOU_REMEMBER_PASSAGE =
-  "Type it as you remember it. Verse numbers aren't needed.";
 export const FIRST_LETTERS_HINT_LABEL = "First letters";
+export const TYPE_IT_AS_YOU_REMEMBER = "Type it as you remember it.";
+export const VERSE_NUMBERS_NOT_NEEDED = "Verse numbers aren't needed.";
+export const BACK_ON_TRACK = "Back on track.";
 export const ENTER_TO_CHECK_HINT =
   "Enter to check · Shift+Enter for a new line";
 export const REFRESH_LABEL = "Refresh";
@@ -172,6 +172,24 @@ export const START_OVER_CONFIRM_BODY =
   "You'll learn it again from the beginning. Your notes and hearts stay.";
 export const WHOLE_PASSAGE_OPTION = "The whole passage";
 export const WHOLE_PACK_OPTION = "The whole pack";
+
+export function fromMemoryHintCopy(passage: boolean): string {
+  return passage
+    ? `${TYPE_IT_AS_YOU_REMEMBER} ${VERSE_NUMBERS_NOT_NEEDED}`
+    : TYPE_IT_AS_YOU_REMEMBER;
+}
+
+export function refresherGoalLabel(step: 1 | 2): string {
+  return step === 1
+    ? `${stepShortLabel(1)} · 1 of 2`
+    : `${stepShortLabel(3)} · 2 of 2`;
+}
+
+export function backOnTrackCopy(dueDay: string): string {
+  return dueDay === "today"
+    ? BACK_ON_TRACK
+    : `${BACK_ON_TRACK} We'll check in again ${dueDay}.`;
+}
 
 export function startOverTitle(name: string): string {
   return `Start ${name} over?`;

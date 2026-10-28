@@ -7,11 +7,14 @@ import {
 } from "@/components/memory/passage/passage-recall-card";
 import { PassageSessionShell } from "@/components/memory/passage/passage-session-shell";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
-import { REFRESH_FINISH_ERROR } from "@/lib/memory-copy";
+import { REFRESH_FINISH_ERROR, refresherGoalLabel } from "@/lib/memory-copy";
 import { learnedPassagePieces } from "@/lib/passage-frontier";
 import { maskVerseText } from "@/lib/verse-hint";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
-import type { RefreshStep } from "@/lib/memory-way-back";
+import {
+  refreshLearnStageForStep,
+  type RefreshStep,
+} from "@/lib/memory-way-back";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -55,7 +58,10 @@ export function PassageRefreshSitting({
         tokens: maskVerseText(hintSource, "first-letters"),
       };
     }
-    return { type: "hidden" as const, message: "" };
+    return {
+      type: "hidden" as const,
+      message: refresherGoalLabel(2),
+    };
   }, [hintSource, step]);
 
   const onSubmit = async (result: PassageRecallResult) => {
@@ -98,13 +104,13 @@ export function PassageRefreshSitting({
         error={passage.error}
         retry={passage.retry}
         hint={hint}
-        learnStage={step}
+        learnStage={refreshLearnStageForStep(step)}
         stageReps={0}
         status={view.status === "mastered" ? "mastered" : "reviewing"}
         refreshSitting
         onSubmit={onSubmit}
         onContinueAfterResult={() => {
-          if (step === 1) {
+          if (step < 2) {
             setStep(2);
             return;
           }

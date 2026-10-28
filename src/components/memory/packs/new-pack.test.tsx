@@ -239,27 +239,27 @@ describe("NewPack", () => {
     });
   });
 
-  it("reorders from the grip and removes from the row", async () => {
+  it("reorders from the Reorder button and removes with the trash", async () => {
     renderNewPack();
     await addByReference("John 14:27");
     await addByReference("Romans 8:28");
     await addByReference("Psalm 23:1");
 
-    const grip = screen.getByRole("button", { name: "Reorder Psalm 23:1" });
-    grip.focus();
-    await userEvent.keyboard("{ArrowUp}");
+    screen.getByRole("button", { name: "Reorder Psalm 23:1" }).focus();
+    await userEvent.keyboard(" {ArrowUp} ");
     expect(pickedNames()).toEqual(["John 14:27", "Psalm 23:1", "Romans 8:28"]);
     expect(screen.getByRole("status")).toHaveTextContent(
       "Moved Psalm 23:1 to 2 of 3.",
     );
 
-    const romans = screen.getByText("Romans 8:28").closest("li");
-    expect(romans).not.toBeNull();
-    await userEvent.hover(romans as HTMLElement);
+    screen.getByRole("button", { name: "Reorder John 14:27" }).focus();
+    await userEvent.keyboard(" {ArrowDown} ");
+    expect(pickedNames()).toEqual(["Psalm 23:1", "John 14:27", "Romans 8:28"]);
+
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove Romans 8:28 from pack" }),
+      screen.getByRole("button", { name: "Remove Romans 8:28" }),
     );
-    expect(pickedNames()).toEqual(["John 14:27", "Psalm 23:1"]);
+    expect(pickedNames()).toEqual(["Psalm 23:1", "John 14:27"]);
   });
 
   it("adds from your hearts and marks what is already in", async () => {

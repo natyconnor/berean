@@ -10,7 +10,6 @@ import {
   type MemorySchedule,
 } from "./memory-scheduler";
 import {
-  backOnTrackCopy,
   modeToStore,
   planRefreshFinish,
   planRescueSpend,
@@ -69,28 +68,25 @@ describe("verseRefreshEligibility", () => {
     );
   });
 
-  it("hides Refresh on an empty pack and shows it once a piece is past Read", () => {
-    expect(refreshEligibility({ scope: "group", verses: [], pieces: [] })).toBe(
+  it("hides Refresh on an empty passage and shows it once a piece is past Read", () => {
+    expect(refreshEligibility({ scope: "passage", pieces: [] })).toBe(
       "new-or-read",
     );
     expect(
       refreshEligibility({
-        scope: "group",
-        verses: [{ status: "new", learnStage: 0 }],
+        scope: "passage",
         pieces: [{ attachment: "learning", learnStage: 0 }],
       }),
     ).toBe("new-or-read");
     expect(
       refreshEligibility({
-        scope: "group",
-        verses: [],
+        scope: "passage",
         pieces: [{ attachment: "learning", learnStage: 1 }],
       }),
     ).toBe("learned");
     expect(
       refreshEligibility({
-        scope: "group",
-        verses: [],
+        scope: "passage",
         pieces: [{ attachment: "solid", learnStage: 0 }],
       }),
     ).toBe("learned");
@@ -191,17 +187,8 @@ describe("modeToStore", () => {
   });
 });
 
-describe("backOnTrackCopy", () => {
-  it("names tomorrow and stays quiet when due today", () => {
-    expect(backOnTrackCopy(NOW, NOW, "UTC")).toBe("Back on track.");
-    expect(backOnTrackCopy(NOW + DAY_MS, NOW, "UTC")).toBe(
-      "Back on track. We'll check in again tomorrow.",
-    );
-  });
-});
-
 describe("refreshStepGate", () => {
-  it("retries an early miss and finishes on From memory", () => {
+  it("retries a weak First letters pass and finishes From memory", () => {
     expect(refreshStepGate(1, { accuracy: 40, quality: "off" })).toEqual({
       type: "retry",
     });
