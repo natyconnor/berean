@@ -32,7 +32,7 @@ export function PassageSessionShell({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <SessionBackButton

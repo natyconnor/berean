@@ -188,7 +188,8 @@ export function MemoryRestartMenu({
     !started &&
     refreshTarget !== undefined &&
     refreshEligibility(refreshTarget) === "learned";
-  if (!showRestart && !extraItems && !stop) return null;
+  const showMenu = Boolean(extraItems || stop || (showRestart && !started));
+  if (!started && !showMenu) return null;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -212,150 +213,156 @@ export function MemoryRestartMenu({
           ) : null}
         </div>
       ) : null}
-      <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverAnchor asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                ref={triggerRef}
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-11 text-muted-foreground sm:size-8"
-                aria-label={triggerLabel}
-              >
-                <MoreHorizontal aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-          </PopoverAnchor>
-          <DropdownMenuContent
+      {showMenu ? (
+        <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DropdownMenu
+            modal={false}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+          >
+            <PopoverAnchor asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  ref={triggerRef}
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-11 text-muted-foreground sm:size-8"
+                  aria-label={triggerLabel}
+                >
+                  <MoreHorizontal aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+            </PopoverAnchor>
+            <DropdownMenuContent
+              align="end"
+              className="max-w-[min(18rem,calc(100vw-32px))]"
+              onCloseAutoFocus={(event) => {
+                if (!pendingConfirm.current) return;
+                event.preventDefault();
+                pendingConfirm.current = false;
+                setConfirmOpen(true);
+              }}
+            >
+              {showRefresh ? (
+                <DropdownMenuItem
+                  disabled={refreshLock.pending || startLock.pending}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setMenuOpen(false);
+                    void handleRefresh();
+                  }}
+                >
+                  <Lightbulb aria-hidden />
+                  <span className="flex flex-col">
+                    <span>{REFRESH_LABEL}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {REFRESH_MENU_DETAIL}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ) : null}
+              {showRestart ? (
+                <DropdownMenuItem
+                  disabled={refreshLock.pending || startLock.pending}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    handleStartOverSelect();
+                  }}
+                >
+                  <RotateCcw aria-hidden />
+                  <span className="flex flex-col">
+                    <span>{START_OVER_MENU_LABEL}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {START_OVER_MENU_DETAIL}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ) : null}
+              {extraItems}
+              {stop && (showRestart || extraItems) ? (
+                <DropdownMenuSeparator />
+              ) : null}
+              {stop ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={startLock.pending}
+                  onSelect={() => setStopOpen(true)}
+                >
+                  {stop.icon ?? <CircleStop aria-hidden />}
+                  {stop.label}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <PopoverContent
             align="end"
-            className="max-w-[min(18rem,calc(100vw-32px))]"
+            className="w-[min(21rem,calc(100vw-32px))]"
             onCloseAutoFocus={(event) => {
-              if (!pendingConfirm.current) return;
               event.preventDefault();
-              pendingConfirm.current = false;
-              setConfirmOpen(true);
+              triggerRef.current?.focus();
+            }}
+            onFocusOutside={(event) => {
+              const target = event.target;
+              if (
+                target instanceof Element &&
+                (target.closest(`[aria-label="${triggerLabel}"]`) ||
+                  target.closest("[role='menu']"))
+              ) {
+                event.preventDefault();
+              }
             }}
           >
-            {showRefresh ? (
-              <DropdownMenuItem
-                disabled={refreshLock.pending || startLock.pending}
-                onSelect={(event) => {
-                  event.preventDefault();
-                  setMenuOpen(false);
-                  void handleRefresh();
-                }}
+            <h3 className="text-[15px] font-semibold tracking-tight text-pretty">
+              {startOverTitle(name)}
+            </h3>
+            {showChooser ? (
+              <div className="mt-3 grid gap-2">
+                <Choice
+                  selected={choice === "shaky"}
+                  onSelect={() => setPickedChoice("shaky")}
+                  label={shakyVersesOption(formatShakyVerseList(shakyLabels))}
+                />
+                <Choice
+                  selected={choice === "whole"}
+                  onSelect={() => setPickedChoice("whole")}
+                  label={
+                    wholeLabel === "pack"
+                      ? WHOLE_PACK_OPTION
+                      : WHOLE_PASSAGE_OPTION
+                  }
+                />
+              </div>
+            ) : wholeLabel ? null : (
+              <p className="mt-1.5 text-[13px] leading-5 text-foreground/80">
+                {START_OVER_CONFIRM_BODY}
+              </p>
+            )}
+            {error ? (
+              <p className="mt-2 text-xs text-destructive">{error}</p>
+            ) : null}
+            <div className="mt-3.5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmOpen(false)}
               >
-                <Lightbulb aria-hidden />
-                <span className="flex flex-col">
-                  <span>{REFRESH_LABEL}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {REFRESH_MENU_DETAIL}
-                  </span>
-                </span>
-              </DropdownMenuItem>
-            ) : null}
-            {showRestart ? (
-              <DropdownMenuItem
-                disabled={refreshLock.pending || startLock.pending}
-                onSelect={(event) => {
-                  event.preventDefault();
-                  handleStartOverSelect();
-                }}
-              >
-                <RotateCcw aria-hidden />
-                <span className="flex flex-col">
-                  <span>{START_OVER_MENU_LABEL}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {START_OVER_MENU_DETAIL}
-                  </span>
-                </span>
-              </DropdownMenuItem>
-            ) : null}
-            {extraItems}
-            {stop && (showRestart || extraItems) ? (
-              <DropdownMenuSeparator />
-            ) : null}
-            {stop ? (
-              <DropdownMenuItem
+                {START_OVER_CANCEL_LABEL}
+              </Button>
+              <Button
+                type="button"
                 variant="destructive"
-                disabled={startLock.pending}
-                onSelect={() => setStopOpen(true)}
+                size="sm"
+                loading={startLock.pending}
+                onClick={handleConfirm}
               >
-                {stop.icon ?? <CircleStop aria-hidden />}
-                {stop.label}
-              </DropdownMenuItem>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <PopoverContent
-          align="end"
-          className="w-[min(21rem,calc(100vw-32px))]"
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            triggerRef.current?.focus();
-          }}
-          onFocusOutside={(event) => {
-            const target = event.target;
-            if (
-              target instanceof Element &&
-              (target.closest(`[aria-label="${triggerLabel}"]`) ||
-                target.closest("[role='menu']"))
-            ) {
-              event.preventDefault();
-            }
-          }}
-        >
-          <h3 className="text-[15px] font-semibold tracking-tight text-pretty">
-            {startOverTitle(name)}
-          </h3>
-          {showChooser ? (
-            <div className="mt-3 grid gap-2">
-              <Choice
-                selected={choice === "shaky"}
-                onSelect={() => setPickedChoice("shaky")}
-                label={shakyVersesOption(formatShakyVerseList(shakyLabels))}
-              />
-              <Choice
-                selected={choice === "whole"}
-                onSelect={() => setPickedChoice("whole")}
-                label={
-                  wholeLabel === "pack"
-                    ? WHOLE_PACK_OPTION
-                    : WHOLE_PASSAGE_OPTION
-                }
-              />
+                {START_OVER_CONFIRM_LABEL}
+              </Button>
             </div>
-          ) : wholeLabel ? null : (
-            <p className="mt-1.5 text-[13px] leading-5 text-foreground/80">
-              {START_OVER_CONFIRM_BODY}
-            </p>
-          )}
-          {error ? (
-            <p className="mt-2 text-xs text-destructive">{error}</p>
-          ) : null}
-          <div className="mt-3.5 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirmOpen(false)}
-            >
-              {START_OVER_CANCEL_LABEL}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              loading={startLock.pending}
-              onClick={handleConfirm}
-            >
-              {START_OVER_CONFIRM_LABEL}
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+          </PopoverContent>
+        </Popover>
+      ) : null}
 
       {stop ? (
         <Dialog open={stopOpen} onOpenChange={setStopOpen}>

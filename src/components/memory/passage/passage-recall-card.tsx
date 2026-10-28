@@ -373,7 +373,7 @@ export function PassageRecallCard({
             <>
               <div
                 className={cn(
-                  "mx-auto min-h-[140px] rounded-xl border bg-background/75 px-5 py-5 text-left",
+                  "mx-auto min-h-[140px] max-h-[45vh] overflow-y-auto rounded-xl border bg-background/75 px-5 py-5 text-left",
                   SESSION_VERSE_TEXT_CLASS,
                   READER_MEASURE_CLASS,
                   stageColor.panel,

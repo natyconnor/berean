@@ -539,6 +539,10 @@ describe("PassageRecallCard Refresh and skip", () => {
     const hint = screen.getByText("First letters").closest("div");
     const lineBox = hint?.querySelector("p.whitespace-pre-wrap");
     expect(lineBox?.textContent).toContain("\n");
+    expect(hint?.parentElement).toHaveClass("max-h-[45vh]");
+    expect(
+      screen.getByRole("textbox", { name: "Your recited passage" }),
+    ).toBeInTheDocument();
   });
 
   it("shows Skip warm-up on a held rope miss", async () => {

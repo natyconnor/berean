@@ -254,6 +254,53 @@ describe("MemoryRestartMenu", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps Undo after Start over when the verse becomes Up next", async () => {
+    const onStartOver = vi.fn().mockResolvedValue(undefined);
+    const onUndo = vi.fn().mockResolvedValue(undefined);
+    const props = {
+      name: "John 1:1",
+      isDrawer: false as const,
+      refreshHref: "/memory/practice?refresh=1",
+      refreshTarget: {
+        scope: "verse" as const,
+        mark: { status: "mastered" as const, learnStage: 3 },
+      },
+      onStartOver,
+      onUndo,
+      showRestart: true,
+      triggerLabel: "Options for John 1:1",
+    };
+    const { rerender } = render(<MemoryRestartMenu {...props} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Options for John 1:1" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Start over/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
+
+    rerender(
+      <MemoryRestartMenu
+        {...props}
+        showRestart={false}
+        refreshTarget={undefined}
+      />,
+    );
+    expect(screen.getByText(STARTED_OVER_LABEL)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: UNDO_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Options for John 1:1" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: UNDO_LABEL }));
+    expect(onUndo).toHaveBeenCalled();
+  });
+
   it("shows only the title and buttons when a passage has no shaky verses", async () => {
     renderMenu({ wholeLabel: "passage", shakyLabels: [] });
     await openStartOverConfirm();

@@ -8,7 +8,11 @@ import {
   MemoryPanelPage,
 } from "@/components/memory/drawer/memory-panel-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { START_OVER_CONFIRM_LABEL } from "@/lib/memory-copy";
+import {
+  START_OVER_CONFIRM_LABEL,
+  STARTED_OVER_LABEL,
+  UNDO_LABEL,
+} from "@/lib/memory-copy";
 import { memoryProgressFraction } from "@/lib/mastery-ring";
 import {
   dismissLearnPackForToday,
@@ -712,6 +716,66 @@ describe("PackDetail for a pack", () => {
         name: "Options for Isaiah 41:10",
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps Undo on a verse row after Start over turns it into Up next", async () => {
+    const host = () => (
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "pack", packId: "mercedxx" }}
+          from={undefined}
+        />
+      </TooltipProvider>
+    );
+    const view = render(host());
+    await userEvent.click(
+      screen.getByRole("button", { name: "Options for Luke 9:23–24" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Start over/ }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Start Luke 9:23–24 over?" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    await waitFor(() => {
+      expect(mutation("verseMemory.startOver")).toHaveBeenCalled();
+    });
+
+    membersByPack = {
+      ...membersByPack,
+      mercedxx: MERCED_MEMBERS.map((row) =>
+        row.verseRefId === "luke"
+          ? { ...row, status: "new", learnStage: 0, isDue: false }
+          : row,
+      ),
+    };
+    view.rerender(host());
+
+    const luke = screen.getByText("Luke 9:23–24").closest("li");
+    expect(luke).not.toBeNull();
+    expect(
+      within(luke as HTMLElement).getByText(STARTED_OVER_LABEL),
+    ).toBeInTheDocument();
+    expect(
+      within(luke as HTMLElement).getByText(
+        "Up next · starts when you're ready",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(luke as HTMLElement).getByRole("button", { name: UNDO_LABEL }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Options for Luke 9:23–24" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: UNDO_LABEL }));
+    expect(mutation("verseMemory.undoStartOver")).toHaveBeenCalledWith({
+      verseRefId: "luke",
+      now: expect.any(Number) as number,
+    });
   });
 
   it("deletes a pack without stopping its verses, then goes back to Your verses", async () => {
