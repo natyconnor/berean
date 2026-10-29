@@ -9,6 +9,11 @@ import {
 
 import type { DragReorder } from "./use-drag-reorder";
 
+/**
+ * Editing controls for an ordered verse list (a pack's verses, New pack's
+ * "In this pack"). Rows are `group` list items.
+ */
+
 export function DragHandle({
   label,
   ...props
@@ -58,6 +63,7 @@ export function RowEditControls({
   );
 }
 
+/** Polite live region that reads out moves. */
 export function MoveAnnouncer({ message }: { message: string }) {
   return (
     <p role="status" aria-live="polite" className="sr-only">
