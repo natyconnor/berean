@@ -503,7 +503,6 @@ function TodaySession({
       ? { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() }
       : "skip",
   );
-  // A finished passage that still has work today can be opened again.
   const reopenable = new Set(livePassages?.map((item) => item.packId));
 
   const spent = spentCards(segments, runStates);

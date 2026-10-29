@@ -594,8 +594,6 @@ export function PracticeBoard({
     [orderedVerses, progressByVerseId, now, kind, scopeLabel, gradedIds],
   );
 
-  // What the summary lists: each verse where it landed, flagged when it
-  // moved from learning into review during this run.
   const sessionVerses = useMemo<SessionCompleteVerse[]>(() => {
     const startedInReview = new Set(
       baseVerses
@@ -1254,10 +1252,6 @@ interface PracticeCardProps {
   refreshSitting?: boolean;
   onRefreshFinished?: () => Promise<void>;
   onAfterMissRescueFinished?: () => Promise<void>;
-  /**
-   * This verse is spent for the session, so dismissing the result leaves the
-   * card instead of setting up another rep.
-   */
   advancesOnContinue?: boolean;
   /** Fired when the learner dismisses a checked attempt's result. */
   onContinueAfterResult?: () => void;
@@ -1379,9 +1373,6 @@ function PracticeCard({
         : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
   const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
-  // A session-ending clear locks the verse the instant its attempt is adopted.
-  // Hold the graded result until the learner continues so the feedback they
-  // just earned isn't swapped out from under them.
   const reviewed = reviewedOutcome !== undefined;
   const refresherOpen = rescue !== "off" || refreshSitting;
   const showReviewed = reviewed && !checked && !refresherOpen;
@@ -1486,8 +1477,6 @@ function PracticeCard({
               holdSchedule: holding,
             })
           : null;
-      // Freeze the step label on the step being graded; journey props may adopt
-      // as soon as `onRecord` settles, but the label waits for Continue.
       if (sittingStep !== null) {
         setHeldGoalLabel(refresherGoalLabel(sittingStep));
       } else if (status !== "reviewing" && status !== "mastered") {

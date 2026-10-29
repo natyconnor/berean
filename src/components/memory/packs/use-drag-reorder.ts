@@ -74,7 +74,6 @@ export function useDragReorder(
           return;
         }
         event.dataTransfer.effectAllowed = "move";
-        // Firefox only starts a drag that carries data.
         event.dataTransfer.setData("text/plain", String(index));
         const row = event.currentTarget.closest("li");
         if (row) event.dataTransfer.setDragImage(row, 20, 20);

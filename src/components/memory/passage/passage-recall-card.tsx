@@ -142,8 +142,6 @@ export function PassageRecallCard({
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
-  // Snapshot of "First letters · N of M today" at Check so the step label stays
-  // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
   const [rescue, setRescue] = useState<"off" | "letters" | "memory">("off");
@@ -205,10 +203,6 @@ export function PassageRecallCard({
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
-    // Capture before `onSubmit` so a parent that adopts journey progress early
-    // cannot advance the step label while the result is still on screen.
-    // The check button stays mounted until the save resolves, so its label
-    // switches to Saving... for that wait instead of sitting on Check answer.
     const goalAtCheck = liveGoalLabel;
     submit(async () => {
       const tokens = diffWords(typedAnswer, versePlainText);
