@@ -36,13 +36,24 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
+import { PinnedSessionAction } from "@/components/memory/pinned-session-action";
+import { RefresherStepLine } from "@/components/memory/refresher-step-line";
+import { ScrollFadeBox } from "@/components/memory/scroll-fade-box";
 import {
   REFRESH_FINISH_ERROR,
   SESSION_COMPLETE_FOOTER,
   backOnTrackCopy,
+  backOnTrackHint,
+  nowTryWithoutHintsCopy,
   refresherGoalLabel,
+  refresherPhaseLabel,
   stepShortLabel,
 } from "@/lib/memory-copy";
+import {
+  type PracticeEndKind,
+  practiceEndKind,
+  practiceEndLabel,
+} from "@/lib/practice-end-label";
 import {
   EmptyHintPrompt,
   EnterToCheckHint,
@@ -146,6 +157,7 @@ import {
   type SessionProgressSource,
 } from "@/lib/session-progress";
 import { SessionHeaderProgress } from "./session-header-progress";
+import { SessionColumns } from "./session-columns";
 
 export type { MemorySessionLabel } from "@/lib/memory-session";
 
@@ -473,6 +485,11 @@ export function PracticeBoard({
   const finishRefresh = useMutation(api.verseMemory.finishRefresh);
   const spendDailyRescue = useMutation(api.verseMemory.spendDailyRescue);
   const [refreshStartedAt] = useState(() => Date.now());
+  const [backOnTrackNotice, setBackOnTrackNotice] = useState<string | null>(
+    null,
+  );
+  const [summaryRefresh, setSummaryRefresh] =
+    useState<ReviewSessionAttempt | null>(null);
   const acceptVerseRetryHold = useMutation(api.verseMemory.acceptRetryHold);
   const acceptUnifiedRetryHold = useMutation(api.packs.acceptRetryHold);
   const acceptPassageRetryHold = useMutation(api.passageMemory.acceptRetryHold);
@@ -945,6 +962,28 @@ export function PracticeBoard({
     );
   }
 
+  if (finished && summaryRefresh) {
+    const refreshVerse = baseVerses.find((verse) =>
+      summaryRefresh.label
+        ? verse.composite !== undefined &&
+          (verse.composite.packName ?? scopeLabel) === summaryRefresh.label
+        : verseRefKey(verse.reference) ===
+          verseRefKey(summaryRefresh.reference),
+    );
+    if (refreshVerse) {
+      return (
+        <PracticeBoard
+          kind="practice"
+          verses={[refreshVerse]}
+          scopeLabel={summaryRefresh.label ?? scopeLabel}
+          onExit={() => setSummaryRefresh(null)}
+          backLabel="Back"
+          refresh
+        />
+      );
+    }
+  }
+
   if (finished) {
     // The enclosing session shows the next part once the results are up.
     if (onComplete)
@@ -977,6 +1016,7 @@ export function PracticeBoard({
             doneLabel={exitLabel}
             extraPracticeHref={extraPracticeHref}
             returnTo={returnTo}
+            onRefresh={setSummaryRefresh}
           />
         ) : (
           <SessionComplete
@@ -992,183 +1032,10 @@ export function PracticeBoard({
 
   return (
     <PracticeShell {...shellProps}>
-      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="order-2 md:order-1">
-          <div className="relative">
-            <PracticeCard
-              key={currentVerse.id}
-              sessionLabel={sessionLabel}
-              reference={currentVerse.reference}
-              learnStage={currentProgress.learnStage}
-              stageReps={currentProgress.stageReps}
-              status={currentProgress.status}
-              scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
-              locked={currentLocked}
-              nextStep={nextStepCopy(currentProgress, now, getViewerTimeZone())}
-              reviewedOutcome={
-                currentReviewed
-                  ? reviewedOutcomeLine(currentProgress, now)
-                  : undefined
-              }
-              onLeaveDone={leaveSpentVerse}
-              leaveDoneLabel={nextOpenIndex >= 0 ? "Next" : "Continue"}
-              position={boundedIndex}
-              total={orderedVerses.length}
-              showScheduleOutcome={isReview}
-              composite={
-                composite
-                  ? {
-                      title: composite.packName ?? scopeLabel,
-                      // The verses the learner actually recites, not the number
-                      // of memory units they were learned in.
-                      verseCount: composite.members.reduce(
-                        (total, member) =>
-                          total + member.endVerse - member.startVerse + 1,
-                        0,
-                      ),
-                      text: compositePassage.text,
-                      hintText: compositePassage.hintText,
-                      segments: compositePassage.segments,
-                      loading: compositePassage.loading,
-                      error: compositePassage.error,
-                      retry: compositePassage.retry,
-                    }
-                  : null
-              }
-              onRecord={(tokens, wordCount, opts) => {
-                const verseId = currentVerse.id;
-                const accuracy = verseAttemptAccuracy(tokens);
-                const hold = opts?.holdSchedule === true || refresh;
-                if (isReview) {
-                  const nextAttempt = {
-                    reference: currentVerse.reference,
-                    accuracy,
-                    // One recitation, one row: the pack name, and no
-                    // per-verse practice shortcut to a single member.
-                    label: composite
-                      ? (composite.packName ?? scopeLabel)
-                      : undefined,
-                    offerPractice: composite === null,
-                  };
-                  setSessionAttempts((prev) => [...prev, nextAttempt]);
-                }
-                if (composite) {
-                  return recordComposite(
-                    composite.packId,
-                    tokens,
-                    wordCount,
-                    composite.passageStatus,
-                    opts,
-                  ).then((next) => {
-                    if (!next) return null;
-                    adoptVerseSchedule(verseId, next);
-                    return next;
-                  });
-                }
-                return recordWithSeqAdopt(
-                  verseId,
-                  {
-                    reference: currentVerse.reference,
-                    verseRefId: currentVerse.verseRefId,
-                    tokens,
-                    stage: currentProgress.learnStage,
-                    wordCount,
-                    hint: opts?.hint,
-                    holdSchedule: hold,
-                  },
-                  (schedule) => {
-                    adoptVerseSchedule(verseId, schedule);
-                  },
-                );
-              }}
-              refreshSitting={refresh}
-              onRefreshFinished={async () => {
-                if (!currentVerse.verseRefId) return;
-                const attemptedAt = Date.now();
-                const next = await finishRefresh({
-                  verseRefId: currentVerse.verseRefId,
-                  now: attemptedAt,
-                  sittingStartedAt: refreshStartedAt,
-                  tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
-                  timeZone: getViewerTimeZone(),
-                });
-                adoptVerseSchedule(currentVerse.id, next);
-                markVerseGraded(currentVerse.id);
-              }}
-              onAfterMissRescueFinished={async () => {
-                if (!currentVerse.verseRefId) return;
-                const attemptedAt = Date.now();
-                const result = await spendDailyRescue({
-                  verseRefId: currentVerse.verseRefId,
-                  now: attemptedAt,
-                  tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
-                  timeZone: getViewerTimeZone(),
-                });
-                adoptVerseSchedule(currentVerse.id, result.schedule);
-                if (!result.sessionSpent) return;
-                markVerseGraded(currentVerse.id);
-                advancePastCurrentVerse();
-              }}
-              advancesOnContinue={!currentHasWorkLeft}
-              onContinueAfterResult={() => {
-                if (refresh) {
-                  onExit();
-                  return;
-                }
-                if (currentHasWorkLeft) return;
-                markVerseGraded(currentVerse.id);
-                advancePastCurrentVerse();
-              }}
-              onKeepWait={async () => {
-                const verseId = currentVerse.id;
-                const attemptedAt = Date.now();
-                const tzOffsetMinutes = new Date(
-                  attemptedAt,
-                ).getTimezoneOffset();
-                const timeZone = getViewerTimeZone();
-                const snapshot = memoryScheduleFromSnapshot(
-                  scheduleSnapshotFrom(currentProgress),
-                );
-                const localHold = snapshot
-                  ? holdReviewingInterval(
-                      snapshot,
-                      attemptedAt,
-                      tzOffsetMinutes,
-                      timeZone,
-                    )
-                  : null;
-                if (localHold) adoptVerseSchedule(verseId, localHold);
-                try {
-                  const next = await persistRetryHold(
-                    attemptedAt,
-                    tzOffsetMinutes,
-                    timeZone,
-                  );
-                  if (next) adoptVerseSchedule(verseId, next);
-                } catch (error) {
-                  devLog.warn("verseMemory", "acceptRetryHold failed", error);
-                }
-                markVerseGraded(verseId);
-                advancePastCurrentVerse();
-              }}
-            />
-            <AnimatePresence>
-              {isShuffling && (
-                <PracticeShuffleOverlay
-                  key={`practice-shuffle-${shuffleNonce}`}
-                  sessionLabel={sessionLabel}
-                  verses={railVerses}
-                  firstVerse={
-                    railVerses.find((v) => v.id === currentVerse.id) ??
-                    currentVerse
-                  }
-                />
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-        <div className="order-1 space-y-3 md:order-2">
-          {typeof rail === "function"
+      <SessionColumns
+        collapseAside={refresh}
+        aside={
+          typeof rail === "function"
             ? rail({ changeOrder: handleOrderChange })
             : (rail ?? (
                 <>
@@ -1191,9 +1058,224 @@ export function PracticeBoard({
                     allowReorder={sessionClusterCount(baseVerses) > 1}
                   />
                 </>
-              ))}
+              ))
+        }
+      >
+        <div className="relative">
+          <PracticeCard
+            key={currentVerse.id}
+            sessionLabel={sessionLabel}
+            reference={currentVerse.reference}
+            learnStage={currentProgress.learnStage}
+            stageReps={currentProgress.stageReps}
+            status={currentProgress.status}
+            scheduleSnapshot={scheduleSnapshotFrom(currentProgress)}
+            locked={currentLocked}
+            nextStep={nextStepCopy(currentProgress, now, getViewerTimeZone())}
+            reviewedOutcome={
+              currentReviewed
+                ? reviewedOutcomeLine(currentProgress, now)
+                : undefined
+            }
+            onLeaveDone={leaveSpentVerse}
+            leaveDoneLabel={
+              practiceEndKind({
+                kind,
+                total: orderedVerses.length,
+                remainingAfter: nextOpenIndex >= 0 ? 1 : 0,
+              })
+                ? practiceEndLabel(
+                    practiceEndKind({
+                      kind,
+                      total: orderedVerses.length,
+                      remainingAfter: nextOpenIndex >= 0 ? 1 : 0,
+                    })!,
+                  )
+                : nextOpenIndex >= 0
+                  ? "Next"
+                  : "Continue"
+            }
+            position={boundedIndex}
+            total={orderedVerses.length}
+            showScheduleOutcome={isReview}
+            composite={
+              composite
+                ? {
+                    title: composite.packName ?? scopeLabel,
+                    // The verses the learner actually recites, not the number
+                    // of memory units they were learned in.
+                    verseCount: composite.members.reduce(
+                      (total, member) =>
+                        total + member.endVerse - member.startVerse + 1,
+                      0,
+                    ),
+                    text: compositePassage.text,
+                    hintText: compositePassage.hintText,
+                    segments: compositePassage.segments,
+                    loading: compositePassage.loading,
+                    error: compositePassage.error,
+                    retry: compositePassage.retry,
+                  }
+                : null
+            }
+            onRecord={(tokens, wordCount, opts) => {
+              const verseId = currentVerse.id;
+              const accuracy = verseAttemptAccuracy(tokens);
+              const hold = opts?.holdSchedule === true || refresh;
+              if (isReview) {
+                const nextAttempt = {
+                  reference: currentVerse.reference,
+                  accuracy,
+                  // One recitation, one row: the pack name, and no
+                  // per-verse practice shortcut to a single member.
+                  label: composite
+                    ? (composite.packName ?? scopeLabel)
+                    : undefined,
+                  packId: composite?.packId,
+                };
+                setSessionAttempts((prev) => [...prev, nextAttempt]);
+              }
+              if (composite) {
+                return recordComposite(
+                  composite.packId,
+                  tokens,
+                  wordCount,
+                  composite.passageStatus,
+                  opts,
+                ).then((next) => {
+                  if (!next) return null;
+                  adoptVerseSchedule(verseId, next);
+                  return next;
+                });
+              }
+              return recordWithSeqAdopt(
+                verseId,
+                {
+                  reference: currentVerse.reference,
+                  verseRefId: currentVerse.verseRefId,
+                  tokens,
+                  stage: currentProgress.learnStage,
+                  wordCount,
+                  hint: opts?.hint,
+                  holdSchedule: hold,
+                },
+                (schedule) => {
+                  adoptVerseSchedule(verseId, schedule);
+                },
+              );
+            }}
+            refreshSitting={refresh}
+            onRefreshFinished={async () => {
+              if (!currentVerse.verseRefId) {
+                markVerseGraded(currentVerse.id);
+                return;
+              }
+              const attemptedAt = Date.now();
+              const next = await finishRefresh({
+                verseRefId: currentVerse.verseRefId,
+                now: attemptedAt,
+                sittingStartedAt: refreshStartedAt,
+                tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+                timeZone: getViewerTimeZone(),
+              });
+              adoptVerseSchedule(currentVerse.id, next);
+              markVerseGraded(currentVerse.id);
+            }}
+            onAfterMissRescueFinished={async () => {
+              const notice = currentVerse.composite
+                ? (currentVerse.composite.packName ?? scopeLabel)
+                : formatVerseRefTitle(currentVerse.reference);
+              if (!currentVerse.verseRefId) {
+                markVerseGraded(currentVerse.id);
+                setBackOnTrackNotice(backOnTrackHint(notice));
+                advancePastCurrentVerse();
+                return;
+              }
+              const attemptedAt = Date.now();
+              const result = await spendDailyRescue({
+                verseRefId: currentVerse.verseRefId,
+                now: attemptedAt,
+                tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+                timeZone: getViewerTimeZone(),
+              });
+              adoptVerseSchedule(currentVerse.id, result.schedule);
+              if (!result.sessionSpent) return;
+              markVerseGraded(currentVerse.id);
+              setBackOnTrackNotice(backOnTrackHint(notice));
+              advancePastCurrentVerse();
+            }}
+            advancesOnContinue={!currentHasWorkLeft}
+            endKind={practiceEndKind({
+              kind,
+              total: orderedVerses.length,
+              remainingAfter: nextOpenIndex >= 0 ? 1 : 0,
+            })}
+            backOnTrackNotice={backOnTrackNotice}
+            onClearBackOnTrack={() => setBackOnTrackNotice(null)}
+            onContinueAfterResult={() => {
+              if (refresh) {
+                onExit();
+                return;
+              }
+              if (kind === "practice") {
+                if (nextOpenIndex >= 0) {
+                  const nextId = railVerses[nextOpenIndex]?.id;
+                  if (nextId) showVerse(nextId);
+                  return;
+                }
+                setFinished(true);
+                return;
+              }
+              if (currentHasWorkLeft) return;
+              markVerseGraded(currentVerse.id);
+              advancePastCurrentVerse();
+            }}
+            onKeepWait={async () => {
+              const verseId = currentVerse.id;
+              const attemptedAt = Date.now();
+              const tzOffsetMinutes = new Date(attemptedAt).getTimezoneOffset();
+              const timeZone = getViewerTimeZone();
+              const snapshot = memoryScheduleFromSnapshot(
+                scheduleSnapshotFrom(currentProgress),
+              );
+              const localHold = snapshot
+                ? holdReviewingInterval(
+                    snapshot,
+                    attemptedAt,
+                    tzOffsetMinutes,
+                    timeZone,
+                  )
+                : null;
+              if (localHold) adoptVerseSchedule(verseId, localHold);
+              try {
+                const next = await persistRetryHold(
+                  attemptedAt,
+                  tzOffsetMinutes,
+                  timeZone,
+                );
+                if (next) adoptVerseSchedule(verseId, next);
+              } catch (error) {
+                devLog.warn("verseMemory", "acceptRetryHold failed", error);
+              }
+              markVerseGraded(verseId);
+              advancePastCurrentVerse();
+            }}
+          />
+          <AnimatePresence>
+            {isShuffling && (
+              <PracticeShuffleOverlay
+                key={`practice-shuffle-${shuffleNonce}`}
+                sessionLabel={sessionLabel}
+                verses={railVerses}
+                firstVerse={
+                  railVerses.find((v) => v.id === currentVerse.id) ??
+                  currentVerse
+                }
+              />
+            )}
+          </AnimatePresence>
         </div>
-      </div>
+      </SessionColumns>
     </PracticeShell>
   );
 }
@@ -1260,6 +1342,9 @@ interface PracticeCardProps {
    * again for a stretch. The parent persists the hold and advances.
    */
   onKeepWait?: () => Promise<void>;
+  endKind?: PracticeEndKind | null;
+  backOnTrackNotice?: string | null;
+  onClearBackOnTrack?: () => void;
 }
 
 function PracticeCard({
@@ -1285,6 +1370,9 @@ function PracticeCard({
   refreshSitting = false,
   onRefreshFinished,
   onAfterMissRescueFinished,
+  endKind = null,
+  backOnTrackNotice = null,
+  onClearBackOnTrack,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -1580,6 +1668,10 @@ function PracticeCard({
       void onAfterMissRescueFinished?.();
       return;
     }
+    if (endKind === "again") {
+      window.requestAnimationFrame(() => answerInputRef.current?.focus());
+      return;
+    }
     onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
@@ -1630,17 +1722,18 @@ function PracticeCard({
     checkAnswer();
   }
 
-  const settledResultAction = offerPracticeAgain ? (
-    <>
-      <RotateCcw className="h-4 w-4" aria-hidden />
-      Try again
-    </>
-  ) : (
-    <>
-      <ArrowRight className="h-4 w-4" aria-hidden />
-      Continue
-    </>
-  );
+  const settledResultAction =
+    endKind === "again" || (endKind === null && offerPracticeAgain) ? (
+      <>
+        <RotateCcw className="h-4 w-4" aria-hidden />
+        {endKind === "again" ? practiceEndLabel("again") : "Try again"}
+      </>
+    ) : (
+      <>
+        <ArrowRight className="h-4 w-4" aria-hidden />
+        {endKind ? practiceEndLabel(endKind) : "Continue"}
+      </>
+    );
   const resultActionLabel = gradePending ? (
     "Saving..."
   ) : offerUnhintedFromMemoryRetry ? (
@@ -1691,7 +1784,9 @@ function PracticeCard({
                 className={cn("h-2 w-2 rounded-full", stageColor.dot)}
                 aria-hidden
               />
-              {sessionLabel} · {stageInfo.label}
+              {sittingStep
+                ? refresherPhaseLabel(sittingStep)
+                : `${sessionLabel} · ${stageInfo.label}`}
             </p>
             <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {composite ? composite.title : refLabel}
@@ -1705,7 +1800,9 @@ function PracticeCard({
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
           </p>
-          {sessionGoalLabel && !locked && !showReviewed ? (
+          {sittingStep ? (
+            <RefresherStepLine step={sittingStep} />
+          ) : sessionGoalLabel && !locked && !showReviewed ? (
             <p className="text-xs tabular-nums text-muted-foreground">
               {sessionGoalLabel}
             </p>
@@ -1757,14 +1854,12 @@ function PracticeCard({
             <>
               {!checked && (
                 <>
-                  <div
+                  <ScrollFadeBox
+                    name="hint"
                     className={cn(
-                      "mx-auto min-h-[220px] rounded-xl border bg-background/75 px-5 py-5 text-left",
+                      "mx-auto min-h-[120px] max-h-[45vh] rounded-xl border bg-background/75 px-5 py-5 text-left",
                       SESSION_VERSE_TEXT_CLASS,
                       READER_MEASURE_CLASS,
-                      // A whole passage scrolls inside the card instead of
-                      // pushing the answer box off the screen.
-                      composite && "max-h-[45vh] overflow-y-auto",
                       stageColor.panel,
                     )}
                   >
@@ -1788,8 +1883,20 @@ function PracticeCard({
                       !(refreshSitting && refreshStep === 1) ? (
                       <EmptyHintPrompt
                         passage={Boolean(composite)}
+                        message={
+                          sittingStep === 2
+                            ? nowTryWithoutHintsCopy(Boolean(composite))
+                            : undefined
+                        }
+                        notice={
+                          rescue === "off" && sittingStep === null
+                            ? (backOnTrackNotice ?? undefined)
+                            : undefined
+                        }
                         onRefresher={
-                          !refreshSitting && rescue === "off"
+                          !refreshSitting &&
+                          rescue === "off" &&
+                          sittingStep === null
                             ? () => openRefresher(false)
                             : undefined
                         }
@@ -1804,33 +1911,37 @@ function PracticeCard({
                     ) : (
                       <HintTokenText tokens={tokens} />
                     )}
-                  </div>
+                  </ScrollFadeBox>
 
                   {!isReadPrime && (
-                    <Textarea
-                      ref={answerInputRef}
-                      value={typedAnswer}
-                      onChange={(event) => setTypedAnswer(event.target.value)}
-                      onKeyDown={handleAnswerKeyDown}
-                      placeholder={
-                        composite
-                          ? "Type the passage from memory"
-                          : "Type what you remember"
-                      }
-                      className={cn(
-                        "mx-auto bg-background/80 px-4 py-3",
-                        SESSION_VERSE_TEXT_CLASS,
-                        READER_MEASURE_CLASS,
-                        composite
-                          ? "min-h-[300px] max-h-[60vh] resize-y"
-                          : "min-h-[170px] resize-none",
-                      )}
-                      aria-label={
-                        composite
-                          ? "Your recited passage"
-                          : "Your recalled verse"
-                      }
-                    />
+                    <ScrollFadeBox name="answer">
+                      <Textarea
+                        ref={answerInputRef}
+                        value={typedAnswer}
+                        onChange={(event) => {
+                          setTypedAnswer(event.target.value);
+                          if (event.target.value.length > 0) {
+                            onClearBackOnTrack?.();
+                          }
+                        }}
+                        onKeyDown={handleAnswerKeyDown}
+                        placeholder={
+                          composite
+                            ? "Type the passage from memory"
+                            : "Type what you remember"
+                        }
+                        className={cn(
+                          "mx-auto field-sizing-content max-h-[45vh] min-h-[180px] resize-none overflow-y-auto bg-background/80 px-4 py-3",
+                          SESSION_VERSE_TEXT_CLASS,
+                          READER_MEASURE_CLASS,
+                        )}
+                        aria-label={
+                          composite
+                            ? "Your recited passage"
+                            : "Your recalled verse"
+                        }
+                      />
+                    </ScrollFadeBox>
                   )}
                 </>
               )}
@@ -1854,14 +1965,13 @@ function PracticeCard({
                       offerUnhintedFromMemoryRetry
                         ? FROM_MEMORY_HINT_PASS_MESSAGE
                         : refreshGate?.type === "passed-final"
-                          ? backOnTrackCopy(
-                              formatDueDay(
-                                nextSchedule?.dueAt ?? scheduleSnapshot.dueAt,
-                                outcomeNow,
-                                getViewerTimeZone(),
-                              ),
-                            )
+                          ? backOnTrackCopy()
                           : undefined
+                    }
+                    scrollMaxClass={
+                      checkedQuality !== "exact"
+                        ? "max-h-[30vh]"
+                        : "max-h-[45vh]"
                     }
                     bannerRef={resultBannerRef}
                     scheduleHeld={refreshSitting || rescueHold}
@@ -1878,7 +1988,7 @@ function PracticeCard({
                     <OverflowRegion
                       name="full-text"
                       className={cn(
-                        "mx-auto max-h-[45vh] rounded-xl border bg-card/60 px-4 py-3 text-left",
+                        "mx-auto max-h-[30vh] rounded-xl border bg-card/60 px-4 py-3 text-left",
                         READER_VERSE_SIZE_CLASS,
                         READER_MEASURE_CLASS,
                       )}
@@ -1937,69 +2047,82 @@ function PracticeCard({
                   disabled={loading || Boolean(error)}
                 />
               ) : null}
-              {showDone ? (
-                onLeaveDone ? (
-                  <Button
-                    ref={reviewActionRef}
-                    type="button"
-                    variant="default"
-                    className="flex-1 sm:flex-none"
-                    onClick={onLeaveDone}
-                  >
-                    {leaveDoneLabel}
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Button>
-                ) : null
-              ) : checked && refreshGate?.type === "weak-final" ? (
-                <>
-                  <Button
-                    ref={reviewActionRef}
-                    type="button"
-                    variant="outline"
-                    className="flex-1 sm:flex-none"
-                    onClick={() => {
-                      resetCard();
-                      window.requestAnimationFrame(() =>
-                        answerInputRef.current?.focus(),
-                      );
-                    }}
-                    disabled={submitPending}
-                  >
-                    <RotateCcw className="h-4 w-4" aria-hidden />
-                    Try again
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="default"
-                    className="flex-1 sm:flex-none"
-                    onClick={() => {
-                      if (refreshSitting) {
-                        finishRefreshSitting();
-                        return;
-                      }
-                      resetCard();
-                      setRescue("off");
-                      setRescueHold(false);
-                      onContinueAfterResult?.();
-                    }}
-                    loading={submitPending}
-                  >
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                    Continue
-                  </Button>
-                </>
-              ) : checked ? (
-                reviewRetryOffer && onKeepWait && rescue === "off" ? (
-                  <>
+              <PinnedSessionAction>
+                {showDone ? (
+                  onLeaveDone ? (
                     <Button
+                      ref={reviewActionRef}
+                      type="button"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                      onClick={onLeaveDone}
+                    >
+                      {leaveDoneLabel}
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                    </Button>
+                  ) : null
+                ) : checked && refreshGate?.type === "weak-final" ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <Button
+                      ref={reviewActionRef}
                       type="button"
                       variant="outline"
                       className="flex-1 sm:flex-none"
-                      onClick={keepThisWait}
+                      onClick={() => {
+                        resetCard();
+                        window.requestAnimationFrame(() =>
+                          answerInputRef.current?.focus(),
+                        );
+                      }}
+                      disabled={submitPending}
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      Try again
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                      onClick={() => {
+                        if (refreshSitting) {
+                          finishRefreshSitting();
+                          return;
+                        }
+                        resetCard();
+                        setRescue("off");
+                        setRescueHold(false);
+                        onContinueAfterResult?.();
+                      }}
                       loading={submitPending}
                     >
-                      {REVIEW_RETRY_KEEP_GOING_LABEL}
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                      Continue
                     </Button>
+                  </div>
+                ) : checked ? (
+                  reviewRetryOffer && onKeepWait && rescue === "off" ? (
+                    <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1 sm:flex-none"
+                        onClick={keepThisWait}
+                        loading={submitPending}
+                      >
+                        {REVIEW_RETRY_KEEP_GOING_LABEL}
+                      </Button>
+                      <Button
+                        ref={reviewActionRef}
+                        type="button"
+                        variant="default"
+                        className="flex-1 sm:flex-none"
+                        onClick={continueAttempt}
+                        loading={submitPending}
+                      >
+                        {resultActionLabel}
+                      </Button>
+                    </div>
+                  ) : (
                     <Button
                       ref={reviewActionRef}
                       type="button"
@@ -2010,34 +2133,21 @@ function PracticeCard({
                     >
                       {resultActionLabel}
                     </Button>
-                  </>
-                ) : (
+                  )
+                ) : isReadPrime ? (
                   <Button
                     ref={reviewActionRef}
                     type="button"
                     variant="default"
                     className="flex-1 sm:flex-none"
-                    onClick={continueAttempt}
+                    onClick={continueRead}
+                    disabled={!canContinueRead}
                     loading={submitPending}
                   >
-                    {resultActionLabel}
+                    Continue
+                    <ArrowRight className="h-4 w-4" aria-hidden />
                   </Button>
-                )
-              ) : isReadPrime ? (
-                <Button
-                  ref={reviewActionRef}
-                  type="button"
-                  variant="default"
-                  className="flex-1 sm:flex-none"
-                  onClick={continueRead}
-                  disabled={!canContinueRead}
-                  loading={submitPending}
-                >
-                  Continue
-                  <ArrowRight className="h-4 w-4" aria-hidden />
-                </Button>
-              ) : (
-                <>
+                ) : (
                   <Button
                     type="button"
                     variant="default"
@@ -2055,8 +2165,8 @@ function PracticeCard({
                       </>
                     )}
                   </Button>
-                </>
-              )}
+                )}
+              </PinnedSessionAction>
             </div>
           </div>
         </CardFooter>

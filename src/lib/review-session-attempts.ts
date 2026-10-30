@@ -13,6 +13,8 @@ export interface ReviewSessionAttempt {
   /** Whether to offer the per-verse Practice shortcut. Defaults to true. */
   offerPractice?: boolean;
   status?: MemoryStatus;
+  /** Pack recited as one passage: Refresh/Practice target this pack. */
+  packId?: string;
 }
 
 /** Mean accuracy across every recitation, including retries. */

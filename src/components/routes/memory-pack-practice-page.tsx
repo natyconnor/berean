@@ -20,6 +20,7 @@ import {
   dismissLearnPackForToday,
   learnDismissDayKey,
 } from "@/lib/learn-dismissed-packs";
+import { PRACTICE_AGAIN_LABEL } from "@/lib/practice-end-label";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import {
   isMemorySessionCandidate,
@@ -211,6 +212,7 @@ export function MemoryPackSessionPage({
         }
         backLabel={backLabel}
         exitHref={exit.href}
+        endLabel={isLearning ? undefined : PRACTICE_AGAIN_LABEL}
       />
     );
   }

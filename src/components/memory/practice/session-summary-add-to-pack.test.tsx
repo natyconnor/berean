@@ -205,6 +205,36 @@ describe("Add to pack on session summaries", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers Refresh on a missed passage row", async () => {
+    const onRefresh = vi.fn();
+    renderWithTooltips(
+      <ReviewSummary
+        attempts={[
+          {
+            reference: {
+              book: "Psalms",
+              chapter: 23,
+              startVerse: 1,
+              endVerse: 6,
+            },
+            accuracy: 0,
+            label: "Psalm 23",
+            packId: "pack_psalm",
+            offerPractice: false,
+          },
+        ]}
+        averageAccuracy={0}
+        remaining={0}
+        onDone={() => {}}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
   it("sends a learning-phase Refresh to a Refresh sitting", async () => {
     renderWithTooltips(
       <ReviewSummary

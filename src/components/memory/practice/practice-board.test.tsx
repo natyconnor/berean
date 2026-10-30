@@ -236,9 +236,7 @@ describe("PracticeBoard composite recitation", () => {
     expect(screen.getByText("100%")).toBeVisible();
     const row = within(screen.getByRole("listitem"));
     expect(row.getByText("Psalm 23")).toBeVisible();
-    expect(
-      row.queryByRole("button", { name: "Practice" }),
-    ).not.toBeInTheDocument();
+    expect(row.getByRole("button", { name: "Practice" })).toBeInTheDocument();
   });
 
   it("celebrates a word-for-word recitation in one banner with particles", async () => {
@@ -373,6 +371,36 @@ describe("PracticeBoard composite recitation", () => {
     expect(
       await screen.findByLabelText("Your recited passage"),
     ).toBeInTheDocument();
+  });
+
+  it("advances a unified pack after a post-miss refresher", async () => {
+    renderComposite();
+    const answer = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+
+    const first = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(first);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const second = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(second);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(await screen.findByText("All caught up!")).toBeInTheDocument();
+    expect(mutationMock("verseMemory.spendDailyRescue")).not.toHaveBeenCalled();
   });
 });
 
@@ -2029,7 +2057,7 @@ describe("PracticeBoard refresher", () => {
     );
 
     expect(
-      await screen.findByText(/Review\s*·\s*From memory/),
+      await screen.findByText(/Refresh\s*·\s*From memory/),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Recall the verse from memory"),
@@ -2336,6 +2364,28 @@ describe("PracticeBoard refresher", () => {
       screen.queryByText(FROM_MEMORY_CLOSE_MESSAGE),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText(FROM_MEMORY_HINT_PASS_MESSAGE)).toHaveLength(1);
+  });
+
+  it("names Practice again on a single-verse practice card", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByRole("button", { name: /Practice again/ }),
+    ).toBeInTheDocument();
   });
 });
 
