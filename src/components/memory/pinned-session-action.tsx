@@ -7,22 +7,26 @@ import {
   type ReactNode,
 } from "react";
 
+import { useIsMobile } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
 /**
- * Pins Check answer / Continue just above the Notes/Memory bar when the
- * in-flow button would sit off screen. Short cards keep the in-flow button.
+ * On phones, pins Check answer / Continue just above the Notes/Memory bar
+ * when the in-flow button would sit off screen. Larger widths keep the
+ * in-flow button. Short cards keep it in flow on every width.
  */
 export function PinnedSessionAction({
   children,
 }: {
   children: ReactNode;
 }): JSX.Element {
+  const isPhone = useIsMobile();
   const flowRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(false);
   const [dockGap, setDockGap] = useState(80);
 
   useLayoutEffect(() => {
+    if (!isPhone) return;
     const dock = document.querySelector('[aria-label="Mode"]');
     if (!(dock instanceof HTMLElement)) return;
     const update = () => {
@@ -36,9 +40,10 @@ export function PinnedSessionAction({
       observer.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, []);
+  }, [isPhone]);
 
   useEffect(() => {
+    if (!isPhone) return;
     const node = flowRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
@@ -49,12 +54,12 @@ export function PinnedSessionAction({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [dockGap]);
+  }, [dockGap, isPhone]);
 
   return (
     <>
       <div ref={flowRef}>{children}</div>
-      {pinned ? (
+      {isPhone && pinned ? (
         <div
           className={cn(
             "pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4",
