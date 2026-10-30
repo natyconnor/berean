@@ -857,6 +857,37 @@ export function PracticeBoard({
     }));
   }
 
+  async function applyRefreshFinish() {
+    if (!currentVerse) return;
+    if (!currentVerse.verseRefId) {
+      markVerseGraded(currentVerse.id);
+      return;
+    }
+    const attemptedAt = Date.now();
+    const next = await finishRefresh({
+      verseRefId: currentVerse.verseRefId,
+      now: attemptedAt,
+      sittingStartedAt: refreshStartedAt,
+      tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+      timeZone: getViewerTimeZone(),
+    });
+    adoptVerseSchedule(currentVerse.id, next);
+    markVerseGraded(currentVerse.id);
+  }
+
+  async function applyRescueSchedule() {
+    if (!currentVerse?.verseRefId) return null;
+    const attemptedAt = Date.now();
+    const result = await spendDailyRescue({
+      verseRefId: currentVerse.verseRefId,
+      now: attemptedAt,
+      tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
+      timeZone: getViewerTimeZone(),
+    });
+    adoptVerseSchedule(currentVerse.id, result.schedule);
+    return result;
+  }
+
   function advancePastCurrentVerse() {
     const nextAvailable = railVerses.findIndex(
       (verse, index) => index !== boundedIndex && !verse.locked,
@@ -963,7 +994,7 @@ export function PracticeBoard({
   }
 
   if (finished && summaryRefresh) {
-    const refreshVerse = baseVerses.find((verse) =>
+    const refreshVerse = railVerses.find((verse) =>
       summaryRefresh.label
         ? verse.composite !== undefined &&
           (verse.composite.packName ?? scopeLabel) === summaryRefresh.label
@@ -1165,21 +1196,13 @@ export function PracticeBoard({
               );
             }}
             refreshSitting={refresh}
-            onRefreshFinished={async () => {
-              if (!currentVerse.verseRefId) {
-                markVerseGraded(currentVerse.id);
+            onRefreshFinished={applyRefreshFinish}
+            onRefreshPassed={async () => {
+              if (refresh) {
+                await applyRefreshFinish();
                 return;
               }
-              const attemptedAt = Date.now();
-              const next = await finishRefresh({
-                verseRefId: currentVerse.verseRefId,
-                now: attemptedAt,
-                sittingStartedAt: refreshStartedAt,
-                tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
-                timeZone: getViewerTimeZone(),
-              });
-              adoptVerseSchedule(currentVerse.id, next);
-              markVerseGraded(currentVerse.id);
+              await applyRescueSchedule();
             }}
             onAfterMissRescueFinished={async () => {
               const notice = currentVerse.composite
@@ -1191,15 +1214,8 @@ export function PracticeBoard({
                 advancePastCurrentVerse();
                 return;
               }
-              const attemptedAt = Date.now();
-              const result = await spendDailyRescue({
-                verseRefId: currentVerse.verseRefId,
-                now: attemptedAt,
-                tzOffsetMinutes: new Date(attemptedAt).getTimezoneOffset(),
-                timeZone: getViewerTimeZone(),
-              });
-              adoptVerseSchedule(currentVerse.id, result.schedule);
-              if (!result.sessionSpent) return;
+              const result = await applyRescueSchedule();
+              if (!result?.sessionSpent) return;
               markVerseGraded(currentVerse.id);
               setBackOnTrackNotice(backOnTrackHint(notice));
               advancePastCurrentVerse();
@@ -1334,6 +1350,7 @@ interface PracticeCardProps {
   refreshSitting?: boolean;
   onRefreshFinished?: () => Promise<void>;
   onAfterMissRescueFinished?: () => Promise<void>;
+  onRefreshPassed?: () => Promise<void>;
   advancesOnContinue?: boolean;
   /** Fired when the learner dismisses a checked attempt's result. */
   onContinueAfterResult?: () => void;
@@ -1370,6 +1387,7 @@ function PracticeCard({
   refreshSitting = false,
   onRefreshFinished,
   onAfterMissRescueFinished,
+  onRefreshPassed,
   endKind = null,
   backOnTrackNotice = null,
   onClearBackOnTrack,
@@ -1456,7 +1474,7 @@ function PracticeCard({
   const liveGoalLabel =
     sittingStep !== null
       ? refresherGoalLabel(sittingStep)
-      : status === "reviewing" || status === "mastered"
+      : showScheduleOutcome || status === "reviewing" || status === "mastered"
         ? null
         : `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`;
   const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
@@ -1567,7 +1585,11 @@ function PracticeCard({
           : null;
       if (sittingStep !== null) {
         setHeldGoalLabel(refresherGoalLabel(sittingStep));
-      } else if (status !== "reviewing" && status !== "mastered") {
+      } else if (
+        !showScheduleOutcome &&
+        status !== "reviewing" &&
+        status !== "mastered"
+      ) {
         setHeldGoalLabel(
           `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`,
         );
@@ -1580,6 +1602,19 @@ function PracticeCard({
         holdSchedule: holding,
       });
       if (schedule) setNextSchedule(schedule);
+      if (
+        sittingStep &&
+        quality &&
+        refreshStepGate(sittingStep, { accuracy, quality }).type ===
+          "passed-final"
+      ) {
+        try {
+          await onRefreshPassed?.();
+          setRefreshError(null);
+        } catch {
+          setRefreshError(REFRESH_FINISH_ERROR);
+        }
+      }
     });
   }
 
@@ -1647,7 +1682,13 @@ function PracticeCard({
     }
     if (refreshGate?.type === "passed-final") {
       if (refreshSitting) {
-        finishRefreshSitting();
+        setSubmitKind("keep");
+        submit(() => {
+          setRefreshError(null);
+          resetCard();
+          onContinueAfterResult?.();
+          return Promise.resolve();
+        });
         return;
       }
     }
