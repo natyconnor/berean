@@ -31,6 +31,21 @@ describe("averageReviewAccuracy", () => {
       ]),
     ).toBe(67);
   });
+
+  it("leaves held first-letter retries out of the average", () => {
+    expect(
+      averageReviewAccuracy([
+        { ...john, accuracy: 0, hint: "first-letters" },
+        {
+          ...john,
+          accuracy: 100,
+          hint: "first-letters",
+          holdSchedule: true,
+        },
+        { ...john, accuracy: 100, holdSchedule: true },
+      ]),
+    ).toBe(50);
+  });
 });
 
 describe("groupReviewSessionAttempts", () => {

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -186,6 +186,91 @@ describe("PassageRecallCard result banner", () => {
     expect(
       screen.getByRole("button", { name: "Need a refresher?" }),
     ).toBeInTheDocument();
+  });
+
+  function renderPassageReview() {
+    return render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="From memory"
+        title="Psalm 23"
+        promptLine="Type the passage from memory"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+  }
+
+  it("offers Try with hints again only after a passage miss that started from Need a refresher", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPassageReview();
+
+    await user.click(screen.getByRole("button", { name: "Need a refresher?" }));
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const footer = container.querySelector('[data-slot="card-footer"]');
+    expect(footer).not.toBeNull();
+    expect(
+      await within(footer as HTMLElement).findByRole("button", {
+        name: "Try with hints again",
+      }),
+    ).toBeVisible();
+    expect(
+      within(footer as HTMLElement).getByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reopens First letters empty from Try with hints again on a passage", async () => {
+    const user = userEvent.setup();
+    renderPassageReview();
+
+    await user.click(screen.getByRole("button", { name: "Need a refresher?" }));
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    expect(screen.getByText("First letters")).toBeInTheDocument();
+    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
+    const answer = screen.getByLabelText("Your recited passage");
+    expect(answer).toHaveValue("");
+    expect(answer).toHaveFocus();
+  });
+
+  it("continues to From memory after a passed hinted passage retry", async () => {
+    const user = userEvent.setup();
+    renderPassageReview();
+
+    await user.click(screen.getByRole("button", { name: "Need a refresher?" }));
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    const letters = screen.getByLabelText("Your recited passage");
+    await user.click(letters);
+    await user.paste(VERSE);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(screen.getByText(/Refresh\s*·\s*From memory/)).toBeInTheDocument();
+    expect(screen.getByText("From memory · 2 of 2")).toBeInTheDocument();
   });
 
   it("tabs How you did only while that region overflows", async () => {

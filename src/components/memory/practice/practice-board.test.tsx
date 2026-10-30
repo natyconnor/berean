@@ -2185,6 +2185,181 @@ describe("PracticeBoard refresher", () => {
     expect(screen.queryByText(/· \d+ of \d+ today/)).not.toBeInTheDocument();
   });
 
+  function renderReviewCard() {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function missAfterNeedARefresher() {
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    await missCurrentVerse();
+  }
+
+  it("offers Try with hints again only after a miss that started from Need a refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    const { container } = renderReviewCard();
+    await missAfterNeedARefresher();
+
+    const footer = container.querySelector('[data-slot="card-footer"]');
+    expect(footer).not.toBeNull();
+    expect(
+      await within(footer as HTMLElement).findByRole("button", {
+        name: "Try with hints again",
+      }),
+    ).toBeVisible();
+    expect(
+      within(footer as HTMLElement).getByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Try with hints again after a miss with no refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderReviewCard();
+    await missCurrentVerse();
+
+    expect(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Try with hints again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Try with hints again on a 60% or better hinted try", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    renderReviewCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("The Lord is my shepherd I");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText(/recalled/)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Try with hints again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reopens First letters empty from Try with hints again", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderReviewCard();
+    await missAfterNeedARefresher();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    expect(screen.getByText(/Refresh\s*·\s*First letters/)).toBeInTheDocument();
+    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    expect(answer).toHaveValue("");
+    expect(answer).toHaveFocus();
+  });
+
+  it("continues to From memory after a passed hinted retry", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderReviewCard();
+    await missAfterNeedARefresher();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    const letters = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(letters);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(
+      await screen.findByText(/Refresh\s*·\s*From memory/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves hinted retries out of the session average and spends the review once", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
+      schedule: heldSchedule,
+      sessionSpent: true,
+    });
+    renderReviewCard();
+    await missAfterNeedARefresher();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    const letters = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(letters);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const fromMemory = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(fromMemory);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(await screen.findByText("All caught up!")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("Average accuracy")).toBeInTheDocument();
+    expect(
+      screen.getByText("0%, 100%, then 100% recalled"),
+    ).toBeInTheDocument();
+
+    const records = mutationMock("verseMemory.recordAttempt").mock.calls.map(
+      ([args]) => args as { holdSchedule?: boolean; hint?: string },
+    );
+    expect(records.filter((args) => !args.holdSchedule)).toHaveLength(1);
+    expect(
+      records.filter((args) => args.holdSchedule === true).length,
+    ).toBeGreaterThan(0);
+    expect(mutationMock("verseMemory.spendDailyRescue")).toHaveBeenCalled();
+  });
+
   it("shows Memorized on Progress when a refresher lands on Back on track", async () => {
     mutationMock("verseMemory.recordAttempt").mockResolvedValue(
       lapsedToChallenge,
