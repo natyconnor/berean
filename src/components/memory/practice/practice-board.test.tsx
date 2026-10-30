@@ -11,7 +11,11 @@ import {
 } from "@/components/study/from-memory-messages";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
-import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
+import {
+  DAY_MS,
+  MIN_LEARNING_LOCK_MS,
+  REVIEW_LAPSE_LEARN_STAGE,
+} from "@/lib/memory-scheduler";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -59,6 +63,11 @@ vi.mock("convex-helpers/react/cache", () => ({
     if (args === "skip") return undefined;
     return queryResults.get(name);
   },
+  usePaginatedQuery: () => ({
+    results: [],
+    status: "Exhausted",
+    loadMore: () => {},
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -1124,6 +1133,43 @@ const reviewingVerse: PracticeVerse = {
   earlyReviewApplied: false,
 };
 
+const dailyReviewingVerse: PracticeVerse = {
+  ...reviewingVerse,
+  intervalDays: 1,
+  consecutiveCorrect: 1,
+};
+
+const lapsedToChallenge = {
+  status: "learning" as const,
+  learnStage: REVIEW_LAPSE_LEARN_STAGE,
+  stageReps: 0,
+  ease: 2.1,
+  intervalDays: 0,
+  dueAt: getSessionNow(),
+  consecutiveCorrect: 0,
+  lapses: 1,
+  earlyReviewApplied: false,
+};
+
+const restoredToMemorized = {
+  ...lapsedToChallenge,
+  status: "reviewing" as const,
+  learnStage: 3,
+  intervalDays: 1,
+  dueAt: getSessionNow() + DAY_MS,
+};
+
+function progressPanelStage(): string {
+  const heading = screen.getByText("Progress");
+  const panel = heading.parentElement;
+  if (!panel) throw new Error("Progress panel missing");
+  return (
+    within(panel)
+      .getByLabelText(/^(Learning journey|Progress to mastered):/)
+      .getAttribute("aria-label") ?? ""
+  );
+}
+
 const stillDueSchedule = {
   status: "reviewing" as const,
   learnStage: 3,
@@ -2079,6 +2125,118 @@ describe("PracticeBoard refresher", () => {
         expect.objectContaining({ verseRefId: reviewingVerse.verseRefId }),
       );
     });
+  });
+
+  function renderDailyReview() {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[dailyReviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function missCurrentVerse() {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  it("shows the lapsed learning stage on Progress after a daily-review miss, without a today counter", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    renderDailyReview();
+
+    expect(progressPanelStage()).toMatch(/^Progress to mastered: Memorized/);
+    await missCurrentVerse();
+
+    expect(
+      await screen.findAllByText("Back to fill in the blanks."),
+    ).not.toHaveLength(0);
+    await waitFor(() => {
+      expect(progressPanelStage()).toMatch(
+        /^Learning journey: Fill in the blanks/,
+      );
+    });
+    expect(screen.queryByText(/· \d+ of \d+ today/)).not.toBeInTheDocument();
+  });
+
+  it("hides the today counter when a review miss follows Need a refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    renderDailyReview();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    await missCurrentVerse();
+
+    expect(
+      await screen.findAllByText("Back to fill in the blanks."),
+    ).not.toHaveLength(0);
+    expect(screen.queryByText(/· \d+ of \d+ today/)).not.toBeInTheDocument();
+  });
+
+  it("shows Memorized on Progress when a refresher lands on Back on track", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
+      schedule: restoredToMemorized,
+      sessionSpent: true,
+    });
+    renderDailyReview();
+    await missCurrentVerse();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+
+    const letters = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(letters);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const fromMemory = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(fromMemory);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText("Back on track.")).toBeVisible();
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.spendDailyRescue")).toHaveBeenCalled();
+      expect(progressPanelStage()).toMatch(/^Progress to mastered: Memorized/);
+    });
+  });
+
+  it("opens summary Refresh from the live schedule after a daily-review miss", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    renderDailyReview();
+    await missCurrentVerse();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(await screen.findByText("All caught up!")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(await screen.findByText(/Refresh · First letters/)).toBeVisible();
+    expect(progressPanelStage()).toMatch(
+      /^Learning journey: Fill in the blanks/,
+    );
+    expect(progressPanelStage()).not.toMatch(/Memorized/);
   });
 
   async function completeRefreshStep() {
