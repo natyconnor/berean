@@ -22,15 +22,24 @@ export function EmptyHintPrompt({
   passage = false,
   onRefresher,
   disabled,
+  message,
+  notice,
 }: {
   passage?: boolean;
   onRefresher?: () => void;
   disabled?: boolean;
+  message?: string;
+  notice?: string;
 }) {
   return (
-    <div className="flex h-full min-h-[140px] flex-col items-center justify-center gap-3 text-center font-sans">
+    <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-3 text-center font-sans">
+      {notice ? (
+        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          {notice}
+        </p>
+      ) : null}
       <p className="max-w-sm text-sm text-muted-foreground">
-        {fromMemoryHintCopy(passage)}
+        {message ?? fromMemoryHintCopy(passage)}
       </p>
       {onRefresher ? (
         <NeedARefresherLink onClick={onRefresher} disabled={disabled} />

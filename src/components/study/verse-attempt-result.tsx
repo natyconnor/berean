@@ -35,6 +35,8 @@ interface VerseAttemptResultProps {
   scheduleHeld?: boolean;
   refresherOffer?: ReactNode;
   bannerRef?: Ref<HTMLDivElement>;
+  /** Caps "How you did" so Continue stays close when the full text is also up. */
+  scrollMaxClass?: string;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -157,6 +159,7 @@ export function VerseAttemptResult({
   refresherOffer,
   bannerRef,
   scheduleHeld = false,
+  scrollMaxClass = "max-h-[45vh]",
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -198,7 +201,8 @@ export function VerseAttemptResult({
         <OverflowRegion
           name="how-you-did"
           className={cn(
-            "max-h-[45vh] space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
+            scrollMaxClass,
+            "space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
             attemptQuality === "exact"
               ? "border-emerald-500/40"
               : attemptQuality === "close"
