@@ -89,7 +89,10 @@ import {
   ropePieceIndexes,
   sectionStartIndex,
 } from "@/lib/passage-frontier";
-import type { ReviewSessionAttempt } from "@/lib/review-session-attempts";
+import {
+  averageReviewAccuracy,
+  type ReviewSessionAttempt,
+} from "@/lib/review-session-attempts";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
   reducePassageSession,
@@ -446,6 +449,8 @@ function PassageSessionRun({
             accuracy: result.accuracy,
             label: packName,
             packId,
+            hint: result.hint,
+            holdSchedule: result.holdSchedule,
           },
         ]);
       }
@@ -655,14 +660,7 @@ function PassageSessionRun({
   }
 
   if (reviewComplete) {
-    const total = sessionAttempts.reduce(
-      (sum, attempt) => sum + attempt.accuracy,
-      0,
-    );
-    const averageAccuracy =
-      sessionAttempts.length > 0
-        ? Math.round(total / sessionAttempts.length)
-        : null;
+    const averageAccuracy = averageReviewAccuracy(sessionAttempts);
     return (
       <PassageSessionShell
         phaseLabel="Review"

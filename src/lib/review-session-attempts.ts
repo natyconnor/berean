@@ -15,16 +15,21 @@ export interface ReviewSessionAttempt {
   status?: MemoryStatus;
   /** Pack recited as one passage: Refresh/Practice target this pack. */
   packId?: string;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
 }
 
-/** Mean accuracy across every recitation, including retries. */
 export function averageReviewAccuracy(
   attempts: readonly ReviewSessionAttempt[],
 ): number | null {
-  if (attempts.length === 0) return null;
+  const counted = attempts.filter(
+    (attempt) =>
+      !(attempt.hint === "first-letters" && attempt.holdSchedule === true),
+  );
+  if (counted.length === 0) return null;
   return Math.round(
-    attempts.reduce((sum, attempt) => sum + attempt.accuracy, 0) /
-      attempts.length,
+    counted.reduce((sum, attempt) => sum + attempt.accuracy, 0) /
+      counted.length,
   );
 }
 

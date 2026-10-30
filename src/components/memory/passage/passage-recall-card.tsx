@@ -58,6 +58,7 @@ import { RefresherStepLine } from "@/components/memory/refresher-step-line";
 import { ScrollFadeBox } from "@/components/memory/scroll-fade-box";
 import {
   REFRESH_THESE_VERSES_LABEL,
+  TRY_WITH_HINTS_AGAIN_LABEL,
   backOnTrackCopy,
   nowTryWithoutHintsCopy,
   refresherGoalLabel,
@@ -354,13 +355,15 @@ export function PassageRecallCard({
 
   const fieldLabel =
     mode === "frontier" ? "Your recalled verse" : "Your recited passage";
-  const afterMissOffer =
+  const reviewMissNeedsHelp =
     checked &&
     checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
-    rescue === "off" &&
     !refreshSitting &&
     !hideAfterMissOffer &&
     (mode === "review" || learnStage >= 3);
+  const afterMissOffer = reviewMissNeedsHelp && rescue === "off";
+  const tryHintsAgainOffer =
+    reviewMissNeedsHelp && rescue === "letters" && !rescueHold;
   const showAfterMiss = afterMissOffer && !submitPending;
   const resultScrollMax = checked && !passed ? "max-h-[30vh]" : "max-h-[45vh]";
   const sittingPhase = sittingStep ? refresherPhaseLabel(sittingStep) : null;
@@ -594,6 +597,40 @@ export function PassageRecallCard({
                     >
                       <ArrowRight className="h-4 w-4" aria-hidden />
                       {continueText}
+                    </Button>
+                  </div>
+                ) : checked && tryHintsAgainOffer ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 sm:flex-none"
+                      onClick={() => {
+                        setRescue("letters");
+                        setRescueHold(true);
+                        resetTyped();
+                      }}
+                      disabled={submitPending}
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      {TRY_WITH_HINTS_AGAIN_LABEL}
+                    </Button>
+                    <Button
+                      ref={actionRef}
+                      type="button"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                      onClick={continueAttempt}
+                      loading={submitPending}
+                    >
+                      {submitPending ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <ArrowRight className="h-4 w-4" aria-hidden />
+                          {continueText}
+                        </>
+                      )}
                     </Button>
                   </div>
                 ) : checked ? (

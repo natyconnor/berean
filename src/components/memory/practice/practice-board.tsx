@@ -42,6 +42,7 @@ import { ScrollFadeBox } from "@/components/memory/scroll-fade-box";
 import {
   REFRESH_FINISH_ERROR,
   SESSION_COMPLETE_FOOTER,
+  TRY_WITH_HINTS_AGAIN_LABEL,
   backOnTrackCopy,
   backOnTrackHint,
   nowTryWithoutHintsCopy,
@@ -1163,6 +1164,8 @@ export function PracticeBoard({
                     ? (composite.packName ?? scopeLabel)
                     : undefined,
                   packId: composite?.packId,
+                  hint: opts?.hint,
+                  holdSchedule: hold || undefined,
                 };
                 setSessionAttempts((prev) => [...prev, nextAttempt]);
               }
@@ -1795,15 +1798,17 @@ function PracticeCard({
   ) : (
     settledResultAction
   );
-  const afterMissOffer =
+  const reviewMissNeedsHelp =
     checked &&
     checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
-    rescue === "off" &&
     !refreshSitting &&
     (showScheduleOutcome ||
       fromMemoryLearn ||
       status === "reviewing" ||
       status === "mastered");
+  const afterMissOffer = reviewMissNeedsHelp && rescue === "off";
+  const tryHintsAgainOffer =
+    reviewMissNeedsHelp && rescue === "letters" && !rescueHold;
   const showAfterMiss = afterMissOffer && !gradePending;
 
   return (
@@ -2138,6 +2143,36 @@ function PracticeCard({
                     >
                       <ArrowRight className="h-4 w-4" aria-hidden />
                       Continue
+                    </Button>
+                  </div>
+                ) : checked && tryHintsAgainOffer ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 sm:flex-none"
+                      onClick={() => openRefresher(true)}
+                      disabled={submitPending}
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      {TRY_WITH_HINTS_AGAIN_LABEL}
+                    </Button>
+                    <Button
+                      ref={reviewActionRef}
+                      type="button"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                      onClick={continueAttempt}
+                      loading={submitPending}
+                    >
+                      {gradePending ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <ArrowRight className="h-4 w-4" aria-hidden />
+                          Continue
+                        </>
+                      )}
                     </Button>
                   </div>
                 ) : checked ? (
