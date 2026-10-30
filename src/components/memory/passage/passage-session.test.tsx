@@ -973,6 +973,7 @@ describe("PassageSession", () => {
         "Now try it without the hints. Verse numbers aren't needed.",
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Starting hint")).not.toBeInTheDocument();
     expect(screen.queryByText("Try this part again")).not.toBeInTheDocument();
     expect(
       screen.queryByText("That's enough for today"),

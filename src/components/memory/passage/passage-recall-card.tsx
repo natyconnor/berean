@@ -421,7 +421,7 @@ export function PassageRecallCard({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {!checked && stallCue ? (
+          {!checked && stallCue && !fromMemorySitting ? (
             <StallCue text={stallCue} label={stallCueLabel} />
           ) : null}
           {!checked && (
