@@ -7,7 +7,6 @@ import {
   START_OVER_CONFIRM_LABEL,
   START_OVER_MENU_LABEL,
   STARTED_OVER_LABEL,
-  UNDO_LABEL,
   WHOLE_PACK_OPTION,
   shakyVersesOption,
 } from "@/lib/memory-copy";
@@ -52,12 +51,10 @@ function renderMenu(
   overrides: Partial<Parameters<typeof MemoryRestartMenu>[0]> = {},
 ) {
   const onStartOver = vi.fn().mockResolvedValue(undefined);
-  const onUndo = vi.fn().mockResolvedValue(undefined);
   const onRefresh = vi.fn().mockResolvedValue(undefined);
   const view = render(
     <MemoryRestartMenu
       name="Romans 8:28"
-      isDrawer={false}
       refreshHref="/memory/practice"
       refreshTarget={{
         scope: "verse",
@@ -65,7 +62,6 @@ function renderMenu(
       }}
       onRefresh={onRefresh}
       onStartOver={onStartOver}
-      onUndo={onUndo}
       stop={{
         label: "Stop memorizing",
         title: "Stop memorizing Romans 8:28?",
@@ -77,7 +73,6 @@ function renderMenu(
   );
   return {
     onStartOver,
-    onUndo,
     onRefresh,
     unmount: view.unmount,
     rerender: view.rerender,
@@ -207,21 +202,25 @@ describe("MemoryRestartMenu", () => {
     expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus();
   });
 
-  it("returns focus to More actions after Undo", async () => {
-    renderMenu();
+  it("confirms Start over in a pack drawer without opening the full page", async () => {
+    const view = renderMenu();
     await openStartOverConfirm();
+    expect(
+      await screen.findByRole("heading", { name: "Start Romans 8:28 over?" }),
+    ).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
     await userEvent.click(
       screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
     );
     expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: UNDO_LABEL }));
-    await waitFor(() => {
-      expect(screen.queryByText(STARTED_OVER_LABEL)).not.toBeInTheDocument();
-    });
-    expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus();
+    expect(view.onStartOver).toHaveBeenCalledWith("whole");
+    expect(
+      screen.queryByRole("button", { name: "Undo" }),
+    ).not.toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  it("keeps the menu after Start over and hides Undo after leaving the page", async () => {
+  it("keeps Started over with no Undo after confirming", async () => {
     const first = renderMenu();
     await openStartOverConfirm();
     await userEvent.click(
@@ -229,22 +228,13 @@ describe("MemoryRestartMenu", () => {
     );
 
     expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(first.onStartOver).toHaveBeenCalledWith("whole");
     expect(
-      screen.queryByRole("menuitem", { name: /Refresh/ }),
+      screen.queryByRole("button", { name: "Undo" }),
     ).not.toBeInTheDocument();
-    expect(first.onStartOver).toHaveBeenCalledWith("whole", {
-      replaceUndo: true,
-    });
     expect(
       screen.getByRole("button", { name: "More actions" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: UNDO_LABEL }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /Learn/ }),
-    ).not.toBeInTheDocument();
 
     first.unmount();
     renderMenu();
@@ -254,19 +244,16 @@ describe("MemoryRestartMenu", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps Undo after Start over when the verse becomes Up next", async () => {
+  it("keeps Started over when the verse becomes Up next", async () => {
     const onStartOver = vi.fn().mockResolvedValue(undefined);
-    const onUndo = vi.fn().mockResolvedValue(undefined);
     const props = {
       name: "John 1:1",
-      isDrawer: false as const,
       refreshHref: "/memory/practice?refresh=1",
       refreshTarget: {
         scope: "verse" as const,
         mark: { status: "mastered" as const, learnStage: 3 },
       },
       onStartOver,
-      onUndo,
       showRestart: true,
       triggerLabel: "Options for John 1:1",
     };
@@ -291,14 +278,11 @@ describe("MemoryRestartMenu", () => {
     );
     expect(screen.getByText(STARTED_OVER_LABEL)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: UNDO_LABEL }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Undo" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Options for John 1:1" }),
     ).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: UNDO_LABEL }));
-    expect(onUndo).toHaveBeenCalled();
   });
 
   it("shows only the title and buttons when a passage has no shaky verses", async () => {
@@ -333,7 +317,6 @@ describe("MemoryRestartMenu", () => {
     view.rerender(
       <MemoryRestartMenu
         name="Romans 8:28"
-        isDrawer={false}
         refreshHref="/memory/practice"
         refreshTarget={{
           scope: "verse",
@@ -341,7 +324,6 @@ describe("MemoryRestartMenu", () => {
         }}
         onRefresh={view.onRefresh}
         onStartOver={view.onStartOver}
-        onUndo={view.onUndo}
         stop={{
           label: "Stop memorizing",
           title: "Stop memorizing Romans 8:28?",
@@ -361,9 +343,7 @@ describe("MemoryRestartMenu", () => {
     await userEvent.click(
       screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
     );
-    expect(view.onStartOver).toHaveBeenCalledWith("shaky", {
-      replaceUndo: true,
-    });
+    expect(view.onStartOver).toHaveBeenCalledWith("shaky");
   });
 
   it("keeps a whole-pack pick after shaky verses load again", async () => {
@@ -378,7 +358,6 @@ describe("MemoryRestartMenu", () => {
     view.rerender(
       <MemoryRestartMenu
         name="Romans 8:28"
-        isDrawer={false}
         refreshHref="/memory/practice"
         refreshTarget={{
           scope: "verse",
@@ -386,7 +365,6 @@ describe("MemoryRestartMenu", () => {
         }}
         onRefresh={view.onRefresh}
         onStartOver={view.onStartOver}
-        onUndo={view.onUndo}
         stop={{
           label: "Stop memorizing",
           title: "Stop memorizing Romans 8:28?",
@@ -400,9 +378,7 @@ describe("MemoryRestartMenu", () => {
     await userEvent.click(
       screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
     );
-    expect(view.onStartOver).toHaveBeenCalledWith("whole", {
-      replaceUndo: true,
-    });
+    expect(view.onStartOver).toHaveBeenCalledWith("whole");
   });
 });
 
@@ -420,7 +396,6 @@ describe("VerseRestartMenu", () => {
         status="learning"
         learnStage={1}
         refreshHref="/memory/practice?refresh=1"
-        isDrawer={false}
         onStopped={() => {}}
       />,
     );
@@ -444,7 +419,6 @@ describe("VerseRestartMenu", () => {
         status="learning"
         learnStage={0}
         refreshHref="/memory/practice?refresh=1"
-        isDrawer={false}
         onStopped={() => {}}
       />,
     );
@@ -466,7 +440,6 @@ describe("VerseRestartMenu", () => {
         status="new"
         learnStage={0}
         refreshHref="/memory/practice?refresh=1"
-        isDrawer={false}
         onStopped={() => {}}
       />,
     );

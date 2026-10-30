@@ -47,8 +47,6 @@ import {
   START_OVER_MENU_DETAIL,
   START_OVER_MENU_LABEL,
   STARTED_OVER_LABEL,
-  UNDO_LABEL,
-  UNDO_START_OVER_ERROR,
   WHOLE_PACK_OPTION,
   WHOLE_PASSAGE_OPTION,
   formatShakyVerseList,
@@ -73,13 +71,10 @@ export type MemoryRestartStop = {
 
 export function MemoryRestartMenu({
   name,
-  fullPageHref,
-  isDrawer,
   refreshHref,
   refreshTarget,
   onRefresh,
   onStartOver,
-  onUndo,
   stop,
   shakyLabels = [],
   wholeLabel,
@@ -89,16 +84,10 @@ export function MemoryRestartMenu({
   triggerLabel = "More actions",
 }: {
   name: string;
-  fullPageHref?: string;
-  isDrawer: boolean;
   refreshHref: string;
   refreshTarget?: RefreshTarget;
   onRefresh?: () => Promise<void>;
-  onStartOver?: (
-    choice: ShakyChoice,
-    opts?: { replaceUndo?: boolean },
-  ) => Promise<void>;
-  onUndo?: () => Promise<void>;
+  onStartOver?: (choice: ShakyChoice) => Promise<void>;
   stop?: MemoryRestartStop;
   shakyLabels?: readonly string[];
   wholeLabel?: "passage" | "pack";
@@ -127,7 +116,6 @@ export function MemoryRestartMenu({
     pickedChoice ?? (shakyLabels.length > 0 ? "shaky" : "whole");
   const startLock = useSubmitLock();
   const refreshLock = useSubmitLock();
-  const undoLock = useSubmitLock();
   const stopLock = useSubmitLock();
 
   const openFullPage = (href: string) => {
@@ -146,11 +134,6 @@ export function MemoryRestartMenu({
     });
 
   const handleStartOverSelect = () => {
-    if (isDrawer && fullPageHref) {
-      const joiner = fullPageHref.includes("?") ? "&" : "?";
-      openFullPage(`${fullPageHref}${joiner}startOver=1`);
-      return;
-    }
     setError(null);
     pendingConfirm.current = true;
     setMenuOpen(false);
@@ -160,25 +143,11 @@ export function MemoryRestartMenu({
     startLock.submit(async () => {
       setError(null);
       try {
-        await onStartOver?.(shakyLabels.length > 0 ? choice : "whole", {
-          replaceUndo: !started,
-        });
+        await onStartOver?.(shakyLabels.length > 0 ? choice : "whole");
         setConfirmOpen(false);
         setStarted(true);
       } catch {
         setError(START_OVER_ERROR);
-      }
-    });
-
-  const handleUndo = () =>
-    undoLock.submit(async () => {
-      setError(null);
-      try {
-        await onUndo?.();
-        pendingTriggerFocus.current = true;
-        setStarted(false);
-      } catch {
-        setError(UNDO_START_OVER_ERROR);
       }
     });
 
@@ -197,17 +166,6 @@ export function MemoryRestartMenu({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
           <Check className="size-4 text-emerald-700" aria-hidden />
           <span className="font-semibold">{STARTED_OVER_LABEL}</span>
-          <span aria-hidden className="text-muted-foreground">
-            {" · "}
-          </span>
-          <button
-            type="button"
-            className="text-[12.5px] font-medium text-primary"
-            onClick={handleUndo}
-            disabled={undoLock.pending}
-          >
-            {UNDO_LABEL}
-          </button>
           {error ? (
             <p className="w-full text-xs text-destructive">{error}</p>
           ) : null}
@@ -441,8 +399,6 @@ export function VerseRestartMenu({
   status,
   learnStage,
   refreshHref,
-  fullPageHref,
-  isDrawer,
   openStartOver,
   showStop = true,
   triggerLabel,
@@ -453,35 +409,26 @@ export function VerseRestartMenu({
   status: MemoryStatus;
   learnStage: number;
   refreshHref: string;
-  fullPageHref?: string;
-  isDrawer: boolean;
   openStartOver?: boolean;
   showStop?: boolean;
   triggerLabel?: string;
   onStopped?: () => void;
 }) {
   const startOver = useMutation(api.verseMemory.startOver);
-  const undoStartOver = useMutation(api.verseMemory.undoStartOver);
   const stopMemorizing = useMutation(api.verseMemory.stopMemorizing);
 
   return (
     <MemoryRestartMenu
       name={reference}
-      fullPageHref={fullPageHref}
-      isDrawer={isDrawer}
       refreshHref={refreshHref}
       refreshTarget={{ scope: "verse", mark: { status, learnStage } }}
       openStartOver={openStartOver}
       triggerLabel={triggerLabel}
-      onStartOver={async (_choice, opts) => {
+      onStartOver={async () => {
         await startOver({
           verseRefId,
           now: Date.now(),
-          replaceUndo: opts?.replaceUndo,
         });
-      }}
-      onUndo={async () => {
-        await undoStartOver({ verseRefId, now: Date.now() });
       }}
       stop={
         showStop

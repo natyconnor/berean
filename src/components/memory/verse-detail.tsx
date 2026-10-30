@@ -163,8 +163,6 @@ export function VerseDetailPanel({
               `${memoryVerseSessionHref("practice", detail)}&refresh=1`,
               frame.returnTo,
             )}
-            fullPageHref={frame.fullPageHref}
-            isDrawer={frame.surface === "drawer"}
             openStartOver={
               search !== undefined &&
               "startOver" in search &&

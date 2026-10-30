@@ -702,7 +702,7 @@ describe("PackDetail for a pack", () => {
     );
   });
 
-  it("keeps Undo on a verse row after Start over turns it into Up next", async () => {
+  it("keeps Started over on a verse row after Start over turns it into Up next", async () => {
     const host = () => (
       <TooltipProvider>
         <MemoryPanelPage
@@ -749,17 +749,11 @@ describe("PackDetail for a pack", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      within(luke as HTMLElement).getByRole("button", { name: UNDO_LABEL }),
-    ).toBeInTheDocument();
+      within(luke as HTMLElement).queryByRole("button", { name: UNDO_LABEL }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "More actions for Luke 9:23–24" }),
     ).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: UNDO_LABEL }));
-    expect(mutation("verseMemory.undoStartOver")).toHaveBeenCalledWith({
-      verseRefId: "luke",
-      now: expect.any(Number) as number,
-    });
   });
 
   it("deletes a pack without stopping its verses, then goes back to Your verses", async () => {
@@ -876,19 +870,6 @@ describe("PackDetail on its full page", () => {
     dismissLearnPackForToday("psalm16x", dayKey);
     await startOverOnPage();
     expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(false);
-  });
-
-  it("restores That's enough for today when Undo runs after Start over", async () => {
-    const dayKey = learnDismissDayKey(Date.now());
-    dismissLearnPackForToday("psalm16x", dayKey);
-    await startOverOnPage();
-    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(false);
-
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await waitFor(() => {
-      expect(mutation("passageMemory.undoStartOver")).toHaveBeenCalled();
-    });
-    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(true);
   });
 
   it("shows Not found for a junk pack id without querying packs.get", () => {

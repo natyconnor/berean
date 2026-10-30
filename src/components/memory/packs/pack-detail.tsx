@@ -46,7 +46,6 @@ import {
   learnActionLabel,
   todayStepParts,
 } from "@/lib/memory-copy";
-import { memoryPanelFullPagePath } from "@/lib/memory-panel";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
 import { spanDisplayTitle } from "@/lib/memorize-target";
@@ -82,7 +81,6 @@ import {
 import { moveItem, orderByKeys } from "@/lib/pack-order";
 import {
   clearLearnPackDismissal,
-  dismissLearnPackForToday,
   learnDismissDayKey,
 } from "@/lib/learn-dismissed-packs";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "@/lib/passage-frontier";
@@ -286,8 +284,6 @@ function PackDetailContent({
             `${memoryPackSessionHref("practice", pack._id)}?refresh=1`,
             frame.returnTo,
           )}
-          fullPageHref={frame.fullPageHref}
-          isDrawer={frame.surface === "drawer"}
           openStartOver={
             search !== undefined &&
             "startOver" in search &&
@@ -1045,11 +1041,6 @@ function PackVerses({
                     `${memoryVerseSessionHref("practice", member)}&refresh=1`,
                     frame.returnTo,
                   )}
-                  fullPageHref={memoryPanelFullPagePath(
-                    { kind: "verse", verseRefId: member.verseRefId },
-                    frame.from ? { from: frame.from } : undefined,
-                  )}
-                  isDrawer={frame.surface === "drawer"}
                   triggerLabel={`More actions for ${reference}`}
                   showStop={false}
                 />
@@ -1243,8 +1234,6 @@ function PackDetailMenu({
   now,
   reciteHref,
   refreshHref,
-  fullPageHref,
-  isDrawer,
   openStartOver,
   onRemoved,
 }: {
@@ -1256,8 +1245,6 @@ function PackDetailMenu({
   now: number;
   reciteHref: string;
   refreshHref: string;
-  fullPageHref?: string;
-  isDrawer: boolean;
   openStartOver?: boolean;
   onRemoved: () => void;
 }) {
@@ -1266,14 +1253,12 @@ function PackDetailMenu({
   const deletePack = useMutation(api.packs.remove);
   const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
   const startOverPassage = useMutation(api.passageMemory.startOver);
-  const undoPassage = useMutation(api.passageMemory.undoStartOver);
   const shakyPieces = useQuery(
     api.passageMemory.shakyPieces,
     isPassage ? { packId: pack._id } : "skip",
   );
   const [togetherOpen, setTogetherOpen] = useState(false);
   const [togetherError, setTogetherError] = useState<string | null>(null);
-  const restoreLearnDismissal = useRef(false);
   const removeLock = useSubmitLock();
   const togetherLock = useSubmitLock();
 
@@ -1338,14 +1323,11 @@ function PackDetailMenu({
   const shakyLabels = (passage?.pieces ?? [])
     .filter((piece) => (shakyPieces ?? []).includes(piece.index))
     .map((piece) => String(piece.startVerse));
-  const tzOffsetMinutes = new Date(now).getTimezoneOffset();
 
   return (
     <>
       <MemoryRestartMenu
         name={pack.name}
-        fullPageHref={fullPageHref}
-        isDrawer={isDrawer}
         refreshHref={refreshHref}
         refreshTarget={
           isPassage
@@ -1362,32 +1344,16 @@ function PackDetailMenu({
         shakyLabels={isPassage ? shakyLabels : []}
         wholeLabel={isPassage ? "passage" : undefined}
         showRestart={isPassage && (passage?.pieces.length ?? 0) > 0}
-        onStartOver={async (choice, opts) => {
+        onStartOver={async (choice) => {
           if (!isPassage) return;
           const pieceIndexes =
             choice === "shaky" ? (shakyPieces ?? []).slice() : undefined;
-          restoreLearnDismissal.current = clearLearnPackDismissal(
-            pack._id,
-            learnDismissDayKey(Date.now()),
-          );
+          clearLearnPackDismissal(pack._id, learnDismissDayKey(Date.now()));
           await startOverPassage({
             packId: pack._id,
             now: Date.now(),
-            replaceUndo: opts?.replaceUndo,
             ...(pieceIndexes ? { pieceIndexes } : {}),
           });
-        }}
-        onUndo={async () => {
-          if (!isPassage) return;
-          await undoPassage({
-            packId: pack._id,
-            now: Date.now(),
-            tzOffsetMinutes,
-          });
-          if (restoreLearnDismissal.current) {
-            dismissLearnPackForToday(pack._id, learnDismissDayKey(Date.now()));
-            restoreLearnDismissal.current = false;
-          }
         }}
         extraItems={
           reviewTogether ? (
