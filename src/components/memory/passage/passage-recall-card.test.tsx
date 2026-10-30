@@ -698,6 +698,73 @@ describe("PassageRecallCard Refresh and skip", () => {
     expect(onSkip).toHaveBeenCalledTimes(1);
   });
 
+  it("runs First letters then From memory after Refresh these verses", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(() => Promise.resolve(true));
+    const onRescue = vi.fn();
+    const onContinue = vi.fn();
+    render(
+      <PassageRecallCard
+        mode="rope"
+        phaseLabel="Join verses"
+        title="3 John 1:3–4"
+        promptLine="Type both verses together"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="learning"
+        onSubmit={onSubmit}
+        onContinueAfterResult={onContinue}
+        onSkipWarmup={() => undefined}
+        skipLabel="Skip for now"
+        hideAfterMissOffer
+        refreshTheseVerses
+        onAfterMissRescueFinished={onRescue}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Refresh these verses" }),
+    );
+
+    expect(screen.getByText("Refresh · First letters")).toBeInTheDocument();
+    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste(VERSE);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText(/recalled/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(screen.getByText("Refresh · From memory")).toBeInTheDocument();
+    expect(screen.getByText("From memory · 2 of 2")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Now try it without the hints. Verse numbers aren't needed.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("First letters")).not.toBeInTheDocument();
+    expect(onRescue).not.toHaveBeenCalled();
+    expect(onContinue).not.toHaveBeenCalled();
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste(VERSE);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Back on track.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(onRescue).toHaveBeenCalledTimes(1);
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("hides the starting hint on the result", async () => {
     const user = userEvent.setup();
     render(

@@ -227,19 +227,21 @@ export function PassageRecallCard({
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       if (!quality) return;
-      const saved = await onSubmit({
-        tokens,
-        accuracy: verseAttemptAccuracy(tokens),
-        quality,
-        durationMs: Math.max(0, Date.now() - startedAt),
-        via: "typed",
-        hint:
-          rescue === "letters" || (refreshSitting && learnStage === 1)
-            ? "first-letters"
-            : undefined,
-        holdSchedule: rescueHold || refreshSitting || undefined,
-      });
-      if (saved === false) return;
+      if (!rescueHold) {
+        const saved = await onSubmit({
+          tokens,
+          accuracy: verseAttemptAccuracy(tokens),
+          quality,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          via: "typed",
+          hint:
+            rescue === "letters" || (refreshSitting && learnStage === 1)
+              ? "first-letters"
+              : undefined,
+          holdSchedule: refreshSitting || undefined,
+        });
+        if (saved === false) return;
+      }
       setHeldGoalLabel(goalAtCheck);
       setChecked(true);
     });

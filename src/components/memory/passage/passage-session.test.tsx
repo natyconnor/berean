@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
-import { DAY_MS } from "@/lib/memory-scheduler";
+import { DAY_MS, requiredRepsFor } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
   clearPassageStepInProgress,
@@ -908,6 +908,87 @@ describe("PassageSession", () => {
     expect(
       screen.queryByText("Recite the whole passage from memory"),
     ).not.toBeInTheDocument();
+  });
+
+  it("runs First letters then From memory after Refresh these verses on a failed join", async () => {
+    const user = userEvent.setup();
+    const now = getSessionNow();
+    const joinView = passageView(
+      [
+        piece(0, "attached", {
+          learnStage: 3,
+          stageReps: requiredRepsFor(3) - 1,
+          dueAt: now,
+        }),
+        piece(1, "attached", {
+          learnStage: 3,
+          dueAt: now + DAY_MS,
+        }),
+      ],
+      { remainingIntroduces: 0, addsOnDay: 5 },
+    );
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(joinView);
+    renderSession(joinView);
+
+    await user.click(
+      await screen.findByRole("button", { name: WARMUP_SKIP_LABEL }),
+    );
+    const frontierAnswer = await screen.findByLabelText("Your recalled verse");
+    await user.click(frontierAnswer);
+    await user.paste(PASSAGE_ONE);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(await screen.findByRole("button", { name: /Continue/ }));
+
+    await user.click(
+      await screen.findByRole("button", { name: CONNECT_RECITE_LABEL }),
+    );
+    const joinAnswer = await screen.findByLabelText("Your recited passage");
+    await user.click(joinAnswer);
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Refresh these verses" }),
+    );
+    const recordedBeforeRefresh = mutationMock("passageMemory.recordAttempt")
+      .mock.calls.length;
+
+    expect(
+      await screen.findByText("Refresh · First letters"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
+
+    const lettersAnswer = await screen.findByLabelText("Your recited passage");
+    await user.click(lettersAnswer);
+    await user.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText(/recalled/)).toBeVisible();
+    await user.click(await screen.findByRole("button", { name: /Continue/ }));
+
+    expect(
+      await screen.findByText("Refresh · From memory"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("From memory · 2 of 2")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Now try it without the hints. Verse numbers aren't needed.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Try this part again")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("That's enough for today"),
+    ).not.toBeInTheDocument();
+
+    const memoryAnswer = await screen.findByLabelText("Your recited passage");
+    await user.click(memoryAnswer);
+    await user.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Back on track.")).toBeVisible();
+    await user.click(await screen.findByRole("button", { name: /Continue/ }));
+
+    expect(screen.queryByText("Refresh · From memory")).not.toBeInTheDocument();
+    expect(mutationMock("passageMemory.recordAttempt").mock.calls).toHaveLength(
+      recordedBeforeRefresh,
+    );
   });
 
   it("uses plain language for the remaining session copy", () => {
