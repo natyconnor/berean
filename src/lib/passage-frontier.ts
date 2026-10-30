@@ -22,6 +22,7 @@ import type {
   PieceAttachment,
 } from "./passage-pieces";
 import { scopeCoverageComplete } from "./scope-verse-coverage";
+import type { WindowHintEscalation } from "./passage-refresh-coverage";
 import { countVerseWords, hintForProgress, maskVerseText } from "./verse-hint";
 import type { VerseScope } from "./verse-scope-match";
 
@@ -259,6 +260,7 @@ export function compositeHintForWindow(
   start: number,
   end: number,
   texts: readonly string[],
+  escalation: WindowHintEscalation = "stage",
 ): string {
   const parts: string[] = [];
   const windowAligned =
@@ -275,6 +277,19 @@ export function compositeHintForWindow(
       ? (texts[index - start] ?? "")
       : (texts[index] ?? "");
     if (text.length === 0) continue;
+
+    if (escalation === "full") {
+      parts.push(text);
+      continue;
+    }
+    if (escalation === "first-letters") {
+      parts.push(
+        maskVerseText(text, "first-letters")
+          .map((token) => token.text)
+          .join(""),
+      );
+      continue;
+    }
 
     if (piece.attachment === "solid") {
       parts.push(

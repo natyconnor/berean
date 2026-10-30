@@ -153,6 +153,11 @@ export const FIRST_LETTERS_HINT_LABEL = "First letters";
 export const TYPE_IT_AS_YOU_REMEMBER = "Type it as you remember it.";
 export const VERSE_NUMBERS_NOT_NEEDED = "Verse numbers aren't needed.";
 export const BACK_ON_TRACK = "Back on track.";
+export const NOW_TRY_WITHOUT_HINTS = "Now try it without the hints.";
+export const SKIP_FOR_NOW_LABEL = "Skip for now";
+export const REFRESH_THESE_VERSES_LABEL = "Refresh these verses";
+export const SHOW_PROGRESS_LABEL = "Show progress";
+export const HIDE_PROGRESS_LABEL = "Hide progress";
 export const ENTER_TO_CHECK_HINT =
   "Enter to check · Shift+Enter for a new line";
 export const REFRESH_LABEL = "Refresh";
@@ -165,7 +170,6 @@ export const STARTED_OVER_LABEL = "Started over.";
 export const STARTED_OVER_TODAY_COPY = "Started over today";
 export const UNDO_LABEL = "Undo";
 export const START_OVER_ERROR = "Couldn't start over. Try again.";
-export const UNDO_START_OVER_ERROR = "Couldn't undo. Try again.";
 export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
 export const REFRESH_FINISH_ERROR = "Couldn't finish the refresher. Try again.";
 export const START_OVER_CONFIRM_BODY =
@@ -179,16 +183,29 @@ export function fromMemoryHintCopy(passage: boolean): string {
     : TYPE_IT_AS_YOU_REMEMBER;
 }
 
+export function nowTryWithoutHintsCopy(passage: boolean): string {
+  return passage
+    ? `${NOW_TRY_WITHOUT_HINTS} ${VERSE_NUMBERS_NOT_NEEDED}`
+    : NOW_TRY_WITHOUT_HINTS;
+}
+
 export function refresherGoalLabel(step: 1 | 2): string {
   return step === 1
     ? `${stepShortLabel(1)} · 1 of 2`
     : `${stepShortLabel(3)} · 2 of 2`;
 }
 
-export function backOnTrackCopy(dueDay: string): string {
-  return dueDay === "today"
-    ? BACK_ON_TRACK
-    : `${BACK_ON_TRACK} We'll check in again ${dueDay}.`;
+export function refresherPhaseLabel(step: 1 | 2): string {
+  return `${REFRESH_LABEL} · ${step === 1 ? stepShortLabel(1) : stepShortLabel(3)}`;
+}
+
+export function backOnTrackCopy(dueDay?: string): string {
+  void dueDay;
+  return BACK_ON_TRACK;
+}
+
+export function backOnTrackHint(ref: string): string {
+  return `✓ ${ref} is back on track`;
 }
 
 export function startOverTitle(name: string): string {

@@ -432,6 +432,32 @@ describe("compositeHintForWindow", () => {
     expect(hint).not.toContain("Blessed");
     expect(hint.includes("unused")).toBe(false);
   });
+
+  it("escalates a repeated miss: first letters, then full words", () => {
+    const solidText = "Blessed is the man";
+    const attachedText = "who walks not";
+    const pieces = [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "attached", { learnStage: 2, stageReps: 0 }),
+    ];
+    const texts = [solidText, attachedText];
+    const letters = compositeHintForWindow(
+      pieces,
+      0,
+      2,
+      texts,
+      "first-letters",
+    );
+    const full = compositeHintForWindow(pieces, 0, 2, texts, "full");
+    expect(letters).toBe(
+      `${maskVerseText(solidText, "first-letters")
+        .map((token) => token.text)
+        .join("")} ${maskVerseText(attachedText, "first-letters")
+        .map((token) => token.text)
+        .join("")}`,
+    );
+    expect(full).toBe(`${solidText} ${attachedText}`);
+  });
 });
 
 describe("progressPassagePiece", () => {

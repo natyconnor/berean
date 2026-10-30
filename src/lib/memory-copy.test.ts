@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   ENTER_TO_CHECK_HINT,
   backOnTrackCopy,
+  backOnTrackHint,
   formatShakyVerseList,
   fromMemoryHintCopy,
+  nowTryWithoutHintsCopy,
+  refresherPhaseLabel,
   hasLearningProgress,
   learnActionLabel,
   memorizeTitleLabel,
@@ -146,16 +149,18 @@ describe("refresher copy", () => {
     );
     expect(refresherGoalLabel(1)).toBe("First letters · 1 of 2");
     expect(refresherGoalLabel(2)).toBe("From memory · 2 of 2");
+    expect(refresherPhaseLabel(1)).toBe("Refresh · First letters");
+    expect(refresherPhaseLabel(2)).toBe("Refresh · From memory");
+    expect(nowTryWithoutHintsCopy(false)).toBe("Now try it without the hints.");
+    expect(nowTryWithoutHintsCopy(true)).toBe(
+      "Now try it without the hints. Verse numbers aren't needed.",
+    );
   });
 
-  it("names the next check-in from the real due day", () => {
+  it("keeps Back on track to one sentence", () => {
     expect(backOnTrackCopy("today")).toBe("Back on track.");
-    expect(backOnTrackCopy("tomorrow")).toBe(
-      "Back on track. We'll check in again tomorrow.",
-    );
-    expect(backOnTrackCopy("Thu")).toBe(
-      "Back on track. We'll check in again Thu.",
-    );
+    expect(backOnTrackCopy("tomorrow")).toBe("Back on track.");
+    expect(backOnTrackHint("John 3:16")).toBe("✓ John 3:16 is back on track");
   });
 });
 
