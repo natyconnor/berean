@@ -18,6 +18,7 @@ export function PassageSessionShell({
   progress,
   persistError,
   aside,
+  collapseAside = false,
   children,
 }: {
   phaseLabel: string;
@@ -29,6 +30,7 @@ export function PassageSessionShell({
   progress?: SessionProgress;
   persistError: string | null;
   aside?: ReactNode;
+  collapseAside?: boolean;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -69,7 +71,9 @@ export function PassageSessionShell({
       ) : null}
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">
-          <SessionColumns aside={aside}>{children}</SessionColumns>
+          <SessionColumns aside={aside} collapseAside={collapseAside}>
+            {children}
+          </SessionColumns>
         </div>
       </ScrollArea>
     </div>

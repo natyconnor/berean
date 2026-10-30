@@ -51,9 +51,18 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
-  useQuery: () => ({ stale: false }),
+  useQuery: (name: string) =>
+    name === "passageMemory.shakyPieces" ? [] : { stale: false },
   useAction: (name: string) =>
     name === "esv.getChaptersBatch" ? fetchChaptersBatchMock : vi.fn(),
+}));
+
+vi.mock("convex-helpers/react/cache", () => ({
+  usePaginatedQuery: () => ({
+    results: [],
+    status: "Exhausted",
+    loadMore: () => {},
+  }),
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -62,12 +71,18 @@ vi.mock("../../../../convex/_generated/api", () => ({
       getChaptersBatch: "esv.getChaptersBatch",
       getPassage: "esv.getPassage",
     },
+    packs: {
+      listMine: "packs.listMine",
+      addVerse: "packs.addVerse",
+      createAndMemorize: "packs.createAndMemorize",
+    },
     passageMemory: {
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
       markCelebrated: "passageMemory.markCelebrated",
       reviewFreshness: "passageMemory.reviewFreshness",
       finishRefresh: "passageMemory.finishRefresh",
+      shakyPieces: "passageMemory.shakyPieces",
     },
   },
 }));
@@ -860,6 +875,39 @@ describe("PassageSession", () => {
     expect(
       screen.getByRole("status", { name: "Session phase: Refresh" }),
     ).toBeInTheDocument();
+  });
+
+  it("ends a passage Review on the summary after Continue", async () => {
+    const user = userEvent.setup();
+    mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+      passageView(
+        [
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "solid", { learnStage: 3 }),
+        ],
+        { status: "reviewing" },
+      ),
+    );
+    renderSession(
+      passageView(
+        [
+          piece(0, "solid", { learnStage: 3 }),
+          piece(1, "solid", { learnStage: 3 }),
+        ],
+        { status: "reviewing" },
+      ),
+    );
+
+    const answer = await screen.findByLabelText("Your recited passage");
+    await user.click(answer);
+    await user.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    await user.click(await screen.findByRole("button", { name: /Continue/ }));
+
+    expect(await screen.findByText("All caught up!")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Recite the whole passage from memory"),
+    ).not.toBeInTheDocument();
   });
 
   it("uses plain language for the remaining session copy", () => {

@@ -53,7 +53,16 @@ import {
   refreshStepGate,
   type RefreshStep,
 } from "@/lib/memory-way-back";
-import { backOnTrackCopy, refresherGoalLabel } from "@/lib/memory-copy";
+import { PinnedSessionAction } from "@/components/memory/pinned-session-action";
+import { RefresherStepLine } from "@/components/memory/refresher-step-line";
+import { ScrollFadeBox } from "@/components/memory/scroll-fade-box";
+import {
+  REFRESH_THESE_VERSES_LABEL,
+  backOnTrackCopy,
+  nowTryWithoutHintsCopy,
+  refresherGoalLabel,
+  refresherPhaseLabel,
+} from "@/lib/memory-copy";
 import { WARMUP_SKIP_LABEL } from "@/components/memory/passage/passage-session-model";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
 import {
@@ -109,8 +118,13 @@ interface PassageRecallCardProps {
   readContinue?: boolean;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
   onContinueAfterResult?: () => void;
+  onAfterMissRescueFinished?: () => void;
   refreshSitting?: boolean;
   onSkipWarmup?: () => void;
+  skipLabel?: string;
+  hideAfterMissOffer?: boolean;
+  refreshTheseVerses?: boolean;
+  continueLabel?: string;
 }
 
 export function PassageRecallCard({
@@ -136,8 +150,13 @@ export function PassageRecallCard({
   readContinue = false,
   onSubmit,
   onContinueAfterResult,
+  onAfterMissRescueFinished,
   refreshSitting = false,
   onSkipWarmup,
+  skipLabel = WARMUP_SKIP_LABEL,
+  hideAfterMissOffer = false,
+  refreshTheseVerses = false,
+  continueLabel,
 }: PassageRecallCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -254,6 +273,18 @@ export function PassageRecallCard({
     window.requestAnimationFrame(focusAnswerKeepingTitle);
   }
 
+  function finishResult() {
+    const heldRescue = rescueHold;
+    setRescue("off");
+    setRescueHold(false);
+    resetTyped();
+    if (heldRescue) {
+      onAfterMissRescueFinished?.();
+      return;
+    }
+    onContinueAfterResult?.();
+  }
+
   function continueAttempt() {
     if (refreshGate?.type === "retry") {
       resetTyped();
@@ -270,15 +301,18 @@ export function PassageRecallCard({
       return;
     }
     if (refreshGate?.type === "weak-final") return;
+    if (refreshTheseVerses && rescue === "off" && !passed) {
+      setRescue("letters");
+      setRescueHold(true);
+      resetTyped();
+      return;
+    }
     if (rescue === "letters" && rescueHold) {
       setRescue("memory");
       resetTyped();
       return;
     }
-    setRescue("off");
-    setRescueHold(false);
-    resetTyped();
-    onContinueAfterResult?.();
+    finishResult();
   }
 
   useEnterToClick(actionRef, !checked ? isReadPrime : true);
@@ -323,8 +357,16 @@ export function PassageRecallCard({
     checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
     rescue === "off" &&
     !refreshSitting &&
+    !hideAfterMissOffer &&
     (mode === "review" || learnStage >= 3);
   const showAfterMiss = afterMissOffer && !submitPending;
+  const resultScrollMax = checked && !passed ? "max-h-[30vh]" : "max-h-[45vh]";
+  const sittingPhase = sittingStep ? refresherPhaseLabel(sittingStep) : null;
+  const continueText =
+    refreshTheseVerses && checked && !passed && rescue === "off"
+      ? REFRESH_THESE_VERSES_LABEL
+      : (continueLabel ?? "Continue");
+  const fromMemorySitting = sittingStep === 2 || rescue === "memory";
 
   return (
     <motion.div
@@ -345,7 +387,7 @@ export function PassageRecallCard({
                 className={cn("h-2 w-2 rounded-full", stageColor.dot)}
                 aria-hidden
               />
-              {phaseLabel}
+              {sittingPhase ?? phaseLabel}
             </p>
             <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {title}
@@ -357,7 +399,9 @@ export function PassageRecallCard({
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
           </p>
-          {sessionGoalLabel ? (
+          {sittingStep ? (
+            <RefresherStepLine step={sittingStep} />
+          ) : sessionGoalLabel ? (
             <p className="text-xs tabular-nums text-muted-foreground">
               {sessionGoalLabel}
             </p>
@@ -375,12 +419,15 @@ export function PassageRecallCard({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {stallCue ? <StallCue text={stallCue} label={stallCueLabel} /> : null}
+          {!checked && stallCue ? (
+            <StallCue text={stallCue} label={stallCueLabel} />
+          ) : null}
           {!checked && (
             <>
-              <div
+              <ScrollFadeBox
+                name="hint"
                 className={cn(
-                  "mx-auto min-h-[140px] max-h-[140px] overflow-y-auto rounded-xl border bg-background/75 px-5 py-5 text-left",
+                  "mx-auto min-h-[120px] max-h-[45vh] rounded-xl border bg-background/75 px-5 py-5 text-left",
                   SESSION_VERSE_TEXT_CLASS,
                   READER_MEASURE_CLASS,
                   stageColor.panel,
@@ -407,11 +454,16 @@ export function PassageRecallCard({
                     text={hintPlainText ?? versePlainText}
                     className="border-0 bg-transparent p-0"
                   />
-                ) : rescue === "memory" || hint.type === "hidden" ? (
+                ) : fromMemorySitting || hint.type === "hidden" ? (
                   <EmptyHintPrompt
                     passage={compositeField}
+                    message={
+                      fromMemorySitting
+                        ? nowTryWithoutHintsCopy(compositeField)
+                        : undefined
+                    }
                     onRefresher={
-                      !refreshSitting && rescue === "off"
+                      !fromMemorySitting && !refreshSitting && rescue === "off"
                         ? () => {
                             setRescue("letters");
                             setRescueHold(false);
@@ -427,29 +479,28 @@ export function PassageRecallCard({
                     {hint.text}
                   </p>
                 )}
-              </div>
+              </ScrollFadeBox>
 
               {!isReadPrime && (
-                <Textarea
-                  ref={answerInputRef}
-                  value={typedAnswer}
-                  onChange={(event) => setTypedAnswer(event.target.value)}
-                  onKeyDown={handleAnswerKeyDown}
-                  placeholder={
-                    compositeField
-                      ? "Type the passage from memory"
-                      : "Type what you remember"
-                  }
-                  className={cn(
-                    "mx-auto bg-background/80 px-4 py-3",
-                    SESSION_VERSE_TEXT_CLASS,
-                    READER_MEASURE_CLASS,
-                    compositeField
-                      ? "min-h-[180px] resize-y"
-                      : "min-h-[170px] resize-none",
-                  )}
-                  aria-label={fieldLabel}
-                />
+                <ScrollFadeBox name="answer">
+                  <Textarea
+                    ref={answerInputRef}
+                    value={typedAnswer}
+                    onChange={(event) => setTypedAnswer(event.target.value)}
+                    onKeyDown={handleAnswerKeyDown}
+                    placeholder={
+                      compositeField
+                        ? "Type the passage from memory"
+                        : "Type what you remember"
+                    }
+                    className={cn(
+                      "mx-auto field-sizing-content max-h-[45vh] min-h-[180px] resize-none overflow-y-auto bg-background/80 px-4 py-3",
+                      SESSION_VERSE_TEXT_CLASS,
+                      READER_MEASURE_CLASS,
+                    )}
+                    aria-label={fieldLabel}
+                  />
+                </ScrollFadeBox>
               )}
             </>
           )}
@@ -465,9 +516,10 @@ export function PassageRecallCard({
                 scheduleHeld={refreshSitting || rescueHold}
                 praiseLine={
                   refreshGate?.type === "passed-final"
-                    ? backOnTrackCopy("tomorrow")
+                    ? backOnTrackCopy()
                     : undefined
                 }
+                scrollMaxClass={resultScrollMax}
                 refresherOffer={
                   showAfterMiss ? (
                     <NeedARefresherButton
@@ -508,80 +560,77 @@ export function PassageRecallCard({
                   className="flex-1 sm:flex-none"
                   onClick={onSkipWarmup}
                 >
-                  {WARMUP_SKIP_LABEL}
+                  {skipLabel}
                 </Button>
               ) : null}
-              {checked && refreshGate?.type === "weak-final" ? (
-                <>
+              <PinnedSessionAction>
+                {checked && refreshGate?.type === "weak-final" ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <Button
+                      ref={actionRef}
+                      type="button"
+                      variant="outline"
+                      className="flex-1 sm:flex-none"
+                      onClick={resetTyped}
+                      disabled={submitPending}
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      Try again
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                      onClick={() => {
+                        if (refreshSitting) {
+                          onContinueAfterResult?.();
+                          return;
+                        }
+                        finishResult();
+                      }}
+                      loading={submitPending}
+                    >
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                      {continueText}
+                    </Button>
+                  </div>
+                ) : checked ? (
                   <Button
                     ref={actionRef}
                     type="button"
-                    variant="outline"
+                    variant="default"
                     className="flex-1 sm:flex-none"
-                    onClick={resetTyped}
-                    disabled={submitPending}
+                    onClick={continueAttempt}
+                    loading={submitPending}
                   >
-                    <RotateCcw className="h-4 w-4" aria-hidden />
-                    Try again
+                    {submitPending ? (
+                      "Saving..."
+                    ) : refreshGate?.type === "retry" || offerTryAgain ? (
+                      <>
+                        <RotateCcw className="h-4 w-4" aria-hidden />
+                        Try again
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="h-4 w-4" aria-hidden />
+                        {continueText}
+                      </>
+                    )}
                   </Button>
+                ) : isReadPrime ? (
                   <Button
+                    ref={actionRef}
                     type="button"
                     variant="default"
                     className="flex-1 sm:flex-none"
-                    onClick={() => {
-                      if (refreshSitting) {
-                        onContinueAfterResult?.();
-                        return;
-                      }
-                      setRescue("off");
-                      setRescueHold(false);
-                      resetTyped();
-                      onContinueAfterResult?.();
-                    }}
+                    onClick={continueRead}
+                    disabled={!canContinueRead}
                     loading={submitPending}
                   >
-                    <ArrowRight className="h-4 w-4" aria-hidden />
                     Continue
+                    <ArrowRight className="h-4 w-4" aria-hidden />
                   </Button>
-                </>
-              ) : checked ? (
-                <Button
-                  ref={actionRef}
-                  type="button"
-                  variant="default"
-                  className="flex-1 sm:flex-none"
-                  onClick={continueAttempt}
-                  loading={submitPending}
-                >
-                  {submitPending ? (
-                    "Saving..."
-                  ) : refreshGate?.type === "retry" || offerTryAgain ? (
-                    <>
-                      <RotateCcw className="h-4 w-4" aria-hidden />
-                      Try again
-                    </>
-                  ) : (
-                    <>
-                      <ArrowRight className="h-4 w-4" aria-hidden />
-                      Continue
-                    </>
-                  )}
-                </Button>
-              ) : isReadPrime ? (
-                <Button
-                  ref={actionRef}
-                  type="button"
-                  variant="default"
-                  className="flex-1 sm:flex-none"
-                  onClick={continueRead}
-                  disabled={!canContinueRead}
-                  loading={submitPending}
-                >
-                  Continue
-                  <ArrowRight className="h-4 w-4" aria-hidden />
-                </Button>
-              ) : (
-                <>
+                ) : (
                   <Button
                     type="button"
                     variant="default"
@@ -599,8 +648,8 @@ export function PassageRecallCard({
                       </>
                     )}
                   </Button>
-                </>
-              )}
+                )}
+              </PinnedSessionAction>
             </div>
           </div>
         </CardFooter>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 
 import {
   PassageRecallCard,
@@ -7,8 +7,15 @@ import {
 } from "@/components/memory/passage/passage-recall-card";
 import { PassageSessionShell } from "@/components/memory/passage/passage-session-shell";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
-import { REFRESH_FINISH_ERROR, refresherGoalLabel } from "@/lib/memory-copy";
-import { learnedPassagePieces } from "@/lib/passage-frontier";
+import {
+  REFRESH_FINISH_ERROR,
+  nowTryWithoutHintsCopy,
+} from "@/lib/memory-copy";
+import {
+  passageRefreshCoverage,
+  selectRefreshPieces,
+  type PassageRefreshSource,
+} from "@/lib/passage-refresh-coverage";
 import { maskVerseText } from "@/lib/verse-hint";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import {
@@ -27,6 +34,7 @@ export function PassageRefreshSitting({
   onExit,
   backLabel = "Back to Memory",
   exitHref,
+  coverage,
 }: {
   packId: Id<"packs">;
   view: PassageView;
@@ -34,21 +42,35 @@ export function PassageRefreshSitting({
   onExit: () => void;
   backLabel?: string;
   exitHref?: string;
+  coverage?: PassageRefreshSource;
 }) {
   const [step, setStep] = useState<RefreshStep>(1);
   const [startedAt] = useState(() => Date.now());
   const [finishError, setFinishError] = useState<string | null>(null);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
   const finishRefresh = useMutation(api.passageMemory.finishRefresh);
-  const refreshPieces = learnedPassagePieces(view.pieces);
-  const members = (refreshPieces.length > 0 ? refreshPieces : view.pieces).map(
-    (piece) => ({
-      book: piece.book,
-      chapter: piece.chapter,
-      startVerse: piece.startVerse,
-      endVerse: piece.endVerse,
-    }),
+  const shakyPieces = useQuery(
+    api.passageMemory.shakyPieces,
+    coverage === undefined ? { packId } : "skip",
   );
+  const source: PassageRefreshSource = coverage ?? {
+    kind: "menu",
+    pieces: view.pieces.map((piece) => ({
+      attachment: piece.attachment,
+      index: piece.index,
+    })),
+    shakyIndexes: Array.isArray(shakyPieces) ? shakyPieces : [],
+  };
+  const refreshPieces = selectRefreshPieces(
+    view.pieces,
+    passageRefreshCoverage(source),
+  );
+  const members = refreshPieces.map((piece) => ({
+    book: piece.book,
+    chapter: piece.chapter,
+    startVerse: piece.startVerse,
+    endVerse: piece.endVerse,
+  }));
   const passage = useEsvCompositePassage(members);
   const hintSource = passage.hintText || passage.text;
   const hint = useMemo(() => {
@@ -60,7 +82,7 @@ export function PassageRefreshSitting({
     }
     return {
       type: "hidden" as const,
-      message: refresherGoalLabel(2),
+      message: nowTryWithoutHintsCopy(true),
     };
   }, [hintSource, step]);
 
@@ -88,6 +110,7 @@ export function PassageRefreshSitting({
       backLabel={backLabel}
       exitHref={exitHref}
       persistError={finishError}
+      collapseAside
     >
       <PassageRecallCard
         mode="review"

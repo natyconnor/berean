@@ -580,7 +580,7 @@ describe("PassageRecallCard Refresh and skip", () => {
     const hint = screen.getByText("First letters").closest("div");
     const lineBox = hint?.querySelector("p.whitespace-pre-wrap");
     expect(lineBox?.textContent).toContain("\n");
-    expect(hint?.parentElement).toHaveClass("max-h-[140px]");
+    expect(hint?.parentElement).toHaveClass("max-h-[45vh]");
     expect(
       screen.getByRole("textbox", { name: "Your recited passage" }),
     ).toBeInTheDocument();
@@ -651,6 +651,114 @@ describe("PassageRecallCard Refresh and skip", () => {
       await screen.findByRole("button", { name: "Skip warm-up" }),
     );
     expect(onSkipWarmup).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses Skip for now and Refresh these verses on a failed join", async () => {
+    const user = userEvent.setup();
+    const onSkip = vi.fn();
+    const onRescue = vi.fn();
+    render(
+      <PassageRecallCard
+        mode="rope"
+        phaseLabel="Join verses"
+        title="Jude 1:3–4"
+        promptLine="Type both verses together"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="learning"
+        onSubmit={() => Promise.resolve(true)}
+        onSkipWarmup={onSkip}
+        skipLabel="Skip for now"
+        hideAfterMissOffer
+        refreshTheseVerses
+        onAfterMissRescueFinished={onRescue}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Skip warm-up" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Refresh these verses" }),
+    ).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: "Skip for now" }),
+    );
+    expect(onSkip).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the starting hint on the result", async () => {
+    const user = userEvent.setup();
+    render(
+      <PassageRecallCard
+        mode="rope"
+        phaseLabel="Join verses"
+        title="Jude 1:3–4"
+        promptLine="Type both verses together"
+        versePlainText={VERSE}
+        stallCue="P"
+        stallCueLabel="Starting hint"
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="learning"
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+
+    expect(screen.getByLabelText("Starting hint")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Your recited passage"));
+    await user.paste("nope");
+    await user.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByRole("button", { name: /Continue/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Starting hint")).not.toBeInTheDocument();
+  });
+
+  it("heads a sitting From memory step as Refresh and drops the refresher link", () => {
+    render(
+      <PassageRecallCard
+        mode="review"
+        phaseLabel="Recite it all"
+        title="Psalm 23"
+        promptLine="Recall the passage from memory"
+        versePlainText={VERSE}
+        loading={false}
+        error={null}
+        retry={() => undefined}
+        hint={{ type: "hidden", message: "No hint text." }}
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        refreshSitting
+        onSubmit={() => Promise.resolve(true)}
+      />,
+    );
+
+    expect(screen.getByText("Refresh · From memory")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Now try it without the hints. Verse numbers aren't needed.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
   });
 
   it("lets a weak From memory Refresh finish on Continue", async () => {
