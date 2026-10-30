@@ -37,6 +37,21 @@ export function dismissLearnPackForToday(packId: string, dayKey: number): void {
   writeRecord({ day: dayKey, packIds: [...packIds] });
 }
 
+/** Removes one pack from today's dismissal list. Returns whether it was there. */
+export function clearLearnPackDismissal(
+  packId: string,
+  dayKey: number,
+): boolean {
+  const packIds = readLearnPacksDismissedToday(dayKey);
+  if (!packIds.delete(packId)) return false;
+  if (packIds.size === 0) {
+    clearRecord();
+    return true;
+  }
+  writeRecord({ day: dayKey, packIds: [...packIds] });
+  return true;
+}
+
 function localStore(): Storage | null {
   try {
     if (typeof localStorage === "undefined") return null;

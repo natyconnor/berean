@@ -9,6 +9,9 @@ import {
 import { CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { useMutation } from "convex/react";
 
+import { PassageRefreshSitting } from "@/components/memory/passage/passage-refresh-sitting";
+import { PassageSessionShell } from "@/components/memory/passage/passage-session-shell";
+import { ReviewSummary } from "@/components/memory/review-summary";
 import { PassageCompleteMoment } from "@/components/memory/celebrate/passage-complete-moment";
 import { useFirstMasteredToast } from "@/components/memory/celebrate/use-milestone-hint";
 import {
@@ -57,15 +60,15 @@ import {
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
+import { SKIP_FOR_NOW_LABEL } from "@/lib/memory-copy";
+import {
+  windowHintEscalation,
+  type WindowHintEscalation,
+} from "@/lib/passage-refresh-coverage";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
-import { SessionColumns } from "@/components/memory/practice/session-columns";
-import {
-  SessionHeaderProgress,
-  type SessionProgress,
-} from "@/components/memory/practice/session-header-progress";
+import type { SessionProgress } from "@/components/memory/practice/session-header-progress";
 import type { VerseAttemptQuality } from "@/components/study/study-attempt-quality";
-import { SessionBackButton } from "@/components/memory/session-back-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -74,7 +77,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEsvCompositePassage } from "@/hooks/use-esv-composite-passage";
 import { useLiveNow } from "@/hooks/use-live-now";
 import {
@@ -83,9 +85,14 @@ import {
   localDayIndex,
   rehearsalStartIndex,
   remainingIntroduces,
+  PASSAGE_PASS_ACCURACY,
   ropePieceIndexes,
   sectionStartIndex,
 } from "@/lib/passage-frontier";
+import {
+  averageReviewAccuracy,
+  type ReviewSessionAttempt,
+} from "@/lib/review-session-attempts";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
   reducePassageSession,
@@ -109,6 +116,7 @@ type BuiltRecall = {
   subtitle?: string;
   promptLine: string;
   versePlainText: string;
+  hintPlainText?: string;
   loading: boolean;
   error: string | null;
   retry: () => void;
@@ -144,9 +152,29 @@ interface PassageSessionProps {
   progress?: SessionProgress | ((todayShare: number) => SessionProgress);
   /** A side column beside the passage, e.g. the rest of today's queue. */
   aside?: ReactNode;
+  /** Menu Refresh sitting for a reviewing passage. */
+  refresh?: boolean;
+  /** Practice sitting end label, e.g. "Practice again". */
+  endLabel?: string;
 }
 
-export function PassageSession({
+export function PassageSession(props: PassageSessionProps): JSX.Element {
+  if (props.refresh) {
+    return (
+      <PassageRefreshSitting
+        packId={props.packId}
+        view={props.view}
+        packName={props.packName}
+        onExit={props.onExit}
+        backLabel={props.backLabel}
+        exitHref={props.exitHref}
+      />
+    );
+  }
+  return <PassageSessionRun {...props} />;
+}
+
+function PassageSessionRun({
   packId,
   view,
   packName,
@@ -156,6 +184,7 @@ export function PassageSession({
   exitHref,
   progress,
   aside,
+  endLabel,
 }: PassageSessionProps): JSX.Element {
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
@@ -202,6 +231,12 @@ export function PassageSession({
   const [recitingSection, setRecitingSection] = useState(false);
   const [recitingConnect, setRecitingConnect] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
+  const [warmupMissCount, setWarmupMissCount] = useState(0);
+  const [reviewComplete, setReviewComplete] = useState(false);
+  const [sessionAttempts, setSessionAttempts] = useState<
+    ReviewSessionAttempt[]
+  >([]);
+  const [summaryRefresh, setSummaryRefresh] = useState(false);
   // The passage just became known by heart: "pending" holds the moment until
   // the learner continues past the result that finished it. "owed" is a moment
   // missed by leaving early, shown once this session opens with its text.
@@ -240,6 +275,7 @@ export function PassageSession({
     recitingSection ? "section" : ropeOverride,
     wordCountsReady ? pieceWordCounts : undefined,
   );
+  const hintEscalation = windowHintEscalation(warmupMissCount);
   const liveRecall = isMaintenance
     ? reviewRecall(packName, state.pieces, pieceTexts, composite)
     : buildingRecall({
@@ -252,6 +288,7 @@ export function PassageSession({
         compositeError: composite.error,
         retry: composite.retry,
         ropeIndexes,
+        hintEscalation,
       });
   const recall = holdResult && heldRecall ? heldRecall : liveRecall;
   const cue = stallCue ?? recall?.pickUpCue ?? null;
@@ -273,6 +310,8 @@ export function PassageSession({
     next: PassageSessionState,
     quality: VerseAttemptQuality | undefined,
     durationMs?: number,
+    hint?: "first-letters",
+    holdSchedule?: boolean,
   ): Promise<boolean> {
     const pending = next.pendingMutation;
     if (!pending) {
@@ -317,6 +356,8 @@ export function PassageSession({
           pending.kind === "frontier"
             ? (next.pieceWordCounts?.[pending.pieceIndex ?? 0] ?? undefined)
             : undefined,
+        hint,
+        holdSchedule,
       });
       const remaining = remainingIntroduces({
         addsOnDay: nextView.addsOnDay,
@@ -365,6 +406,17 @@ export function PassageSession({
     };
   }
 
+  function completeMaintenanceReview() {
+    if (onDoneForToday) {
+      finishForToday();
+      return;
+    }
+    setHoldResult(false);
+    setHeldRecall(null);
+    if (endLabel) return;
+    setReviewComplete(true);
+  }
+
   async function handleGraded(result: PassageRecallResult): Promise<boolean> {
     if (isMaintenance) {
       const saved = await persist(
@@ -378,8 +430,30 @@ export function PassageSession({
         },
         result.quality,
         result.durationMs,
+        result.hint,
+        result.holdSchedule,
       );
       if (!saved) return false;
+      const first = state.pieces[0];
+      const last = state.pieces[state.pieces.length - 1];
+      if (first) {
+        setSessionAttempts((prev) => [
+          ...prev,
+          {
+            reference: {
+              book: first.book,
+              chapter: first.chapter,
+              startVerse: first.startVerse,
+              endVerse: last?.endVerse ?? first.endVerse,
+            },
+            accuracy: result.accuracy,
+            label: packName,
+            packId,
+            hint: result.hint,
+            holdSchedule: result.holdSchedule,
+          },
+        ]);
+      }
       if (result.via === "typed") {
         setHoldResult(true);
         setHeldRecall(liveRecall);
@@ -393,7 +467,13 @@ export function PassageSession({
       tokens: result.tokens,
       now: Date.now(),
     });
-    const saved = await persist(next, result.quality, result.durationMs);
+    const saved = await persist(
+      next,
+      result.quality,
+      result.durationMs,
+      result.hint,
+      result.holdSchedule,
+    );
     if (!saved) return false;
     if (result.via === "typed" && liveRecall) {
       // Freeze hint/prompt chrome on the pre-check snapshot, but adopt the
@@ -401,6 +481,15 @@ export function PassageSession({
       // as soon as the check qualifies.
       setHeldRecall(heldRecallWithJourneyProgress(liveRecall, next));
       setHoldResult(true);
+    }
+    if (
+      liveRecall &&
+      (liveRecall.mode === "rope" || liveRecall.mode === "repair") &&
+      result.accuracy < PASSAGE_PASS_ACCURACY
+    ) {
+      setWarmupMissCount((count) => count + 1);
+    } else if (result.accuracy >= PASSAGE_PASS_ACCURACY) {
+      setWarmupMissCount(0);
     }
     setStallCue(computeStallCue(next, pieceTexts));
     return true;
@@ -418,6 +507,7 @@ export function PassageSession({
       if (!saved) return false;
       setRopeOverride("rehearsal");
       setStallCue(null);
+      setWarmupMissCount(0);
       setHoldResult(false);
       setHeldRecall(null);
       setRecitingSection(false);
@@ -429,7 +519,16 @@ export function PassageSession({
   }
 
   function handleContinueAfterResult() {
-    if (moment === "pending") setMoment("showing");
+    if (moment === "pending") {
+      setMoment("showing");
+      setHoldResult(false);
+      setHeldRecall(null);
+      return;
+    }
+    if (isMaintenance) {
+      completeMaintenanceReview();
+      return;
+    }
     setHoldResult(false);
     setHeldRecall(null);
     if (state.phase !== "rope" && state.phase !== "stall-repair") {
@@ -452,6 +551,7 @@ export function PassageSession({
     setHoldResult(false);
     setHeldRecall(null);
     setStallCue(null);
+    setWarmupMissCount(0);
     setRopeOverride("rehearsal");
   }
 
@@ -464,8 +564,27 @@ export function PassageSession({
     setHoldResult(false);
     setHeldRecall(null);
     setStallCue(null);
+    setWarmupMissCount(0);
     setRecitingSection(false);
     setRecitingConnect(false);
+  }
+
+  function handleAfterMissRescueFinished() {
+    if (moment === "pending") {
+      setMoment("showing");
+      setHoldResult(false);
+      setHeldRecall(null);
+      return;
+    }
+    if (isMaintenance) {
+      completeMaintenanceReview();
+      return;
+    }
+    if (recitingConnect || recitingSection) {
+      handleSkipSection();
+      return;
+    }
+    handleContinueAfterResult();
   }
 
   const remaining = remainingAddsIn(state);
@@ -524,6 +643,45 @@ export function PassageSession({
     !showNextVersePanel &&
     !showDoneToday &&
     !needsFirstVerse;
+  const joinOrSection = recitingConnect || recitingSection;
+
+  if (summaryRefresh) {
+    return (
+      <PassageRefreshSitting
+        packId={packId}
+        view={view}
+        packName={packName}
+        onExit={() => setSummaryRefresh(false)}
+        backLabel="Back"
+        exitHref={exitHref}
+        coverage={{ kind: "summary-passage" }}
+      />
+    );
+  }
+
+  if (reviewComplete) {
+    const averageAccuracy = averageReviewAccuracy(sessionAttempts);
+    return (
+      <PassageSessionShell
+        phaseLabel="Review"
+        packName={packName}
+        onExit={leaveSession}
+        onHome={endStep}
+        backLabel={backLabel}
+        exitHref={exitHref}
+        persistError={persistError}
+      >
+        <ReviewSummary
+          attempts={sessionAttempts}
+          averageAccuracy={averageAccuracy}
+          remaining={0}
+          onDone={leaveSession}
+          doneLabel={backLabel}
+          onRefresh={() => setSummaryRefresh(true)}
+        />
+      </PassageSessionShell>
+    );
+  }
 
   return (
     <PassageSessionShell
@@ -668,6 +826,7 @@ export function PassageSession({
             subtitle={recall.subtitle}
             promptLine={recall.promptLine}
             versePlainText={recall.versePlainText}
+            hintPlainText={recall.hintPlainText}
             loading={recall.loading}
             error={recall.error}
             retry={recall.retry}
@@ -683,6 +842,21 @@ export function PassageSession({
             readContinue={recall.readContinue}
             onSubmit={handleGraded}
             onContinueAfterResult={handleContinueAfterResult}
+            onAfterMissRescueFinished={handleAfterMissRescueFinished}
+            onSkipWarmup={
+              (recall.mode === "rope" || recall.mode === "repair") &&
+              (effectivePhase === "rope" ||
+                effectivePhase === "stall-repair" ||
+                joinOrSection)
+                ? joinOrSection
+                  ? handleSkipSection
+                  : handleSkipWarmup
+                : undefined
+            }
+            skipLabel={joinOrSection ? SKIP_FOR_NOW_LABEL : WARMUP_SKIP_LABEL}
+            hideAfterMissOffer={joinOrSection}
+            refreshTheseVerses={joinOrSection}
+            continueLabel={endLabel}
           />
         </div>
       ) : null}
@@ -895,7 +1069,12 @@ function reviewRecall(
   packName: string,
   pieces: readonly PassagePiece[],
   texts: readonly string[],
-  composite: { loading: boolean; error: string | null; retry: () => void },
+  composite: {
+    loading: boolean;
+    error: string | null;
+    retry: () => void;
+    hintText: string;
+  },
 ): BuiltRecall {
   const indexes = pieces.map((_, index) => index);
   return {
@@ -904,6 +1083,7 @@ function reviewRecall(
     subtitle: `${verseCountIn(pieces)} verses · whole passage`,
     promptLine: "Recite the whole passage from memory",
     versePlainText: joinPieceTexts(pieces, indexes, texts),
+    hintPlainText: composite.hintText || undefined,
     loading: composite.loading,
     error: composite.error,
     retry: composite.retry,
@@ -921,6 +1101,16 @@ function reviewRecall(
   };
 }
 
+function joinHintPlainText(
+  indexes: readonly number[],
+  texts: readonly string[],
+): string | undefined {
+  const lines = indexes
+    .map((index) => texts[index])
+    .filter((text): text is string => Boolean(text && text.length > 0));
+  return lines.length === 0 ? undefined : lines.join("\n");
+}
+
 function ropeRecall(
   packName: string,
   pieces: readonly PassagePiece[],
@@ -931,10 +1121,17 @@ function ropeRecall(
   retry: () => void,
   subtitle: string | undefined,
   promptLine: string,
+  hintEscalation: WindowHintEscalation = "stage",
 ): BuiltRecall {
   const start = indexes[0] ?? 0;
   const end = (indexes[indexes.length - 1] ?? 0) + 1;
-  const hintText = compositeHintForWindow(pieces, start, end, pieceTexts);
+  const hintText = compositeHintForWindow(
+    pieces,
+    start,
+    end,
+    pieceTexts,
+    hintEscalation,
+  );
   const allHidden = pieces
     .filter((_, index) => indexes.includes(index))
     .every((piece) => piece.attachment === "solid");
@@ -945,6 +1142,7 @@ function ropeRecall(
     subtitle,
     promptLine,
     versePlainText: joinPieceTexts(pieces, indexes, pieceTexts),
+    hintPlainText: joinHintPlainText(indexes, pieceTexts),
     loading: compositeLoading,
     error: compositeError,
     retry,
@@ -974,6 +1172,7 @@ function buildingRecall(args: {
   compositeError: string | null;
   retry: () => void;
   ropeIndexes: readonly number[];
+  hintEscalation: WindowHintEscalation;
 }): BuiltRecall | null {
   const {
     packName,
@@ -985,6 +1184,7 @@ function buildingRecall(args: {
     compositeError,
     retry,
     ropeIndexes,
+    hintEscalation,
   } = args;
   const phase = state.phase;
 
@@ -1010,6 +1210,7 @@ function buildingRecall(args: {
       retry,
       "This section",
       "Recite this section from memory",
+      hintEscalation,
     );
   }
 
@@ -1030,6 +1231,7 @@ function buildingRecall(args: {
       retry,
       "Together",
       "Type both verses together",
+      hintEscalation,
     );
   }
 
@@ -1043,12 +1245,19 @@ function buildingRecall(args: {
       subtitle: "Try this part again",
       promptLine: "Type this part from memory",
       versePlainText: joinPieceTexts(state.pieces, indexes, pieceTexts),
+      hintPlainText: joinHintPlainText(indexes, pieceTexts),
       loading: compositeLoading,
       error: compositeError,
       retry,
       hint: {
         type: "text",
-        text: compositeHintForWindow(state.pieces, start, end, pieceTexts),
+        text: compositeHintForWindow(
+          state.pieces,
+          start,
+          end,
+          pieceTexts,
+          hintEscalation,
+        ),
         label: "Hint",
       },
       pickUpCue: null,
@@ -1078,6 +1287,7 @@ function buildingRecall(args: {
             ? "Recall the verse from memory"
             : "Type what you remember",
       versePlainText: text,
+      hintPlainText: text || undefined,
       loading: compositeLoading,
       error: compositeError,
       retry,
@@ -1115,73 +1325,6 @@ function buildingRecall(args: {
     retry,
     undefined,
     phase === "rope" ? WARMUP_PROMPT_COPY : PRACTICE_ROPE_PROMPT_COPY,
-  );
-}
-
-function PassageSessionShell({
-  phaseLabel,
-  packName,
-  onExit,
-  onHome,
-  backLabel,
-  exitHref,
-  progress,
-  persistError,
-  aside,
-  children,
-}: {
-  phaseLabel: string;
-  packName: string;
-  onExit: () => void;
-  onHome?: () => void;
-  backLabel: string;
-  exitHref?: string;
-  progress?: SessionProgress;
-  persistError: string | null;
-  aside?: ReactNode;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="shrink-0 border-b px-5 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <SessionBackButton
-            onExit={onExit}
-            onHome={onHome}
-            label={backLabel}
-            exitHref={exitHref}
-          />
-          <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
-            <span
-              className="shrink-0 font-semibold"
-              role="status"
-              aria-label={`Session phase: ${phaseLabel}`}
-            >
-              {phaseLabel}
-            </span>
-            <span aria-hidden className="text-muted-foreground">
-              ·
-            </span>
-            <span className="truncate font-medium text-muted-foreground">
-              {packName}
-            </span>
-          </h1>
-          {progress ? <SessionHeaderProgress progress={progress} /> : null}
-        </div>
-      </header>
-      {persistError ? (
-        <div
-          role="alert"
-          className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-sm text-destructive"
-        >
-          {persistError}
-        </div>
-      ) : null}
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto max-w-6xl px-5 pt-6 pb-24">
-          <SessionColumns aside={aside}>{children}</SessionColumns>
-        </div>
-      </ScrollArea>
-    </div>
+    hintEscalation,
   );
 }

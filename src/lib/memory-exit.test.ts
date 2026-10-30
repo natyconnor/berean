@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   isMemoryHomeHref,
+  isMemoryItemPageHref,
+  isMemoryReturnFocusHref,
   memoryExitLookup,
   memoryExitName,
   resolveMemoryExit,
@@ -70,6 +72,17 @@ describe("resolveMemoryExit", () => {
     });
     expect(exit.href).toBe("/memory");
     expect(exit.label).toBe("Back to Memory");
+  });
+
+  it("names verse and pack pages as Refresh return-focus targets", () => {
+    expect(isMemoryItemPageHref("/memory/verse/vr_romans")).toBe(true);
+    expect(isMemoryItemPageHref("/memory/psalm16x?from=verses")).toBe(true);
+    expect(isMemoryItemPageHref("/memory")).toBe(false);
+    expect(isMemoryItemPageHref("/memory/verses")).toBe(false);
+    expect(isMemoryItemPageHref("/memory/practice")).toBe(false);
+    expect(isMemoryReturnFocusHref("/memory")).toBe(true);
+    expect(isMemoryReturnFocusHref("/memory?panel=pack:merced")).toBe(true);
+    expect(isMemoryReturnFocusHref("/memory/practice")).toBe(false);
   });
 
   it("names a verse page once the reference loads", () => {

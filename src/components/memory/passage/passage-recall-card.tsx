@@ -2,11 +2,24 @@ import {
   type JSX,
   type KeyboardEvent,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
+import {
+  EmptyHintPrompt,
+  EnterToCheckHint,
+  FirstLettersPanel,
+  NeedARefresherButton,
+} from "@/components/memory/memory-refresher-controls";
+import {
+  scrollBelowSessionHeader,
+  scrollClearOfModeDock,
+  scrollResultBannerIntoView,
+} from "@/components/memory/scroll-result-banner";
+import { REVIEW_LAPSE_ACCURACY } from "@/lib/memory-scheduler";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
@@ -35,6 +48,23 @@ import { useEnterToClick } from "@/hooks/use-enter-to-click";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import { requiredRepsFor, type MemoryStatus } from "@/lib/memory-scheduler";
+import {
+  refreshStepFromLearnStage,
+  refreshStepGate,
+  type RefreshStep,
+} from "@/lib/memory-way-back";
+import { PinnedSessionAction } from "@/components/memory/pinned-session-action";
+import { RefresherStepLine } from "@/components/memory/refresher-step-line";
+import { ScrollFadeBox } from "@/components/memory/scroll-fade-box";
+import {
+  REFRESH_THESE_VERSES_LABEL,
+  TRY_WITH_HINTS_AGAIN_LABEL,
+  backOnTrackCopy,
+  nowTryWithoutHintsCopy,
+  refresherGoalLabel,
+  refresherPhaseLabel,
+} from "@/lib/memory-copy";
+import { WARMUP_SKIP_LABEL } from "@/components/memory/passage/passage-session-model";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
 import {
   READER_MEASURE_CLASS,
@@ -52,6 +82,8 @@ export type PassageRecallResult = {
   quality: VerseAttemptQuality;
   durationMs: number;
   via: "read" | "typed";
+  hint?: "first-letters";
+  holdSchedule?: boolean;
 };
 
 export type PassageRecallHint =
@@ -66,6 +98,7 @@ interface PassageRecallCardProps {
   subtitle?: string;
   promptLine: string;
   versePlainText: string;
+  hintPlainText?: string;
   loading: boolean;
   error: string | null;
   retry: () => void;
@@ -86,6 +119,13 @@ interface PassageRecallCardProps {
   readContinue?: boolean;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
   onContinueAfterResult?: () => void;
+  onAfterMissRescueFinished?: () => void;
+  refreshSitting?: boolean;
+  onSkipWarmup?: () => void;
+  skipLabel?: string;
+  hideAfterMissOffer?: boolean;
+  refreshTheseVerses?: boolean;
+  continueLabel?: string;
 }
 
 export function PassageRecallCard({
@@ -95,6 +135,7 @@ export function PassageRecallCard({
   subtitle,
   promptLine,
   versePlainText,
+  hintPlainText,
   loading,
   error,
   retry,
@@ -110,29 +151,49 @@ export function PassageRecallCard({
   readContinue = false,
   onSubmit,
   onContinueAfterResult,
+  onAfterMissRescueFinished,
+  refreshSitting = false,
+  onSkipWarmup,
+  skipLabel = WARMUP_SKIP_LABEL,
+  hideAfterMissOffer = false,
+  refreshTheseVerses = false,
+  continueLabel,
 }: PassageRecallCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
   const [checked, setChecked] = useState(false);
-  // Snapshot of "First letters · N of M today" at Check so the step label stays
-  // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
+  const [rescue, setRescue] = useState<"off" | "letters" | "memory">("off");
+  const [rescueHold, setRescueHold] = useState(false);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
+  const resultBannerRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   const { submit, pending: submitPending } = useSubmitLock();
 
-  const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
-  const stageColor = practiceChromeFor(learnStage, status);
+  const displayStage =
+    rescue === "letters" ? 1 : rescue === "memory" ? 3 : learnStage;
+  const stageInfo = PRACTICE_STAGES[displayStage] ?? PRACTICE_STAGES[0];
+  const stageColor = practiceChromeFor(displayStage, status);
   const wordCount = countVerseWords(versePlainText);
   const isReadPrime = readContinue;
   const compositeField =
     mode === "rope" || mode === "review" || mode === "repair";
   const requiredToday = requiredRepsFor(learnStage, wordCount);
+  const sittingStep: RefreshStep | null = refreshSitting
+    ? refreshStepFromLearnStage(learnStage)
+    : rescueHold && rescue === "letters"
+      ? 1
+      : rescueHold && rescue === "memory"
+        ? 2
+        : null;
   const liveGoalLabel =
-    showJourneyBar && status !== "reviewing" && status !== "mastered"
-      ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
-      : null;
+    sittingStep !== null
+      ? refresherGoalLabel(sittingStep)
+      : showJourneyBar && status !== "reviewing" && status !== "mastered"
+        ? `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`
+        : null;
   const sessionGoalLabel = heldGoalLabel ?? liveGoalLabel;
 
   const canCheckAnswer =
@@ -149,28 +210,39 @@ export function PassageRecallCard({
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
+  const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
   const passed = checkedAccuracy >= PASSAGE_PASS_ACCURACY;
+  const refreshGate =
+    sittingStep && checked && checkedQuality
+      ? refreshStepGate(sittingStep, {
+          accuracy: checkedAccuracy,
+          quality: checkedQuality,
+        })
+      : null;
   const offerTryAgain = checked && !passed && mode === "frontier";
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
-    // Capture before `onSubmit` so a parent that adopts journey progress early
-    // cannot advance the step label while the result is still on screen.
-    // The check button stays mounted until the save resolves, so its label
-    // switches to Saving... for that wait instead of sitting on Check answer.
     const goalAtCheck = liveGoalLabel;
     submit(async () => {
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       if (!quality) return;
-      const saved = await onSubmit({
-        tokens,
-        accuracy: verseAttemptAccuracy(tokens),
-        quality,
-        durationMs: Math.max(0, Date.now() - startedAt),
-        via: "typed",
-      });
-      if (saved === false) return;
+      if (!rescueHold) {
+        const saved = await onSubmit({
+          tokens,
+          accuracy: verseAttemptAccuracy(tokens),
+          quality,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          via: "typed",
+          hint:
+            rescue === "letters" || (refreshSitting && learnStage === 1)
+              ? "first-letters"
+              : undefined,
+          holdSchedule: refreshSitting || undefined,
+        });
+        if (saved === false) return;
+      }
       setHeldGoalLabel(goalAtCheck);
       setChecked(true);
     });
@@ -190,27 +262,90 @@ export function PassageRecallCard({
     });
   }
 
-  function continueAttempt() {
+  function focusAnswerKeepingTitle() {
+    const field = answerInputRef.current;
+    field?.focus({ preventScroll: true });
+    scrollBelowSessionHeader(titleRef.current);
+    scrollClearOfModeDock(field);
+  }
+
+  function resetTyped() {
     setChecked(false);
     setHeldGoalLabel(null);
     setTypedAnswer("");
+    window.requestAnimationFrame(focusAnswerKeepingTitle);
+  }
+
+  function finishResult() {
+    const heldRescue = rescueHold;
+    setRescue("off");
+    setRescueHold(false);
+    resetTyped();
+    if (heldRescue) {
+      onAfterMissRescueFinished?.();
+      return;
+    }
     onContinueAfterResult?.();
-    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+  }
+
+  function continueAttempt() {
+    if (refreshGate?.type === "retry") {
+      resetTyped();
+      return;
+    }
+    if (refreshGate?.type === "advance") {
+      if (refreshSitting) {
+        resetTyped();
+        onContinueAfterResult?.();
+        return;
+      }
+      setRescue("memory");
+      resetTyped();
+      return;
+    }
+    if (refreshGate?.type === "weak-final") return;
+    if (refreshTheseVerses && rescue === "off" && !passed) {
+      setRescue("letters");
+      setRescueHold(true);
+      resetTyped();
+      return;
+    }
+    if (rescue === "letters" && rescueHold) {
+      setRescue("memory");
+      resetTyped();
+      return;
+    }
+    finishResult();
   }
 
   useEnterToClick(actionRef, !checked ? isReadPrime : true);
 
   useEffect(() => {
     if (!checked && !isReadPrime) return;
-    actionRef.current?.focus();
-  }, [checked, isReadPrime]);
+    if (checked) {
+      scrollResultBannerIntoView(resultBannerRef.current);
+    }
+    // Saving... is disabled, so wait until the save clears before focusing.
+    if (submitPending) return;
+    actionRef.current?.focus({ preventScroll: true });
+  }, [checked, isReadPrime, submitPending]);
 
   // After Read advances into a typing band, focus the answer box. Continue is
   // unmounted on that transition, so without this focus is left on body.
-  useEffect(() => {
-    if (checked || isReadPrime) return;
-    answerInputRef.current?.focus();
-  }, [checked, isReadPrime]);
+  // Wait until the first-letters hint has real text so the field isn't left
+  // under the Mode dock after a tall hint lands.
+  useLayoutEffect(() => {
+    if (checked || isReadPrime || loading) return;
+    focusAnswerKeepingTitle();
+  }, [
+    checked,
+    isReadPrime,
+    rescue,
+    learnStage,
+    loading,
+    versePlainText,
+    hintPlainText,
+  ]);
 
   function handleAnswerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -220,6 +355,23 @@ export function PassageRecallCard({
 
   const fieldLabel =
     mode === "frontier" ? "Your recalled verse" : "Your recited passage";
+  const reviewMissNeedsHelp =
+    checked &&
+    checkedAccuracy < REVIEW_LAPSE_ACCURACY &&
+    !refreshSitting &&
+    !hideAfterMissOffer &&
+    (mode === "review" || learnStage >= 3);
+  const afterMissOffer = reviewMissNeedsHelp && rescue === "off";
+  const tryHintsAgainOffer =
+    reviewMissNeedsHelp && rescue === "letters" && !rescueHold;
+  const showAfterMiss = afterMissOffer && !submitPending;
+  const resultScrollMax = checked && !passed ? "max-h-[30vh]" : "max-h-[45vh]";
+  const sittingPhase = sittingStep ? refresherPhaseLabel(sittingStep) : null;
+  const continueText =
+    refreshTheseVerses && checked && !passed && rescue === "off"
+      ? REFRESH_THESE_VERSES_LABEL
+      : (continueLabel ?? "Continue");
+  const fromMemorySitting = sittingStep === 2 || rescue === "memory";
 
   return (
     <motion.div
@@ -229,7 +381,7 @@ export function PassageRecallCard({
     >
       <Card className={cn("mx-auto w-full overflow-hidden", stageColor.panel)}>
         <CardHeader className="gap-3 text-center">
-          <div>
+          <div ref={titleRef}>
             <p
               className={cn(
                 "inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]",
@@ -240,7 +392,7 @@ export function PassageRecallCard({
                 className={cn("h-2 w-2 rounded-full", stageColor.dot)}
                 aria-hidden
               />
-              {phaseLabel}
+              {sittingPhase ?? phaseLabel}
             </p>
             <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {title}
@@ -252,12 +404,14 @@ export function PassageRecallCard({
           <p className={cn("text-xs font-medium", stageColor.text)}>
             {promptLine}
           </p>
-          {sessionGoalLabel ? (
+          {sittingStep ? (
+            <RefresherStepLine step={sittingStep} />
+          ) : sessionGoalLabel ? (
             <p className="text-xs tabular-nums text-muted-foreground">
               {sessionGoalLabel}
             </p>
           ) : null}
-          {showJourneyBar ? (
+          {showJourneyBar && sittingStep === null && rescue === "off" ? (
             <LearningJourneyBar
               learnStage={learnStage}
               stageReps={stageReps}
@@ -270,12 +424,15 @@ export function PassageRecallCard({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {stallCue ? <StallCue text={stallCue} label={stallCueLabel} /> : null}
+          {!checked && stallCue && !fromMemorySitting ? (
+            <StallCue text={stallCue} label={stallCueLabel} />
+          ) : null}
           {!checked && (
             <>
-              <div
+              <ScrollFadeBox
+                name="hint"
                 className={cn(
-                  "mx-auto min-h-[140px] rounded-xl border bg-background/75 px-5 py-5 text-left",
+                  "mx-auto min-h-[120px] max-h-[45vh] rounded-xl border bg-background/75 px-5 py-5 text-left",
                   SESSION_VERSE_TEXT_CLASS,
                   READER_MEASURE_CLASS,
                   stageColor.panel,
@@ -296,12 +453,30 @@ export function PassageRecallCard({
                       Retry
                     </Button>
                   </div>
-                ) : hint.type === "hidden" ? (
-                  <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
-                    <p className="max-w-sm text-sm text-muted-foreground">
-                      {hint.message}
-                    </p>
-                  </div>
+                ) : rescue === "letters" ||
+                  (refreshSitting && learnStage === 1) ? (
+                  <FirstLettersPanel
+                    text={hintPlainText ?? versePlainText}
+                    className="border-0 bg-transparent p-0"
+                  />
+                ) : fromMemorySitting || hint.type === "hidden" ? (
+                  <EmptyHintPrompt
+                    passage={compositeField}
+                    message={
+                      fromMemorySitting
+                        ? nowTryWithoutHintsCopy(compositeField)
+                        : undefined
+                    }
+                    onRefresher={
+                      !fromMemorySitting && !refreshSitting && rescue === "off"
+                        ? () => {
+                            setRescue("letters");
+                            setRescueHold(false);
+                          }
+                        : undefined
+                    }
+                    disabled={submitPending}
+                  />
                 ) : hint.type === "tokens" ? (
                   <HintTokenText tokens={hint.tokens} />
                 ) : (
@@ -309,29 +484,28 @@ export function PassageRecallCard({
                     {hint.text}
                   </p>
                 )}
-              </div>
+              </ScrollFadeBox>
 
               {!isReadPrime && (
-                <Textarea
-                  ref={answerInputRef}
-                  value={typedAnswer}
-                  onChange={(event) => setTypedAnswer(event.target.value)}
-                  onKeyDown={handleAnswerKeyDown}
-                  placeholder={
-                    compositeField
-                      ? "Type the passage from memory"
-                      : "Type what you remember"
-                  }
-                  className={cn(
-                    "mx-auto bg-background/80 px-4 py-3",
-                    SESSION_VERSE_TEXT_CLASS,
-                    READER_MEASURE_CLASS,
-                    compositeField
-                      ? "min-h-[180px] resize-y"
-                      : "min-h-[170px] resize-none",
-                  )}
-                  aria-label={fieldLabel}
-                />
+                <ScrollFadeBox name="answer">
+                  <Textarea
+                    ref={answerInputRef}
+                    value={typedAnswer}
+                    onChange={(event) => setTypedAnswer(event.target.value)}
+                    onKeyDown={handleAnswerKeyDown}
+                    placeholder={
+                      compositeField
+                        ? "Type the passage from memory"
+                        : "Type what you remember"
+                    }
+                    className={cn(
+                      "mx-auto field-sizing-content max-h-[45vh] min-h-[180px] resize-none overflow-y-auto bg-background/80 px-4 py-3",
+                      SESSION_VERSE_TEXT_CLASS,
+                      READER_MEASURE_CLASS,
+                    )}
+                    aria-label={fieldLabel}
+                  />
+                </ScrollFadeBox>
               )}
             </>
           )}
@@ -343,75 +517,179 @@ export function PassageRecallCard({
                 versePlainText={versePlainText}
                 diffTokens={checkedDiffTokens}
                 note={passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`}
+                bannerRef={resultBannerRef}
+                scheduleHeld={refreshSitting || rescueHold}
+                praiseLine={
+                  refreshGate?.type === "passed-final"
+                    ? backOnTrackCopy()
+                    : undefined
+                }
+                scrollMaxClass={resultScrollMax}
+                refresherOffer={
+                  showAfterMiss ? (
+                    <NeedARefresherButton
+                      onClick={() => {
+                        setRescue("letters");
+                        setRescueHold(true);
+                        setChecked(false);
+                        setTypedAnswer("");
+                      }}
+                      disabled={submitPending}
+                    />
+                  ) : undefined
+                }
               />
             </div>
           )}
         </CardContent>
 
         <CardFooter className="flex justify-end border-t">
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
             {!checked && !isReadPrime ? (
-              <PreviewFillExactAnswerButton
-                versePlainText={versePlainText}
-                onFill={setTypedAnswer}
-                disabled={loading || Boolean(error)}
-              />
-            ) : null}
-            {checked ? (
-              <Button
-                ref={actionRef}
-                type="button"
-                variant="default"
-                className="flex-1 sm:flex-none"
-                onClick={continueAttempt}
-                loading={submitPending}
-              >
-                {submitPending ? (
-                  "Saving..."
-                ) : offerTryAgain ? (
-                  <>
-                    <RotateCcw className="h-4 w-4" aria-hidden />
-                    Try again
-                  </>
-                ) : (
-                  <>
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                    Continue
-                  </>
-                )}
-              </Button>
-            ) : isReadPrime ? (
-              <Button
-                ref={actionRef}
-                type="button"
-                variant="default"
-                className="flex-1 sm:flex-none"
-                onClick={continueRead}
-                disabled={!canContinueRead}
-                loading={submitPending}
-              >
-                Continue
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Button>
+              <EnterToCheckHint className="sm:mr-auto" />
             ) : (
-              <Button
-                type="button"
-                variant="default"
-                className="flex-1 sm:flex-none"
-                onClick={checkAnswer}
-                disabled={!canCheckAnswer}
-                loading={submitPending}
-              >
-                {submitPending ? (
-                  "Saving..."
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" aria-hidden />
-                    Check answer
-                  </>
-                )}
-              </Button>
+              <span className="hidden sm:block" />
             )}
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+              {!checked && !isReadPrime ? (
+                <PreviewFillExactAnswerButton
+                  versePlainText={versePlainText}
+                  onFill={setTypedAnswer}
+                  disabled={loading || Boolean(error)}
+                />
+              ) : null}
+              {checked && onSkipWarmup && !passed ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex-1 sm:flex-none"
+                  onClick={onSkipWarmup}
+                >
+                  {skipLabel}
+                </Button>
+              ) : null}
+              <PinnedSessionAction>
+                {checked && refreshGate?.type === "weak-final" ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <Button
+                      ref={actionRef}
+                      type="button"
+                      variant="outline"
+                      className="flex-1 sm:flex-none"
+                      onClick={resetTyped}
+                      disabled={submitPending}
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      Try again
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                      onClick={() => {
+                        if (refreshSitting) {
+                          onContinueAfterResult?.();
+                          return;
+                        }
+                        finishResult();
+                      }}
+                      loading={submitPending}
+                    >
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                      {continueText}
+                    </Button>
+                  </div>
+                ) : checked && tryHintsAgainOffer ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 sm:flex-none"
+                      onClick={() => {
+                        setRescue("letters");
+                        setRescueHold(true);
+                        resetTyped();
+                      }}
+                      disabled={submitPending}
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden />
+                      {TRY_WITH_HINTS_AGAIN_LABEL}
+                    </Button>
+                    <Button
+                      ref={actionRef}
+                      type="button"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                      onClick={continueAttempt}
+                      loading={submitPending}
+                    >
+                      {submitPending ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <ArrowRight className="h-4 w-4" aria-hidden />
+                          {continueText}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ) : checked ? (
+                  <Button
+                    ref={actionRef}
+                    type="button"
+                    variant="default"
+                    className="flex-1 sm:flex-none"
+                    onClick={continueAttempt}
+                    loading={submitPending}
+                  >
+                    {submitPending ? (
+                      "Saving..."
+                    ) : refreshGate?.type === "retry" || offerTryAgain ? (
+                      <>
+                        <RotateCcw className="h-4 w-4" aria-hidden />
+                        Try again
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="h-4 w-4" aria-hidden />
+                        {continueText}
+                      </>
+                    )}
+                  </Button>
+                ) : isReadPrime ? (
+                  <Button
+                    ref={actionRef}
+                    type="button"
+                    variant="default"
+                    className="flex-1 sm:flex-none"
+                    onClick={continueRead}
+                    disabled={!canContinueRead}
+                    loading={submitPending}
+                  >
+                    Continue
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="h-11 flex-1 sm:flex-none"
+                    onClick={checkAnswer}
+                    disabled={!canCheckAnswer}
+                    loading={submitPending}
+                  >
+                    {submitPending ? (
+                      "Saving..."
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" aria-hidden />
+                        Check answer
+                      </>
+                    )}
+                  </Button>
+                )}
+              </PinnedSessionAction>
+            </div>
           </div>
         </CardFooter>
       </Card>

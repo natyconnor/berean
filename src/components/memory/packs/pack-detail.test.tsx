@@ -8,7 +8,17 @@ import {
   MemoryPanelPage,
 } from "@/components/memory/drawer/memory-panel-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  START_OVER_CONFIRM_LABEL,
+  STARTED_OVER_LABEL,
+  UNDO_LABEL,
+} from "@/lib/memory-copy";
 import { memoryProgressFraction } from "@/lib/mastery-ring";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+  readLearnPacksDismissedToday,
+} from "@/lib/learn-dismissed-packs";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import { localDayIndex } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
@@ -39,6 +49,7 @@ function mutation(name: string) {
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
+  useSearch: () => ({}),
   useCanGoBack: () => false,
   Link: ({
     to,
@@ -93,6 +104,10 @@ vi.mock("../../../../convex/_generated/api", () => ({
     passageMemory: {
       getForPack: "passageMemory.getForPack",
       ensureDueBackfill: "passageMemory.ensureDueBackfill",
+      startOver: "passageMemory.startOver",
+      undoStartOver: "passageMemory.undoStartOver",
+      finishRefresh: "passageMemory.finishRefresh",
+      shakyPieces: "passageMemory.shakyPieces",
     },
     savedVerses: {
       listForChapter: "savedVerses.listForChapter",
@@ -101,6 +116,9 @@ vi.mock("../../../../convex/_generated/api", () => ({
     verseMemory: {
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
+      startOver: "verseMemory.startOver",
+      undoStartOver: "verseMemory.undoStartOver",
+      finishRefresh: "verseMemory.finishRefresh",
     },
   },
 }));
@@ -312,6 +330,7 @@ function renderHost(panel: string, from?: "verses") {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   mocks.queryResults.clear();
   mocks.queryByArgs.clear();
   mocks.queryCalls.length = 0;
@@ -407,6 +426,32 @@ describe("PackDetail for a passage", () => {
     ).toHaveLength(1);
   });
 
+  it("after Start over looks like a passage that has never been started", () => {
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 2, "unreached"),
+          piece(1, 3, 4, "unreached"),
+          piece(2, 5, 6, "unreached"),
+          piece(3, 7, 11, "unreached"),
+        ],
+        lastSessionAt: undefined,
+        addsOnDay: 0,
+        addDayKey: undefined,
+      }),
+    };
+    renderHost("pack:psalm16x");
+    const dialog = screen.getByRole("dialog", { name: "Psalm 16" });
+
+    expect(
+      within(dialog).getByRole("link", { name: "Start · about 7 min" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText("Continue · about 7 min")).toBeNull();
+    expect(within(dialog).queryByText("Learning today")).toBeNull();
+    expect(within(dialog).queryByText("Today:")).toBeNull();
+    expect(within(dialog).getAllByText("Up next")).toHaveLength(11);
+  });
+
   it("says which memorized verses came from before the passage", () => {
     passages = {
       psalm16x: passageView({
@@ -475,6 +520,76 @@ describe("PackDetail for a passage", () => {
         )}%`,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("lists Refresh and Start over on the passage menu", async () => {
+    renderHost("pack:psalm16x");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    ).toHaveTextContent("Practice with hints");
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toHaveTextContent("Learn it again from the start");
+    expect(
+      screen.getByRole("menuitem", { name: "Stop memorizing" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the Refresh sitting for a building passage with learned verses", async () => {
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 4, "solid", { learnStage: 3 }),
+          piece(1, 5, 5, "learning", { learnStage: 2 }),
+          piece(2, 6, 11, "unreached"),
+        ],
+      }),
+    };
+    renderHost("pack:psalm16x");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        href: "/memory/psalm16x/practice?refresh=1&return=%2Fmemory%2Fpsalm16x",
+      }),
+    );
+    expect(mutation("passageMemory.finishRefresh")).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    );
+    expect(mutation("passageMemory.finishRefresh")).not.toHaveBeenCalled();
+  });
+
+  it("opens Refresh for a learning-only building passage", async () => {
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 4, "learning", { learnStage: 2 }),
+          piece(1, 5, 11, "unreached"),
+        ],
+      }),
+    };
+    renderHost("pack:psalm16x");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        href: "/memory/psalm16x/practice?refresh=1&return=%2Fmemory%2Fpsalm16x",
+      }),
+    );
+    expect(mutation("passageMemory.finishRefresh")).not.toHaveBeenCalled();
   });
 
   it("confirms Stop memorizing, clears it and closes the drawer", async () => {
@@ -587,6 +702,60 @@ describe("PackDetail for a pack", () => {
     );
   });
 
+  it("keeps Started over on a verse row after Start over turns it into Up next", async () => {
+    const host = () => (
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "pack", packId: "mercedxx" }}
+          from={undefined}
+        />
+      </TooltipProvider>
+    );
+    const view = render(host());
+    await userEvent.click(
+      screen.getByRole("button", { name: "More actions for Luke 9:23–24" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Start over/ }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Start Luke 9:23–24 over?" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    await waitFor(() => {
+      expect(mutation("verseMemory.startOver")).toHaveBeenCalled();
+    });
+
+    membersByPack = {
+      ...membersByPack,
+      mercedxx: MERCED_MEMBERS.map((row) =>
+        row.verseRefId === "luke"
+          ? { ...row, status: "new", learnStage: 0, isDue: false }
+          : row,
+      ),
+    };
+    view.rerender(host());
+
+    const luke = screen.getByText("Luke 9:23–24").closest("li");
+    expect(luke).not.toBeNull();
+    expect(
+      within(luke as HTMLElement).getByText(STARTED_OVER_LABEL),
+    ).toBeInTheDocument();
+    expect(
+      within(luke as HTMLElement).getByText(
+        "Up next · starts when you're ready",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(luke as HTMLElement).queryByRole("button", { name: UNDO_LABEL }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "More actions for Luke 9:23–24" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("deletes a pack without stopping its verses, then goes back to Your verses", async () => {
     renderHost("pack:mercedxx", "verses");
 
@@ -672,6 +841,37 @@ describe("PackDetail for a pack", () => {
 });
 
 describe("PackDetail on its full page", () => {
+  async function startOverOnPage() {
+    render(
+      <TooltipProvider>
+        <MemoryPanelPage
+          panel={{ kind: "pack", packId: "psalm16x" }}
+          from={undefined}
+        />
+      </TooltipProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /Start over/ }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Start Psalm 16 over?" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: START_OVER_CONFIRM_LABEL }),
+    );
+    await waitFor(() => {
+      expect(mutation("passageMemory.startOver")).toHaveBeenCalled();
+    });
+  }
+
+  it("clears That's enough for today when Start over runs", async () => {
+    const dayKey = learnDismissDayKey(Date.now());
+    dismissLearnPackForToday("psalm16x", dayKey);
+    await startOverOnPage();
+    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(false);
+  });
+
   it("shows Not found for a junk pack id without querying packs.get", () => {
     render(
       <TooltipProvider>
@@ -793,9 +993,12 @@ describe("PackDetail editing a pack", () => {
     ).toBeInTheDocument();
   });
 
-  it("moves verses with Move up / Move down and announces each move", async () => {
-    // Like the server: the saved order is what resolveMembers returns next,
-    // and each save finishes when the test says so.
+  async function reorderWithKeyboard(label: string, keys: string) {
+    screen.getByRole("button", { name: `Reorder ${label}` }).focus();
+    await userEvent.keyboard(` ${keys} `);
+  }
+
+  it("reorders verses from the Reorder button and announces each move", async () => {
     const saves: Array<() => void> = [];
     mocks.mutations.set(
       "packs.reorder",
@@ -817,13 +1020,7 @@ describe("PackDetail editing a pack", () => {
     const view = render(host());
     expect(rowNames()).toEqual(["Luke 9:23–24", "Joshua 1:9", "Isaiah 41:10"]);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Options for Luke 9:23–24" }),
-    );
-    expect(
-      await screen.findByRole("menuitem", { name: "Move up" }),
-    ).toHaveAttribute("data-disabled");
-    await userEvent.click(screen.getByRole("menuitem", { name: "Move down" }));
+    await reorderWithKeyboard("Luke 9:23–24", "{ArrowDown}");
 
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
     expect(mocks.mutations.get("packs.reorder")).toHaveBeenCalledWith({
@@ -833,23 +1030,18 @@ describe("PackDetail editing a pack", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Moved Luke 9:23–24 to 2 of 3.",
     );
-    // The query pushes the saved order, then the save finishes.
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith(
+      "New order saved",
+      expect.anything(),
+    );
     view.rerender(host());
     await act(async () => {
       saves.shift()?.();
       await Promise.resolve();
     });
     expect(rowNames()).toEqual(["Joshua 1:9", "Luke 9:23–24", "Isaiah 41:10"]);
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("New order saved", {
-      id: "pack-order-mercedxx",
-    });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Options for Isaiah 41:10" }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Move up" }),
-    );
+    await reorderWithKeyboard("Isaiah 41:10", "{ArrowUp}");
     expect(mocks.mutations.get("packs.reorder")).toHaveBeenLastCalledWith({
       id: "mercedxx",
       orderedVerseRefIds: ["josh", "isa", "luke"],
@@ -857,6 +1049,15 @@ describe("PackDetail editing a pack", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Moved Isaiah 41:10 to 2 of 3.",
     );
+  });
+
+  it("cancels a keyboard reorder with Escape", async () => {
+    renderHost("pack:mercedxx");
+    screen.getByRole("button", { name: "Reorder Luke 9:23–24" }).focus();
+    await userEvent.keyboard(" {ArrowDown}{Escape}");
+    expect(rowNames()).toEqual(["Luke 9:23–24", "Joshua 1:9", "Isaiah 41:10"]);
+    expect(mocks.mutations.get("packs.reorder")).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Reorder cancelled.");
   });
 
   it("removes a verse with an Undo that puts it back at its old place", async () => {
@@ -870,20 +1071,47 @@ describe("PackDetail editing a pack", () => {
       id: "mercedxx",
       verseRefId: "josh",
     });
-    await waitFor(() => expect(mocks.toast).toHaveBeenCalledTimes(1));
-    const [message, options] = mocks.toast.mock.calls[0] as [
-      string,
-      { action: { label: string; onClick: () => void } },
-    ];
-    expect(message).toBe("Removed Joshua 1:9.");
-    expect(options.action.label).toBe("Undo");
+    expect(await screen.findByText("Removed Joshua 1:9")).toBeInTheDocument();
+    expect(mocks.toast).not.toHaveBeenCalled();
 
-    options.action.onClick();
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(mocks.mutations.get("packs.restoreVerse")).toHaveBeenCalledWith({
       id: "mercedxx",
       verseRefId: "josh",
       order: 1,
     });
+  });
+
+  it("keeps Refresh and Start over on verse rows, not the pack menu", async () => {
+    renderHost("pack:mercedxx");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Start over/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete pack" }),
+    ).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "More actions for Luke 9:23–24" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: /Refresh/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Start over/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Stop memorizing" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Move up" }),
+    ).not.toBeInTheDocument();
   });
 
   it("adds a verse by reference from the inline row, and Esc closes only the row", async () => {
@@ -934,6 +1162,14 @@ describe("PackDetail editing a pack", () => {
         "No verses yet. Add verses from the reader with Memorize, or tap Add verses.",
       ),
     ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Start over/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     await userEvent.click(screen.getByRole("button", { name: "Add verses" }));
     expect(
       screen.getByRole("searchbox", { name: "Search by reference" }),
@@ -946,7 +1182,7 @@ describe("PackDetail editing a pack", () => {
       screen.queryByRole("button", { name: "Add verses" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^Options for/ }),
+      screen.queryByRole("button", { name: /^Reorder / }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Remove / }),

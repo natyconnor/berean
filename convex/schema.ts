@@ -320,6 +320,27 @@ export default defineSchema({
     // the inMemory backfill has run for the user.
     inMemory: v.optional(v.boolean()),
     lastReviewedAt: v.optional(v.number()),
+    startedOverAt: v.optional(v.number()),
+    refreshAppliedSittingAt: v.optional(v.number()),
+    startOverUndo: v.optional(
+      v.object({
+        status: v.union(
+          v.literal("new"),
+          v.literal("learning"),
+          v.literal("reviewing"),
+          v.literal("mastered"),
+        ),
+        learnStage: v.number(),
+        stageReps: v.number(),
+        ease: v.number(),
+        intervalDays: v.number(),
+        dueAt: v.number(),
+        consecutiveCorrect: v.number(),
+        lapses: v.number(),
+        earlyReviewApplied: v.boolean(),
+        lastReviewedAt: v.optional(v.number()),
+      }),
+    ),
     createdAt: v.number(),
   })
     .index("by_userId_dueAt", ["userId", "dueAt"]) // Today queue + badge
@@ -346,6 +367,8 @@ export default defineSchema({
       v.literal("deck"),
       v.literal("practice"),
     ),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
     durationMs: v.optional(v.number()),
     createdAt: v.number(),
   })
@@ -386,6 +409,24 @@ export default defineSchema({
     // When the passage first left building, so the moment survives leaving
     // before it was shown. Older passages have neither and never celebrate.
     celebrationPendingAt: v.optional(v.number()),
+    startedOverAt: v.optional(v.number()),
+    refreshAppliedSittingAt: v.optional(v.number()),
+    startOverUndo: v.optional(
+      v.object({
+        status: passageStatusValidator,
+        pieces: v.array(passagePieceValidator),
+        ease: v.number(),
+        intervalDays: v.number(),
+        dueAt: v.number(),
+        consecutiveCorrect: v.number(),
+        lapses: v.number(),
+        stageReps: v.number(),
+        earlyReviewApplied: v.optional(v.boolean()),
+        lastSessionAt: v.optional(v.number()),
+        addsOnDay: v.optional(v.number()),
+        addDayKey: v.optional(v.number()),
+      }),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -406,6 +447,8 @@ export default defineSchema({
     pieceIndex: v.optional(v.number()),
     quality: qualityValidator,
     accuracy: v.number(),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
     durationMs: v.optional(v.number()),
     createdAt: v.number(),
   })

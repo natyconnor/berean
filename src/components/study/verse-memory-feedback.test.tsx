@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
+import {
+  FROM_MEMORY_CLOSE_MESSAGE,
+  FROM_MEMORY_HINT_PASS_MESSAGE,
+} from "./from-memory-messages";
 import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
 const { useReducedMotion } = vi.hoisted(() => ({
@@ -161,6 +164,21 @@ describe("VerseMemoryFeedback", () => {
     );
   });
 
+  it("replaces the 100% graduation line when a hinted pass can be retried", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={92}
+        attemptKey="hinted-retry"
+        requireExactToAdvance
+        praiseLine={FROM_MEMORY_HINT_PASS_MESSAGE}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveTextContent(FROM_MEMORY_HINT_PASS_MESSAGE);
+    expect(banner).not.toHaveTextContent(FROM_MEMORY_CLOSE_MESSAGE);
+  });
+
   it("tells Review to retry at 80%+ so the interval can still stretch", () => {
     render(
       <VerseMemoryFeedback
@@ -290,5 +308,56 @@ describe("VerseMemoryFeedback", () => {
     );
     expect(screen.getByText("Nailed it!")).toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent(/review/i);
+  });
+
+  it("keeps Need a refresher on the score row and out of the live region", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="off"
+        accuracy={0}
+        attemptKey="after-miss"
+        showScheduleOutcome
+        nextSchedule={{
+          status: "learning",
+          learnStage: 2,
+          stageReps: 0,
+          ease: 2.1,
+          intervalDays: 0,
+          dueAt: NOW,
+          consecutiveCorrect: 0,
+          lapses: 1,
+          earlyReviewApplied: false,
+        }}
+        now={NOW}
+        refresherOffer={<button type="button">Need a refresher?</button>}
+      />,
+    );
+    const offer = screen.getByRole("button", { name: "Need a refresher?" });
+    expect(offer).toBeVisible();
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "Need a refresher?",
+    );
+    expect(screen.getByText("0% recalled").compareDocumentPosition(offer)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("does not promise a sooner return when the schedule is held", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="off"
+        accuracy={0}
+        attemptKey="held-miss"
+        showScheduleOutcome
+        scheduleHeld
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveTextContent("This one needs another pass.");
+    expect(banner).toHaveTextContent("Another look will help it stick.");
+    expect(banner).not.toHaveTextContent("We'll bring it back sooner.");
+    expect(banner).not.toHaveTextContent(/Next review/);
   });
 });

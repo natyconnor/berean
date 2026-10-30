@@ -108,6 +108,36 @@ const RECENT_ATTEMPTS = 5;
 const SOLID_ACCURACY = 90;
 const FEW_SLIPS_ACCURACY = 70;
 
+export type HowItsGoingAttempt = {
+  accuracy: number;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
+  createdAt?: number;
+};
+
+export function unhintedAttempts<
+  T extends { hint?: "first-letters"; holdSchedule?: boolean },
+>(attempts: readonly T[]): T[] {
+  return attempts.filter(
+    (attempt) => attempt.hint === undefined && !attempt.holdSchedule,
+  );
+}
+
+/** Accuracies that should move the How it's going readout. */
+export function accuraciesForHowItsGoing(
+  attempts: readonly HowItsGoingAttempt[],
+  startedOverAt?: number,
+): number[] {
+  return unhintedAttempts(attempts)
+    .filter(
+      (attempt) =>
+        startedOverAt === undefined ||
+        attempt.createdAt === undefined ||
+        attempt.createdAt >= startedOverAt,
+    )
+    .map((attempt) => attempt.accuracy);
+}
+
 /** From the latest attempts (newest first); `null` before any practice. */
 export function howItsGoing(
   accuraciesNewestFirst: readonly number[],

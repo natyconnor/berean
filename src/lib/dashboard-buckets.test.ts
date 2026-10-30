@@ -6,6 +6,7 @@ import {
   bucketForecastCounts,
   bucketReviewCounts,
   computeStreak,
+  countsTowardAccuracy,
   isReadPrimeAttempt,
   normalizeTimeZone,
   overallAccuracy,
@@ -140,6 +141,20 @@ describe("isReadPrimeAttempt", () => {
     expect(isReadPrimeAttempt({ mode: "learn", stage: 1 })).toBe(false);
     expect(isReadPrimeAttempt({ mode: "review", stage: 0 })).toBe(false);
     expect(isReadPrimeAttempt({})).toBe(false);
+  });
+});
+
+describe("countsTowardAccuracy", () => {
+  it("drops Read primes and held Refresh sitting tries", () => {
+    expect(countsTowardAccuracy({ mode: "review", stage: 3 })).toBe(true);
+    expect(countsTowardAccuracy({ mode: "learn", stage: 0 })).toBe(false);
+    expect(
+      countsTowardAccuracy({
+        mode: "review",
+        stage: 3,
+        holdSchedule: true,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -295,6 +310,63 @@ describe("aggregateReviewDays / reviewActivityFromLogs", () => {
       zonedDayStarts(saturdayEveningPdt, 2, pacific),
     );
     expect(stored).toEqual(activity);
+  });
+
+  it("keeps held Refresh sitting tries off headline accuracy", () => {
+    const dayStart = startOfZonedDay(saturdayEveningPdt, pacific);
+    const heldMiss = {
+      createdAt: saturdayEveningPdt,
+      accuracy: 0,
+      mode: "review" as const,
+      stage: 3,
+      holdSchedule: true,
+    };
+    const prior = {
+      createdAt: fridayEveningPdt,
+      accuracy: 96,
+      mode: "review" as const,
+      stage: 3,
+    };
+    const committed = {
+      createdAt: saturdayEveningPdt + 1,
+      accuracy: 100,
+      mode: "review" as const,
+      stage: 3,
+    };
+
+    const abandoned = reviewActivityFromLogs(
+      [prior, heldMiss],
+      saturdayEveningPdt,
+      3,
+      3,
+      pacific,
+    );
+    expect(abandoned.trend.map((day) => day.average)).toEqual([null, 96, null]);
+    expect(abandoned.trend.map((day) => day.count)).toEqual([0, 1, 0]);
+
+    const finished = reviewActivityFromLogs(
+      [prior, heldMiss, committed],
+      saturdayEveningPdt + 1,
+      3,
+      3,
+      pacific,
+    );
+    expect(finished.trend.map((day) => day.count)).toEqual([0, 1, 1]);
+    expect(finished.trend[2]?.average).toBe(100);
+    expect(finished.heatmap[2]?.count).toBe(2);
+
+    const stored = reviewActivityFromDayAggregates(
+      aggregateReviewDays(
+        [prior, heldMiss, committed],
+        saturdayEveningPdt + 1,
+        3,
+        pacific,
+      ),
+      zonedDayStarts(saturdayEveningPdt + 1, 3, pacific),
+      zonedDayStarts(saturdayEveningPdt + 1, 3, pacific),
+    );
+    expect(stored).toEqual(finished);
+    expect(dayStart).toBe(stored.heatmap[2]?.dayStart);
   });
 
   it("sums duplicate day rows so a concurrent first-insert race still counts", () => {

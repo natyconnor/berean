@@ -56,6 +56,7 @@ import {
 } from "../src/lib/memorize-status";
 import { scopePackMatches, scopesEqual } from "../src/lib/scope-equality";
 import { packAllowsUnifiedRecitation } from "../src/lib/contiguous-spans";
+import { isReviewHintedCheckIn } from "../src/lib/memory-stale";
 import { rangeAllowsPassageMode } from "../src/lib/passage-eligibility";
 import {
   rangeCoversWholeChapters,
@@ -892,6 +893,8 @@ export const recordUnifiedReview = mutation({
     tzOffsetMinutes: v.optional(v.number()),
     timeZone: v.optional(v.string()),
     durationMs: v.optional(v.number()),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -931,6 +934,16 @@ export const recordUnifiedReview = mutation({
       members.map(toSchedule),
       args.now,
     );
+    const firstVerseRefId = memories[0]?.member.verseRefId;
+    const lastReview = firstVerseRefId
+      ? await ctx.db
+          .query("verseMemoryReviews")
+          .withIndex("by_userId_verseRefId_createdAt", (q) =>
+            q.eq("userId", userId).eq("verseRefId", firstVerseRefId),
+          )
+          .order("desc")
+          .first()
+      : null;
     const next = applyUnifiedGrade(canonical, {
       quality: args.quality,
       accuracy: args.accuracy,
@@ -939,6 +952,9 @@ export const recordUnifiedReview = mutation({
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
+      hint: args.hint,
+      holdSchedule: args.holdSchedule,
+      priorHintedCheckIn: isReviewHintedCheckIn(lastReview),
     });
 
     for (const { member, memory } of memories) {
@@ -952,16 +968,20 @@ export const recordUnifiedReview = mutation({
         mode: "review",
         durationMs: args.durationMs,
         createdAt: args.now,
+        ...(args.hint ? { hint: args.hint } : {}),
+        ...(args.holdSchedule ? { holdSchedule: true } : {}),
       });
 
-      await patchMemberSchedule(
-        ctx,
-        userId,
-        member.verseRefId,
-        next,
-        args.now,
-        args.now,
-      );
+      if (!args.holdSchedule) {
+        await patchMemberSchedule(
+          ctx,
+          userId,
+          member.verseRefId,
+          next,
+          args.now,
+          args.now,
+        );
+      }
     }
 
     return next;

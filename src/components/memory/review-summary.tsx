@@ -1,15 +1,17 @@
 import type { JSX } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
+import { CheckCircle2, Lightbulb, RotateCcw, Sparkles } from "lucide-react";
 
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { AddToPack } from "@/components/memory/packs/add-to-pack";
 import { SessionSummaryActions } from "@/components/memory/practice/session-complete";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { REFRESH_LABEL } from "@/lib/memory-copy";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   groupReviewSessionAttempts,
+  lastTryNeedsRefresh,
   recalledCopy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
@@ -34,6 +36,8 @@ interface ReviewSummaryProps {
   extraPracticeHref?: string;
   /** Carried into each verse's Practice session so it returns here too. */
   returnTo?: string;
+  /** Overlay a Refresh sitting instead of navigating away. */
+  onRefresh?: (attempt: ReviewSessionAttempt) => void;
 }
 
 /**
@@ -49,6 +53,7 @@ export function ReviewSummary({
   doneLabel = "Done",
   extraPracticeHref,
   returnTo,
+  onRefresh,
 }: ReviewSummaryProps): JSX.Element {
   const caughtUp = remaining === 0;
   const hasAttempts = attempts.length > 0;
@@ -88,7 +93,11 @@ export function ReviewSummary({
         )}
 
         {hasAttempts && (
-          <ReviewResultRows attempts={attempts} returnTo={returnTo} />
+          <ReviewResultRows
+            attempts={attempts}
+            returnTo={returnTo}
+            onRefresh={onRefresh}
+          />
         )}
 
         <div className="flex flex-col gap-2">
@@ -118,10 +127,12 @@ export function ReviewResultRows({
   attempts,
   returnTo,
   className,
+  onRefresh,
 }: {
   attempts: ReviewSessionAttempt[];
   returnTo?: string;
   className?: string;
+  onRefresh?: (attempt: ReviewSessionAttempt) => void;
 }): JSX.Element {
   const navigate = useNavigate();
   const now = useLiveNow();
@@ -149,12 +160,58 @@ export function ReviewResultRows({
                   variant="icon"
                 />
               ) : null}
-              {attempt.offerPractice === false ? null : (
+              {lastTryNeedsRefresh(attempt.accuracies) ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-primary"
+                  onClick={() => {
+                    if (onRefresh) {
+                      onRefresh(attempt);
+                      return;
+                    }
+                    if (attempt.packId) {
+                      void navigate({
+                        to: "/memory/$packId/practice",
+                        params: { packId: attempt.packId },
+                        search: {
+                          refresh: true,
+                          ...(returnTo === undefined
+                            ? {}
+                            : { return: returnTo }),
+                        },
+                      });
+                      return;
+                    }
+                    void navigate({
+                      to: "/memory/practice",
+                      search: {
+                        ...memoryPracticeSearch(attempt.reference),
+                        refresh: true,
+                        ...(returnTo === undefined ? {} : { return: returnTo }),
+                      },
+                    });
+                  }}
+                >
+                  <Lightbulb className="size-3.5" aria-hidden />
+                  {REFRESH_LABEL}
+                </Button>
+              ) : attempt.offerPractice === false ? null : (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => {
+                    if (attempt.packId) {
+                      void navigate({
+                        to: "/memory/$packId/practice",
+                        params: { packId: attempt.packId },
+                        search:
+                          returnTo === undefined ? {} : { return: returnTo },
+                      });
+                      return;
+                    }
                     void navigate({
                       to: "/memory/practice",
                       search: {

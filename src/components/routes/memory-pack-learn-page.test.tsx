@@ -78,6 +78,7 @@ vi.mock("../../../convex/_generated/api", () => ({
       getForPack: "passageMemory.getForPack",
       recordAttempt: "passageMemory.recordAttempt",
       acceptRetryHold: "passageMemory.acceptRetryHold",
+      reviewFreshness: "passageMemory.reviewFreshness",
     },
   },
 }));

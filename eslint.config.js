@@ -6,7 +6,16 @@ import tseslint from "typescript-eslint";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores(["dist", "coverage", "convex/_generated", "electron-dist"]),
+  globalIgnores([
+    "dist",
+    "coverage",
+    "convex/_generated",
+    "electron-dist",
+    "scripts/start-over-confirm-browser",
+    "scripts/pr341-tester-fixes-browser",
+    "scripts/pr341-refresher-inline-browser",
+    "scripts/pr341-overflow-tabstops-browser",
+  ]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [

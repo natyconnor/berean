@@ -84,6 +84,9 @@ describe("useEsvCompositePassage", () => {
     expect(result.current.text).toBe(
       "The Lord is my shepherd; I shall not want. He makes me lie down in green pastures. He restores my soul.\nThe earth is the Lord's.",
     );
+    expect(result.current.hintText).toBe(
+      "The Lord is my shepherd; I shall not want.\nHe makes me lie down in green pastures.\nHe restores my soul.\nThe earth is the Lord's.",
+    );
     expect(result.current.segments.map((segment) => segment.text)).toEqual([
       "The Lord is my shepherd; I shall not want. He makes me lie down in green pastures.",
       "He restores my soul.",

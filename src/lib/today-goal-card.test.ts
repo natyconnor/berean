@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { VerseGoalCard } from "./memory-goals";
+import type { PassageGoalCard, VerseGoalCard } from "./memory-goals";
+import { DAY_MS } from "./memory-scheduler";
 import { todayGoalCardModel } from "./today-goal-card";
 
 const TZ = "America/Los_Angeles";
@@ -88,5 +89,76 @@ describe("todayGoalCardModel", () => {
         text: "Today's step done. Later today: fill in the blanks.",
       },
     ]);
+  });
+});
+
+describe("todayGoalCardModel after passage Start over", () => {
+  const NOW = Date.UTC(2026, 9, 12, 18);
+
+  function buildingPassage(
+    overrides: Partial<PassageGoalCard> = {},
+  ): PassageGoalCard {
+    return {
+      kind: "passage",
+      packId: "psalm1",
+      title: "Psalm 1",
+      verseCount: 6,
+      learnedVerses: 0,
+      pieceStates: [
+        { verses: 2, state: "upNext", today: false },
+        { verses: 2, state: "upNext", today: false },
+        { verses: 2, state: "upNext", today: false },
+      ],
+      status: "building",
+      hasWorkToday: true,
+      todayStep: {
+        label: "Read verses 1–2, then type them with first letters",
+        ladderDay: 1,
+      },
+      masteryFraction: 0,
+      nextDueAt: NOW,
+      createdAt: NOW - 5 * DAY_MS,
+      lastActivityAt: NOW - 5 * DAY_MS,
+      lastPracticedAt: null,
+      ...overrides,
+    };
+  }
+
+  it("offers today's first step again with Learn, and no Done today chip or tint", () => {
+    const model = todayGoalCardModel(buildingPassage(), NOW, "UTC");
+
+    expect(model.chip).toBeNull();
+    expect(model.steps).toEqual([
+      {
+        kind: "learn",
+        lead: "Today:",
+        rest: "read verses 1–2, then type them with first letters.",
+      },
+    ]);
+    expect(model.action).toMatchObject({
+      kind: "learn",
+      label: "Start · 7 min",
+    });
+    expect(model.signature.kind).toBe("passage");
+    if (model.signature.kind !== "passage") throw new Error("expected passage");
+    expect(model.signature.ticks.every((tick) => tick.today === false)).toBe(
+      true,
+    );
+  });
+
+  it("still marks Done today when last practice was today and there is no work left", () => {
+    const model = todayGoalCardModel(
+      buildingPassage({
+        hasWorkToday: false,
+        todayStep: null,
+        lastPracticedAt: NOW - 60_000,
+        lastActivityAt: NOW - 60_000,
+      }),
+      NOW,
+      "UTC",
+    );
+
+    expect(model.chip).toEqual({ tone: "done", label: "Done today" });
+    expect(model.action).toBeNull();
   });
 });

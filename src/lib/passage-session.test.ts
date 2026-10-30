@@ -203,6 +203,35 @@ describe("reducePassageSession", () => {
     expect(current.rehearsalRopeIndexes).toEqual([2, 3]);
   });
 
+  it("offers the next verse after a failed join then a repair pass", () => {
+    let current = session([
+      piece(0, "unreached"),
+      piece(1, "unreached"),
+      piece(2, "unreached"),
+    ]);
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[0]?.attachment === "attached",
+    );
+    current = reducePassageSession(current, { type: "introduce" });
+    current = passFrontierUntil(
+      current,
+      (state) => state.pieces[1]?.attachment === "attached",
+    );
+    expect(current.phase).toBe("connect");
+
+    const stalled = fail(
+      current,
+      diffWords("wrong", "one two three four five six"),
+    );
+    expect(stalled.phase).toBe("stall-repair");
+    expect(stalled.interruptedPhase).toBe("connect");
+
+    const repaired = pass(stalled);
+    expect(repaired.phase).toBe("offer-introduce");
+  });
+
   it("does not connect the first verse to a later pre-hearted solid", () => {
     let current = session([
       piece(0, "unreached", {

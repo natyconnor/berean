@@ -121,6 +121,17 @@ export function isMemoryHomeHref(href: string): boolean {
   return pathOf(href) === "/memory";
 }
 
+/** Verse and pack pages can restore focus after a Refresh sitting. */
+export function isMemoryItemPageHref(href: string): boolean {
+  const dest = classify(canonicalHref(href));
+  return dest.type === "verse" || dest.type === "pack";
+}
+
+/** Memory home, verse, and pack pages restore focus after a Refresh sitting. */
+export function isMemoryReturnFocusHref(href: string): boolean {
+  return isMemoryItemPageHref(href) || isMemoryHomeHref(href);
+}
+
 export function memoryExitName(label: string): string {
   return label.startsWith("Back to ") ? label.slice("Back to ".length) : label;
 }

@@ -126,7 +126,7 @@ function WorkBody({
       ) : null}
       <div className="mt-3">
         <Button asChild className="h-10 px-[18px] max-sm:h-11 max-sm:w-full">
-          <InternalLink href={START_TODAY_HREF}>
+          <InternalLink href={START_TODAY_HREF} data-memory-main-action="">
             <Play aria-hidden />
             {continuing ? "Continue" : START_TODAY_LABEL} · about {minutes} min
           </InternalLink>

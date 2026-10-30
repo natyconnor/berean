@@ -14,10 +14,13 @@ import {
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
+import { isMemoryReturnFocusHref } from "@/lib/memory-exit";
+import { markMemoryReturnFocus } from "@/lib/memory-return-focus";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
 } from "@/lib/learn-dismissed-packs";
+import { PRACTICE_AGAIN_LABEL } from "@/lib/practice-end-label";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import {
   isMemorySessionCandidate,
@@ -31,13 +34,14 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 export function MemoryPackPracticePage() {
   const { packId } = Route.useParams();
-  const { return: returnTo } = Route.useSearch();
+  const { return: returnTo, refresh } = Route.useSearch();
 
   return (
     <MemoryPackSessionPage
       kind="practice"
       packId={packId as Id<"packs">}
       returnTo={returnTo}
+      refresh={refresh === true}
     />
   );
 }
@@ -46,16 +50,23 @@ export function MemoryPackSessionPage({
   kind,
   packId: typedPackId,
   returnTo,
+  refresh = false,
 }: {
   kind: MemorySessionKind;
   packId: Id<"packs">;
   /** Where Done and Back go; else the pack page. */
   returnTo?: string;
+  refresh?: boolean;
 }) {
   const now = useLiveNow();
   const packHref = `/memory/${encodeURIComponent(typedPackId)}`;
   const exit = useMemoryExit(returnTo, packHref);
-  const onExit = exit.go;
+  const onExit = () => {
+    if (refresh && isMemoryReturnFocusHref(exit.href)) {
+      markMemoryReturnFocus();
+    }
+    exit.go();
+  };
   const backLabel = exit.label;
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
@@ -137,6 +148,12 @@ export function MemoryPackSessionPage({
         }),
     );
   }, [members, kind, now, unifiedEnabled, pack?.name, typedPackId]);
+  const refreshVerses = useMemo(() => {
+    if (!refresh) return sessionVerses;
+    return sessionVerses.filter(
+      (verse) => verse.status !== undefined && isReviewPhase(verse.status),
+    );
+  }, [refresh, sessionVerses]);
   const isLearning = kind === "learning";
   const hasMemorized = (members ?? []).some((member) =>
     isReviewPhase(member.status),
@@ -183,6 +200,7 @@ export function MemoryPackSessionPage({
         packId={typedPackId}
         view={passage}
         packName={pack.name}
+        refresh={refresh}
         onExit={onExit}
         onDoneForToday={
           isLearning
@@ -194,6 +212,7 @@ export function MemoryPackSessionPage({
         }
         backLabel={backLabel}
         exitHref={exit.href}
+        endLabel={isLearning ? undefined : PRACTICE_AGAIN_LABEL}
       />
     );
   }
@@ -209,7 +228,8 @@ export function MemoryPackSessionPage({
   return (
     <MemorySessionRunner
       kind={kind}
-      verses={sessionVerses}
+      verses={refresh ? refreshVerses : sessionVerses}
+      refresh={refresh}
       scopeLabel={pack.name}
       backLabel={backLabel}
       exitHref={exit.href}

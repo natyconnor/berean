@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
-import type { JSX } from "react";
+import type { JSX, ReactNode, Ref } from "react";
 
+import { OverflowRegion } from "@/components/study/overflow-region";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import type { MemorySchedule } from "@/lib/memory-scheduler";
 import { READER_VERSE_TEXT_CLASS } from "@/lib/reader-typography";
@@ -29,6 +30,13 @@ interface VerseAttemptResultProps {
   now?: number;
   /** Trails the banner's percentage, e.g. "Pass at 85%". */
   note?: string;
+  /** Replaces the usual praise line when this result has its own next step. */
+  praiseLine?: string;
+  scheduleHeld?: boolean;
+  refresherOffer?: ReactNode;
+  bannerRef?: Ref<HTMLDivElement>;
+  /** Caps "How you did" so Continue stays close when the full text is also up. */
+  scrollMaxClass?: string;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -147,6 +155,11 @@ export function VerseAttemptResult({
   nextSchedule = null,
   now,
   note,
+  praiseLine,
+  refresherOffer,
+  bannerRef,
+  scheduleHeld = false,
+  scrollMaxClass = "max-h-[45vh]",
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -163,35 +176,45 @@ export function VerseAttemptResult({
   return (
     <div className="w-full max-w-xl mx-auto space-y-3">
       {attemptQuality ? (
-        <VerseMemoryFeedback
-          quality={attemptQuality}
-          attemptKey={attemptKey}
-          showScheduleOutcome={showScheduleOutcome}
-          requireExactToAdvance={requireExactToAdvance}
-          nextSchedule={nextSchedule}
-          now={now}
-          accuracy={attemptAccuracy}
-          errors={attemptErrors}
-          note={note}
-        />
+        <div ref={bannerRef} className="scroll-mt-4">
+          <VerseMemoryFeedback
+            quality={attemptQuality}
+            attemptKey={attemptKey}
+            showScheduleOutcome={showScheduleOutcome}
+            requireExactToAdvance={requireExactToAdvance}
+            nextSchedule={nextSchedule}
+            now={now}
+            accuracy={attemptAccuracy}
+            errors={attemptErrors}
+            note={note}
+            praiseLine={praiseLine}
+            refresherOffer={refresherOffer}
+            scheduleHeld={scheduleHeld}
+          />
+        </div>
       ) : null}
       <motion.div
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.24, ease: "easeOut" }}
-        className={cn(
-          "space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
-          attemptQuality === "exact"
-            ? "border-emerald-500/40"
-            : attemptQuality === "close"
-              ? "border-amber-500/40"
-              : "border-primary/25",
-        )}
       >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          How you did
-        </p>
-        <VerseAttemptDiff tokens={diffTokens} />
+        <OverflowRegion
+          name="how-you-did"
+          className={cn(
+            scrollMaxClass,
+            "space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
+            attemptQuality === "exact"
+              ? "border-emerald-500/40"
+              : attemptQuality === "close"
+                ? "border-amber-500/40"
+                : "border-primary/25",
+          )}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            How you did
+          </p>
+          <VerseAttemptDiff tokens={diffTokens} />
+        </OverflowRegion>
       </motion.div>
     </div>
   );

@@ -11,9 +11,11 @@ import {
   compositeHintForWindow,
   connectPairForPiece,
   connectPairIndexes,
+  applyBuildingPassageRefresh,
   coerceUnstartedLearningPieces,
   dueFrontierIndex,
   frontierIndex,
+  learnedPassagePieces,
   inferPieceLearningState,
   localDayIndex,
   looksLikeAutoHeartedPassage,
@@ -22,6 +24,7 @@ import {
   PASSAGE_PASS_ACCURACY,
   PASSAGE_REHEARSAL_MAX_PIECES,
   PASSAGE_REHEARSAL_MAX_WORDS,
+  progressFrontierPieces,
   progressPassagePiece,
   rehearsalStartIndex,
   remainingIntroduces,
@@ -429,6 +432,32 @@ describe("compositeHintForWindow", () => {
     expect(hint).not.toContain("Blessed");
     expect(hint.includes("unused")).toBe(false);
   });
+
+  it("escalates a repeated miss: first letters, then full words", () => {
+    const solidText = "Blessed is the man";
+    const attachedText = "who walks not";
+    const pieces = [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "attached", { learnStage: 2, stageReps: 0 }),
+    ];
+    const texts = [solidText, attachedText];
+    const letters = compositeHintForWindow(
+      pieces,
+      0,
+      2,
+      texts,
+      "first-letters",
+    );
+    const full = compositeHintForWindow(pieces, 0, 2, texts, "full");
+    expect(letters).toBe(
+      `${maskVerseText(solidText, "first-letters")
+        .map((token) => token.text)
+        .join("")} ${maskVerseText(attachedText, "first-letters")
+        .map((token) => token.text)
+        .join("")}`,
+    );
+    expect(full).toBe(`${solidText} ${attachedText}`);
+  });
 });
 
 describe("progressPassagePiece", () => {
@@ -456,6 +485,54 @@ describe("progressPassagePiece", () => {
     expect(current.attachment).toBe("attached");
     expect(current.learnStage).toBe(2);
     expect(current.dueAt).toBeGreaterThan(now);
+  });
+
+  it("leaves pieces unchanged when a frontier attempt holds the schedule", () => {
+    const now = 1_700_000_000_000;
+    const pieces = [piece(0, "learning", { learnStage: 2, stageReps: 0 })];
+    expect(
+      progressFrontierPieces(pieces, 0, {
+        accuracy: 92,
+        now,
+        tzOffsetMinutes: 0,
+        wordCount: 10,
+        holdSchedule: true,
+      }),
+    ).toEqual(pieces);
+    const advanced = progressFrontierPieces(pieces, 0, {
+      accuracy: 92,
+      now,
+      tzOffsetMinutes: 0,
+      wordCount: 10,
+    });
+    expect(advanced[0]?.stageReps).toBe(1);
+    expect(advanced[0]).not.toEqual(pieces[0]);
+  });
+
+  it("Refresh on a partly learned passage holds every piece", () => {
+    const now = 1_700_000_000_000;
+    const pieces = [
+      piece(0, "solid", { learnStage: 3, stageReps: 1, dueAt: now + DAY_MS }),
+      piece(1, "learning", { learnStage: 2, stageReps: 0, dueAt: now }),
+      piece(2, "unreached"),
+    ];
+
+    expect(learnedPassagePieces(pieces).map((item) => item.index)).toEqual([0]);
+    expect(applyBuildingPassageRefresh(pieces, now)).toEqual(pieces);
+  });
+
+  it("Refresh on a building passage with no learned verses still drops a stage", () => {
+    const now = 1_700_000_000_000;
+    const pieces = [
+      piece(0, "learning", { learnStage: 2, stageReps: 1, dueAt: now }),
+      piece(1, "unreached"),
+    ];
+
+    expect(learnedPassagePieces(pieces)).toEqual([]);
+    expect(applyBuildingPassageRefresh(pieces, now)).toEqual([
+      { ...pieces[0], learnStage: 1, stageReps: 0, dueAt: now },
+      pieces[1],
+    ]);
   });
 
   it("does not skip a locked attached piece when a later learning piece is due", () => {

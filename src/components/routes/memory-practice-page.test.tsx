@@ -172,6 +172,33 @@ describe("MemoryAllSessionPage", () => {
     expect(screen.getByText("1 verses")).toBeInTheDocument();
   });
 
+  it("keeps a slipped verse in a scoped Refresh sitting", () => {
+    frozenResults.set("verseMemory.getInMemory", {
+      ...romans828,
+      memory: {
+        ...romans828.memory,
+        status: "learning" as const,
+        learnStage: 0,
+      },
+    });
+
+    render(
+      <MemoryAllSessionPage
+        kind="practice"
+        search={{
+          book: "Romans",
+          chapter: 8,
+          startVerse: 28,
+          endVerse: 28,
+          refresh: true,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Romans 8:28")).toBeInTheDocument();
+    expect(screen.getByText("1 verses")).toBeInTheDocument();
+  });
+
   it("shows nothing for a scoped URL whose verse is not in Memory", () => {
     frozenResults.set("verseMemory.getInMemory", null);
 

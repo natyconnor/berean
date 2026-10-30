@@ -178,4 +178,99 @@ describe("Add to pack on session summaries", () => {
       screen.queryByRole("button", { name: /Psalm 23/ }),
     ).not.toBeInTheDocument();
   });
+
+  it("offers Practice when the last try recovered", () => {
+    renderWithTooltips(
+      <ReviewSummary
+        attempts={[
+          { reference: JOHN_3_16, accuracy: 0 },
+          { reference: JOHN_3_16, accuracy: 100 },
+          { reference: JOHN_3_16, accuracy: 100 },
+        ]}
+        averageAccuracy={67}
+        remaining={0}
+        onDone={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("67%")).toBeInTheDocument();
+    expect(
+      screen.getByText("0%, 100%, then 100% recalled"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Refresh" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Practice" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Refresh on a missed passage row", async () => {
+    const onRefresh = vi.fn();
+    renderWithTooltips(
+      <ReviewSummary
+        attempts={[
+          {
+            reference: {
+              book: "Psalms",
+              chapter: 23,
+              startVerse: 1,
+              endVerse: 6,
+            },
+            accuracy: 0,
+            label: "Psalm 23",
+            packId: "pack_psalm",
+            offerPractice: false,
+          },
+        ]}
+        averageAccuracy={0}
+        remaining={0}
+        onDone={() => {}}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("sends a learning-phase Refresh to a Refresh sitting", async () => {
+    renderWithTooltips(
+      <ReviewSummary
+        attempts={[
+          { reference: JOHN_3_16, accuracy: 34, status: "learning" },
+          { reference: GENESIS_33_9, accuracy: 40, status: "reviewing" },
+        ]}
+        averageAccuracy={37}
+        remaining={0}
+        onDone={() => {}}
+      />,
+    );
+
+    const refreshButtons = screen.getAllByRole("button", { name: "Refresh" });
+    await userEvent.click(refreshButtons[0]);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/practice",
+      search: {
+        book: "John",
+        chapter: 3,
+        startVerse: 16,
+        endVerse: 16,
+        refresh: true,
+      },
+    });
+
+    await userEvent.click(refreshButtons[1]);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/memory/practice",
+      search: {
+        book: "Genesis",
+        chapter: 33,
+        startVerse: 9,
+        endVerse: 9,
+        refresh: true,
+      },
+    });
+  });
 });

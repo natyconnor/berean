@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 
 import { accuracyFeedback, type AccuracyBand } from "@/lib/accuracy-feedback";
 import {
@@ -45,6 +45,14 @@ interface VerseMemoryFeedbackProps {
   errors?: AttemptErrorCounts;
   /** Trails the percentage, e.g. "Pass at 85%". */
   note?: string;
+  /** Replaces the usual praise line when this result has its own next step. */
+  praiseLine?: string;
+  scheduleHeld?: boolean;
+  /**
+   * Quiet after-miss offer, rendered on the percentage row and kept outside
+   * the status live region so it is not announced as part of the score.
+   */
+  refresherOffer?: ReactNode;
 }
 
 const BANNER_TONE: Record<AccuracyBand, string> = {
@@ -89,28 +97,47 @@ export function VerseMemoryFeedback({
   accuracy,
   errors,
   note,
+  praiseLine,
+  refresherOffer,
+  scheduleHeld = false,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
   const scored =
     accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
   const outcome = reviewGradeOutcome(quality, scored);
-  const feedback = accuracyFeedback(scored, { exact: quality === "exact" });
+  const feedback = accuracyFeedback(scored, {
+    exact: quality === "exact",
+    scheduleHeld,
+  });
   const { band } = feedback;
   const celebrate = band === "exact";
   const praise =
-    !showScheduleOutcome && requireExactToAdvance && quality === "close"
+    praiseLine ??
+    (!showScheduleOutcome && requireExactToAdvance && quality === "close"
       ? FROM_MEMORY_CLOSE_MESSAGE
-      : attemptPraiseLine({ accuracy: scored, outcome, errors });
-  const consequence = showScheduleOutcome
-    ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
-    : null;
+      : attemptPraiseLine({ accuracy: scored, outcome, errors }));
+  const consequence =
+    showScheduleOutcome && !scheduleHeld
+      ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
+      : null;
+  const scoreLine = `${scored}% recalled${note ? ` · ${note}` : ""}`;
+  const statusCopy = [
+    feedback.lead,
+    feedback.rest,
+    praise,
+    scoreLine,
+    consequence,
+  ]
+    .filter((part): part is string => Boolean(part && part.length > 0))
+    .join(" ");
 
   return (
     <motion.div
       key={`${band}-${attemptKey}`}
-      role="status"
-      aria-live="polite"
+      role={refresherOffer ? undefined : "status"}
+      aria-live={refresherOffer ? undefined : "polite"}
       data-tone={band}
+      data-result-banner=""
       // A pop, not a fade: the result reads the moment it lands.
       initial={reduceMotion ? false : { y: -6, scale: celebrate ? 0.94 : 0.98 }}
       animate={{ y: 0, scale: 1 }}
@@ -120,10 +147,15 @@ export function VerseMemoryFeedback({
           : { duration: 0.22, ease: "easeOut" }
       }
       className={cn(
-        "relative mx-auto flex w-full max-w-xl flex-col items-center gap-1 overflow-visible rounded-2xl border px-4 py-4 text-center shadow-sm",
+        "relative mx-auto flex w-full max-w-xl scroll-mt-2 flex-col items-center gap-1 overflow-visible rounded-2xl border px-4 py-4 text-center shadow-sm",
         BANNER_TONE[band],
       )}
     >
+      {refresherOffer ? (
+        <div role="status" aria-live="polite" className="sr-only">
+          {statusCopy}
+        </div>
+      ) : null}
       <ResultEmoji
         emoji={feedback.emoji}
         celebrate={celebrate}
@@ -140,10 +172,12 @@ export function VerseMemoryFeedback({
       <p className="text-sm font-medium leading-snug text-balance text-foreground/90">
         {praise}
       </p>
-      <p className="text-xs tabular-nums text-muted-foreground">
-        {`${scored}% recalled`}
-        {note ? ` · ${note}` : null}
-      </p>
+      <div className="flex flex-wrap items-start justify-center gap-x-1.5 sm:items-center">
+        <p className="text-xs tabular-nums text-muted-foreground">
+          {scoreLine}
+        </p>
+        {refresherOffer}
+      </div>
       {consequence ? (
         <p className="mt-1 text-sm leading-snug text-balance text-foreground/80">
           {consequence}

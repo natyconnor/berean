@@ -42,6 +42,23 @@ export function validateMemoryReturnSearch(
   return returnTo === undefined ? {} : { return: returnTo };
 }
 
+export type MemoryPackPracticeSearch = MemoryReturnSearch & {
+  refresh?: boolean;
+};
+
+/** Pack practice may open as a Refresh sitting (`?refresh=1`). */
+export function validateMemoryPackPracticeSearch(
+  search: Record<string, unknown>,
+): MemoryPackPracticeSearch {
+  const base = validateMemoryReturnSearch(search);
+  const refresh =
+    search.refresh === true ||
+    search.refresh === 1 ||
+    search.refresh === "1" ||
+    search.refresh === "true";
+  return refresh ? { ...base, refresh: true } : base;
+}
+
 /** `href` with `return=<returnTo>` added; unchanged when `returnTo` is not allowed. */
 export function withReturn(href: string, returnTo: string): string {
   const safe = parseMemoryReturn(returnTo);

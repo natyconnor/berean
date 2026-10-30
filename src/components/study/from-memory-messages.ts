@@ -14,6 +14,11 @@ export const FROM_MEMORY_FIRST_ROUND_PROMPT = "Recall the verse from memory";
 export const FROM_MEMORY_SECOND_ROUND_PROMPT =
   "Let's do it one more time to really show you've got this one down!";
 
+export const FROM_MEMORY_HINT_PASS_MESSAGE =
+  "Nice work with a little help. Try it once more from memory so this step can count.";
+
+export const FROM_MEMORY_HINT_PASS_ACTION = "Try from memory";
+
 /** True while the learner is still on the From Memory band (not yet graduated). */
 export function isFromMemoryLearning(
   learnStage: number,

@@ -17,6 +17,8 @@ interface RecordAttemptArgs {
   tokens: ReadonlyArray<DiffToken>;
   stage: number;
   wordCount?: number;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
 }
 
 interface UseVersePracticeAttemptReturn {
@@ -59,6 +61,8 @@ export function useVersePracticeAttempt(
         stage: args.stage,
         mode,
         wordCount: args.wordCount,
+        hint: args.hint,
+        holdSchedule: args.holdSchedule,
       });
       if (!schedule) return null;
       const applied = appliedSeqByVerseId.current.get(verseKey) ?? 0;

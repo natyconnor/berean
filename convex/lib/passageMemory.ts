@@ -327,6 +327,8 @@ export async function insertPassageReview(
     now: number;
     durationMs?: number;
     pieceIndex?: number;
+    hint?: "first-letters";
+    holdSchedule?: boolean;
   },
 ): Promise<void> {
   await ctx.db.insert("passageReviews", {
@@ -339,6 +341,8 @@ export async function insertPassageReview(
     createdAt: args.now,
     ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
     ...(args.pieceIndex !== undefined ? { pieceIndex: args.pieceIndex } : {}),
+    ...(args.hint ? { hint: args.hint } : {}),
+    ...(args.holdSchedule ? { holdSchedule: true } : {}),
   });
 }
 

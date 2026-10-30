@@ -58,9 +58,27 @@ import {
   isLearningLocked,
   isReviewPhase,
   holdReviewingInterval,
+  nextStartOverUndo,
+  restoreStartOverUndo,
   scheduleNext,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
+import {
+  modeToStore,
+  planRefreshFinish,
+  planRescueSpend,
+  sameSchedule,
+} from "../src/lib/memory-way-back";
+import {
+  isReviewHintedCheckIn,
+  isStaleVerse,
+  recentReviewLapsed,
+  refreshRecentLapseCount,
+} from "../src/lib/memory-stale";
+import {
+  snapshotSchedule,
+  startOverVersePatch,
+} from "../src/lib/memory-start-over";
 import {
   countDuePassageReviews,
   countProjectedPassageLearning,
@@ -533,6 +551,8 @@ export const recordAttempt = mutation({
     tzOffsetMinutes: v.optional(v.number()),
     /** IANA zone for Practice heatmap day buckets; same as `reviewActivity`. */
     timeZone: v.optional(v.string()),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -579,30 +599,15 @@ export const recordAttempt = mutation({
       return current;
     }
 
-    await ctx.db.insert("verseMemoryReviews", {
-      userId,
-      verseRefId: args.verseRefId,
-      verseMemoryId: memory._id,
-      quality: args.quality,
-      accuracy: args.accuracy,
-      stage: args.stage,
-      mode: args.mode,
-      durationMs: args.durationMs,
-      createdAt: args.now,
-    });
+    const lastReview = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_verseRefId_createdAt", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .order("desc")
+      .first();
 
-    if (args.timeZone) {
-      await noteVerseReviewForActivity(ctx, {
-        userId,
-        createdAt: args.now,
-        accuracy: args.accuracy,
-        mode: args.mode,
-        stage: args.stage,
-        timeZone: args.timeZone,
-      });
-    }
-
-    const next = scheduleNext(current, {
+    const scheduled = scheduleNext(current, {
       quality: args.quality,
       accuracy: args.accuracy,
       mode: args.mode,
@@ -610,7 +615,45 @@ export const recordAttempt = mutation({
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
+      hint: args.hint,
+      holdSchedule: args.holdSchedule,
+      priorHintedCheckIn: isReviewHintedCheckIn(lastReview),
     });
+    const mode = modeToStore({
+      requestedMode: args.mode,
+      hint: args.hint,
+      holdSchedule: args.holdSchedule,
+      wasDueForReview: isDueForReview(current, args.now),
+      scheduleChanged: !sameSchedule(current, scheduled),
+    });
+
+    await ctx.db.insert("verseMemoryReviews", {
+      userId,
+      verseRefId: args.verseRefId,
+      verseMemoryId: memory._id,
+      quality: args.quality,
+      accuracy: args.accuracy,
+      stage: args.stage,
+      mode,
+      durationMs: args.durationMs,
+      createdAt: args.now,
+      ...(args.hint ? { hint: args.hint } : {}),
+      ...(args.holdSchedule ? { holdSchedule: true } : {}),
+    });
+
+    if (args.timeZone) {
+      await noteVerseReviewForActivity(ctx, {
+        userId,
+        createdAt: args.now,
+        accuracy: args.accuracy,
+        mode,
+        stage: args.stage,
+        timeZone: args.timeZone,
+        holdSchedule: args.holdSchedule,
+      });
+    }
+
+    const next = scheduled;
 
     if (memory.status !== next.status) {
       await adjustUserMemoryStats(
@@ -633,6 +676,7 @@ export const recordAttempt = mutation({
       lapses: next.lapses,
       earlyReviewApplied: next.earlyReviewApplied,
       lastReviewedAt: args.now,
+      startOverUndo: undefined,
     });
 
     return next;
@@ -901,6 +945,327 @@ export const stopMemorizing = mutation({
 
     await stopMemorizingVerse(ctx, userId, args.verseRefId, args.now);
     return null;
+  },
+});
+
+function scheduleFromMemory(memory: Doc<"verseMemory">): MemorySchedule {
+  return {
+    status: memory.status,
+    learnStage: memory.learnStage,
+    stageReps: memory.stageReps ?? 0,
+    ease: memory.ease,
+    intervalDays: memory.intervalDays,
+    dueAt: memory.dueAt,
+    consecutiveCorrect: memory.consecutiveCorrect,
+    lapses: memory.lapses,
+    earlyReviewApplied: memory.earlyReviewApplied ?? false,
+  };
+}
+
+async function applyVerseStartOver(
+  ctx: Parameters<typeof adjustUserMemoryStats>[0],
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+  now: number,
+  replaceUndo = true,
+): Promise<MemorySchedule> {
+  const memory = await requireInMemory(ctx, userId, verseRefId);
+  const current = scheduleFromMemory(memory);
+  const next = startOverVersePatch(now);
+  if (memory.status !== next.status) {
+    await adjustUserMemoryStats(ctx, userId, now, memory.status, next.status);
+  }
+  await ctx.db.patch(memory._id, {
+    ...next,
+    startedOverAt: now,
+    startOverUndo: nextStartOverUndo(
+      memory.startOverUndo,
+      snapshotSchedule({
+        ...current,
+        lastReviewedAt: memory.lastReviewedAt,
+      }),
+      replaceUndo,
+    ),
+  });
+  return {
+    status: next.status,
+    learnStage: next.learnStage,
+    stageReps: next.stageReps,
+    ease: next.ease,
+    intervalDays: next.intervalDays,
+    dueAt: next.dueAt,
+    consecutiveCorrect: next.consecutiveCorrect,
+    lapses: next.lapses,
+    earlyReviewApplied: next.earlyReviewApplied,
+  };
+}
+
+async function loadRecentReviews(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+) {
+  return await ctx.db
+    .query("verseMemoryReviews")
+    .withIndex("by_userId_verseRefId_createdAt", (q) =>
+      q.eq("userId", userId).eq("verseRefId", verseRefId),
+    )
+    .order("desc")
+    .take(3);
+}
+
+/** Reset one verse to Read. Notes, hearts, packs, and history stay. */
+export const startOver = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    now: v.number(),
+    replaceUndo: v.optional(v.boolean()),
+  },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    return await applyVerseStartOver(
+      ctx,
+      userId,
+      args.verseRefId,
+      args.now,
+      args.replaceUndo,
+    );
+  },
+});
+
+/** Put the schedule captured at Start over back. */
+export const undoStartOver = mutation({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
+    if (!memory.startOverUndo) {
+      throw new Error("Nothing to undo");
+    }
+    const next = restoreStartOverUndo(memory.startOverUndo);
+    if (memory.status !== next.status) {
+      await adjustUserMemoryStats(
+        ctx,
+        userId,
+        args.now,
+        memory.status,
+        next.status,
+      );
+    }
+    await ctx.db.patch(memory._id, {
+      ...next,
+      lastReviewedAt: memory.startOverUndo.lastReviewedAt,
+      startedOverAt: undefined,
+      startOverUndo: undefined,
+    });
+    return next;
+  },
+});
+
+/** Apply the Refresh rung after a finished sitting. */
+export const finishRefresh = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    now: v.number(),
+    sittingStartedAt: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
+  },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
+    const recent = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_verseRefId_createdAt", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .order("desc")
+      .take(20);
+    const current = scheduleFromMemory(memory);
+    const plan = planRefreshFinish(
+      {
+        kind: "verse",
+        schedule: current,
+        rows: recent.map((row) => ({
+          createdAt: row.createdAt,
+          accuracy: row.accuracy,
+          quality: row.quality,
+          holdSchedule: row.holdSchedule,
+          hint: row.hint,
+          stage: row.stage,
+          mode: row.mode,
+        })),
+        appliedSittingAt: memory.refreshAppliedSittingAt,
+      },
+      {
+        sittingStartedAt: args.sittingStartedAt,
+        now: args.now,
+        overdueMs: Math.max(0, args.now - memory.dueAt),
+        recentLapseCount: refreshRecentLapseCount(
+          recent,
+          args.sittingStartedAt,
+        ),
+        tzOffsetMinutes: args.tzOffsetMinutes,
+        timeZone: args.timeZone,
+      },
+    );
+    if (plan.status === "already-applied") return current;
+    if (plan.status === "missing-finish-grade") {
+      throw new Error("Refresh sitting has no held finish");
+    }
+    if (plan.reviewCopy) {
+      if (plan.reviewCopy.stage === undefined) {
+        throw new Error("verse refresh copy is missing stage");
+      }
+      await ctx.db.insert("verseMemoryReviews", {
+        userId,
+        verseRefId: args.verseRefId,
+        verseMemoryId: memory._id,
+        quality: plan.reviewCopy.quality,
+        accuracy: plan.reviewCopy.accuracy,
+        stage: plan.reviewCopy.stage,
+        mode: "review",
+        createdAt: args.now,
+        ...(plan.reviewCopy.hint ? { hint: plan.reviewCopy.hint } : {}),
+      });
+      if (args.timeZone) {
+        await noteVerseReviewForActivity(ctx, {
+          userId,
+          createdAt: args.now,
+          accuracy: plan.reviewCopy.accuracy,
+          mode: "review",
+          stage: plan.reviewCopy.stage,
+          timeZone: args.timeZone,
+        });
+      }
+    }
+    if (memory.status !== plan.schedule.status) {
+      await adjustUserMemoryStats(
+        ctx,
+        userId,
+        args.now,
+        memory.status,
+        plan.schedule.status,
+      );
+    }
+    await ctx.db.patch(memory._id, {
+      ...plan.schedule,
+      refreshAppliedSittingAt: plan.appliedSittingAt,
+      lastReviewedAt: memory.lastReviewedAt,
+    });
+    return plan.schedule;
+  },
+});
+
+export const spendDailyRescue = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    now: v.number(),
+    tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
+  },
+  returns: v.object({
+    schedule: memoryScheduleValidator,
+    sessionSpent: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
+    const recent = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_userId_verseRefId_createdAt", (q) =>
+        q.eq("userId", userId).eq("verseRefId", args.verseRefId),
+      )
+      .order("desc")
+      .take(20);
+    const current = scheduleFromMemory(memory);
+    const plan = planRescueSpend({
+      schedule: current,
+      recent: recent.map((row) => ({
+        mode: row.mode,
+        accuracy: row.accuracy,
+        holdSchedule: row.holdSchedule,
+      })),
+      now: args.now,
+      tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
+    });
+    if (plan.status === "unchanged") {
+      return { schedule: current, sessionSpent: plan.sessionSpent };
+    }
+    if (memory.status !== plan.schedule.status) {
+      await adjustUserMemoryStats(
+        ctx,
+        userId,
+        args.now,
+        memory.status,
+        plan.schedule.status,
+      );
+    }
+    await ctx.db.patch(memory._id, {
+      ...plan.schedule,
+      lastReviewedAt: memory.lastReviewedAt,
+    });
+    return { schedule: plan.schedule, sessionSpent: plan.sessionSpent };
+  },
+});
+
+export const reviewFreshness = query({
+  args: { verseRefId: v.id("verseRefs"), now: v.number() },
+  returns: v.object({
+    stale: v.boolean(),
+    lastReviews: v.array(
+      v.object({ accuracy: v.number(), lapsed: v.boolean() }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) {
+      return { stale: false, lastReviews: [] };
+    }
+    const memory = await findVerseMemory(ctx, userId, args.verseRefId);
+    if (!memory) return { stale: false, lastReviews: [] };
+    const recent = await loadRecentReviews(ctx, userId, args.verseRefId);
+    const lastReviews = recent.map((row) => ({
+      accuracy: row.accuracy,
+      lapsed: recentReviewLapsed(row.accuracy),
+      createdAt: row.createdAt,
+    }));
+    return {
+      stale: isStaleVerse({
+        status: memory.status,
+        dueAt: memory.dueAt,
+        intervalDays: memory.intervalDays,
+        lastReviewedAt: memory.lastReviewedAt,
+        learnStage: memory.learnStage,
+        now: args.now,
+        startedOverAt: memory.startedOverAt,
+        lastReviews,
+      }),
+      lastReviews: lastReviews.map(({ accuracy, lapsed }) => ({
+        accuracy,
+        lapsed,
+      })),
+    };
   },
 });
 
@@ -1351,6 +1716,7 @@ export const reviewActivity = query({
         accuracy: row.accuracy,
         mode: row.mode,
         stage: row.stage,
+        ...(row.holdSchedule ? { holdSchedule: true } : {}),
       })),
       args.now,
       heatmapDays,
@@ -1701,6 +2067,8 @@ const attemptValidator = v.object({
   accuracy: v.number(),
   stage: v.number(),
   mode: modeValidator,
+  hint: v.optional(v.literal("first-letters")),
+  holdSchedule: v.optional(v.boolean()),
   durationMs: v.optional(v.number()),
   createdAt: v.number(),
 });
@@ -1737,6 +2105,7 @@ const verseDetailValidator = v.object({
   lapses: v.number(),
   consecutiveCorrect: v.number(),
   lastReviewedAt: v.optional(v.number()),
+  startedOverAt: v.optional(v.number()),
   attempts: v.array(attemptValidator),
   difficulty: v.union(difficultyValidator, v.null()),
 });
@@ -1746,6 +2115,8 @@ type Attempt = {
   accuracy: number;
   stage: number;
   mode: Doc<"verseMemoryReviews">["mode"];
+  hint?: "first-letters";
+  holdSchedule?: boolean;
   durationMs?: number;
   createdAt: number;
 };
@@ -1835,6 +2206,8 @@ export const verseDetail = query({
       mode: row.mode,
       durationMs: row.durationMs,
       createdAt: row.createdAt,
+      ...(row.hint ? { hint: row.hint } : {}),
+      ...(row.holdSchedule ? { holdSchedule: true } : {}),
     }));
 
     return {
@@ -1856,6 +2229,7 @@ export const verseDetail = query({
       lapses: memory.lapses,
       consecutiveCorrect: memory.consecutiveCorrect,
       lastReviewedAt: memory.lastReviewedAt,
+      startedOverAt: memory.startedOverAt,
       attempts,
       difficulty: deriveDifficulty(attempts),
     };

@@ -22,6 +22,7 @@ import type {
   PieceAttachment,
 } from "./passage-pieces";
 import { scopeCoverageComplete } from "./scope-verse-coverage";
+import type { WindowHintEscalation } from "./passage-refresh-coverage";
 import { countVerseWords, hintForProgress, maskVerseText } from "./verse-hint";
 import type { VerseScope } from "./verse-scope-match";
 
@@ -83,6 +84,40 @@ export function remainingIntroduces(args: {
 }): number {
   const usedToday = args.addDayKey === args.todayKey ? args.addsOnDay : 0;
   return Math.max(0, PASSAGE_MAX_ADDS_PER_DAY - usedToday);
+}
+
+/** Pieces already memorized. Refresh sits over these and leaves the rest alone. */
+export function learnedPassagePieces<T extends { attachment: PieceAttachment }>(
+  pieces: readonly T[],
+): T[] {
+  return pieces.filter((piece) => piece.attachment === "solid");
+}
+
+/**
+ * Refresh on a building passage with no learned verses still drops a learning
+ * piece one stage. Once any verse is learned, every piece stays as it is.
+ */
+export function applyBuildingPassageRefresh<
+  T extends {
+    attachment: PieceAttachment;
+    learnStage: number;
+    stageReps: number;
+    dueAt?: number;
+  },
+>(pieces: readonly T[], now: number): T[] {
+  if (learnedPassagePieces(pieces).length > 0) {
+    return [...pieces];
+  }
+  return pieces.map((piece) =>
+    piece.attachment === "unreached"
+      ? piece
+      : {
+          ...piece,
+          learnStage: Math.max(0, piece.learnStage - 1),
+          stageReps: 0,
+          dueAt: now,
+        },
+  );
 }
 
 /** Lowest index with attachment !== "solid"; or `pieces.length` if all solid. */
@@ -225,6 +260,7 @@ export function compositeHintForWindow(
   start: number,
   end: number,
   texts: readonly string[],
+  escalation: WindowHintEscalation = "stage",
 ): string {
   const parts: string[] = [];
   const windowAligned =
@@ -241,6 +277,19 @@ export function compositeHintForWindow(
       ? (texts[index - start] ?? "")
       : (texts[index] ?? "");
     if (text.length === 0) continue;
+
+    if (escalation === "full") {
+      parts.push(text);
+      continue;
+    }
+    if (escalation === "first-letters") {
+      parts.push(
+        maskVerseText(text, "first-letters")
+          .map((token) => token.text)
+          .join(""),
+      );
+      continue;
+    }
 
     if (piece.attachment === "solid") {
       parts.push(
@@ -421,6 +470,33 @@ export function dueFrontierIndex(
  * banks a rep (including From Memory — exact is not required). Clearing Guided
  * attaches; clearing From Memory solids; Guided/Challenge clears soft-lock.
  */
+export type FrontierAttemptInput = {
+  accuracy: number;
+  now: number;
+  tzOffsetMinutes: number;
+  timeZone?: string;
+  wordCount: number;
+  holdSchedule?: boolean;
+};
+
+/**
+ * Bank a frontier attempt, or leave every piece alone when the try is a
+ * held-schedule refresher.
+ */
+export function progressFrontierPieces(
+  pieces: readonly PassagePiece[],
+  pieceIndex: number,
+  input: FrontierAttemptInput,
+): PassagePiece[] {
+  if (input.holdSchedule) return pieces.slice();
+  const piece = pieces[pieceIndex];
+  if (!piece || isPassagePieceLocked(piece, input.now)) return pieces.slice();
+  const progressed = progressPassagePiece(piece, input);
+  return pieces.map((current, index) =>
+    index === pieceIndex ? progressed : current,
+  );
+}
+
 export function progressPassagePiece(
   piece: PassagePiece,
   input: {

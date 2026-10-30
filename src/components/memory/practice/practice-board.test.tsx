@@ -1,11 +1,21 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  FROM_MEMORY_CLOSE_MESSAGE,
+  FROM_MEMORY_HINT_PASS_ACTION,
+  FROM_MEMORY_HINT_PASS_MESSAGE,
+  FROM_MEMORY_SECOND_ROUND_PROMPT,
+} from "@/components/study/from-memory-messages";
 import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
-import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
+import {
+  DAY_MS,
+  MIN_LEARNING_LOCK_MS,
+  REVIEW_LAPSE_LEARN_STAGE,
+} from "@/lib/memory-scheduler";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -53,6 +63,11 @@ vi.mock("convex-helpers/react/cache", () => ({
     if (args === "skip") return undefined;
     return queryResults.get(name);
   },
+  usePaginatedQuery: () => ({
+    results: [],
+    status: "Exhausted",
+    loadMore: () => {},
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -80,6 +95,9 @@ vi.mock("../../../../convex/_generated/api", () => ({
     verseMemory: {
       recordAttempt: "verseMemory.recordAttempt",
       acceptRetryHold: "verseMemory.acceptRetryHold",
+      reviewFreshness: "verseMemory.reviewFreshness",
+      finishRefresh: "verseMemory.finishRefresh",
+      spendDailyRescue: "verseMemory.spendDailyRescue",
     },
   },
 }));
@@ -227,9 +245,7 @@ describe("PracticeBoard composite recitation", () => {
     expect(screen.getByText("100%")).toBeVisible();
     const row = within(screen.getByRole("listitem"));
     expect(row.getByText("Psalm 23")).toBeVisible();
-    expect(
-      row.queryByRole("button", { name: "Practice" }),
-    ).not.toBeInTheDocument();
+    expect(row.getByRole("button", { name: "Practice" })).toBeInTheDocument();
   });
 
   it("celebrates a word-for-word recitation in one banner with particles", async () => {
@@ -364,6 +380,36 @@ describe("PracticeBoard composite recitation", () => {
     expect(
       await screen.findByLabelText("Your recited passage"),
     ).toBeInTheDocument();
+  });
+
+  it("advances a unified pack after a post-miss refresher", async () => {
+    renderComposite();
+    const answer = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+
+    const first = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(first);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const second = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(second);
+    await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(await screen.findByText("All caught up!")).toBeInTheDocument();
+    expect(mutationMock("verseMemory.spendDailyRescue")).not.toHaveBeenCalled();
   });
 });
 
@@ -870,6 +916,49 @@ describe("PracticeBoard recall submit loading", () => {
       screen.queryByRole("button", { name: "Saving..." }),
     ).not.toBeInTheDocument();
   });
+
+  it("focuses Continue after Check answer once saving finishes", async () => {
+    let resolveRecord!: (value: unknown) => void;
+    const pendingRecord = new Promise((resolve) => {
+      resolveRecord = resolve;
+    });
+    mutationMock("verseMemory.recordAttempt").mockReturnValue(pendingRecord);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("zzz qqq xxx");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(
+      await screen.findByRole("button", { name: "Saving..." }),
+    ).toBeDisabled();
+
+    resolveRecord({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+
+    const continueButton = await screen.findByRole("button", {
+      name: /Continue/,
+    });
+    await waitFor(() => {
+      expect(continueButton).toBeEnabled();
+      expect(continueButton).toHaveFocus();
+    });
+  });
 });
 
 function learningRef(
@@ -1043,6 +1132,43 @@ const reviewingVerse: PracticeVerse = {
   lapses: 0,
   earlyReviewApplied: false,
 };
+
+const dailyReviewingVerse: PracticeVerse = {
+  ...reviewingVerse,
+  intervalDays: 1,
+  consecutiveCorrect: 1,
+};
+
+const lapsedToChallenge = {
+  status: "learning" as const,
+  learnStage: REVIEW_LAPSE_LEARN_STAGE,
+  stageReps: 0,
+  ease: 2.1,
+  intervalDays: 0,
+  dueAt: getSessionNow(),
+  consecutiveCorrect: 0,
+  lapses: 1,
+  earlyReviewApplied: false,
+};
+
+const restoredToMemorized = {
+  ...lapsedToChallenge,
+  status: "reviewing" as const,
+  learnStage: 3,
+  intervalDays: 1,
+  dueAt: getSessionNow() + DAY_MS,
+};
+
+function progressPanelStage(): string {
+  const heading = screen.getByText("Progress");
+  const panel = heading.parentElement;
+  if (!panel) throw new Error("Progress panel missing");
+  return (
+    within(panel)
+      .getByLabelText(/^(Learning journey|Progress to mastered):/)
+      .getAttribute("aria-label") ?? ""
+  );
+}
 
 const stillDueSchedule = {
   status: "reviewing" as const,
@@ -1301,6 +1427,7 @@ describe("PracticeBoard spent reviews", () => {
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
     await recite(PASSAGE_TWO);
     expect(await screen.findByText("Word for word.")).toBeVisible();
+    await userEvent.click(railButton("Psalm 23:1"));
     await waitFor(() => {
       const [state] = onRunStateChange.mock.lastCall ?? [];
       expect(state?.graded).toEqual([SECOND_ID]);
@@ -1353,6 +1480,22 @@ describe("PracticeBoard spent reviews", () => {
     );
     expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+  });
+
+  it("keeps Verse 1 of 2 on screen after a miss until Continue", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderBoard("review");
+    expect(await screen.findByText("Verse 1 of 2")).toBeInTheDocument();
+    await recite("nope");
+    expect(
+      await screen.findByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+    expect(screen.getByText("Verse 1 of 2")).toBeInTheDocument();
+    expect(screen.queryByText("Verse 2 of 2")).not.toBeInTheDocument();
   });
 
   it("moves from a reviewed card to the next one with work left", async () => {
@@ -1493,6 +1636,1089 @@ describe("PracticeBoard session Home", () => {
     expect(
       screen.queryByRole("link", { name: "Go to Memory" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("PracticeBoard refresher", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    queryResults.set("verseMemory.reviewFreshness", {
+      stale: false,
+      lastReviews: [],
+    });
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+  });
+
+  it("shows Need a refresher in the empty from-memory hint box", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Check answer/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Type it as you remember it.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Need a refresher?" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens first letters from Need a refresher in the hint box", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    expect(screen.getByText("First letters")).toBeInTheDocument();
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
+        expect.objectContaining({ hint: "first-letters" }),
+      );
+    });
+  });
+
+  it("offers Need a refresher on the result banner after a miss", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    const { container } = render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    const offer = await screen.findByRole("button", {
+      name: "Need a refresher?",
+    });
+    expect(offer).toBeVisible();
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "Need a refresher?",
+    );
+    expect(
+      screen.getAllByRole("button", { name: "Need a refresher?" }),
+    ).toHaveLength(1);
+    const footer = container.querySelector('[data-slot="card-footer"]');
+    expect(footer).not.toBeNull();
+    expect(
+      within(footer as HTMLElement).queryByRole("button", {
+        name: "Need a refresher?",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(footer as HTMLElement).getByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+  });
+
+  describe("result scroll tab stops", () => {
+    let observers: ResizeObserverCallback[] = [];
+
+    function fireResize() {
+      act(() => {
+        for (const callback of observers) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+    }
+
+    function setBox(
+      element: HTMLElement,
+      clientHeight: number,
+      scrollHeight: number,
+    ) {
+      Object.defineProperties(element, {
+        clientHeight: { configurable: true, value: clientHeight },
+        scrollHeight: { configurable: true, value: scrollHeight },
+        clientWidth: { configurable: true, value: 320 },
+        scrollWidth: { configurable: true, value: 320 },
+      });
+    }
+
+    function tabStops(root: ParentNode) {
+      return [...root.querySelectorAll<HTMLElement>("*")].filter((element) => {
+        if (element.hasAttribute("disabled")) return false;
+        if (element.getAttribute("tabindex") === "-1") return false;
+        if (element.hasAttribute("tabindex")) return true;
+        const tag = element.tagName;
+        return tag === "BUTTON" || tag === "A" || tag === "TEXTAREA";
+      });
+    }
+
+    beforeEach(() => {
+      observers = [];
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(callback: ResizeObserverCallback) {
+            observers.push(callback);
+          }
+          disconnect() {}
+          observe() {}
+          unobserve() {}
+        },
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("leaves Full text out of the tab order when it does not overflow", async () => {
+      const { container } = render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await userEvent.click(answer);
+      await userEvent.paste("nope");
+      await userEvent.click(
+        screen.getByRole("button", { name: /Check answer/ }),
+      );
+      const offer = await screen.findByRole("button", {
+        name: "Need a refresher?",
+      });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      setBox(fullText, 200, 200);
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      fireResize();
+
+      expect(fullText).not.toHaveAttribute("tabindex");
+      const labels = tabStops(container).map((node) =>
+        node.textContent?.trim(),
+      );
+      expect(labels).toContain("Need a refresher?");
+      expect(labels).toContain("Continue");
+      expect(labels.some((label) => label?.includes("Full text"))).toBe(false);
+      expect(offer.compareDocumentPosition(fullText)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    });
+
+    it("inserts overflowing Full text between the banner link and Continue", async () => {
+      const { container } = render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await userEvent.click(answer);
+      await userEvent.paste("nope");
+      await userEvent.click(
+        screen.getByRole("button", { name: /Check answer/ }),
+      );
+      await screen.findByRole("button", { name: "Need a refresher?" });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      setBox(fullText, 80, 400);
+      fireResize();
+
+      expect(fullText).toHaveAttribute("tabindex", "0");
+      const stops = tabStops(container);
+      const labels = stops.map((node) => node.textContent?.trim());
+      const offerAt = labels.indexOf("Need a refresher?");
+      const fullTextAt = stops.indexOf(fullText);
+      const continueAt = labels.indexOf("Continue");
+      expect(offerAt).toBeGreaterThan(-1);
+      expect(fullTextAt).toBeGreaterThan(offerAt);
+      expect(continueAt).toBeGreaterThan(fullTextAt);
+    });
+
+    it("Shift+Tabs from Continue to Need a refresher when nothing overflows", async () => {
+      const user = userEvent.setup();
+      render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await user.click(answer);
+      await user.paste("nope");
+      await user.click(screen.getByRole("button", { name: /Check answer/ }));
+      const offer = await screen.findByRole("button", {
+        name: "Need a refresher?",
+      });
+      const continueButton = await screen.findByRole("button", {
+        name: /Continue/,
+      });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      setBox(fullText, 200, 200);
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      fireResize();
+
+      continueButton.focus();
+      await user.tab({ shift: true });
+      expect(offer).toHaveFocus();
+    });
+
+    it("Shift+Tabs from Continue onto overflowing Full text", async () => {
+      const user = userEvent.setup();
+      render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[reviewingVerse]}
+            scopeLabel="Memory"
+            onExit={() => {}}
+            remainingDue={0}
+          />
+        </TooltipProvider>,
+      );
+
+      const answer = await screen.findByLabelText("Your recalled verse");
+      await user.click(answer);
+      await user.paste("nope");
+      await user.click(screen.getByRole("button", { name: /Check answer/ }));
+      await screen.findByRole("button", { name: "Need a refresher?" });
+      const continueButton = await screen.findByRole("button", {
+        name: /Continue/,
+      });
+      const fullText = screen
+        .getByText("Full text")
+        .closest("[data-result-scroll='full-text']");
+      if (!(fullText instanceof HTMLElement)) {
+        throw new Error("Expected a Full text scroll region");
+      }
+      const howYouDid = screen
+        .getByText("How you did")
+        .closest("[data-result-scroll='how-you-did']");
+      if (howYouDid instanceof HTMLElement) {
+        setBox(howYouDid, 200, 200);
+      }
+      setBox(fullText, 80, 400);
+      fireResize();
+
+      continueButton.focus();
+      await user.tab({ shift: true });
+      expect(fullText).toHaveFocus();
+    });
+  });
+
+  it("shows Need a refresher after a miss finishes saving", async () => {
+    let resolveRecord!: (value: unknown) => void;
+    const pendingRecord = new Promise((resolve) => {
+      resolveRecord = resolve;
+    });
+    mutationMock("verseMemory.recordAttempt").mockReturnValue(pendingRecord);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText("0% recalled")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+
+    resolveRecord({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+
+    const offer = await screen.findByRole("button", {
+      name: "Need a refresher?",
+    });
+    expect(offer).toBeVisible();
+    expect(offer).toBeEnabled();
+    expect(offer.closest("[data-slot='card-footer']")).toBeNull();
+  });
+
+  it("hides Need a refresher on a 60% or better hold", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("The Lord is my shepherd I");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText(/recalled/)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("runs First letters then From memory after Need a refresher on a miss", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+    expect(screen.getByText("First letters")).toBeInTheDocument();
+
+    const hinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(hinted);
+    await userEvent.paste(PASSAGE_ONE);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Check answer/ }),
+      ).toBeEnabled();
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(
+      await screen.findByText(/Refresh\s*·\s*From memory/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+
+    const fromMemory = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(fromMemory);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
+      schedule: heldSchedule,
+      sessionSpent: true,
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.spendDailyRescue")).toHaveBeenCalledWith(
+        expect.objectContaining({ verseRefId: reviewingVerse.verseRefId }),
+      );
+    });
+  });
+
+  function renderDailyReview() {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[dailyReviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function missCurrentVerse() {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  it("shows the lapsed learning stage on Progress after a daily-review miss, without a today counter", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    renderDailyReview();
+
+    expect(progressPanelStage()).toMatch(/^Progress to mastered: Memorized/);
+    await missCurrentVerse();
+
+    expect(
+      await screen.findAllByText("Back to fill in the blanks."),
+    ).not.toHaveLength(0);
+    await waitFor(() => {
+      expect(progressPanelStage()).toMatch(
+        /^Learning journey: Fill in the blanks/,
+      );
+    });
+    expect(screen.queryByText(/· \d+ of \d+ today/)).not.toBeInTheDocument();
+  });
+
+  it("hides the today counter when a review miss follows Need a refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    renderDailyReview();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    await missCurrentVerse();
+
+    expect(
+      await screen.findAllByText("Back to fill in the blanks."),
+    ).not.toHaveLength(0);
+    expect(screen.queryByText(/· \d+ of \d+ today/)).not.toBeInTheDocument();
+  });
+
+  function renderReviewCard() {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function missAfterNeedARefresher() {
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    await missCurrentVerse();
+  }
+
+  it("offers Try with hints again only after a miss that started from Need a refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    const { container } = renderReviewCard();
+    await missAfterNeedARefresher();
+
+    const footer = container.querySelector('[data-slot="card-footer"]');
+    expect(footer).not.toBeNull();
+    expect(
+      await within(footer as HTMLElement).findByRole("button", {
+        name: "Try with hints again",
+      }),
+    ).toBeVisible();
+    expect(
+      within(footer as HTMLElement).getByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Try with hints again after a miss with no refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderReviewCard();
+    await missCurrentVerse();
+
+    expect(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Try with hints again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Try with hints again on a 60% or better hinted try", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    renderReviewCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("The Lord is my shepherd I");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText(/recalled/)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Try with hints again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reopens First letters empty from Try with hints again", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderReviewCard();
+    await missAfterNeedARefresher();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    expect(screen.getByText(/Refresh\s*·\s*First letters/)).toBeInTheDocument();
+    expect(screen.getByText("First letters · 1 of 2")).toBeInTheDocument();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    expect(answer).toHaveValue("");
+    expect(answer).toHaveFocus();
+  });
+
+  it("continues to From memory after a passed hinted retry", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    renderReviewCard();
+    await missAfterNeedARefresher();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    const letters = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(letters);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(
+      await screen.findByText(/Refresh\s*·\s*From memory/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves hinted retries out of the session average and spends the review once", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+      lapses: 1,
+    });
+    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
+      schedule: heldSchedule,
+      sessionSpent: true,
+    });
+    renderReviewCard();
+    await missAfterNeedARefresher();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Try with hints again" }),
+    );
+
+    const letters = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(letters);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const fromMemory = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(fromMemory);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(await screen.findByText("All caught up!")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("Average accuracy")).toBeInTheDocument();
+    expect(
+      screen.getByText("0%, 100%, then 100% recalled"),
+    ).toBeInTheDocument();
+
+    const records = mutationMock("verseMemory.recordAttempt").mock.calls.map(
+      ([args]) => args as { holdSchedule?: boolean; hint?: string },
+    );
+    expect(records.filter((args) => !args.holdSchedule)).toHaveLength(1);
+    expect(
+      records.filter((args) => args.holdSchedule === true).length,
+    ).toBeGreaterThan(0);
+    expect(mutationMock("verseMemory.spendDailyRescue")).toHaveBeenCalled();
+  });
+
+  it("shows Memorized on Progress when a refresher lands on Back on track", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    mutationMock("verseMemory.spendDailyRescue").mockResolvedValue({
+      schedule: restoredToMemorized,
+      sessionSpent: true,
+    });
+    renderDailyReview();
+    await missCurrentVerse();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+
+    const letters = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(letters);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const fromMemory = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(fromMemory);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByText("Back on track.")).toBeVisible();
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.spendDailyRescue")).toHaveBeenCalled();
+      expect(progressPanelStage()).toMatch(/^Progress to mastered: Memorized/);
+    });
+  });
+
+  it("opens summary Refresh from the live schedule after a daily-review miss", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
+      lapsedToChallenge,
+    );
+    renderDailyReview();
+    await missCurrentVerse();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    expect(await screen.findByText("All caught up!")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(await screen.findByText(/Refresh · First letters/)).toBeVisible();
+    expect(progressPanelStage()).toMatch(
+      /^Learning journey: Fill in the blanks/,
+    );
+    expect(progressPanelStage()).not.toMatch(/Memorized/);
+  });
+
+  async function completeRefreshStep() {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+  }
+
+  it("holds the schedule through a Refresh sitting and applies the rung at the end", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    mutationMock("verseMemory.finishRefresh").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByText(/Refresh · First letters/),
+    ).toBeInTheDocument();
+    await completeRefreshStep();
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
+        expect.objectContaining({ holdSchedule: true }),
+      );
+    });
+  });
+
+  it("ends a Refresh sitting after From memory and leaves the session", async () => {
+    const onExit = vi.fn();
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    mutationMock("verseMemory.finishRefresh").mockResolvedValue({
+      ...heldSchedule,
+      intervalDays: 2,
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={onExit}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    await completeRefreshStep();
+    expect(
+      await screen.findByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+    await completeRefreshStep();
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a weak early Refresh step and hides Need a refresher", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      screen.queryByRole("button", { name: "Need a refresher?" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    expect(mutationMock("verseMemory.finishRefresh")).not.toHaveBeenCalled();
+  });
+
+  it("finishes a weak From memory Refresh on Continue", async () => {
+    const onExit = vi.fn();
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    mutationMock("verseMemory.finishRefresh").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={onExit}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("First letters")).toBeInTheDocument();
+    await completeRefreshStep();
+    expect(
+      await screen.findByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByRole("button", { name: /Try again/ }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.finishRefresh")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers an immediate unhinted From memory retry after a hinted learning pass", async () => {
+    const fromMemoryVerse: PracticeVerse = {
+      ...learningVerse,
+      learnStage: 3,
+      stageReps: 0,
+    };
+    const stillOpen = {
+      status: "learning" as const,
+      learnStage: 3,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() - 1000,
+      consecutiveCorrect: 2,
+      lapses: 0,
+      earlyReviewApplied: false,
+    };
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(stillOpen)
+      .mockResolvedValueOnce({ ...stillOpen, stageReps: 1 });
+    queryResults.set("verseMemory.reviewFreshness", {
+      stale: true,
+      lastReviews: [],
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[fromMemoryVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    expect(screen.getByText("First letters")).toBeInTheDocument();
+
+    const hinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(hinted);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hint: "first-letters",
+          mode: "learn",
+        }),
+      );
+    });
+    const [hintedArgs] = mutationMock("verseMemory.recordAttempt").mock
+      .calls[0] as [{ holdSchedule?: boolean }];
+    expect(hintedArgs.holdSchedule).toBeFalsy();
+    expect(screen.getByText(FROM_MEMORY_HINT_PASS_MESSAGE)).toBeVisible();
+    expect(
+      screen.queryByText(FROM_MEMORY_CLOSE_MESSAGE),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: FROM_MEMORY_HINT_PASS_ACTION,
+      }),
+    );
+
+    expect(
+      await screen.findByText("Recall the verse from memory"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("First letters")).not.toBeInTheDocument();
+
+    const unhinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(unhinted);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+    const [unhintedArgs] = mutationMock("verseMemory.recordAttempt").mock
+      .calls[1] as [{ hint?: string; holdSchedule?: boolean }];
+    expect(unhintedArgs.hint).toBeUndefined();
+    expect(unhintedArgs.holdSchedule).toBeFalsy();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(screen.getByText(FROM_MEMORY_SECOND_ROUND_PROMPT)).toBeVisible();
+    expect(screen.queryByText("Done for today")).not.toBeInTheDocument();
+  });
+
+  it("shows only the hinted-pass line on a graduating From memory close", async () => {
+    const fromMemoryVerse: PracticeVerse = {
+      ...learningVerse,
+      learnStage: 3,
+      stageReps: 1,
+    };
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: 3,
+      stageReps: 1,
+      ease: 2.3,
+      intervalDays: 0,
+      dueAt: getSessionNow() - 1000,
+      consecutiveCorrect: 2,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+    queryResults.set("verseMemory.reviewFreshness", {
+      stale: true,
+      lastReviews: [],
+    });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[fromMemoryVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Need a refresher?" }),
+    );
+    const hinted = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(hinted);
+    await userEvent.paste("The Lord is my shepherd I shall not eat");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(
+      await screen.findByText(FROM_MEMORY_HINT_PASS_MESSAGE),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(FROM_MEMORY_CLOSE_MESSAGE),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText(FROM_MEMORY_HINT_PASS_MESSAGE)).toHaveLength(1);
+  });
+
+  it("names Practice again on a single-verse practice card", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByRole("button", { name: /Practice again/ }),
+    ).toBeInTheDocument();
   });
 });
 

@@ -165,6 +165,12 @@ export interface ReviewInput {
   accuracy: number;
   mode: "learn" | "review" | "deck" | "practice";
   now: number; // pass `now` IN (Convex forbids Date.now() in queries)
+  /** First-letters support used on this recall. */
+  hint?: "first-letters";
+  /** True when the last review was a ≥85% hinted check-in. */
+  priorHintedCheckIn?: boolean;
+  /** Log the try without moving the schedule (refresh sitting, after-miss). */
+  holdSchedule?: boolean;
   /** Word count of the verse text; drives the length-based rep curve. */
   wordCount?: number;
   /**
@@ -664,7 +670,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
  * Anything longer (including leftover SM-2 growth from before this ladder)
  * multiplies by ease on each exact.
  */
-function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
+export function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
   const rounded = Math.max(1, Math.round(intervalDays));
   if (rounded <= 1) return 1;
   if (rounded === 2) return 2;
@@ -895,9 +901,61 @@ function lapseReviewingOneStep(
   };
 }
 
+function hintedCheckIn(s: MemorySchedule, r: ReviewInput): MemorySchedule {
+  return {
+    ...s,
+    dueAt: dueAtInCalendarDays(r.now, 1, r.tzOffsetMinutes, r.timeZone),
+    earlyReviewApplied: false,
+  };
+}
+
+function restoreKeptInterval(
+  s: MemorySchedule,
+  r: ReviewInput,
+): MemorySchedule {
+  return {
+    ...s,
+    dueAt: computeDueAt(
+      r,
+      Math.max(REVIEW_DAILY_INTERVAL_DAYS, s.intervalDays),
+    ),
+    earlyReviewApplied: r.now < s.dueAt,
+  };
+}
+
+function applyHintedReview(
+  s: MemorySchedule,
+  r: ReviewInput,
+): MemorySchedule | null {
+  if (r.hint !== "first-letters") return null;
+  if (r.accuracy >= LEARN_PROGRESS_ACCURACY) {
+    return hintedCheckIn(s, r);
+  }
+  return null;
+}
+
+export function isLearnFromMemoryHintedPass(input: {
+  learnStage: number;
+  hint?: ReviewInput["hint"];
+  accuracy: number;
+}): boolean {
+  return (
+    input.learnStage >= MAX_LEARN_STAGE &&
+    input.hint === "first-letters" &&
+    input.accuracy >= LEARN_PROGRESS_ACCURACY
+  );
+}
+
 function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
+  const hinted = applyHintedReview(s, r);
+  if (hinted) return hinted;
+
   const isEarly = r.now < s.dueAt;
   const outcome = reviewGradeOutcome(r.quality, r.accuracy);
+
+  if (r.priorHintedCheckIn && outcome === "exact") {
+    return restoreKeptInterval(s, r);
+  }
 
   if (outcome === "lapse") {
     // Always applies even when early — a hard miss should not be ignored.
@@ -974,10 +1032,54 @@ export function scheduleNext(
   s: MemorySchedule,
   r: ReviewInput,
 ): MemorySchedule {
+  if (r.holdSchedule) return s;
+  if (r.mode === "practice" && r.hint) return s;
   if (isLearningPhase(s.status)) {
+    if (
+      isLearnFromMemoryHintedPass({
+        learnStage: s.learnStage,
+        hint: r.hint,
+        accuracy: r.accuracy,
+      })
+    ) {
+      return s;
+    }
+    const hinted = applyHintedReview(s, r);
+    if (hinted) return hinted;
     return scheduleLearning(s, r);
   }
   return scheduleReviewing(s, r);
+}
+
+/** Start over: back to new / Read, due now. History stays with the caller. */
+export function startOverSchedule(now: number): MemorySchedule {
+  return initialSchedule(now);
+}
+
+export function nextStartOverUndo<T>(
+  existing: T | undefined,
+  snapshot: T,
+  replaceUndo = true,
+): T {
+  if (!replaceUndo && existing !== undefined) return existing;
+  return snapshot;
+}
+
+/** Undo Start over by putting the captured schedule back. */
+export function restoreStartOverUndo(
+  snapshot: MemorySchedule & { lastReviewedAt?: number },
+): MemorySchedule {
+  return {
+    status: snapshot.status,
+    learnStage: snapshot.learnStage,
+    stageReps: snapshot.stageReps,
+    ease: snapshot.ease,
+    intervalDays: snapshot.intervalDays,
+    dueAt: snapshot.dueAt,
+    consecutiveCorrect: snapshot.consecutiveCorrect,
+    lapses: snapshot.lapses,
+    earlyReviewApplied: snapshot.earlyReviewApplied,
+  };
 }
 
 /**

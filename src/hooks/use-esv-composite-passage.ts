@@ -24,6 +24,11 @@ export interface CompositePassageState {
    * composite card is one recitation, not a numbered list.
    */
   text: string;
+  /**
+   * Same verses as {@link text}, but one verse per line so a first-letters or
+   * cloze hint wraps at verse boundaries instead of mid-line.
+   */
+  hintText: string;
   /** Per-span text, so a reveal panel can show where each unit starts. */
   segments: CompositePassageSegment[];
   loading: boolean;
@@ -99,7 +104,7 @@ function chaptersByBook(
   return byBook;
 }
 
-function spanText(data: EsvChapterData, reference: CardReference): string {
+function spanVerses(data: EsvChapterData, reference: CardReference): string[] {
   return data.verses
     .filter(
       (verse) =>
@@ -107,8 +112,16 @@ function spanText(data: EsvChapterData, reference: CardReference): string {
         verse.number <= reference.endVerse,
     )
     .map((verse) => verse.text.trim())
-    .filter((text) => text.length > 0)
-    .join(" ");
+    .filter((text) => text.length > 0);
+}
+
+function emptyCompose(missing: boolean) {
+  return {
+    text: "",
+    hintText: "",
+    segments: [] as CompositePassageSegment[],
+    missing,
+  };
 }
 
 /**
@@ -200,46 +213,40 @@ export function useEsvCompositePassage(
   const settled = loaded.key === chaptersKey;
   const composed = (() => {
     if (!active || !settled || loaded.error !== null) {
-      return {
-        text: "",
-        segments: [] as CompositePassageSegment[],
-        missing: false,
-      };
+      return emptyCompose(false);
     }
 
     const segments: CompositePassageSegment[] = [];
     let text = "";
+    let hintText = "";
     let previousChapter: string | null = null;
 
     for (const reference of spans) {
       const key = chapterKey(reference.book, reference.chapter);
       const data = loaded.byChapter.get(key);
       if (!data) {
-        return {
-          text: "",
-          segments: [] as CompositePassageSegment[],
-          missing: true,
-        };
+        return emptyCompose(true);
       }
-      const segment = spanText(data, reference);
+      const verses = spanVerses(data, reference);
+      const segment = verses.join(" ");
       if (segment.length === 0) {
-        return {
-          text: "",
-          segments: [] as CompositePassageSegment[],
-          missing: true,
-        };
+        return emptyCompose(true);
       }
 
       if (text.length > 0) {
         text +=
           previousChapter !== null && previousChapter !== key ? "\n" : " ";
       }
+      if (hintText.length > 0) {
+        hintText += "\n";
+      }
       text += segment;
+      hintText += verses.join("\n");
       previousChapter = key;
       segments.push({ reference, text: segment });
     }
 
-    return { text, segments, missing: false };
+    return { text, hintText, segments, missing: false };
   })();
 
   const composeError = composed.missing
@@ -250,6 +257,7 @@ export function useEsvCompositePassage(
 
   return {
     text: composed.text,
+    hintText: composed.hintText,
     segments: composed.segments,
     loading,
     error,

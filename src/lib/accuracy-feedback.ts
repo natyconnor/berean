@@ -54,10 +54,14 @@ export function accuracyBand(accuracy: number, exact: boolean): AccuracyBand {
 /** The headline a result view leads with; the percentage sits under it. */
 export function accuracyFeedback(
   accuracy: number,
-  { exact }: { exact: boolean },
+  { exact, scheduleHeld = false }: { exact: boolean; scheduleHeld?: boolean },
 ): AccuracyFeedback {
   const band = accuracyBand(accuracy, exact);
-  const { lead, rest, emoji } = COPY[band];
+  const { lead, emoji } = COPY[band];
+  const rest =
+    band === "again" && scheduleHeld
+      ? "Another look will help it stick."
+      : COPY[band].rest;
   return {
     band,
     lead,

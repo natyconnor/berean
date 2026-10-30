@@ -1,4 +1,8 @@
 import type { CardReference } from "@/components/study/study-card-model";
+import {
+  REVIEW_LAPSE_ACCURACY,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export interface ReviewSessionAttempt {
@@ -8,16 +12,24 @@ export interface ReviewSessionAttempt {
   label?: string;
   /** Whether to offer the per-verse Practice shortcut. Defaults to true. */
   offerPractice?: boolean;
+  status?: MemoryStatus;
+  /** Pack recited as one passage: Refresh/Practice target this pack. */
+  packId?: string;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
 }
 
-/** Mean accuracy across every recitation, including retries. */
 export function averageReviewAccuracy(
   attempts: readonly ReviewSessionAttempt[],
 ): number | null {
-  if (attempts.length === 0) return null;
+  const counted = attempts.filter(
+    (attempt) =>
+      !(attempt.hint === "first-letters" && attempt.holdSchedule === true),
+  );
+  if (counted.length === 0) return null;
   return Math.round(
-    attempts.reduce((sum, attempt) => sum + attempt.accuracy, 0) /
-      attempts.length,
+    counted.reduce((sum, attempt) => sum + attempt.accuracy, 0) /
+      counted.length,
   );
 }
 
@@ -52,5 +64,11 @@ export function recalledCopy(accuracies: readonly number[]): string {
   if (accuracies.length <= 1) {
     return `${accuracies[0] ?? 0}% recalled`;
   }
-  return `${accuracies.join("%, then ")}% recalled`;
+  const last = accuracies[accuracies.length - 1] ?? 0;
+  return `${accuracies.slice(0, -1).join("%, ")}%, then ${last}% recalled`;
+}
+
+export function lastTryNeedsRefresh(accuracies: readonly number[]): boolean {
+  const last = accuracies[accuracies.length - 1];
+  return last !== undefined && last < REVIEW_LAPSE_ACCURACY;
 }

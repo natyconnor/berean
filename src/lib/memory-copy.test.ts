@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ENTER_TO_CHECK_HINT,
+  backOnTrackCopy,
+  backOnTrackHint,
+  formatShakyVerseList,
+  fromMemoryHintCopy,
+  nowTryWithoutHintsCopy,
+  refresherPhaseLabel,
+  hasLearningProgress,
+  learnActionLabel,
   memorizeTitleLabel,
   passageStepLine,
+  refresherGoalLabel,
+  shakyVersesOption,
+  startOverTitle,
   statusLabel,
   stepAction,
   stepActionLine,
@@ -92,6 +104,22 @@ describe("todayStepParts", () => {
   });
 });
 
+describe("hasLearningProgress", () => {
+  it("is false for a never-started Read verse", () => {
+    expect(hasLearningProgress({ learnStage: 0 })).toBe(false);
+    expect(learnActionLabel({ learnStage: 0 })).toBe("Learn");
+  });
+
+  it("stays true when lastReviewedAt is the only leftover", () => {
+    expect(
+      hasLearningProgress({ learnStage: 0, lastReviewedAt: 1_700_000_000_000 }),
+    ).toBe(true);
+    expect(
+      learnActionLabel({ learnStage: 0, lastReviewedAt: 1_700_000_000_000 }),
+    ).toBe("Continue learning");
+  });
+});
+
 describe("statusLabel", () => {
   it("reads reviewing as Memorized", () => {
     expect(statusLabel("new")).toBe("New");
@@ -104,5 +132,47 @@ describe("statusLabel", () => {
 describe("memorizeTitleLabel", () => {
   it("names the target", () => {
     expect(memorizeTitleLabel("Psalm 1")).toBe("Memorize Psalm 1");
+  });
+});
+
+describe("refresher copy", () => {
+  it("keeps the check-answer hint plain", () => {
+    expect(ENTER_TO_CHECK_HINT).toBe(
+      "Enter to check · Shift+Enter for a new line",
+    );
+  });
+
+  it("names the empty hint box and the two sitting steps", () => {
+    expect(fromMemoryHintCopy(false)).toBe("Type it as you remember it.");
+    expect(fromMemoryHintCopy(true)).toBe(
+      "Type it as you remember it. Verse numbers aren't needed.",
+    );
+    expect(refresherGoalLabel(1)).toBe("First letters · 1 of 2");
+    expect(refresherGoalLabel(2)).toBe("From memory · 2 of 2");
+    expect(refresherPhaseLabel(1)).toBe("Refresh · First letters");
+    expect(refresherPhaseLabel(2)).toBe("Refresh · From memory");
+    expect(nowTryWithoutHintsCopy(false)).toBe("Now try it without the hints.");
+    expect(nowTryWithoutHintsCopy(true)).toBe(
+      "Now try it without the hints. Verse numbers aren't needed.",
+    );
+  });
+
+  it("keeps Back on track to one sentence", () => {
+    expect(backOnTrackCopy("today")).toBe("Back on track.");
+    expect(backOnTrackCopy("tomorrow")).toBe("Back on track.");
+    expect(backOnTrackHint("John 3:16")).toBe("✓ John 3:16 is back on track");
+  });
+});
+
+describe("start over copy", () => {
+  it("names the verse in the confirm title", () => {
+    expect(startOverTitle("Romans 8:28")).toBe("Start Romans 8:28 over?");
+  });
+
+  it("lists shaky verses and caps the list", () => {
+    expect(shakyVersesOption("3, 5")).toBe("Just the shaky verses · 3, 5");
+    expect(formatShakyVerseList(["3", "5", "7", "9", "11"])).toBe(
+      "3, 5, 7, 9 +1 more",
+    );
   });
 });

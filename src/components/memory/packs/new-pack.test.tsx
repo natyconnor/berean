@@ -239,36 +239,25 @@ describe("NewPack", () => {
     });
   });
 
-  it("reorders with Move up / Move down and removes from the row menu", async () => {
+  it("reorders from the Reorder button and removes with the trash", async () => {
     renderNewPack();
     await addByReference("John 14:27");
     await addByReference("Romans 8:28");
     await addByReference("Psalm 23:1");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Options for Psalm 23:1" }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Move up" }),
-    );
+    screen.getByRole("button", { name: "Reorder Psalm 23:1" }).focus();
+    await userEvent.keyboard(" {ArrowUp} ");
     expect(pickedNames()).toEqual(["John 14:27", "Psalm 23:1", "Romans 8:28"]);
     expect(screen.getByRole("status")).toHaveTextContent(
       "Moved Psalm 23:1 to 2 of 3.",
     );
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Options for John 14:27" }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Move down" }),
-    );
+    screen.getByRole("button", { name: "Reorder John 14:27" }).focus();
+    await userEvent.keyboard(" {ArrowDown} ");
     expect(pickedNames()).toEqual(["Psalm 23:1", "John 14:27", "Romans 8:28"]);
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Options for Romans 8:28" }),
-    );
-    await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Remove" }),
+      screen.getByRole("button", { name: "Remove Romans 8:28" }),
     );
     expect(pickedNames()).toEqual(["Psalm 23:1", "John 14:27"]);
   });

@@ -30,6 +30,7 @@ function mutation(name: string) {
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
   useCanGoBack: () => mocks.canGoBack,
+  useSearch: () => ({}),
   Link: ({
     to,
     children,
@@ -72,6 +73,10 @@ vi.mock("../../../../convex/_generated/api", () => ({
       listLibrary: "verseMemory.listLibrary",
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
+      startOver: "verseMemory.startOver",
+      undoStartOver: "verseMemory.undoStartOver",
+      finishRefresh: "verseMemory.finishRefresh",
+      reviewFreshness: "verseMemory.reviewFreshness",
       memoryStatus: "verseMemory.memoryStatus",
       memoryStats: "verseMemory.memoryStats",
       reviewActivity: "verseMemory.reviewActivity",

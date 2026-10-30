@@ -401,6 +401,7 @@ export function passageGoal<P extends string>(
     building && hasWorkToday
       ? passageTodayPieceIndex(passage, pieces, now, tzOffsetMinutes)
       : null;
+  const started = passage.lastSessionAt != null || learnedVerses > 0;
 
   return {
     kind: "passage",
@@ -411,7 +412,7 @@ export function passageGoal<P extends string>(
     pieceStates: pieces.map((piece, index) => ({
       verses: piece.endVerse - piece.startVerse + 1,
       state: PIECE_STATE[piece.attachment],
-      today: index === todayIndex,
+      today: started && index === todayIndex,
     })),
     status: passage.status,
     hasWorkToday,

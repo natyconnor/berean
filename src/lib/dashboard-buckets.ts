@@ -166,6 +166,7 @@ export function bucketAccuracyAverages(
     accuracy: number;
     mode?: string;
     stage?: number;
+    holdSchedule?: boolean;
   }[],
   now: number,
   days: number,
@@ -176,7 +177,7 @@ export function bucketAccuracyAverages(
   const sums = Array.from({ length: days }, () => 0);
   const counts = Array.from({ length: days }, () => 0);
   for (const review of reviews) {
-    if (isReadPrimeAttempt(review)) continue;
+    if (!countsTowardAccuracy(review)) continue;
     const index = indexByKey.get(zonedDateKey(review.createdAt, timeZone));
     if (index !== undefined) {
       sums[index] += review.accuracy;
@@ -194,6 +195,7 @@ export type ReviewLogRow = {
   accuracy: number;
   mode?: string;
   stage?: number;
+  holdSchedule?: boolean;
 };
 
 export type ReviewDayAggregate = {
@@ -203,11 +205,6 @@ export type ReviewDayAggregate = {
   accuracyCount: number;
 };
 
-/**
- * Per-local-day heatmap counts (all logs) and accuracy sums (excluding Read
- * primes). Only days with at least one log are returned so callers can persist
- * a sparse ~365-row table.
- */
 export function aggregateReviewDays(
   reviews: readonly ReviewLogRow[],
   now: number,
@@ -223,7 +220,7 @@ export function aggregateReviewDays(
     const index = indexByKey.get(zonedDateKey(review.createdAt, timeZone));
     if (index === undefined) continue;
     counts[index] += 1;
-    if (isReadPrimeAttempt(review)) continue;
+    if (!countsTowardAccuracy(review)) continue;
     accuracySums[index] += review.accuracy;
     accuracyCounts[index] += 1;
   }
@@ -320,6 +317,14 @@ export function isReadPrimeAttempt(row: {
   stage?: number;
 }): boolean {
   return row.mode === "learn" && row.stage === 0;
+}
+
+export function countsTowardAccuracy(row: {
+  mode?: string;
+  stage?: number;
+  holdSchedule?: boolean;
+}): boolean {
+  return !isReadPrimeAttempt(row) && !row.holdSchedule;
 }
 
 /**
