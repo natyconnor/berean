@@ -10,11 +10,6 @@ import {
 import { useIsMobile } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
-/**
- * On phones, pins Check answer / Continue just above the Notes/Memory bar
- * when the in-flow button would sit off screen. Larger widths keep the
- * in-flow button. Short cards keep it in flow on every width.
- */
 export function PinnedSessionAction({
   children,
 }: {
