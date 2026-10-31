@@ -103,8 +103,8 @@ describe("VerseMemoryFeedback", () => {
       />,
     );
     const banner = screen.getByRole("status");
-    expect(banner).toHaveAttribute("data-tone", "nearly");
-    expect(banner).toHaveTextContent("Nearly there.");
+    expect(banner).toHaveAttribute("data-tone", "pass");
+    expect(banner).toHaveTextContent("Well remembered.");
     expect(banner).toHaveTextContent("Oh so close! Just one word off.");
     expect(banner).toHaveTextContent("91% recalled");
     expect(screen.getByTestId("result-emoji")).toHaveTextContent("🙌");
@@ -116,7 +116,7 @@ describe("VerseMemoryFeedback", () => {
       <VerseMemoryFeedback quality="close" accuracy={70} attemptKey="mid" />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Good progress. The highlighted words are worth another look.",
+      "So close. A few words slipped. The highlighted ones are worth another look.",
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       "Mostly there, but it needs some work.",
@@ -128,7 +128,7 @@ describe("VerseMemoryFeedback", () => {
       <VerseMemoryFeedback quality="off" accuracy={40} attemptKey="low" />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "This one needs another pass.",
+      "This one needs more time.",
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       "A handful of words came back.",
@@ -161,22 +161,27 @@ describe("VerseMemoryFeedback", () => {
     );
   });
 
-  it("tells Review to retry at 80%+ so the interval can still stretch", () => {
+  it("shows a spent 85–99% Review pass with the next-review line", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
-        accuracy={82}
-        attemptKey="review-retry"
+        accuracy={90}
+        attemptKey="review-pass"
         showScheduleOutcome
+        nextSchedule={{
+          ...reviewingSchedule,
+          intervalDays: 1,
+          dueAt: NOW + 24 * 60 * 60 * 1000,
+        }}
+        now={NOW}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Almost there.");
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Try again to extend your review interval.",
-    );
+    expect(screen.getByRole("status")).toHaveAttribute("data-tone", "pass");
+    expect(screen.getByRole("status")).toHaveTextContent("Well remembered.");
+    expect(screen.getByRole("status")).toHaveTextContent(/Next review/);
   });
 
-  it("calls out a single wrong word on Review retry", () => {
+  it("calls out a single wrong word on an 85–99% Review pass", () => {
     render(
       <VerseMemoryFeedback
         quality="close"
@@ -193,20 +198,19 @@ describe("VerseMemoryFeedback", () => {
         nextSchedule={{
           ...reviewingSchedule,
           intervalDays: 1,
-          dueAt: NOW,
+          dueAt: NOW + 24 * 60 * 60 * 1000,
           consecutiveCorrect: 3,
         }}
+        now={NOW}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       "Oh so close! Just one word off.",
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Try again to extend your review interval from 1 day to 2 days.",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent(/Next review/);
   });
 
-  it("keeps the current gap on a 60–79% Review recall", () => {
+  it("steps a 60–84% Review recall back with a next-review line", () => {
     render(
       <VerseMemoryFeedback
         quality="close"

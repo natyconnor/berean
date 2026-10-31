@@ -2,14 +2,9 @@ import {
   wordErrorCount,
   type AttemptErrorCounts,
 } from "@/components/study/study-attempt-quality";
-import {
-  formatNextReviewPhrase,
-  formatReviewIntervalPhrase,
-} from "@/lib/memory-due-label";
+import { formatNextReviewPhrase } from "@/lib/memory-due-label";
 import { stepShortLabel } from "@/lib/memory-copy";
 import {
-  isReviewPhase,
-  nextExactReviewIntervalDays,
   REVIEW_LAPSE_LEARN_STAGE,
   type MemorySchedule,
   type ReviewGradeOutcome,
@@ -31,27 +26,28 @@ type AccuracyLead = {
 };
 
 /**
- * Fine-grained retry copy (80–99, not exact). First matching `min` wins.
+ * Fine-grained 85–99 pass copy. First matching `min` wins.
  * Specials (one word off, typos-only) take priority over these.
  */
-export const RETRY_ACCURACY_LEADS: readonly AccuracyLead[] = [
+export const PASS_ACCURACY_LEADS: readonly AccuracyLead[] = [
   { min: 98, lead: "One breath away from perfect" },
   { min: 96, lead: "So close to perfect" },
   { min: 93, lead: "You've pretty much got this" },
   { min: 90, lead: "Tiny slip — the verse is in there" },
   { min: 87, lead: "That was pretty good" },
-  { min: 84, lead: "You're getting there" },
-  { min: 80, lead: "Almost there" },
+  { min: 85, lead: "A good, steady recall" },
 ];
 
-/** Fine-grained hold copy (60–79). Specials still win when they apply. */
-export const HOLD_ACCURACY_LEADS: readonly AccuracyLead[] = [
+/** Fine-grained 60–84 close-miss copy. Specials still win when they apply. */
+export const CLOSE_ACCURACY_LEADS: readonly AccuracyLead[] = [
+  { min: 84, lead: "You're getting there" },
+  { min: 80, lead: "Almost there" },
   { min: 77, lead: "Solid recall, with a few holes" },
   { min: 73, lead: "The shape of the verse is there" },
   { min: 70, lead: "Mostly there, but it needs some work" },
   { min: 66, lead: "More right than wrong" },
   { min: 63, lead: "You remembered a good bit" },
-  { min: 60, lead: "Enough to keep the same review interval" },
+  { min: 60, lead: "More than half is there" },
 ];
 
 /** Fine-grained lapse copy (below 60). */
@@ -119,16 +115,16 @@ export function attemptFeedbackLead(input: AttemptFeedbackInput): string {
     return exactLead(input.errors);
   }
 
-  if (input.errors && (input.outcome === "retry" || input.outcome === "hold")) {
+  if (input.errors && (input.outcome === "pass" || input.outcome === "close")) {
     const special = specialMissLead(input.errors);
     if (special) return special;
   }
 
-  if (input.outcome === "retry") {
-    return leadForAccuracy(RETRY_ACCURACY_LEADS, input.accuracy);
+  if (input.outcome === "pass") {
+    return leadForAccuracy(PASS_ACCURACY_LEADS, input.accuracy);
   }
-  if (input.outcome === "hold") {
-    return leadForAccuracy(HOLD_ACCURACY_LEADS, input.accuracy);
+  if (input.outcome === "close") {
+    return leadForAccuracy(CLOSE_ACCURACY_LEADS, input.accuracy);
   }
   return leadForAccuracy(LAPSE_ACCURACY_LEADS, input.accuracy);
 }
@@ -139,9 +135,6 @@ export function attemptPraiseLine(input: AttemptFeedbackInput): string {
   return `${lead}${input.outcome === "exact" ? "!" : "."}`;
 }
 
-/** Decline the extra retry and move on at the current interval. */
-export const REVIEW_RETRY_KEEP_GOING_LABEL = "It's okay — keep going";
-
 interface ReviewOutcomeInput {
   outcome: ReviewGradeOutcome;
   nextSchedule?: MemorySchedule | null;
@@ -149,29 +142,11 @@ interface ReviewOutcomeInput {
   lapsedToLearning: boolean;
 }
 
-function reviewRetryScheduleCopy(
-  schedule: MemorySchedule | null | undefined,
-): string {
-  const from = formatReviewIntervalPhrase(schedule?.intervalDays);
-  if (!schedule || !from || !isReviewPhase(schedule.status)) {
-    return "try again to extend your review interval";
-  }
-  const to = formatReviewIntervalPhrase(nextExactReviewIntervalDays(schedule));
-  if (!to || to === from) {
-    return `try again to keep your review interval at ${from}`;
-  }
-  return `try again to extend your review interval from ${from} to ${to}`;
-}
-
 /**
  * What the grade does to the schedule, lowercase, or null when the next
- * review isn't known yet. Retry stays due, so it invites another attempt and
- * names the current gap plus the interval a perfect recall would land.
+ * review isn't known yet.
  */
 function reviewOutcomeClause(input: ReviewOutcomeInput): string | null {
-  if (input.outcome === "retry") {
-    return reviewRetryScheduleCopy(input.nextSchedule);
-  }
   if (input.outcome === "lapse" && input.lapsedToLearning) {
     return `back to ${stepShortLabel(REVIEW_LAPSE_LEARN_STAGE).toLowerCase()}`;
   }

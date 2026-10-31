@@ -57,7 +57,6 @@ import {
   isDueForReview,
   isLearningLocked,
   isReviewPhase,
-  holdReviewingInterval,
   scheduleNext,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
@@ -621,74 +620,6 @@ export const recordAttempt = mutation({
         next.status,
       );
     }
-
-    await ctx.db.patch(memory._id, {
-      status: next.status,
-      learnStage: next.learnStage,
-      stageReps: next.stageReps,
-      ease: next.ease,
-      intervalDays: next.intervalDays,
-      dueAt: next.dueAt,
-      consecutiveCorrect: next.consecutiveCorrect,
-      lapses: next.lapses,
-      earlyReviewApplied: next.earlyReviewApplied,
-      lastReviewedAt: args.now,
-    });
-
-    return next;
-  },
-});
-
-/**
- * Spend a review-phase verse after the learner declines an 80%+ retry.
- * Holds the current interval without logging another recitation — the close
- * attempt was already recorded.
- */
-export const acceptRetryHold = mutation({
-  args: {
-    verseRefId: v.id("verseRefs"),
-    now: v.number(),
-    tzOffsetMinutes: v.optional(v.number()),
-    timeZone: v.optional(v.string()),
-  },
-  returns: memoryScheduleValidator,
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-
-    const ref = await ctx.db.get(args.verseRefId);
-    if (!ref || ref.userId !== userId) {
-      throw new Error("Verse reference not found");
-    }
-
-    const memory = await requireInMemory(ctx, userId, args.verseRefId);
-
-    const current: MemorySchedule = {
-      status: memory.status,
-      learnStage: memory.learnStage,
-      stageReps: memory.stageReps ?? 0,
-      ease: memory.ease,
-      intervalDays: memory.intervalDays,
-      dueAt: memory.dueAt,
-      consecutiveCorrect: memory.consecutiveCorrect,
-      lapses: memory.lapses,
-      earlyReviewApplied: memory.earlyReviewApplied ?? false,
-    };
-
-    if (!isReviewPhase(current.status)) return current;
-
-    const unifiedVerseRefIds = await loadUnifiedReviewVerseRefIds(ctx, userId);
-    if (unifiedVerseRefIds.has(args.verseRefId)) {
-      throw new Error(
-        "This verse is part of a pack recited as one passage. Review it from the pack.",
-      );
-    }
-
-    const next = holdReviewingInterval(
-      current,
-      args.now,
-      args.tzOffsetMinutes,
-      args.timeZone,
-    );
 
     await ctx.db.patch(memory._id, {
       status: next.status,

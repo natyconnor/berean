@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { REVIEW_RETRY_KEEP_GOING_LABEL } from "@/components/study/verse-attempt-feedback";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -67,11 +66,9 @@ vi.mock("../../../../convex/_generated/api", () => ({
     },
     packs: {
       recordUnifiedReview: "packs.recordUnifiedReview",
-      acceptRetryHold: "packs.acceptRetryHold",
     },
     passageMemory: {
       recordAttempt: "passageMemory.recordAttempt",
-      acceptRetryHold: "passageMemory.acceptRetryHold",
     },
     savedVerses: {
       listAll: "savedVerses.listAll",
@@ -79,7 +76,6 @@ vi.mock("../../../../convex/_generated/api", () => ({
     },
     verseMemory: {
       recordAttempt: "verseMemory.recordAttempt",
-      acceptRetryHold: "verseMemory.acceptRetryHold",
     },
   },
 }));
@@ -1061,109 +1057,6 @@ const heldSchedule = {
   dueAt: getSessionNow() + 5 * 24 * 60 * 60 * 1000,
 };
 
-describe("PracticeBoard review retry", () => {
-  beforeEach(() => {
-    queryResults.clear();
-    queryCalls.length = 0;
-    mutationMocks.clear();
-    navigateMock.mockReset();
-    sessionStorage.clear();
-    queryResults.set("savedVerses.listRecordingIds", []);
-    fetchChaptersBatchMock.mockReset();
-    getPassageMock.mockReset();
-    getPassageMock.mockResolvedValue(psalm23);
-    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
-      stillDueSchedule,
-    );
-    mutationMock("verseMemory.acceptRetryHold").mockResolvedValue(heldSchedule);
-  });
-
-  it("offers keep going after an 80%+ review and spends the verse without another grade", async () => {
-    render(
-      <TooltipProvider delayDuration={0}>
-        <PracticeBoard
-          kind="review"
-          verses={[reviewingVerse]}
-          scopeLabel="Memory"
-          onExit={() => {}}
-          remainingDue={0}
-        />
-      </TooltipProvider>,
-    );
-
-    const answer = await screen.findByLabelText("Your recalled verse");
-    await userEvent.click(answer);
-    await userEvent.paste("The Lord is my shepherd I shall not eat");
-    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-
-    expect(
-      await screen.findByRole("button", { name: /Try again/ }),
-    ).toBeVisible();
-    const keepGoing = screen.getByRole("button", {
-      name: REVIEW_RETRY_KEEP_GOING_LABEL,
-    });
-    expect(keepGoing).toBeVisible();
-
-    await userEvent.click(keepGoing);
-
-    await waitFor(() => {
-      expect(mutationMock("verseMemory.acceptRetryHold")).toHaveBeenCalledTimes(
-        1,
-      );
-    });
-    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText("Average accuracy")).toBeVisible();
-    expect(screen.getByText(/recalled/)).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: REVIEW_RETRY_KEEP_GOING_LABEL }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("averages the first recitation with a successful retry", async () => {
-    mutationMock("verseMemory.recordAttempt")
-      .mockResolvedValueOnce(stillDueSchedule)
-      .mockResolvedValueOnce(heldSchedule);
-
-    render(
-      <TooltipProvider delayDuration={0}>
-        <PracticeBoard
-          kind="review"
-          verses={[reviewingVerse]}
-          scopeLabel="Memory"
-          onExit={() => {}}
-          remainingDue={0}
-        />
-      </TooltipProvider>,
-    );
-
-    const firstAnswer = await screen.findByLabelText("Your recalled verse");
-    await userEvent.click(firstAnswer);
-    await userEvent.paste("The Lord is my shepherd I shall not eat");
-    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Try again/ }),
-    );
-
-    const secondAnswer = await screen.findByLabelText("Your recalled verse");
-    await userEvent.click(secondAnswer);
-    await userEvent.paste(PASSAGE_ONE);
-    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Continue/ }),
-    );
-
-    expect(await screen.findByText("Average accuracy")).toBeVisible();
-    expect(screen.getByText(/then 100% recalled/)).toBeVisible();
-    const averageText =
-      screen.getByText("Average accuracy").parentElement?.textContent ?? "";
-    const average = Number(averageText.match(/(\d+)%/)?.[1]);
-    expect(average).toBeGreaterThan(0);
-    expect(average).toBeLessThan(100);
-  });
-});
-
 const SECOND_REF_ID = "vr_ps23_2" as Id<"verseRefs">;
 const secondReviewingVerse: PracticeVerse = {
   ...reviewingVerse,
@@ -1239,27 +1132,27 @@ describe("PracticeBoard spent reviews", () => {
     expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a pending retry open after leaving and coming back", async () => {
-    mutationMock("verseMemory.recordAttempt").mockResolvedValue(
-      stillDueSchedule,
-    );
+  it("spends an 85–99% review on Continue only, then opens it read-only", async () => {
     renderBoard("review");
 
     await recite("The Lord is my shepherd I shall not eat");
     expect(
-      await screen.findByRole("button", { name: /Try again/ }),
+      await screen.findByRole("button", { name: /Continue/ }),
     ).toBeVisible();
-    await userEvent.click(railButton("Psalm 23:2"));
+    expect(
+      screen.queryByRole("button", { name: /Try again/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /keep going/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
     await userEvent.click(railButton("Psalm 23:1"));
 
-    expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
-    await recite(PASSAGE_ONE);
-    await waitFor(() => {
-      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
-        2,
-      );
-    });
+    expect(await screen.findByText("Reviewed")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Your recalled verse")).toBeNull();
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
   it("lets Practice recall the same verse again", async () => {

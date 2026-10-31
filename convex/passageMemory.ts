@@ -37,10 +37,7 @@ import {
   loadPassageDueRecords,
 } from "./lib/passageDue";
 import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
-import {
-  holdReviewingInterval,
-  SHORT_VERSE_WORDS,
-} from "../src/lib/memory-scheduler";
+import { SHORT_VERSE_WORDS } from "../src/lib/memory-scheduler";
 import {
   packAllowsPassageMode,
   rangeAllowsPassageMode,
@@ -375,6 +372,7 @@ export const recordAttempt = mutation({
           now: args.now,
           tzOffsetMinutes: args.tzOffsetMinutes,
           timeZone: args.timeZone,
+          item: "passage",
         });
         const nextStatus =
           scheduled.status === "mastered" || scheduled.status === "reviewing"
@@ -407,56 +405,6 @@ export const recordAttempt = mutation({
         updatedAt: args.now,
       });
     }
-
-    return toPassageView(next, args.now, args.tzOffsetMinutes);
-  },
-});
-
-/**
- * Spend a reviewing passage after the learner declines an 80%+ retry. Holds
- * the current interval without logging another recitation.
- */
-export const acceptRetryHold = mutation({
-  args: {
-    packId: v.id("packs"),
-    now: v.number(),
-    tzOffsetMinutes: v.number(),
-    timeZone: v.optional(v.string()),
-  },
-  returns: passageViewValidator,
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-    const row = withNormalizedPieces(
-      await requirePassageForPack(ctx, args.packId, userId),
-    );
-
-    if (row.status !== "reviewing" && row.status !== "mastered") {
-      return toPassageView(row, args.now, args.tzOffsetMinutes);
-    }
-
-    const scheduled = holdReviewingInterval(
-      toPassageSchedule(row),
-      args.now,
-      args.tzOffsetMinutes,
-      args.timeZone,
-    );
-    const nextStatus =
-      scheduled.status === "mastered" || scheduled.status === "reviewing"
-        ? scheduled.status
-        : row.status;
-    const next = await patchPassageMemory(ctx, row._id, {
-      pieces: row.pieces,
-      status: nextStatus,
-      ease: scheduled.ease,
-      intervalDays: scheduled.intervalDays,
-      dueAt: scheduled.dueAt,
-      consecutiveCorrect: scheduled.consecutiveCorrect,
-      lapses: scheduled.lapses,
-      stageReps: scheduled.stageReps,
-      earlyReviewApplied: scheduled.earlyReviewApplied,
-      lastSessionAt: args.now,
-      updatedAt: args.now,
-    });
 
     return toPassageView(next, args.now, args.tzOffsetMinutes);
   },

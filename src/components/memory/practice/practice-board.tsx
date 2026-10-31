@@ -39,18 +39,15 @@ import { SESSION_COMPLETE_FOOTER, stepShortLabel } from "@/lib/memory-copy";
 import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
-  holdReviewingInterval,
   isLearningLocked,
   isLearningProgressAttempt,
   isReviewPhase,
   MAX_LEARN_STAGE,
   requiredRepsFor,
-  reviewGradeOutcome,
   type MemorySchedule,
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
 import {
-  memoryScheduleFromSnapshot,
   previewNextSchedule,
   type MemoryScheduleSnapshot,
 } from "@/lib/memory-schedule-preview";
@@ -104,7 +101,6 @@ import {
 import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import { VerseAttemptResult } from "../../study/verse-attempt-result";
-import { REVIEW_RETRY_KEEP_GOING_LABEL } from "../../study/verse-attempt-feedback";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import {
@@ -443,15 +439,11 @@ export function PracticeBoard({
     () => new Set(runState?.graded),
   );
 
-  const { recordWithSeqAdopt, resolveVerseRefId } = useVersePracticeAttempt(
-    recordModeFor(kind),
-    { skipLibraryIds: sessionVersesCanSkipLibraryIds(verses) },
-  );
+  const { recordWithSeqAdopt } = useVersePracticeAttempt(recordModeFor(kind), {
+    skipLibraryIds: sessionVersesCanSkipLibraryIds(verses),
+  });
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);
-  const acceptVerseRetryHold = useMutation(api.verseMemory.acceptRetryHold);
-  const acceptUnifiedRetryHold = useMutation(api.packs.acceptRetryHold);
-  const acceptPassageRetryHold = useMutation(api.passageMemory.acceptRetryHold);
   const celebrateMastered = useFirstMasteredToast();
   const sessionLabel = sessionLabelFor(kind);
   const isReview = kind === "review";
@@ -830,53 +822,6 @@ export function PracticeBoard({
     setFinished(true);
   }
 
-  async function persistRetryHold(
-    attemptedAt: number,
-    tzOffsetMinutes: number,
-    timeZone?: string,
-  ): Promise<MemorySchedule | null> {
-    if (!currentVerse) return null;
-    if (composite) {
-      if (
-        composite.passageStatus === "reviewing" ||
-        composite.passageStatus === "mastered"
-      ) {
-        const view = await acceptPassageRetryHold({
-          packId: composite.packId,
-          now: attemptedAt,
-          tzOffsetMinutes,
-          timeZone,
-        });
-        return {
-          status: view.status === "mastered" ? "mastered" : "reviewing",
-          learnStage: MAX_LEARN_STAGE,
-          stageReps: view.stageReps,
-          ease: view.ease,
-          intervalDays: view.intervalDays,
-          dueAt: view.dueAt,
-          consecutiveCorrect: view.consecutiveCorrect,
-          lapses: view.lapses,
-          earlyReviewApplied: view.earlyReviewApplied ?? false,
-        };
-      }
-      return await acceptUnifiedRetryHold({
-        id: composite.packId,
-        now: attemptedAt,
-        tzOffsetMinutes,
-        timeZone,
-      });
-    }
-    const verseRefId =
-      currentVerse.verseRefId ?? resolveVerseRefId(currentVerse.reference);
-    if (!verseRefId) return null;
-    return await acceptVerseRetryHold({
-      verseRefId,
-      now: attemptedAt,
-      tzOffsetMinutes,
-      timeZone,
-    });
-  }
-
   const shellProps = {
     sessionLabel,
     scopeLabel,
@@ -966,6 +911,12 @@ export function PracticeBoard({
               position={boundedIndex}
               total={orderedVerses.length}
               showScheduleOutcome={isReview}
+              reviewItem={
+                composite?.passageStatus === "reviewing" ||
+                composite?.passageStatus === "mastered"
+                  ? "passage"
+                  : "verse"
+              }
               composite={
                 composite
                   ? {
@@ -1002,8 +953,7 @@ export function PracticeBoard({
                       : undefined,
                     offerPractice: composite === null,
                   };
-                  // Keep every recitation, including an 80%+ retry. The
-                  // summary averages them instead of replacing the first try.
+                  // Keep every recitation. The summary averages them.
                   setSessionAttempts((prev) => [...prev, nextAttempt]);
                 }
                 if (composite) {
@@ -1038,37 +988,6 @@ export function PracticeBoard({
                 // rescheduled) should hand off to the next verse that still
                 // has a session left rather than parking on a dead end.
                 if (currentHasWorkLeft) return;
-                advancePastCurrentVerse();
-              }}
-              onKeepWait={async () => {
-                const verseId = currentVerse.id;
-                const attemptedAt = Date.now();
-                const tzOffsetMinutes = new Date(
-                  attemptedAt,
-                ).getTimezoneOffset();
-                const timeZone = getViewerTimeZone();
-                const snapshot = memoryScheduleFromSnapshot(
-                  scheduleSnapshotFrom(currentProgress),
-                );
-                const localHold = snapshot
-                  ? holdReviewingInterval(
-                      snapshot,
-                      attemptedAt,
-                      tzOffsetMinutes,
-                      timeZone,
-                    )
-                  : null;
-                if (localHold) adoptVerseSchedule(verseId, localHold);
-                try {
-                  const next = await persistRetryHold(
-                    attemptedAt,
-                    tzOffsetMinutes,
-                    timeZone,
-                  );
-                  if (next) adoptVerseSchedule(verseId, next);
-                } catch (error) {
-                  devLog.warn("verseMemory", "acceptRetryHold failed", error);
-                }
                 advancePastCurrentVerse();
               }}
             />
@@ -1163,6 +1082,7 @@ interface PracticeCardProps {
   showScheduleOutcome?: boolean;
   /** Set when this card is a whole pack recited as one passage. */
   composite?: CompositeCardPassage | null;
+  reviewItem?: "verse" | "passage";
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
@@ -1174,11 +1094,6 @@ interface PracticeCardProps {
   advancesOnContinue?: boolean;
   /** Fired when the learner dismisses a checked attempt's result. */
   onContinueAfterResult?: () => void;
-  /**
-   * Review retry offer: move on at the current interval instead of trying
-   * again for a stretch. The parent persists the hold and advances.
-   */
-  onKeepWait?: () => Promise<void>;
 }
 
 function PracticeCard({
@@ -1197,10 +1112,10 @@ function PracticeCard({
   total,
   showScheduleOutcome = false,
   composite = null,
+  reviewItem = "verse",
   onRecord,
   advancesOnContinue = false,
   onContinueAfterResult,
-  onKeepWait,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -1218,17 +1133,15 @@ function PracticeCard({
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
   // click) into a single recorded attempt, and `submitPending` shows a spinner
-  // on the disabled control while it's in flight. One lock covers Read, check,
-  // and keep-going so those actions can't overlap.
+  // on the disabled control while it's in flight. One lock covers Read and
+  // check so those actions can't overlap.
   const { submit, pending: submitPending } = useSubmitLock();
   // Which submit owns the spinner. The result button mounts as soon as the
   // answer is checked, while the save is still running — "Saving..." holds
   // that label until the record settles so it doesn't offer Try again or
   // Continue early. Set in the same turn as the lock, so it batches with
   // `submitPending` and both clear on the render that ends the save.
-  const [submitKind, setSubmitKind] = useState<
-    "grade" | "read" | "keep" | null
-  >(null);
+  const [submitKind, setSubmitKind] = useState<"grade" | "read" | null>(null);
   const gradePending = submitPending && submitKind === "grade";
 
   const refLabel = formatVerseRefTitle(reference);
@@ -1317,17 +1230,11 @@ function PracticeCard({
     );
   // Once graduated, another strong recall is just another practice pass — offer
   // "Try again" instead of implying the learning journey still advances. Review
-  // spends the verse after a hold, stretch, or lapse (`advancesOnContinue`);
-  // an 80%+ retry stays due so this path still shows Try again, plus Keep
-  // going so they can decline the extra attempt.
+  // spends every graded due try (`advancesOnContinue`), so this path is Learn
+  // steps, passage frontier, and not-due Practice.
   const offerPracticeAgain =
     !advancesOnContinue &&
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
-  const reviewRetryOffer =
-    showScheduleOutcome &&
-    checked &&
-    checkedQuality !== null &&
-    reviewGradeOutcome(checkedQuality, checkedAccuracy) === "retry";
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
@@ -1355,6 +1262,7 @@ function PracticeCard({
               wordCount: wordCount ?? 0,
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
               timeZone: getViewerTimeZone(),
+              item: reviewItem,
             })
           : null;
       // Freeze the step label on the step being graded; journey props may adopt
@@ -1398,14 +1306,6 @@ function PracticeCard({
     setTypedAnswer("");
     onContinueAfterResult?.();
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
-  }
-
-  function keepThisWait() {
-    if (!onKeepWait) return;
-    setSubmitKind("keep");
-    submit(async () => {
-      await onKeepWait();
-    });
   }
 
   // Read Continue and the result-view Continue / Try again share one control
@@ -1680,44 +1580,20 @@ function PracticeCard({
                 </Button>
               ) : null
             ) : checked ? (
-              reviewRetryOffer && onKeepWait ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 sm:flex-none"
-                    onClick={keepThisWait}
-                    loading={submitPending}
-                  >
-                    {REVIEW_RETRY_KEEP_GOING_LABEL}
-                  </Button>
-                  <Button
-                    ref={reviewActionRef}
-                    type="button"
-                    variant="default"
-                    className="flex-1 sm:flex-none"
-                    onClick={continueAttempt}
-                    loading={submitPending}
-                  >
-                    {resultActionLabel}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  ref={reviewActionRef}
-                  type="button"
-                  variant="default"
-                  className="flex-1 sm:flex-none"
-                  onClick={continueAttempt}
-                  // Hold until the attempt settles: this both keeps the submit
-                  // lock from swallowing the next check (resetting the question
-                  // mid-flight would strand it) and ensures the adopted band/reps
-                  // land before the next rep renders, so it can't re-record stale.
-                  loading={submitPending}
-                >
-                  {resultActionLabel}
-                </Button>
-              )
+              <Button
+                ref={reviewActionRef}
+                type="button"
+                variant="default"
+                className="flex-1 sm:flex-none"
+                onClick={continueAttempt}
+                // Hold until the attempt settles: this both keeps the submit
+                // lock from swallowing the next check (resetting the question
+                // mid-flight would strand it) and ensures the adopted band/reps
+                // land before the next rep renders, so it can't re-record stale.
+                loading={submitPending}
+              >
+                {resultActionLabel}
+              </Button>
             ) : isReadPrime ? (
               <Button
                 ref={reviewActionRef}

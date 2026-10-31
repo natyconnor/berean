@@ -17,12 +17,12 @@ import { startOfZonedDay } from "./dashboard-buckets";
  *    hidden. After graduating, exact recalls stay daily for
  *    {@link REVIEW_DAILY_REPS} reviews, then every other day for
  *    {@link REVIEW_EVERY_OTHER_REPS} reviews; only then does the interval
- *    multiply by ease. A close recall at {@link REVIEW_RETRY_ACCURACY} leaves
- *    the verse due so the learner can try again for the stretch, or keep the
- *    current gap if they decline. Between {@link REVIEW_LAPSE_ACCURACY} and
- *    that retry bar, the current gap is kept. Below the lapse bar, the verse
- *    drops one ladder step (daily → Challenge, every-other-day → daily,
- *    growing → every-other-day).
+ *    multiply by ease. An 85–99% recall grows the gap halfway, leaves ease
+ *    alone, and still counts as a streak rep. A 60–84% recall steps back one
+ *    level (daily stays daily; every-other-day goes daily; growing or
+ *    Mastered goes every-other-day) and restarts the rep count. Below
+ *    {@link REVIEW_LAPSE_ACCURACY} a verse drops to Learning at Challenge;
+ *    a passage stays reviewing on the daily gap, due tomorrow.
  *    Due dates land at local midnight N calendar days later (with a 6-hour
  *    floor so a late-night 1-day review does not reopen at 12:01am).
  *
@@ -40,8 +40,9 @@ export interface MemorySchedule {
   learnStage: number;
   /**
    * Learning: exact reps banked on the current support band.
-   * Reviewing: exact recalls at the current early interval (daily, then
-   * every-other-day). Unused once the interval has started growing with ease.
+   * Reviewing: pass recalls (exact or 85–99%) at the current early interval
+   * (daily, then every-other-day). Unused once the interval has started
+   * growing with ease.
    */
   stageReps: number;
   ease: number;
@@ -179,6 +180,11 @@ export interface ReviewInput {
    * `tzOffsetMinutes`, then to a rolling day.
    */
   timeZone?: string;
+  /**
+   * Reviewing item. A passage bad miss stays reviewing on the daily gap.
+   * Omitted treats the item as a verse.
+   */
+  item?: "verse" | "passage";
 }
 
 /** Ease bounds. Ease starts at {@link EASE_START} for freshly-seeded verses. */
@@ -193,17 +199,10 @@ export const MAX_LEARN_STAGE = 3;
 export const MASTERED_INTERVAL_DAYS = 30;
 
 /**
- * Review accuracy below this drops one ladder step. At or above, the verse
- * stays in the review phase (retry or hold — see {@link reviewGradeOutcome}).
+ * Review accuracy below this is a bad miss. A verse drops to Learning; a
+ * passage stays reviewing on the daily gap.
  */
 export const REVIEW_LAPSE_ACCURACY = 60;
-
-/**
- * Close review at or above this stays due so the learner can try again for an
- * exact that stretches the interval. Below this (and at or above
- * {@link REVIEW_LAPSE_ACCURACY}) the current gap is kept and the verse is spent.
- */
-export const REVIEW_RETRY_ACCURACY = 80;
 
 /**
  * Exact reviewing recalls while the interval is still 1 day. The verse stays
@@ -241,14 +240,14 @@ export const LEARN_PROGRESS_ACCURACY = 85;
 export const REVIEW_LAPSE_LEARN_STAGE = 2;
 
 /** How a reviewing-phase grade should move the schedule. */
-export type ReviewGradeOutcome = "exact" | "retry" | "hold" | "lapse";
+export type ReviewGradeOutcome = "exact" | "pass" | "close" | "lapse";
 
 /**
- * Band a reviewing attempt into stretch / retry / hold / lapse.
+ * Band a reviewing attempt into exact / pass / close / lapse.
  *
- * Exact (including the two-typo allowance) stretches. Otherwise accuracy
- * decides: ≥ {@link REVIEW_RETRY_ACCURACY} retries in place, ≥
- * {@link REVIEW_LAPSE_ACCURACY} keeps the gap, below that lapses one step.
+ * Exact (including the two-typo allowance) is a full pass. Otherwise accuracy
+ * decides: ≥ {@link LEARN_PROGRESS_ACCURACY} is an 85–99% pass,
+ * ≥ {@link REVIEW_LAPSE_ACCURACY} is a close miss, below that lapses.
  */
 export function reviewGradeOutcome(
   quality: ReviewInput["quality"],
@@ -256,8 +255,8 @@ export function reviewGradeOutcome(
 ): ReviewGradeOutcome {
   if (accuracy < REVIEW_LAPSE_ACCURACY) return "lapse";
   if (quality === "exact") return "exact";
-  if (accuracy >= REVIEW_RETRY_ACCURACY) return "retry";
-  return "hold";
+  if (accuracy >= LEARN_PROGRESS_ACCURACY) return "pass";
+  return "close";
 }
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -664,7 +663,7 @@ function scheduleLearning(s: MemorySchedule, r: ReviewInput): MemorySchedule {
  * Anything longer (including leftover SM-2 growth from before this ladder)
  * multiplies by ease on each exact.
  */
-function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
+export function reviewingIntervalStep(intervalDays: number): 1 | 2 | "growing" {
   const rounded = Math.max(1, Math.round(intervalDays));
   if (rounded <= 1) return 1;
   if (rounded === 2) return 2;
@@ -730,6 +729,61 @@ function nextReviewingOnExact(
     status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
     intervalDays,
     ease: clampEase(s.ease + 0.05),
+    stageReps: 0,
+    consecutiveCorrect,
+  };
+}
+
+function nextReviewingOnPass(
+  s: Pick<
+    MemorySchedule,
+    "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+  >,
+): Pick<
+  MemorySchedule,
+  "status" | "intervalDays" | "ease" | "stageReps" | "consecutiveCorrect"
+> {
+  const step = reviewingIntervalStep(s.intervalDays);
+  const consecutiveCorrect = s.consecutiveCorrect + 1;
+
+  if (step === 1 || step === 2) {
+    const needed = step === 1 ? REVIEW_DAILY_REPS : REVIEW_EVERY_OTHER_REPS;
+    const reps = s.stageReps + 1;
+    if (reps >= needed) {
+      const intervalDays =
+        step === 1
+          ? REVIEW_EVERY_OTHER_INTERVAL_DAYS
+          : REVIEW_EVERY_OTHER_INTERVAL_DAYS * s.ease;
+      return {
+        status:
+          intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
+        intervalDays,
+        ease: s.ease,
+        stageReps: 0,
+        consecutiveCorrect,
+      };
+    }
+    return {
+      status: "reviewing",
+      intervalDays:
+        step === 1
+          ? REVIEW_DAILY_INTERVAL_DAYS
+          : REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+      ease: s.ease,
+      stageReps: reps,
+      consecutiveCorrect,
+    };
+  }
+
+  const grown = s.intervalDays + (s.intervalDays * s.ease - s.intervalDays) / 2;
+  const intervalDays = Math.max(
+    Math.max(1, Math.round(s.intervalDays)) + 1,
+    Math.round(grown),
+  );
+  return {
+    status: intervalDays >= MASTERED_INTERVAL_DAYS ? "mastered" : "reviewing",
+    intervalDays,
+    ease: s.ease,
     stageReps: 0,
     consecutiveCorrect,
   };
@@ -851,46 +905,58 @@ export function reviewingPathStartEase(
   return startEase;
 }
 
-/**
- * Drop one post-graduation ladder step after a hard miss.
- *
- * Daily review returns to Challenge (due now, out of the review queue).
- * Every-other-day returns to daily review due tomorrow. Growing / mastered
- * intervals return to every-other-day.
- */
-function lapseReviewingOneStep(
+function lapseReviewingToLearning(
   s: MemorySchedule,
   r: ReviewInput,
 ): MemorySchedule {
-  const ease = clampEase(s.ease - 0.2);
-  const lapses = s.lapses + 1;
-  const step = reviewingIntervalStep(s.intervalDays);
+  return {
+    status: "learning",
+    learnStage: REVIEW_LAPSE_LEARN_STAGE,
+    stageReps: 0,
+    ease: clampEase(s.ease - 0.2),
+    intervalDays: 0,
+    dueAt: r.now,
+    consecutiveCorrect: 0,
+    lapses: s.lapses + 1,
+    earlyReviewApplied: false,
+  };
+}
 
-  if (step === 1) {
-    return {
-      status: "learning",
-      learnStage: REVIEW_LAPSE_LEARN_STAGE,
-      stageReps: 0,
-      ease,
-      intervalDays: 0,
-      dueAt: r.now,
-      consecutiveCorrect: 0,
-      lapses,
-      earlyReviewApplied: false,
-    };
-  }
-
-  const intervalDays =
-    step === 2 ? REVIEW_DAILY_INTERVAL_DAYS : REVIEW_EVERY_OTHER_INTERVAL_DAYS;
+function lapsePassageToDaily(
+  s: MemorySchedule,
+  r: ReviewInput,
+): MemorySchedule {
   return {
     status: "reviewing",
     learnStage: s.learnStage,
     stageReps: 0,
-    ease,
+    ease: clampEase(s.ease - 0.2),
+    intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+    dueAt: computeDueAt(r, REVIEW_DAILY_INTERVAL_DAYS),
+    consecutiveCorrect: 0,
+    lapses: s.lapses + 1,
+    earlyReviewApplied: false,
+  };
+}
+
+function stepBackReviewingOneLevel(
+  s: MemorySchedule,
+  r: ReviewInput,
+): MemorySchedule {
+  const step = reviewingIntervalStep(s.intervalDays);
+  const intervalDays =
+    step === "growing"
+      ? REVIEW_EVERY_OTHER_INTERVAL_DAYS
+      : REVIEW_DAILY_INTERVAL_DAYS;
+  return {
+    status: "reviewing",
+    learnStage: s.learnStage,
+    stageReps: 0,
+    ease: s.ease,
     intervalDays,
     dueAt: computeDueAt(r, intervalDays),
     consecutiveCorrect: 0,
-    lapses,
+    lapses: s.lapses,
     earlyReviewApplied: false,
   };
 }
@@ -900,14 +966,13 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   const outcome = reviewGradeOutcome(r.quality, r.accuracy);
 
   if (outcome === "lapse") {
-    // Always applies even when early — a hard miss should not be ignored.
-    return lapseReviewingOneStep(s, r);
+    return r.item === "passage"
+      ? lapsePassageToDaily(s, r)
+      : lapseReviewingToLearning(s, r);
   }
 
-  if (outcome === "retry") {
-    // Stay due so the learner can try again for the stretch. Does not consume
-    // the one-time early-review boost.
-    return s;
+  if (outcome === "close") {
+    return stepBackReviewingOneLevel(s, r);
   }
 
   // One early success may push dueAt out from now; further early successes
@@ -916,50 +981,12 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
     return s;
   }
 
-  if (outcome === "exact") {
-    const next = nextReviewingOnExact(s);
-    return {
-      ...next,
-      learnStage: s.learnStage,
-      dueAt: computeDueAt(r, next.intervalDays),
-      lapses: s.lapses,
-      earlyReviewApplied: isEarly,
-    };
-  }
-
-  // hold (60–79%): keep the current gap. A messy recall should not earn more
-  // time before the next review.
-  return holdReviewingInterval(s, r.now, r.tzOffsetMinutes, r.timeZone);
-}
-
-/**
- * Keep the current review interval and spend the verse.
- *
- * Used for a 60–79% hold and when the learner declines an 80%+ retry offer
- * ("It's okay — keep going"). Does not insert a new recitation grade — callers
- * that already logged the close attempt should only patch the schedule.
- *
- * A second early hold after {@link MemorySchedule.earlyReviewApplied} leaves
- * the schedule unchanged, matching a second early exact.
- */
-export function holdReviewingInterval(
-  s: MemorySchedule,
-  now: number,
-  tzOffsetMinutes?: number,
-  timeZone?: string,
-): MemorySchedule {
-  if (!isReviewPhase(s.status)) return s;
-  const isEarly = now < s.dueAt;
-  if (isEarly && s.earlyReviewApplied) return s;
-  const intervalDays = Math.max(REVIEW_DAILY_INTERVAL_DAYS, s.intervalDays);
+  const next =
+    outcome === "exact" ? nextReviewingOnExact(s) : nextReviewingOnPass(s);
   return {
-    status: s.status,
+    ...next,
     learnStage: s.learnStage,
-    stageReps: s.stageReps,
-    ease: s.ease,
-    intervalDays,
-    dueAt: dueAtInCalendarDays(now, intervalDays, tzOffsetMinutes, timeZone),
-    consecutiveCorrect: s.consecutiveCorrect,
+    dueAt: computeDueAt(r, next.intervalDays),
     lapses: s.lapses,
     earlyReviewApplied: isEarly,
   };

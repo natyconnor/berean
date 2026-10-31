@@ -66,18 +66,15 @@ vi.mock("../../../convex/_generated/api", () => ({
     packs: {
       get: "packs.get",
       recordUnifiedReview: "packs.recordUnifiedReview",
-      acceptRetryHold: "packs.acceptRetryHold",
       resolveMembers: "packs.resolveMembers",
     },
     savedVerses: { listRecordingIds: "savedVerses.listRecordingIds" },
     verseMemory: {
       recordAttempt: "verseMemory.recordAttempt",
-      acceptRetryHold: "verseMemory.acceptRetryHold",
     },
     passageMemory: {
       getForPack: "passageMemory.getForPack",
       recordAttempt: "passageMemory.recordAttempt",
-      acceptRetryHold: "passageMemory.acceptRetryHold",
     },
   },
 }));

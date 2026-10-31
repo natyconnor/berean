@@ -15,12 +15,12 @@ describe("accuracyBand", () => {
   it("splits the rest on the scheduler's thresholds", () => {
     expect(LEARN_PROGRESS_ACCURACY).toBe(85);
     expect(REVIEW_LAPSE_ACCURACY).toBe(60);
-    expect(accuracyBand(99, false)).toBe("nearly");
-    expect(accuracyBand(85, false)).toBe("nearly");
-    expect(accuracyBand(84, false)).toBe("progress");
-    expect(accuracyBand(60, false)).toBe("progress");
-    expect(accuracyBand(59, false)).toBe("again");
-    expect(accuracyBand(0, false)).toBe("again");
+    expect(accuracyBand(99, false)).toBe("pass");
+    expect(accuracyBand(85, false)).toBe("pass");
+    expect(accuracyBand(84, false)).toBe("close");
+    expect(accuracyBand(60, false)).toBe("close");
+    expect(accuracyBand(59, false)).toBe("miss");
+    expect(accuracyBand(0, false)).toBe("miss");
   });
 });
 
@@ -30,22 +30,23 @@ describe("accuracyFeedback", () => {
       "Word for word.",
     );
     expect(accuracyFeedback(92, { exact: false }).headline).toBe(
-      "Nearly there. Just a little to tidy up.",
+      "Well remembered. Just a few words to tidy up.",
     );
     expect(accuracyFeedback(70, { exact: false }).headline).toBe(
-      "Good progress. The highlighted words are worth another look.",
+      "So close. A few words slipped. The highlighted ones are worth another look.",
     );
     expect(accuracyFeedback(40, { exact: false }).headline).toBe(
-      "This one needs another pass. We'll bring it back sooner.",
+      "This one needs more time. We'll bring it back sooner.",
     );
   });
 
   it("splits the bold lead from the rest", () => {
     expect(accuracyFeedback(70, { exact: false })).toEqual({
-      band: "progress",
-      lead: "Good progress.",
-      rest: "The highlighted words are worth another look.",
-      headline: "Good progress. The highlighted words are worth another look.",
+      band: "close",
+      lead: "So close.",
+      rest: "A few words slipped. The highlighted ones are worth another look.",
+      headline:
+        "So close. A few words slipped. The highlighted ones are worth another look.",
       emoji: "🌱",
     });
     expect(accuracyFeedback(100, { exact: true }).rest).toBe("");

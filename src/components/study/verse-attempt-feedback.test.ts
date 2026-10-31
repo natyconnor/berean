@@ -11,9 +11,9 @@ import {
 import {
   attemptFeedbackLead,
   attemptPraiseLine,
-  HOLD_ACCURACY_LEADS,
+  CLOSE_ACCURACY_LEADS,
   LAPSE_ACCURACY_LEADS,
-  RETRY_ACCURACY_LEADS,
+  PASS_ACCURACY_LEADS,
   reviewOutcomeMessage,
   specialMissLead,
 } from "./verse-attempt-feedback";
@@ -130,55 +130,71 @@ describe("attemptFeedbackLead", () => {
     expect(
       attemptFeedbackLead({
         accuracy: 91,
-        outcome: "retry",
+        outcome: "pass",
         errors: { matches: 10, typos: 0, mismatches: 1, missing: 0, extra: 0 },
       }),
     ).toBe("Oh so close! Just one word off");
   });
 
-  it("uses each retry accuracy band", () => {
-    expect(attemptFeedbackLead({ accuracy: 99, outcome: "retry" })).toBe(
-      RETRY_ACCURACY_LEADS[0].lead,
+  it("uses each 85–99 pass accuracy band", () => {
+    expect(attemptFeedbackLead({ accuracy: 99, outcome: "pass" })).toBe(
+      PASS_ACCURACY_LEADS[0].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 96, outcome: "retry" })).toBe(
-      RETRY_ACCURACY_LEADS[1].lead,
+    expect(attemptFeedbackLead({ accuracy: 96, outcome: "pass" })).toBe(
+      PASS_ACCURACY_LEADS[1].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 93, outcome: "retry" })).toBe(
-      RETRY_ACCURACY_LEADS[2].lead,
+    expect(attemptFeedbackLead({ accuracy: 93, outcome: "pass" })).toBe(
+      PASS_ACCURACY_LEADS[2].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 90, outcome: "retry" })).toBe(
-      RETRY_ACCURACY_LEADS[3].lead,
+    expect(attemptFeedbackLead({ accuracy: 90, outcome: "pass" })).toBe(
+      PASS_ACCURACY_LEADS[3].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 87, outcome: "retry" })).toBe(
-      RETRY_ACCURACY_LEADS[4].lead,
+    expect(attemptFeedbackLead({ accuracy: 87, outcome: "pass" })).toBe(
+      PASS_ACCURACY_LEADS[4].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 84, outcome: "retry" })).toBe(
-      RETRY_ACCURACY_LEADS[5].lead,
-    );
-    expect(attemptFeedbackLead({ accuracy: 80, outcome: "retry" })).toBe(
-      RETRY_ACCURACY_LEADS[6].lead,
+    expect(attemptFeedbackLead({ accuracy: 85, outcome: "pass" })).toBe(
+      PASS_ACCURACY_LEADS[5].lead,
     );
   });
 
-  it("uses each hold accuracy band", () => {
-    expect(attemptFeedbackLead({ accuracy: 79, outcome: "hold" })).toBe(
-      HOLD_ACCURACY_LEADS[0].lead,
+  it("uses each 60–84 close accuracy band", () => {
+    expect(attemptFeedbackLead({ accuracy: 84, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[0].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 73, outcome: "hold" })).toBe(
-      HOLD_ACCURACY_LEADS[1].lead,
+    expect(attemptFeedbackLead({ accuracy: 80, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[1].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 70, outcome: "hold" })).toBe(
-      HOLD_ACCURACY_LEADS[2].lead,
+    expect(attemptFeedbackLead({ accuracy: 77, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[2].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 66, outcome: "hold" })).toBe(
-      HOLD_ACCURACY_LEADS[3].lead,
+    expect(attemptFeedbackLead({ accuracy: 73, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[3].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 63, outcome: "hold" })).toBe(
-      HOLD_ACCURACY_LEADS[4].lead,
+    expect(attemptFeedbackLead({ accuracy: 70, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[4].lead,
     );
-    expect(attemptFeedbackLead({ accuracy: 60, outcome: "hold" })).toBe(
-      HOLD_ACCURACY_LEADS[5].lead,
+    expect(attemptFeedbackLead({ accuracy: 66, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[5].lead,
     );
+    expect(attemptFeedbackLead({ accuracy: 63, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[6].lead,
+    );
+    expect(attemptFeedbackLead({ accuracy: 60, outcome: "close" })).toBe(
+      CLOSE_ACCURACY_LEADS[7].lead,
+    );
+  });
+
+  it("never mentions a kept interval, an extra try, or stretching", () => {
+    const lines = [
+      ...PASS_ACCURACY_LEADS,
+      ...CLOSE_ACCURACY_LEADS,
+      ...LAPSE_ACCURACY_LEADS,
+    ].map((band) => band.lead);
+    for (const line of lines) {
+      expect(line).not.toMatch(/keep the same review interval/i);
+      expect(line).not.toMatch(/extend your review interval/i);
+      expect(line).not.toMatch(/try again to/i);
+    }
   });
 
   it("uses each lapse accuracy band", () => {
@@ -245,7 +261,7 @@ describe("attemptPraiseLine", () => {
     expect(
       attemptPraiseLine({
         accuracy: 91,
-        outcome: "retry",
+        outcome: "pass",
         errors: { matches: 10, typos: 0, mismatches: 1, missing: 0, extra: 0 },
       }),
     ).toBe("Oh so close! Just one word off.");
@@ -256,46 +272,10 @@ describe("attemptPraiseLine", () => {
 });
 
 describe("reviewOutcomeMessage", () => {
-  it("names current and next interval when a perfect recall would stretch", () => {
+  it("keeps the next-review clause on a close miss that stays reviewing", () => {
     expect(
       reviewOutcomeMessage({
-        outcome: "retry",
-        nextSchedule: {
-          ...reviewingTomorrow,
-          intervalDays: 1,
-          stageReps: 3,
-        },
-        now: NOW,
-        lapsedToLearning: false,
-      }),
-    ).toBe("Try again to extend your review interval from 1 day to 2 days.");
-  });
-
-  it("names the current interval when a perfect recall would not stretch yet", () => {
-    expect(
-      reviewOutcomeMessage({
-        outcome: "retry",
-        nextSchedule: reviewingTomorrow,
-        now: NOW,
-        lapsedToLearning: false,
-      }),
-    ).toBe("Try again to keep your review interval at 1 day.");
-  });
-
-  it("still invites a retry when the current interval is unknown", () => {
-    expect(
-      reviewOutcomeMessage({
-        outcome: "retry",
-        now: NOW,
-        lapsedToLearning: false,
-      }),
-    ).toBe("Try again to extend your review interval.");
-  });
-
-  it("keeps the next-review clause on hold and later-ladder lapses", () => {
-    expect(
-      reviewOutcomeMessage({
-        outcome: "hold",
+        outcome: "close",
         nextSchedule: reviewingTomorrow,
         now: NOW,
         lapsedToLearning: false,
@@ -314,12 +294,12 @@ describe("reviewOutcomeMessage", () => {
     ).toBe("Next review in 3 days.");
     expect(
       reviewOutcomeMessage({
-        outcome: "retry",
-        nextSchedule: { ...reviewingTomorrow, intervalDays: 5, ease: 2.3 },
+        outcome: "pass",
+        nextSchedule: reviewingTomorrow,
         now: NOW,
         lapsedToLearning: false,
       }),
-    ).toBe("Try again to extend your review interval from 5 days to 12 days.");
+    ).toBe("Next review tomorrow.");
     expect(
       reviewOutcomeMessage({
         outcome: "lapse",
@@ -332,7 +312,7 @@ describe("reviewOutcomeMessage", () => {
   it("says nothing until the next review is known", () => {
     expect(
       reviewOutcomeMessage({
-        outcome: "hold",
+        outcome: "close",
         nextSchedule: null,
         now: NOW,
         lapsedToLearning: false,
