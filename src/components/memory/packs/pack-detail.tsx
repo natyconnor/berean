@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   BookOpen,
@@ -23,6 +30,11 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { useMemoryPanelFrame } from "@/components/memory/drawer/memory-panel-context";
 import { MemoryPanelFrame } from "@/components/memory/drawer/memory-panel-frame";
 import { InternalLink } from "@/components/memory/internal-link";
+import {
+  StartedOverStatus,
+  StartOverConfirm,
+  StartOverMenuItem,
+} from "@/components/memory/memory-restart-menu";
 import { FRONTIER_LOCKED_COPY } from "@/components/memory/passage/passage-session-model";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +53,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PopoverAnchor } from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -52,11 +65,21 @@ import { useStartPassage } from "@/hooks/use-start-passage";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { asTableId } from "@/lib/convex-id";
 import {
+  canStartOver,
+  canStartOverPassage,
   EXTRA_PRACTICE_TOOLTIP,
-  PRACTICE_ANYTIME_LABEL,
   learnActionLabel,
+  PRACTICE_ANYTIME_LABEL,
+  START_OVER_CONFIRM_BODY,
+  START_OVER_ERROR,
+  startOverPassageBody,
+  startOverTitle,
   todayStepParts,
 } from "@/lib/memory-copy";
+import {
+  clearLearnPackDismissal,
+  learnDismissDayKey,
+} from "@/lib/learn-dismissed-packs";
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
 import { spanDisplayTitle } from "@/lib/memorize-target";
@@ -280,10 +303,13 @@ function PackDetailContent({
       actions={
         <PackDetailMenu
           pack={pack}
+          passage={passage}
           isPassage={passage !== null}
+          verseCount={passageGoal ? passageGoal.verseCount : members.length}
           reviewTogether={reviewTogetherOption(detailPack, passage, members)}
           members={members}
           now={now}
+          tzOffsetMinutes={tzOffsetMinutes}
           reciteHref={sessionHref("review")}
           onRemoved={frame.exit}
         />
@@ -804,6 +830,192 @@ function usePackEditor(pack: Pack, members: Member[]) {
   };
 }
 
+function PackVerseRow({
+  member,
+  index,
+  count,
+  now,
+  timeZone,
+  reviewTogether,
+  editable,
+  drag,
+  removing,
+  onMove,
+  onRemove,
+}: {
+  member: Member;
+  index: number;
+  count: number;
+  now: number;
+  timeZone: string;
+  reviewTogether: boolean;
+  editable: boolean;
+  drag: ReturnType<typeof useDragReorder>;
+  removing: boolean;
+  onMove: (from: number, to: number) => void;
+  onRemove: () => void;
+}) {
+  const frame = useMemoryPanelFrame();
+  const startOver = useMutation(api.verseMemory.startOver);
+  const startLock = useSubmitLock();
+  const [started, setStarted] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const pendingTriggerFocus = useRef(false);
+  const pendingLearnFocus = useRef(false);
+  const row = packMemberRow(member, { now, timeZone, reviewTogether });
+  const reference = formatVerseRefTitle(member);
+  const showStartOver = !started && canStartOver(member);
+  const href = (session: MemorySessionKind) =>
+    withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
+
+  useLayoutEffect(() => {
+    if (pendingTriggerFocus.current) {
+      pendingTriggerFocus.current = false;
+      triggerRef.current?.focus();
+    }
+    if (pendingLearnFocus.current) {
+      pendingLearnFocus.current = false;
+      rowRef.current
+        ?.querySelector<HTMLElement>('a[href*="/memory/learn"]')
+        ?.focus();
+    }
+  });
+
+  const handleConfirm = () =>
+    startLock.submit(async () => {
+      setError(null);
+      try {
+        await startOver({ verseRefId: member.verseRefId, now: Date.now() });
+        setConfirmOpen(false);
+        setStarted(true);
+        if (editable) pendingTriggerFocus.current = true;
+        else pendingLearnFocus.current = true;
+      } catch {
+        setError(START_OVER_ERROR);
+      }
+    });
+
+  const startOverProps =
+    showStartOver || confirmOpen
+      ? {
+          show: showStartOver,
+          pending: startLock.pending,
+          confirmOpen,
+          error,
+          title: startOverTitle(reference),
+          body: START_OVER_CONFIRM_BODY,
+          onSelect: () => setError(null),
+          onConfirm: handleConfirm,
+          onConfirmOpenChange: (open: boolean) => {
+            if (startLock.pending) return;
+            setConfirmOpen(open);
+            if (!open) setError(null);
+          },
+          triggerRef,
+        }
+      : undefined;
+
+  return (
+    <li
+      ref={rowRef}
+      {...(editable ? drag.rowProps(index) : {})}
+      className={cn(
+        "group flex flex-wrap items-center gap-3 rounded-lg border bg-card px-3 py-2.5",
+        editable && dragRowClassName(drag.rowState(index, count)),
+      )}
+    >
+      {editable ? <DragHandle {...drag.handleProps(index)} /> : null}
+      <span
+        aria-hidden
+        className={cn(
+          "size-2 shrink-0 rounded-full",
+          MEMORY_STATUS_STYLE[row.status].dot,
+        )}
+      />
+      <div className="min-w-[8rem] flex-1">
+        <InternalLink
+          href={frame.hrefFor({
+            kind: "verse",
+            verseRefId: member.verseRefId,
+          })}
+          className="block truncate text-sm font-medium hover:underline"
+        >
+          {reference}
+        </InternalLink>
+        {started ? (
+          <StartedOverStatus className="mt-1 w-fit px-2 py-1 text-xs" />
+        ) : (
+          <p className="text-xs text-muted-foreground">{row.line}</p>
+        )}
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {row.actions.includes("practice") ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                asChild
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground max-sm:h-11"
+              >
+                <InternalLink
+                  href={href("practice")}
+                  aria-label={`Practice ${reference}`}
+                >
+                  Practice
+                </InternalLink>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              {EXTRA_PRACTICE_TOOLTIP}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+        {row.actions.includes("review") ? (
+          <Button asChild size="sm" variant="outline" className="max-sm:h-11">
+            <InternalLink
+              href={href("review")}
+              aria-label={`Review ${reference}`}
+            >
+              <RotateCcw aria-hidden />
+              Review
+            </InternalLink>
+          </Button>
+        ) : null}
+        {row.actions.includes("learn") ? (
+          <Button asChild size="sm" variant="outline" className="max-sm:h-11">
+            <InternalLink
+              href={href("learn")}
+              aria-label={`${learnActionLabel(member)} ${reference}`}
+            >
+              <GraduationCap aria-hidden />
+              {learnActionLabel(member)}
+            </InternalLink>
+          </Button>
+        ) : null}
+        {editable || startOverProps ? (
+          <RowEditControls
+            label={reference}
+            {...(editable
+              ? {
+                  index,
+                  count,
+                  removing,
+                  onMove,
+                  onRemove,
+                }
+              : {})}
+            startOver={startOverProps}
+          />
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 function PackVerses({
   pack,
   members,
@@ -818,7 +1030,6 @@ function PackVerses({
   /** Custom packs: add, remove and reorder. */
   editable: boolean;
 }) {
-  const frame = useMemoryPanelFrame();
   const reviewTogether = pack.unifiedReviewEnabled === true;
   const editor = usePackEditor(pack, members);
   const drag = useDragReorder(editor.move);
@@ -905,109 +1116,22 @@ function PackVerses({
     >
       {addRow}
       <ul className="space-y-1.5">
-        {editor.ordered.map((member, index) => {
-          const row = packMemberRow(member, { now, timeZone, reviewTogether });
-          const reference = formatVerseRefTitle(member);
-          const href = (session: MemorySessionKind) =>
-            withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
-          return (
-            <li
-              key={member.verseRefId}
-              {...(editable ? drag.rowProps(index) : {})}
-              className={cn(
-                "group flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5",
-                editable && dragRowClassName(drag.rowState(index, count)),
-              )}
-            >
-              {editable ? <DragHandle {...drag.handleProps(index)} /> : null}
-              <span
-                aria-hidden
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  MEMORY_STATUS_STYLE[row.status].dot,
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <InternalLink
-                  href={frame.hrefFor({
-                    kind: "verse",
-                    verseRefId: member.verseRefId,
-                  })}
-                  className="block truncate text-sm font-medium hover:underline"
-                >
-                  {reference}
-                </InternalLink>
-                <p className="text-xs text-muted-foreground">{row.line}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {row.actions.includes("practice") ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        asChild
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground max-sm:h-11"
-                      >
-                        <InternalLink
-                          href={href("practice")}
-                          aria-label={`Practice ${reference}`}
-                        >
-                          Practice
-                        </InternalLink>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      {EXTRA_PRACTICE_TOOLTIP}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : null}
-                {row.actions.includes("review") ? (
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="outline"
-                    className="max-sm:h-11"
-                  >
-                    <InternalLink
-                      href={href("review")}
-                      aria-label={`Review ${reference}`}
-                    >
-                      <RotateCcw aria-hidden />
-                      Review
-                    </InternalLink>
-                  </Button>
-                ) : null}
-                {row.actions.includes("learn") ? (
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="outline"
-                    className="max-sm:h-11"
-                  >
-                    <InternalLink
-                      href={href("learn")}
-                      aria-label={`${learnActionLabel(member)} ${reference}`}
-                    >
-                      <GraduationCap aria-hidden />
-                      {learnActionLabel(member)}
-                    </InternalLink>
-                  </Button>
-                ) : null}
-              </div>
-              {editable ? (
-                <RowEditControls
-                  label={reference}
-                  index={index}
-                  count={count}
-                  removing={editor.removing.has(member.verseRefId)}
-                  onMove={editor.move}
-                  onRemove={() => editor.remove(member)}
-                />
-              ) : null}
-            </li>
-          );
-        })}
+        {editor.ordered.map((member, index) => (
+          <PackVerseRow
+            key={member.verseRefId}
+            member={member}
+            index={index}
+            count={count}
+            now={now}
+            timeZone={timeZone}
+            reviewTogether={reviewTogether}
+            editable={editable}
+            drag={drag}
+            removing={editor.removing.has(member.verseRefId)}
+            onMove={editor.move}
+            onRemove={() => editor.remove(member)}
+          />
+        ))}
       </ul>
       {editable ? <MoveAnnouncer message={editor.announcement} /> : null}
     </VersesSection>
@@ -1161,18 +1285,24 @@ function PassageChapterRows({
 
 function PackDetailMenu({
   pack,
+  passage,
   isPassage,
+  verseCount,
   reviewTogether,
   members,
   now,
+  tzOffsetMinutes,
   reciteHref,
   onRemoved,
 }: {
   pack: Pack;
+  passage: Passage | null;
   isPassage: boolean;
+  verseCount: number;
   reviewTogether: ReviewTogetherOption | null;
   members: Member[];
   now: number;
+  tzOffsetMinutes: number;
   reciteHref: string;
   onRemoved: () => void;
 }) {
@@ -1180,11 +1310,28 @@ function PackDetailMenu({
   const stopMemorizing = useMutation(api.packs.stopMemorizing);
   const deletePack = useMutation(api.packs.remove);
   const setUnifiedReview = useMutation(api.packs.setUnifiedReview);
+  const startOverPassage = useMutation(api.passageMemory.startOver);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [startConfirmOpen, setStartConfirmOpen] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [togetherOpen, setTogetherOpen] = useState(false);
   const [togetherError, setTogetherError] = useState<string | null>(null);
+  const pendingStartConfirm = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const pendingTriggerFocus = useRef(false);
   const removeLock = useSubmitLock();
+  const startLock = useSubmitLock();
   const togetherLock = useSubmitLock();
+  const showStartOver =
+    isPassage && !started && canStartOverPassage(passage?.pieces ?? []);
+
+  useLayoutEffect(() => {
+    if (!pendingTriggerFocus.current) return;
+    pendingTriggerFocus.current = false;
+    triggerRef.current?.focus();
+  });
 
   // A passage is one memorized text, so it stops; a pack is only a grouping,
   // so deleting it leaves its verses' memory alone.
@@ -1245,56 +1392,129 @@ function PackDetailMenu({
       }
     });
 
+  const handleStartOver = () =>
+    startLock.submit(async () => {
+      setStartError(null);
+      try {
+        clearLearnPackDismissal(pack._id, learnDismissDayKey(Date.now()));
+        await startOverPassage({
+          packId: pack._id,
+          now: Date.now(),
+          tzOffsetMinutes,
+        });
+        setStartConfirmOpen(false);
+        setStarted(true);
+        pendingTriggerFocus.current = true;
+      } catch {
+        setStartError(START_OVER_ERROR);
+      }
+    });
+
+  const trigger = (
+    <DropdownMenuTrigger asChild>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-11 text-muted-foreground sm:size-8"
+        aria-label="More actions"
+        disabled={startLock.pending}
+      >
+        <MoreHorizontal aria-hidden />
+      </Button>
+    </DropdownMenuTrigger>
+  );
+
+  const menu = (
+    <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
+      {isPassage ? <PopoverAnchor asChild>{trigger}</PopoverAnchor> : trigger}
+      <DropdownMenuContent
+        align="end"
+        className="max-w-72"
+        onCloseAutoFocus={(event) => {
+          if (!pendingStartConfirm.current) return;
+          event.preventDefault();
+          pendingStartConfirm.current = false;
+          setStartConfirmOpen(true);
+        }}
+      >
+        {showStartOver ? (
+          <StartOverMenuItem
+            disabled={startLock.pending}
+            onSelect={() => {
+              setStartError(null);
+              pendingStartConfirm.current = true;
+              setMenuOpen(false);
+            }}
+          />
+        ) : null}
+        {showStartOver && reviewTogether ? <DropdownMenuSeparator /> : null}
+        {reviewTogether ? (
+          <>
+            <DropdownMenuCheckboxItem
+              checked={reviewTogether.checked}
+              disabled={reviewTogether.disabled || togetherLock.pending}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  setTogetherError(null);
+                  setTogetherOpen(true);
+                } else {
+                  disableTogether();
+                }
+              }}
+            >
+              <span className="flex flex-col">
+                Review together as one recitation
+                {reviewTogether.disabled ? (
+                  <span className="text-xs text-muted-foreground">
+                    Once every verse is memorized
+                  </span>
+                ) : null}
+              </span>
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : showStartOver ? (
+          <DropdownMenuSeparator />
+        ) : null}
+        <DropdownMenuItem
+          variant="destructive"
+          onSelect={() => setConfirmOpen(true)}
+        >
+          {removal.icon}
+          {removal.label}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 text-muted-foreground sm:size-8"
-            aria-label="More actions"
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {started ? <StartedOverStatus /> : null}
+        {isPassage ? (
+          <StartOverConfirm
+            open={startConfirmOpen}
+            onOpenChange={(open) => {
+              if (startLock.pending) return;
+              setStartConfirmOpen(open);
+              if (!open) setStartError(null);
+            }}
+            pending={startLock.pending}
+            title={startOverTitle(pack.name)}
+            body={startOverPassageBody(verseCount)}
+            error={startError}
+            triggerLabel="More actions"
+            triggerRef={triggerRef}
+            onConfirm={handleStartOver}
           >
-            <MoreHorizontal aria-hidden />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="max-w-72">
-          {reviewTogether ? (
-            <>
-              <DropdownMenuCheckboxItem
-                checked={reviewTogether.checked}
-                disabled={reviewTogether.disabled || togetherLock.pending}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setTogetherError(null);
-                    setTogetherOpen(true);
-                  } else {
-                    disableTogether();
-                  }
-                }}
-              >
-                <span className="flex flex-col">
-                  Review together as one recitation
-                  {reviewTogether.disabled ? (
-                    <span className="text-xs text-muted-foreground">
-                      Once every verse is memorized
-                    </span>
-                  ) : null}
-                </span>
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-            </>
-          ) : null}
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setConfirmOpen(true)}
-          >
-            {removal.icon}
-            {removal.label}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            {menu}
+          </StartOverConfirm>
+        ) : (
+          menu
+        )}
+      </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent showCloseButton={false} className="sm:max-w-sm">
