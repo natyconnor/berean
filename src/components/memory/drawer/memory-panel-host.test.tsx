@@ -71,6 +71,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     verseMemory: {
       listLibrary: "verseMemory.listLibrary",
       verseDetail: "verseMemory.verseDetail",
+      startOver: "verseMemory.startOver",
       stopMemorizing: "verseMemory.stopMemorizing",
       memoryStatus: "verseMemory.memoryStatus",
       memoryStats: "verseMemory.memoryStats",
@@ -179,6 +180,7 @@ const VERSE_DETAIL = {
   lapses: 0,
   consecutiveCorrect: 3,
   lastReviewedAt: NOW - 8 * DAY_MS,
+  startedOverAt: undefined,
   attempts: [
     {
       quality: "exact",

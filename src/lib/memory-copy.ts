@@ -1,4 +1,8 @@
-import { MAX_LEARN_STAGE, type MemoryStatus } from "./memory-scheduler";
+import {
+  isReviewPhase,
+  MAX_LEARN_STAGE,
+  type MemoryStatus,
+} from "./memory-scheduler";
 
 /**
  * Glossary for every user-facing Memory string. Surfaces read their words from
@@ -41,6 +45,16 @@ export function hasLearningProgress(progress: LearningProgress): boolean {
     (progress.stageReps ?? 0) > 0 ||
     progress.lastReviewedAt !== undefined
   );
+}
+
+/**
+ * Start over is offered once there is real progress since the last reset, or
+ * the verse is already Memorized or Mastered.
+ */
+export function canStartOver(
+  progress: LearningProgress & { status: MemoryStatus },
+): boolean {
+  return isReviewPhase(progress.status) || hasLearningProgress(progress);
 }
 
 /** "Continue learning" once a verse has any learning progress, else "Learn". */
@@ -146,4 +160,17 @@ const STATUS_LABELS: Record<MemoryStatus, StatusLabel> = {
 /** Status chip text. `reviewing` reads as the achievement, "Memorized". */
 export function statusLabel(status: MemoryStatus): StatusLabel {
   return STATUS_LABELS[status];
+}
+
+export const START_OVER_MENU_LABEL = "Start over…";
+export const START_OVER_MENU_DETAIL = "Learn it again from the start";
+export const START_OVER_CONFIRM_LABEL = "Start over";
+export const START_OVER_CANCEL_LABEL = "Cancel";
+export const STARTED_OVER_LABEL = "Started over.";
+export const START_OVER_ERROR = "Couldn't start over. Try again.";
+export const START_OVER_CONFIRM_BODY =
+  "You'll learn it again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.";
+
+export function startOverTitle(name: string): string {
+  return `Start ${name} over?`;
 }
