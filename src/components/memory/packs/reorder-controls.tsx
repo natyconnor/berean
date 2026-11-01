@@ -44,7 +44,7 @@ export function DragHandle(props: ReturnType<DragReorder["handleProps"]>) {
 }
 
 const revealOnRowHover =
-  "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:focus-visible:opacity-100";
+  "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:focus-visible:opacity-100 pointer-fine:data-[state=open]:opacity-100 pointer-fine:data-[confirm-open]:opacity-100";
 
 export type RowStartOver = {
   show: boolean;
@@ -87,6 +87,8 @@ export function RowEditControls({
     index !== undefined &&
     count !== undefined;
   const showStartOver = startOver?.show === true;
+  const confirmOpenProps =
+    startOver?.confirmOpen === true ? { "data-confirm-open": "" as const } : {};
 
   const trigger = (
     <DropdownMenuTrigger asChild>
@@ -97,10 +99,10 @@ export function RowEditControls({
         size="icon"
         aria-label={triggerLabel}
         className={cn(
-          "size-11 text-muted-foreground sm:size-8 data-[state=open]:opacity-100",
+          "size-11 text-muted-foreground sm:size-8",
           revealOnRowHover,
-          startOver?.confirmOpen && "opacity-100",
         )}
+        {...confirmOpenProps}
       >
         <MoreHorizontal aria-hidden />
       </Button>
@@ -179,6 +181,7 @@ export function RowEditControls({
             "hidden size-8 text-muted-foreground pointer-fine:inline-flex",
             revealOnRowHover,
           )}
+          {...confirmOpenProps}
         >
           <X aria-hidden />
         </Button>

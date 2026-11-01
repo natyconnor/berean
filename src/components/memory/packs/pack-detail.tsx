@@ -863,8 +863,7 @@ function PackVerseRow({
   const [error, setError] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const rowRef = useRef<HTMLLIElement>(null);
-  const pendingTriggerFocus = useRef(false);
-  const pendingLearnFocus = useRef(false);
+  const pendingFocus = useRef(false);
   const row = packMemberRow(member, { now, timeZone, reviewTogether });
   const reference = formatVerseRefTitle(member);
   const showStartOver = !started && canStartOver(member);
@@ -872,16 +871,16 @@ function PackVerseRow({
     withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
 
   useLayoutEffect(() => {
-    if (pendingTriggerFocus.current) {
-      pendingTriggerFocus.current = false;
-      triggerRef.current?.focus();
+    if (!pendingFocus.current) return;
+    pendingFocus.current = false;
+    const trigger = triggerRef.current;
+    if (trigger) {
+      trigger.focus();
+      return;
     }
-    if (pendingLearnFocus.current) {
-      pendingLearnFocus.current = false;
-      rowRef.current
-        ?.querySelector<HTMLElement>('a[href*="/memory/learn"]')
-        ?.focus();
-    }
+    rowRef.current
+      ?.querySelector<HTMLElement>('a[href*="/memory/learn"]')
+      ?.focus();
   });
 
   const handleConfirm = () =>
@@ -891,15 +890,14 @@ function PackVerseRow({
         await startOver({ verseRefId: member.verseRefId, now: Date.now() });
         setConfirmOpen(false);
         setStarted(true);
-        if (editable) pendingTriggerFocus.current = true;
-        else pendingLearnFocus.current = true;
+        pendingFocus.current = true;
       } catch {
         setError(START_OVER_ERROR);
       }
     });
 
   const startOverProps =
-    showStartOver || confirmOpen
+    showStartOver || confirmOpen || (started && editable)
       ? {
           show: showStartOver,
           pending: startLock.pending,
@@ -1396,12 +1394,12 @@ function PackDetailMenu({
     startLock.submit(async () => {
       setStartError(null);
       try {
-        clearLearnPackDismissal(pack._id, learnDismissDayKey(Date.now()));
         await startOverPassage({
           packId: pack._id,
           now: Date.now(),
           tzOffsetMinutes,
         });
+        clearLearnPackDismissal(pack._id, learnDismissDayKey(Date.now()));
         setStartConfirmOpen(false);
         setStarted(true);
         pendingTriggerFocus.current = true;
