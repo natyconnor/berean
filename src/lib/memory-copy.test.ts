@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { startOverVersePatch } from "./memory-start-over";
 import {
+  canStartOver,
+  hasLearningProgress,
   memorizeTitleLabel,
   passageStepLine,
+  START_OVER_CONFIRM_BODY,
+  startOverTitle,
   statusLabel,
   stepAction,
   stepActionLine,
@@ -104,5 +109,53 @@ describe("statusLabel", () => {
 describe("memorizeTitleLabel", () => {
   it("names the target", () => {
     expect(memorizeTitleLabel("Psalm 1")).toBe("Memorize Psalm 1");
+  });
+});
+
+describe("hasLearningProgress and canStartOver", () => {
+  it("hides Start over on New or Read with nothing done", () => {
+    const fresh = { status: "new" as const, learnStage: 0 };
+    expect(hasLearningProgress(fresh)).toBe(false);
+    expect(canStartOver(fresh)).toBe(false);
+    expect(
+      canStartOver({ status: "learning", learnStage: 0, stageReps: 0 }),
+    ).toBe(false);
+  });
+
+  it("shows Start over after a step, a banked rep, or a logged try", () => {
+    expect(canStartOver({ status: "learning", learnStage: 1 })).toBe(true);
+    expect(
+      canStartOver({ status: "learning", learnStage: 0, stageReps: 1 }),
+    ).toBe(true);
+    expect(
+      canStartOver({
+        status: "learning",
+        learnStage: 0,
+        lastReviewedAt: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("shows Start over for Memorized and Mastered verses", () => {
+    expect(canStartOver({ status: "reviewing", learnStage: 3 })).toBe(true);
+    expect(canStartOver({ status: "mastered", learnStage: 3 })).toBe(true);
+  });
+
+  it("hides Start over again right after a reset", () => {
+    const reset = startOverVersePatch(1_700_000_000_000);
+    expect(hasLearningProgress(reset)).toBe(false);
+    expect(canStartOver(reset)).toBe(false);
+  });
+});
+
+describe("startOver copy", () => {
+  it("titles the confirm with the verse reference", () => {
+    expect(startOverTitle("John 3:16")).toBe("Start John 3:16 over?");
+  });
+
+  it("uses the follow-up confirm line word for word", () => {
+    expect(START_OVER_CONFIRM_BODY).toBe(
+      "You'll learn it again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.",
+    );
   });
 });

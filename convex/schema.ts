@@ -320,6 +320,8 @@ export default defineSchema({
     // the inMemory backfill has run for the user.
     inMemory: v.optional(v.boolean()),
     lastReviewedAt: v.optional(v.number()),
+    // Epoch for verse-page history after Start over. Absent until the first reset.
+    startedOverAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_userId_dueAt", ["userId", "dueAt"]) // Today queue + badge
