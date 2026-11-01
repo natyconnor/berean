@@ -65,5 +65,7 @@ export function startOverPassagePatch(
     lastSessionAt: session.lastSessionAt,
     addsOnDay: session.addsOnDay,
     addDayKey: session.addDayKey,
+    celebratedAt: undefined,
+    celebrationPendingAt: undefined,
   };
 }

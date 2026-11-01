@@ -9,6 +9,10 @@ import {
 import { EASE_START, initialSchedule } from "./memory-scheduler";
 import type { PassagePiece } from "./passage-pieces";
 import {
+  celebrationPendingPatch,
+  needsCelebration,
+} from "../../convex/lib/passageCelebration";
+import {
   attemptsSinceStartOver,
   startOverPassagePatch,
   startOverPassagePieces,
@@ -116,6 +120,28 @@ describe("startOverPassagePatch", () => {
       true,
     );
     expect(startOverPassageSession()).toEqual({ addsOnDay: 0 });
+  });
+
+  it("clears celebration so a second finish can show the moment again", () => {
+    const celebrated = {
+      status: "reviewing" as const,
+      celebratedAt: NOW - DAY_MS,
+      celebrationPendingAt: NOW - 2 * DAY_MS,
+    };
+    const reset = {
+      ...celebrated,
+      ...startOverPassagePatch([piece(0, "solid")], NOW),
+    };
+
+    expect(reset.celebratedAt).toBeUndefined();
+    expect(reset.celebrationPendingAt).toBeUndefined();
+    expect("celebratedAt" in reset).toBe(true);
+    expect("celebrationPendingAt" in reset).toBe(true);
+    expect(needsCelebration(reset)).toBe(false);
+
+    const pending = celebrationPendingPatch(reset, "reviewing", NOW + DAY_MS);
+    expect(pending).toEqual({ celebrationPendingAt: NOW + DAY_MS });
+    expect(needsCelebration({ ...reset, ...pending })).toBe(true);
   });
 });
 
