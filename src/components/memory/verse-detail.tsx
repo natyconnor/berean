@@ -5,38 +5,14 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import {
-  Brain,
-  CircleStop,
-  Dumbbell,
-  GraduationCap,
-  MoreHorizontal,
-  Play,
-} from "lucide-react";
+import { Brain, Dumbbell, GraduationCap, Play } from "lucide-react";
 import { useQuery } from "convex-helpers/react/cache";
-import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { toast } from "sonner";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { formatAccuracyPercent, hoverIndexFromX } from "@/lib/accuracy-trend";
 import {
   learnActionLabel,
@@ -46,7 +22,6 @@ import {
 } from "@/lib/memory-copy";
 import { formatMemoryStatusCaption } from "@/lib/memory-due-label";
 import { withReturn } from "@/lib/memory-return";
-import { MemoryStatusCaptionLine } from "./memory-status-caption";
 import {
   isDueForReview,
   isLearningLocked,
@@ -60,17 +35,20 @@ import {
 import { nextStepCopy } from "@/lib/memorize-plan";
 import { cn } from "@/lib/utils";
 import { asTableId } from "@/lib/convex-id";
+import { attemptsSinceStartOver } from "@/lib/memory-start-over";
 import { howItsGoing, verseDetailFacts } from "@/lib/verse-detail-copy";
 import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { linePath, scaleLinear } from "./dashboard/svg-chart-helpers";
 import { useMemoryPanelFrame } from "./drawer/memory-panel-context";
 import { MemoryPanelFrame } from "./drawer/memory-panel-frame";
-import { GoalKindMark } from "./today/goal-kind-icon";
 import { InternalLink } from "./internal-link";
+import { VerseMemoryMenu } from "./memory-restart-menu";
 import { useMemorizeSheet } from "./memorize/memorize-context";
+import { MemoryStatusCaptionLine } from "./memory-status-caption";
 import { AddToPack } from "./packs/add-to-pack";
 import { LearningJourneyBar } from "./practice/learning-journey-bar";
+import { GoalKindMark } from "./today/goal-kind-icon";
 
 export type VerseDetailData = NonNullable<
   FunctionReturnType<typeof api.verseMemory.verseDetail>
@@ -116,7 +94,7 @@ function VerseDetailSkeleton() {
 
 /**
  * One verse in a drawer or on its full page: the reference as the title, a ⋯
- * menu with Stop memorizing, and {@link VerseDetailBody}.
+ * menu with Start over and Stop memorizing, and {@link VerseDetailBody}.
  */
 export function VerseDetailPanel({
   verseRefId,
@@ -168,9 +146,13 @@ export function VerseDetailPanel({
       subtitle={verseSubtitle(detail)}
       actions={
         detail.inMemory ? (
-          <StopMemorizingMenu
+          <VerseMemoryMenu
             verseRefId={id}
             reference={reference}
+            status={detail.status}
+            learnStage={detail.learnStage}
+            stageReps={detail.stageReps}
+            lastReviewedAt={detail.lastReviewedAt}
             onStopped={frame.exit}
           />
         ) : undefined
@@ -253,7 +235,11 @@ export function VerseDetailBody({
 
   const reviewPhase = isReviewPhase(detail.status);
   const facts = verseDetailFacts(detail, now, timeZone);
-  const going = howItsGoing(detail.attempts.map((attempt) => attempt.accuracy));
+  const pageAttempts = attemptsSinceStartOver(
+    detail.attempts,
+    detail.startedOverAt,
+  );
+  const going = howItsGoing(pageAttempts.map((attempt) => attempt.accuracy));
   const sessionHref = (kind: MemorySessionKind) =>
     withReturn(memoryVerseSessionHref(kind, reference), returnTo);
 
@@ -417,7 +403,7 @@ export function VerseDetailBody({
           </p>
         )}
         <AccuracySparkline
-          attemptsNewestFirst={detail.attempts}
+          attemptsNewestFirst={pageAttempts}
           timeZone={timeZone}
         />
       </section>
@@ -630,85 +616,5 @@ function AccuracySparkline({
           : ""}
       </p>
     </div>
-  );
-}
-
-function StopMemorizingMenu({
-  verseRefId,
-  reference,
-  onStopped,
-}: {
-  verseRefId: Id<"verseRefs">;
-  reference: string;
-  onStopped: () => void;
-}) {
-  const stopMemorizing = useMutation(api.verseMemory.stopMemorizing);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const { submit, pending } = useSubmitLock();
-
-  const handleStop = () =>
-    submit(async () => {
-      try {
-        await stopMemorizing({ verseRefId, now: Date.now() });
-        setConfirmOpen(false);
-        toast.success(`Stopped memorizing ${reference}.`);
-        onStopped();
-      } catch {
-        toast.error("Couldn't stop memorizing. Please try again.");
-      }
-    });
-
-  return (
-    <>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 text-muted-foreground sm:size-8"
-            aria-label="More actions"
-          >
-            <MoreHorizontal aria-hidden />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setConfirmOpen(true)}
-          >
-            <CircleStop aria-hidden />
-            Stop memorizing
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Stop memorizing {reference}?</DialogTitle>
-            <DialogDescription>
-              Your progress is saved if you start again.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Keep
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              loading={pending}
-              onClick={handleStop}
-            >
-              Stop memorizing
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }
