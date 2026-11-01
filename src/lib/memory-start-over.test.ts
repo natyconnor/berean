@@ -7,8 +7,12 @@ import {
   overallAccuracy,
 } from "./dashboard-buckets";
 import { EASE_START, initialSchedule } from "./memory-scheduler";
+import type { PassagePiece } from "./passage-pieces";
 import {
   attemptsSinceStartOver,
+  startOverPassagePatch,
+  startOverPassagePieces,
+  startOverPassageSession,
   startOverVersePatch,
 } from "./memory-start-over";
 
@@ -50,6 +54,68 @@ describe("attemptsSinceStartOver", () => {
 
   it("returns none when every try is from before the reset", () => {
     expect(attemptsSinceStartOver([older], NOW)).toEqual([]);
+  });
+});
+
+function piece(
+  index: number,
+  attachment: PassagePiece["attachment"],
+  extra: Partial<PassagePiece> = {},
+): PassagePiece {
+  return {
+    index,
+    book: "Psalms",
+    chapter: 23,
+    startVerse: index + 1,
+    endVerse: index + 1,
+    sectionIndex: 0,
+    attachment,
+    learnStage: attachment === "solid" ? 3 : 1,
+    stageReps: 2,
+    dueAt: NOW - DAY_MS,
+    carriedOver: true,
+    ...extra,
+  };
+}
+
+describe("startOverPassagePatch", () => {
+  it("resets every piece and puts the passage back to learning due now", () => {
+    const other = piece(1, "unreached", {
+      learnStage: 0,
+      stageReps: 0,
+      dueAt: undefined,
+    });
+    const next = startOverPassagePatch(
+      [piece(0, "solid"), piece(1, "learning"), other],
+      NOW,
+    );
+
+    expect(next.status).toBe("building");
+    expect(next.dueAt).toBe(NOW);
+    expect(next.startedOverAt).toBe(NOW);
+    expect(next).toMatchObject({
+      ease: EASE_START,
+      intervalDays: 0,
+      consecutiveCorrect: 0,
+      lapses: 0,
+      stageReps: 0,
+      addsOnDay: 0,
+    });
+    expect(next.lastSessionAt).toBeUndefined();
+    expect(next.addDayKey).toBeUndefined();
+    expect(startOverPassagePieces([piece(0, "solid")])).toEqual([
+      {
+        ...piece(0, "solid"),
+        attachment: "unreached",
+        learnStage: 0,
+        stageReps: 0,
+        dueAt: undefined,
+      },
+    ]);
+    expect(next.pieces.every((item) => item.attachment === "unreached")).toBe(
+      true,
+    );
+    expect(startOverPassageSession()).toEqual({ addsOnDay: 0 });
   });
 });
 

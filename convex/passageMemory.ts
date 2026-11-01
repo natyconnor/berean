@@ -63,6 +63,7 @@ import {
   planStart,
 } from "../src/lib/passage-start";
 import { applyUnifiedGrade } from "../src/lib/unified-review-schedule";
+import { startOverPassagePatch } from "../src/lib/memory-start-over";
 
 /**
  * Passage-mode overlay on a pack. Returns `null` when the caller is
@@ -541,6 +542,30 @@ export const ensureDueBackfill = mutation({
     const userId = await getCurrentUserId(ctx);
     await ensurePassageDueBackfill(ctx, userId, args.now);
     return null;
+  },
+});
+
+/**
+ * Reset every piece to unreached and the passage to learning, due now.
+ * Attempt rows stay. Review-day totals are not touched.
+ */
+export const startOver = mutation({
+  args: {
+    packId: v.id("packs"),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: passageViewValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = withNormalizedPieces(
+      await requirePassageForPack(ctx, args.packId, userId),
+    );
+    const next = await patchPassageMemory(ctx, row._id, {
+      ...startOverPassagePatch(row.pieces, args.now),
+      updatedAt: args.now,
+    });
+    return toPassageView(next, args.now, args.tzOffsetMinutes);
   },
 });
 

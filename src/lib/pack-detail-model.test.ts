@@ -193,6 +193,22 @@ describe("primary action", () => {
     });
   });
 
+  it("passage with nothing reached: Start · about N min", () => {
+    const goal = passageGoal({
+      pieces: [
+        piece(0, 1, 4, "unreached"),
+        piece(1, 5, 6, "unreached"),
+        piece(2, 7, 11, "unreached"),
+      ],
+    });
+    expect(passageDetailActions(goal, NOW, TZ).main).toEqual({
+      kind: "session",
+      emphasis: "primary",
+      label: "Start · about 7 min",
+      session: "learn",
+    });
+  });
+
   it("passage building, waiting: disabled Up next tomorrow", () => {
     const goal = passageGoal({
       pieces: [

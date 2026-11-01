@@ -269,11 +269,14 @@ export function passageDetailActions(
       reviewVerses: 0,
       passageSessions: 1,
     });
+    const nothingReached = goal.pieceStates.every(
+      (piece) => piece.state === "upNext",
+    );
     return {
       main: {
         kind: "session",
         emphasis: "primary",
-        label: `Continue · about ${minutes} min`,
+        label: `${nothingReached ? "Start" : "Continue"} · about ${minutes} min`,
         session: "learn",
       },
       practice: false,
