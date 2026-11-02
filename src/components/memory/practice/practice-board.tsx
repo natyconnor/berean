@@ -35,10 +35,17 @@ import { useSubmitLock } from "@/hooks/use-submit-lock";
 import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
-import { SESSION_COMPLETE_FOOTER, stepShortLabel } from "@/lib/memory-copy";
+import {
+  NOW_TRY_WITHOUT_HINTS,
+  REFRESH_SAVE_ERROR,
+  SESSION_COMPLETE_FOOTER,
+  refresherHeader,
+  stepShortLabel,
+} from "@/lib/memory-copy";
 import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
+  LEARN_PROGRESS_ACCURACY,
   isLearningLocked,
   isLearningProgressAttempt,
   isReviewPhase,
@@ -100,8 +107,11 @@ import {
 } from "../../study/study-attempt-quality";
 import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
+import type { RecordVerseAttemptResult } from "../../study/use-record-verse-attempt";
 import { VerseAttemptResult } from "../../study/verse-attempt-result";
+import { EmptyHintPrompt } from "../memory-refresher-controls";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
+import { useVerseRefresher } from "./use-verse-refresher";
 import { LearningJourneyBar } from "./learning-journey-bar";
 import {
   currentStageStep,
@@ -442,6 +452,7 @@ export function PracticeBoard({
   const { recordWithSeqAdopt } = useVersePracticeAttempt(recordModeFor(kind), {
     skipLibraryIds: sessionVersesCanSkipLibraryIds(verses),
   });
+  const [cardSaving, setCardSaving] = useState(false);
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);
   const celebrateMastered = useFirstMasteredToast();
@@ -828,6 +839,7 @@ export function PracticeBoard({
     onExit,
     backLabel,
     exitHref,
+    backDisabled: cardSaving,
     progress: resolveSessionProgress(progress, {
       done: railVerses.filter((verse) => verse.locked).length,
       total: railVerses.length,
@@ -936,51 +948,62 @@ export function PracticeBoard({
                     }
                   : null
               }
-              onRecord={(tokens, wordCount) => {
+              offerRefresher={isReview}
+              onSavingChange={setCardSaving}
+              onRecord={async (tokens, wordCount, opts) => {
                 const verseId = currentVerse.id;
-                const accuracy = verseAttemptAccuracy(tokens);
-                setGradedIds((prev) =>
-                  prev.has(verseId) ? prev : new Set(prev).add(verseId),
-                );
-                if (isReview) {
-                  const nextAttempt = {
-                    reference: currentVerse.reference,
-                    accuracy,
-                    // One recitation, one row: the pack name, and no
-                    // per-verse practice shortcut to a single member.
-                    label: composite
-                      ? (composite.packName ?? scopeLabel)
-                      : undefined,
-                    offerPractice: composite === null,
-                  };
-                  // Keep every recitation. The summary averages them.
-                  setSessionAttempts((prev) => [...prev, nextAttempt]);
+                const hold = opts?.holdSchedule === true;
+                const counted: RecordVerseAttemptResult = composite
+                  ? await recordComposite(
+                      composite.packId,
+                      tokens,
+                      wordCount,
+                      composite.passageStatus,
+                    ).then((next) =>
+                      next
+                        ? { ok: true as const, schedule: next }
+                        : { ok: false as const },
+                    )
+                  : await recordWithSeqAdopt(
+                      verseId,
+                      {
+                        reference: currentVerse.reference,
+                        verseRefId: currentVerse.verseRefId,
+                        tokens,
+                        stage: currentProgress.learnStage,
+                        wordCount,
+                        now: opts?.now,
+                        hint: opts?.hint,
+                        holdSchedule: opts?.holdSchedule,
+                        refresherUsed: opts?.refresherUsed,
+                      },
+                      (schedule) => {
+                        if (hold) return;
+                        adoptVerseSchedule(verseId, schedule);
+                      },
+                    );
+                if (hold || !counted.ok) return counted;
+                if (composite && counted.schedule) {
+                  adoptVerseSchedule(verseId, counted.schedule);
                 }
-                if (composite) {
-                  return recordComposite(
-                    composite.packId,
-                    tokens,
-                    wordCount,
-                    composite.passageStatus,
-                  ).then((next) => {
-                    if (!next) return null;
-                    adoptVerseSchedule(verseId, next);
-                    return next;
-                  });
+                if (isReview && (counted.schedule || composite)) {
+                  setGradedIds((prev) =>
+                    prev.has(verseId) ? prev : new Set(prev).add(verseId),
+                  );
+                  setSessionAttempts((prev) => [
+                    ...prev,
+                    {
+                      reference: currentVerse.reference,
+                      accuracy: verseAttemptAccuracy(tokens),
+                      label: composite
+                        ? (composite.packName ?? scopeLabel)
+                        : undefined,
+                      offerPractice: composite === null,
+                      ...(opts?.refresherUsed ? { refresherUsed: true } : {}),
+                    },
+                  ]);
                 }
-                return recordWithSeqAdopt(
-                  verseId,
-                  {
-                    reference: currentVerse.reference,
-                    verseRefId: currentVerse.verseRefId,
-                    tokens,
-                    stage: currentProgress.learnStage,
-                    wordCount,
-                  },
-                  (schedule) => {
-                    adoptVerseSchedule(verseId, schedule);
-                  },
-                );
+                return counted;
               }}
               advancesOnContinue={!currentHasWorkLeft}
               onContinueAfterResult={() => {
@@ -1083,10 +1106,19 @@ interface PracticeCardProps {
   /** Set when this card is a whole pack recited as one passage. */
   composite?: CompositeCardPassage | null;
   reviewItem?: "verse" | "passage";
+  /** Quiet refresher link. Gate on Memorized + loaded lives in the card. */
+  offerRefresher?: boolean;
+  onSavingChange?: (saving: boolean) => void;
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
-  ) => Promise<MemorySchedule | null>;
+    opts?: {
+      now?: number;
+      hint?: "first-letters";
+      holdSchedule?: boolean;
+      refresherUsed?: boolean;
+    },
+  ) => Promise<RecordVerseAttemptResult>;
   /**
    * This verse is spent for the session, so dismissing the result leaves the
    * card instead of setting up another rep.
@@ -1113,12 +1145,17 @@ function PracticeCard({
   showScheduleOutcome = false,
   composite = null,
   reviewItem = "verse",
+  offerRefresher = false,
+  onSavingChange,
   onRecord,
   advancesOnContinue = false,
   onContinueAfterResult,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
+  const refresher = useVerseRefresher();
   const [typedAnswer, setTypedAnswer] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const countedSaveNowRef = useRef<number | null>(null);
   // Whether the current answer has been checked (and thus recorded). Persists
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
@@ -1143,6 +1180,16 @@ function PracticeCard({
   // `submitPending` and both clear on the render that ends the save.
   const [submitKind, setSubmitKind] = useState<"grade" | "read" | null>(null);
   const gradePending = submitPending && submitKind === "grade";
+  const countedFromMemory =
+    showScheduleOutcome &&
+    isReviewPhase(status) &&
+    !composite &&
+    refresher.phase !== "step1";
+
+  useEffect(() => {
+    onSavingChange?.(submitPending);
+    return () => onSavingChange?.(false);
+  }, [onSavingChange, submitPending]);
 
   const refLabel = formatVerseRefTitle(reference);
   // A composite card recites many spans, so it takes its text from the pack's
@@ -1162,6 +1209,20 @@ function PracticeCard({
   const stageColor = practiceChromeFor(learnStage, status);
   const { hintStage, tokens, wordCount } = useMemo(() => {
     const wc = countVerseWords(versePlainText);
+    if (refresher.phase === "step1") {
+      return {
+        hintStage: "first-letters" as const,
+        tokens: maskVerseText(versePlainText, "first-letters"),
+        wordCount: wc,
+      };
+    }
+    if (refresher.phase === "step2") {
+      return {
+        hintStage: "hidden" as const,
+        tokens: maskVerseText(versePlainText, "hidden"),
+        wordCount: wc,
+      };
+    }
     const hint = hintForProgress(learnStage, stageReps, wc);
     return {
       hintStage: hint.stage,
@@ -1171,7 +1232,7 @@ function PracticeCard({
       }),
       wordCount: wc,
     };
-  }, [versePlainText, learnStage, stageReps]);
+  }, [versePlainText, learnStage, stageReps, refresher.phase]);
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
   const liveGoalLabel =
@@ -1236,6 +1297,20 @@ function PracticeCard({
     !advancesOnContinue &&
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
 
+  function recordFlags(): {
+    now?: number;
+    hint?: "first-letters";
+    holdSchedule?: boolean;
+    refresherUsed?: boolean;
+  } {
+    const hold = refresher.phase === "step1";
+    return {
+      hint: hold ? "first-letters" : undefined,
+      holdSchedule: hold || undefined,
+      refresherUsed: refresher.phase === "step2" || undefined,
+    };
+  }
+
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
     // Practice counts fully: every checked attempt records and reschedules. The
@@ -1245,15 +1320,17 @@ function PracticeCard({
     // and already on screen; the wait is the Convex write.
     setSubmitKind("grade");
     submit(async () => {
-      const now = Date.now();
+      const now =
+        countedFromMemory && countedSaveNowRef.current !== null
+          ? countedSaveNowRef.current
+          : Date.now();
+      if (countedFromMemory) countedSaveNowRef.current = now;
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       const accuracy = verseAttemptAccuracy(tokens);
-      // Preview the next interval locally so the result banner never flashes
-      // "soon" while `recordAttempt` is in flight. Server schedule still wins
-      // when it lands.
+      const waitForSave = countedFromMemory || refresher.phase === "step1";
       const preview =
-        showScheduleOutcome && quality
+        showScheduleOutcome && quality && !waitForSave
           ? previewNextSchedule(scheduleSnapshot, {
               quality,
               accuracy,
@@ -1265,8 +1342,6 @@ function PracticeCard({
               item: reviewItem,
             })
           : null;
-      // Freeze the step label on the step being graded; journey props may adopt
-      // as soon as `onRecord` settles, but the label waits for Continue.
       if (status !== "reviewing" && status !== "mastered") {
         setHeldGoalLabel(
           `${stageInfo.label} · ${currentStageStep(stageReps, requiredToday)} of ${requiredToday} today`,
@@ -1275,37 +1350,88 @@ function PracticeCard({
       setChecked(true);
       setOutcomeNow(now);
       setNextSchedule(preview);
-      const schedule = await onRecord(tokens, wordCount ?? 0);
-      if (schedule) setNextSchedule(schedule);
+      const result = await onRecord(tokens, wordCount ?? 0, {
+        now,
+        ...recordFlags(),
+      });
+      if (refresher.phase === "step1") {
+        setSaveError(null);
+        return;
+      }
+      if (!result.ok) {
+        if (countedFromMemory) setSaveError(REFRESH_SAVE_ERROR);
+        return;
+      }
+      setSaveError(null);
+      if (result.schedule) setNextSchedule(result.schedule);
+    });
+  }
+
+  function retryCountedSave() {
+    setSubmitKind("grade");
+    submit(async () => {
+      const now = countedSaveNowRef.current ?? Date.now();
+      const result = await onRecord(
+        diffWords(typedAnswer, versePlainText),
+        wordCount ?? 0,
+        { now, ...recordFlags() },
+      );
+      if (!result.ok) return;
+      setSaveError(null);
+      if (result.schedule) setNextSchedule(result.schedule);
     });
   }
 
   function continueRead() {
     if (!canContinueRead) return;
-    // Submitting the shown (full) text banks the single Read rep, advancing the
-    // scheduler to the first fading band. The lock collapses same-tick double
-    // activations; it releases whatever the outcome, so a null/unchanged result
-    // (mutation error, verse not hearted) re-enables Continue rather than
-    // stranding it. On the normal success path the band advances and this
-    // button is unmounted.
     setSubmitKind("read");
     submit(async () => {
       setOutcomeNow(Date.now());
       setNextSchedule(null);
-      const schedule = await onRecord(
+      const result = await onRecord(
         diffWords(versePlainText, versePlainText),
         wordCount ?? 0,
       );
-      if (schedule) setNextSchedule(schedule);
+      if (result.ok && result.schedule) setNextSchedule(result.schedule);
     });
   }
 
-  function continueAttempt() {
+  function resetTyping() {
     setChecked(false);
     setHeldGoalLabel(null);
     setTypedAnswer("");
-    onContinueAfterResult?.();
+    setSaveError(null);
+    setNextSchedule(null);
+    countedSaveNowRef.current = null;
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
+  }
+
+  function openRefresher() {
+    setTypedAnswer("");
+    setChecked(false);
+    setSaveError(null);
+    countedSaveNowRef.current = null;
+    refresher.open();
+    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+  }
+
+  function continueAttempt() {
+    if (saveError) {
+      retryCountedSave();
+      return;
+    }
+    if (refresher.phase === "step1") {
+      if (checkedAccuracy < LEARN_PROGRESS_ACCURACY) {
+        resetTyping();
+        return;
+      }
+      refresher.continueToStep2();
+      resetTyping();
+      return;
+    }
+    refresher.close();
+    resetTyping();
+    onContinueAfterResult?.();
   }
 
   // Read Continue and the result-view Continue / Try again share one control
@@ -1319,6 +1445,11 @@ function PracticeCard({
     if (showDone || (!checked && !isReadPrime)) return;
     reviewActionRef.current?.focus();
   }, [checked, isReadPrime, showDone]);
+
+  useEffect(() => {
+    if (!saveError || submitPending) return;
+    reviewActionRef.current?.focus();
+  }, [saveError, submitPending]);
 
   // After Read advances into a typing band (or when landing mid-ladder), put
   // the caret in the answer box. Continue is unmounted, so without this the
@@ -1334,7 +1465,13 @@ function PracticeCard({
     checkAnswer();
   }
 
-  const settledResultAction = offerPracticeAgain ? (
+  const step1Retry =
+    refresher.phase === "step1" && checkedAccuracy < LEARN_PROGRESS_ACCURACY;
+  const showTryAgain =
+    Boolean(saveError) ||
+    step1Retry ||
+    (offerPracticeAgain && !countedFromMemory && refresher.phase !== "step1");
+  const settledResultAction = showTryAgain ? (
     <>
       <RotateCcw className="h-4 w-4" aria-hidden />
       Try again
@@ -1345,7 +1482,8 @@ function PracticeCard({
       Continue
     </>
   );
-  const resultActionLabel = gradePending ? "Saving..." : settledResultAction;
+  const resultActionLabel =
+    gradePending && !saveError ? "Saving..." : settledResultAction;
 
   return (
     <motion.div
@@ -1366,7 +1504,9 @@ function PracticeCard({
                 className={cn("h-2 w-2 rounded-full", stageColor.dot)}
                 aria-hidden
               />
-              {sessionLabel} · {stageInfo.label}
+              {refresher.step
+                ? refresherHeader(refresher.step)
+                : `${sessionLabel} · ${stageInfo.label}`}
             </p>
             <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {composite ? composite.title : refLabel}
@@ -1385,14 +1525,16 @@ function PracticeCard({
               {sessionGoalLabel}
             </p>
           ) : null}
-          <LearningJourneyBar
-            learnStage={learnStage}
-            stageReps={stageReps}
-            wordCount={wordCount}
-            status={status}
-            intervalDays={scheduleSnapshot.intervalDays}
-            ease={scheduleSnapshot.ease}
-          />
+          {refresher.isOpen ? null : (
+            <LearningJourneyBar
+              learnStage={learnStage}
+              stageReps={stageReps}
+              wordCount={wordCount}
+              status={status}
+              intervalDays={scheduleSnapshot.intervalDays}
+              ease={scheduleSnapshot.ease}
+            />
+          )}
           {locked ? (
             <p className="text-xs text-muted-foreground">
               Tomorrow: {stageInfo.label}
@@ -1457,13 +1599,26 @@ function PracticeCard({
                         </Button>
                       </div>
                     ) : hintStage === "hidden" ? (
-                      <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
-                        <p className="max-w-sm text-sm text-muted-foreground">
-                          {composite
-                            ? "No hint text. Type the passage from memory — verse numbers not needed — then check your answer."
-                            : "No hint text. Type the verse from memory, then check your answer."}
-                        </p>
-                      </div>
+                      <EmptyHintPrompt
+                        passage={Boolean(composite)}
+                        message={
+                          refresher.phase === "step2"
+                            ? NOW_TRY_WITHOUT_HINTS
+                            : undefined
+                        }
+                        onRefresher={
+                          offerRefresher &&
+                          !composite &&
+                          isReviewPhase(status) &&
+                          !loading &&
+                          !error &&
+                          versePlainText !== "" &&
+                          refresher.phase === "off"
+                            ? openRefresher
+                            : undefined
+                        }
+                        disabled={submitPending}
+                      />
                     ) : (
                       <HintTokenText tokens={tokens} />
                     )}
@@ -1513,6 +1668,9 @@ function PracticeCard({
                     )}
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
+                    scheduleHeld={refresher.phase === "step1"}
+                    skipCelebrate={refresher.phase === "step1"}
+                    saveError={saveError}
                   />
                   {checkedQuality !== "exact" && (
                     <div
@@ -1789,6 +1947,7 @@ function PracticeShell({
   onExit,
   backLabel = "Back to Memory",
   exitHref,
+  backDisabled = false,
   progress,
   children,
 }: {
@@ -1797,6 +1956,7 @@ function PracticeShell({
   onExit: () => void;
   backLabel?: string;
   exitHref?: string;
+  backDisabled?: boolean;
   progress?: SessionProgress;
   children: ReactNode;
 }): JSX.Element {
@@ -1808,6 +1968,7 @@ function PracticeShell({
             onExit={onExit}
             label={backLabel}
             exitHref={exitHref}
+            disabled={backDisabled}
           />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
             <span className="shrink-0 font-semibold">{sessionLabel}</span>
