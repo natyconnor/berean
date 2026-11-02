@@ -7,6 +7,7 @@ import type { PracticeVerse } from "@/components/memory/practice/practice-board"
 import { ReviewEmptyState } from "@/components/memory/session-empty-states";
 import { dueQueueEntryToPracticeVerse } from "@/components/memory/to-practice-verse";
 import { Button } from "@/components/ui/button";
+import { useLeftoverHeldAttemptsReady } from "@/hooks/use-apply-leftover-held-attempts";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
@@ -74,13 +75,14 @@ export function MemoryReviewPage() {
   const backLabel = exit.label;
   const exitHref = exit.href;
   const now = useLiveNow();
+  const leftoversReady = useLeftoverHeldAttemptsReady();
   const hasScope = hasReviewVerseScope(search);
   const [queueEpoch, setQueueEpoch] = useState(0);
   const [drainedDue, setDrainedDue] = useState(0);
 
   const scopedDue = useFrozenQuery(
     api.verseMemory.dueForVerse,
-    hasScope
+    hasScope && leftoversReady
       ? {
           now,
           book: search.book,
@@ -92,12 +94,12 @@ export function MemoryReviewPage() {
   );
   const globalDue = useFrozenQuery(
     api.verseMemory.dueQueue,
-    hasScope ? "skip" : { now, generation: queueEpoch },
+    hasScope || !leftoversReady ? "skip" : { now, generation: queueEpoch },
     queueEpoch,
   );
   const globalStats = useFrozenQuery(
     api.verseMemory.memoryStats,
-    hasScope
+    hasScope || !leftoversReady
       ? "skip"
       : { now, tzOffsetMinutes: new Date(now).getTimezoneOffset() },
   );

@@ -4,6 +4,7 @@ import { DAY_MS, LEARN_PROGRESS_ACCURACY } from "./memory-scheduler";
 import {
   applyHeldTry,
   countedTryExistsToday,
+  dueQueueAfterLeftoverApply,
   emptyHeldAttemptState,
   HELD_ATTEMPT_BACKSTOP_MS,
   holdFirstTry,
@@ -140,6 +141,30 @@ describe("held first try", () => {
     expect(raced.practiceOnly).toBe(true);
     expect(countedCount(raced.state)).toBe(1);
     expect(raced.state.counted[0]?.accuracy).toBe(70);
+  });
+
+  it("after a held-card reload, leftover apply leaves one counted row and drops the verse from due", () => {
+    const held = miss();
+    const reloaded = dueQueueAfterLeftoverApply(
+      holdFirstTry(emptyHeldAttemptState(), held),
+      [VERSE, "other.verse"],
+    );
+    expect(countedCount(reloaded.state)).toBe(1);
+    expect(reloaded.state.heldById.size).toBe(0);
+    expect(reloaded.dueKeys).toEqual(["other.verse"]);
+  });
+
+  it("after a mid-step-2 reload, leftover apply leaves one counted row and drops the verse from due", () => {
+    const held = miss({ id: "held_step2" });
+    const midStep2 = holdFirstTry(emptyHeldAttemptState(), held);
+    expect(midStep2.heldById.get(held.id)).toEqual(held);
+    expect(midStep2.counted).toEqual([]);
+
+    const reloaded = dueQueueAfterLeftoverApply(midStep2, [VERSE]);
+    expect(countedCount(reloaded.state)).toBe(1);
+    expect(reloaded.state.counted[0]?.accuracy).toBe(70);
+    expect(reloaded.state.counted[0]?.refresherUsed).toBe(false);
+    expect(reloaded.dueKeys).toEqual([]);
   });
 
   it("does not hold a pre-try refresher, so backing out counts nothing", () => {

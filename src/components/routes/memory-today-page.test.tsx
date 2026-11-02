@@ -56,6 +56,12 @@ vi.mock("@/hooks/use-live-now", () => ({
   useLiveNow: () => NOW,
 }));
 
+vi.mock("@/hooks/use-apply-leftover-held-attempts", () => ({
+  useLeftoverHeldAttemptsReady: () => true,
+  useApplyLeftoverHeldAttempts: () => {},
+  resetApplyLeftoverHeldAttemptsForTests: () => {},
+}));
+
 vi.mock("@/hooks/use-frozen-query", () => ({
   useFrozenQuery: (name: string, args: unknown) =>
     args === "skip" ? undefined : frozenResults.get(name),

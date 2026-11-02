@@ -35,6 +35,12 @@ function mutationMock(name: string) {
   return created;
 }
 
+vi.mock("@/hooks/use-apply-leftover-held-attempts", () => ({
+  useLeftoverHeldAttemptsReady: () => true,
+  useApplyLeftoverHeldAttempts: () => {},
+  resetApplyLeftoverHeldAttemptsForTests: () => {},
+}));
+
 vi.mock("convex/react", () => ({
   useQuery: (name: string) => queryResults.get(name),
   useMutation: (name: string) => mutationMock(name),

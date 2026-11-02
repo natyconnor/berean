@@ -169,6 +169,25 @@ export function countedTryExistsToday(
   );
 }
 
+/**
+ * Reload / next-session load: apply leftover held misses, then build the due
+ * list from the result. A verse whose miss just counted is no longer due.
+ */
+export function dueQueueAfterLeftoverApply(
+  state: HeldAttemptState,
+  dueKeys: readonly string[],
+): { state: HeldAttemptState; dueKeys: string[] } {
+  let next = state;
+  for (const held of [...state.heldById.values()]) {
+    next = applyHeldTry(next, held.id).state;
+  }
+  const countedKeys = new Set(next.counted.map((row) => row.verseKey));
+  return {
+    state: next,
+    dueKeys: dueKeys.filter((key) => !countedKeys.has(key)),
+  };
+}
+
 /** A first unhinted miss on a due Memorized verse, before any counted try today. */
 export function isHoldableColdMiss(args: {
   reviewPhase: boolean;
