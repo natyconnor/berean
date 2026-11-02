@@ -45,6 +45,7 @@ interface RecordVerseAttemptInput {
   hint?: "first-letters";
   holdSchedule?: boolean;
   refresherUsed?: boolean;
+  replaceHeldId?: Id<"heldVerseAttempts">;
 }
 
 interface PendingAttempt {
@@ -136,6 +137,7 @@ export function useRecordVerseAttempt(
         ...(input.hint ? { hint: input.hint } : {}),
         ...(input.holdSchedule ? { holdSchedule: true } : {}),
         ...(input.refresherUsed ? { refresherUsed: true } : {}),
+        ...(input.replaceHeldId ? { replaceHeldId: input.replaceHeldId } : {}),
       })
         .then((schedule): RecordVerseAttemptResult => ({
           ok: true,

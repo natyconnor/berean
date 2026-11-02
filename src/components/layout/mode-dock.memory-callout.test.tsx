@@ -7,7 +7,12 @@ import type { OnboardingMilestones } from "@/lib/staged-onboarding-thresholds";
 import { ModeDock } from "./mode-dock";
 
 const mocks = vi.hoisted(() => ({
-  ensureInMemoryBackfill: vi.fn(() => Promise.resolve(null)),
+  ensureInMemoryBackfill: vi
+    .fn<(args?: { now?: number }) => Promise<null>>()
+    .mockResolvedValue(null),
+  applyLeftoverHeldAttempts: vi
+    .fn<(args?: { now?: number }) => Promise<{ applied: number }>>()
+    .mockResolvedValue({ applied: 0 }),
   isAuthenticated: true,
   navigate: vi.fn(),
   useLocation: vi.fn(() => ({
@@ -32,7 +37,10 @@ vi.mock("@/lib/use-tabs", () => ({
 
 vi.mock("convex/react", () => ({
   useQuery: (query: unknown, args?: unknown) => mocks.useQuery(query, args),
-  useMutation: () => mocks.ensureInMemoryBackfill,
+  useMutation: () => (args?: { now?: number }) => {
+    if (args && "now" in args) return mocks.ensureInMemoryBackfill(args);
+    return mocks.applyLeftoverHeldAttempts(args ?? {});
+  },
   useConvexAuth: () => ({
     isAuthenticated: mocks.isAuthenticated,
     isLoading: false,

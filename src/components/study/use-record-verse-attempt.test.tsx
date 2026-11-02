@@ -192,8 +192,9 @@ describe("useRecordVerseAttempt", () => {
     expect(recorded).toEqual({ ok: false });
   });
 
-  it("forwards hint, hold, refresherUsed, and a reused now", async () => {
+  it("forwards hint, hold, refresherUsed, replaceHeldId, and a reused now", async () => {
     useQueryMock.mockReturnValue([]);
+    const heldId = "held_1" as Id<"heldVerseAttempts">;
 
     const { result } = renderHook(() => useRecordVerseAttempt());
     await act(async () => {
@@ -205,6 +206,8 @@ describe("useRecordVerseAttempt", () => {
         mode: "review",
         hint: "first-letters",
         holdSchedule: true,
+        refresherUsed: true,
+        replaceHeldId: heldId,
         now: 1_700_000_000_000,
       });
     });
@@ -213,6 +216,8 @@ describe("useRecordVerseAttempt", () => {
       expect.objectContaining({
         hint: "first-letters",
         holdSchedule: true,
+        refresherUsed: true,
+        replaceHeldId: heldId,
         now: 1_700_000_000_000,
       }),
     );
