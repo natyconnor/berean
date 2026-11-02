@@ -32,6 +32,9 @@ interface VerseAttemptResultProps {
   scheduleHeld?: boolean;
   skipCelebrate?: boolean;
   saveError?: string | null;
+  bannerId?: string;
+  errorId?: string;
+  closingLine?: string | null;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -160,6 +163,9 @@ export function VerseAttemptResult({
   scheduleHeld = false,
   skipCelebrate = false,
   saveError = null,
+  bannerId,
+  errorId,
+  closingLine = null,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -188,10 +194,12 @@ export function VerseAttemptResult({
           note={note}
           scheduleHeld={scheduleHeld}
           skipCelebrate={skipCelebrate}
+          bannerId={bannerId}
+          closingLine={closingLine}
         />
       ) : null}
       {saveError ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p id={errorId} role="alert" className="text-sm text-destructive">
           {saveError}
         </p>
       ) : null}

@@ -337,4 +337,26 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent(/Next review/);
   });
+
+  it("puts a practice-only closing line where Next review would sit", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={70}
+        attemptKey="practice-round"
+        showScheduleOutcome
+        scheduleHeld
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+        bannerId="result-banner"
+        closingLine="Practice only, your progress didn't change."
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveAttribute("id", "result-banner");
+    expect(banner).toHaveTextContent(
+      "Practice only, your progress didn't change.",
+    );
+    expect(banner).not.toHaveTextContent(/Next review/);
+  });
 });

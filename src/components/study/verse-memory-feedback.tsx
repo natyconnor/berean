@@ -49,6 +49,10 @@ interface VerseMemoryFeedbackProps {
   scheduleHeld?: boolean;
   /** Skip the 100% celebration pop (step 1 of a refresher). */
   skipCelebrate?: boolean;
+  /** Screen-reader target for the default-focus result button. */
+  bannerId?: string;
+  /** Replaces the Next review line, e.g. a practice-only close. */
+  closingLine?: string | null;
 }
 
 const BANNER_TONE: Record<AccuracyBand, string> = {
@@ -95,6 +99,8 @@ export function VerseMemoryFeedback({
   note,
   scheduleHeld = false,
   skipCelebrate = false,
+  bannerId,
+  closingLine = null,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
   const scored =
@@ -111,13 +117,16 @@ export function VerseMemoryFeedback({
       ? FROM_MEMORY_CLOSE_MESSAGE
       : attemptPraiseLine({ accuracy: scored, outcome, errors });
   const consequence =
-    showScheduleOutcome && !scheduleHeld
-      ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
-      : null;
+    closingLine !== null
+      ? closingLine
+      : showScheduleOutcome && !scheduleHeld
+        ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
+        : null;
 
   return (
     <motion.div
       key={`${band}-${attemptKey}`}
+      id={bannerId}
       role="status"
       aria-live="polite"
       data-tone={band}

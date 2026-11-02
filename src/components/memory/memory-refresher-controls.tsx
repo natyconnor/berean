@@ -1,5 +1,7 @@
+import { type Ref } from "react";
 import { Lightbulb } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { NEED_A_REFRESHER_LABEL } from "@/lib/memory-copy";
 import { cn } from "@/lib/utils";
 
@@ -13,15 +15,17 @@ export function EmptyHintPrompt({
   onRefresher,
   disabled,
   message,
+  messageId,
 }: {
   passage?: boolean;
   onRefresher?: () => void;
   disabled?: boolean;
   message?: string;
+  messageId?: string;
 }) {
   return (
     <div className="flex h-full min-h-[140px] flex-col items-center justify-center gap-3 text-center font-sans">
-      <p className="max-w-sm text-sm text-muted-foreground">
+      <p id={messageId} className="max-w-sm text-sm text-muted-foreground">
         {message ??
           (passage ? FROM_MEMORY_EMPTY_HINT_PASSAGE : FROM_MEMORY_EMPTY_HINT)}
       </p>
@@ -29,6 +33,35 @@ export function EmptyHintPrompt({
         <NeedARefresherLink onClick={onRefresher} disabled={disabled} />
       ) : null}
     </div>
+  );
+}
+
+export function RefresherOfferButton({
+  label,
+  onClick,
+  disabled,
+  buttonRef,
+  describedBy,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  buttonRef?: Ref<HTMLButtonElement>;
+  describedBy?: string;
+}) {
+  return (
+    <Button
+      ref={buttonRef}
+      type="button"
+      variant="outline"
+      className="flex-1 sm:flex-none"
+      onClick={onClick}
+      disabled={disabled}
+      aria-describedby={describedBy}
+    >
+      <Lightbulb className="h-4 w-4" aria-hidden />
+      {label}
+    </Button>
   );
 }
 

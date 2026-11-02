@@ -149,6 +149,12 @@ export function statusLabel(status: MemoryStatus): StatusLabel {
 }
 
 export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
+export const TRY_ANOTHER_REFRESHER_LABEL = "Try another refresher";
+export const PRACTICE_ONLY_NOTE = "Another refresher is practice only.";
+export const PRACTICE_ONLY_CLOSING =
+  "Practice only, your progress didn't change.";
+export const LEAVE_NOW_FIRST_TRY_COUNTS =
+  "If you leave now, your first try counts.";
 export const NOW_TRY_WITHOUT_HINTS = "Now try it without the hints.";
 export const REFRESH_SAVE_ERROR = "Couldn't save your result. Try again.";
 
