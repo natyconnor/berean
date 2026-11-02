@@ -56,6 +56,31 @@ describe("passageMomentDays", () => {
       1,
     );
   });
+
+  it("counts from Start over when the passage was reset", () => {
+    expect(
+      passageMomentDays(
+        MONDAY_9AM_UTC,
+        MONDAY_9AM_UTC + 10 * DAY_MS,
+        0,
+        MONDAY_9AM_UTC + 8 * DAY_MS,
+      ),
+    ).toBe(3);
+  });
+
+  it("counts from when the passage was added when it was never reset", () => {
+    expect(
+      passageMomentDays(MONDAY_9AM_UTC, MONDAY_9AM_UTC + 2 * DAY_MS, 0),
+    ).toBe(3);
+    expect(
+      passageMomentDays(
+        MONDAY_9AM_UTC,
+        MONDAY_9AM_UTC + 2 * DAY_MS,
+        0,
+        undefined,
+      ),
+    ).toBe(3);
+  });
 });
 
 describe("passageMomentStats", () => {
