@@ -21,11 +21,13 @@ export function SessionBackButton({
   onHome,
   label,
   exitHref = MEMORY_HOME,
+  disabled = false,
 }: {
   onExit: () => void;
   onHome?: () => void;
   label: string;
   exitHref?: string;
+  disabled?: boolean;
 }) {
   const name = memoryExitName(label);
   return (
@@ -38,6 +40,7 @@ export function SessionBackButton({
             size="sm"
             onClick={onExit}
             aria-label={label}
+            disabled={disabled}
             className="-ml-2 h-11 min-w-11 shrink-0 gap-1.5 px-2 sm:h-8"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />

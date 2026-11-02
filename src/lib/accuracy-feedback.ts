@@ -51,13 +51,17 @@ export function accuracyBand(accuracy: number, exact: boolean): AccuracyBand {
   return "miss";
 }
 
+const HELD_MISS_REST = "Another look will help it stick.";
+
 /** The headline a result view leads with; the percentage sits under it. */
 export function accuracyFeedback(
   accuracy: number,
-  { exact }: { exact: boolean },
+  { exact, scheduleHeld = false }: { exact: boolean; scheduleHeld?: boolean },
 ): AccuracyFeedback {
   const band = accuracyBand(accuracy, exact);
-  const { lead, rest, emoji } = COPY[band];
+  const { lead, emoji } = COPY[band];
+  const rest =
+    band === "miss" && scheduleHeld ? HELD_MISS_REST : COPY[band].rest;
   return {
     band,
     lead,

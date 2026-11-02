@@ -19,6 +19,14 @@ import type { CardReference } from "./study-card-model";
 /** Memory session modes; stored `"deck"` attempts are legacy Study rows. */
 export type VerseAttemptMode = "learn" | "review" | "practice";
 
+export type RecordVerseAttemptResult =
+  { ok: true; schedule: MemorySchedule | null } | { ok: false };
+
+const NOTHING_TO_GRADE: RecordVerseAttemptResult = {
+  ok: true,
+  schedule: null,
+};
+
 interface RecordVerseAttemptInput {
   reference: CardReference;
   /**
@@ -32,12 +40,17 @@ interface RecordVerseAttemptInput {
   durationMs?: number;
   /** Word count of the verse text; forwarded to the scheduler's length curve. */
   wordCount?: number;
+  /** Reuse on retry so a lost reply cannot insert a second row. */
+  now?: number;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
+  refresherUsed?: boolean;
 }
 
 interface PendingAttempt {
   input: RecordVerseAttemptInput;
   now: number;
-  resolve: (schedule: MemorySchedule | null) => void;
+  resolve: (result: RecordVerseAttemptResult) => void;
 }
 
 export interface RecordVerseAttemptOptions {
@@ -54,14 +67,14 @@ interface RecordVerseAttempt {
   /**
    * Fire-and-forget persistence of a graded verse attempt.
    *
-   * Resolves to the verse's new schedule on success (so callers can adopt the
-   * server-authoritative `learnStage`), or `null` when there is nothing to
-   * grade / the verse isn't hearted / the mutation fails. Never rejects, so it
-   * can't perturb the UI. Attempts made before the hearted-verse list has
-   * loaded are deferred and flushed once it resolves, so a real attempt is
-   * never dropped just because it landed in the loading window.
+   * `{ ok: true, schedule }` on a saved grade (`schedule` is null when there
+   * is nothing to grade or the verse is not hearted). `{ ok: false }` when the
+   * mutation fails. Never rejects, so it can't perturb the UI. Attempts made
+   * before the hearted-verse list has loaded are deferred and flushed once it
+   * resolves, so a real attempt is never dropped just because it landed in the
+   * loading window.
    */
-  record: (input: RecordVerseAttemptInput) => Promise<MemorySchedule | null>;
+  record: (input: RecordVerseAttemptInput) => Promise<RecordVerseAttemptResult>;
   /** Map a verse reference to the current user's owned `verseRefs` id, if any. */
   resolveVerseRefId: (reference: CardReference) => Id<"verseRefs"> | null;
 }
@@ -104,9 +117,9 @@ export function useRecordVerseAttempt(
       input: RecordVerseAttemptInput,
       verseRefId: Id<"verseRefs">,
       now: number,
-    ): Promise<MemorySchedule | null> => {
+    ): Promise<RecordVerseAttemptResult> => {
       const quality = classifyVerseAttempt(input.tokens);
-      if (!quality) return Promise.resolve(null);
+      if (!quality) return Promise.resolve(NOTHING_TO_GRADE);
       return recordAttempt({
         verseRefId,
         quality,
@@ -120,11 +133,17 @@ export function useRecordVerseAttempt(
         // learner's next local day instead of a rolling 24 hours.
         tzOffsetMinutes: new Date(now).getTimezoneOffset(),
         timeZone: getViewerTimeZone(),
+        ...(input.hint ? { hint: input.hint } : {}),
+        ...(input.holdSchedule ? { holdSchedule: true } : {}),
+        ...(input.refresherUsed ? { refresherUsed: true } : {}),
       })
-        .then((schedule): MemorySchedule | null => schedule)
+        .then((schedule): RecordVerseAttemptResult => ({
+          ok: true,
+          schedule,
+        }))
         .catch((error: unknown) => {
           devLog.warn("verseMemory", "recordAttempt failed", error);
-          return null;
+          return { ok: false as const };
         });
     },
     [recordAttempt],
@@ -140,21 +159,23 @@ export function useRecordVerseAttempt(
   const pendingRef = useRef<PendingAttempt[]>([]);
 
   const record = useCallback(
-    (input: RecordVerseAttemptInput): Promise<MemorySchedule | null> => {
+    (input: RecordVerseAttemptInput): Promise<RecordVerseAttemptResult> => {
       // Nothing gradable yet (e.g. empty input) — no-op without a round trip.
-      if (!classifyVerseAttempt(input.tokens)) return Promise.resolve(null);
+      if (!classifyVerseAttempt(input.tokens)) {
+        return Promise.resolve(NOTHING_TO_GRADE);
+      }
 
-      const now = Date.now();
+      const now = input.now ?? Date.now();
       const verseRefId = verseRefIdFor(input);
       if (verseRefId) return performRecord(input, verseRefId, now);
 
       if (skipLibraryIds || recordingIds !== undefined) {
-        return Promise.resolve(null);
+        return Promise.resolve(NOTHING_TO_GRADE);
       }
 
       // Hearted verses still loading: defer so a real attempt isn't lost.
       // The flush effect resolves this once resolution is possible.
-      return new Promise<MemorySchedule | null>((resolve) => {
+      return new Promise<RecordVerseAttemptResult>((resolve) => {
         pendingRef.current.push({ input, now, resolve });
       });
     },
@@ -170,7 +191,7 @@ export function useRecordVerseAttempt(
       const verseRefId = verseRefIdFor(input);
       if (!verseRefId) {
         // Resolved list, still not a hearted verse: a no-op is correct.
-        resolve(null);
+        resolve(NOTHING_TO_GRADE);
         continue;
       }
       void performRecord(input, verseRefId, now).then(resolve);

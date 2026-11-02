@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  NEED_A_REFRESHER_LABEL,
+  NOW_TRY_WITHOUT_HINTS,
+  REFRESH_SAVE_ERROR,
   memorizeTitleLabel,
   passageStepLine,
+  refresherHeader,
   statusLabel,
   stepAction,
   stepActionLine,
@@ -104,5 +108,15 @@ describe("statusLabel", () => {
 describe("memorizeTitleLabel", () => {
   it("names the target", () => {
     expect(memorizeTitleLabel("Psalm 1")).toBe("Memorize Psalm 1");
+  });
+});
+
+describe("refresher copy", () => {
+  it("names the quiet link and the two step headers", () => {
+    expect(NEED_A_REFRESHER_LABEL).toBe("Need a refresher?");
+    expect(NOW_TRY_WITHOUT_HINTS).toBe("Now try it without the hints.");
+    expect(REFRESH_SAVE_ERROR).toBe("Couldn't save your result. Try again.");
+    expect(refresherHeader(1)).toBe("Refresh · First letters · 1 of 2");
+    expect(refresherHeader(2)).toBe("Refresh · From memory · 2 of 2");
   });
 });

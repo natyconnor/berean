@@ -169,7 +169,52 @@ describe("useRecordVerseAttempt", () => {
       });
     });
 
-    expect(recorded).toBeNull();
+    expect(recorded).toEqual({ ok: true, schedule: null });
     expect(recordAttemptMock).not.toHaveBeenCalled();
+  });
+
+  it("returns ok false when the mutation fails, not a silent null", async () => {
+    useQueryMock.mockReturnValue([]);
+    recordAttemptMock.mockRejectedValue(new Error("network"));
+
+    const { result } = renderHook(() => useRecordVerseAttempt());
+    let recorded: unknown;
+    await act(async () => {
+      recorded = await result.current.record({
+        reference,
+        verseRefId: VERSE_REF_ID,
+        tokens: exactTokens,
+        stage: 3,
+        mode: "review",
+      });
+    });
+
+    expect(recorded).toEqual({ ok: false });
+  });
+
+  it("forwards hint, hold, refresherUsed, and a reused now", async () => {
+    useQueryMock.mockReturnValue([]);
+
+    const { result } = renderHook(() => useRecordVerseAttempt());
+    await act(async () => {
+      await result.current.record({
+        reference,
+        verseRefId: VERSE_REF_ID,
+        tokens: exactTokens,
+        stage: 3,
+        mode: "review",
+        hint: "first-letters",
+        holdSchedule: true,
+        now: 1_700_000_000_000,
+      });
+    });
+
+    expect(recordAttemptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hint: "first-letters",
+        holdSchedule: true,
+        now: 1_700_000_000_000,
+      }),
+    );
   });
 });

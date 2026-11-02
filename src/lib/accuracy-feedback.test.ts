@@ -67,4 +67,13 @@ describe("accuracyFeedback", () => {
       expect(headline).not.toMatch(/\d/);
     }
   });
+
+  it("swaps the miss rest when the schedule is held", () => {
+    expect(
+      accuracyFeedback(40, { exact: false, scheduleHeld: true }).rest,
+    ).toBe("Another look will help it stick.");
+    expect(
+      accuracyFeedback(70, { exact: false, scheduleHeld: true }).rest,
+    ).toBe("A few words slipped. The highlighted ones are worth another look.");
+  });
 });
