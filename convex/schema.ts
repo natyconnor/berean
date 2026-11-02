@@ -388,6 +388,8 @@ export default defineSchema({
     // When the passage first left building, so the moment survives leaving
     // before it was shown. Older passages have neither and never celebrate.
     celebrationPendingAt: v.optional(v.number()),
+    // Epoch for passage-page history after Start over. Absent until the first reset.
+    startedOverAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

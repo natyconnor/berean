@@ -381,6 +381,7 @@ export function toPassageView(
     migrationBannerDismissed: row.migrationBannerDismissed,
     celebratedAt: row.celebratedAt,
     needsCelebration: needsCelebration(row),
+    startedOverAt: row.startedOverAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     remainingIntroduces: remainingIntroduces({

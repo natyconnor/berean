@@ -9,6 +9,17 @@ import {
 } from "@/components/memory/drawer/memory-panel-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { memoryProgressFraction } from "@/lib/mastery-ring";
+import {
+  dismissLearnPackForToday,
+  learnDismissDayKey,
+  readLearnPacksDismissedToday,
+} from "@/lib/learn-dismissed-packs";
+import {
+  START_OVER_CONFIRM_BODY,
+  START_OVER_MENU_LABEL,
+  STARTED_OVER_LABEL,
+  startOverPassageBody,
+} from "@/lib/memory-copy";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import { localDayIndex } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
@@ -93,6 +104,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     passageMemory: {
       getForPack: "passageMemory.getForPack",
       ensureDueBackfill: "passageMemory.ensureDueBackfill",
+      startOver: "passageMemory.startOver",
     },
     savedVerses: {
       listForChapter: "savedVerses.listForChapter",
@@ -101,6 +113,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
     verseMemory: {
       verseDetail: "verseMemory.verseDetail",
       stopMemorizing: "verseMemory.stopMemorizing",
+      startOver: "verseMemory.startOver",
     },
   },
 }));
@@ -946,10 +959,335 @@ describe("PackDetail editing a pack", () => {
       screen.queryByRole("button", { name: "Add verses" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^Options for/ }),
+      screen.queryByRole("button", { name: /^Remove / }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /^Remove / }),
+      screen.getByRole("button", { name: "Options for Psalm 23:1–3" }),
+    ).toBeInTheDocument();
+  });
+});
+
+async function openMenuItem(name: string, item: string | RegExp) {
+  await userEvent.click(screen.getByRole("button", { name }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: item }));
+}
+
+describe("PackDetail Start over", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mutation("passageMemory.startOver").mockResolvedValue({});
+    mutation("verseMemory.startOver").mockResolvedValue({});
+  });
+
+  it("hides Start over on a whole pack and on a passage with nothing reached", async () => {
+    const packView = renderHost("pack:mercedxx");
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", {
+        name: new RegExp(START_OVER_MENU_LABEL),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete pack" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+    packView.unmount();
+
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 4, "unreached"),
+          piece(1, 5, 6, "unreached"),
+          piece(2, 7, 11, "unreached"),
+        ],
+      }),
+    };
+    renderHost("pack:psalm16x");
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", {
+        name: new RegExp(START_OVER_MENU_LABEL),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Stop memorizing" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Start · about 7 min" }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks to confirm a passage Start over with the follow-up line and resets every verse", async () => {
+    renderHost("pack:psalm16x");
+    await openMenuItem("More actions", new RegExp(START_OVER_MENU_LABEL));
+
+    expect(
+      await screen.findByRole("heading", { name: "Start Psalm 16 over?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(startOverPassageBody(11))).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByText(/shaky/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      STARTED_OVER_LABEL,
+    );
+    expect(mocks.mutations.get("passageMemory.startOver")).toHaveBeenCalledWith(
+      expect.objectContaining({ packId: "psalm16x" }),
+    );
+    expect(mocks.mutations.get("verseMemory.startOver")).not.toHaveBeenCalled();
+    expect(screen.queryByText("Undo")).not.toBeInTheDocument();
+    expect(mocks.toast).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", {
+        name: new RegExp(START_OVER_MENU_LABEL),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", {
+        name: /^Continue · about 7 min$|^Start · about 7 min$/,
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("keeps passage verse rows as chips with no menu", () => {
+    renderHost("pack:psalm16x");
+    expect(
+      screen.queryByRole("button", { name: /^Options for/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Memorized").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Up next").length).toBeGreaterThan(0);
+  });
+
+  it("hides Start over on a custom row with no progress and on a preset row with none", async () => {
+    renderHost("pack:mercedxx");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Options for Isaiah 41:10" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Move up" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Remove" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", {
+        name: new RegExp(START_OVER_MENU_LABEL),
+      }),
+    ).not.toBeInTheDocument();
+
+    membersByPack = {
+      ...membersByPack,
+      psalm23x: [
+        member("p23a", {
+          book: "Psalms",
+          chapter: 23,
+          startVerse: 1,
+          endVerse: 3,
+          status: "new",
+          learnStage: 0,
+          stageReps: 0,
+          lastReviewedAt: undefined,
+          dueAt: NOW,
+          isDue: false,
+        }),
+      ],
+    };
+    renderHost("pack:psalm23x");
+    expect(
+      screen.queryByRole("button", { name: /^Options for/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("puts Start over in the custom row menu and as the only preset item", async () => {
+    const custom = renderHost("pack:mercedxx");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Options for Luke 9:23–24" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Move up" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: new RegExp(START_OVER_MENU_LABEL) }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Remove" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /^Options for Luke/ }),
+    ).toHaveLength(1);
+    custom.unmount();
+
+    renderHost("pack:psalm23x");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Options for Psalm 23:1–3" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: new RegExp(START_OVER_MENU_LABEL) }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Move up" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Remove" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks to confirm a row Start over with the verse line and only resets that verse", async () => {
+    renderHost("pack:mercedxx");
+    await openMenuItem(
+      "Options for Luke 9:23–24",
+      new RegExp(START_OVER_MENU_LABEL),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Start Luke 9:23–24 over?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(START_OVER_CONFIRM_BODY)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
+    expect(mocks.mutations.get("verseMemory.startOver")).toHaveBeenCalledWith(
+      expect.objectContaining({ verseRefId: "luke" }),
+    );
+    expect(
+      mocks.mutations.get("passageMemory.startOver"),
+    ).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Learning · tomorrow: fill in the blanks"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Up next · starts when you're ready"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Undo")).not.toBeInTheDocument();
+  });
+
+  it("keeps the row controls visible while Start over is open", async () => {
+    renderHost("pack:mercedxx");
+    const options = screen.getByRole("button", {
+      name: "Options for Luke 9:23–24",
+    });
+    const remove = screen.getByRole("button", {
+      name: "Remove Luke 9:23–24",
+    });
+    expect(options).not.toHaveAttribute("data-confirm-open");
+    expect(remove).not.toHaveAttribute("data-confirm-open");
+
+    await openMenuItem(
+      "Options for Luke 9:23–24",
+      new RegExp(START_OVER_MENU_LABEL),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Start Luke 9:23–24 over?" }),
+    ).toBeInTheDocument();
+    expect(options).toHaveAttribute("data-confirm-open");
+    expect(remove).toHaveAttribute("data-confirm-open");
+    expect(options.className).toContain(
+      "pointer-fine:data-[confirm-open]:opacity-100",
+    );
+    expect(remove.className).toContain(
+      "pointer-fine:data-[confirm-open]:opacity-100",
+    );
+  });
+
+  it("returns focus to the custom row menu after Start over", async () => {
+    renderHost("pack:mercedxx");
+    await openMenuItem(
+      "Options for Luke 9:23–24",
+      new RegExp(START_OVER_MENU_LABEL),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Options for Luke 9:23–24" }),
+    ).toHaveFocus();
+  });
+
+  it("returns focus to Learn when a preset row loses its menu", async () => {
+    membersByPack = {
+      ...membersByPack,
+      psalm23x: [
+        member("p23a", {
+          book: "Psalms",
+          chapter: 23,
+          startVerse: 1,
+          endVerse: 3,
+          status: "learning",
+          learnStage: 2,
+          stageReps: 1,
+          lastReviewedAt: NOW - DAY_MS,
+          dueAt: NOW,
+          isDue: true,
+        }),
+      ],
+    };
+    renderHost("pack:psalm23x");
+    await openMenuItem(
+      "Options for Psalm 23:1–3",
+      new RegExp(START_OVER_MENU_LABEL),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByText(STARTED_OVER_LABEL)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Options for Psalm 23:1–3" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Continue learning Psalm 23:1–3" }),
+    ).toHaveFocus();
+  });
+
+  it("keeps the confirm open when Start over fails", async () => {
+    mutation("passageMemory.startOver").mockRejectedValueOnce(
+      new Error("offline"),
+    );
+    renderHost("pack:psalm16x");
+    await openMenuItem("More actions", new RegExp(START_OVER_MENU_LABEL));
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't start over. Try again.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Start Psalm 16 over?" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("leaves a That's enough for today dismissal when Start over fails", async () => {
+    const dayKey = learnDismissDayKey(Date.now());
+    dismissLearnPackForToday("psalm16x", dayKey);
+    mutation("passageMemory.startOver").mockRejectedValueOnce(
+      new Error("offline"),
+    );
+    renderHost("pack:psalm16x");
+    await openMenuItem("More actions", new RegExp(START_OVER_MENU_LABEL));
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't start over. Try again.",
+    );
+    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(true);
+  });
+
+  it("clears the That's enough for today dismissal after a passage reset", async () => {
+    const dayKey = learnDismissDayKey(Date.now());
+    dismissLearnPackForToday("psalm16x", dayKey);
+    renderHost("pack:psalm16x");
+    await openMenuItem("More actions", new RegExp(START_OVER_MENU_LABEL));
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      STARTED_OVER_LABEL,
+    );
+    expect(readLearnPacksDismissedToday(dayKey).has("psalm16x")).toBe(false);
+  });
+
+  it("shows no row menus on an empty pack", () => {
+    membersByPack = { ...membersByPack, mercedxx: [] };
+    renderHost("pack:mercedxx");
+    expect(
+      screen.queryByRole("button", { name: /^Options for/ }),
     ).not.toBeInTheDocument();
   });
 });

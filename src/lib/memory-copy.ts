@@ -3,6 +3,7 @@ import {
   MAX_LEARN_STAGE,
   type MemoryStatus,
 } from "./memory-scheduler";
+import type { PieceAttachment } from "./passage-pieces";
 
 /**
  * Glossary for every user-facing Memory string. Surfaces read their words from
@@ -173,4 +174,27 @@ export const START_OVER_CONFIRM_BODY =
 
 export function startOverTitle(name: string): string {
   return `Start ${name} over?`;
+}
+
+export function startOverPassageBody(count: number): string {
+  return `You'll learn all ${count} verses again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.`;
+}
+
+export type PassageStartOverPiece = {
+  attachment: PieceAttachment;
+  learnStage: number;
+  stageReps: number;
+};
+
+/** A passage shows Start over once a piece is attached, solid, or in progress. */
+export function canStartOverPassage(
+  pieces: readonly PassageStartOverPiece[],
+): boolean {
+  return pieces.some(
+    (piece) =>
+      piece.attachment === "attached" ||
+      piece.attachment === "solid" ||
+      piece.learnStage > 0 ||
+      piece.stageReps > 0,
+  );
 }

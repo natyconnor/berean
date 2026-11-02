@@ -693,6 +693,7 @@ export function PassageSession({
           title={packName}
           verseCount={verseCountIn(state.pieces)}
           createdAt={view.createdAt}
+          startedOverAt={view.startedOverAt}
           segments={composite.segments}
           onDone={moment === "owed" ? () => setMoment(null) : finishForToday}
         />

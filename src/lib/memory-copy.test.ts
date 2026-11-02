@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { startOverVersePatch } from "./memory-start-over";
+import {
+  startOverPassagePatch,
+  startOverVersePatch,
+} from "./memory-start-over";
 import {
   canStartOver,
+  canStartOverPassage,
   hasLearningProgress,
   memorizeTitleLabel,
   passageStepLine,
   START_OVER_CONFIRM_BODY,
+  startOverPassageBody,
   startOverTitle,
   statusLabel,
   stepAction,
@@ -157,5 +162,54 @@ describe("startOver copy", () => {
     expect(START_OVER_CONFIRM_BODY).toBe(
       "You'll learn it again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.",
     );
+    expect(startOverPassageBody(14)).toBe(
+      "You'll learn all 14 verses again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.",
+    );
+  });
+});
+
+describe("canStartOverPassage", () => {
+  const fresh = {
+    attachment: "unreached" as const,
+    learnStage: 0,
+    stageReps: 0,
+  };
+
+  it("hides Start over when nothing is reached", () => {
+    expect(canStartOverPassage([fresh])).toBe(false);
+    expect(
+      canStartOverPassage([
+        { attachment: "learning", learnStage: 0, stageReps: 0 },
+      ]),
+    ).toBe(false);
+  });
+
+  it("shows Start over once a piece is attached, solid, or in progress", () => {
+    expect(canStartOverPassage([{ ...fresh, attachment: "attached" }])).toBe(
+      true,
+    );
+    expect(canStartOverPassage([{ ...fresh, attachment: "solid" }])).toBe(true);
+    expect(canStartOverPassage([{ ...fresh, learnStage: 1 }])).toBe(true);
+    expect(canStartOverPassage([{ ...fresh, stageReps: 1 }])).toBe(true);
+  });
+
+  it("hides Start over again right after a reset", () => {
+    const reset = startOverPassagePatch(
+      [
+        {
+          index: 0,
+          book: "Psalms",
+          chapter: 23,
+          startVerse: 1,
+          endVerse: 6,
+          sectionIndex: 0,
+          attachment: "solid",
+          learnStage: 3,
+          stageReps: 2,
+        },
+      ],
+      1_700_000_000_000,
+    );
+    expect(canStartOverPassage(reset.pieces)).toBe(false);
   });
 });
