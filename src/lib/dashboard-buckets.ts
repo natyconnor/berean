@@ -176,7 +176,7 @@ export function bucketAccuracyAverages(
   const sums = Array.from({ length: days }, () => 0);
   const counts = Array.from({ length: days }, () => 0);
   for (const review of reviews) {
-    if (isReadPrimeAttempt(review)) continue;
+    if (!countsTowardAccuracy(review)) continue;
     const index = indexByKey.get(zonedDateKey(review.createdAt, timeZone));
     if (index !== undefined) {
       sums[index] += review.accuracy;
@@ -194,7 +194,46 @@ export type ReviewLogRow = {
   accuracy: number;
   mode?: string;
   stage?: number;
+  holdSchedule?: boolean;
 };
+
+/**
+ * Placeholder: a day of only First letters refresher tries does not count on
+ * the heatmap or keep the streak until Nathan decides. Flip this one constant.
+ * Accuracy and today's credit never count those tries.
+ */
+export const FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY = false;
+
+/**
+ * True for a First letters refresher try. Those rows hold the schedule and
+ * stay out of accuracy, difficulty, credit and the session summary.
+ */
+export function isFirstLettersHold(row: { holdSchedule?: boolean }): boolean {
+  return row.holdSchedule === true;
+}
+
+/**
+ * Heatmap and streak. First letters holds follow
+ * {@link FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY}.
+ */
+export function countsTowardActivity(
+  row: { holdSchedule?: boolean },
+  countFirstLetters: boolean = FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY,
+): boolean {
+  if (isFirstLettersHold(row)) return countFirstLetters;
+  return true;
+}
+
+/**
+ * Accuracy charts. Read primes and First letters holds never count.
+ */
+export function countsTowardAccuracy(row: {
+  mode?: string;
+  stage?: number;
+  holdSchedule?: boolean;
+}): boolean {
+  return !isReadPrimeAttempt(row) && !isFirstLettersHold(row);
+}
 
 export type ReviewDayAggregate = {
   dayStart: number;
@@ -204,15 +243,16 @@ export type ReviewDayAggregate = {
 };
 
 /**
- * Per-local-day heatmap counts (all logs) and accuracy sums (excluding Read
- * primes). Only days with at least one log are returned so callers can persist
- * a sparse ~365-row table.
+ * Per-local-day heatmap counts and accuracy sums. First letters holds follow
+ * {@link countsTowardActivity} / {@link countsTowardAccuracy}. Only days with
+ * at least one counted log are returned so callers can persist a sparse table.
  */
 export function aggregateReviewDays(
   reviews: readonly ReviewLogRow[],
   now: number,
   days: number,
   timeZone: string,
+  countFirstLetters: boolean = FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY,
 ): ReviewDayAggregate[] {
   const starts = zonedDayStarts(now, days, timeZone);
   const indexByKey = dayKeyIndex(starts, timeZone);
@@ -222,8 +262,8 @@ export function aggregateReviewDays(
   for (const review of reviews) {
     const index = indexByKey.get(zonedDateKey(review.createdAt, timeZone));
     if (index === undefined) continue;
-    counts[index] += 1;
-    if (isReadPrimeAttempt(review)) continue;
+    if (countsTowardActivity(review, countFirstLetters)) counts[index] += 1;
+    if (!countsTowardAccuracy(review)) continue;
     accuracySums[index] += review.accuracy;
     accuracyCounts[index] += 1;
   }

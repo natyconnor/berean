@@ -395,7 +395,10 @@ function inProgressLearningDueAt(previousDueAt: number, now: number): number {
  * local midnight N calendar days later (6-hour floor). A zero interval means
  * "again this session", so it stays at `now`.
  */
-function computeDueAt(input: ReviewInput, intervalDays: number): number {
+function computeDueAt(
+  input: Pick<ReviewInput, "now" | "tzOffsetMinutes" | "timeZone">,
+  intervalDays: number,
+): number {
   if (intervalDays <= 0) return input.now;
   return dueAtInCalendarDays(
     input.now,
@@ -1005,6 +1008,49 @@ export function scheduleNext(
     return scheduleLearning(s, r);
   }
   return scheduleReviewing(s, r);
+}
+
+/**
+ * A From memory pass after a refresher keeps the verse where it was: same
+ * level, reps, ease, lapses and gap. `dueAt` is that gap counted from today.
+ */
+export function keepReviewingSchedule(
+  s: MemorySchedule,
+  r: Pick<ReviewInput, "now" | "tzOffsetMinutes" | "timeZone">,
+): MemorySchedule {
+  return {
+    ...s,
+    dueAt: computeDueAt(r, s.intervalDays),
+  };
+}
+
+/** Flags a refresher step sends with the grade. Omitted fields are a cold try. */
+export type VerseAttemptPlanInput = ReviewInput & {
+  holdSchedule?: boolean;
+  refresherUsed?: boolean;
+};
+
+/**
+ * Decide the next schedule for a verse attempt.
+ *
+ * First letters (hold) logs the try and leaves the verse alone. A From memory
+ * pass after a refresher on a due Memorized verse keeps the current gap.
+ * Everything else uses {@link scheduleNext}.
+ */
+export function planVerseAttemptSchedule(
+  s: MemorySchedule,
+  r: VerseAttemptPlanInput,
+): { next: MemorySchedule; patch: boolean } {
+  if (r.holdSchedule) return { next: s, patch: false };
+  const outcome = reviewGradeOutcome(r.quality, r.accuracy);
+  if (
+    r.refresherUsed &&
+    isDueForReview(s, r.now) &&
+    (outcome === "exact" || outcome === "pass")
+  ) {
+    return { next: keepReviewingSchedule(s, r), patch: true };
+  }
+  return { next: scheduleNext(s, r), patch: true };
 }
 
 /**

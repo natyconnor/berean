@@ -346,6 +346,9 @@ export default defineSchema({
       v.literal("deck"),
       v.literal("practice"),
     ),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
+    refresherUsed: v.optional(v.boolean()),
     durationMs: v.optional(v.number()),
     createdAt: v.number(),
   })
@@ -354,7 +357,8 @@ export default defineSchema({
       "userId",
       "verseRefId",
       "createdAt",
-    ]),
+    ])
+    .index("by_verseMemoryId_createdAt", ["verseMemoryId", "createdAt"]),
 
   /**
    * 1:1 with a pack while passage mode is active. Pieces are frozen at start.

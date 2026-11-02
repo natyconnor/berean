@@ -8,6 +8,8 @@ export interface ReviewSessionAttempt {
   label?: string;
   /** Whether to offer the per-verse Practice shortcut. Defaults to true. */
   offerPractice?: boolean;
+  /** From memory try that followed a refresher. S7 shows the note. */
+  refresherUsed?: boolean;
 }
 
 /** Mean accuracy across every recitation, including retries. */

@@ -6,12 +6,16 @@ import {
   bucketForecastCounts,
   bucketReviewCounts,
   computeStreak,
+  countsTowardAccuracy,
+  countsTowardActivity,
+  FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY,
   isReadPrimeAttempt,
   normalizeTimeZone,
   overallAccuracy,
   mergeReviewDayAggregates,
   reviewActivityFromDayAggregates,
   reviewActivityFromLogs,
+  type ReviewLogRow,
   startOfUtcDay,
   startOfZonedDay,
   utcDayStarts,
@@ -140,6 +144,51 @@ describe("isReadPrimeAttempt", () => {
     expect(isReadPrimeAttempt({ mode: "learn", stage: 1 })).toBe(false);
     expect(isReadPrimeAttempt({ mode: "review", stage: 0 })).toBe(false);
     expect(isReadPrimeAttempt({})).toBe(false);
+  });
+});
+
+describe("first-letters activity switch", () => {
+  const hold: ReviewLogRow = {
+    createdAt: NOW,
+    accuracy: 90,
+    mode: "review",
+    stage: 3,
+    holdSchedule: true,
+  };
+  const counted: ReviewLogRow = {
+    createdAt: NOW,
+    accuracy: 80,
+    mode: "review",
+    stage: 3,
+  };
+
+  it("is off until Nathan decides, and both values are a one-argument flip", () => {
+    expect(FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY).toBe(false);
+    expect(countsTowardActivity(hold)).toBe(false);
+    expect(countsTowardActivity(hold, false)).toBe(false);
+    expect(countsTowardActivity(hold, true)).toBe(true);
+    expect(countsTowardActivity(counted, false)).toBe(true);
+    expect(countsTowardActivity(counted, true)).toBe(true);
+  });
+
+  it("never counts a First letters hold toward accuracy", () => {
+    expect(countsTowardAccuracy(hold)).toBe(false);
+    expect(countsTowardAccuracy(counted)).toBe(true);
+    const buckets = bucketAccuracyAverages([hold, counted], NOW, 1);
+    expect(buckets[0]).toEqual({ average: 80, count: 1 });
+  });
+
+  it("omits a First letters-only day from the heatmap while the switch is off", () => {
+    const days = aggregateReviewDays([hold], NOW, 1, "UTC");
+    expect(days).toEqual([]);
+    expect(aggregateReviewDays([hold], NOW, 1, "UTC", false)).toEqual([]);
+  });
+
+  it("keeps a First letters-only day on the heatmap when the switch is on", () => {
+    const days = aggregateReviewDays([hold], NOW, 1, "UTC", true);
+    expect(days).toHaveLength(1);
+    expect(days[0]?.count).toBe(1);
+    expect(days[0]?.accuracyCount).toBe(0);
   });
 });
 

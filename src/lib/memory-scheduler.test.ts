@@ -25,6 +25,8 @@ import {
   dueAtInCalendarDays,
   dueIndexUntil,
   isFromMemoryGraduationAttempt,
+  keepReviewingSchedule,
+  planVerseAttemptSchedule,
   nextExactReviewIntervalDays,
   exactReviewsUntilMastered,
   reviewingPathStartEase,
@@ -34,11 +36,14 @@ import {
   LONG_VERSE_WORDS,
   type MemorySchedule,
   type ReviewInput,
+  type VerseAttemptPlanInput,
 } from "./memory-scheduler";
 
 const NOW = 1_700_000_000_000;
 
-function review(overrides: Partial<ReviewInput> = {}): ReviewInput {
+function review(
+  overrides: Partial<VerseAttemptPlanInput> = {},
+): VerseAttemptPlanInput {
   return {
     quality: "exact",
     accuracy: 100,
@@ -887,6 +892,101 @@ describe("reviewing score bands", () => {
       }
     },
   );
+});
+
+describe("keepReviewingSchedule", () => {
+  it("keeps level, reps, ease and lapses, and lands due after the current gap", () => {
+    const current = reviewing({
+      intervalDays: 1,
+      stageReps: 3,
+      consecutiveCorrect: 2,
+      ease: 2.4,
+      lapses: 1,
+    });
+    const next = keepReviewingSchedule(current, { now: NOW });
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBe(1);
+    expect(next.stageReps).toBe(3);
+    expect(next.consecutiveCorrect).toBe(2);
+    expect(next.ease).toBe(2.4);
+    expect(next.lapses).toBe(1);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
+  });
+});
+
+describe("planVerseAttemptSchedule", () => {
+  const dueDaily = reviewing({
+    intervalDays: 1,
+    stageReps: 3,
+    consecutiveCorrect: 2,
+    dueAt: NOW,
+  });
+
+  it("logs a First letters hold without patching", () => {
+    const planned = planVerseAttemptSchedule(
+      dueDaily,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        holdSchedule: true,
+      }),
+    );
+    expect(planned.patch).toBe(false);
+    expect(planned.next).toEqual(dueDaily);
+  });
+
+  it("keeps a due From memory pass after a refresher, including 100%", () => {
+    for (const grade of [
+      { quality: "exact" as const, accuracy: 100 },
+      { quality: "close" as const, accuracy: 90 },
+    ]) {
+      const planned = planVerseAttemptSchedule(
+        dueDaily,
+        review({ ...grade, mode: "review", refresherUsed: true }),
+      );
+      expect(planned.patch).toBe(true);
+      expect(planned.next.stageReps).toBe(3);
+      expect(planned.next.consecutiveCorrect).toBe(2);
+      expect(planned.next.intervalDays).toBe(1);
+      expect(planned.next.dueAt).toBe(NOW + DAY_MS);
+    }
+  });
+
+  it("runs S1 scoring on a From memory miss after a refresher", () => {
+    const close = planVerseAttemptSchedule(
+      dueDaily,
+      review({
+        quality: "close",
+        accuracy: 70,
+        mode: "review",
+        refresherUsed: true,
+      }),
+    );
+    expect(close.next.stageReps).toBe(0);
+    expect(close.next.intervalDays).toBe(1);
+
+    const lapse = planVerseAttemptSchedule(
+      dueDaily,
+      review({
+        quality: "off",
+        accuracy: 40,
+        mode: "review",
+        refresherUsed: true,
+      }),
+    );
+    expect(lapse.next.status).toBe("learning");
+    expect(lapse.next.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+  });
+
+  it("grows the gap on a cold pass, unlike a refresher pass", () => {
+    const cold = planVerseAttemptSchedule(
+      dueDaily,
+      review({ quality: "exact", accuracy: 100, mode: "review" }),
+    );
+    expect(cold.next.stageReps).toBe(0);
+    expect(cold.next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+  });
 });
 
 describe("ease clamping", () => {

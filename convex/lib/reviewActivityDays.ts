@@ -2,7 +2,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
   aggregateReviewDays,
-  isReadPrimeAttempt,
+  countsTowardAccuracy,
+  countsTowardActivity,
   mergeReviewDayAggregates,
   normalizeTimeZone,
   startOfZonedDay,
@@ -154,6 +155,7 @@ export async function rebuildReviewActivityDays(
     accuracy: row.accuracy,
     mode: row.mode,
     stage: row.stage,
+    ...(row.holdSchedule ? { holdSchedule: true } : {}),
   }));
   const days = aggregateReviewDays(logs, now, BACKFILL_WINDOW_DAYS, tz);
   await replaceReviewDays(ctx, userId, tz, days);
@@ -199,6 +201,7 @@ export async function noteVerseReviewForActivity(
     mode: string;
     stage: number;
     timeZone: string;
+    holdSchedule?: boolean;
   },
 ): Promise<void> {
   const tz = normalizeTimeZone(args.timeZone);
@@ -210,10 +213,13 @@ export async function noteVerseReviewForActivity(
     return;
   }
 
+  const countDelta = countsTowardActivity(args) ? 1 : 0;
+  const accuracyDelta = countsTowardAccuracy(args) ? args.accuracy : 0;
+  const accuracyCountDelta = countsTowardAccuracy(args) ? 1 : 0;
+  if (countDelta === 0 && accuracyCountDelta === 0) return;
+
   const dayStart = startOfZonedDay(args.createdAt, tz);
   const existingRows = await loadDayRows(ctx, args.userId, tz, dayStart);
-  const accuracyDelta = isReadPrimeAttempt(args) ? 0 : args.accuracy;
-  const accuracyCountDelta = isReadPrimeAttempt(args) ? 0 : 1;
   const existing = existingRows[0];
   if (existing) {
     let count = 0;
@@ -225,7 +231,7 @@ export async function noteVerseReviewForActivity(
       accuracyCount += row.accuracyCount;
     }
     await ctx.db.patch(existing._id, {
-      count: count + 1,
+      count: count + countDelta,
       accuracySum: accuracySum + accuracyDelta,
       accuracyCount: accuracyCount + accuracyCountDelta,
     });
@@ -238,7 +244,7 @@ export async function noteVerseReviewForActivity(
     userId: args.userId,
     timeZone: tz,
     dayStart,
-    count: 1,
+    count: countDelta,
     accuracySum: accuracyDelta,
     accuracyCount: accuracyCountDelta,
   });

@@ -172,6 +172,7 @@ export async function loadTodayModel(
       verseRefId: log.verseRefId,
       mode: log.mode,
       createdAt: log.createdAt,
+      ...(log.holdSchedule ? { holdSchedule: true } : {}),
     })),
     passageLogs: passageLogs.map((log) => ({
       passageMemoryId: log.passageMemoryId,

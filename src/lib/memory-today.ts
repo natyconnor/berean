@@ -76,6 +76,7 @@ export interface TodayVerseLog {
   verseRefId: string;
   mode: "learn" | "review" | "deck" | "practice";
   createdAt: number;
+  holdSchedule?: boolean;
 }
 
 export interface TodayPassageLog {
@@ -128,6 +129,7 @@ function summarizeToday(
 
   for (const log of verseLogs) {
     if (log.createdAt < dayStart) continue;
+    if (log.holdSchedule) continue;
     if (log.mode === "learn") learnedVerses.add(log.verseRefId);
     else if (log.mode === "review") reviewedVerses.add(log.verseRefId);
     else continue;

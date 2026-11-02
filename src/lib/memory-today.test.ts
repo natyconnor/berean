@@ -362,6 +362,30 @@ describe("buildTodayModel: done today", () => {
 
     expect(model.doneToday.reviews).toBe(1);
   });
+
+  it("does not credit a First letters hold as today's review", () => {
+    const model = buildTodayModel(
+      input({
+        verses: [
+          verse("due", 1, {
+            status: "reviewing",
+            intervalDays: 1,
+            dueAt: NOW - HOUR_MS,
+          }),
+        ],
+        verseLogs: [
+          {
+            verseRefId: "due",
+            mode: "review",
+            createdAt: NOW - HOUR_MS,
+            holdSchedule: true,
+          },
+        ],
+      }),
+    );
+    expect(model.doneToday).toEqual({ learningSteps: 0, reviews: 0 });
+    expect(model.startedToday).toBe(false);
+  });
 });
 
 describe("todayHeadline", () => {
