@@ -361,6 +361,34 @@ export default defineSchema({
     .index("by_verseMemoryId_createdAt", ["verseMemoryId", "createdAt"]),
 
   /**
+   * At most one held first-try miss per verse. Nothing is counted until this
+   * row is applied or replaced. `_id` is the held id.
+   */
+  heldVerseAttempts: defineTable({
+    userId: v.id("users"),
+    verseRefId: v.id("verseRefs"),
+    verseMemoryId: v.id("verseMemory"),
+    quality: v.union(v.literal("exact"), v.literal("close"), v.literal("off")),
+    accuracy: v.number(),
+    answer: v.string(),
+    attemptedAt: v.number(),
+    stage: v.number(),
+    mode: v.union(
+      v.literal("learn"),
+      v.literal("review"),
+      v.literal("deck"),
+      v.literal("practice"),
+    ),
+    durationMs: v.optional(v.number()),
+    wordCount: v.optional(v.number()),
+    tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_verseRefId", ["userId", "verseRefId"])
+    .index("by_verseMemoryId", ["verseMemoryId"]),
+
+  /**
    * 1:1 with a pack while passage mode is active. Pieces are frozen at start.
    * Per-piece `dueAt` is the learning soft-lock; row `dueAt` is maintenance
    * when status is reviewing | mastered.
