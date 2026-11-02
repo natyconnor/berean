@@ -1688,7 +1688,9 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
     expect(screen.getByText(refresherHeader(1))).toBeVisible();
-    expect(screen.getByLabelText("Your recalled verse")).toHaveValue("");
+    const retried = screen.getByLabelText("Your recalled verse");
+    expect(retried).toHaveValue("");
+    expect(retried).toHaveFocus();
 
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
@@ -1701,6 +1703,9 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
+    const step2Box = screen.getByLabelText("Your recalled verse");
+    expect(step2Box).toHaveValue("");
+    expect(step2Box).toHaveFocus();
 
     await waitFor(() => {
       const [state] = onRunStateChange.mock.lastCall ?? [];
@@ -1713,6 +1718,30 @@ describe("PracticeBoard pre-try refresher", () => {
         holdSchedule: true,
       }),
     );
+  });
+
+  it("offers only Continue after a counted From memory miss", async () => {
+    renderReview();
+    await openRefresher();
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByText("We'll bring it back sooner."),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Try again/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("counts nothing when backing out before From memory", async () => {
@@ -1764,6 +1793,11 @@ describe("PracticeBoard pre-try refresher", () => {
       await screen.findByRole("button", { name: /Continue/ }),
     ).toBeVisible();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText(refresherHeader(2))).toBeVisible();
+    expect(screen.getByText("Word for word.")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
 
     const calls = record.mock.calls as Array<[Record<string, unknown>]>;
     expect(calls).toHaveLength(3);

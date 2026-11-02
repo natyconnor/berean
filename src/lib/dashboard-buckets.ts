@@ -198,9 +198,10 @@ export type ReviewLogRow = {
 };
 
 /**
- * Placeholder: a day of only First letters refresher tries does not count on
- * the heatmap or keep the streak until Nathan decides. Flip this one constant.
- * Accuracy and today's credit never count those tries.
+ * Refresher First letters (step 1) tries do not count on the heatmap or keep
+ * the streak (Nathan, Nov 2, 10:49 AM PT, #346 Decisions log). Learn-flow
+ * First letters tries are not holds (`holdSchedule` is unset) and still count.
+ * Accuracy and today's credit never count refresher First letters either.
  */
 export const FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY = false;
 
@@ -213,8 +214,9 @@ export function isFirstLettersHold(row: { holdSchedule?: boolean }): boolean {
 }
 
 /**
- * Heatmap and streak. First letters holds follow
- * {@link FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY}.
+ * Heatmap and streak. Refresher First letters holds follow
+ * {@link FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY}; Learn-flow First letters
+ * tries always count.
  */
 export function countsTowardActivity(
   row: { holdSchedule?: boolean },
@@ -225,7 +227,8 @@ export function countsTowardActivity(
 }
 
 /**
- * Accuracy charts. Read primes and First letters holds never count.
+ * Accuracy charts. Read primes and refresher First letters holds never count.
+ * Learn-flow First letters tries still count.
  */
 export function countsTowardAccuracy(row: {
   mode?: string;
@@ -243,9 +246,10 @@ export type ReviewDayAggregate = {
 };
 
 /**
- * Per-local-day heatmap counts and accuracy sums. First letters holds follow
- * {@link countsTowardActivity} / {@link countsTowardAccuracy}. Only days with
- * at least one counted log are returned so callers can persist a sparse table.
+ * Per-local-day heatmap counts and accuracy sums. Refresher First letters
+ * holds follow {@link countsTowardActivity} / {@link countsTowardAccuracy}.
+ * Only days with at least one counted log are returned so callers can persist
+ * a sparse table.
  */
 export function aggregateReviewDays(
   reviews: readonly ReviewLogRow[],
