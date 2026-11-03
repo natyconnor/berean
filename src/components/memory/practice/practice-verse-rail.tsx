@@ -13,7 +13,10 @@ import { cn } from "@/lib/utils";
 import { formatBookChapter, formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
 import type { CardReference } from "../../study/study-card-model";
-import { LearningJourneyBar } from "./learning-journey-bar";
+import {
+  LearningJourneyBar,
+  type JourneyBarFill,
+} from "./learning-journey-bar";
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 
 interface RailVerse extends SessionOrderItem {
@@ -53,6 +56,8 @@ interface PracticeVerseRailProps {
   currentWordCount?: number;
   /** Soft-locked: today's learning session is done for the active verse. */
   currentLocked?: boolean;
+  /** Saved fill to animate from when the header bar is previewing a miss. */
+  currentFrom?: JourneyBarFill;
   /**
    * Whether the Shuffle / In-order toggle may appear. A composite recitation
    * is one card in passage order, so it turns reordering off entirely.
@@ -82,6 +87,7 @@ export function PracticeVerseRail({
   currentEase,
   currentWordCount,
   currentLocked = false,
+  currentFrom,
   allowReorder = true,
   className,
 }: PracticeVerseRailProps) {
@@ -174,6 +180,7 @@ export function PracticeVerseRail({
               status={currentStatus}
               intervalDays={currentIntervalDays}
               ease={currentEase}
+              from={currentFrom}
             />
             {currentLocked ? (
               <p className="mt-1.5 text-[11px] text-muted-foreground">

@@ -1,4 +1,5 @@
 import type { CardReference } from "@/components/study/study-card-model";
+import type { MemorySchedule } from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export interface ReviewSessionAttempt {
@@ -10,6 +11,11 @@ export interface ReviewSessionAttempt {
   offerPractice?: boolean;
   /** From memory try that followed a refresher. S7 shows the note. */
   refresherUsed?: boolean;
+  /** Landed schedule, so a summary row can show the bar and next review. */
+  schedule?: Pick<
+    MemorySchedule,
+    "status" | "learnStage" | "stageReps" | "intervalDays" | "ease" | "dueAt"
+  >;
 }
 
 /** Mean accuracy across every recitation, including retries. */

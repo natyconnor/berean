@@ -377,6 +377,71 @@ describe("PracticeBoard composite recitation", () => {
       await screen.findByLabelText("Your recited passage"),
     ).toBeInTheDocument();
   });
+
+  it("shows each pack verse's bar and next review after a bad miss, with no refresher", async () => {
+    const now = getSessionNow();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[
+            {
+              ...compositeVerse,
+              composite: {
+                packId: PACK_ID,
+                members: [span(1, 1), span(2, 2)],
+                memberSchedules: [
+                  {
+                    status: "reviewing",
+                    learnStage: 3,
+                    stageReps: 1,
+                    dueAt: now,
+                    ease: 2.3,
+                    intervalDays: 1,
+                    consecutiveCorrect: 1,
+                    lapses: 0,
+                    earlyReviewApplied: false,
+                  },
+                  {
+                    status: "reviewing",
+                    learnStage: 3,
+                    stageReps: 3,
+                    dueAt: now,
+                    ease: 2.3,
+                    intervalDays: 1,
+                    consecutiveCorrect: 3,
+                    lapses: 0,
+                    earlyReviewApplied: false,
+                  },
+                ],
+              },
+            },
+          ]}
+          scopeLabel="Psalm 23"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+    const answer = await screen.findByLabelText("Your recited passage");
+    await userEvent.click(answer);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByText("We'll bring it back sooner."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByLabelText(/Learning journey: Fill in the blanks/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByLabelText(/Progress to mastered: Memorized · 0%/).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Next review /).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
+  });
 });
 
 const VERSE_REF_ID = "vr_ps23_1" as Id<"verseRefs">;
@@ -1938,6 +2003,12 @@ describe("PracticeBoard held first try", () => {
     return offer;
   }
 
+  function withinCard() {
+    const card = document.querySelector('[data-slot="card"]');
+    expect(card).toBeInstanceOf(HTMLElement);
+    return within(card as HTMLElement);
+  }
+
   it("holds a 70% miss with the S1 next-review line and no held copy", async () => {
     renderReview();
     const card = document.querySelector('[data-slot="card"]');
@@ -1982,8 +2053,32 @@ describe("PracticeBoard held first try", () => {
       screen.queryByText(/back to fill in the blanks/i),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByLabelText(/Learning journey: Fill in the blanks/),
+      withinCard().getByLabelText(/Progress to mastered: Memorized/),
     ).toBeInTheDocument();
+    const labels = screen.getAllByLabelText(/Progress to mastered: Memorized/);
+    expect(labels.length).toBeGreaterThanOrEqual(2);
+    expect(
+      new Set(labels.map((el) => el.getAttribute("aria-label"))).size,
+    ).toBe(1);
+  });
+
+  it("drops to Fill in the blanks on a held bad miss with fewer than 3 banked", async () => {
+    renderReview({
+      verses: [
+        {
+          ...reviewingVerse,
+          intervalDays: 1,
+          stageReps: 1,
+          consecutiveCorrect: 1,
+        },
+        secondReviewingVerse,
+      ],
+    });
+    await holdColdMiss(BAD_MISS);
+    expect(
+      withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Next review /)).toBeVisible();
   });
 
   it("applies the held miss once on Continue", async () => {
@@ -2090,7 +2185,7 @@ describe("PracticeBoard held first try", () => {
     expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
   });
 
-  it("replaces the held miss with a From memory pass and restarts the level's reps", async () => {
+  it("replaces the held miss with a From memory pass and keeps the current gap", async () => {
     renderReview();
     await holdColdMiss(CLOSE_MISS);
     await userEvent.click(
@@ -2347,7 +2442,7 @@ describe("PracticeBoard held first try", () => {
     );
   });
 
-  it("after a 40% miss, a refresher pass stays Memorized and due tomorrow", async () => {
+  it("after a 40% miss, a refresher pass stays Memorized two steps back", async () => {
     const tomorrow = getSessionNow() + 24 * 60 * 60 * 1000;
     mutationMock("verseMemory.recordAttempt").mockResolvedValue({
       status: "reviewing",
@@ -2380,7 +2475,7 @@ describe("PracticeBoard held first try", () => {
     expect(screen.getByText("Next review tomorrow")).toBeVisible();
     await waitFor(() => {
       expect(
-        screen.getByLabelText(/Progress to mastered: Memorized/),
+        withinCard().getByLabelText(/Progress to mastered: Memorized/),
       ).toBeInTheDocument();
     });
     expect(
@@ -2462,6 +2557,119 @@ describe("PracticeBoard held first try", () => {
     });
     expect(continueButton).toHaveFocus();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps a 0-banked close miss at 0% Memorized with the sky start mark", async () => {
+    renderReview({
+      verses: [
+        {
+          ...reviewingVerse,
+          intervalDays: 1,
+          stageReps: 0,
+          consecutiveCorrect: 0,
+        },
+      ],
+    });
+    await holdColdMiss(CLOSE_MISS);
+    expect(
+      withinCard().getByLabelText(/Progress to mastered: Memorized · 0%/),
+    ).toBeInTheDocument();
+    expect(withinCard().getByText("0% to mastered")).toBeVisible();
+    expect(screen.getByText(/^Next review /)).toBeVisible();
+    expect(
+      screen.queryByLabelText(/Learning journey: Fill in the blanks/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("after a bad miss with two banked, a refresher pass lands at 0% Memorized", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "reviewing",
+      learnStage: 3,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 1,
+      dueAt: getSessionNow() + 24 * 60 * 60 * 1000,
+      consecutiveCorrect: 0,
+      lapses: 1,
+      earlyReviewApplied: false,
+    });
+    renderReview({
+      verses: [
+        {
+          ...reviewingVerse,
+          intervalDays: 1,
+          stageReps: 2,
+          consecutiveCorrect: 2,
+        },
+      ],
+    });
+    await holdColdMiss(BAD_MISS);
+    expect(
+      withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    const bar = withinCard().getByLabelText(
+      /Progress to mastered: Memorized · 0%/,
+    );
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveAttribute("data-journey-motion", "fade");
+  });
+
+  it("after a bad miss with one banked, a refresher pass stays in Learning", async () => {
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "learning",
+      learnStage: REVIEW_LAPSE_LEARN_STAGE,
+      stageReps: 0,
+      ease: 2.1,
+      intervalDays: 0,
+      dueAt: getSessionNow(),
+      consecutiveCorrect: 0,
+      lapses: 1,
+      earlyReviewApplied: false,
+    });
+    renderReview({
+      verses: [
+        {
+          ...reviewingVerse,
+          intervalDays: 1,
+          stageReps: 1,
+          consecutiveCorrect: 1,
+        },
+      ],
+    });
+    await holdColdMiss(BAD_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(
+      withinCard().getByLabelText(/Learning journey: Fill in the blanks/),
+    ).toBeInTheDocument();
   });
 
   it("does not hold a Learning miss", async () => {
