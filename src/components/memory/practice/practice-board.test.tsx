@@ -10,6 +10,9 @@ import {
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
   PRACTICE_ONLY_NOTE,
+  PRACTICE_PASS_EMOJI,
+  PRACTICE_PASS_LEAD,
+  PRACTICE_PASS_REST,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
@@ -1740,6 +1743,25 @@ describe("PracticeBoard pre-try refresher", () => {
     );
   });
 
+  it("keeps S1 pass copy on a pre-try From memory pass", async () => {
+    renderReview();
+    await openRefresher();
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("Nailed it!")).toBeVisible();
+    expect(screen.queryByText(PRACTICE_PASS_LEAD)).not.toBeInTheDocument();
+  });
+
   it("offers Try another refresher after a counted From memory miss", async () => {
     renderReview();
     await openRefresher();
@@ -2079,6 +2101,8 @@ describe("PracticeBoard held first try", () => {
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("Nailed it!")).toBeVisible();
+    expect(screen.queryByText(PRACTICE_PASS_LEAD)).not.toBeInTheDocument();
     expect(
       screen.queryByText(LEAVE_NOW_FIRST_TRY_COUNTS),
     ).not.toBeInTheDocument();
@@ -2212,6 +2236,16 @@ describe("PracticeBoard held first try", () => {
       expect(practice2).toHaveValue(PASSAGE_ONE);
     });
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    const practicePassBanner = await screen.findByRole("status");
+    expect(practicePassBanner).toHaveTextContent(PRACTICE_PASS_LEAD);
+    expect(practicePassBanner).toHaveTextContent(PRACTICE_PASS_REST);
+    expect(practicePassBanner).toHaveTextContent(PRACTICE_PASS_EMOJI);
+    expect(practicePassBanner).toHaveTextContent("100% recalled");
+    expect(practicePassBanner).not.toHaveTextContent("Nailed it!");
+    expect(practicePassBanner).not.toHaveTextContent("Word for word.");
+    expect(practicePassBanner).not.toHaveTextContent("Well remembered");
+    expect(practicePassBanner).not.toHaveTextContent("see if it comes back");
+    expect(screen.queryByText("🎉")).not.toBeInTheDocument();
     expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
     expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
     expect(
@@ -2220,6 +2254,70 @@ describe("PracticeBoard held first try", () => {
     expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus();
     const [state] = onRunStateChange.mock.lastCall ?? [];
     expect(state?.attempts).toHaveLength(1);
+  });
+
+  async function reachPracticeFromMemory() {
+    await holdColdMiss(CLOSE_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(BAD_MISS);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    );
+    const practice1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(practice1);
+    await userEvent.paste(PASSAGE_ONE);
+    await waitFor(() => {
+      expect(practice1).toHaveValue(PASSAGE_ONE);
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    return screen.getByLabelText("Your recalled verse");
+  }
+
+  it("shows practice pass copy at 90% with no Well remembered line", async () => {
+    renderReview();
+    const practice2 = await reachPracticeFromMemory();
+    await userEvent.click(practice2);
+    await userEvent.paste("The Lord is my shepherd I shall not eat");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveTextContent(PRACTICE_PASS_LEAD);
+    expect(banner).toHaveTextContent(PRACTICE_PASS_REST);
+    expect(banner).toHaveTextContent(PRACTICE_PASS_EMOJI);
+    expect(banner).not.toHaveTextContent("Well remembered");
+    expect(banner).not.toHaveTextContent("Nailed it!");
+    expect(banner).not.toHaveTextContent("see if it comes back");
+    expect(screen.queryByText("🙌")).not.toBeInTheDocument();
+    expect(screen.getByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+  });
+
+  it("keeps S1 miss copy plus the practice-only line at 70%", async () => {
+    renderReview();
+    const practice2 = await reachPracticeFromMemory();
+    await userEvent.click(practice2);
+    await userEvent.paste(CLOSE_MISS);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveTextContent("So close.");
+    expect(banner).toHaveTextContent(
+      "A few words slipped. The highlighted ones are worth another look.",
+    );
+    expect(banner).not.toHaveTextContent(PRACTICE_PASS_LEAD);
+    expect(screen.getByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
   });
 
   it("shows the leave line on both after-miss steps, then drops it once step 2 is saved", async () => {
