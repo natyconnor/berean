@@ -951,8 +951,10 @@ describe("planVerseAttemptSchedule", () => {
         refresherUsed: true,
       }),
     );
+    expect(close.next.status).toBe("reviewing");
     expect(close.next.stageReps).toBe(2);
     expect(close.next.intervalDays).toBe(1);
+    expect(close.next.lapses).toBe(0);
 
     const lapse = planVerseAttemptSchedule(
       dueDaily,
@@ -964,7 +966,9 @@ describe("planVerseAttemptSchedule", () => {
       }),
     );
     expect(lapse.next.status).toBe("reviewing");
+    expect(lapse.next.intervalDays).toBe(1);
     expect(lapse.next.stageReps).toBe(0);
+    expect(lapse.next.lapses).toBe(1);
     expect(reviewingBar(lapse.next)).toBe(0);
   });
 
@@ -976,7 +980,6 @@ describe("planVerseAttemptSchedule", () => {
     expect(cold.next.stageReps).toBe(0);
     expect(cold.next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
   });
-
   it("after a close miss, a refresher pass keeps interval, reps and ease", () => {
     const growing = reviewing({
       intervalDays: 5,
