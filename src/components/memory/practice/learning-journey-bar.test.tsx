@@ -68,7 +68,63 @@ describe("LearningJourneyBar", () => {
     ).toBeInTheDocument();
     const fill = container.querySelector(".h-full");
     expect(fill?.className).toContain("bg-sky-500");
-    expect(fill).toHaveStyle({ width: "0%" });
+    expect(fill).toHaveStyle({ width: "0%", minWidth: "0.375rem" });
+    expect(screen.getByText("0% to mastered")).toBeInTheDocument();
+  });
+
+  it("keeps one mastery track when Mastered recolors to Memorized", () => {
+    const { container, rerender } = render(
+      <LearningJourneyBar
+        learnStage={3}
+        status="mastered"
+        intervalDays={MASTERED_INTERVAL_DAYS}
+      />,
+    );
+    const track = container.querySelector("[data-journey-track=mastery]");
+    expect(track).toBeTruthy();
+
+    rerender(
+      <LearningJourneyBar
+        learnStage={3}
+        status="reviewing"
+        intervalDays={MASTERED_INTERVAL_DAYS}
+        stageReps={0}
+        from={{
+          learnStage: 3,
+          status: "mastered",
+          intervalDays: MASTERED_INTERVAL_DAYS,
+        }}
+      />,
+    );
+    expect(container.querySelector("[data-journey-track=mastery]")).toBe(track);
+    expect(
+      screen
+        .getByLabelText(/Progress to mastered/)
+        .getAttribute("data-journey-motion"),
+    ).toBe("slide");
+  });
+
+  it("fades between Memorized and Fill in the blanks without a width slide", () => {
+    const { container } = render(
+      <LearningJourneyBar
+        learnStage={2}
+        stageReps={0}
+        status="learning"
+        from={{
+          learnStage: 3,
+          stageReps: 0,
+          status: "reviewing",
+          intervalDays: 1,
+        }}
+      />,
+    );
+    expect(
+      screen.getByLabelText(/Learning journey: Fill in the blanks/),
+    ).toHaveAttribute("data-journey-motion", "fade");
+    const fills = container.querySelectorAll(".h-full");
+    for (const fill of fills) {
+      expect(fill.className).not.toContain("duration-500");
+    }
   });
 
   it("fills the mastery bar when a daily reviewing streak banks a rep", () => {
@@ -143,6 +199,10 @@ describe("LearningJourneyBar", () => {
     const fill = container.querySelector(".h-full");
     expect(fill).toHaveStyle({ width: "0%" });
     expect(fill?.className).toContain("motion-reduce:transition-none");
+    expect(screen.getByLabelText(/Progress to mastered/)).toHaveAttribute(
+      "data-journey-motion",
+      "none",
+    );
     useReducedMotion.mockReturnValue(false);
   });
 });

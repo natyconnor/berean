@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useState } from "react";
+import { type CSSProperties, type JSX, useEffect, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 
 import { memoryProgressFraction } from "@/lib/mastery-ring";
@@ -10,6 +10,9 @@ import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
 
 const BAR_FILL_MS = 500;
 const BANNER_SETTLE_MS = 220;
+const STAGE_FADE_MS = 150;
+const DOT_PULSE_MS = 400;
+const START_MARK = "0.375rem";
 
 export type JourneyBarFill = {
   learnStage: number;
@@ -47,22 +50,34 @@ interface LearningJourneyBarProps {
   ease?: number;
   /**
    * Paint this fill first, then ease to the current value once the banner
-   * is in place. Used for an after-miss refresher result.
+   * is in place. Used on a held miss and an after-miss refresher result.
    */
   from?: JourneyBarFill;
   className?: string;
+}
+
+type BarPhase = "mastery" | "learning";
+type MotionKind = "none" | "slide" | "fade-down" | "fade-up";
+type Beat = "idle" | "from" | "out" | "in" | "pulse" | "done";
+
+function isGraduated(status?: MemoryStatus): boolean {
+  return status === "reviewing" || status === "mastered";
+}
+
+function phaseOf(fill: JourneyBarFill): BarPhase {
+  return isGraduated(fill.status) ? "mastery" : "learning";
 }
 
 /**
  * Compact progress bar for the phase the verse is in now.
  *
  * While learning, the track fills to 100% learned. After graduation it is
- * replaced by a new mastery track that starts empty and fills one equal share
- * per exact on the path to mastered. Fill fraction is
- * {@link memoryProgressFraction}.
+ * a mastery track that fills one equal share per exact on the path to
+ * mastered. Fill fraction is {@link memoryProgressFraction}.
  *
  * From Memory stays the learning (amber) color. Reviewing is sky and mastered
- * is emerald.
+ * is emerald. Mastered and Memorized share one track so a miss can recolor
+ * without remounting. Memorized at 0% keeps a sky start mark.
  */
 function fillPercent(fill: JourneyBarFill, wordCount?: number): number {
   return Math.round(
@@ -75,6 +90,46 @@ function fillPercent(fill: JourneyBarFill, wordCount?: number): number {
       fill.ease,
     ) * 100,
   );
+}
+
+function motionKind(
+  from: JourneyBarFill | undefined,
+  to: JourneyBarFill,
+  reduceMotion: boolean,
+): MotionKind {
+  if (!from || reduceMotion) return "none";
+  const fromPhase = phaseOf(from);
+  const toPhase = phaseOf(to);
+  if (fromPhase !== toPhase) {
+    return toPhase === "learning" ? "fade-down" : "fade-up";
+  }
+  if (fillPercent(from) === fillPercent(to) && from.status === to.status) {
+    return "none";
+  }
+  return "slide";
+}
+
+function faceCopy(
+  fill: JourneyBarFill,
+  pct: number,
+): { label: string; goal: string; ariaKind: string } {
+  const graduated = isGraduated(fill.status);
+  const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, fill.learnStage));
+  const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
+  const label =
+    fill.status === "reviewing" || fill.status === "mastered"
+      ? statusLabel(fill.status)
+      : stage.label;
+  return {
+    label,
+    goal:
+      fill.status === "mastered"
+        ? `${pct}%`
+        : graduated
+          ? `${pct}% to mastered`
+          : `${pct}% learned`,
+    ariaKind: graduated ? "Progress to mastered" : "Learning journey",
+  };
 }
 
 export function LearningJourneyBar({
@@ -97,75 +152,163 @@ export function LearningJourneyBar({
   };
   const toPct = fillPercent(toFill, wordCount);
   const fromPct = from ? fillPercent(from, wordCount) : toPct;
-  const shouldAnimate = Boolean(from) && !reduceMotion && fromPct !== toPct;
-  const animateKey = shouldAnimate ? `${fromPct}-${toPct}` : "static";
+  const kind = motionKind(from, toFill, reduceMotion);
+  const animateKey = `${kind}:${fromPct}:${toPct}:${from?.status ?? ""}:${toFill.status ?? ""}`;
+  const [beat, setBeat] = useState<Beat>("idle");
   const [playedKey, setPlayedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!shouldAnimate) return;
-    const start = window.setTimeout(() => {
-      setPlayedKey(animateKey);
-    }, BANNER_SETTLE_MS);
-    return () => window.clearTimeout(start);
-  }, [animateKey, shouldAnimate]);
+    if (kind === "none") return;
+    const timers: number[] = [];
+    const at = (ms: number, next: Beat) => {
+      timers.push(window.setTimeout(() => setBeat(next), ms));
+    };
+    if (kind === "slide") {
+      at(BANNER_SETTLE_MS, "done");
+    } else {
+      at(BANNER_SETTLE_MS, "out");
+      at(BANNER_SETTLE_MS + STAGE_FADE_MS, "in");
+      if (kind === "fade-up") {
+        at(BANNER_SETTLE_MS + STAGE_FADE_MS * 2, "pulse");
+        at(BANNER_SETTLE_MS + STAGE_FADE_MS * 2 + DOT_PULSE_MS, "done");
+      } else {
+        at(BANNER_SETTLE_MS + STAGE_FADE_MS * 2, "done");
+      }
+    }
+    timers.push(
+      window.setTimeout(
+        () => setPlayedKey(animateKey),
+        kind === "slide"
+          ? BANNER_SETTLE_MS
+          : kind === "fade-up"
+            ? BANNER_SETTLE_MS + STAGE_FADE_MS * 2 + DOT_PULSE_MS
+            : BANNER_SETTLE_MS + STAGE_FADE_MS * 2,
+      ),
+    );
+    return () => {
+      for (const timer of timers) window.clearTimeout(timer);
+    };
+  }, [animateKey, kind]);
 
-  const settled = !shouldAnimate || playedKey === animateKey;
-  const pct = settled ? toPct : fromPct;
-  const show = settled ? toFill : (from ?? toFill);
-  const graduated = show.status === "reviewing" || show.status === "mastered";
-  const phase = graduated ? "mastery" : "learning";
-  const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, show.learnStage));
-  const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
-  const chrome = practiceChromeFor(clampedStage, show.status);
-  const label =
-    show.status === "reviewing" || show.status === "mastered"
-      ? statusLabel(show.status)
-      : stage.label;
-  const ariaKind = graduated ? "Progress to mastered" : "Learning journey";
-  const goal =
-    show.status === "mastered"
-      ? `${toPct}%`
-      : graduated
-        ? `${toPct}% to mastered`
-        : `${toPct}% learned`;
+  const sliding = kind === "slide" && playedKey !== animateKey;
+  const fading = kind === "fade-down" || kind === "fade-up";
+  const fromOpacity = beat === "idle" || beat === "from" ? 1 : 0;
+  const toOpacity =
+    beat === "in" || beat === "pulse" || beat === "done" ? 1 : 0;
+  const pulsing = kind === "fade-up" && beat === "pulse";
+  const livePct = sliding ? fromPct : toPct;
+  const copy = faceCopy(toFill, toPct);
+  const motion =
+    kind === "none" ? "none" : pulsing ? "pulse" : fading ? "fade" : "slide";
 
   return (
     <div
       className={cn("space-y-1", className)}
-      aria-label={`${ariaKind}: ${label} · ${toPct}%`}
+      aria-label={`${copy.ariaKind}: ${copy.label} · ${toPct}%`}
+      data-journey-motion={motion}
     >
+      {fading && from ? (
+        <div className="relative">
+          <JourneyFace
+            fill={toFill}
+            pct={toPct}
+            pulseDot={pulsing}
+            className="transition-opacity ease-out"
+            style={{
+              opacity: toOpacity,
+              transitionDuration: `${STAGE_FADE_MS}ms`,
+            }}
+          />
+          <div className="pointer-events-none absolute inset-0">
+            <JourneyFace
+              fill={from}
+              pct={fromPct}
+              className="transition-opacity ease-out"
+              style={{
+                opacity: fromOpacity,
+                transitionDuration: `${STAGE_FADE_MS}ms`,
+              }}
+            />
+          </div>
+        </div>
+      ) : (
+        <JourneyFace
+          fill={toFill}
+          pct={livePct}
+          slideColor={kind === "slide"}
+          sliding={sliding}
+        />
+      )}
+    </div>
+  );
+}
+
+function JourneyFace({
+  fill,
+  pct,
+  pulseDot = false,
+  slideColor = false,
+  sliding = false,
+  className,
+  style,
+}: {
+  fill: JourneyBarFill;
+  pct: number;
+  pulseDot?: boolean;
+  slideColor?: boolean;
+  sliding?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}): JSX.Element {
+  const chrome = practiceChromeFor(
+    Math.max(0, Math.min(MAX_LEARN_STAGE, fill.learnStage)),
+    fill.status,
+  );
+  const copy = faceCopy(fill, pct);
+  const graduated = isGraduated(fill.status);
+  const startMark = graduated && pct === 0;
+
+  return (
+    <div className={cn("space-y-1", className)} style={style}>
       <div className="flex items-center justify-between gap-2">
         <span
           className={cn(
             "inline-flex items-center gap-1.5 text-xs font-medium",
             chrome.text,
+            slideColor && "transition-colors duration-500 ease-out",
           )}
         >
           <span
-            className={cn("h-1.5 w-1.5 rounded-full", chrome.dot)}
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              chrome.dot,
+              pulseDot && "animate-journey-dot-pulse",
+            )}
             aria-hidden
           />
-          {label}
+          {copy.label}
         </span>
         <span className="text-xs tabular-nums text-muted-foreground">
-          {goal}
+          {copy.goal}
         </span>
       </div>
       <div
-        key={shouldAnimate ? "journey-fill" : phase}
+        data-journey-track={phaseOf(fill)}
         className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
       >
         <div
           className={cn(
             "h-full rounded-full motion-reduce:transition-none",
-            shouldAnimate
-              ? "transition-[width] duration-500 ease-out"
+            sliding || slideColor
+              ? "transition-[width,background-color] duration-500 ease-out"
               : "transition-[width] duration-300",
             chrome.dot,
           )}
           style={{
             width: `${pct}%`,
-            transitionDuration: shouldAnimate ? `${BAR_FILL_MS}ms` : undefined,
+            minWidth: startMark ? START_MARK : undefined,
+            transitionDuration:
+              sliding || slideColor ? `${BAR_FILL_MS}ms` : undefined,
           }}
           aria-hidden
         />
