@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  startOverPassagePatch,
+  startOverVersePatch,
+} from "./memory-start-over";
+import {
   NEED_A_REFRESHER_LABEL,
   NOW_TRY_WITHOUT_HINTS,
   REFRESH_SAVE_ERROR,
+  canStartOver,
+  canStartOverPassage,
+  hasLearningProgress,
   memorizeTitleLabel,
   passageStepLine,
   refresherHeader,
+  START_OVER_CONFIRM_BODY,
+  startOverPassageBody,
+  startOverTitle,
   statusLabel,
   stepAction,
   stepActionLine,
@@ -108,6 +118,103 @@ describe("statusLabel", () => {
 describe("memorizeTitleLabel", () => {
   it("names the target", () => {
     expect(memorizeTitleLabel("Psalm 1")).toBe("Memorize Psalm 1");
+  });
+});
+
+describe("hasLearningProgress and canStartOver", () => {
+  it("hides Start over on New or Read with nothing done", () => {
+    const fresh = { status: "new" as const, learnStage: 0 };
+    expect(hasLearningProgress(fresh)).toBe(false);
+    expect(canStartOver(fresh)).toBe(false);
+    expect(
+      canStartOver({ status: "learning", learnStage: 0, stageReps: 0 }),
+    ).toBe(false);
+  });
+
+  it("shows Start over after a step, a banked rep, or a logged try", () => {
+    expect(canStartOver({ status: "learning", learnStage: 1 })).toBe(true);
+    expect(
+      canStartOver({ status: "learning", learnStage: 0, stageReps: 1 }),
+    ).toBe(true);
+    expect(
+      canStartOver({
+        status: "learning",
+        learnStage: 0,
+        lastReviewedAt: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("shows Start over for Memorized and Mastered verses", () => {
+    expect(canStartOver({ status: "reviewing", learnStage: 3 })).toBe(true);
+    expect(canStartOver({ status: "mastered", learnStage: 3 })).toBe(true);
+  });
+
+  it("hides Start over again right after a reset", () => {
+    const reset = startOverVersePatch(1_700_000_000_000);
+    expect(hasLearningProgress(reset)).toBe(false);
+    expect(canStartOver(reset)).toBe(false);
+  });
+});
+
+describe("startOver copy", () => {
+  it("titles the confirm with the verse reference", () => {
+    expect(startOverTitle("John 3:16")).toBe("Start John 3:16 over?");
+  });
+
+  it("uses the follow-up confirm line word for word", () => {
+    expect(START_OVER_CONFIRM_BODY).toBe(
+      "You'll learn it again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.",
+    );
+    expect(startOverPassageBody(14)).toBe(
+      "You'll learn all 14 verses again from the start, and this page will count from today. Your past tries aren't deleted, and your streak and overall stats stay as they are. This can't be undone.",
+    );
+  });
+});
+
+describe("canStartOverPassage", () => {
+  const fresh = {
+    attachment: "unreached" as const,
+    learnStage: 0,
+    stageReps: 0,
+  };
+
+  it("hides Start over when nothing is reached", () => {
+    expect(canStartOverPassage([fresh])).toBe(false);
+    expect(
+      canStartOverPassage([
+        { attachment: "learning", learnStage: 0, stageReps: 0 },
+      ]),
+    ).toBe(false);
+  });
+
+  it("shows Start over once a piece is attached, solid, or in progress", () => {
+    expect(canStartOverPassage([{ ...fresh, attachment: "attached" }])).toBe(
+      true,
+    );
+    expect(canStartOverPassage([{ ...fresh, attachment: "solid" }])).toBe(true);
+    expect(canStartOverPassage([{ ...fresh, learnStage: 1 }])).toBe(true);
+    expect(canStartOverPassage([{ ...fresh, stageReps: 1 }])).toBe(true);
+  });
+
+  it("hides Start over again right after a reset", () => {
+    const reset = startOverPassagePatch(
+      [
+        {
+          index: 0,
+          book: "Psalms",
+          chapter: 23,
+          startVerse: 1,
+          endVerse: 6,
+          sectionIndex: 0,
+          attachment: "solid",
+          learnStage: 3,
+          stageReps: 2,
+        },
+      ],
+      1_700_000_000_000,
+    );
+    expect(canStartOverPassage(reset.pieces)).toBe(false);
   });
 });
 

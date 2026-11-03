@@ -30,16 +30,19 @@ export function passageMomentHeadline(title: string): string {
 /**
  * Calendar days from the passage's start through `now`, counting both ends:
  * started Monday, finished Wednesday is 3 days, the same count "Learn it in
- * about N days" promised. Never less than 1.
+ * about N days" promised. A Start over counts from the reset. Never less
+ * than 1.
  */
 export function passageMomentDays(
   createdAt: number,
   now: number,
   tzOffsetMinutes: number,
+  startedOverAt?: number,
 ): number {
+  const startedAt = startedOverAt ?? createdAt;
   const days =
     localDayIndex(now, tzOffsetMinutes) -
-    localDayIndex(createdAt, tzOffsetMinutes) +
+    localDayIndex(startedAt, tzOffsetMinutes) +
     1;
   return Math.max(1, days);
 }

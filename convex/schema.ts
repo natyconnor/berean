@@ -320,6 +320,8 @@ export default defineSchema({
     // the inMemory backfill has run for the user.
     inMemory: v.optional(v.boolean()),
     lastReviewedAt: v.optional(v.number()),
+    // Epoch for verse-page history after Start over. Absent until the first reset.
+    startedOverAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_userId_dueAt", ["userId", "dueAt"]) // Today queue + badge
@@ -390,6 +392,8 @@ export default defineSchema({
     // When the passage first left building, so the moment survives leaving
     // before it was shown. Older passages have neither and never celebrate.
     celebrationPendingAt: v.optional(v.number()),
+    // Epoch for passage-page history after Start over. Absent until the first reset.
+    startedOverAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

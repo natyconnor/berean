@@ -86,6 +86,7 @@ export const passageViewValidator = v.object({
   migrationBannerDismissed: v.optional(v.boolean()),
   celebratedAt: v.optional(v.number()),
   needsCelebration: v.boolean(),
+  startedOverAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
   remainingIntroduces: v.number(),

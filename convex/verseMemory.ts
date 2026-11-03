@@ -61,6 +61,10 @@ import {
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
 import {
+  attemptsSinceStartOver,
+  startOverVersePatch,
+} from "../src/lib/memory-start-over";
+import {
   countDuePassageReviews,
   countProjectedPassageLearning,
   isPassageDueForReview,
@@ -141,6 +145,7 @@ const verseMemoryValidator = v.object({
   isHearted: v.optional(v.boolean()),
   inMemory: v.optional(v.boolean()),
   lastReviewedAt: v.optional(v.number()),
+  startedOverAt: v.optional(v.number()),
   createdAt: v.number(),
 });
 
@@ -271,6 +276,7 @@ function toRowView(row: Doc<"verseMemory">) {
     isHearted: row.isHearted,
     inMemory: row.inMemory,
     lastReviewedAt: row.lastReviewedAt,
+    startedOverAt: row.startedOverAt,
     createdAt: row.createdAt,
   };
 }
@@ -856,6 +862,51 @@ export const stopMemorizing = mutation({
 
     await stopMemorizingVerse(ctx, userId, args.verseRefId, args.now);
     return null;
+  },
+});
+
+async function applyVerseStartOver(
+  ctx: Parameters<typeof adjustUserMemoryStats>[0],
+  userId: Id<"users">,
+  verseRefId: Id<"verseRefs">,
+  now: number,
+): Promise<MemorySchedule> {
+  const memory = await requireInMemory(ctx, userId, verseRefId);
+  const next = startOverVersePatch(now);
+  if (memory.status !== next.status) {
+    await adjustUserMemoryStats(ctx, userId, now, memory.status, next.status);
+  }
+  await ctx.db.patch(memory._id, {
+    ...next,
+    startedOverAt: now,
+  });
+  return {
+    status: next.status,
+    learnStage: next.learnStage,
+    stageReps: next.stageReps,
+    ease: next.ease,
+    intervalDays: next.intervalDays,
+    dueAt: next.dueAt,
+    consecutiveCorrect: next.consecutiveCorrect,
+    lapses: next.lapses,
+    earlyReviewApplied: next.earlyReviewApplied,
+  };
+}
+
+/** Reset one verse to New/Read. Attempt rows stay; the verse page counts from now. */
+export const startOver = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    now: v.number(),
+  },
+  returns: memoryScheduleValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
+    }
+    return await applyVerseStartOver(ctx, userId, args.verseRefId, args.now);
   },
 });
 
@@ -1693,6 +1744,7 @@ const verseDetailValidator = v.object({
   lapses: v.number(),
   consecutiveCorrect: v.number(),
   lastReviewedAt: v.optional(v.number()),
+  startedOverAt: v.optional(v.number()),
   attempts: v.array(attemptValidator),
   difficulty: v.union(difficultyValidator, v.null()),
 });
@@ -1784,16 +1836,19 @@ export const verseDetail = query({
       .order("desc")
       .take(VERSE_DETAIL_ATTEMPT_LIMIT);
 
-    const attempts: Attempt[] = attemptRows
-      .filter((row) => !row.holdSchedule)
-      .map((row) => ({
-        quality: row.quality,
-        accuracy: row.accuracy,
-        stage: row.stage,
-        mode: row.mode,
-        durationMs: row.durationMs,
-        createdAt: row.createdAt,
-      }));
+    const attempts: Attempt[] = attemptsSinceStartOver(
+      attemptRows
+        .filter((row) => !row.holdSchedule)
+        .map((row) => ({
+          quality: row.quality,
+          accuracy: row.accuracy,
+          stage: row.stage,
+          mode: row.mode,
+          durationMs: row.durationMs,
+          createdAt: row.createdAt,
+        })),
+      memory.startedOverAt,
+    );
 
     return {
       verseRefId,
@@ -1814,6 +1869,7 @@ export const verseDetail = query({
       lapses: memory.lapses,
       consecutiveCorrect: memory.consecutiveCorrect,
       lastReviewedAt: memory.lastReviewedAt,
+      startedOverAt: memory.startedOverAt,
       attempts,
       difficulty: deriveDifficulty(attempts),
     };
