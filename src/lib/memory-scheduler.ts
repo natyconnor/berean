@@ -18,11 +18,12 @@ import { startOfZonedDay } from "./dashboard-buckets";
  *    {@link REVIEW_DAILY_REPS} reviews, then every other day for
  *    {@link REVIEW_EVERY_OTHER_REPS} reviews; only then does the interval
  *    multiply by ease. An 85–99% recall grows the gap halfway, leaves ease
- *    alone, and still counts as a streak rep. A 60–84% recall steps back one
- *    level (daily stays daily; every-other-day goes daily; growing or
- *    Mastered goes every-other-day) and restarts the rep count. Below
- *    {@link REVIEW_LAPSE_ACCURACY} a verse drops to Learning at Challenge;
- *    a passage stays reviewing on the daily gap, due tomorrow.
+ *    alone, and still counts as a streak rep. A 60–84% recall on a verse
+ *    loses one exact-path step and floors at the daily gap. Below
+ *    {@link REVIEW_LAPSE_ACCURACY} a verse loses three, or drops to Learning
+ *    at Challenge when fewer than three are banked. A passage close miss
+ *    still steps back one level,
+ *    and a passage bad miss stays reviewing on the daily gap, due tomorrow.
  *    Due dates land at local midnight N calendar days later (with a 6-hour
  *    floor so a late-night 1-day review does not reopen at 12:01am).
  *
@@ -181,7 +182,7 @@ export interface ReviewInput {
    */
   timeZone?: string;
   /**
-   * Reviewing item. A passage bad miss stays reviewing on the daily gap.
+   * Reviewing item. Passage misses keep the old step back and daily lapse.
    * Omitted treats the item as a verse.
    */
   item?: "verse" | "passage";
@@ -199,8 +200,9 @@ export const MAX_LEARN_STAGE = 3;
 export const MASTERED_INTERVAL_DAYS = 30;
 
 /**
- * Review accuracy below this is a bad miss. A verse drops to Learning; a
- * passage stays reviewing on the daily gap.
+ * Review accuracy below this is a bad miss. A verse loses three banked
+ * reviews, or drops to Learning when fewer are banked. A passage stays
+ * reviewing on the daily gap.
  */
 export const REVIEW_LAPSE_ACCURACY = 60;
 
@@ -880,7 +882,6 @@ function computeReviewingPathStartEase(
       ) {
         return startEase;
       }
-      if (current.status === "mastered") break;
       current = nextReviewingOnExact(current);
     }
   }
@@ -906,6 +907,156 @@ export function reviewingPathStartEase(
   const startEase = computeReviewingPathStartEase(intervalDays, ease);
   reviewingPathStartEaseCacheSet(key, startEase);
   return startEase;
+}
+
+type ReviewingPathState = {
+  status: "reviewing" | "mastered";
+  intervalDays: number;
+  ease: number;
+  stageReps: number;
+  consecutiveCorrect: number;
+};
+
+const REVIEW_PATH_STEP_LIMIT = 64;
+const CLOSE_REVIEW_LOSS = 1;
+const BAD_REVIEW_LOSS = 3;
+
+function pathOrigin(startEase: number): ReviewingPathState {
+  return {
+    status: "reviewing",
+    intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+    ease: startEase,
+    stageReps: 0,
+    consecutiveCorrect: 0,
+  };
+}
+
+function pathAfterExact(current: ReviewingPathState): ReviewingPathState {
+  const next = nextReviewingOnExact(current);
+  return {
+    status: next.status === "mastered" ? "mastered" : "reviewing",
+    intervalDays: next.intervalDays,
+    ease: next.ease,
+    stageReps: next.stageReps,
+    consecutiveCorrect: next.consecutiveCorrect,
+  };
+}
+
+function reviewingPathStateAtStep(
+  startEase: number,
+  step: number,
+): ReviewingPathState {
+  let current = pathOrigin(startEase);
+  const target = Math.max(0, step);
+  for (let i = 0; i < target; i += 1) {
+    current = pathAfterExact(current);
+  }
+  return current;
+}
+
+function pathStepMatches(
+  current: ReviewingPathState,
+  intervalDays: number,
+  ease: number,
+  stageReps: number,
+): boolean {
+  return (
+    Math.abs(current.intervalDays - intervalDays) <= 1e-6 &&
+    Math.abs(current.ease - ease) <= 1e-6 &&
+    current.stageReps === stageReps
+  );
+}
+
+function matchingReviewingPathStep(
+  startEase: number,
+  intervalDays: number,
+  ease: number,
+  stageReps: number,
+): number | undefined {
+  let current = pathOrigin(startEase);
+  for (let step = 0; step < REVIEW_PATH_STEP_LIMIT; step += 1) {
+    if (current.status === "mastered") return undefined;
+    if (pathStepMatches(current, intervalDays, ease, stageReps)) return step;
+    current = pathAfterExact(current);
+  }
+  return undefined;
+}
+
+/**
+ * Highest exact-path step whose interval is still at most `intervalDays`.
+ * Off-path rows (an 85–99% gap, or a gap from before this ladder) use this.
+ */
+function highestPathStepWithIntervalAtMost(
+  startEase: number,
+  intervalDays: number,
+): number {
+  let current = pathOrigin(startEase);
+  let best = 0;
+  for (let step = 0; step < REVIEW_PATH_STEP_LIMIT; step += 1) {
+    if (current.intervalDays <= intervalDays + 1e-6) best = step;
+    current = pathAfterExact(current);
+  }
+  return best;
+}
+
+function bankedGoodReviews(
+  s: Pick<MemorySchedule, "status" | "intervalDays" | "ease" | "stageReps">,
+): number {
+  const startEase = reviewingPathStartEase(s.intervalDays, s.ease);
+  const total = exactReviewsUntilMastered({
+    intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+    ease: startEase,
+    stageReps: 0,
+  });
+  if (s.status === "mastered") return total;
+  const matched = matchingReviewingPathStep(
+    startEase,
+    s.intervalDays,
+    s.ease,
+    s.stageReps,
+  );
+  if (matched !== undefined) return matched;
+  return highestPathStepWithIntervalAtMost(startEase, s.intervalDays);
+}
+
+function scheduleOnReviewingPathStep(
+  s: MemorySchedule,
+  r: ReviewInput,
+  step: number,
+  countLapse: boolean,
+): MemorySchedule {
+  const landed = reviewingPathStateAtStep(
+    reviewingPathStartEase(s.intervalDays, s.ease),
+    step,
+  );
+  return {
+    status: landed.status,
+    learnStage: s.learnStage,
+    stageReps: landed.stageReps,
+    ease: landed.ease,
+    intervalDays: landed.intervalDays,
+    dueAt: computeDueAt(r, landed.intervalDays),
+    consecutiveCorrect: landed.consecutiveCorrect,
+    lapses: s.lapses + (countLapse ? 1 : 0),
+    earlyReviewApplied: false,
+  };
+}
+
+function scheduleVerseReviewMiss(
+  s: MemorySchedule,
+  r: ReviewInput,
+  loss: number,
+): MemorySchedule {
+  const banked = bankedGoodReviews(s);
+  if (loss === BAD_REVIEW_LOSS && banked < loss) {
+    return lapseReviewingToLearning(s, r);
+  }
+  return scheduleOnReviewingPathStep(
+    s,
+    r,
+    Math.max(0, banked - loss),
+    loss === BAD_REVIEW_LOSS,
+  );
 }
 
 function lapseReviewingToLearning(
@@ -942,7 +1093,7 @@ function lapsePassageToDaily(
   };
 }
 
-function stepBackReviewingOneLevel(
+function stepBackPassageOneLevel(
   s: MemorySchedule,
   r: ReviewInput,
 ): MemorySchedule {
@@ -971,11 +1122,13 @@ function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   if (outcome === "lapse") {
     return r.item === "passage"
       ? lapsePassageToDaily(s, r)
-      : lapseReviewingToLearning(s, r);
+      : scheduleVerseReviewMiss(s, r, BAD_REVIEW_LOSS);
   }
 
   if (outcome === "close") {
-    return stepBackReviewingOneLevel(s, r);
+    return r.item === "passage"
+      ? stepBackPassageOneLevel(s, r)
+      : scheduleVerseReviewMiss(s, r, CLOSE_REVIEW_LOSS);
   }
 
   // One early success may push dueAt out from now; further early successes
