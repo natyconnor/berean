@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import type { JSX } from "react";
 
+import { accuracyBand, type AccuracyBand } from "@/lib/accuracy-feedback";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import type { MemorySchedule } from "@/lib/memory-scheduler";
 import { READER_VERSE_TEXT_CLASS } from "@/lib/reader-typography";
@@ -21,8 +22,7 @@ interface VerseAttemptResultProps {
   showScheduleOutcome?: boolean;
   /**
    * The graduating From Memory recall requires a perfect grade to bank. Passed
-   * through to the close-attempt banner so it can explain why Continue is
-   * still "Try again".
+   * through to the close-attempt banner so it can explain why the step stays.
    */
   requireExactToAdvance?: boolean;
   nextSchedule?: MemorySchedule | null;
@@ -32,6 +32,13 @@ interface VerseAttemptResultProps {
 }
 
 const PLACEHOLDER = "\u00a0";
+
+const DIFF_BORDER: Record<AccuracyBand, string> = {
+  exact: "border-emerald-500/40",
+  pass: "border-emerald-500/30",
+  close: "border-amber-500/40",
+  miss: "border-primary/25",
+};
 
 function renderDiffChip(token: DiffToken, idx: number): JSX.Element {
   if (token.status === "match") {
@@ -181,11 +188,9 @@ export function VerseAttemptResult({
         transition={{ duration: 0.24, ease: "easeOut" }}
         className={cn(
           "space-y-3 rounded-xl border bg-card/60 px-4 py-3 shadow-sm backdrop-blur-sm",
-          attemptQuality === "exact"
-            ? "border-emerald-500/40"
-            : attemptQuality === "close"
-              ? "border-amber-500/40"
-              : "border-primary/25",
+          DIFF_BORDER[
+            accuracyBand(attemptAccuracy, attemptQuality === "exact")
+          ],
         )}
       >
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">

@@ -39,7 +39,7 @@ interface VerseMemoryFeedbackProps {
   nextSchedule?: MemorySchedule | null;
   /** Clock used for due labels. Defaults to `Date.now()`. */
   now?: number;
-  /** Percent recalled; required to band retry vs hold on Review. */
+  /** Percent recalled; required to band pass vs close on Review. */
   accuracy?: number;
   /** Diff error tallies — unlocks one-word-off and typo-only copy. */
   errors?: AttemptErrorCounts;
@@ -49,16 +49,16 @@ interface VerseMemoryFeedbackProps {
 
 const BANNER_TONE: Record<AccuracyBand, string> = {
   exact: "border-emerald-500/40 bg-emerald-500/10",
-  nearly: "border-emerald-500/30 bg-emerald-500/[0.06]",
-  progress: "border-amber-500/40 bg-amber-500/10",
-  again: "border-sky-500/30 bg-sky-500/10",
+  pass: "border-emerald-500/30 bg-emerald-500/[0.06]",
+  close: "border-amber-500/40 bg-amber-500/10",
+  miss: "border-sky-500/30 bg-sky-500/10",
 };
 
 const LEAD_TONE: Record<AccuracyBand, string> = {
   exact: "text-emerald-700 dark:text-emerald-300",
-  nearly: "text-emerald-700 dark:text-emerald-300",
-  progress: "text-amber-700 dark:text-amber-300",
-  again: "text-sky-800 dark:text-sky-200",
+  pass: "text-emerald-700 dark:text-emerald-300",
+  close: "text-amber-700 dark:text-amber-300",
+  miss: "text-sky-800 dark:text-sky-200",
 };
 
 const CONFETTI_COUNT = 10;
@@ -153,10 +153,6 @@ export function VerseMemoryFeedback({
   );
 }
 
-/**
- * A lapse that drops the verse back into learning reads as a lapse even when
- * the raw grade was a hold or retry.
- */
 function scheduleConsequence(
   outcome: ReviewGradeOutcome,
   nextSchedule: MemorySchedule | null,

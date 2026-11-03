@@ -14,7 +14,6 @@ import {
   REVIEW_DAILY_REPS,
   REVIEW_EVERY_OTHER_INTERVAL_DAYS,
   REVIEW_EVERY_OTHER_REPS,
-  holdReviewingInterval,
   scheduleNext,
   type MemorySchedule,
 } from "./memory-scheduler";
@@ -384,19 +383,19 @@ describe("memoryProgressFraction", () => {
     ).toBe(1);
   });
 
-  it("does not move on retry or hold, and drops only on a lapse", () => {
+  it("moves the bar on a close miss or lapse, and banks an 85–99% pass", () => {
     const s = reviewingAt({
       intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
       stageReps: 2,
     });
     const before = barOf(s);
-    const retry = scheduleNext(s, {
+    const pass = scheduleNext(s, {
       quality: "close",
-      accuracy: 82,
+      accuracy: 90,
       mode: "review",
       now: s.dueAt,
     });
-    const hold = scheduleNext(s, {
+    const close = scheduleNext(s, {
       quality: "close",
       accuracy: 70,
       mode: "review",
@@ -408,9 +407,8 @@ describe("memoryProgressFraction", () => {
       mode: "review",
       now: s.dueAt,
     });
-    expect(barOf(retry)).toBe(before);
-    expect(barOf(hold)).toBe(before);
-    expect(barOf(holdReviewingInterval(s, s.dueAt))).toBe(before);
+    expect(barOf(pass)).toBeGreaterThan(before);
+    expect(barOf(close)).toBeLessThan(before);
     expect(barOf(lapse)).toBeLessThan(before);
 
     const early = scheduleNext(s, {

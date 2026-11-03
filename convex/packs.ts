@@ -43,7 +43,6 @@ import {
   isDueForReview,
   isLearningPhase,
   isReviewPhase,
-  holdReviewingInterval,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
 import {
@@ -954,65 +953,6 @@ export const recordUnifiedReview = mutation({
         createdAt: args.now,
       });
 
-      await patchMemberSchedule(
-        ctx,
-        userId,
-        member.verseRefId,
-        next,
-        args.now,
-        args.now,
-      );
-    }
-
-    return next;
-  },
-});
-
-/**
- * Spend a unified pack after the learner declines an 80%+ retry. Holds the
- * shared interval without logging another recitation.
- */
-export const acceptRetryHold = mutation({
-  args: {
-    id: v.id("packs"),
-    now: v.number(),
-    tzOffsetMinutes: v.optional(v.number()),
-    timeZone: v.optional(v.string()),
-  },
-  returns: memoryScheduleValidator,
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-    const pack = await loadOwnedPack(ctx, args.id, userId);
-    if (!pack) throw new Error("Pack not found");
-    if (!pack.unifiedReviewEnabled) {
-      throw new Error("Unified review is not enabled for this pack");
-    }
-    if (pack.kind !== "scope") {
-      throw new Error("Unified review is only available for scope packs");
-    }
-
-    const members = await loadPackMembers(ctx, userId, pack);
-    if (members.length === 0) {
-      throw new Error("Cannot record a unified review on an empty pack");
-    }
-    if (members.some((member) => isLearningPhase(member.status))) {
-      throw new Error(
-        "Cannot record a unified review while any member is still learning",
-      );
-    }
-
-    const canonical = canonicalUnifiedSchedule(
-      members.map(toSchedule),
-      args.now,
-    );
-    const next = holdReviewingInterval(
-      canonical,
-      args.now,
-      args.tzOffsetMinutes,
-      args.timeZone,
-    );
-
-    for (const member of members) {
       await patchMemberSchedule(
         ctx,
         userId,

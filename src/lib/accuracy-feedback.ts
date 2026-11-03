@@ -3,7 +3,7 @@ import {
   REVIEW_LAPSE_ACCURACY,
 } from "@/lib/memory-scheduler";
 
-export type AccuracyBand = "exact" | "nearly" | "progress" | "again";
+export type AccuracyBand = "exact" | "pass" | "close" | "miss";
 
 export interface AccuracyFeedback {
   band: AccuracyBand;
@@ -22,18 +22,18 @@ const COPY: Record<
   { lead: string; rest: string; emoji: string }
 > = {
   exact: { lead: "Word for word.", rest: "", emoji: "🎉" },
-  nearly: {
-    lead: "Nearly there.",
-    rest: "Just a little to tidy up.",
+  pass: {
+    lead: "Well remembered.",
+    rest: "Just a few words to tidy up.",
     emoji: "🙌",
   },
-  progress: {
-    lead: "Good progress.",
-    rest: "The highlighted words are worth another look.",
+  close: {
+    lead: "So close.",
+    rest: "A few words slipped. The highlighted ones are worth another look.",
     emoji: "🌱",
   },
-  again: {
-    lead: "This one needs another pass.",
+  miss: {
+    lead: "This one needs more time.",
     rest: "We'll bring it back sooner.",
     emoji: "📖",
   },
@@ -46,9 +46,9 @@ const COPY: Record<
  */
 export function accuracyBand(accuracy: number, exact: boolean): AccuracyBand {
   if (exact) return "exact";
-  if (accuracy >= LEARN_PROGRESS_ACCURACY) return "nearly";
-  if (accuracy >= REVIEW_LAPSE_ACCURACY) return "progress";
-  return "again";
+  if (accuracy >= LEARN_PROGRESS_ACCURACY) return "pass";
+  if (accuracy >= REVIEW_LAPSE_ACCURACY) return "close";
+  return "miss";
 }
 
 /** The headline a result view leads with; the percentage sits under it. */
