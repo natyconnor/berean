@@ -4,14 +4,25 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  START_OVER_CONFIRM_BODY,
+  START_OVER_MENU_LABEL,
+  STARTED_OVER_LABEL,
+} from "@/lib/memory-copy";
 import { DAY_MS } from "@/lib/memory-scheduler";
 
+import { VerseMemoryMenu } from "./memory-restart-menu";
 import { VerseDetailBody, type VerseDetailData } from "./verse-detail";
 
 const NOW = Date.UTC(2026, 9, 12, 18, 0, 0);
 const RETURN_TO = "/memory/verse/v1";
 
-const mocks = vi.hoisted(() => ({ openSheet: vi.fn(), navigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  openSheet: vi.fn(),
+  navigate: vi.fn(),
+  startOver: vi.fn(),
+  stopMemorizing: vi.fn(),
+}));
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
@@ -29,7 +40,10 @@ vi.mock("@tanstack/react-router", () => ({
   ),
 }));
 
-vi.mock("convex/react", () => ({ useMutation: () => vi.fn() }));
+vi.mock("convex/react", () => ({
+  useMutation: (name: string) =>
+    name === "verseMemory.startOver" ? mocks.startOver : mocks.stopMemorizing,
+}));
 
 vi.mock("convex-helpers/react/cache", () => ({
   useQuery: () => undefined,
@@ -45,6 +59,7 @@ vi.mock("../../../convex/_generated/api", () => ({
     packs: { listMine: "packs.listMine", addVerse: "packs.addVerse" },
     verseMemory: {
       verseDetail: "verseMemory.verseDetail",
+      startOver: "verseMemory.startOver",
       stopMemorizing: "verseMemory.stopMemorizing",
     },
   },
@@ -74,6 +89,7 @@ function detail(overrides: Partial<VerseDetailData> = {}): VerseDetailData {
     lapses: 0,
     consecutiveCorrect: 4,
     lastReviewedAt: NOW - 8 * DAY_MS,
+    startedOverAt: undefined,
     attempts: [
       {
         quality: "exact",
@@ -122,6 +138,10 @@ const JARGON =
 describe("VerseDetailBody", () => {
   beforeEach(() => {
     mocks.openSheet.mockReset();
+    mocks.startOver.mockReset();
+    mocks.stopMemorizing.mockReset();
+    mocks.startOver.mockResolvedValue({});
+    mocks.stopMemorizing.mockResolvedValue(null);
   });
 
   it("shows plain facts and no scheduler jargon", () => {
@@ -281,6 +301,38 @@ describe("VerseDetailBody", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("counts How it's going only from the reset", () => {
+    renderBody(
+      detail({
+        startedOverAt: NOW - DAY_MS,
+        attempts: [
+          {
+            quality: "exact",
+            accuracy: 98,
+            stage: 3,
+            mode: "review",
+            createdAt: NOW - 8 * DAY_MS,
+          },
+          {
+            quality: "exact",
+            accuracy: 94,
+            stage: 3,
+            mode: "learn",
+            createdAt: NOW - 12 * DAY_MS,
+          },
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText("This fills in after you practice it."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Solid")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: /^Accuracy across/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("offers Memorize again for a verse no longer in Memory", async () => {
     renderBody(detail({ inMemory: false }));
 
@@ -291,5 +343,125 @@ describe("VerseDetailBody", () => {
       kind: "spans",
       spans: [{ book: "Romans", chapter: 8, startVerse: 28, endVerse: 28 }],
     });
+  });
+});
+
+function renderMenu(
+  overrides: Partial<Parameters<typeof VerseMemoryMenu>[0]> = {},
+) {
+  return render(
+    <VerseMemoryMenu
+      verseRefId={"v1" as VerseDetailData["verseRefId"]}
+      reference="Romans 8:28"
+      status="reviewing"
+      learnStage={3}
+      stageReps={0}
+      lastReviewedAt={NOW - 8 * DAY_MS}
+      onStopped={() => {}}
+      {...overrides}
+    />,
+  );
+}
+
+async function openStartOverConfirm() {
+  await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+  await userEvent.click(
+    await screen.findByRole("menuitem", {
+      name: new RegExp(START_OVER_MENU_LABEL),
+    }),
+  );
+}
+
+describe("VerseMemoryMenu", () => {
+  beforeEach(() => {
+    mocks.startOver.mockReset();
+    mocks.stopMemorizing.mockReset();
+    mocks.startOver.mockResolvedValue({});
+    mocks.stopMemorizing.mockResolvedValue(null);
+  });
+
+  it("hides Start over on a New verse with nothing done", async () => {
+    renderMenu({
+      status: "new",
+      learnStage: 0,
+      stageReps: 0,
+      lastReviewedAt: undefined,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", {
+        name: new RegExp(START_OVER_MENU_LABEL),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Stop memorizing" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+  });
+
+  it("shows Start over after real progress or when Memorized", async () => {
+    const { unmount } = renderMenu({
+      status: "learning",
+      learnStage: 2,
+      lastReviewedAt: undefined,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: new RegExp(START_OVER_MENU_LABEL) }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("separator")).toBeInTheDocument();
+    unmount();
+
+    renderMenu({ status: "reviewing", learnStage: 3 });
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: new RegExp(START_OVER_MENU_LABEL) }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks to confirm with the follow-up wording", async () => {
+    renderMenu();
+    await openStartOverConfirm();
+    expect(
+      await screen.findByRole("heading", { name: "Start Romans 8:28 over?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(START_OVER_CONFIRM_BODY)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start over" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("shows Started over. after confirm and hides the item", async () => {
+    renderMenu();
+    await openStartOverConfirm();
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      STARTED_OVER_LABEL,
+    );
+    expect(screen.queryByText("Undo")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.queryByRole("menuitem", {
+        name: new RegExp(START_OVER_MENU_LABEL),
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Stop memorizing" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the confirm open and shows the error when Start over fails", async () => {
+    mocks.startOver.mockRejectedValueOnce(new Error("offline"));
+    renderMenu();
+    await openStartOverConfirm();
+    await userEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't start over. Try again.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Start Romans 8:28 over?" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

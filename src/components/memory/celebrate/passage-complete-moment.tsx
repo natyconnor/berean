@@ -28,8 +28,9 @@ interface PassageCompleteMomentProps {
   /** "Psalm 23". */
   title: string;
   verseCount: number;
-  /** The passage row's creation time, for "{d} days". */
+  /** The passage row's creation time, for "{d} days" when never reset. */
   createdAt: number;
+  startedOverAt?: number;
   /** The passage text, one segment per learned piece, in order. */
   segments: readonly CompositePassageSegment[];
   onDone: () => void;
@@ -45,6 +46,7 @@ export function PassageCompleteMoment({
   title,
   verseCount,
   createdAt,
+  startedOverAt,
   segments,
   onDone,
 }: PassageCompleteMomentProps): JSX.Element {
@@ -66,6 +68,7 @@ export function PassageCompleteMoment({
     createdAt,
     shownAt,
     new Date(shownAt).getTimezoneOffset(),
+    startedOverAt,
   );
   const multiChapter =
     new Set(segments.map((segment) => segment.reference.chapter)).size > 1;
