@@ -193,6 +193,22 @@ describe("primary action", () => {
     });
   });
 
+  it("passage with nothing reached: Start · about N min", () => {
+    const goal = passageGoal({
+      pieces: [
+        piece(0, 1, 4, "unreached"),
+        piece(1, 5, 6, "unreached"),
+        piece(2, 7, 11, "unreached"),
+      ],
+    });
+    expect(passageDetailActions(goal, NOW, TZ).main).toEqual({
+      kind: "session",
+      emphasis: "primary",
+      label: "Start · about 7 min",
+      session: "learn",
+    });
+  });
+
   it("passage building, waiting: disabled Up next tomorrow", () => {
     const goal = passageGoal({
       pieces: [
@@ -528,6 +544,26 @@ describe("packMemberRow", () => {
 });
 
 describe("passageVerseRows", () => {
+  it("marks the first unreached piece as Learning today when the passage is due", () => {
+    const rows = passageVerseRows(
+      passage({
+        pieces: [
+          piece(0, 1, 1, "unreached"),
+          piece(1, 2, 2, "unreached"),
+          piece(2, 3, 3, "unreached"),
+        ],
+        addsOnDay: 0,
+      }),
+      NOW,
+      0,
+    );
+    expect(rows.map((row) => [row.verse, row.chip.label])).toEqual([
+      [1, "Learning today"],
+      [2, "Up next"],
+      [3, "Up next"],
+    ]);
+  });
+
   it("chips each verse: Memorized, Learning today, Up next", () => {
     const rows = passageVerseRows(passage(), NOW, 0);
     expect(rows).toHaveLength(11);
