@@ -128,6 +128,7 @@ async function commitCountedReview(
     hint?: "first-letters";
     holdSchedule?: boolean;
     refresherUsed?: boolean;
+    heldMissAccuracy?: number;
   },
 ): Promise<MemorySchedule> {
   const current = scheduleFromMemory(memory);
@@ -181,6 +182,7 @@ async function commitCountedReview(
     timeZone: args.timeZone,
     holdSchedule,
     refresherUsed,
+    heldMissAccuracy: args.heldMissAccuracy,
   });
 
   if (!patch) return next;

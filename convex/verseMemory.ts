@@ -585,8 +585,10 @@ export const recordAttempt = mutation({
       return current;
     }
 
+    let heldMissAccuracy: number | undefined;
     if (args.replaceHeldId) {
-      await deleteHeldIfOwned(ctx, userId, args.replaceHeldId);
+      const held = await deleteHeldIfOwned(ctx, userId, args.replaceHeldId);
+      heldMissAccuracy = held?.accuracy;
     }
 
     const holdSchedule = args.holdSchedule === true;
@@ -615,6 +617,7 @@ export const recordAttempt = mutation({
       hint: args.hint,
       holdSchedule,
       refresherUsed: args.refresherUsed === true,
+      heldMissAccuracy,
     });
   },
 });

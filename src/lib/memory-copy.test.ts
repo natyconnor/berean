@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  LEAVE_NOW_FIRST_TRY_COUNTS,
   NEED_A_REFRESHER_LABEL,
+  NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
-  PRACTICE_ONLY_NOTE,
   PRACTICE_PASS_EMOJI,
   PRACTICE_PASS_LEAD,
   PRACTICE_PASS_REST,
@@ -122,7 +121,9 @@ describe("refresher copy", () => {
   it("names the quiet link and the two step headers", () => {
     expect(NEED_A_REFRESHER_LABEL).toBe("Need a refresher?");
     expect(TRY_ANOTHER_REFRESHER_LABEL).toBe("Try another refresher");
-    expect(PRACTICE_ONLY_NOTE).toBe("Another refresher is practice only.");
+    expect(NEED_A_REFRESHER_TOOLTIP).toBe(
+      "Do a refresher on this verse for some more practice.",
+    );
     expect(PRACTICE_ONLY_CLOSING).toBe(
       "Practice only, your progress didn't change.",
     );
@@ -132,9 +133,6 @@ describe("refresher copy", () => {
     );
     expect(PRACTICE_PASS_REST).not.toContain("see if it comes back");
     expect(PRACTICE_PASS_EMOJI).toBe("👍");
-    expect(LEAVE_NOW_FIRST_TRY_COUNTS).toBe(
-      "If you leave now, your first try counts.",
-    );
     expect(NOW_TRY_WITHOUT_HINTS).toBe("Now try it without the hints.");
     expect(REFRESH_SAVE_ERROR).toBe("Couldn't save your result. Try again.");
     expect(refresherHeader(1)).toBe("Refresh · First letters · 1 of 2");

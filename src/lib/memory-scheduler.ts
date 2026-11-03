@@ -1024,17 +1024,52 @@ export function keepReviewingSchedule(
   };
 }
 
+/**
+ * A From memory pass after a missed first try. Softer than Continue: a bad
+ * miss stays Memorized on the daily gap, due tomorrow; a close miss keeps
+ * its level and restarts the rep count at that level.
+ */
+export function afterMissPassSchedule(
+  s: MemorySchedule,
+  r: Pick<ReviewInput, "now" | "tzOffsetMinutes" | "timeZone">,
+  heldAccuracy: number,
+): MemorySchedule {
+  if (heldAccuracy < REVIEW_LAPSE_ACCURACY) {
+    return {
+      status: "reviewing",
+      learnStage: s.learnStage,
+      stageReps: 0,
+      ease: s.ease,
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      dueAt: computeDueAt(r, REVIEW_DAILY_INTERVAL_DAYS),
+      consecutiveCorrect: 0,
+      lapses: s.lapses,
+      earlyReviewApplied: false,
+    };
+  }
+  return {
+    ...s,
+    stageReps: 0,
+    consecutiveCorrect: 0,
+    dueAt: computeDueAt(r, s.intervalDays),
+    earlyReviewApplied: false,
+  };
+}
+
 /** Flags a refresher step sends with the grade. Omitted fields are a cold try. */
 export type VerseAttemptPlanInput = ReviewInput & {
   holdSchedule?: boolean;
   refresherUsed?: boolean;
+  /** First-try miss accuracy when this pass replaces a held try. */
+  heldMissAccuracy?: number;
 };
 
 /**
  * Decide the next schedule for a verse attempt.
  *
  * First letters (hold) logs the try and leaves the verse alone. A From memory
- * pass after a refresher on a due Memorized verse keeps the current gap.
+ * pass after a pre-try refresher on a due Memorized verse keeps the current
+ * gap. A pass that replaces a held miss uses {@link afterMissPassSchedule}.
  * Everything else uses {@link scheduleNext}.
  */
 export function planVerseAttemptSchedule(
@@ -1048,6 +1083,12 @@ export function planVerseAttemptSchedule(
     isDueForReview(s, r.now) &&
     (outcome === "exact" || outcome === "pass")
   ) {
+    if (r.heldMissAccuracy !== undefined) {
+      return {
+        next: afterMissPassSchedule(s, r, r.heldMissAccuracy),
+        patch: true,
+      };
+    }
     return { next: keepReviewingSchedule(s, r), patch: true };
   }
   return { next: scheduleNext(s, r), patch: true };

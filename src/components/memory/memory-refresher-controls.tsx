@@ -1,7 +1,8 @@
-import { type Ref } from "react";
+import { type Ref, useId } from "react";
 import { Lightbulb } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TooltipButton } from "@/components/ui/tooltip-button";
 import { NEED_A_REFRESHER_LABEL } from "@/lib/memory-copy";
 import { cn } from "@/lib/utils";
 
@@ -42,26 +43,46 @@ export function RefresherOfferButton({
   disabled,
   buttonRef,
   describedBy,
+  tooltip,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
   buttonRef?: Ref<HTMLButtonElement>;
   describedBy?: string;
+  tooltip?: string;
 }) {
-  return (
-    <Button
-      ref={buttonRef}
-      type="button"
-      variant="outline"
-      className="flex-1 sm:flex-none"
-      onClick={onClick}
-      disabled={disabled}
-      aria-describedby={describedBy}
-    >
+  const tooltipId = useId();
+  const described = [describedBy, tooltip ? tooltipId : undefined]
+    .filter(Boolean)
+    .join(" ");
+  const body = (
+    <>
       <Lightbulb className="h-4 w-4" aria-hidden />
       {label}
-    </Button>
+    </>
+  );
+  const shared = {
+    ref: buttonRef,
+    type: "button" as const,
+    variant: "outline" as const,
+    className: "flex-1 sm:flex-none",
+    onClick,
+    disabled,
+    "aria-describedby": described || undefined,
+  };
+  if (!tooltip) {
+    return <Button {...shared}>{body}</Button>;
+  }
+  return (
+    <>
+      <TooltipButton tooltip={tooltip} side="top" {...shared}>
+        {body}
+      </TooltipButton>
+      <span id={tooltipId} className="sr-only">
+        {tooltip}
+      </span>
+    </>
   );
 }
 

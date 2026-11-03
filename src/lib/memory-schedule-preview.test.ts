@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { formatNextReviewPhrase } from "./memory-due-label";
 import {
   EASE_START,
+  planVerseAttemptSchedule,
   scheduleNext,
   type MemorySchedule,
-  type ReviewInput,
+  type VerseAttemptPlanInput,
 } from "./memory-scheduler";
 import {
   memoryScheduleFromSnapshot,
@@ -33,7 +34,9 @@ function reviewingSnapshot(
   };
 }
 
-function reviewInput(overrides: Partial<ReviewInput> = {}): ReviewInput {
+function reviewInput(
+  overrides: Partial<VerseAttemptPlanInput> = {},
+): VerseAttemptPlanInput {
   return {
     quality: "exact",
     accuracy: 100,
@@ -93,5 +96,22 @@ describe("previewNextSchedule", () => {
         reviewInput(),
       ),
     ).toBeNull();
+  });
+
+  it("matches an after-miss refresher pass to the planner", () => {
+    const snapshot = reviewingSnapshot({ intervalDays: 5, stageReps: 2 });
+    const input = reviewInput({
+      quality: "close",
+      accuracy: 90,
+      refresherUsed: true,
+      heldMissAccuracy: 40,
+    });
+    const current = memoryScheduleFromSnapshot(snapshot) as MemorySchedule;
+    expect(previewNextSchedule(snapshot, input)).toEqual(
+      planVerseAttemptSchedule(current, {
+        ...input,
+        tzOffsetMinutes: TZ,
+      }).next,
+    );
   });
 });

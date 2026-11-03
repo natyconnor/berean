@@ -987,6 +987,57 @@ describe("planVerseAttemptSchedule", () => {
     expect(cold.next.stageReps).toBe(0);
     expect(cold.next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
   });
+
+  it("after a bad miss, a refresher pass stays Memorized and due tomorrow", () => {
+    const growing = reviewing({
+      intervalDays: 5,
+      stageReps: 2,
+      consecutiveCorrect: 4,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      growing,
+      review({
+        quality: "close",
+        accuracy: 90,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    expect(planned.next.status).toBe("reviewing");
+    expect(planned.next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(planned.next.stageReps).toBe(0);
+    expect(planned.next.consecutiveCorrect).toBe(0);
+    expect(planned.next.dueAt).toBe(NOW + DAY_MS);
+    expect(planned.next.ease).toBe(growing.ease);
+    expect(planned.next.lapses).toBe(growing.lapses);
+  });
+
+  it("after a close miss, a refresher pass keeps the level and restarts reps", () => {
+    const growing = reviewing({
+      intervalDays: 5,
+      stageReps: 2,
+      consecutiveCorrect: 4,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      growing,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 70,
+      }),
+    );
+    expect(planned.next.status).toBe("reviewing");
+    expect(planned.next.intervalDays).toBe(5);
+    expect(planned.next.stageReps).toBe(0);
+    expect(planned.next.consecutiveCorrect).toBe(0);
+    expect(planned.next.dueAt).toBe(NOW + 5 * DAY_MS);
+    expect(planned.next.ease).toBe(growing.ease);
+  });
 });
 
 describe("ease clamping", () => {

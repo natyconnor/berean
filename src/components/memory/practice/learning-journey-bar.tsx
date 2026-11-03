@@ -1,4 +1,5 @@
-import type { JSX } from "react";
+import { type JSX, useEffect, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 
 import { memoryProgressFraction } from "@/lib/mastery-ring";
 import { statusLabel } from "@/lib/memory-copy";
@@ -6,6 +7,17 @@ import { MAX_LEARN_STAGE, type MemoryStatus } from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
 import { PRACTICE_STAGES, practiceChromeFor } from "./practice-stages";
+
+const BAR_FILL_MS = 500;
+const BANNER_SETTLE_MS = 220;
+
+export type JourneyBarFill = {
+  learnStage: number;
+  stageReps?: number;
+  status?: MemoryStatus;
+  intervalDays?: number;
+  ease?: number;
+};
 
 interface LearningJourneyBarProps {
   /** Current learning band (0..3). */
@@ -33,6 +45,11 @@ interface LearningJourneyBarProps {
    * remaining exacts to mastered. Defaults to the scheduler start ease.
    */
   ease?: number;
+  /**
+   * Paint this fill first, then ease to the current value once the banner
+   * is in place. Used for an after-miss refresher result.
+   */
+  from?: JourneyBarFill;
   className?: string;
 }
 
@@ -47,6 +64,19 @@ interface LearningJourneyBarProps {
  * From Memory stays the learning (amber) color. Reviewing is sky and mastered
  * is emerald.
  */
+function fillPercent(fill: JourneyBarFill, wordCount?: number): number {
+  return Math.round(
+    memoryProgressFraction(
+      fill.status,
+      fill.learnStage,
+      fill.stageReps ?? 0,
+      fill.intervalDays ?? 0,
+      wordCount,
+      fill.ease,
+    ) * 100,
+  );
+}
+
 export function LearningJourneyBar({
   learnStage,
   stageReps,
@@ -54,35 +84,55 @@ export function LearningJourneyBar({
   status,
   intervalDays,
   ease,
+  from,
   className,
 }: LearningJourneyBarProps): JSX.Element {
-  const graduated = status === "reviewing" || status === "mastered";
-  const phase = graduated ? "mastery" : "learning";
-  const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, learnStage));
-  const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
-  const chrome = practiceChromeFor(clampedStage, status);
-  const label = graduated ? statusLabel(status) : stage.label;
-  const fraction = memoryProgressFraction(
-    status,
+  const reduceMotion = useReducedMotion() ?? false;
+  const toFill: JourneyBarFill = {
     learnStage,
-    stageReps ?? 0,
-    intervalDays ?? 0,
-    wordCount,
+    stageReps,
+    status,
+    intervalDays,
     ease,
-  );
-  const pct = Math.round(fraction * 100);
+  };
+  const toPct = fillPercent(toFill, wordCount);
+  const fromPct = from ? fillPercent(from, wordCount) : toPct;
+  const shouldAnimate = Boolean(from) && !reduceMotion && fromPct !== toPct;
+  const animateKey = shouldAnimate ? `${fromPct}-${toPct}` : "static";
+  const [playedKey, setPlayedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!shouldAnimate) return;
+    const start = window.setTimeout(() => {
+      setPlayedKey(animateKey);
+    }, BANNER_SETTLE_MS);
+    return () => window.clearTimeout(start);
+  }, [animateKey, shouldAnimate]);
+
+  const settled = !shouldAnimate || playedKey === animateKey;
+  const pct = settled ? toPct : fromPct;
+  const show = settled ? toFill : (from ?? toFill);
+  const graduated = show.status === "reviewing" || show.status === "mastered";
+  const phase = graduated ? "mastery" : "learning";
+  const clampedStage = Math.max(0, Math.min(MAX_LEARN_STAGE, show.learnStage));
+  const stage = PRACTICE_STAGES[clampedStage] ?? PRACTICE_STAGES[0];
+  const chrome = practiceChromeFor(clampedStage, show.status);
+  const label =
+    show.status === "reviewing" || show.status === "mastered"
+      ? statusLabel(show.status)
+      : stage.label;
   const ariaKind = graduated ? "Progress to mastered" : "Learning journey";
   const goal =
-    status === "mastered"
-      ? `${pct}%`
+    show.status === "mastered"
+      ? `${toPct}%`
       : graduated
-        ? `${pct}% to mastered`
-        : `${pct}% learned`;
+        ? `${toPct}% to mastered`
+        : `${toPct}% learned`;
 
   return (
     <div
       className={cn("space-y-1", className)}
-      aria-label={`${ariaKind}: ${label} · ${pct}%`}
+      aria-label={`${ariaKind}: ${label} · ${toPct}%`}
     >
       <div className="flex items-center justify-between gap-2">
         <span
@@ -102,15 +152,21 @@ export function LearningJourneyBar({
         </span>
       </div>
       <div
-        key={phase}
+        key={shouldAnimate ? "journey-fill" : phase}
         className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60"
       >
         <div
           className={cn(
-            "h-full rounded-full transition-[width] duration-300",
+            "h-full rounded-full motion-reduce:transition-none",
+            shouldAnimate
+              ? "transition-[width] duration-500 ease-out"
+              : "transition-[width] duration-300",
             chrome.dot,
           )}
-          style={{ width: `${pct}%` }}
+          style={{
+            width: `${pct}%`,
+            transitionDuration: shouldAnimate ? `${BAR_FILL_MS}ms` : undefined,
+          }}
           aria-hidden
         />
       </div>
