@@ -58,7 +58,6 @@ interface VerseMemoryFeedbackProps {
   bannerId?: string;
   /** Replaces the Next review line, e.g. a practice-only close. */
   closingLine?: string | null;
-  /** Practice-only From memory: 85%+ uses the quieter pass copy. */
   practiceOnly?: boolean;
 }
 
