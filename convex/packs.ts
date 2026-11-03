@@ -47,6 +47,7 @@ import {
 } from "../src/lib/memory-scheduler";
 import {
   applyUnifiedGrade,
+  applyUnifiedMemberGrades,
   canonicalUnifiedSchedule,
 } from "../src/lib/unified-review-schedule";
 import {
@@ -926,21 +927,24 @@ export const recordUnifiedReview = mutation({
       memories.push({ member, memory });
     }
 
-    const canonical = canonicalUnifiedSchedule(
-      members.map(toSchedule),
-      args.now,
-    );
-    const next = applyUnifiedGrade(canonical, {
+    const gradeInput = {
       quality: args.quality,
       accuracy: args.accuracy,
-      mode: "review",
+      mode: "review" as const,
       now: args.now,
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
-    });
+    };
+    const memberSchedules = members.map(toSchedule);
+    const nextByMember = applyUnifiedMemberGrades(memberSchedules, gradeInput);
+    const next = applyUnifiedGrade(
+      canonicalUnifiedSchedule(memberSchedules, args.now),
+      gradeInput,
+    );
 
-    for (const { member, memory } of memories) {
+    for (const [index, { member, memory }] of memories.entries()) {
+      const memberNext = nextByMember[index] ?? next;
       await ctx.db.insert("verseMemoryReviews", {
         userId,
         verseRefId: member.verseRefId,
@@ -957,7 +961,7 @@ export const recordUnifiedReview = mutation({
         ctx,
         userId,
         member.verseRefId,
-        next,
+        memberNext,
         args.now,
         args.now,
       );
