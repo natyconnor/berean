@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   MASTERED_INTERVAL_DAYS,
@@ -22,6 +22,10 @@ function percentLabel(label: HTMLElement): number {
 }
 
 describe("LearningJourneyBar", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("fills the learning bar past halfway and keeps From Memory amber", () => {
     const { container } = render(
       <LearningJourneyBar learnStage={3} stageReps={0} status="learning" />,
@@ -125,6 +129,35 @@ describe("LearningJourneyBar", () => {
     for (const fill of fills) {
       expect(fill.className).not.toContain("duration-500");
     }
+  });
+
+  it("pulses the sky dot once when fading back up to Memorized", () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LearningJourneyBar
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        intervalDays={1}
+        from={{
+          learnStage: 2,
+          stageReps: 0,
+          status: "learning",
+        }}
+      />,
+    );
+    expect(screen.getByLabelText(/Progress to mastered/)).toHaveAttribute(
+      "data-journey-motion",
+      "fade",
+    );
+    act(() => {
+      vi.advanceTimersByTime(520);
+    });
+    expect(screen.getByLabelText(/Progress to mastered/)).toHaveAttribute(
+      "data-journey-motion",
+      "pulse",
+    );
+    expect(container.querySelector(".animate-journey-dot-pulse")).toBeTruthy();
   });
 
   it("fills the mastery bar when a daily reviewing streak banks a rep", () => {

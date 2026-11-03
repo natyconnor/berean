@@ -15,6 +15,7 @@ import {
 } from "@/lib/memory-copy";
 import { formatDueDay } from "@/lib/memorize-plan";
 import {
+  MASTERED_INTERVAL_DAYS,
   MIN_LEARNING_LOCK_MS,
   REVIEW_LAPSE_LEARN_STAGE,
 } from "@/lib/memory-scheduler";
@@ -2062,6 +2063,130 @@ describe("PracticeBoard held first try", () => {
     ).toBe(1);
   });
 
+  it("slides a Mastered close miss to about 91% Memorized, then a pass returns 100%", async () => {
+    const mastered = {
+      ...reviewingVerse,
+      status: "mastered" as const,
+      intervalDays: MASTERED_INTERVAL_DAYS,
+      stageReps: 0,
+      consecutiveCorrect: 11,
+      ease: 2.3,
+    };
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "mastered",
+      learnStage: 3,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: MASTERED_INTERVAL_DAYS,
+      dueAt: getSessionNow() + MASTERED_INTERVAL_DAYS * 24 * 60 * 60 * 1000,
+      consecutiveCorrect: 11,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+    renderReview({ verses: [mastered] });
+    const before = withinCard().getByLabelText(
+      /Progress to mastered: Mastered · 100%/,
+    );
+    expect(before).toBeInTheDocument();
+    await holdColdMiss(CLOSE_MISS);
+    const held = withinCard().getByLabelText(/Progress to mastered: Memorized/);
+    expect(held.getAttribute("aria-label")).toMatch(/91%/);
+    expect(held).toHaveAttribute("data-journey-motion", "slide");
+    expect(
+      screen.queryByLabelText(/Learning journey: Fill in the blanks/),
+    ).not.toBeInTheDocument();
+    const labels = screen.getAllByLabelText(/Progress to mastered: Memorized/);
+    expect(
+      new Set(labels.map((el) => el.getAttribute("aria-label"))).size,
+    ).toBe(1);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await waitFor(() => {
+      expect(
+        withinCard().getByLabelText(/Progress to mastered: Mastered · 100%/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("slides a Mastered bad miss to about 73% Memorized, then a pass to about 82%", async () => {
+    const now = getSessionNow();
+    const mastered = {
+      ...reviewingVerse,
+      status: "mastered" as const,
+      intervalDays: MASTERED_INTERVAL_DAYS,
+      stageReps: 0,
+      consecutiveCorrect: 11,
+      ease: 2.3,
+    };
+    const pass = previewNextSchedule(
+      {
+        status: "mastered",
+        learnStage: mastered.learnStage,
+        stageReps: mastered.stageReps ?? 0,
+        dueAt: mastered.dueAt ?? now,
+        ease: mastered.ease,
+        intervalDays: mastered.intervalDays,
+        consecutiveCorrect: mastered.consecutiveCorrect,
+        lapses: mastered.lapses,
+        earlyReviewApplied: mastered.earlyReviewApplied,
+      },
+      {
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        now,
+        wordCount: 9,
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      },
+    );
+    expect(pass).not.toBeNull();
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(pass);
+    renderReview({ verses: [mastered] });
+    await holdColdMiss(BAD_MISS);
+    const held = withinCard().getByLabelText(/Progress to mastered: Memorized/);
+    expect(held.getAttribute("aria-label")).toMatch(/73%/);
+    expect(held).toHaveAttribute("data-journey-motion", "slide");
+    expect(
+      screen.queryByLabelText(/Learning journey: Fill in the blanks/),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await waitFor(() => {
+      expect(
+        withinCard()
+          .getByLabelText(/Progress to mastered: Memorized/)
+          .getAttribute("aria-label"),
+      ).toMatch(/82%/);
+    });
+  });
+
   it("drops to Fill in the blanks on a held bad miss with fewer than 3 banked", async () => {
     renderReview({
       verses: [
@@ -2557,6 +2682,32 @@ describe("PracticeBoard held first try", () => {
     });
     expect(continueButton).toHaveFocus();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps a 3-banked bad miss at 0% Memorized after Continue", async () => {
+    renderReview({
+      verses: [
+        {
+          ...reviewingVerse,
+          intervalDays: 1,
+          stageReps: 3,
+          consecutiveCorrect: 3,
+        },
+      ],
+    });
+    await holdColdMiss(BAD_MISS);
+    expect(
+      withinCard().getByLabelText(/Progress to mastered: Memorized · 0%/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Learning journey: Fill in the blanks/),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    await waitFor(() => {
+      expect(
+        mutationMock("verseMemory.applyHeldAttempt"),
+      ).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("keeps a 0-banked close miss at 0% Memorized with the sky start mark", async () => {

@@ -1271,6 +1271,27 @@ describe("counted misses on the exact review path", () => {
     expect(fromPast.intervalDays).toBeCloseTo(previous.intervalDays, 5);
     expect(fromPast.ease).toBeCloseTo(previous.ease, 5);
     expect(reviewingBar(fromPast)).toBeCloseTo(10 / 11, 5);
+
+    const bad = scheduleNext(
+      current,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
+    expect(bad.status).toBe("reviewing");
+    expect(reviewingBar(bad)).toBeCloseTo(8 / 11, 5);
+
+    const afterMissPass = planVerseAttemptSchedule(
+      current,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        now: current.dueAt,
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    expect(afterMissPass.next.status).toBe("reviewing");
+    expect(reviewingBar(afterMissPass.next)).toBeCloseTo(9 / 11, 5);
   });
 });
 
