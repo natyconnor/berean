@@ -4,13 +4,16 @@ import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
 import { AddToPack } from "@/components/memory/packs/add-to-pack";
+import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
 import { SessionSummaryActions } from "@/components/memory/practice/session-complete";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { formatDueDay } from "@/lib/memorize-plan";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   groupReviewSessionAttempts,
   recalledCopy,
+  refresherResultCopy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
@@ -135,11 +138,31 @@ export function ReviewResultRows({
             key={label}
             className="flex items-center justify-between gap-3 px-3 py-2.5"
           >
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{label}</p>
-              <p className="text-xs tabular-nums text-muted-foreground">
-                {recalledCopy(attempt.accuracies)}
-              </p>
+              {attempt.schedule ? (
+                <div className="mt-1.5 space-y-1">
+                  <LearningJourneyBar
+                    learnStage={attempt.schedule.learnStage}
+                    stageReps={attempt.schedule.stageReps}
+                    status={attempt.schedule.status}
+                    intervalDays={attempt.schedule.intervalDays}
+                    ease={attempt.schedule.ease}
+                  />
+                  {attempt.refresherUsed ? (
+                    <p className="text-xs text-muted-foreground">
+                      {refresherResultCopy(attempt.accuracies)}
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    Next review {formatDueDay(attempt.schedule.dueAt, now)}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  {recalledCopy(attempt.accuracies)}
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {attempt.label === undefined ? (

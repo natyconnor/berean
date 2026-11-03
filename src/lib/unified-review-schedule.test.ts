@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DAY_MS,
   EASE_START,
   MAX_LEARN_STAGE,
+  REVIEW_DAILY_INTERVAL_DAYS,
+  REVIEW_LAPSE_LEARN_STAGE,
   scheduleNext,
   type MemorySchedule,
   type ReviewInput,
 } from "./memory-scheduler";
+import { memoryProgressFraction } from "./mastery-ring";
 import {
   applyUnifiedGrade,
+  applyUnifiedMemberGrades,
   canonicalUnifiedSchedule,
 } from "./unified-review-schedule";
 
@@ -121,5 +126,133 @@ describe("applyUnifiedGrade", () => {
     expect(applyUnifiedGrade(canonical, input)).toEqual(
       scheduleNext(canonical, input),
     );
+  });
+
+  it("loses one banked review on a pack verse close miss", () => {
+    const canonical = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 2,
+      consecutiveCorrect: 2,
+      lapses: 1,
+      dueAt: NOW,
+    });
+    const next = applyUnifiedGrade(
+      canonical,
+      reviewInput({ quality: "close", accuracy: 70 }),
+    );
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(next.stageReps).toBe(1);
+    expect(next.consecutiveCorrect).toBe(1);
+    expect(next.ease).toBeCloseTo(EASE_START, 5);
+    expect(next.lapses).toBe(1);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
+    expect(
+      memoryProgressFraction(
+        next.status,
+        next.learnStage,
+        next.stageReps,
+        next.intervalDays,
+        undefined,
+        next.ease,
+      ),
+    ).toBeGreaterThan(0);
+    expect(next).toEqual(
+      scheduleNext(canonical, reviewInput({ quality: "close", accuracy: 70 })),
+    );
+  });
+
+  it("drops a pack verse to Learning on a bad miss with too few reviews", () => {
+    const canonical = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 1,
+      consecutiveCorrect: 1,
+      lapses: 0,
+      dueAt: NOW,
+    });
+    const next = applyUnifiedGrade(
+      canonical,
+      reviewInput({ quality: "off", accuracy: 40 }),
+    );
+    expect(next.status).toBe("learning");
+    expect(next.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+    expect(next.intervalDays).toBe(0);
+    expect(next.stageReps).toBe(0);
+    expect(next.dueAt).toBe(NOW);
+    expect(next.lapses).toBe(1);
+    expect(next.ease).toBeCloseTo(EASE_START - 0.2, 5);
+    expect(next).toEqual(
+      scheduleNext(canonical, reviewInput({ quality: "off", accuracy: 40 })),
+    );
+  });
+
+  it("keeps a pack verse reviewing when a bad miss still has three reviews", () => {
+    const canonical = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 3,
+      consecutiveCorrect: 3,
+      lapses: 2,
+      dueAt: NOW,
+    });
+    const next = applyUnifiedGrade(
+      canonical,
+      reviewInput({ quality: "off", accuracy: 20 }),
+    );
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(next.stageReps).toBe(0);
+    expect(next.lapses).toBe(3);
+    expect(next.ease).toBeCloseTo(EASE_START, 5);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
+    expect(
+      memoryProgressFraction(
+        next.status,
+        next.learnStage,
+        next.stageReps,
+        next.intervalDays,
+        undefined,
+        next.ease,
+      ),
+    ).toBe(0);
+  });
+});
+
+describe("applyUnifiedMemberGrades", () => {
+  it("moves each verse from its own banked reviews", () => {
+    const weak = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 1,
+      consecutiveCorrect: 1,
+      dueAt: NOW,
+    });
+    const strong = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 3,
+      consecutiveCorrect: 3,
+      dueAt: NOW,
+    });
+    const next = applyUnifiedMemberGrades(
+      [weak, strong],
+      reviewInput({ quality: "off", accuracy: 40 }),
+    );
+    const weakNext = next[0];
+    const strongNext = next[1];
+    expect(weakNext).toBeDefined();
+    expect(strongNext).toBeDefined();
+    if (!weakNext || !strongNext) return;
+    expect(weakNext.status).toBe("learning");
+    expect(weakNext.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+    expect(strongNext.status).toBe("reviewing");
+    expect(strongNext.stageReps).toBe(0);
+    expect(
+      memoryProgressFraction(
+        strongNext.status,
+        strongNext.learnStage,
+        strongNext.stageReps,
+        strongNext.intervalDays,
+        undefined,
+        strongNext.ease,
+      ),
+    ).toBe(0);
   });
 });

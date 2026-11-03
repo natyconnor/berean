@@ -121,6 +121,7 @@ export function packReviewSession({
           packId,
           packName,
           members: members.map(memberReference),
+          memberSchedules: members.map(memberSchedule),
         },
       },
     ],

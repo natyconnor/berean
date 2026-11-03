@@ -122,7 +122,10 @@ import {
 } from "../memory-refresher-controls";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
 import { useVerseRefresher } from "./use-verse-refresher";
-import { LearningJourneyBar } from "./learning-journey-bar";
+import {
+  LearningJourneyBar,
+  type JourneyBarFill,
+} from "./learning-journey-bar";
 import {
   currentStageStep,
   PRACTICE_STAGES,
@@ -150,6 +153,11 @@ export type { MemorySessionLabel } from "@/lib/memory-session";
 export interface PracticeCompositeSet {
   packId: Id<"packs">;
   members: CardReference[];
+  /**
+   * Each member's live schedule when Review together opened from a pack.
+   * Used to preview that verse's own bar after a miss.
+   */
+  memberSchedules?: MemoryScheduleSnapshot[];
   /** Pack name, used when this card sits in a mixed global review queue. */
   packName?: string;
   /**
@@ -376,6 +384,22 @@ function reviewedOutcomeLine(
 
 function dateOnlyNextReviewLine(dueAt: number, now: number): string {
   return `Next review ${formatDueDay(dueAt, now)}`;
+}
+
+function journeyFillFrom(schedule: {
+  learnStage: number;
+  stageReps?: number;
+  status?: MemoryStatus;
+  intervalDays?: number;
+  ease?: number;
+}): JourneyBarFill {
+  return {
+    learnStage: schedule.learnStage,
+    stageReps: schedule.stageReps,
+    status: schedule.status,
+    intervalDays: schedule.intervalDays,
+    ease: schedule.ease,
+  };
 }
 
 function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
@@ -635,6 +659,10 @@ export function PracticeBoard({
     currentVerse !== null &&
     gradedIds.has(currentVerse.id) &&
     !currentHasWorkLeft;
+  const [journeyPreview, setJourneyPreview] = useState<{
+    from: JourneyBarFill;
+    to: JourneyBarFill;
+  } | null>(null);
 
   // The active card's passage: a unified pack is one concatenated recitation,
   // even when it sits next to ordinary verses in the global review queue.
@@ -974,6 +1002,9 @@ export function PracticeBoard({
               offerRefresher={isReview}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
+              packMemberSchedules={composite?.memberSchedules}
+              packMemberRefs={composite?.members}
+              onJourneyPreview={setJourneyPreview}
               onHold={async (tokens, wordCount, answer, now) => {
                 const quality = classifyVerseAttempt(tokens);
                 if (!quality || !currentVerse.verseRefId) {
@@ -1068,18 +1099,56 @@ export function PracticeBoard({
                   setGradedIds((prev) =>
                     prev.has(verseId) ? prev : new Set(prev).add(verseId),
                   );
-                  setSessionAttempts((prev) => [
-                    ...prev,
-                    {
-                      reference: currentVerse.reference,
-                      accuracy: verseAttemptAccuracy(tokens),
-                      label: composite
-                        ? (composite.packName ?? scopeLabel)
-                        : undefined,
-                      offerPractice: composite === null,
-                      ...(opts?.refresherUsed ? { refresherUsed: true } : {}),
-                    },
-                  ]);
+                  const accuracy = verseAttemptAccuracy(tokens);
+                  const quality = classifyVerseAttempt(tokens);
+                  const memberRows =
+                    composite?.memberSchedules && quality
+                      ? composite.members.flatMap((member, index) => {
+                          const snapshot = composite.memberSchedules?.[index];
+                          if (!snapshot) return [];
+                          const next = previewNextSchedule(snapshot, {
+                            quality,
+                            accuracy,
+                            mode: "review",
+                            now: opts?.now ?? Date.now(),
+                            wordCount,
+                            item: "verse",
+                          });
+                          return [
+                            {
+                              reference: member,
+                              accuracy,
+                              offerPractice: false as const,
+                              ...(next ? { schedule: next } : {}),
+                            },
+                          ];
+                        })
+                      : [
+                          ...(opts?.heldMissAccuracy !== undefined
+                            ? [
+                                {
+                                  reference: currentVerse.reference,
+                                  accuracy: opts.heldMissAccuracy,
+                                  offerPractice: true as const,
+                                },
+                              ]
+                            : []),
+                          {
+                            reference: currentVerse.reference,
+                            accuracy,
+                            label: composite
+                              ? (composite.packName ?? scopeLabel)
+                              : undefined,
+                            offerPractice: composite === null,
+                            ...(opts?.refresherUsed
+                              ? { refresherUsed: true }
+                              : {}),
+                            ...(counted.schedule
+                              ? { schedule: counted.schedule }
+                              : {}),
+                          },
+                        ];
+                  setSessionAttempts((prev) => [...prev, ...memberRows]);
                 }
                 return counted;
               }}
@@ -1122,13 +1191,26 @@ export function PracticeBoard({
                     order={order}
                     onOrderChange={handleOrderChange}
                     shuffleNonce={shuffleNonce}
-                    currentLearnStage={currentProgress.learnStage}
-                    currentStageReps={currentProgress.stageReps}
-                    currentStatus={currentProgress.status}
-                    currentIntervalDays={currentProgress.intervalDays}
-                    currentEase={currentProgress.ease}
+                    currentLearnStage={
+                      journeyPreview?.to.learnStage ??
+                      currentProgress.learnStage
+                    }
+                    currentStageReps={
+                      journeyPreview?.to.stageReps ?? currentProgress.stageReps
+                    }
+                    currentStatus={
+                      journeyPreview?.to.status ?? currentProgress.status
+                    }
+                    currentIntervalDays={
+                      journeyPreview?.to.intervalDays ??
+                      currentProgress.intervalDays
+                    }
+                    currentEase={
+                      journeyPreview?.to.ease ?? currentProgress.ease
+                    }
                     currentWordCount={currentWordCount}
                     currentLocked={currentLocked}
+                    currentFrom={journeyPreview?.from}
                     allowReorder={sessionClusterCount(baseVerses) > 1}
                   />
                 </>
@@ -1200,6 +1282,7 @@ interface PracticeCardProps {
       refresherUsed?: boolean;
       replaceHeldId?: Id<"heldVerseAttempts">;
       skipSessionRow?: boolean;
+      heldMissAccuracy?: number;
     },
   ) => Promise<RecordVerseAttemptResult>;
   onHold: (
@@ -1221,6 +1304,12 @@ interface PracticeCardProps {
   onContinueAfterResult?: () => void;
   /** Continue on a held miss: the verse is spent, but this render still thinks it is due. */
   onContinueAfterHeld?: () => void;
+  /** Pack Review together: each member's schedule for per-verse result bars. */
+  packMemberSchedules?: MemoryScheduleSnapshot[];
+  packMemberRefs?: CardReference[];
+  onJourneyPreview?: (
+    preview: { from: JourneyBarFill; to: JourneyBarFill } | null,
+  ) => void;
 }
 
 function PracticeCard({
@@ -1249,6 +1338,9 @@ function PracticeCard({
   advancesOnContinue = false,
   onContinueAfterResult,
   onContinueAfterHeld,
+  packMemberSchedules,
+  packMemberRefs,
+  onJourneyPreview,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const refresher = useVerseRefresher();
@@ -1272,6 +1364,13 @@ function PracticeCard({
   const [heldMissPreview, setHeldMissPreview] = useState<MemorySchedule | null>(
     null,
   );
+  const [packMemberResults, setPackMemberResults] = useState<
+    Array<{
+      reference: CardReference;
+      from: JourneyBarFill;
+      next: MemorySchedule;
+    }>
+  >([]);
   const [hasHeldTry, setHasHeldTry] = useState(false);
   const countedTodayRef = useRef(false);
   const applyHeldLatest = useEffectEvent(onApplyHeld);
@@ -1428,17 +1527,23 @@ function PracticeCard({
     refresherUsed?: boolean;
     replaceHeldId?: Id<"heldVerseAttempts">;
     skipSessionRow?: boolean;
+    heldMissAccuracy?: number;
   } {
     const hold = refresher.phase === "step1";
+    const afterMissStep2 =
+      refresher.phase === "step2" && refresher.kind === "after-miss";
     return {
       hint: hold ? "first-letters" : undefined,
       holdSchedule: hold || undefined,
       refresherUsed: refresher.phase === "step2" || undefined,
-      replaceHeldId:
-        refresher.phase === "step2" && refresher.kind === "after-miss"
-          ? (heldIdRef.current ?? undefined)
-          : undefined,
+      replaceHeldId: afterMissStep2
+        ? (heldIdRef.current ?? undefined)
+        : undefined,
       skipSessionRow: practiceRound,
+      heldMissAccuracy:
+        afterMissStep2 && heldAccuracyRef.current !== null
+          ? heldAccuracyRef.current
+          : undefined,
     };
   }
 
@@ -1500,6 +1605,48 @@ function PracticeCard({
       setChecked(true);
       setOutcomeNow(now);
       setNextSchedule(preview);
+      if (preview) {
+        const savedFill = journeyFillFrom({
+          learnStage,
+          stageReps,
+          status,
+          intervalDays: scheduleSnapshot.intervalDays,
+          ease: scheduleSnapshot.ease,
+        });
+        onJourneyPreview?.({
+          from:
+            afterMissStep2 && heldMissPreview
+              ? journeyFillFrom(heldMissPreview)
+              : savedFill,
+          to: journeyFillFrom(preview),
+        });
+      }
+      if (composite && packMemberSchedules && packMemberRefs && quality) {
+        setPackMemberResults(
+          packMemberRefs.flatMap((memberRef, index) => {
+            const snapshot = packMemberSchedules[index];
+            if (!snapshot) return [];
+            const next = previewNextSchedule(snapshot, {
+              quality,
+              accuracy,
+              mode: "review",
+              now,
+              wordCount: wordCount ?? 0,
+              tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+              timeZone: getViewerTimeZone(),
+              item: "verse",
+            });
+            if (!next) return [];
+            return [
+              {
+                reference: memberRef,
+                from: journeyFillFrom(snapshot),
+                next,
+              },
+            ];
+          }),
+        );
+      }
       if (holdingColdMiss) {
         const held = await onHold(tokens, wordCount ?? 0, typedAnswer, now);
         if (!held.ok) {
@@ -1615,6 +1762,8 @@ function PracticeCard({
     setTypedAnswer("");
     setSaveError(null);
     setNextSchedule(null);
+    setPackMemberResults([]);
+    onJourneyPreview?.(null);
     countedSaveNowRef.current = null;
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
@@ -1839,16 +1988,40 @@ function PracticeCard({
               ease={barSchedule?.ease ?? scheduleSnapshot.ease}
               from={
                 afterMissCountedResult && heldMissPreview
-                  ? {
-                      learnStage: heldMissPreview.learnStage,
-                      stageReps: heldMissPreview.stageReps,
-                      status: heldMissPreview.status,
-                      intervalDays: heldMissPreview.intervalDays,
-                      ease: heldMissPreview.ease,
-                    }
-                  : undefined
+                  ? journeyFillFrom(heldMissPreview)
+                  : showHeldOffer
+                    ? journeyFillFrom({
+                        learnStage,
+                        stageReps,
+                        status,
+                        intervalDays: scheduleSnapshot.intervalDays,
+                        ease: scheduleSnapshot.ease,
+                      })
+                    : undefined
               }
             />
+          ) : null}
+          {packMemberResults.length > 0 ? (
+            <ul className="space-y-3">
+              {packMemberResults.map((row) => (
+                <li key={formatVerseRefTitle(row.reference)}>
+                  <p className="text-xs font-medium">
+                    {formatVerseRefTitle(row.reference)}
+                  </p>
+                  <LearningJourneyBar
+                    learnStage={row.next.learnStage}
+                    stageReps={row.next.stageReps}
+                    status={row.next.status}
+                    intervalDays={row.next.intervalDays}
+                    ease={row.next.ease}
+                    from={row.from}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {dateOnlyNextReviewLine(row.next.dueAt, outcomeNow)}
+                  </p>
+                </li>
+              ))}
+            </ul>
           ) : null}
           {locked ? (
             <p className="text-xs text-muted-foreground">

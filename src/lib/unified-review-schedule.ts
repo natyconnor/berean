@@ -40,14 +40,25 @@ export function canonicalUnifiedSchedule(
 }
 
 /**
- * Apply one recitation grade to the canonical schedule. Callers copy the
- * returned schedule onto every pack member.
+ * Apply one recitation grade to a schedule. Pack Review together grades each
+ * member through {@link applyUnifiedMemberGrades} so a miss moves that verse
+ * by its own banked reviews.
  */
 export function applyUnifiedGrade(
   canonical: MemorySchedule,
   input: ReviewInput,
 ): MemorySchedule {
   return scheduleNext(canonical, input);
+}
+
+/** Grade every pack member from its own schedule with the same recitation. */
+export function applyUnifiedMemberGrades(
+  members: readonly MemorySchedule[],
+  input: ReviewInput,
+): MemorySchedule[] {
+  return members.map((member) =>
+    scheduleNext(member, { ...input, item: "verse" }),
+  );
 }
 
 function pickLead(members: readonly MemorySchedule[]): MemorySchedule {

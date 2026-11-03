@@ -38,6 +38,7 @@ import {
   type ReviewInput,
   type VerseAttemptPlanInput,
 } from "./memory-scheduler";
+import { memoryProgressFraction } from "./mastery-ring";
 
 const NOW = 1_700_000_000_000;
 
@@ -65,6 +66,17 @@ function learningAt(stage: number, stageReps = 0): MemorySchedule {
     lapses: 0,
     earlyReviewApplied: false,
   };
+}
+
+function reviewingBar(s: MemorySchedule): number {
+  return memoryProgressFraction(
+    s.status,
+    s.learnStage,
+    s.stageReps,
+    s.intervalDays,
+    undefined,
+    s.ease,
+  );
 }
 
 function reviewing(overrides: Partial<MemorySchedule> = {}): MemorySchedule {
@@ -355,23 +367,26 @@ describe("reviewing phase grades", () => {
     expect(next.dueAt).toBe(NOW + Math.round(5 * 2.3) * DAY_MS);
   });
 
-  it("60–84% on a growing gap steps back to every-other-day and restarts reps", () => {
+  it("60–84% on an off-path gap snaps to the path, then loses one step", () => {
     const s = reviewing({
-      intervalDays: 5,
+      intervalDays: 16,
       ease: 2.3,
-      consecutiveCorrect: 3,
-      stageReps: 2,
+      consecutiveCorrect: 9,
+      stageReps: 0,
+      lapses: 4,
     });
     const next = scheduleNext(
       s,
       review({ quality: "close", accuracy: 70, mode: "review" }),
     );
-    expect(next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
-    expect(next.ease).toBeCloseTo(2.3, 5);
-    expect(next.lapses).toBe(0);
-    expect(next.stageReps).toBe(0);
     expect(next.status).toBe("reviewing");
-    expect(next.dueAt).toBe(NOW + 2 * DAY_MS);
+    expect(next.intervalDays).toBeCloseTo(4.6, 5);
+    expect(next.ease).toBeCloseTo(2.35, 5);
+    expect(next.stageReps).toBe(0);
+    expect(next.consecutiveCorrect).toBe(8);
+    expect(next.lapses).toBe(4);
+    expect(next.dueAt).toBe(NOW + 5 * DAY_MS);
+    expect(reviewingBar(next)).toBeCloseTo(8 / 11, 5);
   });
 
   it("85–99% grows a 4-day gap about halfway vs a perfect recall", () => {
@@ -395,7 +410,7 @@ describe("reviewing phase grades", () => {
     expect(isFromMemoryGraduationAttempt(2, 3)).toBe(false);
   });
 
-  it("under-60% drops a verse to Learning from any review level", () => {
+  it("under 60% with two banked reviews drops a verse to Learning", () => {
     const s = reviewing({
       intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
       ease: 2.3,
@@ -417,58 +432,23 @@ describe("reviewing phase grades", () => {
     expect(next.earlyReviewApplied).toBe(false);
   });
 
-  it("60–84% on every-other-day steps back to daily, due tomorrow", () => {
+  it("treats accuracy 60–84% as a close miss even when quality is off", () => {
     const s = reviewing({
-      intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
       ease: 2.3,
-      lapses: 0,
-      stageReps: 3,
+      stageReps: 2,
+      consecutiveCorrect: 2,
     });
-    const next = scheduleNext(
-      s,
-      review({ quality: "close", accuracy: 70, mode: "review" }),
-    );
-    expect(next.status).toBe("reviewing");
-    expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
-    expect(next.stageReps).toBe(0);
-    expect(next.dueAt).toBe(NOW + DAY_MS);
-    expect(next.ease).toBeCloseTo(2.3, 5);
-    expect(next.lapses).toBe(0);
-    expect(next.consecutiveCorrect).toBe(0);
-  });
-
-  it("under-60% drops a mastered verse to Learning", () => {
-    const s = reviewing({
-      intervalDays: 20,
-      ease: 2.3,
-      lapses: 1,
-      status: "mastered",
-    });
-    const next = scheduleNext(
-      s,
-      review({ quality: "off", accuracy: 16, mode: "review" }),
-    );
-    expect(next.status).toBe("learning");
-    expect(next.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
-    expect(next.intervalDays).toBe(0);
-    expect(next.dueAt).toBe(NOW);
-    expect(next.ease).toBeCloseTo(2.1, 5);
-    expect(next.lapses).toBe(2);
-    expect(next.stageReps).toBe(0);
-  });
-
-  it("60–84% steps back even when quality is off", () => {
-    const s = reviewing({ intervalDays: 5, ease: 2.3, consecutiveCorrect: 3 });
     const next = scheduleNext(
       s,
       review({ quality: "off", accuracy: 70, mode: "review" }),
     );
     expect(next.status).toBe("reviewing");
-    expect(next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+    expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(next.stageReps).toBe(1);
     expect(next.ease).toBeCloseTo(2.3, 5);
     expect(next.lapses).toBe(0);
-    expect(next.stageReps).toBe(0);
-    expect(next.dueAt).toBe(NOW + 2 * DAY_MS);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
   });
 });
 
@@ -566,12 +546,14 @@ describe("post-graduation review ladder", () => {
       review({ quality: "close", accuracy: 70, mode: "review" }),
     );
     expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
-    expect(next.stageReps).toBe(0);
-    expect(next.consecutiveCorrect).toBe(0);
+    expect(next.stageReps).toBe(1);
+    expect(next.consecutiveCorrect).toBe(1);
     expect(next.ease).toBe(2.3);
     expect(next.lapses).toBe(0);
     expect(next.status).toBe("reviewing");
     expect(next.dueAt).toBe(NOW + DAY_MS);
+    expect(reviewingBar(next)).toBeGreaterThan(0);
+    expect(reviewingBar(next)).toBeLessThan(reviewingBar(s));
   });
 
   it("counts remaining exacts to mastered from daily and every-other-day reps", () => {
@@ -723,16 +705,19 @@ describe("early review boost (once per interval)", () => {
     expect(whenDue.dueAt).toBeGreaterThan(afterEarly.dueAt);
   });
 
-  it("early 60–84% steps back one level even before the due date", () => {
+  it("applies a 60–84% loss even before the due date", () => {
     const s = reviewing({
-      intervalDays: 5,
+      intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
       ease: 2.3,
+      stageReps: 2,
+      consecutiveCorrect: 6,
       dueAt: NOW + DAY_MS,
       earlyReviewApplied: false,
-      consecutiveCorrect: 3,
     });
     const first = scheduleNext(s, review({ quality: "close", accuracy: 70 }));
+    expect(first.status).toBe("reviewing");
     expect(first.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+    expect(first.stageReps).toBe(1);
     expect(first.ease).toBe(2.3);
     expect(first.earlyReviewApplied).toBe(false);
     expect(first.dueAt).toBe(NOW + 2 * DAY_MS);
@@ -753,7 +738,8 @@ describe("early review boost (once per interval)", () => {
 
   it("early under-60% drops a verse to Learning and clears the early-boost flag", () => {
     const s = reviewing({
-      intervalDays: 10,
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 1,
       ease: 2.3,
       dueAt: NOW + DAY_MS,
       earlyReviewApplied: true,
@@ -805,21 +791,22 @@ describe("reviewing score bands", () => {
       },
     },
     {
-      name: "60–84% on daily stays Memorized at daily, due tomorrow",
+      name: "60–84% on daily loses one rep and stays due tomorrow",
       schedule: { intervalDays: 1, stageReps: 3, consecutiveCorrect: 3 },
       accuracy: 60,
       expect: {
         status: "reviewing",
         intervalDays: 1,
-        stageReps: 0,
+        stageReps: 2,
+        consecutiveCorrect: 2,
         ease: 2.3,
         lapses: 0,
         dueAt: NOW + DAY_MS,
       },
     },
     {
-      name: "under 60% on daily drops a verse to Learning",
-      schedule: { intervalDays: 1, stageReps: 3, lapses: 0 },
+      name: "under 60% on an empty daily gap drops a verse to Learning",
+      schedule: { intervalDays: 1, stageReps: 0, lapses: 0 },
       accuracy: 59,
       quality: "off",
       expect: {
@@ -832,7 +819,7 @@ describe("reviewing score bands", () => {
       },
     },
     {
-      name: "60–84% on growing or Mastered goes to every-other-day",
+      name: "60–84% on a passage still steps back to every-other-day",
       schedule: {
         intervalDays: 40,
         status: "mastered",
@@ -840,6 +827,7 @@ describe("reviewing score bands", () => {
         lapses: 2,
       },
       accuracy: 84,
+      item: "passage",
       expect: {
         status: "reviewing",
         intervalDays: 2,
@@ -963,8 +951,10 @@ describe("planVerseAttemptSchedule", () => {
         refresherUsed: true,
       }),
     );
-    expect(close.next.stageReps).toBe(0);
+    expect(close.next.status).toBe("reviewing");
+    expect(close.next.stageReps).toBe(2);
     expect(close.next.intervalDays).toBe(1);
+    expect(close.next.lapses).toBe(0);
 
     const lapse = planVerseAttemptSchedule(
       dueDaily,
@@ -975,8 +965,11 @@ describe("planVerseAttemptSchedule", () => {
         refresherUsed: true,
       }),
     );
-    expect(lapse.next.status).toBe("learning");
-    expect(lapse.next.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+    expect(lapse.next.status).toBe("reviewing");
+    expect(lapse.next.intervalDays).toBe(1);
+    expect(lapse.next.stageReps).toBe(0);
+    expect(lapse.next.lapses).toBe(1);
+    expect(reviewingBar(lapse.next)).toBe(0);
   });
 
   it("grows the gap on a cold pass, unlike a refresher pass", () => {
@@ -987,34 +980,7 @@ describe("planVerseAttemptSchedule", () => {
     expect(cold.next.stageReps).toBe(0);
     expect(cold.next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
   });
-
-  it("after a bad miss, a refresher pass stays Memorized and due tomorrow", () => {
-    const growing = reviewing({
-      intervalDays: 5,
-      stageReps: 2,
-      consecutiveCorrect: 4,
-      dueAt: NOW,
-    });
-    const planned = planVerseAttemptSchedule(
-      growing,
-      review({
-        quality: "close",
-        accuracy: 90,
-        mode: "review",
-        refresherUsed: true,
-        heldMissAccuracy: 40,
-      }),
-    );
-    expect(planned.next.status).toBe("reviewing");
-    expect(planned.next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
-    expect(planned.next.stageReps).toBe(0);
-    expect(planned.next.consecutiveCorrect).toBe(0);
-    expect(planned.next.dueAt).toBe(NOW + DAY_MS);
-    expect(planned.next.ease).toBe(growing.ease);
-    expect(planned.next.lapses).toBe(growing.lapses);
-  });
-
-  it("after a close miss, a refresher pass keeps the level and restarts reps", () => {
+  it("after a close miss, a refresher pass keeps interval, reps and ease", () => {
     const growing = reviewing({
       intervalDays: 5,
       stageReps: 2,
@@ -1031,22 +997,316 @@ describe("planVerseAttemptSchedule", () => {
         heldMissAccuracy: 70,
       }),
     );
+    expect(planned.next).toEqual(keepReviewingSchedule(growing, { now: NOW }));
+  });
+
+  it("after a bad miss, a refresher pass loses two path steps", () => {
+    const growing = reviewing({
+      intervalDays: 5,
+      stageReps: 2,
+      consecutiveCorrect: 4,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      growing,
+      review({
+        quality: "close",
+        accuracy: 90,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    const held = scheduleNext(
+      growing,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
     expect(planned.next.status).toBe("reviewing");
-    expect(planned.next.intervalDays).toBe(5);
+    expect(reviewingBar(planned.next)).toBeGreaterThan(reviewingBar(held));
+    expect(planned.next.lapses).toBe(growing.lapses + 1);
+  });
+
+  it("after a bad miss with two banked, a refresher pass lands at 0% Memorized", () => {
+    const twoBanked = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 2,
+      consecutiveCorrect: 2,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      twoBanked,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    expect(planned.next.status).toBe("reviewing");
+    expect(planned.next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
     expect(planned.next.stageReps).toBe(0);
-    expect(planned.next.consecutiveCorrect).toBe(0);
-    expect(planned.next.dueAt).toBe(NOW + 5 * DAY_MS);
-    expect(planned.next.ease).toBe(growing.ease);
+    expect(reviewingBar(planned.next)).toBe(0);
+  });
+
+  it("after a bad miss with fewer than two banked, a refresher pass stays in Learning", () => {
+    const oneBanked = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 1,
+      consecutiveCorrect: 1,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      oneBanked,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    const held = scheduleNext(
+      oneBanked,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
+    expect(planned.next.status).toBe("learning");
+    expect(planned.next.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+    expect(planned.next.status).toBe(held.status);
+    expect(planned.next.learnStage).toBe(held.learnStage);
+  });
+});
+
+describe("counted misses on the exact review path", () => {
+  const startEases = Array.from(
+    { length: 31 },
+    (_, index) => (130 + index * 5) / 100,
+  );
+
+  function exactPath(startEase: number): MemorySchedule[] {
+    const steps: MemorySchedule[] = [];
+    let current = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      ease: startEase,
+      stageReps: 0,
+      consecutiveCorrect: 0,
+      status: "reviewing",
+      lapses: 0,
+      dueAt: NOW,
+      earlyReviewApplied: false,
+    });
+    steps.push(current);
+    while (
+      steps.filter((step) => step.status === "mastered").length < 3 &&
+      steps.length < 40
+    ) {
+      current = scheduleNext(
+        current,
+        review({
+          quality: "exact",
+          accuracy: 100,
+          mode: "review",
+          now: current.dueAt,
+        }),
+      );
+      steps.push(current);
+    }
+    return steps;
+  }
+
+  function expectLandedOn(
+    next: MemorySchedule,
+    target: MemorySchedule,
+    lapses: number,
+  ) {
+    expect(next.status).toBe(target.status);
+    expect(next.intervalDays).toBeCloseTo(target.intervalDays, 5);
+    expect(next.ease).toBeCloseTo(target.ease, 5);
+    expect(next.stageReps).toBe(target.stageReps);
+    expect(next.consecutiveCorrect).toBe(target.consecutiveCorrect);
+    expect(next.learnStage).toBe(MAX_LEARN_STAGE);
+    expect(next.lapses).toBe(lapses);
+    expect(next.earlyReviewApplied).toBe(false);
+    expect(next.dueAt).toBe(dueAtInCalendarDays(NOW, next.intervalDays));
+    expect(reviewingBar(next)).toBeCloseTo(reviewingBar(target), 5);
+  }
+
+  it.each(startEases)(
+    "loses one or three exact steps from start ease %s",
+    (startEase) => {
+      const steps = exactPath(startEase);
+      const firstMastered = steps.findIndex(
+        (step) => step.status === "mastered",
+      );
+      expect(firstMastered).toBeGreaterThan(3);
+
+      for (let index = 0; index < steps.length; index += 1) {
+        const banked =
+          steps[index].status === "mastered" ? firstMastered : index;
+        const state = { ...steps[index], lapses: 2 };
+
+        const close = scheduleNext(
+          state,
+          review({ quality: "close", accuracy: 72, mode: "review", now: NOW }),
+        );
+        if (banked === 0) {
+          expect(close.status).toBe("reviewing");
+          expect(close.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+          expect(close.stageReps).toBe(0);
+          expect(close.consecutiveCorrect).toBe(0);
+          expect(close.ease).toBeCloseTo(startEase, 5);
+          expect(close.lapses).toBe(2);
+          expect(close.dueAt).toBe(NOW + DAY_MS);
+          expect(reviewingBar(close)).toBe(0);
+        } else {
+          expectLandedOn(close, steps[banked - 1], 2);
+        }
+
+        const bad = scheduleNext(
+          state,
+          review({ quality: "off", accuracy: 40, mode: "review", now: NOW }),
+        );
+        if (banked < 3) {
+          expect(bad.status).toBe("learning");
+          expect(bad.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+          expect(bad.intervalDays).toBe(0);
+          expect(bad.stageReps).toBe(0);
+          expect(bad.consecutiveCorrect).toBe(0);
+          expect(bad.dueAt).toBe(NOW);
+          expect(bad.lapses).toBe(3);
+          expect(bad.earlyReviewApplied).toBe(false);
+          expect(bad.ease).toBeCloseTo(
+            Math.min(EASE_MAX, Math.max(EASE_MIN, state.ease - 0.2)),
+            5,
+          );
+        } else {
+          expectLandedOn(bad, steps[banked - 3], 3);
+        }
+      }
+    },
+  );
+
+  it("floors a close miss with no banked reviews at 0% on the daily gap", () => {
+    const s = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 0,
+      consecutiveCorrect: 0,
+      ease: 2.3,
+      lapses: 1,
+    });
+    const next = scheduleNext(
+      s,
+      review({ quality: "close", accuracy: 70, mode: "review" }),
+    );
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(next.stageReps).toBe(0);
+    expect(next.ease).toBeCloseTo(2.3, 5);
+    expect(next.lapses).toBe(1);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
+    expect(reviewingBar(next)).toBe(0);
+  });
+
+  it("moves a mastered verse at ease 2.3 back to about 90.9%", () => {
+    let current = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      ease: 2.1,
+      stageReps: 0,
+      consecutiveCorrect: 0,
+      status: "reviewing",
+    });
+    let previous = current;
+    for (let guard = 0; guard < 40; guard += 1) {
+      if (
+        current.status === "mastered" &&
+        Math.abs(current.ease - 2.3) < 1e-9
+      ) {
+        break;
+      }
+      previous = current;
+      current = scheduleNext(
+        current,
+        review({
+          quality: "exact",
+          accuracy: 100,
+          mode: "review",
+          now: current.dueAt,
+        }),
+      );
+    }
+    expect(current.status).toBe("mastered");
+    expect(current.ease).toBeCloseTo(2.3, 5);
+
+    const next = scheduleNext(
+      current,
+      review({ quality: "close", accuracy: 72, mode: "review" }),
+    );
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBeCloseTo(previous.intervalDays, 5);
+    expect(next.ease).toBeCloseTo(previous.ease, 5);
+    expect(next.stageReps).toBe(previous.stageReps);
+    expect(next.lapses).toBe(0);
+    expect(next.dueAt).toBe(dueAtInCalendarDays(NOW, next.intervalDays));
+    expect(reviewingBar(next)).toBeCloseTo(10 / 11, 5);
+
+    let past = current;
+    for (let extra = 0; extra < 2; extra += 1) {
+      past = scheduleNext(
+        past,
+        review({
+          quality: "exact",
+          accuracy: 100,
+          mode: "review",
+          now: past.dueAt,
+        }),
+      );
+    }
+    expect(past.status).toBe("mastered");
+    expect(past.intervalDays).toBeGreaterThan(current.intervalDays);
+    const fromPast = scheduleNext(
+      past,
+      review({ quality: "close", accuracy: 72, mode: "review" }),
+    );
+    expect(fromPast.status).toBe("reviewing");
+    expect(fromPast.intervalDays).toBeCloseTo(previous.intervalDays, 5);
+    expect(fromPast.ease).toBeCloseTo(previous.ease, 5);
+    expect(reviewingBar(fromPast)).toBeCloseTo(10 / 11, 5);
+
+    const bad = scheduleNext(
+      current,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
+    expect(bad.status).toBe("reviewing");
+    expect(reviewingBar(bad)).toBeCloseTo(8 / 11, 5);
+
+    const afterMissPass = planVerseAttemptSchedule(
+      current,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        now: current.dueAt,
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    expect(afterMissPass.next.status).toBe("reviewing");
+    expect(reviewingBar(afterMissPass.next)).toBeCloseTo(9 / 11, 5);
   });
 });
 
 describe("ease clamping", () => {
-  it("floors ease at EASE_MIN on repeated lapses", () => {
-    const s = reviewing({ ease: EASE_MIN + 0.1 });
+  it("floors ease at EASE_MIN when a bad miss drops to Learning", () => {
+    const s = reviewing({
+      ease: EASE_MIN + 0.1,
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 0,
+    });
     const next = scheduleNext(
       s,
       review({ quality: "off", accuracy: 10, mode: "review" }),
     );
+    expect(next.status).toBe("learning");
     expect(next.ease).toBe(EASE_MIN);
   });
 
@@ -1398,6 +1658,35 @@ describe("reviewingPathStartEase", () => {
           );
         }
         s = exactAtDue(s);
+      }
+    }
+  });
+
+  it("recovers the starting ease after the verse is already mastered", () => {
+    for (const startEase of [1.3, 2.1, EASE_START, 2.5, 2.8]) {
+      let current = reviewing({
+        intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+        ease: startEase,
+        stageReps: 0,
+        consecutiveCorrect: 0,
+      });
+      let masteredSteps = 0;
+      while (masteredSteps < 3) {
+        current = scheduleNext(
+          current,
+          review({
+            quality: "exact",
+            accuracy: 100,
+            mode: "review",
+            now: current.dueAt,
+          }),
+        );
+        if (current.status === "mastered") {
+          masteredSteps += 1;
+          expect(
+            reviewingPathStartEase(current.intervalDays, current.ease),
+          ).toBeCloseTo(startEase, 8);
+        }
       }
     }
   });

@@ -220,6 +220,20 @@
   animation: pulse-subtle 2s ease-in-out infinite;
 }
 
+@keyframes journey-dot-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.4);
+  }
+}
+
+.animate-journey-dot-pulse {
+  animation: journey-dot-pulse 400ms ease-out;
+}
+
 @keyframes splash-text-in {
   from {
     opacity: 0;
