@@ -2,8 +2,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
+import { diffWords } from "@/lib/diff-words";
 import {
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_TOOLTIP,
@@ -442,6 +444,7 @@ describe("PracticeBoard composite recitation", () => {
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(/^Next review /).length).toBeGreaterThan(0);
     expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Refresher used/)).not.toBeInTheDocument();
   });
 });
 
@@ -2346,6 +2349,40 @@ describe("PracticeBoard held first try", () => {
     expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
   });
 
+  it("shows the refresher result line next to the bar and date after a close miss then a pass", async () => {
+    const missAccuracy = verseAttemptAccuracy(
+      diffWords(CLOSE_MISS, PASSAGE_ONE),
+    );
+    renderReview({ verses: [reviewingVerse] });
+    await holdColdMiss(CLOSE_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    const line = await screen.findByText(
+      `${missAccuracy}% → 100% · Refresher used`,
+    );
+    const row = line.closest("li");
+    expect(row).toBeTruthy();
+    expect(
+      within(row as HTMLElement).getByLabelText(/Progress to mastered/),
+    ).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText(/^Next review /)).toBeVisible();
+    expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
+  });
+
   it("replaces the held miss with a From memory miss and offers practice", async () => {
     renderReview();
     await holdColdMiss(CLOSE_MISS);
@@ -2470,7 +2507,9 @@ describe("PracticeBoard held first try", () => {
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus();
     const [state] = onRunStateChange.mock.lastCall ?? [];
-    expect(state?.attempts).toHaveLength(1);
+    expect(state?.attempts).toHaveLength(2);
+    expect(state?.attempts?.[0]?.refresherUsed).toBeUndefined();
+    expect(state?.attempts?.[1]?.refresherUsed).toBe(true);
   });
 
   it("shows no leave line on either after-miss step", async () => {

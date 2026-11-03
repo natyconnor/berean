@@ -1124,6 +1124,15 @@ export function PracticeBoard({
                           ];
                         })
                       : [
+                          ...(opts?.heldMissAccuracy !== undefined
+                            ? [
+                                {
+                                  reference: currentVerse.reference,
+                                  accuracy: opts.heldMissAccuracy,
+                                  offerPractice: true as const,
+                                },
+                              ]
+                            : []),
                           {
                             reference: currentVerse.reference,
                             accuracy,
@@ -1273,6 +1282,7 @@ interface PracticeCardProps {
       refresherUsed?: boolean;
       replaceHeldId?: Id<"heldVerseAttempts">;
       skipSessionRow?: boolean;
+      heldMissAccuracy?: number;
     },
   ) => Promise<RecordVerseAttemptResult>;
   onHold: (
@@ -1516,17 +1526,23 @@ function PracticeCard({
     refresherUsed?: boolean;
     replaceHeldId?: Id<"heldVerseAttempts">;
     skipSessionRow?: boolean;
+    heldMissAccuracy?: number;
   } {
     const hold = refresher.phase === "step1";
+    const afterMissStep2 =
+      refresher.phase === "step2" && refresher.kind === "after-miss";
     return {
       hint: hold ? "first-letters" : undefined,
       holdSchedule: hold || undefined,
       refresherUsed: refresher.phase === "step2" || undefined,
-      replaceHeldId:
-        refresher.phase === "step2" && refresher.kind === "after-miss"
-          ? (heldIdRef.current ?? undefined)
-          : undefined,
+      replaceHeldId: afterMissStep2
+        ? (heldIdRef.current ?? undefined)
+        : undefined,
       skipSessionRow: practiceRound,
+      heldMissAccuracy:
+        afterMissStep2 && heldAccuracyRef.current !== null
+          ? heldAccuracyRef.current
+          : undefined,
     };
   }
 

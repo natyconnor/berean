@@ -13,6 +13,7 @@ import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   groupReviewSessionAttempts,
   recalledCopy,
+  refresherResultCopy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
 import { cn } from "@/lib/utils";
@@ -148,6 +149,11 @@ export function ReviewResultRows({
                     intervalDays={attempt.schedule.intervalDays}
                     ease={attempt.schedule.ease}
                   />
+                  {attempt.refresherUsed ? (
+                    <p className="text-xs text-muted-foreground">
+                      {refresherResultCopy(attempt.accuracies)}
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">
                     Next review {formatDueDay(attempt.schedule.dueAt, now)}
                   </p>
