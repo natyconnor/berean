@@ -38,11 +38,10 @@ import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
-  LEAVE_NOW_FIRST_TRY_COUNTS,
   NEED_A_REFRESHER_LABEL,
+  NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
-  PRACTICE_ONLY_NOTE,
   REFRESH_SAVE_ERROR,
   SESSION_COMPLETE_FOOTER,
   TRY_ANOTHER_REFRESHER_LABEL,
@@ -372,7 +371,11 @@ function reviewedOutcomeLine(
   if (!isReviewPhase(progress.status)) {
     return `Back to ${stepShortLabel(progress.learnStage).toLowerCase()}`;
   }
-  return `Next review ${formatDueDay(progress.dueAt, now)}`;
+  return dateOnlyNextReviewLine(progress.dueAt, now);
+}
+
+function dateOnlyNextReviewLine(dueAt: number, now: number): string {
+  return `Next review ${formatDueDay(dueAt, now)}`;
 }
 
 function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
@@ -1265,13 +1268,16 @@ function PracticeCard({
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   const refresherOfferRef = useRef<HTMLButtonElement>(null);
   const heldIdRef = useRef<Id<"heldVerseAttempts"> | null>(null);
+  const heldAccuracyRef = useRef<number | null>(null);
+  const [heldMissPreview, setHeldMissPreview] = useState<MemorySchedule | null>(
+    null,
+  );
   const [hasHeldTry, setHasHeldTry] = useState(false);
   const countedTodayRef = useRef(false);
   const applyHeldLatest = useEffectEvent(onApplyHeld);
   const checkedAccuracyRef = useRef(0);
   const idPrefix = useId();
   const headerId = `${idPrefix}-refresher-header`;
-  const leaveLineId = `${idPrefix}-leave-counts`;
   const bannerId = `${idPrefix}-result-banner`;
   const errorId = `${idPrefix}-save-error`;
   const step2PromptId = `${idPrefix}-step2-prompt`;
@@ -1463,8 +1469,12 @@ function PracticeCard({
       });
       const waitForSave =
         holdingColdMiss || countedFromMemory || refresher.phase === "step1";
+      const afterMissStep2 =
+        refresher.phase === "step2" && refresher.kind === "after-miss";
       const preview =
-        showScheduleOutcome && quality && (holdingColdMiss || !waitForSave)
+        showScheduleOutcome &&
+        quality &&
+        (holdingColdMiss || afterMissStep2 || !waitForSave)
           ? previewNextSchedule(scheduleSnapshot, {
               quality,
               accuracy,
@@ -1474,6 +1484,11 @@ function PracticeCard({
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
               timeZone: getViewerTimeZone(),
               item: reviewItem,
+              refresherUsed: afterMissStep2,
+              heldMissAccuracy:
+                afterMissStep2 && heldAccuracyRef.current !== null
+                  ? heldAccuracyRef.current
+                  : undefined,
             })
           : null;
       if (status !== "reviewing" && status !== "mastered") {
@@ -1491,6 +1506,8 @@ function PracticeCard({
           return;
         }
         heldIdRef.current = held.heldId;
+        heldAccuracyRef.current = accuracy;
+        setHeldMissPreview(preview);
         setHasHeldTry(true);
         setSaveError(null);
         return;
@@ -1532,6 +1549,7 @@ function PracticeCard({
           );
           if (!held.ok) return;
           heldIdRef.current = held.heldId;
+          heldAccuracyRef.current = checkedAccuracyRef.current;
           setHasHeldTry(true);
           setSaveError(null);
           return;
@@ -1676,6 +1694,20 @@ function PracticeCard({
     !composite &&
     showScheduleOutcome &&
     checkedAccuracy < LEARN_PROGRESS_ACCURACY;
+  const afterMissCountedResult =
+    refresher.kind === "after-miss" &&
+    refresher.phase === "step2" &&
+    checked &&
+    !practiceRound;
+  const showJourneyBar = !refresher.isOpen || afterMissCountedResult;
+  const barSchedule =
+    checked && nextSchedule && (showHeldOffer || afterMissCountedResult)
+      ? nextSchedule
+      : null;
+  const dateOnlyClosing =
+    (showHeldOffer || afterMissCountedResult) && nextSchedule
+      ? dateOnlyNextReviewLine(nextSchedule.dueAt, outcomeNow)
+      : null;
   const defaultFocusRef =
     showHeldOffer && !saveError ? refresherOfferRef : reviewActionRef;
 
@@ -1777,15 +1809,6 @@ function PracticeCard({
                 ? refresherHeader(refresher.step)
                 : `${sessionLabel} · ${stageInfo.label}`}
             </p>
-            {refresher.kind === "after-miss" &&
-            !(refresher.phase === "step2" && checked && !saveError) ? (
-              <p
-                id={leaveLineId}
-                className="mt-1 text-xs text-muted-foreground"
-              >
-                {LEAVE_NOW_FIRST_TRY_COUNTS}
-              </p>
-            ) : null}
             <CardTitle className={cn("mt-2", READER_REFERENCE_CLASS)}>
               {composite ? composite.title : refLabel}
             </CardTitle>
@@ -1803,16 +1826,29 @@ function PracticeCard({
               {sessionGoalLabel}
             </p>
           ) : null}
-          {refresher.isOpen ? null : (
+          {showJourneyBar ? (
             <LearningJourneyBar
-              learnStage={learnStage}
-              stageReps={stageReps}
+              learnStage={barSchedule?.learnStage ?? learnStage}
+              stageReps={barSchedule?.stageReps ?? stageReps}
               wordCount={wordCount}
-              status={status}
-              intervalDays={scheduleSnapshot.intervalDays}
-              ease={scheduleSnapshot.ease}
+              status={barSchedule?.status ?? status}
+              intervalDays={
+                barSchedule?.intervalDays ?? scheduleSnapshot.intervalDays
+              }
+              ease={barSchedule?.ease ?? scheduleSnapshot.ease}
+              from={
+                afterMissCountedResult && heldMissPreview
+                  ? {
+                      learnStage: heldMissPreview.learnStage,
+                      stageReps: heldMissPreview.stageReps,
+                      status: heldMissPreview.status,
+                      intervalDays: heldMissPreview.intervalDays,
+                      ease: heldMissPreview.ease,
+                    }
+                  : undefined
+              }
             />
-          )}
+          ) : null}
           {locked ? (
             <p className="text-xs text-muted-foreground">
               Tomorrow: {stageInfo.label}
@@ -1934,14 +1970,6 @@ function PracticeCard({
                       aria-describedby={
                         [
                           headerId,
-                          refresher.kind === "after-miss" &&
-                          !(
-                            refresher.phase === "step2" &&
-                            checked &&
-                            !saveError
-                          )
-                            ? leaveLineId
-                            : undefined,
                           refresher.phase === "step2"
                             ? step2PromptId
                             : undefined,
@@ -1977,7 +2005,7 @@ function PracticeCard({
                     closingLine={
                       practiceRound && refresher.phase === "step2"
                         ? PRACTICE_ONLY_CLOSING
-                        : null
+                        : dateOnlyClosing
                     }
                   />
                   {checkedQuality !== "exact" && (
@@ -2054,19 +2082,15 @@ function PracticeCard({
                     disabled={submitPending || !hasHeldTry}
                     buttonRef={refresherOfferRef}
                     describedBy={resultDescribedBy}
+                    tooltip={NEED_A_REFRESHER_TOOLTIP}
                   />
                 ) : null}
                 {showTryAnother ? (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      {PRACTICE_ONLY_NOTE}
-                    </p>
-                    <RefresherOfferButton
-                      label={TRY_ANOTHER_REFRESHER_LABEL}
-                      onClick={() => openRefresher("practice")}
-                      disabled={submitPending}
-                    />
-                  </>
+                  <RefresherOfferButton
+                    label={TRY_ANOTHER_REFRESHER_LABEL}
+                    onClick={() => openRefresher("practice")}
+                    disabled={submitPending}
+                  />
                 ) : null}
                 <Button
                   ref={reviewActionRef}

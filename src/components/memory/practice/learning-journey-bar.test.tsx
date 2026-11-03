@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   MASTERED_INTERVAL_DAYS,
@@ -7,6 +7,15 @@ import {
 } from "@/lib/memory-scheduler";
 
 import { LearningJourneyBar } from "./learning-journey-bar";
+
+const { useReducedMotion } = vi.hoisted(() => ({
+  useReducedMotion: vi.fn(() => false),
+}));
+
+vi.mock("framer-motion", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("framer-motion")>();
+  return { ...actual, useReducedMotion: () => useReducedMotion() };
+});
 
 function percentLabel(label: HTMLElement): number {
   return Number(label.getAttribute("aria-label")?.match(/(\d+)%/)?.[1]);
@@ -114,5 +123,26 @@ describe("LearningJourneyBar", () => {
       />,
     );
     expect(screen.getByText("100%")).toBeInTheDocument();
+  });
+
+  it("jumps to the new fill with no transition when motion is reduced", () => {
+    useReducedMotion.mockReturnValue(true);
+    const { container } = render(
+      <LearningJourneyBar
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        intervalDays={1}
+        from={{
+          learnStage: 2,
+          stageReps: 0,
+          status: "learning",
+        }}
+      />,
+    );
+    const fill = container.querySelector(".h-full");
+    expect(fill).toHaveStyle({ width: "0%" });
+    expect(fill?.className).toContain("motion-reduce:transition-none");
+    useReducedMotion.mockReturnValue(false);
   });
 });

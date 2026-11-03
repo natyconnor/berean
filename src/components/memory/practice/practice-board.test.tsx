@@ -5,16 +5,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import {
-  LEAVE_NOW_FIRST_TRY_COUNTS,
   NEED_A_REFRESHER_LABEL,
+  NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
-  PRACTICE_ONLY_NOTE,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
 } from "@/lib/memory-copy";
-import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
+import { formatDueDay } from "@/lib/memorize-plan";
+import {
+  MIN_LEARNING_LOCK_MS,
+  REVIEW_LAPSE_LEARN_STAGE,
+} from "@/lib/memory-scheduler";
+import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import { verseRefKey } from "../../../../shared/verse-ref-key";
@@ -1762,7 +1766,9 @@ describe("PracticeBoard pre-try refresher", () => {
     expect(
       screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
     ).toBeVisible();
-    expect(screen.getByText(PRACTICE_ONLY_NOTE)).toBeVisible();
+    expect(
+      screen.queryByText("Another refresher is practice only."),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Try again/ }),
     ).not.toBeInTheDocument();
@@ -1934,10 +1940,29 @@ describe("PracticeBoard held first try", () => {
 
   it("holds a 70% miss with the S1 next-review line and no held copy", async () => {
     renderReview();
+    const card = document.querySelector('[data-slot="card"]');
+    expect(card).toBeTruthy();
+    const before = within(card as HTMLElement).getByLabelText(
+      /Progress to mastered: Memorized/,
+    );
+    const beforePct = Number(
+      before.getAttribute("aria-label")?.match(/(\d+)%/)?.[1],
+    );
     const offer = await holdColdMiss(CLOSE_MISS);
-    expect(screen.getByText(/Next review/)).toBeVisible();
+    expect(screen.getByText("So close.")).toBeVisible();
+    const dateLine = screen.getByText(/^Next review /);
+    expect(dateLine).toBeVisible();
+    expect(dateLine.textContent).toMatch(/^Next review \S+$/);
+    expect(screen.queryByText(/if you/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/held/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/not saved/i)).not.toBeInTheDocument();
+    const after = within(card as HTMLElement).getByLabelText(
+      /Progress to mastered: Memorized/,
+    );
+    const afterPct = Number(
+      after.getAttribute("aria-label")?.match(/(\d+)%/)?.[1],
+    );
+    expect(afterPct).toBeLessThan(beforePct);
     expect(offer).toHaveFocus();
     expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
@@ -1952,7 +1977,13 @@ describe("PracticeBoard held first try", () => {
     expect(
       screen.queryByText("Another look will help it stick."),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/back to fill in the blanks/i)).toBeVisible();
+    expect(screen.getByText(/^Next review /)).toBeVisible();
+    expect(
+      screen.queryByText(/back to fill in the blanks/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/Learning journey: Fill in the blanks/),
+    ).toBeInTheDocument();
   });
 
   it("applies the held miss once on Continue", async () => {
@@ -1977,7 +2008,7 @@ describe("PracticeBoard held first try", () => {
     });
     expect(await screen.findByText("Verse 2 of 2")).toBeInTheDocument();
     expect(
-      screen.queryByText(LEAVE_NOW_FIRST_TRY_COUNTS),
+      screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
     expect(mutationMock("verseMemory.applyHeldAttempt")).toHaveBeenCalledTimes(
       1,
@@ -2021,19 +2052,17 @@ describe("PracticeBoard held first try", () => {
     );
   });
 
-  it("shows the leave line on an after-miss refresher and applies the held miss on Back", async () => {
+  it("shows no leave line on an after-miss refresher and applies the held miss on Back", async () => {
     renderReview();
     const offer = await holdColdMiss(CLOSE_MISS);
     await userEvent.click(offer);
     expect(await screen.findByText(refresherHeader(1))).toBeVisible();
-    expect(screen.getByText(LEAVE_NOW_FIRST_TRY_COUNTS)).toBeVisible();
+    expect(
+      screen.queryByText("If you leave now, your first try counts."),
+    ).not.toBeInTheDocument();
     const step1 = screen.getByLabelText("Your recalled verse");
     expect(step1).toHaveFocus();
-    expect(step1).toHaveAttribute(
-      "aria-describedby",
-      expect.stringContaining(""),
-    );
-    expect(step1.getAttribute("aria-describedby") ?? "").toMatch(/leave/);
+    expect(step1.getAttribute("aria-describedby") ?? "").not.toMatch(/leave/);
 
     await userEvent.click(
       screen.getByRole("button", { name: /Back to Memory/ }),
@@ -2052,7 +2081,7 @@ describe("PracticeBoard held first try", () => {
       expect(screen.getByText(refresherHeader(1))).toBeVisible();
     });
     expect(
-      screen.queryByText(LEAVE_NOW_FIRST_TRY_COUNTS),
+      screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: /Back to Memory/ }),
@@ -2061,7 +2090,7 @@ describe("PracticeBoard held first try", () => {
     expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
   });
 
-  it("replaces the held miss with a From memory pass and keeps the gap", async () => {
+  it("replaces the held miss with a From memory pass and restarts the level's reps", async () => {
     renderReview();
     await holdColdMiss(CLOSE_MISS);
     await userEvent.click(
@@ -2080,7 +2109,7 @@ describe("PracticeBoard held first try", () => {
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(await screen.findByText("Word for word.")).toBeVisible();
     expect(
-      screen.queryByText(LEAVE_NOW_FIRST_TRY_COUNTS),
+      screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
@@ -2118,7 +2147,7 @@ describe("PracticeBoard held first try", () => {
       await screen.findByText("We'll bring it back sooner."),
     ).toBeVisible();
     expect(
-      screen.queryByText(LEAVE_NOW_FIRST_TRY_COUNTS),
+      screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
     const continueButton = screen.getByRole("button", { name: /Continue/ });
     expect(continueButton).toHaveFocus();
@@ -2157,7 +2186,9 @@ describe("PracticeBoard held first try", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       REFRESH_SAVE_ERROR,
     );
-    expect(screen.getByText(LEAVE_NOW_FIRST_TRY_COUNTS)).toBeVisible();
+    expect(
+      screen.queryByText("If you leave now, your first try counts."),
+    ).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: /Back to Memory/ }),
     );
@@ -2191,7 +2222,7 @@ describe("PracticeBoard held first try", () => {
       await screen.findByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
     );
     expect(
-      screen.queryByText(LEAVE_NOW_FIRST_TRY_COUNTS),
+      screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
     expect(await screen.findByText(refresherHeader(1))).toBeVisible();
     const practice1 = await screen.findByLabelText("Your recalled verse");
@@ -2222,32 +2253,140 @@ describe("PracticeBoard held first try", () => {
     expect(state?.attempts).toHaveLength(1);
   });
 
-  it("shows the leave line on both after-miss steps, then drops it once step 2 is saved", async () => {
+  it("shows no leave line on either after-miss step", async () => {
     renderReview();
     await holdColdMiss(CLOSE_MISS);
     await userEvent.click(
       screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     );
-    expect(await screen.findByText(LEAVE_NOW_FIRST_TRY_COUNTS)).toBeVisible();
+    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
+    expect(
+      screen.queryByText("If you leave now, your first try counts."),
+    ).not.toBeInTheDocument();
     const step1 = await screen.findByLabelText("Your recalled verse");
     await userEvent.click(step1);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
-    expect(screen.getByText(LEAVE_NOW_FIRST_TRY_COUNTS)).toBeVisible();
+    expect(
+      screen.queryByText("If you leave now, your first try counts."),
+    ).not.toBeInTheDocument();
     await userEvent.click(
       await screen.findByRole("button", { name: /Continue/ }),
     );
     expect(await screen.findByText(refresherHeader(2))).toBeVisible();
-    expect(screen.getByText(LEAVE_NOW_FIRST_TRY_COUNTS)).toBeVisible();
+    expect(
+      screen.queryByText("If you leave now, your first try counts."),
+    ).not.toBeInTheDocument();
     const step2 = screen.getByLabelText("Your recalled verse");
-    expect(step2.getAttribute("aria-describedby") ?? "").toMatch(/leave/);
+    expect(step2.getAttribute("aria-describedby") ?? "").not.toMatch(/leave/);
     await userEvent.click(step2);
     await userEvent.paste(PASSAGE_ONE);
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
     expect(await screen.findByText("Word for word.")).toBeVisible();
     expect(
-      screen.queryByText(LEAVE_NOW_FIRST_TRY_COUNTS),
+      screen.queryByText("If you leave now, your first try counts."),
     ).not.toBeInTheDocument();
+  });
+
+  it("previews the held miss date and bar without saving, matching Continue", async () => {
+    renderReview();
+    await holdColdMiss(CLOSE_MISS);
+    const now = getSessionNow();
+    const preview = previewNextSchedule(
+      {
+        status: "reviewing",
+        learnStage: reviewingVerse.learnStage,
+        stageReps: reviewingVerse.stageReps ?? 0,
+        dueAt: reviewingVerse.dueAt ?? now,
+        ease: reviewingVerse.ease,
+        intervalDays: reviewingVerse.intervalDays,
+        consecutiveCorrect: reviewingVerse.consecutiveCorrect,
+        lapses: reviewingVerse.lapses,
+        earlyReviewApplied: reviewingVerse.earlyReviewApplied,
+      },
+      {
+        quality: "close",
+        accuracy: 70,
+        mode: "review",
+        now,
+        wordCount: 9,
+      },
+    );
+    expect(preview).not.toBeNull();
+    expect(
+      screen.getByText(`Next review ${formatDueDay(preview!.dueAt, now)}`),
+    ).toBeVisible();
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
+    mutationMock("verseMemory.applyHeldAttempt").mockResolvedValueOnce({
+      applied: true,
+      schedule: preview,
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    await waitFor(() => {
+      expect(
+        mutationMock("verseMemory.applyHeldAttempt"),
+      ).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not open the Need a refresher? tooltip on auto-focus", async () => {
+    renderReview();
+    const offer = await holdColdMiss(CLOSE_MISS);
+    expect(offer).toHaveFocus();
+    const tip = screen.getByText(NEED_A_REFRESHER_TOOLTIP);
+    expect(tip).toHaveClass("sr-only");
+    expect(offer.getAttribute("aria-describedby") ?? "").toContain(tip.id);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(offer).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      NEED_A_REFRESHER_TOOLTIP,
+    );
+  });
+
+  it("after a 40% miss, a refresher pass stays Memorized and due tomorrow", async () => {
+    const tomorrow = getSessionNow() + 24 * 60 * 60 * 1000;
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue({
+      status: "reviewing",
+      learnStage: 3,
+      stageReps: 0,
+      ease: 2.3,
+      intervalDays: 1,
+      dueAt: tomorrow,
+      consecutiveCorrect: 0,
+      lapses: 0,
+      earlyReviewApplied: false,
+    });
+    renderReview();
+    await holdColdMiss(BAD_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.getByText("Next review tomorrow")).toBeVisible();
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText(/Progress to mastered: Memorized/),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    expect(REVIEW_LAPSE_LEARN_STAGE).toBe(2);
   });
 
   it("disables the offer and shows Saving... while Continue applies the held miss", async () => {
