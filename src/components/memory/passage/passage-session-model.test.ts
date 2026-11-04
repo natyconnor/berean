@@ -10,6 +10,7 @@ import {
   pickUpCue,
   repairWindowShowsStageHints,
   stallRepairCue,
+  stopBeforeCue,
 } from "./passage-session-model";
 import type { PassageSessionState } from "@/lib/passage-session";
 
@@ -157,6 +158,30 @@ describe("pickUpCue", () => {
     expect(
       pickUpCue(pieces, texts, 2, { includeLearning: true })?.text,
     ).toMatch(/refuge\.$/);
+  });
+});
+
+describe("stopBeforeCue", () => {
+  it("cues the first few words of the next verse", () => {
+    const texts = [
+      "The LORD is my shepherd; I shall not want.",
+      "He makes me lie down in green pastures.",
+    ];
+    expect(stopBeforeCue(texts, 0)).toBe("He makes me lie…");
+  });
+
+  it("drops trailing punctuation before the ellipsis", () => {
+    const texts = ["Verse one.", "Blessed is the man, who walks not"];
+    expect(stopBeforeCue(texts, 0)).toBe("Blessed is the man…");
+  });
+
+  it("shows a short next verse whole, without an ellipsis", () => {
+    expect(stopBeforeCue(["Verse one.", "Jesus wept."], 0)).toBe("Jesus wept.");
+  });
+
+  it("returns null at the end of the passage or before text loads", () => {
+    expect(stopBeforeCue(["Only verse."], 0)).toBeNull();
+    expect(stopBeforeCue(["Verse one.", ""], 0)).toBeNull();
   });
 });
 

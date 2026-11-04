@@ -44,6 +44,8 @@ import {
 import { cn } from "@/lib/utils";
 import { countVerseWords, type HintToken } from "@/lib/verse-hint";
 
+import { STOP_BEFORE_LABEL } from "./passage-session-model";
+
 export type PassageRecallMode = "rope" | "repair" | "frontier" | "review";
 
 export type PassageRecallResult = {
@@ -74,6 +76,8 @@ interface PassageRecallCardProps {
   stallCue?: string | null;
   /** Label for the stall cue (bridge vs recovery). */
   stallCueLabel?: string;
+  /** Start of the next verse, shown under the answer when typed from memory. */
+  stopBeforeCue?: string | null;
   learnStage: number;
   stageReps: number;
   status: MemoryStatus;
@@ -101,6 +105,7 @@ export function PassageRecallCard({
   hint,
   stallCue = null,
   stallCueLabel = "Starting hint",
+  stopBeforeCue = null,
   learnStage,
   stageReps,
   status,
@@ -346,6 +351,9 @@ export function PassageRecallCard({
               />
             </div>
           )}
+          {stopBeforeCue ? (
+            <StallCue text={stopBeforeCue} label={STOP_BEFORE_LABEL} />
+          ) : null}
         </CardContent>
 
         <CardFooter className="flex justify-end border-t">
@@ -426,7 +434,7 @@ function StallCue({
   text: string;
   label: string;
 }): JSX.Element {
-  const bridgeOnly = label === "Pick up after";
+  const bridgeOnly = label === "Pick up after" || label === STOP_BEFORE_LABEL;
   return (
     <div
       className="rounded-xl border bg-background/75 px-4 py-3 text-left text-sm leading-6"
