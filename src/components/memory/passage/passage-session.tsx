@@ -42,6 +42,7 @@ import {
   pieceReference,
   pieceStatus,
   pickUpCue,
+  stopBeforeCue,
   RECITE_IT_ALL_LABEL,
   remainingAddsIn,
   repairPromptIndexes,
@@ -115,6 +116,8 @@ type BuiltRecall = {
   hint: PassageRecallHint;
   /** End of the verse before this recall when it starts mid-passage. */
   pickUpCue: StallCueContent | null;
+  /** Start of the verse after this recall when it is typed from memory. */
+  stopBeforeCue: string | null;
   learnStage: number;
   stageReps: number;
   status: "learning" | "reviewing";
@@ -674,6 +677,7 @@ export function PassageSession({
             hint={recall.hint}
             stallCue={cue?.text}
             stallCueLabel={cue?.label}
+            stopBeforeCue={recall.stopBeforeCue}
             learnStage={recall.learnStage}
             stageReps={recall.stageReps}
             status={recall.status}
@@ -914,6 +918,7 @@ function reviewRecall(
         "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
     },
     pickUpCue: null,
+    stopBeforeCue: null,
     learnStage: 3,
     stageReps: 0,
     status: "reviewing",
@@ -957,6 +962,7 @@ function ropeRecall(
         }
       : { type: "text", text: hintText, label: "Hint" },
     pickUpCue: pickUpCue(pieces, pieceTexts, start),
+    stopBeforeCue: allHidden ? stopBeforeCue(pieceTexts, end - 1) : null,
     learnStage: chromeStage(pieces, indexes),
     stageReps: 0,
     status: "learning",
@@ -1053,6 +1059,7 @@ function buildingRecall(args: {
         label: "Hint",
       },
       pickUpCue: null,
+      stopBeforeCue: null,
       learnStage: chromeStage(state.pieces, indexes),
       stageReps: 0,
       status: "learning",
@@ -1094,6 +1101,8 @@ function buildingRecall(args: {
         masked.stage === "hidden"
           ? pickUpCue(state.pieces, pieceTexts, due, { includeLearning: true })
           : null,
+      stopBeforeCue:
+        masked.stage === "hidden" ? stopBeforeCue(pieceTexts, due) : null,
       learnStage: piece.learnStage,
       stageReps: piece.stageReps,
       status: pieceStatus(piece),

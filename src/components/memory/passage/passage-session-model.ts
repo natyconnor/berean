@@ -117,6 +117,11 @@ export const PRACTICE_WHAT_YOU_KNOW_LABEL = "Go over what you know";
 
 const PICK_UP_CUE_WORDS = 6;
 
+/** Enough to mark the boundary without giving much of the next verse away. */
+const STOP_BEFORE_CUE_WORDS = 4;
+
+export const STOP_BEFORE_LABEL = "Stop before";
+
 export type RopeStartOverride = "rehearsal" | "section" | "beginning";
 
 export function pieceCardTitle(piece: PassagePiece): string {
@@ -201,6 +206,26 @@ export function pickUpCue(
   );
   if (!previousText) return null;
   return { text: verseEnding(previousText), label: "Pick up after" };
+}
+
+/**
+ * Opening words of the piece after `lastIndex`, so a from-memory recall shows
+ * where it stops. Unlike `pickUpCue`, this takes the very next piece even when
+ * it is not started yet: the boundary matters here, not whether the learner
+ * knows that verse. Null at the end of the passage.
+ */
+export function stopBeforeCue(
+  texts: readonly string[],
+  lastIndex: number,
+): string | null {
+  const words = (texts[lastIndex + 1] ?? "").trim().split(/\s+/);
+  if (words[0] === "") return null;
+  if (words.length <= STOP_BEFORE_CUE_WORDS) return words.join(" ");
+  const opening = words
+    .slice(0, STOP_BEFORE_CUE_WORDS)
+    .join(" ")
+    .replace(/[\s,;:.!?–—-]+$/u, "");
+  return `${opening}…`;
 }
 
 /**
