@@ -969,6 +969,7 @@ describe("planVerseAttemptSchedule", () => {
     expect(lapse.next.intervalDays).toBe(1);
     expect(lapse.next.stageReps).toBe(0);
     expect(lapse.next.lapses).toBe(1);
+    expect(reviewingBar(lapse.next)).toBe(0);
   });
 
   it("grows the gap on a cold pass, unlike a refresher pass", () => {
@@ -978,6 +979,101 @@ describe("planVerseAttemptSchedule", () => {
     );
     expect(cold.next.stageReps).toBe(0);
     expect(cold.next.intervalDays).toBe(REVIEW_EVERY_OTHER_INTERVAL_DAYS);
+  });
+  it("after a close miss, a refresher pass keeps interval, reps and ease", () => {
+    const growing = reviewing({
+      intervalDays: 5,
+      stageReps: 2,
+      consecutiveCorrect: 4,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      growing,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 70,
+      }),
+    );
+    expect(planned.next).toEqual(keepReviewingSchedule(growing, { now: NOW }));
+  });
+
+  it("after a bad miss, a refresher pass loses two path steps", () => {
+    const growing = reviewing({
+      intervalDays: 5,
+      stageReps: 2,
+      consecutiveCorrect: 4,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      growing,
+      review({
+        quality: "close",
+        accuracy: 90,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    const held = scheduleNext(
+      growing,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
+    expect(planned.next.status).toBe("reviewing");
+    expect(reviewingBar(planned.next)).toBeGreaterThan(reviewingBar(held));
+    expect(planned.next.lapses).toBe(growing.lapses + 1);
+  });
+
+  it("after a bad miss with two banked, a refresher pass lands at 0% Memorized", () => {
+    const twoBanked = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 2,
+      consecutiveCorrect: 2,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      twoBanked,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    expect(planned.next.status).toBe("reviewing");
+    expect(planned.next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(planned.next.stageReps).toBe(0);
+    expect(reviewingBar(planned.next)).toBe(0);
+  });
+
+  it("after a bad miss with fewer than two banked, a refresher pass stays in Learning", () => {
+    const oneBanked = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 1,
+      consecutiveCorrect: 1,
+      dueAt: NOW,
+    });
+    const planned = planVerseAttemptSchedule(
+      oneBanked,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    const held = scheduleNext(
+      oneBanked,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
+    expect(planned.next.status).toBe("learning");
+    expect(planned.next.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+    expect(planned.next.status).toBe(held.status);
+    expect(planned.next.learnStage).toBe(held.learnStage);
   });
 });
 
@@ -1175,6 +1271,27 @@ describe("counted misses on the exact review path", () => {
     expect(fromPast.intervalDays).toBeCloseTo(previous.intervalDays, 5);
     expect(fromPast.ease).toBeCloseTo(previous.ease, 5);
     expect(reviewingBar(fromPast)).toBeCloseTo(10 / 11, 5);
+
+    const bad = scheduleNext(
+      current,
+      review({ quality: "off", accuracy: 40, mode: "review" }),
+    );
+    expect(bad.status).toBe("reviewing");
+    expect(reviewingBar(bad)).toBeCloseTo(8 / 11, 5);
+
+    const afterMissPass = planVerseAttemptSchedule(
+      current,
+      review({
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        now: current.dueAt,
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      }),
+    );
+    expect(afterMissPass.next.status).toBe("reviewing");
+    expect(reviewingBar(afterMissPass.next)).toBeCloseTo(9 / 11, 5);
   });
 });
 

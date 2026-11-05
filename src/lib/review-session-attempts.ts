@@ -1,4 +1,5 @@
 import type { CardReference } from "@/components/study/study-card-model";
+import type { MemorySchedule } from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export interface ReviewSessionAttempt {
@@ -10,6 +11,11 @@ export interface ReviewSessionAttempt {
   offerPractice?: boolean;
   /** From memory try that followed a refresher. S7 shows the note. */
   refresherUsed?: boolean;
+  /** Landed schedule, so a summary row can show the bar and next review. */
+  schedule?: Pick<
+    MemorySchedule,
+    "status" | "learnStage" | "stageReps" | "intervalDays" | "ease" | "dueAt"
+  >;
 }
 
 /** Mean accuracy across every recitation, including retries. */
@@ -31,6 +37,7 @@ export interface GroupedReviewAttempt extends ReviewSessionAttempt {
 /**
  * Collapse retries onto one row per verse while keeping each recitation's
  * score. First occurrence wins for order, label, and the Practice shortcut.
+ * A later recitation can mark the row as a refresher and land its schedule.
  */
 export function groupReviewSessionAttempts(
   attempts: readonly ReviewSessionAttempt[],
@@ -45,7 +52,9 @@ export function groupReviewSessionAttempts(
       groups.push({ ...attempt, accuracies: [attempt.accuracy] });
       continue;
     }
-    groups[existing]?.accuracies.push(attempt.accuracy);
+    groups[existing].accuracies.push(attempt.accuracy);
+    if (attempt.refresherUsed) groups[existing].refresherUsed = true;
+    if (attempt.schedule) groups[existing].schedule = attempt.schedule;
   }
   return groups;
 }
@@ -55,4 +64,12 @@ export function recalledCopy(accuracies: readonly number[]): string {
     return `${accuracies[0] ?? 0}% recalled`;
   }
   return `${accuracies.join("%, then ")}% recalled`;
+}
+
+/** Session-summary result line when a refresher was used on this try. */
+export function refresherResultCopy(accuracies: readonly number[]): string {
+  const from = accuracies[0] ?? 0;
+  const to = accuracies[accuracies.length - 1] ?? from;
+  if (accuracies.length <= 1) return `${to}% · Refresher used`;
+  return `${from}% → ${to}% · Refresher used`;
 }

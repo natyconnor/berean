@@ -10,6 +10,7 @@ import { Brain, BookOpen, NotebookPen } from "lucide-react";
 import { useQuery } from "convex/react";
 
 import { api } from "../../../convex/_generated/api";
+import { useApplyLeftoverHeldAttempts } from "@/hooks/use-apply-leftover-held-attempts";
 import { useEnsureInMemoryBackfill } from "@/hooks/use-ensure-in-memory-backfill";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { cn } from "@/lib/utils";
@@ -64,6 +65,7 @@ export function ModeDock() {
   // clock catches up on a new local day so overnight locks can expire.
   const now = useLiveNow();
   useEnsureInMemoryBackfill(now);
+  useApplyLeftoverHeldAttempts();
   const skipDueCount = isMemorySessionPath(location.pathname);
   const dueCountResult = useQuery(
     api.verseMemory.dueCount,

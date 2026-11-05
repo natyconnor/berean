@@ -13,6 +13,7 @@ import {
 import { memoryProgressFraction } from "./mastery-ring";
 import {
   applyUnifiedGrade,
+  applyUnifiedMemberGrades,
   canonicalUnifiedSchedule,
 } from "./unified-review-schedule";
 
@@ -211,6 +212,46 @@ describe("applyUnifiedGrade", () => {
         next.intervalDays,
         undefined,
         next.ease,
+      ),
+    ).toBe(0);
+  });
+});
+
+describe("applyUnifiedMemberGrades", () => {
+  it("moves each verse from its own banked reviews", () => {
+    const weak = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 1,
+      consecutiveCorrect: 1,
+      dueAt: NOW,
+    });
+    const strong = reviewing({
+      intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+      stageReps: 3,
+      consecutiveCorrect: 3,
+      dueAt: NOW,
+    });
+    const next = applyUnifiedMemberGrades(
+      [weak, strong],
+      reviewInput({ quality: "off", accuracy: 40 }),
+    );
+    const weakNext = next[0];
+    const strongNext = next[1];
+    expect(weakNext).toBeDefined();
+    expect(strongNext).toBeDefined();
+    if (!weakNext || !strongNext) return;
+    expect(weakNext.status).toBe("learning");
+    expect(weakNext.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
+    expect(strongNext.status).toBe("reviewing");
+    expect(strongNext.stageReps).toBe(0);
+    expect(
+      memoryProgressFraction(
+        strongNext.status,
+        strongNext.learnStage,
+        strongNext.stageReps,
+        strongNext.intervalDays,
+        undefined,
+        strongNext.ease,
       ),
     ).toBe(0);
   });

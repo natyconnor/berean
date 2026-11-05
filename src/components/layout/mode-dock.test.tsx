@@ -3,12 +3,18 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetApplyLeftoverHeldAttemptsForTests } from "@/hooks/use-apply-leftover-held-attempts";
 import { resetEnsureInMemoryBackfillForTests } from "@/hooks/use-ensure-in-memory-backfill";
 import { clearModeLastLocations } from "@/lib/mode-last-location";
 import { ModeDock } from "./mode-dock";
 
 const mocks = vi.hoisted(() => ({
-  ensureInMemoryBackfill: vi.fn(() => Promise.resolve(null)),
+  ensureInMemoryBackfill: vi
+    .fn<(args?: { now?: number }) => Promise<null>>()
+    .mockResolvedValue(null),
+  applyLeftoverHeldAttempts: vi
+    .fn<(args?: { now?: number }) => Promise<{ applied: number }>>()
+    .mockResolvedValue({ applied: 0 }),
   isAuthenticated: true,
   navigate: vi.fn(),
   useLocation: vi.fn(() => ({
@@ -33,7 +39,10 @@ vi.mock("@/lib/use-tabs", () => ({
 
 vi.mock("convex/react", () => ({
   useQuery: (query: unknown, args?: unknown) => mocks.useQuery(query, args),
-  useMutation: () => mocks.ensureInMemoryBackfill,
+  useMutation: () => (args?: { now?: number }) => {
+    if (args && "now" in args) return mocks.ensureInMemoryBackfill(args);
+    return mocks.applyLeftoverHeldAttempts(args ?? {});
+  },
   useConvexAuth: () => ({
     isAuthenticated: mocks.isAuthenticated,
     isLoading: false,
@@ -427,7 +436,9 @@ describe("ModeDock dueCount subscription", () => {
 describe("ModeDock inMemory backfill", () => {
   beforeEach(() => {
     resetEnsureInMemoryBackfillForTests();
+    resetApplyLeftoverHeldAttemptsForTests();
     mocks.ensureInMemoryBackfill.mockClear();
+    mocks.applyLeftoverHeldAttempts.mockClear();
     mocks.isAuthenticated = true;
     mocks.useLocation.mockReturnValue({
       pathname: "/passage/John-1",
@@ -451,16 +462,20 @@ describe("ModeDock inMemory backfill", () => {
     expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledWith({
       now: expect.any(Number) as number,
     });
+    expect(mocks.applyLeftoverHeldAttempts).toHaveBeenCalledTimes(1);
+    expect(mocks.applyLeftoverHeldAttempts).toHaveBeenCalledWith({});
   });
 
   it("waits until the user is signed in", () => {
     mocks.isAuthenticated = false;
     const { rerender } = render(<ModeDock />);
     expect(mocks.ensureInMemoryBackfill).not.toHaveBeenCalled();
+    expect(mocks.applyLeftoverHeldAttempts).not.toHaveBeenCalled();
 
     mocks.isAuthenticated = true;
     rerender(<ModeDock />);
     expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(1);
+    expect(mocks.applyLeftoverHeldAttempts).toHaveBeenCalledTimes(1);
   });
 
   it("asks again for the next account after signing out", () => {
@@ -472,5 +487,6 @@ describe("ModeDock inMemory backfill", () => {
     mocks.isAuthenticated = true;
     rerender(<ModeDock />);
     expect(mocks.ensureInMemoryBackfill).toHaveBeenCalledTimes(2);
+    expect(mocks.applyLeftoverHeldAttempts).toHaveBeenCalledTimes(2);
   });
 });

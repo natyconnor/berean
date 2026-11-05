@@ -14,6 +14,7 @@ import { PassageSession } from "@/components/memory/passage/passage-session";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
+import { useLeftoverHeldAttemptsReady } from "@/hooks/use-apply-leftover-held-attempts";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useMemoryExit } from "@/hooks/use-memory-back";
 import { isReviewPhase } from "@/lib/memory-scheduler";
@@ -29,6 +30,7 @@ export function MemoryPackReviewPage() {
   const { return: returnTo } = Route.useSearch();
   const typedPackId = packId as Id<"packs">;
   const now = useLiveNow();
+  const leftoversReady = useLeftoverHeldAttemptsReady();
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const packHref = `/memory/${encodeURIComponent(packId)}`;
   const exit = useMemoryExit(returnTo, packHref);
@@ -36,10 +38,10 @@ export function MemoryPackReviewPage() {
   const backLabel = exit.label;
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
-  const members = useFrozenQuery(api.packs.resolveMembers, {
-    id: typedPackId,
-    now,
-  });
+  const members = useFrozenQuery(
+    api.packs.resolveMembers,
+    leftoversReady ? { id: typedPackId, now } : "skip",
+  );
   const passage = useQuery(api.passageMemory.getForPack, {
     packId: typedPackId,
     now,

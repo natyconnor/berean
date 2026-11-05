@@ -919,6 +919,7 @@ type ReviewingPathState = {
 
 const REVIEW_PATH_STEP_LIMIT = 64;
 const CLOSE_REVIEW_LOSS = 1;
+const AFTER_MISS_PASS_BAD_LOSS = 2;
 const BAD_REVIEW_LOSS = 3;
 
 function pathOrigin(startEase: number): ReviewingPathState {
@@ -1048,14 +1049,15 @@ function scheduleVerseReviewMiss(
   loss: number,
 ): MemorySchedule {
   const banked = bankedGoodReviews(s);
-  if (loss === BAD_REVIEW_LOSS && banked < loss) {
+  const countsLapse = loss > CLOSE_REVIEW_LOSS;
+  if (countsLapse && banked < loss) {
     return lapseReviewingToLearning(s, r);
   }
   return scheduleOnReviewingPathStep(
     s,
     r,
     Math.max(0, banked - loss),
-    loss === BAD_REVIEW_LOSS,
+    countsLapse,
   );
 }
 
@@ -1177,18 +1179,39 @@ export function keepReviewingSchedule(
   };
 }
 
+/**
+ * A From memory pass after a missed first try. Softer than Continue: a close
+ * miss keeps the current interval, reps and ease; a bad miss loses two
+ * exact-path steps, or stays at Fill in the blanks when fewer than two are
+ * banked.
+ */
+export function afterMissPassSchedule(
+  s: MemorySchedule,
+  r: ReviewInput,
+  heldAccuracy: number,
+): MemorySchedule {
+  if (heldAccuracy < REVIEW_LAPSE_ACCURACY) {
+    return scheduleVerseReviewMiss(s, r, AFTER_MISS_PASS_BAD_LOSS);
+  }
+  return keepReviewingSchedule(s, r);
+}
+
 /** Flags a refresher step sends with the grade. Omitted fields are a cold try. */
 export type VerseAttemptPlanInput = ReviewInput & {
   holdSchedule?: boolean;
   refresherUsed?: boolean;
+  /** First-try miss accuracy when this pass replaces a held try. */
+  heldMissAccuracy?: number;
 };
 
 /**
  * Decide the next schedule for a verse attempt.
  *
  * First letters (hold) logs the try and leaves the verse alone. A From memory
- * pass after a refresher on a due Memorized verse keeps the current gap.
- * Everything else uses {@link scheduleNext}.
+ * pass after a pre-try refresher on a due Memorized verse keeps the current
+ * gap. A pass that replaces a held miss uses {@link afterMissPassSchedule}
+ * (close keeps the gap; bad loses two path steps). Everything else uses
+ * {@link scheduleNext}.
  */
 export function planVerseAttemptSchedule(
   s: MemorySchedule,
@@ -1201,6 +1224,12 @@ export function planVerseAttemptSchedule(
     isDueForReview(s, r.now) &&
     (outcome === "exact" || outcome === "pass")
   ) {
+    if (r.heldMissAccuracy !== undefined) {
+      return {
+        next: afterMissPassSchedule(s, r, r.heldMissAccuracy),
+        patch: true,
+      };
+    }
     return { next: keepReviewingSchedule(s, r), patch: true };
   }
   return { next: scheduleNext(s, r), patch: true };

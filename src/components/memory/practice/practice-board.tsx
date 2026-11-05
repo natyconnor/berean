@@ -1,10 +1,12 @@
 import {
   type JSX,
   type KeyboardEvent,
+  type MutableRefObject,
   type ReactNode,
   useCallback,
   useEffect,
   useEffectEvent,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -36,12 +38,17 @@ import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
+  NEED_A_REFRESHER_LABEL,
+  NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
+  PRACTICE_ONLY_CLOSING,
   REFRESH_SAVE_ERROR,
   SESSION_COMPLETE_FOOTER,
+  TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
   stepShortLabel,
 } from "@/lib/memory-copy";
+import { isHoldableColdMiss } from "@/lib/held-verse-attempt";
 import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
@@ -109,10 +116,16 @@ import { referenceKey, type CardReference } from "../../study/study-card-model";
 import { useVersePracticeAttempt } from "../../study/use-verse-practice-attempt";
 import type { RecordVerseAttemptResult } from "../../study/use-record-verse-attempt";
 import { VerseAttemptResult } from "../../study/verse-attempt-result";
-import { EmptyHintPrompt } from "../memory-refresher-controls";
+import {
+  EmptyHintPrompt,
+  RefresherOfferButton,
+} from "../memory-refresher-controls";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
 import { useVerseRefresher } from "./use-verse-refresher";
-import { LearningJourneyBar } from "./learning-journey-bar";
+import {
+  LearningJourneyBar,
+  type JourneyBarFill,
+} from "./learning-journey-bar";
 import {
   currentStageStep,
   PRACTICE_STAGES,
@@ -140,6 +153,11 @@ export type { MemorySessionLabel } from "@/lib/memory-session";
 export interface PracticeCompositeSet {
   packId: Id<"packs">;
   members: CardReference[];
+  /**
+   * Each member's live schedule when Review together opened from a pack.
+   * Used to preview that verse's own bar after a miss.
+   */
+  memberSchedules?: MemoryScheduleSnapshot[];
   /** Pack name, used when this card sits in a mixed global review queue. */
   packName?: string;
   /**
@@ -361,7 +379,27 @@ function reviewedOutcomeLine(
   if (!isReviewPhase(progress.status)) {
     return `Back to ${stepShortLabel(progress.learnStage).toLowerCase()}`;
   }
-  return `Next review ${formatDueDay(progress.dueAt, now)}`;
+  return dateOnlyNextReviewLine(progress.dueAt, now);
+}
+
+function dateOnlyNextReviewLine(dueAt: number, now: number): string {
+  return `Next review ${formatDueDay(dueAt, now)}`;
+}
+
+function journeyFillFrom(schedule: {
+  learnStage: number;
+  stageReps?: number;
+  status?: MemoryStatus;
+  intervalDays?: number;
+  ease?: number;
+}): JourneyBarFill {
+  return {
+    learnStage: schedule.learnStage,
+    stageReps: schedule.stageReps,
+    status: schedule.status,
+    intervalDays: schedule.intervalDays,
+    ease: schedule.ease,
+  };
 }
 
 function sessionLabelFor(kind: MemorySessionKind): MemorySessionLabel {
@@ -452,6 +490,8 @@ export function PracticeBoard({
   const { recordWithSeqAdopt } = useVersePracticeAttempt(recordModeFor(kind), {
     skipLibraryIds: sessionVersesCanSkipLibraryIds(verses),
   });
+  const holdAttempt = useMutation(api.verseMemory.holdAttempt);
+  const applyHeldAttempt = useMutation(api.verseMemory.applyHeldAttempt);
   const [cardSaving, setCardSaving] = useState(false);
   const recordUnifiedReview = useMutation(api.packs.recordUnifiedReview);
   const recordPassageAttempt = useMutation(api.passageMemory.recordAttempt);
@@ -619,6 +659,10 @@ export function PracticeBoard({
     currentVerse !== null &&
     gradedIds.has(currentVerse.id) &&
     !currentHasWorkLeft;
+  const [journeyPreview, setJourneyPreview] = useState<{
+    from: JourneyBarFill;
+    to: JourneyBarFill;
+  } | null>(null);
 
   // The active card's passage: a unified pack is one concatenated recitation,
   // even when it sits next to ordinary verses in the global review queue.
@@ -833,10 +877,17 @@ export function PracticeBoard({
     setFinished(true);
   }
 
+  const leaveHeldRef = useRef<(() => void) | undefined>(undefined);
   const shellProps = {
     sessionLabel,
     scopeLabel,
-    onExit,
+    onExit: () => {
+      leaveHeldRef.current?.();
+      onExit();
+    },
+    onHome: () => {
+      leaveHeldRef.current?.();
+    },
     backLabel,
     exitHref,
     backDisabled: cardSaving,
@@ -949,7 +1000,64 @@ export function PracticeBoard({
                   : null
               }
               offerRefresher={isReview}
+              leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
+              packMemberSchedules={composite?.memberSchedules}
+              packMemberRefs={composite?.members}
+              onJourneyPreview={setJourneyPreview}
+              onHold={async (tokens, wordCount, answer, now) => {
+                const quality = classifyVerseAttempt(tokens);
+                if (!quality || !currentVerse.verseRefId) {
+                  return { ok: false as const };
+                }
+                try {
+                  const { heldId } = await holdAttempt({
+                    verseRefId: currentVerse.verseRefId,
+                    quality,
+                    accuracy: verseAttemptAccuracy(tokens),
+                    answer,
+                    stage: currentProgress.learnStage,
+                    mode: "review",
+                    now,
+                    wordCount,
+                    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+                    timeZone: getViewerTimeZone(),
+                  });
+                  return { ok: true as const, heldId };
+                } catch (error: unknown) {
+                  devLog.warn("verseMemory", "holdAttempt failed", error);
+                  return { ok: false as const };
+                }
+              }}
+              onApplyHeld={async (heldId, accuracy) => {
+                const verseId = currentVerse.id;
+                try {
+                  const result = await applyHeldAttempt({ heldId });
+                  if (result.schedule) {
+                    adoptVerseSchedule(verseId, result.schedule);
+                  }
+                  if (isReview && result.applied) {
+                    setGradedIds((prev) =>
+                      prev.has(verseId) ? prev : new Set(prev).add(verseId),
+                    );
+                    setSessionAttempts((prev) => [
+                      ...prev,
+                      {
+                        reference: currentVerse.reference,
+                        accuracy,
+                        offerPractice: true,
+                      },
+                    ]);
+                  }
+                  return {
+                    ok: true as const,
+                    schedule: result.schedule,
+                  };
+                } catch (error: unknown) {
+                  devLog.warn("verseMemory", "applyHeldAttempt failed", error);
+                  return { ok: false as const };
+                }
+              }}
               onRecord={async (tokens, wordCount, opts) => {
                 const verseId = currentVerse.id;
                 const hold = opts?.holdSchedule === true;
@@ -976,13 +1084,14 @@ export function PracticeBoard({
                         hint: opts?.hint,
                         holdSchedule: opts?.holdSchedule,
                         refresherUsed: opts?.refresherUsed,
+                        replaceHeldId: opts?.replaceHeldId,
                       },
                       (schedule) => {
-                        if (hold) return;
+                        if (hold || opts?.skipSessionRow) return;
                         adoptVerseSchedule(verseId, schedule);
                       },
                     );
-                if (hold || !counted.ok) return counted;
+                if (hold || opts?.skipSessionRow || !counted.ok) return counted;
                 if (composite && counted.schedule) {
                   adoptVerseSchedule(verseId, counted.schedule);
                 }
@@ -990,22 +1099,61 @@ export function PracticeBoard({
                   setGradedIds((prev) =>
                     prev.has(verseId) ? prev : new Set(prev).add(verseId),
                   );
-                  setSessionAttempts((prev) => [
-                    ...prev,
-                    {
-                      reference: currentVerse.reference,
-                      accuracy: verseAttemptAccuracy(tokens),
-                      label: composite
-                        ? (composite.packName ?? scopeLabel)
-                        : undefined,
-                      offerPractice: composite === null,
-                      ...(opts?.refresherUsed ? { refresherUsed: true } : {}),
-                    },
-                  ]);
+                  const accuracy = verseAttemptAccuracy(tokens);
+                  const quality = classifyVerseAttempt(tokens);
+                  const memberRows =
+                    composite?.memberSchedules && quality
+                      ? composite.members.flatMap((member, index) => {
+                          const snapshot = composite.memberSchedules?.[index];
+                          if (!snapshot) return [];
+                          const next = previewNextSchedule(snapshot, {
+                            quality,
+                            accuracy,
+                            mode: "review",
+                            now: opts?.now ?? Date.now(),
+                            wordCount,
+                            item: "verse",
+                          });
+                          return [
+                            {
+                              reference: member,
+                              accuracy,
+                              offerPractice: false as const,
+                              ...(next ? { schedule: next } : {}),
+                            },
+                          ];
+                        })
+                      : [
+                          ...(opts?.heldMissAccuracy !== undefined
+                            ? [
+                                {
+                                  reference: currentVerse.reference,
+                                  accuracy: opts.heldMissAccuracy,
+                                  offerPractice: true as const,
+                                },
+                              ]
+                            : []),
+                          {
+                            reference: currentVerse.reference,
+                            accuracy,
+                            label: composite
+                              ? (composite.packName ?? scopeLabel)
+                              : undefined,
+                            offerPractice: composite === null,
+                            ...(opts?.refresherUsed
+                              ? { refresherUsed: true }
+                              : {}),
+                            ...(counted.schedule
+                              ? { schedule: counted.schedule }
+                              : {}),
+                          },
+                        ];
+                  setSessionAttempts((prev) => [...prev, ...memberRows]);
                 }
                 return counted;
               }}
               advancesOnContinue={!currentHasWorkLeft}
+              onContinueAfterHeld={advancePastCurrentVerse}
               onContinueAfterResult={() => {
                 // A spent verse (learning lock, or a review that just
                 // rescheduled) should hand off to the next verse that still
@@ -1043,13 +1191,26 @@ export function PracticeBoard({
                     order={order}
                     onOrderChange={handleOrderChange}
                     shuffleNonce={shuffleNonce}
-                    currentLearnStage={currentProgress.learnStage}
-                    currentStageReps={currentProgress.stageReps}
-                    currentStatus={currentProgress.status}
-                    currentIntervalDays={currentProgress.intervalDays}
-                    currentEase={currentProgress.ease}
+                    currentLearnStage={
+                      journeyPreview?.to.learnStage ??
+                      currentProgress.learnStage
+                    }
+                    currentStageReps={
+                      journeyPreview?.to.stageReps ?? currentProgress.stageReps
+                    }
+                    currentStatus={
+                      journeyPreview?.to.status ?? currentProgress.status
+                    }
+                    currentIntervalDays={
+                      journeyPreview?.to.intervalDays ??
+                      currentProgress.intervalDays
+                    }
+                    currentEase={
+                      journeyPreview?.to.ease ?? currentProgress.ease
+                    }
                     currentWordCount={currentWordCount}
                     currentLocked={currentLocked}
+                    currentFrom={journeyPreview?.from}
                     allowReorder={sessionClusterCount(baseVerses) > 1}
                   />
                 </>
@@ -1108,6 +1269,8 @@ interface PracticeCardProps {
   reviewItem?: "verse" | "passage";
   /** Quiet refresher link. Gate on Memorized + loaded lives in the card. */
   offerRefresher?: boolean;
+  /** Back / Home flush a held miss even if the card has not unmounted yet. */
+  leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
@@ -1117,7 +1280,20 @@ interface PracticeCardProps {
       hint?: "first-letters";
       holdSchedule?: boolean;
       refresherUsed?: boolean;
+      replaceHeldId?: Id<"heldVerseAttempts">;
+      skipSessionRow?: boolean;
+      heldMissAccuracy?: number;
     },
+  ) => Promise<RecordVerseAttemptResult>;
+  onHold: (
+    tokens: ReturnType<typeof diffWords>,
+    wordCount: number,
+    answer: string,
+    now: number,
+  ) => Promise<{ ok: true; heldId: Id<"heldVerseAttempts"> } | { ok: false }>;
+  onApplyHeld: (
+    heldId: Id<"heldVerseAttempts">,
+    accuracy: number,
   ) => Promise<RecordVerseAttemptResult>;
   /**
    * This verse is spent for the session, so dismissing the result leaves the
@@ -1126,6 +1302,14 @@ interface PracticeCardProps {
   advancesOnContinue?: boolean;
   /** Fired when the learner dismisses a checked attempt's result. */
   onContinueAfterResult?: () => void;
+  /** Continue on a held miss: the verse is spent, but this render still thinks it is due. */
+  onContinueAfterHeld?: () => void;
+  /** Pack Review together: each member's schedule for per-verse result bars. */
+  packMemberSchedules?: MemoryScheduleSnapshot[];
+  packMemberRefs?: CardReference[];
+  onJourneyPreview?: (
+    preview: { from: JourneyBarFill; to: JourneyBarFill } | null,
+  ) => void;
 }
 
 function PracticeCard({
@@ -1146,10 +1330,17 @@ function PracticeCard({
   composite = null,
   reviewItem = "verse",
   offerRefresher = false,
+  leaveHeldRef,
   onSavingChange,
   onRecord,
+  onHold,
+  onApplyHeld,
   advancesOnContinue = false,
   onContinueAfterResult,
+  onContinueAfterHeld,
+  packMemberSchedules,
+  packMemberRefs,
+  onJourneyPreview,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
   const refresher = useVerseRefresher();
@@ -1167,6 +1358,28 @@ function PracticeCard({
   const [outcomeNow, setOutcomeNow] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
+  const refresherOfferRef = useRef<HTMLButtonElement>(null);
+  const heldIdRef = useRef<Id<"heldVerseAttempts"> | null>(null);
+  const heldAccuracyRef = useRef<number | null>(null);
+  const [heldMissPreview, setHeldMissPreview] = useState<MemorySchedule | null>(
+    null,
+  );
+  const [packMemberResults, setPackMemberResults] = useState<
+    Array<{
+      reference: CardReference;
+      from: JourneyBarFill;
+      next: MemorySchedule;
+    }>
+  >([]);
+  const [hasHeldTry, setHasHeldTry] = useState(false);
+  const countedTodayRef = useRef(false);
+  const applyHeldLatest = useEffectEvent(onApplyHeld);
+  const checkedAccuracyRef = useRef(0);
+  const idPrefix = useId();
+  const headerId = `${idPrefix}-refresher-header`;
+  const bannerId = `${idPrefix}-result-banner`;
+  const errorId = `${idPrefix}-save-error`;
+  const step2PromptId = `${idPrefix}-step2-prompt`;
   // Serializes attempt submission for this card: the synchronous in-flight lock
   // collapses same-tick double activations (double-tap, touch+mouse, Enter +
   // click) into a single recorded attempt, and `submitPending` shows a spinner
@@ -1180,11 +1393,13 @@ function PracticeCard({
   // `submitPending` and both clear on the render that ends the save.
   const [submitKind, setSubmitKind] = useState<"grade" | "read" | null>(null);
   const gradePending = submitPending && submitKind === "grade";
+  const practiceRound = refresher.kind === "practice";
   const countedFromMemory =
     showScheduleOutcome &&
     isReviewPhase(status) &&
     !composite &&
-    refresher.phase !== "step1";
+    refresher.phase !== "step1" &&
+    !practiceRound;
 
   useEffect(() => {
     onSavingChange?.(submitPending);
@@ -1245,8 +1460,8 @@ function PracticeCard({
   // Hold the graded result until the learner continues so the feedback they
   // just earned isn't swapped out from under them.
   const reviewed = reviewedOutcome !== undefined;
-  const showReviewed = reviewed && !checked;
-  const showLocked = locked && !checked && !showReviewed;
+  const showReviewed = reviewed && !checked && !refresher.isOpen;
+  const showLocked = locked && !checked && !showReviewed && !refresher.isOpen;
   const showDone = showLocked || showReviewed;
 
   const isReadPrime = hintStage === "full";
@@ -1267,18 +1482,25 @@ function PracticeCard({
 
   const canCheckAnswer =
     !locked &&
-    !reviewed &&
+    !(reviewed && !refresher.isOpen) &&
     !loading &&
     !error &&
     typedAnswer.trim().length > 0 &&
     versePlainText !== "";
   const canContinueRead =
-    !locked && !reviewed && !loading && !error && versePlainText !== "";
+    !locked &&
+    !(reviewed && !refresher.isOpen) &&
+    !loading &&
+    !error &&
+    versePlainText !== "";
   const checkedDiffTokens = useMemo(
     () => (checked ? diffWords(typedAnswer, versePlainText) : []),
     [checked, typedAnswer, versePlainText],
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
+  useEffect(() => {
+    checkedAccuracyRef.current = checkedAccuracy;
+  }, [checkedAccuracy]);
   const checkedQuality = classifyVerseAttempt(checkedDiffTokens);
   const madeLearningProgress =
     checkedQuality !== null &&
@@ -1302,12 +1524,25 @@ function PracticeCard({
     hint?: "first-letters";
     holdSchedule?: boolean;
     refresherUsed?: boolean;
+    replaceHeldId?: Id<"heldVerseAttempts">;
+    skipSessionRow?: boolean;
+    heldMissAccuracy?: number;
   } {
     const hold = refresher.phase === "step1";
+    const afterMissStep2 =
+      refresher.phase === "step2" && refresher.kind === "after-miss";
     return {
       hint: hold ? "first-letters" : undefined,
       holdSchedule: hold || undefined,
       refresherUsed: refresher.phase === "step2" || undefined,
+      replaceHeldId: afterMissStep2
+        ? (heldIdRef.current ?? undefined)
+        : undefined,
+      skipSessionRow: practiceRound,
+      heldMissAccuracy:
+        afterMissStep2 && heldAccuracyRef.current !== null
+          ? heldAccuracyRef.current
+          : undefined,
     };
   }
 
@@ -1328,9 +1563,23 @@ function PracticeCard({
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       const accuracy = verseAttemptAccuracy(tokens);
-      const waitForSave = countedFromMemory || refresher.phase === "step1";
+      checkedAccuracyRef.current = accuracy;
+      const holdingColdMiss = isHoldableColdMiss({
+        reviewPhase: isReviewPhase(status) && !composite,
+        due: showScheduleOutcome && scheduleSnapshot.dueAt <= now,
+        accuracy,
+        passAccuracy: LEARN_PROGRESS_ACCURACY,
+        refresherOpen: refresher.isOpen,
+        countedToday: countedTodayRef.current,
+      });
+      const waitForSave =
+        holdingColdMiss || countedFromMemory || refresher.phase === "step1";
+      const afterMissStep2 =
+        refresher.phase === "step2" && refresher.kind === "after-miss";
       const preview =
-        showScheduleOutcome && quality && !waitForSave
+        showScheduleOutcome &&
+        quality &&
+        (holdingColdMiss || afterMissStep2 || !waitForSave)
           ? previewNextSchedule(scheduleSnapshot, {
               quality,
               accuracy,
@@ -1340,6 +1589,11 @@ function PracticeCard({
               tzOffsetMinutes: new Date(now).getTimezoneOffset(),
               timeZone: getViewerTimeZone(),
               item: reviewItem,
+              refresherUsed: afterMissStep2,
+              heldMissAccuracy:
+                afterMissStep2 && heldAccuracyRef.current !== null
+                  ? heldAccuracyRef.current
+                  : undefined,
             })
           : null;
       if (status !== "reviewing" && status !== "mastered") {
@@ -1350,6 +1604,61 @@ function PracticeCard({
       setChecked(true);
       setOutcomeNow(now);
       setNextSchedule(preview);
+      if (preview) {
+        const savedFill = journeyFillFrom({
+          learnStage,
+          stageReps,
+          status,
+          intervalDays: scheduleSnapshot.intervalDays,
+          ease: scheduleSnapshot.ease,
+        });
+        onJourneyPreview?.({
+          from:
+            afterMissStep2 && heldMissPreview
+              ? journeyFillFrom(heldMissPreview)
+              : savedFill,
+          to: journeyFillFrom(preview),
+        });
+      }
+      if (composite && packMemberSchedules && packMemberRefs && quality) {
+        setPackMemberResults(
+          packMemberRefs.flatMap((memberRef, index) => {
+            const snapshot = packMemberSchedules[index];
+            if (!snapshot) return [];
+            const next = previewNextSchedule(snapshot, {
+              quality,
+              accuracy,
+              mode: "review",
+              now,
+              wordCount: wordCount ?? 0,
+              tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+              timeZone: getViewerTimeZone(),
+              item: "verse",
+            });
+            if (!next) return [];
+            return [
+              {
+                reference: memberRef,
+                from: journeyFillFrom(snapshot),
+                next,
+              },
+            ];
+          }),
+        );
+      }
+      if (holdingColdMiss) {
+        const held = await onHold(tokens, wordCount ?? 0, typedAnswer, now);
+        if (!held.ok) {
+          setSaveError(REFRESH_SAVE_ERROR);
+          return;
+        }
+        heldIdRef.current = held.heldId;
+        heldAccuracyRef.current = accuracy;
+        setHeldMissPreview(preview);
+        setHasHeldTry(true);
+        setSaveError(null);
+        return;
+      }
       const result = await onRecord(tokens, wordCount ?? 0, {
         now,
         ...recordFlags(),
@@ -1363,6 +1672,12 @@ function PracticeCard({
         return;
       }
       setSaveError(null);
+      if (refresher.phase === "step2" && refresher.kind === "after-miss") {
+        heldIdRef.current = null;
+        setHasHeldTry(false);
+        countedTodayRef.current = true;
+      }
+      if (countedFromMemory) countedTodayRef.current = true;
       if (result.schedule) setNextSchedule(result.schedule);
     });
   }
@@ -1371,6 +1686,30 @@ function PracticeCard({
     setSubmitKind("grade");
     submit(async () => {
       const now = countedSaveNowRef.current ?? Date.now();
+      if (!refresher.isOpen && showHeldOffer) {
+        if (!heldIdRef.current) {
+          const held = await onHold(
+            diffWords(typedAnswer, versePlainText),
+            wordCount ?? 0,
+            typedAnswer,
+            now,
+          );
+          if (!held.ok) return;
+          heldIdRef.current = held.heldId;
+          heldAccuracyRef.current = checkedAccuracyRef.current;
+          setHasHeldTry(true);
+          setSaveError(null);
+          return;
+        }
+        const applied = await applyHeldIfNeeded();
+        if (!applied.ok) return;
+        setSaveError(null);
+        if (applied.schedule) setNextSchedule(applied.schedule);
+        refresher.close();
+        resetTyping();
+        onContinueAfterHeld?.();
+        return;
+      }
       const result = await onRecord(
         diffWords(typedAnswer, versePlainText),
         wordCount ?? 0,
@@ -1378,8 +1717,28 @@ function PracticeCard({
       );
       if (!result.ok) return;
       setSaveError(null);
+      if (refresher.phase === "step2" && refresher.kind === "after-miss") {
+        heldIdRef.current = null;
+        setHasHeldTry(false);
+        countedTodayRef.current = true;
+      }
+      if (countedFromMemory) countedTodayRef.current = true;
       if (result.schedule) setNextSchedule(result.schedule);
     });
+  }
+
+  async function applyHeldIfNeeded() {
+    const heldId = heldIdRef.current;
+    if (!heldId) return { ok: true as const, schedule: null };
+    heldIdRef.current = null;
+    setHasHeldTry(false);
+    const result = await onApplyHeld(heldId, checkedAccuracy);
+    if (result.ok) countedTodayRef.current = true;
+    else {
+      heldIdRef.current = heldId;
+      setHasHeldTry(true);
+    }
+    return result;
   }
 
   function continueRead() {
@@ -1402,16 +1761,22 @@ function PracticeCard({
     setTypedAnswer("");
     setSaveError(null);
     setNextSchedule(null);
+    setPackMemberResults([]);
+    onJourneyPreview?.(null);
     countedSaveNowRef.current = null;
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
 
-  function openRefresher() {
+  function openRefresher(
+    kind: "pre-try" | "after-miss" | "practice" = "pre-try",
+  ) {
+    if (kind === "after-miss" && !heldIdRef.current) return;
     setTypedAnswer("");
     setChecked(false);
     setSaveError(null);
+    setNextSchedule(null);
     countedSaveNowRef.current = null;
-    refresher.open();
+    refresher.open(kind);
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
 
@@ -1429,27 +1794,99 @@ function PracticeCard({
       resetTyping();
       return;
     }
+    if (!refresher.isOpen && heldIdRef.current) {
+      setSubmitKind("grade");
+      submit(async () => {
+        const result = await applyHeldIfNeeded();
+        if (!result.ok) {
+          setSaveError(REFRESH_SAVE_ERROR);
+          return;
+        }
+        setSaveError(null);
+        if (result.schedule) setNextSchedule(result.schedule);
+        refresher.close();
+        resetTyping();
+        onContinueAfterHeld?.();
+      });
+      return;
+    }
     refresher.close();
     resetTyping();
     onContinueAfterResult?.();
   }
 
+  useEffect(() => {
+    function flushHeld() {
+      const heldId = heldIdRef.current;
+      if (!heldId) return;
+      heldIdRef.current = null;
+      void applyHeldLatest(heldId, checkedAccuracyRef.current).then(
+        (result) => {
+          if (!result.ok) heldIdRef.current = heldId;
+          else countedTodayRef.current = true;
+        },
+      );
+    }
+    if (leaveHeldRef) leaveHeldRef.current = flushHeld;
+    window.addEventListener("pagehide", flushHeld);
+    return () => {
+      if (leaveHeldRef) leaveHeldRef.current = undefined;
+      window.removeEventListener("pagehide", flushHeld);
+      flushHeld();
+    };
+  }, [leaveHeldRef]);
+
+  const showHeldOffer =
+    checked &&
+    !refresher.isOpen &&
+    isReviewPhase(status) &&
+    !composite &&
+    showScheduleOutcome &&
+    checkedAccuracy < LEARN_PROGRESS_ACCURACY;
+  const afterMissCountedResult =
+    refresher.kind === "after-miss" &&
+    refresher.phase === "step2" &&
+    checked &&
+    !practiceRound;
+  const showJourneyBar = !refresher.isOpen || afterMissCountedResult;
+  const barSchedule =
+    checked && nextSchedule && (showHeldOffer || afterMissCountedResult)
+      ? nextSchedule
+      : null;
+  const dateOnlyClosing =
+    (showHeldOffer || afterMissCountedResult) && nextSchedule
+      ? dateOnlyNextReviewLine(nextSchedule.dueAt, outcomeNow)
+      : null;
+  const defaultFocusRef =
+    showHeldOffer && !saveError ? refresherOfferRef : reviewActionRef;
+
   // Read Continue and the result-view Continue / Try again share one control
   // (only one is mounted at a time) so Enter can advance both steps.
   useEnterToClick(
-    reviewActionRef,
+    defaultFocusRef,
     showDone ? onLeaveDone !== undefined : checked || isReadPrime,
   );
 
   useEffect(() => {
     if (showDone || (!checked && !isReadPrime)) return;
-    reviewActionRef.current?.focus();
-  }, [checked, isReadPrime, showDone]);
-
-  useEffect(() => {
-    if (!saveError || submitPending) return;
-    reviewActionRef.current?.focus();
-  }, [saveError, submitPending]);
+    if (submitPending) return;
+    if (showHeldOffer && !hasHeldTry && !saveError) return;
+    const target =
+      showHeldOffer && !saveError
+        ? refresherOfferRef.current
+        : reviewActionRef.current;
+    target?.focus({ preventScroll: true });
+    document.getElementById(bannerId)?.scrollIntoView?.({ block: "nearest" });
+  }, [
+    checked,
+    isReadPrime,
+    showDone,
+    submitPending,
+    saveError,
+    showHeldOffer,
+    hasHeldTry,
+    bannerId,
+  ]);
 
   // After Read advances into a typing band (or when landing mid-ladder), put
   // the caret in the answer box. Continue is unmounted, so without this the
@@ -1470,7 +1907,19 @@ function PracticeCard({
   const showTryAgain =
     Boolean(saveError) ||
     step1Retry ||
-    (offerPracticeAgain && !countedFromMemory && refresher.phase !== "step1");
+    (offerPracticeAgain &&
+      !countedFromMemory &&
+      !practiceRound &&
+      !showHeldOffer &&
+      refresher.phase !== "step1");
+  const showTryAnother =
+    checked &&
+    !saveError &&
+    refresher.phase === "step2" &&
+    (practiceRound || checkedAccuracy < LEARN_PROGRESS_ACCURACY);
+  const resultDescribedBy = [bannerId, saveError ? errorId : undefined]
+    .filter(Boolean)
+    .join(" ");
   const settledResultAction = showTryAgain ? (
     <>
       <RotateCcw className="h-4 w-4" aria-hidden />
@@ -1495,6 +1944,7 @@ function PracticeCard({
         <CardHeader className="gap-3 text-center">
           <div>
             <p
+              id={headerId}
               className={cn(
                 "inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]",
                 stageColor.text,
@@ -1525,16 +1975,53 @@ function PracticeCard({
               {sessionGoalLabel}
             </p>
           ) : null}
-          {refresher.isOpen ? null : (
+          {showJourneyBar ? (
             <LearningJourneyBar
-              learnStage={learnStage}
-              stageReps={stageReps}
+              learnStage={barSchedule?.learnStage ?? learnStage}
+              stageReps={barSchedule?.stageReps ?? stageReps}
               wordCount={wordCount}
-              status={status}
-              intervalDays={scheduleSnapshot.intervalDays}
-              ease={scheduleSnapshot.ease}
+              status={barSchedule?.status ?? status}
+              intervalDays={
+                barSchedule?.intervalDays ?? scheduleSnapshot.intervalDays
+              }
+              ease={barSchedule?.ease ?? scheduleSnapshot.ease}
+              from={
+                afterMissCountedResult && heldMissPreview
+                  ? journeyFillFrom(heldMissPreview)
+                  : showHeldOffer
+                    ? journeyFillFrom({
+                        learnStage,
+                        stageReps,
+                        status,
+                        intervalDays: scheduleSnapshot.intervalDays,
+                        ease: scheduleSnapshot.ease,
+                      })
+                    : undefined
+              }
             />
-          )}
+          ) : null}
+          {packMemberResults.length > 0 ? (
+            <ul className="space-y-3">
+              {packMemberResults.map((row) => (
+                <li key={formatVerseRefTitle(row.reference)}>
+                  <p className="text-xs font-medium">
+                    {formatVerseRefTitle(row.reference)}
+                  </p>
+                  <LearningJourneyBar
+                    learnStage={row.next.learnStage}
+                    stageReps={row.next.stageReps}
+                    status={row.next.status}
+                    intervalDays={row.next.intervalDays}
+                    ease={row.next.ease}
+                    from={row.from}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {dateOnlyNextReviewLine(row.next.dueAt, outcomeNow)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {locked ? (
             <p className="text-xs text-muted-foreground">
               Tomorrow: {stageInfo.label}
@@ -1606,6 +2093,11 @@ function PracticeCard({
                             ? NOW_TRY_WITHOUT_HINTS
                             : undefined
                         }
+                        messageId={
+                          refresher.phase === "step2"
+                            ? step2PromptId
+                            : undefined
+                        }
                         onRefresher={
                           offerRefresher &&
                           !composite &&
@@ -1614,7 +2106,7 @@ function PracticeCard({
                           !error &&
                           versePlainText !== "" &&
                           refresher.phase === "off"
-                            ? openRefresher
+                            ? () => openRefresher("pre-try")
                             : undefined
                         }
                         disabled={submitPending}
@@ -1648,6 +2140,16 @@ function PracticeCard({
                           ? "Your recited passage"
                           : "Your recalled verse"
                       }
+                      aria-describedby={
+                        [
+                          headerId,
+                          refresher.phase === "step2"
+                            ? step2PromptId
+                            : undefined,
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || undefined
+                      }
                     />
                   )}
                 </>
@@ -1668,9 +2170,16 @@ function PracticeCard({
                     )}
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
-                    scheduleHeld={refresher.phase === "step1"}
+                    scheduleHeld={refresher.phase === "step1" || practiceRound}
                     skipCelebrate={refresher.phase === "step1"}
                     saveError={saveError}
+                    bannerId={bannerId}
+                    errorId={errorId}
+                    closingLine={
+                      practiceRound && refresher.phase === "step2"
+                        ? PRACTICE_ONLY_CLOSING
+                        : dateOnlyClosing
+                    }
                   />
                   {checkedQuality !== "exact" && (
                     <div
@@ -1738,20 +2247,36 @@ function PracticeCard({
                 </Button>
               ) : null
             ) : checked ? (
-              <Button
-                ref={reviewActionRef}
-                type="button"
-                variant="default"
-                className="flex-1 sm:flex-none"
-                onClick={continueAttempt}
-                // Hold until the attempt settles: this both keeps the submit
-                // lock from swallowing the next check (resetting the question
-                // mid-flight would strand it) and ensures the adopted band/reps
-                // land before the next rep renders, so it can't re-record stale.
-                loading={submitPending}
-              >
-                {resultActionLabel}
-              </Button>
+              <>
+                {showHeldOffer ? (
+                  <RefresherOfferButton
+                    label={NEED_A_REFRESHER_LABEL}
+                    onClick={() => openRefresher("after-miss")}
+                    disabled={submitPending || !hasHeldTry}
+                    buttonRef={refresherOfferRef}
+                    describedBy={resultDescribedBy}
+                    tooltip={NEED_A_REFRESHER_TOOLTIP}
+                  />
+                ) : null}
+                {showTryAnother ? (
+                  <RefresherOfferButton
+                    label={TRY_ANOTHER_REFRESHER_LABEL}
+                    onClick={() => openRefresher("practice")}
+                    disabled={submitPending}
+                  />
+                ) : null}
+                <Button
+                  ref={reviewActionRef}
+                  type="button"
+                  variant="default"
+                  className="flex-1 sm:flex-none"
+                  onClick={continueAttempt}
+                  loading={submitPending}
+                  aria-describedby={resultDescribedBy}
+                >
+                  {resultActionLabel}
+                </Button>
+              </>
             ) : isReadPrime ? (
               <Button
                 ref={reviewActionRef}
@@ -1945,6 +2470,7 @@ function PracticeShell({
   sessionLabel,
   scopeLabel,
   onExit,
+  onHome,
   backLabel = "Back to Memory",
   exitHref,
   backDisabled = false,
@@ -1954,6 +2480,7 @@ function PracticeShell({
   sessionLabel: MemorySessionLabel;
   scopeLabel: string;
   onExit: () => void;
+  onHome?: () => void;
   backLabel?: string;
   exitHref?: string;
   backDisabled?: boolean;
@@ -1966,6 +2493,7 @@ function PracticeShell({
         <div className="flex min-w-0 items-center gap-3">
           <SessionBackButton
             onExit={onExit}
+            onHome={onHome}
             label={backLabel}
             exitHref={exitHref}
             disabled={backDisabled}

@@ -200,6 +200,11 @@ export function canStartOverPassage(
 }
 
 export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
+export const NEED_A_REFRESHER_TOOLTIP =
+  "Do a refresher on this verse for some more practice.";
+export const TRY_ANOTHER_REFRESHER_LABEL = "Try another refresher";
+export const PRACTICE_ONLY_CLOSING =
+  "Practice only, your progress didn't change.";
 export const NOW_TRY_WITHOUT_HINTS = "Now try it without the hints.";
 export const REFRESH_SAVE_ERROR = "Couldn't save your result. Try again.";
 

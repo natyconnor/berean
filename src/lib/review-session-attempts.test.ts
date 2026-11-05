@@ -4,6 +4,7 @@ import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
   recalledCopy,
+  refresherResultCopy,
   type ReviewSessionAttempt,
 } from "./review-session-attempts";
 
@@ -36,10 +37,40 @@ describe("groupReviewSessionAttempts", () => {
     expect(grouped[0]?.accuracies).toEqual([85, 100]);
     expect(grouped[1]?.accuracies).toEqual([90]);
   });
+
+  it("keeps a later refresher and landed schedule on the same row", () => {
+    const schedule = {
+      status: "reviewing" as const,
+      learnStage: 3,
+      stageReps: 2,
+      intervalDays: 5,
+      ease: 2.3,
+      dueAt: 1_700_000_000_000,
+    };
+    const grouped = groupReviewSessionAttempts([
+      { ...john, accuracy: 78 },
+      {
+        ...john,
+        accuracy: 100,
+        refresherUsed: true,
+        schedule,
+      },
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.accuracies).toEqual([78, 100]);
+    expect(grouped[0]?.refresherUsed).toBe(true);
+    expect(grouped[0]?.schedule).toEqual(schedule);
+  });
 });
 
 describe("recalledCopy", () => {
   it("names a retry as a second score", () => {
     expect(recalledCopy([85, 100])).toBe("85%, then 100% recalled");
+  });
+});
+
+describe("refresherResultCopy", () => {
+  it("names the first and last scores when a refresher was used", () => {
+    expect(refresherResultCopy([78, 100])).toBe("78% → 100% · Refresher used");
   });
 });

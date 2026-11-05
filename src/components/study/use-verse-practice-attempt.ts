@@ -22,6 +22,7 @@ interface RecordAttemptArgs {
   hint?: "first-letters";
   holdSchedule?: boolean;
   refresherUsed?: boolean;
+  replaceHeldId?: Id<"heldVerseAttempts">;
 }
 
 interface UseVersePracticeAttemptReturn {
@@ -68,6 +69,7 @@ export function useVersePracticeAttempt(
         hint: args.hint,
         holdSchedule: args.holdSchedule,
         refresherUsed: args.refresherUsed,
+        replaceHeldId: args.replaceHeldId,
       });
       if (!result.ok || !result.schedule) return result;
       const applied = appliedSeqByVerseId.current.get(verseKey) ?? 0;

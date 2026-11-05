@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -112,6 +112,40 @@ describe("Add to pack on session summaries", () => {
     expect(
       await screen.findByRole("button", { name: /Verses on hope\s*Added/ }),
     ).toBeDisabled();
+  });
+
+  it("keeps the refresher result line next to the bar and next-review date", () => {
+    const dueAt = Date.now() + 24 * 60 * 60 * 1000;
+    renderWithTooltips(
+      <ReviewSummary
+        attempts={[
+          { reference: JOHN_3_16, accuracy: 78 },
+          {
+            reference: JOHN_3_16,
+            accuracy: 100,
+            refresherUsed: true,
+            schedule: {
+              status: "reviewing",
+              learnStage: 3,
+              stageReps: 2,
+              intervalDays: 5,
+              ease: 2.3,
+              dueAt,
+            },
+          },
+        ]}
+        averageAccuracy={89}
+        remaining={0}
+        onDone={() => {}}
+      />,
+    );
+    const line = screen.getByText("78% → 100% · Refresher used");
+    const row = line.closest("li");
+    expect(row).toBeTruthy();
+    expect(
+      within(row as HTMLElement).getByLabelText(/Progress to mastered/),
+    ).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText(/^Next review /)).toBeVisible();
   });
 
   it("offers it on reviewed verses, not on a pack recited as one passage", async () => {

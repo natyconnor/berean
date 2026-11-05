@@ -1,5 +1,11 @@
-import { query, mutation, type QueryCtx } from "./_generated/server";
+import {
+  query,
+  mutation,
+  internalMutation,
+  type QueryCtx,
+} from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { paginationOptsValidator, type PaginationResult } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
@@ -41,7 +47,6 @@ import {
   MAX_REVIEW_ACTIVITY_ROWS,
   ensureReviewActivityDays as backfillReviewActivityDaysIfNeeded,
   loadBackfilledReviewDays,
-  noteVerseReviewForActivity,
 } from "./lib/reviewActivityDays";
 import {
   toReviewingPassagePackItem,
@@ -57,9 +62,19 @@ import {
   isDueForReview,
   isLearningLocked,
   isReviewPhase,
-  planVerseAttemptSchedule,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
+import {
+  applyHeldById,
+  applyLeftoverHeldForUser,
+  canHoldColdMiss,
+  commitCountedReview,
+  deleteHeldIfOwned,
+  hasCountedReviewToday,
+  HELD_ATTEMPT_BACKSTOP_MS,
+  replaceHeldForVerse,
+  scheduleFromMemory,
+} from "./lib/heldVerseAttempts";
 import {
   attemptsSinceStartOver,
   startOverVersePatch,
@@ -541,6 +556,7 @@ export const recordAttempt = mutation({
     hint: v.optional(v.literal("first-letters")),
     holdSchedule: v.optional(v.boolean()),
     refresherUsed: v.optional(v.boolean()),
+    replaceHeldId: v.optional(v.id("heldVerseAttempts")),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -565,17 +581,7 @@ export const recordAttempt = mutation({
       }
     }
 
-    const current: MemorySchedule = {
-      status: memory.status,
-      learnStage: memory.learnStage,
-      stageReps: memory.stageReps ?? 0,
-      ease: memory.ease,
-      intervalDays: memory.intervalDays,
-      dueAt: memory.dueAt,
-      consecutiveCorrect: memory.consecutiveCorrect,
-      lapses: memory.lapses,
-      earlyReviewApplied: memory.earlyReviewApplied ?? false,
-    };
+    const current = scheduleFromMemory(memory);
 
     // Soft lock: today's learning session is done — refuse to bank more reps.
     if (
@@ -587,84 +593,136 @@ export const recordAttempt = mutation({
       return current;
     }
 
-    const existing = await ctx.db
-      .query("verseMemoryReviews")
-      .withIndex("by_verseMemoryId_createdAt", (q) =>
-        q.eq("verseMemoryId", memory._id).eq("createdAt", args.now),
-      )
-      .first();
-    if (existing) {
-      return current;
+    let heldMissAccuracy: number | undefined;
+    if (args.replaceHeldId) {
+      const held = await deleteHeldIfOwned(ctx, userId, args.replaceHeldId);
+      heldMissAccuracy = held?.accuracy;
     }
 
     const holdSchedule = args.holdSchedule === true;
     const refresherUsed = args.refresherUsed === true;
+    // A later refresher the same day is practice only. Learn still records
+    // every rep; a due review's first counted try still records.
+    if (
+      !holdSchedule &&
+      refresherUsed &&
+      isReviewPhase(memory.status) &&
+      (await hasCountedReviewToday(ctx, memory._id, args.now, args.timeZone))
+    ) {
+      return current;
+    }
 
-    await ctx.db.insert("verseMemoryReviews", {
-      userId,
-      verseRefId: args.verseRefId,
-      verseMemoryId: memory._id,
+    return await commitCountedReview(ctx, memory, {
       quality: args.quality,
       accuracy: args.accuracy,
       stage: args.stage,
       mode: args.mode,
       durationMs: args.durationMs,
-      createdAt: args.now,
-      ...(args.hint ? { hint: args.hint } : {}),
-      ...(holdSchedule ? { holdSchedule: true } : {}),
-      ...(refresherUsed ? { refresherUsed: true } : {}),
-    });
-
-    if (args.timeZone) {
-      await noteVerseReviewForActivity(ctx, {
-        userId,
-        createdAt: args.now,
-        accuracy: args.accuracy,
-        mode: args.mode,
-        stage: args.stage,
-        timeZone: args.timeZone,
-        ...(holdSchedule ? { holdSchedule: true } : {}),
-      });
-    }
-
-    const { next, patch } = planVerseAttemptSchedule(current, {
-      quality: args.quality,
-      accuracy: args.accuracy,
-      mode: args.mode,
       now: args.now,
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
+      hint: args.hint,
       holdSchedule,
-      refresherUsed,
+      refresherUsed: args.refresherUsed === true,
+      heldMissAccuracy,
     });
+  },
+});
 
-    if (!patch) return next;
+const heldAttemptIdValidator = v.object({
+  heldId: v.id("heldVerseAttempts"),
+});
 
-    if (memory.status !== next.status) {
-      await adjustUserMemoryStats(
-        ctx,
-        userId,
-        args.now,
-        memory.status,
-        next.status,
-      );
+const applyHeldResultValidator = v.object({
+  applied: v.boolean(),
+  schedule: v.union(memoryScheduleValidator, v.null()),
+});
+
+/**
+ * Store a first unhinted miss without counting it. At most one per verse.
+ * Schedules a one-shot backstop that no-ops if the held try is already gone.
+ */
+export const holdAttempt = mutation({
+  args: {
+    verseRefId: v.id("verseRefs"),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    answer: v.string(),
+    stage: v.number(),
+    mode: modeValidator,
+    durationMs: v.optional(v.number()),
+    now: v.number(),
+    wordCount: v.optional(v.number()),
+    tzOffsetMinutes: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
+  },
+  returns: heldAttemptIdValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const ref = await ctx.db.get(args.verseRefId);
+    if (!ref || ref.userId !== userId) {
+      throw new Error("Verse reference not found");
     }
-
-    await ctx.db.patch(memory._id, {
-      status: next.status,
-      learnStage: next.learnStage,
-      stageReps: next.stageReps,
-      ease: next.ease,
-      intervalDays: next.intervalDays,
-      dueAt: next.dueAt,
-      consecutiveCorrect: next.consecutiveCorrect,
-      lapses: next.lapses,
-      earlyReviewApplied: next.earlyReviewApplied,
-      lastReviewedAt: args.now,
+    const memory = await requireInMemory(ctx, userId, args.verseRefId);
+    if (!canHoldColdMiss(memory, args.accuracy, args.now)) {
+      throw new Error("This try cannot be held.");
+    }
+    if (await hasCountedReviewToday(ctx, memory._id, args.now, args.timeZone)) {
+      throw new Error("This verse already has a counted try today.");
+    }
+    const heldId = await replaceHeldForVerse(ctx, {
+      userId,
+      verseRefId: args.verseRefId,
+      verseMemoryId: memory._id,
+      quality: args.quality,
+      accuracy: args.accuracy,
+      answer: args.answer,
+      attemptedAt: args.now,
+      stage: args.stage,
+      mode: args.mode,
+      durationMs: args.durationMs,
+      wordCount: args.wordCount,
+      tzOffsetMinutes: args.tzOffsetMinutes,
+      timeZone: args.timeZone,
     });
+    await ctx.scheduler.runAfter(
+      HELD_ATTEMPT_BACKSTOP_MS,
+      internal.verseMemory.applyHeldAttemptBackstop,
+      { heldId },
+    );
+    return { heldId };
+  },
+});
 
-    return next;
+/** Apply a held miss as today's counted try. Missing ids are a no-op. */
+export const applyHeldAttempt = mutation({
+  args: { heldId: v.id("heldVerseAttempts") },
+  returns: applyHeldResultValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    return await applyHeldById(ctx, args.heldId, userId);
+  },
+});
+
+/** Session and dashboard load: apply any leftover held tries. No polling. */
+export const applyLeftoverHeldAttempts = mutation({
+  args: {},
+  returns: v.object({ applied: v.number() }),
+  handler: async (ctx) => {
+    const userId = await getCurrentUserId(ctx);
+    const applied = await applyLeftoverHeldForUser(ctx, userId);
+    return { applied };
+  },
+});
+
+/** Closed-tab backstop. Does nothing when the held try is already gone. */
+export const applyHeldAttemptBackstop = internalMutation({
+  args: { heldId: v.id("heldVerseAttempts") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await applyHeldById(ctx, args.heldId);
+    return null;
   },
 });
 

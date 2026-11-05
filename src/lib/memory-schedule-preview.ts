@@ -1,10 +1,10 @@
 import {
   EASE_START,
   isLearningPhase,
-  scheduleNext,
+  planVerseAttemptSchedule,
   type MemorySchedule,
   type MemoryStatus,
-  type ReviewInput,
+  type VerseAttemptPlanInput,
 } from "@/lib/memory-scheduler";
 
 /**
@@ -52,20 +52,20 @@ export function memoryScheduleFromSnapshot(
 }
 
 /**
- * Client-side `scheduleNext` so review banners can show "in N days" on Check
- * instead of waiting for `recordAttempt`. Same inputs as the mutation: pass
- * the attempt's `now` and timezone so the due label matches the server.
+ * Client-side `planVerseAttemptSchedule` so review banners can show the next
+ * date on Check instead of waiting for `recordAttempt`. Same inputs as the
+ * mutation: pass the attempt's `now` and timezone so the due label matches.
  */
 export function previewNextSchedule(
   snapshot: MemoryScheduleSnapshot,
-  input: ReviewInput,
+  input: VerseAttemptPlanInput,
 ): MemorySchedule | null {
   const current = memoryScheduleFromSnapshot(snapshot);
   if (!current) return null;
-  return scheduleNext(current, {
+  return planVerseAttemptSchedule(current, {
     ...input,
     tzOffsetMinutes:
       input.tzOffsetMinutes ?? new Date(input.now).getTimezoneOffset(),
     timeZone: input.timeZone,
-  });
+  }).next;
 }

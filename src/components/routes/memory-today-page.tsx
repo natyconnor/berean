@@ -42,6 +42,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useLeftoverHeldAttemptsReady } from "@/hooks/use-apply-leftover-held-attempts";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
@@ -146,20 +147,24 @@ function GlobalTodayLoader({
   chrome: TodayChrome;
 }): JSX.Element {
   const now = useLiveNow();
+  const leftoversReady = useLeftoverHeldAttemptsReady();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
-  const passages = useFrozenQuery(api.passageMemory.dueForLearning, {
-    now,
-    tzOffsetMinutes,
-  });
-  const learnQueue = useFrozenQuery(api.verseMemory.learnQueue, {
-    now,
-    tzOffsetMinutes,
-  });
-  const dueQueue = useFrozenQuery(api.verseMemory.dueQueue, { now });
-  const stats = useFrozenQuery(api.verseMemory.memoryStats, {
-    now,
-    tzOffsetMinutes,
-  });
+  const passages = useFrozenQuery(
+    api.passageMemory.dueForLearning,
+    leftoversReady ? { now, tzOffsetMinutes } : "skip",
+  );
+  const learnQueue = useFrozenQuery(
+    api.verseMemory.learnQueue,
+    leftoversReady ? { now, tzOffsetMinutes } : "skip",
+  );
+  const dueQueue = useFrozenQuery(
+    api.verseMemory.dueQueue,
+    leftoversReady ? { now } : "skip",
+  );
+  const stats = useFrozenQuery(
+    api.verseMemory.memoryStats,
+    leftoversReady ? { now, tzOffsetMinutes } : "skip",
+  );
 
   if (
     passages === undefined ||
@@ -207,25 +212,28 @@ function PackTodayLoader({
   chrome: TodayChrome;
 }): JSX.Element {
   const now = useLiveNow();
+  const leftoversReady = useLeftoverHeldAttemptsReady();
   const tzOffsetMinutes = new Date(now).getTimezoneOffset();
-  const pack = useFrozenQuery(api.packs.get, { id: packId });
-  const members = useFrozenQuery(api.packs.resolveMembers, {
-    id: packId,
-    now,
-  });
-  const passage = useFrozenQuery(api.passageMemory.getForPack, {
-    packId,
-    now,
-    tzOffsetMinutes,
-  });
-  const duePassages = useFrozenQuery(api.passageMemory.dueForLearning, {
-    now,
-    tzOffsetMinutes,
-  });
-  const stats = useFrozenQuery(api.verseMemory.memoryStats, {
-    now,
-    tzOffsetMinutes,
-  });
+  const pack = useFrozenQuery(
+    api.packs.get,
+    leftoversReady ? { id: packId } : "skip",
+  );
+  const members = useFrozenQuery(
+    api.packs.resolveMembers,
+    leftoversReady ? { id: packId, now } : "skip",
+  );
+  const passage = useFrozenQuery(
+    api.passageMemory.getForPack,
+    leftoversReady ? { packId, now, tzOffsetMinutes } : "skip",
+  );
+  const duePassages = useFrozenQuery(
+    api.passageMemory.dueForLearning,
+    leftoversReady ? { now, tzOffsetMinutes } : "skip",
+  );
+  const stats = useFrozenQuery(
+    api.verseMemory.memoryStats,
+    leftoversReady ? { now, tzOffsetMinutes } : "skip",
+  );
 
   if (
     pack === undefined ||
