@@ -3,6 +3,11 @@ import type { JSX } from "react";
 
 import { accuracyFeedback, type AccuracyBand } from "@/lib/accuracy-feedback";
 import {
+  PRACTICE_PASS_EMOJI,
+  PRACTICE_PASS_LEAD,
+  PRACTICE_PASS_REST,
+} from "@/lib/memory-copy";
+import {
   isLearningPhase,
   reviewGradeOutcome,
   type MemorySchedule,
@@ -53,6 +58,7 @@ interface VerseMemoryFeedbackProps {
   bannerId?: string;
   /** Replaces the Next review line, e.g. a practice-only close. */
   closingLine?: string | null;
+  practiceOnly?: boolean;
 }
 
 const BANNER_TONE: Record<AccuracyBand, string> = {
@@ -101,6 +107,7 @@ export function VerseMemoryFeedback({
   skipCelebrate = false,
   bannerId,
   closingLine = null,
+  practiceOnly = false,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
   const scored =
@@ -111,9 +118,15 @@ export function VerseMemoryFeedback({
     scheduleHeld,
   });
   const { band } = feedback;
-  const celebrate = band === "exact" && !skipCelebrate;
-  const praise =
-    !showScheduleOutcome && requireExactToAdvance && quality === "close"
+  const practicePass = practiceOnly && (band === "exact" || band === "pass");
+  const tone = practicePass ? "pass" : band;
+  const lead = practicePass ? PRACTICE_PASS_LEAD : feedback.lead;
+  const rest = practicePass ? PRACTICE_PASS_REST : feedback.rest;
+  const emoji = practicePass ? PRACTICE_PASS_EMOJI : feedback.emoji;
+  const celebrate = band === "exact" && !skipCelebrate && !practicePass;
+  const praise = practicePass
+    ? null
+    : !showScheduleOutcome && requireExactToAdvance && quality === "close"
       ? FROM_MEMORY_CLOSE_MESSAGE
       : attemptPraiseLine({ accuracy: scored, outcome, errors });
   const consequence =
@@ -125,11 +138,11 @@ export function VerseMemoryFeedback({
 
   return (
     <motion.div
-      key={`${band}-${attemptKey}`}
+      key={`${tone}-${attemptKey}`}
       id={bannerId}
       role="status"
       aria-live="polite"
-      data-tone={band}
+      data-tone={tone}
       // A pop, not a fade: the result reads the moment it lands.
       initial={reduceMotion ? false : { y: -6, scale: celebrate ? 0.94 : 0.98 }}
       animate={{ y: 0, scale: 1 }}
@@ -140,25 +153,23 @@ export function VerseMemoryFeedback({
       }
       className={cn(
         "relative mx-auto flex w-full max-w-xl flex-col items-center gap-1 overflow-visible rounded-2xl border px-4 py-4 text-center shadow-sm",
-        BANNER_TONE[band],
+        BANNER_TONE[tone],
       )}
     >
       <ResultEmoji
-        emoji={feedback.emoji}
+        emoji={emoji}
         celebrate={celebrate}
         reduceMotion={reduceMotion}
       />
       <p className="mt-1 text-lg leading-snug text-balance">
-        <span className={cn("font-semibold", LEAD_TONE[band])}>
-          {feedback.lead}
-        </span>
-        {feedback.rest ? (
-          <span className="text-foreground/80"> {feedback.rest}</span>
-        ) : null}
+        <span className={cn("font-semibold", LEAD_TONE[tone])}>{lead}</span>
+        {rest ? <span className="text-foreground/80"> {rest}</span> : null}
       </p>
-      <p className="text-sm font-medium leading-snug text-balance text-foreground/90">
-        {praise}
-      </p>
+      {praise ? (
+        <p className="text-sm font-medium leading-snug text-balance text-foreground/90">
+          {praise}
+        </p>
+      ) : null}
       <p className="text-xs tabular-nums text-muted-foreground">
         {`${scored}% recalled`}
         {note ? ` · ${note}` : null}

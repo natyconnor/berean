@@ -9,6 +9,9 @@ import {
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
+  PRACTICE_PASS_EMOJI,
+  PRACTICE_PASS_LEAD,
+  PRACTICE_PASS_REST,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
   canStartOver,
@@ -231,6 +234,12 @@ describe("refresher copy", () => {
     expect(PRACTICE_ONLY_CLOSING).toBe(
       "Practice only, your progress didn't change.",
     );
+    expect(PRACTICE_PASS_LEAD).toBe("Good work getting back on track.");
+    expect(PRACTICE_PASS_REST).toBe(
+      "Next time, see if you can do it on the first try.",
+    );
+    expect(PRACTICE_PASS_REST).not.toContain("see if it comes back");
+    expect(PRACTICE_PASS_EMOJI).toBe("👍");
     expect(NOW_TRY_WITHOUT_HINTS).toBe("Now try it without the hints.");
     expect(REFRESH_SAVE_ERROR).toBe("Couldn't save your result. Try again.");
     expect(refresherHeader(1)).toBe("Refresh · First letters · 1 of 2");

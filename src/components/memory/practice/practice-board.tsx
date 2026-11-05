@@ -1394,6 +1394,7 @@ function PracticeCard({
   const [submitKind, setSubmitKind] = useState<"grade" | "read" | null>(null);
   const gradePending = submitPending && submitKind === "grade";
   const practiceRound = refresher.kind === "practice";
+  const practiceFromMemory = practiceRound && refresher.phase === "step2";
   const countedFromMemory =
     showScheduleOutcome &&
     isReviewPhase(status) &&
@@ -2176,10 +2177,11 @@ function PracticeCard({
                     bannerId={bannerId}
                     errorId={errorId}
                     closingLine={
-                      practiceRound && refresher.phase === "step2"
+                      practiceFromMemory
                         ? PRACTICE_ONLY_CLOSING
                         : dateOnlyClosing
                     }
+                    practiceOnly={practiceFromMemory}
                   />
                   {checkedQuality !== "exact" && (
                     <div

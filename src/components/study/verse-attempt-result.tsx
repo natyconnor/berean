@@ -35,6 +35,7 @@ interface VerseAttemptResultProps {
   bannerId?: string;
   errorId?: string;
   closingLine?: string | null;
+  practiceOnly?: boolean;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -166,6 +167,7 @@ export function VerseAttemptResult({
   bannerId,
   errorId,
   closingLine = null,
+  practiceOnly = false,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -196,6 +198,7 @@ export function VerseAttemptResult({
           skipCelebrate={skipCelebrate}
           bannerId={bannerId}
           closingLine={closingLine}
+          practiceOnly={practiceOnly}
         />
       ) : null}
       {saveError ? (

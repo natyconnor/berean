@@ -1,6 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  PRACTICE_ONLY_CLOSING,
+  PRACTICE_PASS_EMOJI,
+  PRACTICE_PASS_LEAD,
+  PRACTICE_PASS_REST,
+} from "@/lib/memory-copy";
+
 import { FROM_MEMORY_CLOSE_MESSAGE } from "./from-memory-messages";
 import { VerseMemoryFeedback } from "./verse-memory-feedback";
 
@@ -336,6 +343,88 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByText("Word for word.")).toBeInTheDocument();
     expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent(/Next review/);
+  });
+
+  it("uses practice pass copy at 100% and hides Nailed it", () => {
+    useReducedMotion.mockReturnValue(false);
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={100}
+        attemptKey="practice-pass-100"
+        showScheduleOutcome
+        scheduleHeld
+        practiceOnly
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+        closingLine={PRACTICE_ONLY_CLOSING}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveAttribute("data-tone", "pass");
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent(
+      PRACTICE_PASS_EMOJI,
+    );
+    expect(banner).toHaveTextContent(PRACTICE_PASS_LEAD);
+    expect(banner).toHaveTextContent(PRACTICE_PASS_REST);
+    expect(banner).toHaveTextContent("100% recalled");
+    expect(banner).toHaveTextContent(PRACTICE_ONLY_CLOSING);
+    expect(banner).not.toHaveTextContent("Nailed it!");
+    expect(banner).not.toHaveTextContent("Word for word.");
+    expect(banner).not.toHaveTextContent("Well remembered");
+    expect(banner).not.toHaveTextContent("see if it comes back");
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
+  });
+
+  it("uses practice pass copy at 90% and hides Well remembered", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={90}
+        attemptKey="practice-pass-90"
+        showScheduleOutcome
+        scheduleHeld
+        practiceOnly
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+        closingLine={PRACTICE_ONLY_CLOSING}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveAttribute("data-tone", "pass");
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent(
+      PRACTICE_PASS_EMOJI,
+    );
+    expect(banner).toHaveTextContent(PRACTICE_PASS_LEAD);
+    expect(banner).toHaveTextContent(PRACTICE_PASS_REST);
+    expect(banner).toHaveTextContent("90% recalled");
+    expect(banner).not.toHaveTextContent("Well remembered");
+    expect(banner).not.toHaveTextContent("Nailed it!");
+    expect(banner).not.toHaveTextContent("see if it comes back");
+    expect(banner).toHaveTextContent(PRACTICE_ONLY_CLOSING);
+  });
+
+  it("keeps S1 miss copy on a practice-only 70%", () => {
+    render(
+      <VerseMemoryFeedback
+        quality="close"
+        accuracy={70}
+        attemptKey="practice-miss-70"
+        showScheduleOutcome
+        scheduleHeld
+        practiceOnly
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+        closingLine={PRACTICE_ONLY_CLOSING}
+      />,
+    );
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveTextContent(
+      "So close. A few words slipped. The highlighted ones are worth another look.",
+    );
+    expect(banner).not.toHaveTextContent(PRACTICE_PASS_LEAD);
+    expect(banner).toHaveTextContent(PRACTICE_ONLY_CLOSING);
+    expect(screen.getByTestId("result-emoji")).toHaveTextContent("🌱");
   });
 
   it("puts a practice-only closing line where Next review would sit", () => {
