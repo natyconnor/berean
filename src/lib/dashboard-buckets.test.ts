@@ -6,12 +6,16 @@ import {
   bucketForecastCounts,
   bucketReviewCounts,
   computeStreak,
+  countsTowardAccuracy,
+  countsTowardActivity,
+  FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY,
   isReadPrimeAttempt,
   normalizeTimeZone,
   overallAccuracy,
   mergeReviewDayAggregates,
   reviewActivityFromDayAggregates,
   reviewActivityFromLogs,
+  type ReviewLogRow,
   startOfUtcDay,
   startOfZonedDay,
   utcDayStarts,
@@ -140,6 +144,82 @@ describe("isReadPrimeAttempt", () => {
     expect(isReadPrimeAttempt({ mode: "learn", stage: 1 })).toBe(false);
     expect(isReadPrimeAttempt({ mode: "review", stage: 0 })).toBe(false);
     expect(isReadPrimeAttempt({})).toBe(false);
+  });
+});
+
+describe("first-letters activity", () => {
+  const hold: ReviewLogRow = {
+    createdAt: NOW,
+    accuracy: 90,
+    mode: "review",
+    stage: 3,
+    holdSchedule: true,
+  };
+  const learnFirstLetters: ReviewLogRow = {
+    createdAt: NOW,
+    accuracy: 88,
+    mode: "learn",
+    stage: 1,
+  };
+  const refresherFromMemory: ReviewLogRow = {
+    createdAt: NOW,
+    accuracy: 92,
+    mode: "review",
+    stage: 3,
+  };
+
+  function todayHeatmapCount(rows: ReviewLogRow[]): number {
+    return (
+      reviewActivityFromLogs(rows, NOW, 1, 1, "UTC").heatmap[0]?.count ?? 0
+    );
+  }
+
+  it("is false: refresher First letters do not count (Nathan, Nov 2, 10:49 AM PT)", () => {
+    expect(FIRST_LETTERS_TRIES_COUNT_FOR_ACTIVITY).toBe(false);
+    expect(countsTowardActivity(hold)).toBe(false);
+    expect(countsTowardActivity(hold, false)).toBe(false);
+    expect(countsTowardActivity(hold, true)).toBe(true);
+    expect(countsTowardActivity(learnFirstLetters)).toBe(true);
+    expect(countsTowardActivity(refresherFromMemory)).toBe(true);
+  });
+
+  it("never counts a First letters hold toward accuracy", () => {
+    expect(countsTowardAccuracy(hold)).toBe(false);
+    expect(countsTowardAccuracy(learnFirstLetters)).toBe(true);
+    expect(countsTowardAccuracy(refresherFromMemory)).toBe(true);
+    const buckets = bucketAccuracyAverages(
+      [hold, learnFirstLetters, refresherFromMemory],
+      NOW,
+      1,
+    );
+    expect(buckets[0]).toEqual({ average: 90, count: 2 });
+  });
+
+  it("does not put a refresher First letters-only day on the heatmap or streak", () => {
+    const days = aggregateReviewDays([hold], NOW, 1, "UTC");
+    expect(days).toEqual([]);
+    expect(todayHeatmapCount([hold])).toBe(0);
+    expect(computeStreak([0])).toEqual({ days: 0, atRisk: false });
+  });
+
+  it("still counts Learn-flow First letters on the heatmap and streak", () => {
+    expect(todayHeatmapCount([learnFirstLetters])).toBe(1);
+    expect(todayHeatmapCount([learnFirstLetters, hold])).toBe(1);
+    expect(computeStreak([1])).toEqual({ days: 1, atRisk: false });
+    const days = aggregateReviewDays([learnFirstLetters], NOW, 1, "UTC");
+    expect(days).toHaveLength(1);
+    expect(days[0]?.count).toBe(1);
+    expect(days[0]?.accuracyCount).toBe(1);
+  });
+
+  it("counts a refresher From memory try on the heatmap and streak", () => {
+    expect(todayHeatmapCount([refresherFromMemory])).toBe(1);
+    expect(todayHeatmapCount([hold, refresherFromMemory])).toBe(1);
+    expect(computeStreak([1])).toEqual({ days: 1, atRisk: false });
+    const days = aggregateReviewDays([refresherFromMemory], NOW, 1, "UTC");
+    expect(days).toHaveLength(1);
+    expect(days[0]?.count).toBe(1);
+    expect(days[0]?.accuracyCount).toBe(1);
   });
 });
 

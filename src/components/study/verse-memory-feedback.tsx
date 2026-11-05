@@ -45,6 +45,10 @@ interface VerseMemoryFeedbackProps {
   errors?: AttemptErrorCounts;
   /** Trails the percentage, e.g. "Pass at 85%". */
   note?: string;
+  /** First letters refresher: swap the miss line and hide "Next review". */
+  scheduleHeld?: boolean;
+  /** Skip the 100% celebration pop (step 1 of a refresher). */
+  skipCelebrate?: boolean;
 }
 
 const BANNER_TONE: Record<AccuracyBand, string> = {
@@ -89,21 +93,27 @@ export function VerseMemoryFeedback({
   accuracy,
   errors,
   note,
+  scheduleHeld = false,
+  skipCelebrate = false,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
   const scored =
     accuracy ?? (quality === "exact" ? 100 : quality === "close" ? 70 : 0);
   const outcome = reviewGradeOutcome(quality, scored);
-  const feedback = accuracyFeedback(scored, { exact: quality === "exact" });
+  const feedback = accuracyFeedback(scored, {
+    exact: quality === "exact",
+    scheduleHeld,
+  });
   const { band } = feedback;
-  const celebrate = band === "exact";
+  const celebrate = band === "exact" && !skipCelebrate;
   const praise =
     !showScheduleOutcome && requireExactToAdvance && quality === "close"
       ? FROM_MEMORY_CLOSE_MESSAGE
       : attemptPraiseLine({ accuracy: scored, outcome, errors });
-  const consequence = showScheduleOutcome
-    ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
-    : null;
+  const consequence =
+    showScheduleOutcome && !scheduleHeld
+      ? scheduleConsequence(outcome, nextSchedule, now ?? 0)
+      : null;
 
   return (
     <motion.div

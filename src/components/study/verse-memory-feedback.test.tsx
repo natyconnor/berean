@@ -295,4 +295,46 @@ describe("VerseMemoryFeedback", () => {
     expect(screen.getByText("Nailed it!")).toBeInTheDocument();
     expect(screen.getByRole("status")).not.toHaveTextContent(/review/i);
   });
+
+  it("holds a First letters miss without a next-review line", () => {
+    useReducedMotion.mockReturnValue(false);
+    render(
+      <VerseMemoryFeedback
+        quality="off"
+        accuracy={40}
+        attemptKey="refresh-step1"
+        showScheduleOutcome
+        scheduleHeld
+        skipCelebrate
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Another look will help it stick.",
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(/Next review/);
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "We'll bring it back sooner.",
+    );
+  });
+
+  it("skips the celebration pop on a held 100%", () => {
+    useReducedMotion.mockReturnValue(false);
+    render(
+      <VerseMemoryFeedback
+        quality="exact"
+        accuracy={100}
+        attemptKey="refresh-step1-exact"
+        showScheduleOutcome
+        scheduleHeld
+        skipCelebrate
+        nextSchedule={reviewingSchedule}
+        now={NOW}
+      />,
+    );
+    expect(screen.getByText("Word for word.")).toBeInTheDocument();
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent(/Next review/);
+  });
 });

@@ -7,6 +7,7 @@ import type { CardReference } from "./study-card-model";
 import {
   useRecordVerseAttempt,
   type RecordVerseAttemptOptions,
+  type RecordVerseAttemptResult,
   type VerseAttemptMode,
 } from "./use-record-verse-attempt";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -17,6 +18,10 @@ interface RecordAttemptArgs {
   tokens: ReadonlyArray<DiffToken>;
   stage: number;
   wordCount?: number;
+  now?: number;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
+  refresherUsed?: boolean;
 }
 
 interface UseVersePracticeAttemptReturn {
@@ -29,7 +34,7 @@ interface UseVersePracticeAttemptReturn {
     verseKey: string,
     args: RecordAttemptArgs,
     onAdopt: (next: MemorySchedule) => void,
-  ) => Promise<MemorySchedule | null>;
+  ) => Promise<RecordVerseAttemptResult>;
 }
 
 /**
@@ -49,23 +54,27 @@ export function useVersePracticeAttempt(
       verseKey: string,
       args: RecordAttemptArgs,
       onAdopt: (next: MemorySchedule) => void,
-    ): Promise<MemorySchedule | null> => {
+    ): Promise<RecordVerseAttemptResult> => {
       const seq = (attemptSeqByVerseId.current.get(verseKey) ?? 0) + 1;
       attemptSeqByVerseId.current.set(verseKey, seq);
-      const schedule = await record({
+      const result = await record({
         reference: args.reference,
         verseRefId: args.verseRefId,
         tokens: args.tokens,
         stage: args.stage,
         mode,
         wordCount: args.wordCount,
+        now: args.now,
+        hint: args.hint,
+        holdSchedule: args.holdSchedule,
+        refresherUsed: args.refresherUsed,
       });
-      if (!schedule) return null;
+      if (!result.ok || !result.schedule) return result;
       const applied = appliedSeqByVerseId.current.get(verseKey) ?? 0;
-      if (seq <= applied) return schedule;
+      if (seq <= applied) return result;
       appliedSeqByVerseId.current.set(verseKey, seq);
-      onAdopt(schedule);
-      return schedule;
+      onAdopt(result.schedule);
+      return result;
     },
     [mode, record],
   );

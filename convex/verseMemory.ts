@@ -57,7 +57,7 @@ import {
   isDueForReview,
   isLearningLocked,
   isReviewPhase,
-  scheduleNext,
+  planVerseAttemptSchedule,
   type MemorySchedule,
 } from "../src/lib/memory-scheduler";
 import {
@@ -516,10 +516,10 @@ export const dueCount = query({
 /**
  * Log a graded attempt and reschedule the verse in one atomic mutation.
  *
- * Appends a `verseMemoryReviews` row, applies the pure `scheduleNext` to the
- * verse's in-Memory `verseMemory` row, and patches it. Returns the new
- * schedule so callers can reflect the updated `dueAt`/status immediately.
- * Throws when the verse is not in Memory.
+ * Appends a `verseMemoryReviews` row, applies `planVerseAttemptSchedule` to the
+ * verse's in-Memory `verseMemory` row, and patches it unless the try is a
+ * First letters hold. A retry with the same `now` returns the existing row
+ * instead of inserting twice. Throws when the verse is not in Memory.
  *
  * Soft-locked learning verses (`dueAt` in the future) do not advance: the
  * mutation returns the current schedule without writing a review or patch.
@@ -538,6 +538,9 @@ export const recordAttempt = mutation({
     tzOffsetMinutes: v.optional(v.number()),
     /** IANA zone for Practice heatmap day buckets; same as `reviewActivity`. */
     timeZone: v.optional(v.string()),
+    hint: v.optional(v.literal("first-letters")),
+    holdSchedule: v.optional(v.boolean()),
+    refresherUsed: v.optional(v.boolean()),
   },
   returns: memoryScheduleValidator,
   handler: async (ctx, args) => {
@@ -584,6 +587,19 @@ export const recordAttempt = mutation({
       return current;
     }
 
+    const existing = await ctx.db
+      .query("verseMemoryReviews")
+      .withIndex("by_verseMemoryId_createdAt", (q) =>
+        q.eq("verseMemoryId", memory._id).eq("createdAt", args.now),
+      )
+      .first();
+    if (existing) {
+      return current;
+    }
+
+    const holdSchedule = args.holdSchedule === true;
+    const refresherUsed = args.refresherUsed === true;
+
     await ctx.db.insert("verseMemoryReviews", {
       userId,
       verseRefId: args.verseRefId,
@@ -594,6 +610,9 @@ export const recordAttempt = mutation({
       mode: args.mode,
       durationMs: args.durationMs,
       createdAt: args.now,
+      ...(args.hint ? { hint: args.hint } : {}),
+      ...(holdSchedule ? { holdSchedule: true } : {}),
+      ...(refresherUsed ? { refresherUsed: true } : {}),
     });
 
     if (args.timeZone) {
@@ -604,10 +623,11 @@ export const recordAttempt = mutation({
         mode: args.mode,
         stage: args.stage,
         timeZone: args.timeZone,
+        ...(holdSchedule ? { holdSchedule: true } : {}),
       });
     }
 
-    const next = scheduleNext(current, {
+    const { next, patch } = planVerseAttemptSchedule(current, {
       quality: args.quality,
       accuracy: args.accuracy,
       mode: args.mode,
@@ -615,7 +635,11 @@ export const recordAttempt = mutation({
       wordCount: args.wordCount,
       tzOffsetMinutes: args.tzOffsetMinutes,
       timeZone: args.timeZone,
+      holdSchedule,
+      refresherUsed,
     });
+
+    if (!patch) return next;
 
     if (memory.status !== next.status) {
       await adjustUserMemoryStats(
@@ -1333,6 +1357,7 @@ export const reviewActivity = query({
         accuracy: row.accuracy,
         mode: row.mode,
         stage: row.stage,
+        ...(row.holdSchedule ? { holdSchedule: true } : {}),
       })),
       args.now,
       heatmapDays,
@@ -1812,14 +1837,16 @@ export const verseDetail = query({
       .take(VERSE_DETAIL_ATTEMPT_LIMIT);
 
     const attempts: Attempt[] = attemptsSinceStartOver(
-      attemptRows.map((row) => ({
-        quality: row.quality,
-        accuracy: row.accuracy,
-        stage: row.stage,
-        mode: row.mode,
-        durationMs: row.durationMs,
-        createdAt: row.createdAt,
-      })),
+      attemptRows
+        .filter((row) => !row.holdSchedule)
+        .map((row) => ({
+          quality: row.quality,
+          accuracy: row.accuracy,
+          stage: row.stage,
+          mode: row.mode,
+          durationMs: row.durationMs,
+          createdAt: row.createdAt,
+        })),
       memory.startedOverAt,
     );
 

@@ -198,3 +198,14 @@ export function canStartOverPassage(
       piece.stageReps > 0,
   );
 }
+
+export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
+export const NOW_TRY_WITHOUT_HINTS = "Now try it without the hints.";
+export const REFRESH_SAVE_ERROR = "Couldn't save your result. Try again.";
+
+/** "Refresh · First letters · 1 of 2" / "Refresh · From memory · 2 of 2". */
+export function refresherHeader(step: 1 | 2): string {
+  return step === 1
+    ? `Refresh · ${stepShortLabel(1)} · 1 of 2`
+    : `Refresh · ${stepShortLabel(3)} · 2 of 2`;
+}

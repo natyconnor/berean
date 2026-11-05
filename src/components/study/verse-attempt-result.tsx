@@ -29,6 +29,9 @@ interface VerseAttemptResultProps {
   now?: number;
   /** Trails the banner's percentage, e.g. "Pass at 85%". */
   note?: string;
+  scheduleHeld?: boolean;
+  skipCelebrate?: boolean;
+  saveError?: string | null;
 }
 
 const PLACEHOLDER = "\u00a0";
@@ -154,6 +157,9 @@ export function VerseAttemptResult({
   nextSchedule = null,
   now,
   note,
+  scheduleHeld = false,
+  skipCelebrate = false,
+  saveError = null,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
   if (trimmedTyped.length === 0 || versePlainText.length === 0) return null;
@@ -180,7 +186,14 @@ export function VerseAttemptResult({
           accuracy={attemptAccuracy}
           errors={attemptErrors}
           note={note}
+          scheduleHeld={scheduleHeld}
+          skipCelebrate={skipCelebrate}
         />
+      ) : null}
+      {saveError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {saveError}
+        </p>
       ) : null}
       <motion.div
         initial={{ opacity: 0, y: -4 }}

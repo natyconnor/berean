@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
+import {
+  NEED_A_REFRESHER_LABEL,
+  NOW_TRY_WITHOUT_HINTS,
+  REFRESH_SAVE_ERROR,
+  refresherHeader,
+} from "@/lib/memory-copy";
 import { MIN_LEARNING_LOCK_MS } from "@/lib/memory-scheduler";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../../shared/esv-api";
@@ -1516,5 +1522,330 @@ describe("PracticeBoard session order", () => {
 
     await userEvent.click(railRow("Luke 9:23–24"));
     expect(onShow).toHaveBeenCalledWith(luke);
+  });
+});
+
+describe("PracticeBoard pre-try refresher", () => {
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+  });
+
+  function renderReview(
+    extra: Partial<Parameters<typeof PracticeBoard>[0]> = {},
+  ) {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse, secondReviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+          {...extra}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function openRefresher() {
+    const link = await screen.findByRole("button", {
+      name: NEED_A_REFRESHER_LABEL,
+    });
+    await userEvent.click(link);
+  }
+
+  it("shows the quiet link on a due Memorized verse once the text has loaded", async () => {
+    renderReview();
+    const link = await screen.findByRole("button", {
+      name: NEED_A_REFRESHER_LABEL,
+    });
+    await waitFor(() => {
+      expect(link).toBeVisible();
+    });
+  });
+
+  it("hides the link on Learning, New, the Learn flow, and composite cards", async () => {
+    const hideLink = () => {
+      expect(
+        screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+      ).not.toBeInTheDocument();
+    };
+
+    const learning = render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[{ ...reviewingVerse, status: "learning", learnStage: 3 }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    hideLink();
+    learning.unmount();
+
+    const learnFlow = render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="learning"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    hideLink();
+    learnFlow.unmount();
+
+    const asNew = render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[{ ...reviewingVerse, status: "new", learnStage: 0 }]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    expect(
+      await screen.findByText("Read it through, then continue"),
+    ).toBeInTheDocument();
+    hideLink();
+    asNew.unmount();
+
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
+    const pack = renderComposite();
+    expect(
+      await screen.findByLabelText("Your recited passage"),
+    ).toBeInTheDocument();
+    hideLink();
+    pack.unmount();
+  });
+
+  it("hides the link when verse text fails to load", async () => {
+    getPassageMock.mockReset();
+    getPassageMock.mockRejectedValue(new Error("ESV is down"));
+    renderReview({ verses: [reviewingVerse] });
+    expect(
+      await screen.findByText("Could not load verse text."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the link while verse text is still loading", async () => {
+    getPassageMock.mockReset();
+    getPassageMock.mockReturnValue(new Promise(() => {}));
+    renderReview({ verses: [reviewingVerse] });
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/No hint text/)).not.toBeInTheDocument();
+  });
+
+  it("opens First letters, then From memory, with Try again under 85% and Continue at 85%+", async () => {
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    renderReview({ onRunStateChange });
+    await openRefresher();
+
+    await waitFor(() => {
+      expect(screen.getByText(refresherHeader(1))).toBeVisible();
+    });
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    const step1Box = await screen.findByLabelText("Your recalled verse");
+    expect(step1Box).toHaveValue("");
+    expect(step1Box).toHaveFocus();
+
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByText("Another look will help it stick."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+    expect(screen.getByText(refresherHeader(1))).toBeVisible();
+    const retried = screen.getByLabelText("Your recalled verse");
+    expect(retried).toHaveValue("");
+    expect(retried).toHaveFocus();
+
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.queryByTestId("confetti-burst")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(screen.getByText(refresherHeader(2))).toBeVisible();
+    expect(screen.getByText(NOW_TRY_WITHOUT_HINTS)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    const step2Box = screen.getByLabelText("Your recalled verse");
+    expect(step2Box).toHaveValue("");
+    expect(step2Box).toHaveFocus();
+
+    await waitFor(() => {
+      const [state] = onRunStateChange.mock.lastCall ?? [];
+      expect(state?.attempts).toEqual([]);
+      expect(state?.graded).toEqual([]);
+    });
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hint: "first-letters",
+        holdSchedule: true,
+      }),
+    );
+  });
+
+  it("offers only Continue after a counted From memory miss", async () => {
+    renderReview();
+    await openRefresher();
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste("nope");
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(
+      await screen.findByText("We'll bring it back sooner."),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /Continue/ })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Try again/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("counts nothing when backing out before From memory", async () => {
+    const onExit = vi.fn();
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    renderReview({ onExit, onRunStateChange });
+    await openRefresher();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Back to Memory/ }),
+    );
+    expect(onExit).toHaveBeenCalled();
+    const [state] = onRunStateChange.mock.lastCall ?? [];
+    expect(state?.attempts).toEqual([]);
+    expect(state?.graded).toEqual([]);
+  });
+
+  it("shows Try again on a counted save failure and resends the same now", async () => {
+    const record = mutationMock("verseMemory.recordAttempt");
+    record
+      .mockResolvedValueOnce(stillDueSchedule)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(heldSchedule);
+
+    renderReview();
+    await openRefresher();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REFRESH_SAVE_ERROR,
+    );
+    expect(
+      screen.queryByRole("button", { name: /Continue/ }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+    expect(
+      await screen.findByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText(refresherHeader(2))).toBeVisible();
+    expect(screen.getByText("Word for word.")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+
+    const calls = record.mock.calls as Array<[Record<string, unknown>]>;
+    expect(calls).toHaveLength(3);
+    expect(calls[1]?.[0]?.now).toBe(calls[2]?.[0]?.now);
+    expect(calls[1]?.[0]?.refresherUsed).toBe(true);
+    expect(calls[2]?.[0]?.refresherUsed).toBe(true);
+    expect(calls[1]?.[0]?.accuracy).toBe(calls[2]?.[0]?.accuracy);
+  });
+
+  it("saves a counted From memory try once even if Check is activated twice", async () => {
+    renderReview();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    const check = screen.getByRole("button", { name: /Check answer/ });
+    check.click();
+    check.click();
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+  });
+
+  it("retries a cold From memory save with the same now", async () => {
+    const record = mutationMock("verseMemory.recordAttempt");
+    record
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(heldSchedule);
+
+    renderReview();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REFRESH_SAVE_ERROR,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+    expect(
+      await screen.findByRole("button", { name: /Continue/ }),
+    ).toBeVisible();
+
+    const calls = record.mock.calls as Array<[Record<string, unknown>]>;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.[0]?.now).toBe(calls[1]?.[0]?.now);
+    expect(calls[0]?.[0]?.refresherUsed).toBeUndefined();
   });
 });
