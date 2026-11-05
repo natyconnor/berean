@@ -25,6 +25,7 @@ import {
   PRACTICE_WHAT_YOU_KNOW_LABEL,
   SECTION_COMPLETE_COPY,
   SECTION_RECITE_LABEL,
+  STOP_BEFORE_LABEL,
   WARMUP_PROMPT_COPY,
   WARMUP_SKIP_LABEL,
 } from "./passage-session-model";
@@ -217,6 +218,50 @@ describe("PassageSession", () => {
     expect(
       screen.queryByRole("status", { name: "Session phase: First letters" }),
     ).not.toBeInTheDocument();
+  });
+
+  function warmupView(attachment: "attached" | "solid"): PassageView {
+    const now = getSessionNow();
+    fetchChaptersBatchMock.mockResolvedValue([
+      {
+        chapter: 23,
+        data: {
+          ...psalm23,
+          verses: [
+            ...psalm23.verses,
+            {
+              number: 3,
+              text: "He restores my soul. He leads me in paths of righteousness.",
+            },
+          ],
+        },
+      },
+    ]);
+    const learned = { learnStage: attachment === "solid" ? 3 : 2 };
+    return passageView(
+      [
+        piece(0, attachment, { ...learned, dueAt: now + DAY_MS }),
+        piece(1, attachment, { ...learned, dueAt: now + DAY_MS }),
+        piece(2, "learning", { learnStage: 1, dueAt: now }),
+      ],
+      { lastSessionAt: now - 60_000 },
+    );
+  }
+
+  it("shows where a from-memory warm-up stops", async () => {
+    renderSession(warmupView("solid"));
+
+    expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+    const cue = await screen.findByLabelText(STOP_BEFORE_LABEL);
+    expect(cue).toHaveTextContent("He restores my soul…");
+  });
+
+  it("leaves the stop-before cue off a warm-up that still shows hints", async () => {
+    renderSession(warmupView("attached"));
+
+    expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+    expect(await screen.findByLabelText("Hint")).toBeInTheDocument();
+    expect(screen.queryByLabelText(STOP_BEFORE_LABEL)).not.toBeInTheDocument();
   });
 
   it("clears the in-progress marker when the learner leaves", async () => {
@@ -541,6 +586,31 @@ describe("PassageSession", () => {
     expect(cue).not.toHaveTextContent(PASSAGE_TWO);
   });
 
+  it("shows the start of the next verse at From Memory, even on verse 1", async () => {
+    renderSession(
+      passageView([
+        piece(0, "learning", { learnStage: 3, stageReps: 0 }),
+        piece(1, "unreached"),
+      ]),
+    );
+
+    const cue = await screen.findByLabelText(STOP_BEFORE_LABEL);
+    expect(cue).toHaveTextContent("He makes me lie…");
+    expect(screen.queryByLabelText("Pick up after")).not.toBeInTheDocument();
+  });
+
+  it("does not add a stop-before cue on the last verse", async () => {
+    renderSession(
+      passageView([
+        piece(0, "solid", { learnStage: 3 }),
+        piece(1, "learning", { learnStage: 3, stageReps: 0 }),
+      ]),
+    );
+
+    expect(await screen.findByLabelText("Pick up after")).toBeInTheDocument();
+    expect(screen.queryByLabelText(STOP_BEFORE_LABEL)).not.toBeInTheDocument();
+  });
+
   it("does not add a pick-up cue while hints are still shown", async () => {
     renderSession(
       passageView([
@@ -553,6 +623,20 @@ describe("PassageSession", () => {
       await screen.findByText("Type what you remember"),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Pick up after")).not.toBeInTheDocument();
+  });
+
+  it("does not add a stop-before cue while hints are still shown", async () => {
+    renderSession(
+      passageView([
+        piece(0, "learning", { learnStage: 2, stageReps: 0 }),
+        piece(1, "unreached"),
+      ]),
+    );
+
+    expect(
+      await screen.findByText("Type what you remember"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(STOP_BEFORE_LABEL)).not.toBeInTheDocument();
   });
 
   it("sends the verse word count with a frontier attempt", async () => {
