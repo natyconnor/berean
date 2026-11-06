@@ -1605,7 +1605,7 @@ function PracticeCard({
       setChecked(true);
       setOutcomeNow(now);
       setNextSchedule(preview);
-      if (preview) {
+      if (preview && !practiceRound) {
         const savedFill = journeyFillFrom({
           learnStage,
           stageReps,
@@ -1756,14 +1756,14 @@ function PracticeCard({
     });
   }
 
-  function resetTyping() {
+  function resetTyping(options?: { keepJourneyPreview?: boolean }) {
     setChecked(false);
     setHeldGoalLabel(null);
     setTypedAnswer("");
     setSaveError(null);
     setNextSchedule(null);
     setPackMemberResults([]);
-    onJourneyPreview?.(null);
+    if (!options?.keepJourneyPreview) onJourneyPreview?.(null);
     countedSaveNowRef.current = null;
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
@@ -1777,6 +1777,7 @@ function PracticeCard({
     setSaveError(null);
     setNextSchedule(null);
     countedSaveNowRef.current = null;
+    if (kind === "practice") onJourneyPreview?.(null);
     refresher.open(kind);
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
@@ -1787,12 +1788,13 @@ function PracticeCard({
       return;
     }
     if (refresher.phase === "step1") {
+      const keepJourneyPreview = heldIdRef.current !== null;
       if (checkedAccuracy < LEARN_PROGRESS_ACCURACY) {
-        resetTyping();
+        resetTyping({ keepJourneyPreview });
         return;
       }
       refresher.continueToStep2();
-      resetTyping();
+      resetTyping({ keepJourneyPreview });
       return;
     }
     if (!refresher.isOpen && heldIdRef.current) {
