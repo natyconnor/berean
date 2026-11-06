@@ -2212,6 +2212,161 @@ describe("PracticeBoard held first try", () => {
     });
   });
 
+  function sideJourney(): HTMLElement {
+    const heading = screen.getByText("Progress");
+    const panel = heading.parentElement;
+    expect(panel).toBeInstanceOf(HTMLElement);
+    return within(panel as HTMLElement).getByLabelText(
+      /Progress to mastered|Learning journey/,
+    );
+  }
+
+  function fillWidth(bar: HTMLElement): number {
+    const fill = bar.querySelector(".h-full");
+    expect(fill).toBeInstanceOf(HTMLElement);
+    return Number.parseFloat((fill as HTMLElement).style.width);
+  }
+
+  it("keeps the dropped side progress on refresher step 2 and rises on a pass", async () => {
+    const now = getSessionNow();
+    const mastered = {
+      ...reviewingVerse,
+      status: "mastered" as const,
+      intervalDays: MASTERED_INTERVAL_DAYS,
+      stageReps: 0,
+      consecutiveCorrect: 11,
+      ease: 2.3,
+    };
+    const pass = previewNextSchedule(
+      {
+        status: "mastered",
+        learnStage: mastered.learnStage,
+        stageReps: mastered.stageReps ?? 0,
+        dueAt: mastered.dueAt ?? now,
+        ease: mastered.ease,
+        intervalDays: mastered.intervalDays,
+        consecutiveCorrect: mastered.consecutiveCorrect,
+        lapses: mastered.lapses,
+        earlyReviewApplied: mastered.earlyReviewApplied,
+      },
+      {
+        quality: "exact",
+        accuracy: 100,
+        mode: "review",
+        now,
+        wordCount: 9,
+        refresherUsed: true,
+        heldMissAccuracy: 40,
+      },
+    );
+    expect(pass).not.toBeNull();
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(pass);
+    renderReview({ verses: [mastered] });
+    await holdColdMiss(BAD_MISS);
+    const droppedLabel = sideJourney().getAttribute("aria-label");
+    expect(droppedLabel).toMatch(/Memorized/);
+    expect(droppedLabel).toMatch(/73%/);
+    expect(withinCard().getByLabelText(/Progress to mastered/)).toHaveAttribute(
+      "aria-label",
+      droppedLabel,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(await screen.findByText(refresherHeader(2))).toBeVisible();
+    const side = sideJourney();
+    expect(side).toHaveAttribute("aria-label", droppedLabel);
+    expect(within(side).getByText("Memorized")).toBeVisible();
+    expect(within(side).getByText("73% to mastered")).toBeVisible();
+    expect(within(side).queryByText("Mastered")).not.toBeInTheDocument();
+    expect(within(side).queryByText("100%")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(fillWidth(sideJourney())).toBe(73);
+    });
+    const droppedWidth = fillWidth(sideJourney());
+
+    const step2 = screen.getByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(fillWidth(sideJourney())).toBeGreaterThanOrEqual(droppedWidth);
+    await waitFor(() => {
+      const sideLabel = sideJourney().getAttribute("aria-label");
+      const headerLabel = withinCard()
+        .getByLabelText(/Progress to mastered/)
+        .getAttribute("aria-label");
+      expect(sideLabel).toBe(headerLabel);
+      expect(sideLabel).toMatch(/82%/);
+      expect(fillWidth(sideJourney())).toBeGreaterThanOrEqual(droppedWidth);
+    });
+  });
+
+  it("keeps saved side progress through a practice-only miss and pass", async () => {
+    renderReview();
+    await holdColdMiss(CLOSE_MISS);
+    await userEvent.click(
+      screen.getByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    const step1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    const step2 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(step2);
+    await userEvent.paste(BAD_MISS);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    );
+    const practice1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(practice1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(await screen.findByText(refresherHeader(2))).toBeVisible();
+    const saved = sideJourney().getAttribute("aria-label");
+    expect(saved).toBeTruthy();
+
+    const practiceMiss = screen.getByLabelText("Your recalled verse");
+    await userEvent.click(practiceMiss);
+    await userEvent.paste(BAD_MISS);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    expect(sideJourney()).toHaveAttribute("aria-label", saved);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    );
+    const again1 = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(again1);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(sideJourney()).toHaveAttribute("aria-label", saved);
+    const practicePass = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(practicePass);
+    await userEvent.paste(PASSAGE_ONE);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    expect(sideJourney()).toHaveAttribute("aria-label", saved);
+  });
+
   it("drops to Fill in the blanks on a held bad miss with fewer than 3 banked", async () => {
     renderReview({
       verses: [

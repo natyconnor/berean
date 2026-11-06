@@ -234,7 +234,8 @@ export function LearningJourneyBar({
       ) : (
         <JourneyFace
           fill={toFill}
-          pct={livePct}
+          pct={toPct}
+          barPct={livePct}
           slideColor={kind === "slide"}
           sliding={sliding}
         />
@@ -246,6 +247,7 @@ export function LearningJourneyBar({
 function JourneyFace({
   fill,
   pct,
+  barPct = pct,
   pulseDot = false,
   slideColor = false,
   sliding = false,
@@ -254,6 +256,7 @@ function JourneyFace({
 }: {
   fill: JourneyBarFill;
   pct: number;
+  barPct?: number;
   pulseDot?: boolean;
   slideColor?: boolean;
   sliding?: boolean;
@@ -266,7 +269,7 @@ function JourneyFace({
   );
   const copy = faceCopy(fill, pct);
   const graduated = isGraduated(fill.status);
-  const startMark = graduated && pct === 0;
+  const startMark = graduated && barPct === 0;
 
   return (
     <div className={cn("space-y-1", className)} style={style}>
@@ -305,7 +308,7 @@ function JourneyFace({
             chrome.dot,
           )}
           style={{
-            width: `${pct}%`,
+            width: `${barPct}%`,
             minWidth: startMark ? START_MARK : undefined,
             transitionDuration:
               sliding || slideColor ? `${BAR_FILL_MS}ms` : undefined,
