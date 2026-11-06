@@ -238,4 +238,46 @@ describe("LearningJourneyBar", () => {
     );
     useReducedMotion.mockReturnValue(false);
   });
+
+  it("shows the Memorized label and the dropped percent in the same paint", () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LearningJourneyBar
+        learnStage={3}
+        stageReps={0}
+        status="reviewing"
+        intervalDays={1}
+        from={{
+          learnStage: 3,
+          status: "mastered",
+          intervalDays: MASTERED_INTERVAL_DAYS,
+        }}
+      />,
+    );
+
+    const bar = screen.getByLabelText(/Progress to mastered: Memorized/);
+    const pct = percentLabel(bar);
+    expect(pct).toBeLessThan(100);
+    expect(screen.getByText("Memorized")).toBeInTheDocument();
+    expect(screen.queryByText("Mastered")).not.toBeInTheDocument();
+    expect(screen.getByText(`${pct}% to mastered`)).toBeInTheDocument();
+    expect(screen.queryByText("100% to mastered")).not.toBeInTheDocument();
+
+    const fill = container.querySelector(".h-full");
+    expect(fill).toHaveStyle({ width: "100%" });
+
+    act(() => {
+      vi.advanceTimersByTime(219);
+    });
+    expect(fill).toHaveStyle({ width: "100%" });
+    expect(screen.getByText(`${pct}% to mastered`)).toBeInTheDocument();
+    expect(screen.queryByText("100% to mastered")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(fill).toHaveStyle({ width: `${pct}%` });
+    expect(screen.getByText("Memorized")).toBeInTheDocument();
+    expect(screen.getByText(`${pct}% to mastered`)).toBeInTheDocument();
+  });
 });
