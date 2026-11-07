@@ -11,6 +11,7 @@ import { useLeftoverHeldAttemptsReady } from "@/hooks/use-apply-leftover-held-at
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
+import { refreshReturnState } from "@/hooks/use-start-verse-refresh";
 import { hasReviewVerseScope } from "@/lib/memory-review-search";
 import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { sortSessionVerses } from "@/lib/memory-session-order";
@@ -74,12 +75,15 @@ export function MemoryReviewPage() {
   const search = Route.useSearch();
   const returnTo = search.return;
   const exit = useMemoryExit(returnTo);
-  const onExit = exit.go;
   const backLabel = exit.label;
   const exitHref = exit.href;
   const now = useLiveNow();
   const leftoversReady = useLeftoverHeldAttemptsReady();
   const hasScope = hasReviewVerseScope(search);
+  const refresh = hasScope && search.refresh === true;
+  const onExit = refresh
+    ? () => exit.goWith(refreshReturnState(search))
+    : exit.go;
   const [queueEpoch, setQueueEpoch] = useState(0);
   const [drainedDue, setDrainedDue] = useState(0);
 
@@ -186,7 +190,7 @@ export function MemoryReviewPage() {
       backLabel={backLabel}
       exitHref={exitHref}
       returnTo={returnTo}
-      refresh={search.refresh === true}
+      refresh={refresh}
     />
   );
 }

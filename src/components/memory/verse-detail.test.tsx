@@ -1,5 +1,11 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,6 +26,7 @@ const NOW = Date.UTC(2026, 9, 12, 18, 0, 0);
 const RETURN_TO = "/memory/verse/v1";
 
 const mocks = vi.hoisted(() => ({
+  locationState: {},
   openSheet: vi.fn(),
   navigate: vi.fn(),
   startOver: vi.fn(),
@@ -29,6 +36,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
+  useLocation: ({
+    select,
+  }: {
+    select: (location: { state: typeof mocks.locationState }) => unknown;
+  }) => select({ state: mocks.locationState }),
   Link: ({
     to,
     children,
@@ -497,6 +509,7 @@ function refreshItem() {
 describe("VerseMemoryMenu Refresh", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    mocks.locationState = {};
     mocks.startOver.mockClear();
     mocks.navigate.mockReset();
     mocks.navigate.mockResolvedValue(undefined);
@@ -529,6 +542,20 @@ describe("VerseMemoryMenu Refresh", () => {
       expect(refreshItem()).not.toHaveAttribute("aria-disabled");
     },
   );
+
+  it("focuses ••• on return from this verse's Refresh, and only then", async () => {
+    mocks.locationState = { refreshedVerse: "Romans|8|28|28" };
+    const { unmount } = renderMenu();
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    unmount();
+
+    mocks.locationState = { refreshedVerse: "John|3|16|16" };
+    renderMenu();
+    expect(
+      screen.getByRole("button", { name: "More actions" }),
+    ).not.toHaveFocus();
+  });
 
   it("opens a not-due verse's refresher in Practice, returning here", async () => {
     renderMenu({ dueAt: Date.now() + 3 * DAY_MS });

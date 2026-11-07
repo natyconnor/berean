@@ -84,7 +84,10 @@ import {
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
 import { spanDisplayTitle } from "@/lib/memorize-target";
-import { useStartVerseRefresh } from "@/hooks/use-start-verse-refresh";
+import {
+  useRefreshReturnFocus,
+  useStartVerseRefresh,
+} from "@/hooks/use-start-verse-refresh";
 import { withReturn } from "@/lib/memory-return";
 import { isDueForReview, isReviewPhase } from "@/lib/memory-scheduler";
 import {
@@ -872,11 +875,13 @@ function PackVerseRow({
   const href = (session: MemorySessionKind) =>
     withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
   const startRefresh = useStartVerseRefresh(member, frame.returnTo);
+  useRefreshReturnFocus(member, triggerRef);
   const refresh =
     !started && isReviewPhase(member.status)
       ? {
           pending: startRefresh.pending,
           onSelect: () => startRefresh.start(isDueForReview(member, now)),
+          triggerRef,
         }
       : undefined;
 

@@ -64,6 +64,7 @@ export type RowStartOver = {
 export type RowRefresh = {
   pending: boolean;
   onSelect: () => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
 };
 
 /**
@@ -106,7 +107,7 @@ export function RowEditControls({
   const trigger = (
     <DropdownMenuTrigger asChild>
       <Button
-        ref={startOver?.triggerRef}
+        ref={startOver?.triggerRef ?? refresh?.triggerRef}
         type="button"
         variant="ghost"
         size="icon"

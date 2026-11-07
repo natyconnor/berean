@@ -39,7 +39,10 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { useLiveNow } from "@/hooks/use-live-now";
-import { useStartVerseRefresh } from "@/hooks/use-start-verse-refresh";
+import {
+  useRefreshReturnFocus,
+  useStartVerseRefresh,
+} from "@/hooks/use-start-verse-refresh";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import {
   canStartOver,
@@ -284,6 +287,7 @@ export function VerseMemoryMenu({
   const stopLock = useSubmitLock();
   const refresh = useStartVerseRefresh(verse, returnTo);
   const now = useLiveNow();
+  useRefreshReturnFocus(verse, triggerRef);
 
   useLayoutEffect(() => {
     if (!pendingTriggerFocus.current) return;

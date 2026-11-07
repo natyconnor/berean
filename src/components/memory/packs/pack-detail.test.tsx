@@ -31,6 +31,7 @@ const HOUR_MS = 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 9, 12, 18);
 
 const mocks = vi.hoisted(() => ({
+  locationState: {},
   queryResults: new Map<string, unknown>(),
   queryByArgs: new Map<string, (args: unknown) => unknown>(),
   queryCalls: [] as Array<[string, unknown]>,
@@ -53,6 +54,11 @@ function mutation(name: string) {
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
+  useLocation: ({
+    select,
+  }: {
+    select: (location: { state: typeof mocks.locationState }) => unknown;
+  }) => select({ state: mocks.locationState }),
   useCanGoBack: () => false,
   Link: ({
     to,
@@ -1299,6 +1305,7 @@ describe("PackDetail Start over", () => {
 describe("PackDetail row Refresh", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    mocks.locationState = {};
     mocks.getPassage.mockReset();
     mocks.getPassage.mockImplementation(({ query }: { query: string }) =>
       Promise.resolve({
@@ -1398,6 +1405,47 @@ describe("PackDetail row Refresh", () => {
     expect(href.pathname).toBe("/memory/review");
     expect(href.searchParams.get("book")).toBe("Luke");
     expect(href.searchParams.get("refresh")).toBe("1");
+  });
+
+  it("focuses the refreshed row's ••• on return to the pack", async () => {
+    mocks.locationState = { refreshedVerse: "Psalms|23|1|3" };
+    renderHost("pack:psalm23x");
+    const trigger = screen.getByRole("button", {
+      name: "Options for Psalm 23:1–3",
+    });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(
+      screen.getByRole("button", { name: "Options for Psalm 23:4–6" }),
+    ).not.toHaveFocus();
+  });
+
+  it("leaves focus alone when the refreshed row has no ••• any more", async () => {
+    mocks.locationState = { refreshedVerse: "Psalms|23|1|3" };
+    membersByPack = {
+      ...membersByPack,
+      psalm23x: [
+        member("p23a", {
+          book: "Psalms",
+          chapter: 23,
+          startVerse: 1,
+          endVerse: 3,
+          status: "new",
+          learnStage: 0,
+          stageReps: 0,
+          lastReviewedAt: undefined,
+          dueAt: NOW,
+          isDue: false,
+        }),
+      ],
+    };
+    renderHost("pack:psalm23x");
+    await screen.findByText("Psalm 23:1–3");
+    expect(
+      screen.queryByRole("button", { name: /^Options for/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      document.activeElement?.getAttribute("aria-label") ?? "",
+    ).not.toMatch(/^Options for/);
   });
 
   it("shows the error inside the row when the refresher can't start", async () => {

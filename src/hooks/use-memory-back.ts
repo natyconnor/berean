@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, type HistoryState } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { useCallback } from "react";
 
@@ -12,7 +12,11 @@ import {
 } from "@/lib/memory-exit";
 import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
-export type MemoryExitAction = MemoryExit & { go: () => void };
+export type MemoryExitAction = MemoryExit & {
+  go: () => void;
+  /** Leave with `state` on the history entry it lands on. */
+  goWith: (state: HistoryState) => void;
+};
 
 /**
  * Leave a memory session for a named place in the app. Sessions are shared
@@ -54,9 +58,15 @@ export function useMemoryExit(
         : undefined,
   });
 
+  const goWith = useCallback(
+    (state: HistoryState) => {
+      void navigate({ href: exit.href, replace: true, state });
+    },
+    [exit.href, navigate],
+  );
   const go = useCallback(() => {
     void navigate({ href: exit.href, replace: true });
   }, [exit.href, navigate]);
 
-  return { ...exit, go };
+  return { ...exit, go, goWith };
 }

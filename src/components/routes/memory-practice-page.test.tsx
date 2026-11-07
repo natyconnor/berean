@@ -1,12 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MemoryAllSessionPage } from "./memory-practice-page";
 import type { Id } from "../../../convex/_generated/dataModel";
 
-const { frozenArgs, frozenResults } = vi.hoisted(() => ({
+const { frozenArgs, frozenResults, exitGo, exitGoWith } = vi.hoisted(() => ({
   frozenArgs: new Map<string, unknown>(),
   frozenResults: new Map<string, unknown>(),
+  exitGo: vi.fn(),
+  exitGoWith: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-frozen-query", () => ({
@@ -19,7 +21,8 @@ vi.mock("@/hooks/use-frozen-query", () => ({
 
 vi.mock("@/hooks/use-memory-back", () => ({
   useMemoryExit: () => ({
-    go: vi.fn(),
+    go: exitGo,
+    goWith: exitGoWith,
     href: "/memory",
     label: "Back to Memory",
     name: "Memory",
@@ -34,7 +37,9 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
   MemorySessionRunner: ({
     verses,
     scopeLabel,
+    onExit,
   }: {
+    onExit: () => void;
     verses: ReadonlyArray<{
       reference: {
         book: string;
@@ -48,6 +53,9 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     <div>
       <h1>{scopeLabel}</h1>
       <p>{verses.length} verses</p>
+      <button type="button" onClick={() => onExit()}>
+        Leave
+      </button>
     </div>
   ),
 }));
@@ -202,5 +210,38 @@ describe("MemoryAllSessionPage", () => {
     expect(frozenArgs.get("verseMemory.listInMemory")).toEqual({});
     expect(screen.getByText("All learned verses")).toBeInTheDocument();
     expect(screen.getByText("2 verses")).toBeInTheDocument();
+  });
+});
+
+describe("MemoryAllSessionPage ••• Refresh return", () => {
+  beforeEach(() => {
+    frozenArgs.clear();
+    frozenResults.clear();
+    exitGo.mockReset();
+    exitGoWith.mockReset();
+    frozenResults.set("verseMemory.getInMemory", psalm46);
+  });
+
+  const scope = { book: "Psalms", chapter: 46, startVerse: 10, endVerse: 10 };
+
+  it("leaves a refresh naming its verse, so the origin ••• gets focus", () => {
+    render(
+      <MemoryAllSessionPage
+        kind="practice"
+        search={{ ...scope, refresh: true }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }));
+    expect(exitGoWith).toHaveBeenCalledWith({
+      refreshedVerse: "Psalms|46|10|10",
+    });
+    expect(exitGo).not.toHaveBeenCalled();
+  });
+
+  it("leaves an ordinary session plainly", () => {
+    render(<MemoryAllSessionPage kind="practice" search={scope} />);
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }));
+    expect(exitGo).toHaveBeenCalledTimes(1);
+    expect(exitGoWith).not.toHaveBeenCalled();
   });
 });
