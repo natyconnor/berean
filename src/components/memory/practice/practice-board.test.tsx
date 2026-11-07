@@ -327,6 +327,82 @@ describe("PracticeBoard composite recitation", () => {
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
   });
 
+  describe("in Today's queue", () => {
+    const passageReview: PracticeVerse = {
+      ...compositeVerse,
+      composite: { ...compositeVerse.composite!, passageStatus: "reviewing" },
+    };
+
+    beforeEach(() => {
+      mutationMock("passageMemory.recordAttempt").mockResolvedValue({
+        status: "reviewing",
+        stageReps: 0,
+        ease: 2.35,
+        intervalDays: 2.3,
+        dueAt: getSessionNow() + 2 * 24 * 60 * 60 * 1000,
+        consecutiveCorrect: 2,
+        lapses: 0,
+        earlyReviewApplied: false,
+      });
+    });
+
+    async function reciteAndContinue(
+      onComplete: () => void,
+      rest: PracticeVerse[] = [],
+    ) {
+      render(
+        <TooltipProvider delayDuration={0}>
+          <PracticeBoard
+            kind="review"
+            verses={[passageReview, ...rest]}
+            scopeLabel="Today"
+            onExit={() => {}}
+            onComplete={onComplete}
+          />
+        </TooltipProvider>,
+      );
+      const answer = await screen.findByLabelText("Your recited passage");
+      await userEvent.click(answer);
+      await userEvent.paste(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+      const check = screen.getByRole("button", { name: /Check answer/ });
+      await waitFor(() => expect(check).toBeEnabled());
+      await userEvent.click(check);
+      await userEvent.click(
+        await screen.findByRole("button", { name: /Continue/ }),
+      );
+    }
+
+    it("advances from a passage review to the next item", async () => {
+      const onComplete = vi.fn();
+      await reciteAndContinue(onComplete, [secondReviewingVerse]);
+
+      expect(
+        await screen.findByLabelText("Your recalled verse"),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText("Your recited passage")).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: "Review complete" }),
+      ).toBeNull();
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(mutationMock("passageMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+
+    it("hands up the run after a passage review that is the last item", async () => {
+      const onComplete = vi.fn();
+      await reciteAndContinue(onComplete);
+
+      await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+      expect(
+        screen.queryByRole("heading", { name: "Review complete" }),
+      ).toBeNull();
+      expect(mutationMock("passageMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+  });
+
   it("opens a pack recitation already reviewed this session read-only", async () => {
     const unifiedId = `unified:${PACK_ID}`;
     render(

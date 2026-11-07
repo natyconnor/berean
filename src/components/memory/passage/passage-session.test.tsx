@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
+import { formatDueDay } from "@/lib/memorize-plan";
 import { DAY_MS } from "@/lib/memory-scheduler";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
@@ -885,6 +886,120 @@ describe("PassageSession", () => {
       );
       expect(screen.queryByRole("note")).not.toBeInTheDocument();
       expect(localStorage.getItem(seenKey)).toBeNull();
+    });
+  });
+
+  describe("standalone review", () => {
+    const solidPieces = () => [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "solid", { learnStage: 3 }),
+    ];
+    const savedDueAt = () => getSessionNow() + 3 * DAY_MS;
+
+    beforeEach(() => {
+      mutationMock("passageMemory.recordAttempt").mockResolvedValue(
+        passageView(solidPieces(), {
+          status: "reviewing",
+          dueAt: savedDueAt(),
+        }),
+      );
+    });
+
+    function renderReview(onExit: () => void = () => {}) {
+      return render(
+        <TooltipProvider delayDuration={0}>
+          <PassageSession
+            packId={PACK_ID}
+            view={passageView(solidPieces(), { status: "reviewing" })}
+            packName="Psalm 23"
+            onExit={onExit}
+            endsAfterReview
+          />
+        </TooltipProvider>,
+      );
+    }
+
+    async function check(answer: string) {
+      const box = await screen.findByLabelText("Your recited passage");
+      await userEvent.click(box);
+      await userEvent.paste(answer);
+      const button = screen.getByRole("button", { name: /Check answer/ });
+      await waitFor(() => expect(button).toBeEnabled());
+      await userEvent.click(button);
+    }
+
+    function savedAccuracy(): number {
+      const record = mutationMock("passageMemory.recordAttempt");
+      expect(record).toHaveBeenCalledTimes(1);
+      const [args] = record.mock.calls[0] as [{ accuracy: number }];
+      return args.accuracy;
+    }
+
+    it.each([
+      ["an exact answer", `${PASSAGE_ONE} ${PASSAGE_TWO}`, [100, 100]],
+      ["mistakes", `${PASSAGE_ONE} He makes me sit in pastures.`, [1, 99]],
+      ["a 0% answer", "nothing here matches", [0, 0]],
+    ] as const)(
+      "finishes once with a summary after %s",
+      async (_label, answer, [min, max]) => {
+        const onExit = vi.fn();
+        renderReview(onExit);
+
+        await check(answer);
+        await userEvent.click(
+          await screen.findByRole("button", { name: /Continue/ }),
+        );
+
+        const heading = await screen.findByRole("heading", {
+          name: "Review complete",
+        });
+        expect(heading).toHaveFocus();
+        expect(
+          screen.getAllByRole("heading", { name: "Review complete" }),
+        ).toHaveLength(1);
+        const accuracy = savedAccuracy();
+        expect(accuracy).toBeGreaterThanOrEqual(min);
+        expect(accuracy).toBeLessThanOrEqual(max);
+        expect(screen.getByText(`${accuracy}%`)).toBeInTheDocument();
+        expect(screen.getByText("Accuracy")).toBeInTheDocument();
+        expect(
+          screen.getByText("Psalm 23", { selector: "li p" }),
+        ).toBeVisible();
+        expect(
+          screen.getByText(
+            `Next review ${formatDueDay(savedDueAt(), getSessionNow())}`,
+          ),
+        ).toBeInTheDocument();
+        // Never back into From memory.
+        expect(screen.queryByLabelText("Your recited passage")).toBeNull();
+        expect(
+          screen.queryByText("Recite the whole passage from memory"),
+        ).toBeNull();
+
+        await userEvent.click(screen.getByRole("button", { name: "Done" }));
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(
+          mutationMock("passageMemory.recordAttempt"),
+        ).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("keeps the error and shows no summary when the save fails", async () => {
+      mutationMock("passageMemory.recordAttempt").mockRejectedValue(
+        new Error("offline"),
+      );
+      renderReview();
+
+      await check(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Couldn't save that attempt. Please try again.",
+      );
+      expect(screen.getByLabelText("Your recited passage")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Continue/ })).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: "Review complete" }),
+      ).toBeNull();
     });
   });
 
