@@ -3243,6 +3243,9 @@ describe("PracticeBoard not-due Practice", () => {
 
       expectNoProgressWrite();
       expect(sideJourneyLabel()).toBe(before);
+      expect(
+        screen.queryByText(/bring it back sooner/),
+      ).not.toBeInTheDocument();
       // No post-miss offer, and no next-review line: nothing was scheduled.
       expect(
         screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
@@ -3290,29 +3293,89 @@ describe("PracticeBoard not-due Practice", () => {
     expectNoProgressWrite();
   });
 
-  it("keeps a due verse's Practice try counted, with no quiet link", async () => {
-    renderPractice({ verses: [reviewingVerse] });
-    const answer = await screen.findByLabelText("Your recalled verse");
-    await waitFor(() => {
-      expect(answer).toBeVisible();
-    });
-    expect(
-      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
-    ).not.toBeInTheDocument();
+  it("drops the miss line on a not-due practice miss, keeping the lead", async () => {
+    renderPractice();
+    await findVisibleRefresherLink();
+    await recite(BAD_MISS);
+    expect(await screen.findByText("This one needs more time.")).toBeVisible();
+    expect(screen.queryByText(/bring it back sooner/)).not.toBeInTheDocument();
+    expectNoProgressWrite();
+  });
 
-    await recite(PASSAGE_ONE);
-    expect(await screen.findByText("Word for word.")).toBeVisible();
+  it("keeps the miss line on a due review miss", async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+    await findVisibleRefresherLink();
+    await recite(BAD_MISS);
+    expect(
+      await screen.findByText("We'll bring it back sooner."),
+    ).toBeVisible();
+  });
+
+  it("keeps the miss line on a due Practice miss that counts", async () => {
+    // The counted miss reschedules the verse past now; the result keeps the
+    // line it was graded with.
+    renderPractice({ verses: [reviewingVerse] });
+    await findVisibleRefresherLink();
+    await recite(BAD_MISS);
+    expect(
+      await screen.findByText("We'll bring it back sooner."),
+    ).toBeVisible();
     await waitFor(() => {
       expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
         1,
       );
     });
-    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
+    expect(screen.getByText("We'll bring it back sooner.")).toBeVisible();
+  });
+
+  it("offers the quiet link on a due Practice card, and its From memory try counts", async () => {
+    const record = mutationMock("verseMemory.recordAttempt");
+    record
+      .mockResolvedValueOnce(stillDueSchedule)
+      .mockResolvedValueOnce(heldSchedule);
+    renderPractice({ verses: [reviewingVerse] });
+
+    await userEvent.click(await findVisibleRefresherLink());
+    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
+    await recite(PASSAGE_ONE);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(await screen.findByText(refresherHeader(2))).toBeVisible();
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(record).toHaveBeenCalledTimes(2);
+    });
+    expect(record).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         verseRefId: VERSE_REF_ID,
         mode: "practice",
-        quality: "exact",
+        hint: "first-letters",
+        holdSchedule: true,
       }),
     );
+    const counted = record.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(counted).toMatchObject({
+      verseRefId: VERSE_REF_ID,
+      mode: "practice",
+      quality: "exact",
+      refresherUsed: true,
+    });
+    expect(counted).not.toHaveProperty("holdSchedule");
+    expect(counted).not.toHaveProperty("hint");
   });
 });

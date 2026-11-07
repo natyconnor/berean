@@ -1007,9 +1007,8 @@ export function PracticeBoard({
                     }
                   : null
               }
-              preTryRefresher={
-                isReview ? "pre-try" : practiceOnly ? "practice" : undefined
-              }
+              offerRefresher={isReview || kind === "practice"}
+              practiceOnly={practiceOnly}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
               packMemberSchedules={composite?.memberSchedules}
@@ -1278,12 +1277,13 @@ interface PracticeCardProps {
   /** Set when this card is a whole pack recited as one passage. */
   composite?: CompositeCardPassage | null;
   reviewItem?: "verse" | "passage";
+  /** Quiet refresher link. Gate on Memorized + loaded lives in the card. */
+  offerRefresher?: boolean;
   /**
-   * Quiet refresher link and the round it opens: counted on a due review,
-   * practice only on a not-due Practice card. Gate on Memorized + loaded
-   * lives in the card.
+   * A not-due Practice card: tries record nothing, and the quiet link opens
+   * the practice-only refresher instead of the counted one.
    */
-  preTryRefresher?: "pre-try" | "practice";
+  practiceOnly?: boolean;
   /** Back / Home flush a held miss even if the card has not unmounted yet. */
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
@@ -1344,7 +1344,8 @@ function PracticeCard({
   showScheduleOutcome = false,
   composite = null,
   reviewItem = "verse",
-  preTryRefresher,
+  offerRefresher = false,
+  practiceOnly = false,
   leaveHeldRef,
   onSavingChange,
   onRecord,
@@ -1366,6 +1367,9 @@ function PracticeCard({
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
   const [checked, setChecked] = useState(false);
+  // Whether the checked try was practice only. Frozen at Check: a counted
+  // miss reschedules the verse, which would flip `practiceOnly` mid-result.
+  const [checkedPracticeOnly, setCheckedPracticeOnly] = useState(false);
   // Snapshot of "First letters · N of M today" at Check so the step label stays
   // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
@@ -1617,6 +1621,7 @@ function PracticeCard({
         );
       }
       setChecked(true);
+      setCheckedPracticeOnly(practiceOnly);
       setOutcomeNow(now);
       setNextSchedule(preview);
       if (preview && !practiceRound) {
@@ -2116,14 +2121,17 @@ function PracticeCard({
                             : undefined
                         }
                         onRefresher={
-                          preTryRefresher &&
+                          offerRefresher &&
                           !composite &&
                           isReviewPhase(status) &&
                           !loading &&
                           !error &&
                           versePlainText !== "" &&
                           refresher.phase === "off"
-                            ? () => openRefresher(preTryRefresher)
+                            ? () =>
+                                openRefresher(
+                                  practiceOnly ? "practice" : "pre-try",
+                                )
                             : undefined
                         }
                         disabled={submitPending}
@@ -2188,6 +2196,7 @@ function PracticeCard({
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
                     scheduleHeld={refresher.phase === "step1" || practiceRound}
+                    unscheduled={checkedPracticeOnly}
                     skipCelebrate={refresher.phase === "step1"}
                     saveError={saveError}
                     bannerId={bannerId}

@@ -52,6 +52,8 @@ interface VerseMemoryFeedbackProps {
   note?: string;
   /** First letters refresher: swap the miss line and hide "Next review". */
   scheduleHeld?: boolean;
+  /** Practice-only try: drop the miss line's "bring it back sooner". */
+  unscheduled?: boolean;
   /** Skip the 100% celebration pop (step 1 of a refresher). */
   skipCelebrate?: boolean;
   /** Screen-reader target for the default-focus result button. */
@@ -104,6 +106,7 @@ export function VerseMemoryFeedback({
   errors,
   note,
   scheduleHeld = false,
+  unscheduled = false,
   skipCelebrate = false,
   bannerId,
   closingLine = null,
@@ -116,6 +119,7 @@ export function VerseMemoryFeedback({
   const feedback = accuracyFeedback(scored, {
     exact: quality === "exact",
     scheduleHeld,
+    unscheduled,
   });
   const { band } = feedback;
   const practicePass = practiceOnly && (band === "exact" || band === "pass");
