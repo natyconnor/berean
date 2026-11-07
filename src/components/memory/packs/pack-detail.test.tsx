@@ -1407,6 +1407,33 @@ describe("PackDetail row Refresh", () => {
     expect(href.searchParams.get("refresh")).toBe("1");
   });
 
+  it("hides Refresh on every row of a Review together pack, due or not", async () => {
+    mocks.queryByArgs.set("packs.get", (args) => {
+      const pack = PACKS[(args as { id: string }).id];
+      return pack ? { ...pack, unifiedReviewEnabled: true } : null;
+    });
+    const together = renderHost("pack:psalm23x");
+    // Psalm 23:1–3 is not due; Psalm 23:4–6 is due.
+    for (const reference of ["Psalm 23:1–3", "Psalm 23:4–6"]) {
+      const items = await openRow(reference);
+      expect(items).not.toContain(REFRESH_MENU_LABEL);
+      expect(items).toEqual([expect.stringContaining(START_OVER_MENU_LABEL)]);
+      await userEvent.keyboard("{Escape}");
+    }
+    together.unmount();
+
+    mocks.queryByArgs.set(
+      "packs.get",
+      (args) => PACKS[(args as { id: string }).id] ?? null,
+    );
+    renderHost("pack:psalm23x");
+    for (const reference of ["Psalm 23:1–3", "Psalm 23:4–6"]) {
+      const items = await openRow(reference);
+      expect(items[0]).toBe(REFRESH_MENU_LABEL);
+      await userEvent.keyboard("{Escape}");
+    }
+  });
+
   it("focuses the refreshed row's ••• on return to the pack", async () => {
     mocks.locationState = { refreshedVerse: "Psalms|23|1|3" };
     renderHost("pack:psalm23x");

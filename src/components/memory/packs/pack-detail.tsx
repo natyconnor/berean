@@ -876,8 +876,10 @@ function PackVerseRow({
     withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
   const startRefresh = useStartVerseRefresh(member, frame.returnTo);
   useRefreshReturnFocus(member, triggerRef);
+  // A Review together pack reviews its verses as one recitation, so its rows
+  // have no single-verse Refresh (R45 decision).
   const refresh =
-    !started && isReviewPhase(member.status)
+    !started && !reviewTogether && isReviewPhase(member.status)
       ? {
           pending: startRefresh.pending,
           onSelect: () => startRefresh.start(isDueForReview(member, now)),
