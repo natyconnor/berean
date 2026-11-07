@@ -37,6 +37,8 @@ interface VerseAttemptResultProps {
   bannerId?: string;
   errorId?: string;
   closingLine?: string | null;
+  /** Shown after the closing line, e.g. "Counted as today's review". */
+  countedLine?: string | null;
   practiceOnly?: boolean;
 }
 
@@ -170,6 +172,7 @@ export function VerseAttemptResult({
   bannerId,
   errorId,
   closingLine = null,
+  countedLine = null,
   practiceOnly = false,
 }: VerseAttemptResultProps): JSX.Element | null {
   const trimmedTyped = typedAnswer.trim();
@@ -202,6 +205,7 @@ export function VerseAttemptResult({
           skipCelebrate={skipCelebrate}
           bannerId={bannerId}
           closingLine={closingLine}
+          countedLine={countedLine}
           practiceOnly={practiceOnly}
         />
       ) : null}

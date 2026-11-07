@@ -31,6 +31,7 @@ import { useMemoryPanelFrame } from "@/components/memory/drawer/memory-panel-con
 import { MemoryPanelFrame } from "@/components/memory/drawer/memory-panel-frame";
 import { InternalLink } from "@/components/memory/internal-link";
 import {
+  RefreshStartError,
   StartedOverStatus,
   StartOverConfirm,
   StartOverMenuItem,
@@ -83,8 +84,9 @@ import {
 import type { VerseSpan } from "@/lib/hearted-verse-coverage";
 import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
 import { spanDisplayTitle } from "@/lib/memorize-target";
+import { useStartVerseRefresh } from "@/hooks/use-start-verse-refresh";
 import { withReturn } from "@/lib/memory-return";
-import { isDueForReview } from "@/lib/memory-scheduler";
+import { isDueForReview, isReviewPhase } from "@/lib/memory-scheduler";
 import {
   memoryPackSessionHref,
   memoryTodaySessionHref,
@@ -869,6 +871,14 @@ function PackVerseRow({
   const showStartOver = !started && canStartOver(member);
   const href = (session: MemorySessionKind) =>
     withReturn(memoryVerseSessionHref(session, member), frame.returnTo);
+  const startRefresh = useStartVerseRefresh(member, frame.returnTo);
+  const refresh =
+    !started && isReviewPhase(member.status)
+      ? {
+          pending: startRefresh.pending,
+          onSelect: () => startRefresh.start(isDueForReview(member, now)),
+        }
+      : undefined;
 
   useLayoutEffect(() => {
     if (!pendingFocus.current) return;
@@ -994,7 +1004,7 @@ function PackVerseRow({
             </InternalLink>
           </Button>
         ) : null}
-        {editable || startOverProps ? (
+        {editable || startOverProps || refresh ? (
           <RowEditControls
             label={reference}
             {...(editable
@@ -1007,9 +1017,11 @@ function PackVerseRow({
                 }
               : {})}
             startOver={startOverProps}
+            refresh={refresh}
           />
         ) : null}
       </div>
+      <RefreshStartError error={startRefresh.error} className="basis-full" />
     </li>
   );
 }

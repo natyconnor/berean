@@ -38,6 +38,7 @@ import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
+  COUNTED_TODAY_CLOSING,
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
@@ -270,6 +271,11 @@ interface PracticeBoardProps {
     | ((api: { changeOrder: (order: PracticeOrder) => void }) => ReactNode);
   /** Card id to open first; the first card in order when absent or unknown. */
   initialVerseId?: string;
+  /**
+   * ••• Refresh: the card opens in the refresher, and Continue on its From
+   * memory result leaves the run for where it started.
+   */
+  refresh?: boolean;
   /** The card now on screen, after a rail pick, Next, or Shuffle. */
   onCurrentVerseId?: (id: string) => void;
   /** When set, this run reads card order from the session instead of its own. */
@@ -464,6 +470,7 @@ export function PracticeBoard({
   railHeader,
   rail,
   initialVerseId,
+  refresh = false,
   onCurrentVerseId,
   orderedIds,
   shownId,
@@ -670,11 +677,13 @@ export function PracticeBoard({
   // even when it sits next to ordinary verses in the global review queue.
   const composite = currentVerse?.composite ?? null;
   // A Practice try on a Memorized verse that is not due changes nothing (R44).
+  // A ••• Refresh counts only on a due verse in Review (R18, R19), so a
+  // reload after it counted is practice.
+  const notDue = !isDueForReview(currentProgress, now);
   const practiceOnly =
-    kind === "practice" &&
     composite === null &&
     isReviewPhase(currentProgress.status) &&
-    !isDueForReview(currentProgress, now);
+    (refresh ? kind === "practice" || notDue : kind === "practice" && notDue);
   const compositePassage = useEsvCompositePassage(
     composite?.members ?? NO_COMPOSITE_MEMBERS,
     { enabled: composite !== null },
@@ -1009,6 +1018,7 @@ export function PracticeBoard({
               }
               offerRefresher={isReview || kind === "practice"}
               practiceOnly={practiceOnly}
+              onRefreshDone={refresh ? shellProps.onExit : undefined}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
               packMemberSchedules={composite?.memberSchedules}
@@ -1284,6 +1294,11 @@ interface PracticeCardProps {
    * the practice-only refresher instead of the counted one.
    */
   practiceOnly?: boolean;
+  /**
+   * ••• Refresh: the card opens in the refresher, and Continue on its From
+   * memory result calls this instead of returning to the cold try.
+   */
+  onRefreshDone?: () => void;
   /** Back / Home flush a held miss even if the card has not unmounted yet. */
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
@@ -1346,6 +1361,7 @@ function PracticeCard({
   reviewItem = "verse",
   offerRefresher = false,
   practiceOnly = false,
+  onRefreshDone,
   leaveHeldRef,
   onSavingChange,
   onRecord,
@@ -1359,7 +1375,9 @@ function PracticeCard({
   onJourneyPreview,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
-  const refresher = useVerseRefresher();
+  const refresher = useVerseRefresher(
+    onRefreshDone ? (practiceOnly ? "practice" : "pre-try") : undefined,
+  );
   const [typedAnswer, setTypedAnswer] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const countedSaveNowRef = useRef<number | null>(null);
@@ -1816,6 +1834,10 @@ function PracticeCard({
       resetTyping({ keepJourneyPreview });
       return;
     }
+    if (onRefreshDone && refresher.phase === "step2") {
+      onRefreshDone();
+      return;
+    }
     if (!refresher.isOpen && heldIdRef.current) {
       setSubmitKind("grade");
       submit(async () => {
@@ -2205,6 +2227,15 @@ function PracticeCard({
                       practiceFromMemory
                         ? PRACTICE_ONLY_CLOSING
                         : dateOnlyClosing
+                    }
+                    countedLine={
+                      onRefreshDone &&
+                      countedFromMemory &&
+                      refresher.phase === "step2" &&
+                      !submitPending &&
+                      !saveError
+                        ? COUNTED_TODAY_CLOSING
+                        : null
                     }
                     practiceOnly={practiceFromMemory}
                   />

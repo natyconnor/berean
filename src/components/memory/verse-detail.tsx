@@ -149,10 +149,13 @@ export function VerseDetailPanel({
           <VerseMemoryMenu
             verseRefId={id}
             reference={reference}
+            verse={detail}
             status={detail.status}
+            dueAt={detail.dueAt}
             learnStage={detail.learnStage}
             stageReps={detail.stageReps}
             lastReviewedAt={detail.lastReviewedAt}
+            returnTo={frame.returnTo}
             onStopped={frame.exit}
           />
         ) : undefined

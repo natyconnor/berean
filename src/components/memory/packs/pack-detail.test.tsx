@@ -15,6 +15,8 @@ import {
   readLearnPacksDismissedToday,
 } from "@/lib/learn-dismissed-packs";
 import {
+  REFRESH_MENU_LABEL,
+  REFRESH_START_ERROR,
   START_OVER_CONFIRM_BODY,
   START_OVER_MENU_LABEL,
   STARTED_OVER_LABEL,
@@ -37,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   startPassage: vi.fn(),
   toast: vi.fn(),
   toastSuccess: vi.fn(),
+  getPassage: vi.fn(),
 }));
 
 function mutation(name: string) {
@@ -67,7 +70,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutation(name),
-  useAction: () => vi.fn(),
+  useAction: () => mocks.getPassage,
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -86,6 +89,7 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
+    esv: { getPassage: "esv.getPassage" },
     memoryHome: { today: "memoryHome.today" },
     packs: {
       get: "packs.get",
@@ -1289,5 +1293,128 @@ describe("PackDetail Start over", () => {
     expect(
       screen.queryByRole("button", { name: /^Options for/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("PackDetail row Refresh", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    mocks.getPassage.mockReset();
+    mocks.getPassage.mockImplementation(({ query }: { query: string }) =>
+      Promise.resolve({
+        canonical: query,
+        copyright: "ESV",
+        verses: Array.from({ length: 41 }, (_, index) => ({
+          number: index + 1,
+          text: `Verse ${index + 1} text.`,
+        })),
+      }),
+    );
+    mocks.navigate.mockResolvedValue(undefined);
+  });
+
+  async function openRow(reference: string) {
+    await userEvent.click(
+      screen.getByRole("button", { name: `Options for ${reference}` }),
+    );
+    await screen.findByRole("menu");
+    return screen.getAllByRole("menuitem").map((item) => item.textContent);
+  }
+
+  function navigatedHref() {
+    const [arg] = mocks.navigate.mock.calls[0] as [{ href: string }];
+    return new URL(arg.href, "https://app.test");
+  }
+
+  it("shows Refresh only on Memorized rows, before Start over, keeping edit actions", async () => {
+    const custom = renderHost("pack:mercedxx");
+    const luke = await openRow("Luke 9:23–24");
+    expect(luke[0]).toBe("Move up");
+    expect(luke[1]).toBe("Move down");
+    expect(luke[2]).toBe(REFRESH_MENU_LABEL);
+    expect(luke[3]).toContain(START_OVER_MENU_LABEL);
+    expect(luke[4]).toBe("Remove");
+    await userEvent.keyboard("{Escape}");
+
+    const joshua = await openRow("Joshua 1:9");
+    expect(joshua).not.toContain(REFRESH_MENU_LABEL);
+    expect(joshua.some((item) => item?.includes(START_OVER_MENU_LABEL))).toBe(
+      true,
+    );
+    await userEvent.keyboard("{Escape}");
+
+    const isaiah = await openRow("Isaiah 41:10");
+    expect(isaiah).toEqual(["Move up", "Move down", "Remove"]);
+    custom.unmount();
+
+    membersByPack = {
+      ...membersByPack,
+      psalm23x: [
+        member("p23a", {
+          book: "Psalms",
+          chapter: 23,
+          startVerse: 1,
+          endVerse: 3,
+          status: "mastered",
+          dueAt: NOW + 30 * DAY_MS,
+          isDue: false,
+        }),
+      ],
+    };
+    renderHost("pack:psalm23x");
+    const mastered = await openRow("Psalm 23:1–3");
+    expect(mastered[0]).toBe(REFRESH_MENU_LABEL);
+  });
+
+  it("refreshes only the chosen row: not due opens Practice, due opens Review", async () => {
+    const view = renderHost("pack:psalm23x");
+    const practiceReturn = new URL(
+      screen
+        .getByRole("link", { name: "Practice Psalm 23:1–3" })
+        .getAttribute("href")!,
+      "https://app.test",
+    ).searchParams.get("return");
+    await openRow("Psalm 23:1–3");
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+    );
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    let href = navigatedHref();
+    expect(href.pathname).toBe("/memory/practice");
+    expect(href.searchParams.get("refresh")).toBe("1");
+    expect(href.searchParams.get("startVerse")).toBe("1");
+    expect(href.searchParams.get("endVerse")).toBe("3");
+    expect(href.searchParams.get("return")).toBe(practiceReturn);
+    view.unmount();
+
+    mocks.navigate.mockClear();
+    renderHost("pack:mercedxx");
+    await openRow("Luke 9:23–24");
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+    );
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    href = navigatedHref();
+    expect(href.pathname).toBe("/memory/review");
+    expect(href.searchParams.get("book")).toBe("Luke");
+    expect(href.searchParams.get("refresh")).toBe("1");
+  });
+
+  it("shows the error inside the row when the refresher can't start", async () => {
+    mocks.getPassage.mockRejectedValueOnce(new Error("offline"));
+    renderHost("pack:psalm23x");
+    await openRow("Psalm 23:1–3");
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(REFRESH_START_ERROR);
+    expect(
+      within(alert.closest("li")!).getByRole("button", {
+        name: "Options for Psalm 23:1–3",
+      }),
+    ).toBeInTheDocument();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.mutations.get("verseMemory.startOver")).not.toHaveBeenCalled();
   });
 });

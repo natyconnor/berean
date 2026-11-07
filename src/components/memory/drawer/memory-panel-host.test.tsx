@@ -46,6 +46,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutation(name),
+  useAction: () => vi.fn(),
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -60,6 +61,7 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
+    esv: { getPassage: "esv.getPassage" },
     memoryHome: { today: "memoryHome.today" },
     packs: {
       get: "packs.get",

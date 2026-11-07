@@ -60,6 +60,8 @@ interface VerseMemoryFeedbackProps {
   bannerId?: string;
   /** Replaces the Next review line, e.g. a practice-only close. */
   closingLine?: string | null;
+  /** Shown after the closing line, e.g. "Counted as today's review". */
+  countedLine?: string | null;
   practiceOnly?: boolean;
 }
 
@@ -110,6 +112,7 @@ export function VerseMemoryFeedback({
   skipCelebrate = false,
   bannerId,
   closingLine = null,
+  countedLine = null,
   practiceOnly = false,
 }: VerseMemoryFeedbackProps): JSX.Element {
   const reduceMotion = useReducedMotion() ?? false;
@@ -181,6 +184,11 @@ export function VerseMemoryFeedback({
       {consequence ? (
         <p className="mt-1 text-sm leading-snug text-balance text-foreground/80">
           {consequence}
+        </p>
+      ) : null}
+      {countedLine ? (
+        <p className="mt-1 text-sm leading-snug text-balance text-foreground/80">
+          {countedLine}
         </p>
       ) : null}
     </motion.div>

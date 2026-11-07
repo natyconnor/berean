@@ -33,6 +33,7 @@ function MemoryReviewSessionPage({
   exitHref,
   returnTo,
   onContinueSession,
+  refresh,
 }: {
   verses: ReadonlyArray<PracticeVerse>;
   scopeLabel: string;
@@ -43,10 +44,12 @@ function MemoryReviewSessionPage({
   exitHref: string;
   returnTo?: string;
   onContinueSession?: () => void;
+  refresh?: boolean;
 }) {
   return (
     <MemorySessionRunner
       kind="review"
+      refresh={refresh}
       verses={verses}
       scopeLabel={scopeLabel}
       onExit={onExit}
@@ -183,6 +186,7 @@ export function MemoryReviewPage() {
       backLabel={backLabel}
       exitHref={exitHref}
       returnTo={returnTo}
+      refresh={search.refresh === true}
     />
   );
 }
