@@ -53,6 +53,7 @@ import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
   LEARN_PROGRESS_ACCURACY,
+  isDueForReview,
   isLearningLocked,
   isLearningProgressAttempt,
   isReviewPhase,
@@ -438,7 +439,8 @@ const DEAL_FADE_OUT_S = 0.12;
  * (and pack) blocks only — verses learned together stay in Scripture order.
  *
  * Attempts use the session's explicit `learn` or `practice` mode and count
- * fully. The card is driven entirely by the server's
+ * fully, except a Practice try on a not-due Memorized verse, which records
+ * nothing. The card is driven entirely by the server's
  * `learnStage` + `stageReps`: a Read prime, then the fading support bands
  * (Guided → Challenge → From Memory) that re-randomize and thin their hints per
  * rep. Each recorded attempt adopts the returned `learnStage`/`stageReps`, so
@@ -667,6 +669,12 @@ export function PracticeBoard({
   // The active card's passage: a unified pack is one concatenated recitation,
   // even when it sits next to ordinary verses in the global review queue.
   const composite = currentVerse?.composite ?? null;
+  // A Practice try on a Memorized verse that is not due changes nothing (R44).
+  const practiceOnly =
+    kind === "practice" &&
+    composite === null &&
+    isReviewPhase(currentProgress.status) &&
+    !isDueForReview(currentProgress, now);
   const compositePassage = useEsvCompositePassage(
     composite?.members ?? NO_COMPOSITE_MEMBERS,
     { enabled: composite !== null },
@@ -999,7 +1007,8 @@ export function PracticeBoard({
                     }
                   : null
               }
-              offerRefresher={isReview}
+              offerRefresher={isReview || kind === "practice"}
+              practiceOnly={practiceOnly}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
               packMemberSchedules={composite?.memberSchedules}
@@ -1059,6 +1068,7 @@ export function PracticeBoard({
                 }
               }}
               onRecord={async (tokens, wordCount, opts) => {
+                if (practiceOnly) return { ok: true as const, schedule: null };
                 const verseId = currentVerse.id;
                 const hold = opts?.holdSchedule === true;
                 const counted: RecordVerseAttemptResult = composite
@@ -1269,6 +1279,11 @@ interface PracticeCardProps {
   reviewItem?: "verse" | "passage";
   /** Quiet refresher link. Gate on Memorized + loaded lives in the card. */
   offerRefresher?: boolean;
+  /**
+   * A not-due Practice card: tries record nothing, and the quiet link opens
+   * the practice-only refresher instead of the counted one.
+   */
+  practiceOnly?: boolean;
   /** Back / Home flush a held miss even if the card has not unmounted yet. */
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
@@ -1330,6 +1345,7 @@ function PracticeCard({
   composite = null,
   reviewItem = "verse",
   offerRefresher = false,
+  practiceOnly = false,
   leaveHeldRef,
   onSavingChange,
   onRecord,
@@ -1351,6 +1367,9 @@ function PracticeCard({
   // through the resulting band/rep change so the feedback stays visible until
   // the learner continues.
   const [checked, setChecked] = useState(false);
+  // Whether the checked try was practice only. Frozen at Check: a counted
+  // miss reschedules the verse, which would flip `practiceOnly` mid-result.
+  const [checkedPracticeOnly, setCheckedPracticeOnly] = useState(false);
   // Snapshot of "First letters · N of M today" at Check so the step label stays
   // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
@@ -1549,8 +1568,7 @@ function PracticeCard({
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
-    // Practice counts fully: every checked attempt records and reschedules. The
-    // lock keeps a double-tap from recording twice before the result view
+    // The lock keeps a double-tap from recording twice before the result view
     // (driven by `checked`) mounts and replaces this button. The action stays
     // disabled, labeled Saving..., until the record settles. Grading is local
     // and already on screen; the wait is the Convex write.
@@ -1603,6 +1621,7 @@ function PracticeCard({
         );
       }
       setChecked(true);
+      setCheckedPracticeOnly(practiceOnly);
       setOutcomeNow(now);
       setNextSchedule(preview);
       if (preview && !practiceRound) {
@@ -2109,7 +2128,10 @@ function PracticeCard({
                           !error &&
                           versePlainText !== "" &&
                           refresher.phase === "off"
-                            ? () => openRefresher("pre-try")
+                            ? () =>
+                                openRefresher(
+                                  practiceOnly ? "practice" : "pre-try",
+                                )
                             : undefined
                         }
                         disabled={submitPending}
@@ -2174,6 +2196,7 @@ function PracticeCard({
                     nextSchedule={nextSchedule}
                     now={outcomeNow}
                     scheduleHeld={refresher.phase === "step1" || practiceRound}
+                    unscheduled={checkedPracticeOnly}
                     skipCelebrate={refresher.phase === "step1"}
                     saveError={saveError}
                     bannerId={bannerId}

@@ -56,12 +56,27 @@ const HELD_MISS_REST = "Another look will help it stick.";
 /** The headline a result view leads with; the percentage sits under it. */
 export function accuracyFeedback(
   accuracy: number,
-  { exact, scheduleHeld = false }: { exact: boolean; scheduleHeld?: boolean },
+  {
+    exact,
+    scheduleHeld = false,
+    unscheduled = false,
+  }: {
+    exact: boolean;
+    scheduleHeld?: boolean;
+    /** A practice-only try: nothing reschedules, so a miss promises nothing. */
+    unscheduled?: boolean;
+  },
 ): AccuracyFeedback {
   const band = accuracyBand(accuracy, exact);
   const { lead, emoji } = COPY[band];
   const rest =
-    band === "miss" && scheduleHeld ? HELD_MISS_REST : COPY[band].rest;
+    band !== "miss"
+      ? COPY[band].rest
+      : scheduleHeld
+        ? HELD_MISS_REST
+        : unscheduled
+          ? ""
+          : COPY[band].rest;
   return {
     band,
     lead,

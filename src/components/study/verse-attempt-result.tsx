@@ -30,6 +30,8 @@ interface VerseAttemptResultProps {
   /** Trails the banner's percentage, e.g. "Pass at 85%". */
   note?: string;
   scheduleHeld?: boolean;
+  /** Practice-only try: drop the miss line's "bring it back sooner". */
+  unscheduled?: boolean;
   skipCelebrate?: boolean;
   saveError?: string | null;
   bannerId?: string;
@@ -162,6 +164,7 @@ export function VerseAttemptResult({
   now,
   note,
   scheduleHeld = false,
+  unscheduled = false,
   skipCelebrate = false,
   saveError = null,
   bannerId,
@@ -195,6 +198,7 @@ export function VerseAttemptResult({
           errors={attemptErrors}
           note={note}
           scheduleHeld={scheduleHeld}
+          unscheduled={unscheduled}
           skipCelebrate={skipCelebrate}
           bannerId={bannerId}
           closingLine={closingLine}

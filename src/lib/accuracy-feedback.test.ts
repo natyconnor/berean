@@ -40,6 +40,19 @@ describe("accuracyFeedback", () => {
     );
   });
 
+  it("drops the miss line on a practice-only try, and only on a miss", () => {
+    expect(
+      accuracyFeedback(40, { exact: false, unscheduled: true }),
+    ).toMatchObject({
+      lead: "This one needs more time.",
+      rest: "",
+      headline: "This one needs more time.",
+    });
+    expect(accuracyFeedback(70, { exact: false, unscheduled: true })).toEqual(
+      accuracyFeedback(70, { exact: false }),
+    );
+  });
+
   it("splits the bold lead from the rest", () => {
     expect(accuracyFeedback(70, { exact: false })).toEqual({
       band: "close",
