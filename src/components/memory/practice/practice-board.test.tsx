@@ -3193,6 +3193,17 @@ describe("PracticeBoard not-due Practice", () => {
     await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
   }
 
+  /** The card fades in from opacity 0 on mount; wait until it shows. */
+  async function findVisibleRefresherLink(): Promise<HTMLElement> {
+    const link = await screen.findByRole("button", {
+      name: NEED_A_REFRESHER_LABEL,
+    });
+    await waitFor(() => {
+      expect(link).toBeVisible();
+    });
+    return link;
+  }
+
   function expectNoProgressWrite() {
     expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
     expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
@@ -3218,7 +3229,7 @@ describe("PracticeBoard not-due Practice", () => {
           (state: PracticeRunState, result: PracticeSessionResult) => void
         >();
       renderPractice({ onRunStateChange });
-      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL });
+      await findVisibleRefresherLink();
       const before = sideJourneyLabel();
 
       await recite(answer);
@@ -3255,9 +3266,7 @@ describe("PracticeBoard not-due Practice", () => {
 
   it("shows the quiet link, and its refresher is practice only", async () => {
     renderPractice();
-    await userEvent.click(
-      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
-    );
+    await userEvent.click(await findVisibleRefresherLink());
     expect(await screen.findByText(refresherHeader(1))).toBeVisible();
     await recite(PASSAGE_ONE);
     await userEvent.click(
@@ -3283,9 +3292,10 @@ describe("PracticeBoard not-due Practice", () => {
 
   it("keeps a due verse's Practice try counted, with no quiet link", async () => {
     renderPractice({ verses: [reviewingVerse] });
-    expect(
-      await screen.findByLabelText("Your recalled verse"),
-    ).toBeInTheDocument();
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await waitFor(() => {
+      expect(answer).toBeVisible();
+    });
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
