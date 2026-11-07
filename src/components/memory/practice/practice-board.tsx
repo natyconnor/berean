@@ -1432,6 +1432,10 @@ function PracticeCard({
     !composite &&
     refresher.phase !== "step1" &&
     !practiceRound;
+  // A try saved as the verse's review: a failed save shows the save error, and
+  // its retry resends the first try's time.
+  const savesReview =
+    countedFromMemory || (practiceReview && refresher.phase !== "step1");
 
   useEffect(() => {
     onSavingChange?.(submitPending);
@@ -1587,10 +1591,10 @@ function PracticeCard({
     setSubmitKind("grade");
     submit(async () => {
       const now =
-        countedFromMemory && countedSaveNowRef.current !== null
+        savesReview && countedSaveNowRef.current !== null
           ? countedSaveNowRef.current
           : Date.now();
-      if (countedFromMemory) countedSaveNowRef.current = now;
+      if (savesReview) countedSaveNowRef.current = now;
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       const accuracy = verseAttemptAccuracy(tokens);
@@ -1701,9 +1705,7 @@ function PracticeCard({
         return;
       }
       if (!result.ok) {
-        if (countedFromMemory || practiceReview) {
-          setSaveError(REFRESH_SAVE_ERROR);
-        }
+        if (savesReview) setSaveError(REFRESH_SAVE_ERROR);
         return;
       }
       setSaveError(null);

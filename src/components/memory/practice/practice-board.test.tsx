@@ -3448,7 +3448,7 @@ describe("PracticeBoard not-due Practice", () => {
   );
 
   it.each(["review", "practice"] as const)(
-    "a due %s save failure shows the review save error, then Next review on retry",
+    "a due %s save failure shows the review save error, then retries at the same time",
     async (kind) => {
       const record = mutationMock("verseMemory.recordAttempt");
       record
@@ -3469,6 +3469,10 @@ describe("PracticeBoard not-due Practice", () => {
       });
       expect(record).toHaveBeenCalledTimes(2);
       expect(await screen.findByText(/^Next review /)).toBeVisible();
+      // The retry resends the same try, at the first try's time.
+      const calls = record.mock.calls as Array<[Record<string, unknown>]>;
+      expect(calls[1]?.[0]).toEqual(calls[0]?.[0]);
+      expect(calls[0]?.[0]?.now).toEqual(expect.any(Number));
     },
   );
 
