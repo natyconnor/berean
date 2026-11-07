@@ -552,7 +552,7 @@ export function PassageSession({
 
   return (
     <PassageSessionShell
-      phaseLabel={phaseLabel}
+      phaseLabel={finishedReview ? undefined : phaseLabel}
       packName={packName}
       onExit={leaveSession}
       onHome={endStep}
@@ -1171,7 +1171,8 @@ function PassageSessionShell({
   aside,
   children,
 }: {
-  phaseLabel: string;
+  /** Left off on a summary, which names the session but no step. */
+  phaseLabel?: string;
   packName: string;
   onExit: () => void;
   onHome?: () => void;
@@ -1193,19 +1194,25 @@ function PassageSessionShell({
             exitHref={exitHref}
           />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
-            <span
-              className="shrink-0 font-semibold"
-              role="status"
-              aria-label={`Session phase: ${phaseLabel}`}
-            >
-              {phaseLabel}
-            </span>
-            <span aria-hidden className="text-muted-foreground">
-              ·
-            </span>
-            <span className="truncate font-medium text-muted-foreground">
-              {packName}
-            </span>
+            {phaseLabel === undefined ? (
+              <span className="truncate font-semibold">{packName}</span>
+            ) : (
+              <>
+                <span
+                  className="shrink-0 font-semibold"
+                  role="status"
+                  aria-label={`Session phase: ${phaseLabel}`}
+                >
+                  {phaseLabel}
+                </span>
+                <span aria-hidden className="text-muted-foreground">
+                  ·
+                </span>
+                <span className="truncate font-medium text-muted-foreground">
+                  {packName}
+                </span>
+              </>
+            )}
           </h1>
           {progress ? <SessionHeaderProgress progress={progress} /> : null}
         </div>

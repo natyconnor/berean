@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -983,6 +983,30 @@ describe("PassageSession", () => {
         ).toHaveBeenCalledTimes(1);
       },
     );
+
+    it("drops the step label from the header on the summary", async () => {
+      renderReview();
+      const header = screen.getByRole("banner");
+      expect(
+        within(header).getByRole("status", {
+          name: "Session phase: Recite it all",
+        }),
+      ).toBeInTheDocument();
+
+      await check(`${PASSAGE_ONE} ${PASSAGE_TWO}`);
+      await userEvent.click(
+        await screen.findByRole("button", { name: /Continue/ }),
+      );
+
+      await screen.findByRole("heading", { name: "Review complete" });
+      expect(
+        within(header).queryByRole("status", { name: /Session phase/ }),
+      ).toBeNull();
+      expect(within(header).queryByText("Recite it all")).toBeNull();
+      expect(
+        within(header).getByRole("heading", { level: 1, name: "Psalm 23" }),
+      ).toBeInTheDocument();
+    });
 
     it("keeps the error and shows no summary when the save fails", async () => {
       mutationMock("passageMemory.recordAttempt").mockRejectedValue(
