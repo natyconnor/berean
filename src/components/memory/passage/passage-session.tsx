@@ -58,6 +58,7 @@ import {
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
+import { PassageReviewSummary } from "@/components/memory/review-summary";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import { SessionColumns } from "@/components/memory/practice/session-columns";
@@ -125,6 +126,9 @@ type BuiltRecall = {
   readContinue: boolean;
 };
 
+/** A saved standalone review: its score and next due date. */
+type SavedReview = { accuracy: number; dueAt: number };
+
 interface PassageSessionProps {
   packId: Id<"packs">;
   view: PassageView;
@@ -147,6 +151,11 @@ interface PassageSessionProps {
   progress?: SessionProgress | ((todayShare: number) => SessionProgress);
   /** A side column beside the passage, e.g. the rest of today's queue. */
   aside?: ReactNode;
+  /**
+   * Standalone Review: Continue after a saved review ends the session with a
+   * summary instead of reciting the passage again.
+   */
+  endsAfterReview?: boolean;
 }
 
 export function PassageSession({
@@ -159,6 +168,7 @@ export function PassageSession({
   exitHref,
   progress,
   aside,
+  endsAfterReview = false,
 }: PassageSessionProps): JSX.Element {
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
@@ -205,6 +215,10 @@ export function PassageSession({
   const [recitingSection, setRecitingSection] = useState(false);
   const [recitingConnect, setRecitingConnect] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
+  const [savedReview, setSavedReview] = useState<SavedReview | null>(null);
+  const [finishedReview, setFinishedReview] = useState<SavedReview | null>(
+    null,
+  );
   // The passage just became known by heart: "pending" holds the moment until
   // the learner continues past the result that finished it. "owed" is a moment
   // missed by leaving early, shown once this session opens with its text.
@@ -326,6 +340,9 @@ export function PassageSession({
         addDayKey: nextView.addDayKey,
         todayKey: localDayIndex(attemptedAt, tz),
       });
+      if (pending.kind === "review") {
+        setSavedReview({ accuracy: pending.accuracy, dueAt: nextView.dueAt });
+      }
       if (status === "building" && nextView.needsCelebration) {
         setMoment("pending");
       }
@@ -432,6 +449,10 @@ export function PassageSession({
   }
 
   function handleContinueAfterResult() {
+    if (endsAfterReview && savedReview) {
+      setFinishedReview(savedReview);
+      return;
+    }
     if (moment === "pending") setMoment("showing");
     setHoldResult(false);
     setHeldRecall(null);
@@ -524,13 +545,14 @@ export function PassageSession({
   const finishedPiece = latestLockedPiece(state.pieces, state.now);
   const showRecall =
     Boolean(recall) &&
+    !finishedReview &&
     !showNextVersePanel &&
     !showDoneToday &&
     !needsFirstVerse;
 
   return (
     <PassageSessionShell
-      phaseLabel={phaseLabel}
+      phaseLabel={finishedReview ? undefined : phaseLabel}
       packName={packName}
       onExit={leaveSession}
       onHome={endStep}
@@ -689,6 +711,15 @@ export function PassageSession({
             onContinueAfterResult={handleContinueAfterResult}
           />
         </div>
+      ) : null}
+
+      {finishedReview ? (
+        <PassageReviewSummary
+          title={packName}
+          accuracy={finishedReview.accuracy}
+          dueAt={finishedReview.dueAt}
+          onDone={leaveSession}
+        />
       ) : null}
 
       {moment === "showing" || (moment === "owed" && wordCountsReady) ? (
@@ -1140,7 +1171,8 @@ function PassageSessionShell({
   aside,
   children,
 }: {
-  phaseLabel: string;
+  /** Left off on a summary, which names the session but no step. */
+  phaseLabel?: string;
   packName: string;
   onExit: () => void;
   onHome?: () => void;
@@ -1162,19 +1194,25 @@ function PassageSessionShell({
             exitHref={exitHref}
           />
           <h1 className="flex min-w-0 items-baseline gap-2 text-lg tracking-tight">
-            <span
-              className="shrink-0 font-semibold"
-              role="status"
-              aria-label={`Session phase: ${phaseLabel}`}
-            >
-              {phaseLabel}
-            </span>
-            <span aria-hidden className="text-muted-foreground">
-              ·
-            </span>
-            <span className="truncate font-medium text-muted-foreground">
-              {packName}
-            </span>
+            {phaseLabel === undefined ? (
+              <span className="truncate font-semibold">{packName}</span>
+            ) : (
+              <>
+                <span
+                  className="shrink-0 font-semibold"
+                  role="status"
+                  aria-label={`Session phase: ${phaseLabel}`}
+                >
+                  {phaseLabel}
+                </span>
+                <span aria-hidden className="text-muted-foreground">
+                  ·
+                </span>
+                <span className="truncate font-medium text-muted-foreground">
+                  {packName}
+                </span>
+              </>
+            )}
           </h1>
           {progress ? <SessionHeaderProgress progress={progress} /> : null}
         </div>

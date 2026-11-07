@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import { type JSX, useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 
@@ -80,14 +80,7 @@ export function ReviewSummary({
 
       <div className="mt-6 space-y-6">
         {averageAccuracy !== null && (
-          <div className="rounded-lg border bg-background/60 px-3 py-4">
-            <p className="text-3xl font-semibold tabular-nums">
-              {averageAccuracy}%
-            </p>
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Average accuracy
-            </p>
-          </div>
+          <AccuracyScore accuracy={averageAccuracy} label="Average accuracy" />
         )}
 
         {hasAttempts && (
@@ -110,6 +103,79 @@ export function ReviewSummary({
         </div>
       </div>
     </MemoryDashboardCard>
+  );
+}
+
+/**
+ * End of a standalone passage review: its score and when it comes back. One
+ * passage, so no queue claim, mastery bar or extra actions.
+ */
+export function PassageReviewSummary({
+  title,
+  accuracy,
+  dueAt,
+  onDone,
+}: {
+  title: string;
+  accuracy: number;
+  /** Next review from the saved schedule. */
+  dueAt: number;
+  onDone: () => void;
+}): JSX.Element {
+  const now = useLiveNow();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  return (
+    <MemoryDashboardCard className="mx-auto w-full max-w-md p-6 text-center">
+      <div className="flex flex-col items-center gap-2">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <CheckCircle2 className="h-6 w-6 text-primary" aria-hidden />
+        </div>
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-2xl font-semibold tracking-tight outline-none"
+        >
+          Review complete
+        </h2>
+      </div>
+
+      <div className="mt-6 space-y-6">
+        <AccuracyScore accuracy={accuracy} label="Accuracy" />
+        <ul className="divide-y rounded-lg border text-left">
+          <li className="flex items-center justify-between gap-3 px-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium break-words">{title}</p>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Next review {formatDueDay(dueAt, now)}
+              </p>
+            </div>
+          </li>
+        </ul>
+        <SessionSummaryActions exitLabel="Done" onExit={onDone} />
+      </div>
+    </MemoryDashboardCard>
+  );
+}
+
+function AccuracyScore({
+  accuracy,
+  label,
+}: {
+  accuracy: number;
+  label: string;
+}): JSX.Element {
+  return (
+    <div className="rounded-lg border bg-background/60 px-3 py-4">
+      <p className="text-3xl font-semibold tabular-nums">{accuracy}%</p>
+      <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+    </div>
   );
 }
 

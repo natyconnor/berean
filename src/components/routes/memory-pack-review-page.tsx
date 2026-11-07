@@ -109,6 +109,7 @@ export function MemoryPackReviewPage() {
         onExit={onExit}
         backLabel={backLabel}
         exitHref={exit.href}
+        endsAfterReview
       />
     );
   }
