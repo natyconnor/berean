@@ -8,10 +8,13 @@ type VerseRefresherState =
 
 /**
  * Refresher sitting on one verse card. Kind is only present while open, so a
- * leave-counts line cannot leak onto a pre-try or practice round.
+ * leave-counts line cannot leak onto a pre-try or practice round. With
+ * `openAs`, it starts open at step 1 (••• Refresh).
  */
-export function useVerseRefresher() {
-  const [state, setState] = useState<VerseRefresherState>({ phase: "off" });
+export function useVerseRefresher(openAs?: VerseRefresherKind) {
+  const [state, setState] = useState<VerseRefresherState>(() =>
+    openAs ? { phase: "step1", kind: openAs } : { phase: "off" },
+  );
 
   const open = useCallback((kind: VerseRefresherKind = "pre-try") => {
     setState({ phase: "step1", kind });

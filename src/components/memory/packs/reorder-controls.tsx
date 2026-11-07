@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import {
+  RefreshMenuItem,
   StartOverConfirm,
   StartOverMenuItem,
 } from "@/components/memory/memory-restart-menu";
@@ -59,7 +60,17 @@ export type RowStartOver = {
   triggerRef: RefObject<HTMLButtonElement | null>;
 };
 
-/** × (on hover or focus with a mouse) and ⋯ with Move / Start over / Remove. */
+/** ••• Refresh on a Memorized row. */
+export type RowRefresh = {
+  pending: boolean;
+  onSelect: () => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+};
+
+/**
+ * × (on hover or focus with a mouse) and ⋯ with Move / Refresh / Start over /
+ * Remove.
+ */
 export function RowEditControls({
   label,
   index,
@@ -68,6 +79,7 @@ export function RowEditControls({
   onMove,
   onRemove,
   startOver,
+  refresh,
 }: {
   /** The row's reference, for accessible names. */
   label: string;
@@ -77,6 +89,7 @@ export function RowEditControls({
   onMove?: (from: number, to: number) => void;
   onRemove?: () => void;
   startOver?: RowStartOver;
+  refresh?: RowRefresh;
 }) {
   const pendingConfirm = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -87,24 +100,26 @@ export function RowEditControls({
     index !== undefined &&
     count !== undefined;
   const showStartOver = startOver?.show === true;
+  const showMemoryActions = showStartOver || refresh !== undefined;
   const confirmOpenProps =
     startOver?.confirmOpen === true ? { "data-confirm-open": "" as const } : {};
 
   const trigger = (
     <DropdownMenuTrigger asChild>
       <Button
-        ref={startOver?.triggerRef}
+        ref={startOver?.triggerRef ?? refresh?.triggerRef}
         type="button"
         variant="ghost"
         size="icon"
         aria-label={triggerLabel}
+        loading={refresh?.pending}
         className={cn(
           "size-11 text-muted-foreground sm:size-8",
           revealOnRowHover,
         )}
         {...confirmOpenProps}
       >
-        <MoreHorizontal aria-hidden />
+        {refresh?.pending ? null : <MoreHorizontal aria-hidden />}
       </Button>
     </DropdownMenuTrigger>
   );
@@ -139,7 +154,8 @@ export function RowEditControls({
             </DropdownMenuItem>
           </>
         ) : null}
-        {editable && showStartOver ? <DropdownMenuSeparator /> : null}
+        {editable && showMemoryActions ? <DropdownMenuSeparator /> : null}
+        {refresh ? <RefreshMenuItem onSelect={refresh.onSelect} /> : null}
         {showStartOver && startOver ? (
           <StartOverMenuItem
             disabled={startOver.pending}

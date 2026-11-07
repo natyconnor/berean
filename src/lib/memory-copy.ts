@@ -211,6 +211,9 @@ export const PRACTICE_PASS_REST =
 export const PRACTICE_PASS_EMOJI = "👍";
 export const NOW_TRY_WITHOUT_HINTS = "Now try it without the hints.";
 export const REFRESH_SAVE_ERROR = "Couldn't save your result. Try again.";
+export const REFRESH_MENU_LABEL = "Refresh";
+export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
+export const COUNTED_TODAY_CLOSING = "Counted as today's review";
 
 /** "Refresh · First letters · 1 of 2" / "Refresh · From memory · 2 of 2". */
 export function refresherHeader(step: 1 | 2): string {

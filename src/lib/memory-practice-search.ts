@@ -20,7 +20,7 @@ export function validateMemoryPracticeSearch(
 /** True when search fully identifies one verse reference. */
 export function hasPracticeVerseScope(
   search: MemoryPracticeSearch,
-): search is MemoryPracticeVerseScope {
+): search is MemoryPracticeSearch & MemoryPracticeVerseScope {
   return hasMemoryVerseScope(search);
 }
 

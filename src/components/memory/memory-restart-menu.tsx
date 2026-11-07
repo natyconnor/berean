@@ -5,7 +5,13 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { Check, CircleStop, MoreHorizontal, RotateCcw } from "lucide-react";
+import {
+  Check,
+  CircleStop,
+  Lightbulb,
+  MoreHorizontal,
+  RotateCcw,
+} from "lucide-react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 
@@ -32,9 +38,15 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { useLiveNow } from "@/hooks/use-live-now";
+import {
+  useRefreshReturnFocus,
+  useStartVerseRefresh,
+} from "@/hooks/use-start-verse-refresh";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import {
   canStartOver,
+  REFRESH_MENU_LABEL,
   START_OVER_CANCEL_LABEL,
   START_OVER_CONFIRM_BODY,
   START_OVER_CONFIRM_LABEL,
@@ -44,7 +56,11 @@ import {
   STARTED_OVER_LABEL,
   startOverTitle,
 } from "@/lib/memory-copy";
-import type { MemoryStatus } from "@/lib/memory-scheduler";
+import {
+  isDueForReview,
+  isReviewPhase,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { cn } from "@/lib/utils";
 
 const MORE_ACTIONS_LABEL = "More actions";
@@ -87,6 +103,38 @@ export function StartOverMenuItem({
         </span>
       </span>
     </DropdownMenuItem>
+  );
+}
+
+/** ••• Refresh: the two-step refresher on a Memorized verse. */
+export function RefreshMenuItem({
+  disabled,
+  onSelect,
+}: {
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenuItem disabled={disabled} onSelect={onSelect}>
+      <Lightbulb aria-hidden />
+      {REFRESH_MENU_LABEL}
+    </DropdownMenuItem>
+  );
+}
+
+/** The R34 line under the control that started a refresher. */
+export function RefreshStartError({
+  error,
+  className,
+}: {
+  error: string | null;
+  className?: string;
+}) {
+  if (!error) return null;
+  return (
+    <p role="alert" className={cn("text-xs text-destructive", className)}>
+      {error}
+    </p>
   );
 }
 
@@ -192,24 +240,37 @@ export function StartOverConfirm({
 }
 
 /**
- * Verse page ••• menu: Start over when there is real progress, then Stop
- * memorizing. Confirm is a popover on the same button. No Undo.
+ * Verse page ••• menu: Refresh on a Memorized verse, Start over when there is
+ * real progress, then Stop memorizing. Confirm is a popover on the same
+ * button. No Undo.
  */
 export function VerseMemoryMenu({
   verseRefId,
   reference,
+  verse,
   status,
+  dueAt,
   learnStage,
   stageReps,
   lastReviewedAt,
+  returnTo,
   onStopped,
 }: {
   verseRefId: Id<"verseRefs">;
   reference: string;
+  verse: {
+    book: string;
+    chapter: number;
+    startVerse: number;
+    endVerse: number;
+  };
   status: MemoryStatus;
+  dueAt: number;
   learnStage: number;
   stageReps?: number;
   lastReviewedAt?: number;
+  /** Where the refresher's Continue comes back to. */
+  returnTo: string;
   onStopped: () => void;
 }) {
   const startOver = useMutation(api.verseMemory.startOver);
@@ -224,6 +285,9 @@ export function VerseMemoryMenu({
   const pendingTriggerFocus = useRef(false);
   const startLock = useSubmitLock();
   const stopLock = useSubmitLock();
+  const refresh = useStartVerseRefresh(verse, returnTo);
+  const now = useLiveNow();
+  useRefreshReturnFocus(verse, triggerRef);
 
   useLayoutEffect(() => {
     if (!pendingTriggerFocus.current) return;
@@ -233,6 +297,7 @@ export function VerseMemoryMenu({
 
   const showStartOver =
     !started && canStartOver({ status, learnStage, stageReps, lastReviewedAt });
+  const showRefresh = !started && isReviewPhase(status);
 
   const handleStartOverSelect = () => {
     setError(null);
@@ -296,8 +361,9 @@ export function VerseMemoryMenu({
                 className="size-11 text-muted-foreground sm:size-8"
                 aria-label={MORE_ACTIONS_LABEL}
                 disabled={startLock.pending}
+                loading={refresh.pending}
               >
-                <MoreHorizontal aria-hidden />
+                {refresh.pending ? null : <MoreHorizontal aria-hidden />}
               </Button>
             </DropdownMenuTrigger>
           </PopoverAnchor>
@@ -311,13 +377,21 @@ export function VerseMemoryMenu({
               setConfirmOpen(true);
             }}
           >
+            {showRefresh ? (
+              <RefreshMenuItem
+                disabled={startLock.pending}
+                onSelect={() =>
+                  refresh.start(isDueForReview({ status, dueAt }, now))
+                }
+              />
+            ) : null}
             {showStartOver ? (
               <StartOverMenuItem
                 disabled={startLock.pending}
                 onSelect={handleStartOverSelect}
               />
             ) : null}
-            {showStartOver ? <DropdownMenuSeparator /> : null}
+            {showRefresh || showStartOver ? <DropdownMenuSeparator /> : null}
             <DropdownMenuItem
               variant="destructive"
               disabled={startLock.pending}
@@ -356,6 +430,10 @@ export function VerseMemoryMenu({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <RefreshStartError
+        error={refresh.error}
+        className="basis-full text-right"
+      />
     </div>
   );
 }
