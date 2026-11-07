@@ -1250,21 +1250,25 @@ describe("PracticeBoard spent reviews", () => {
     expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
-  it("lets Practice recall the same verse again", async () => {
+  it("lets Practice recall the same verse again, practice only once it is not due", async () => {
     renderBoard("practice");
 
+    // Due: the first Practice try is the review.
     await recite(PASSAGE_ONE);
     expect(await screen.findByText("Word for word.")).toBeVisible();
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
     await userEvent.click(railButton("Psalm 23:2"));
     await userEvent.click(railButton("Psalm 23:1"));
 
+    // Now not due: another try is practice only and records nothing (R44).
     expect(screen.queryByText("Reviewed")).not.toBeInTheDocument();
     await recite(PASSAGE_ONE);
-    await waitFor(() => {
-      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
-        2,
-      );
-    });
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(1);
   });
 
   it("reports the card on screen when the learner moves in the run", async () => {
@@ -3137,5 +3141,168 @@ describe("PracticeBoard held first try", () => {
     expect(
       screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("PracticeBoard not-due Practice", () => {
+  const notDueVerse: PracticeVerse = {
+    ...reviewingVerse,
+    dueAt: getSessionNow() + 3 * 24 * 60 * 60 * 1000,
+  };
+
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    mutationMock("verseMemory.holdAttempt").mockResolvedValue({
+      heldId: "held_1",
+    });
+    mutationMock("verseMemory.applyHeldAttempt").mockResolvedValue({
+      applied: true,
+      schedule: heldSchedule,
+    });
+  });
+
+  function renderPractice(
+    extra: Partial<Parameters<typeof PracticeBoard>[0]> = {},
+  ) {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="practice"
+          verses={[notDueVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          {...extra}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function recite(text: string) {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(text);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  function expectNoProgressWrite() {
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
+  }
+
+  function sideJourneyLabel(): string | null {
+    const panel = screen.getByText("Progress").parentElement;
+    expect(panel).toBeInstanceOf(HTMLElement);
+    return within(panel as HTMLElement)
+      .getByLabelText(/Progress to mastered|Learning journey/)
+      .getAttribute("aria-label");
+  }
+
+  it.each([
+    ["pass", PASSAGE_ONE, "Word for word."],
+    ["miss", BAD_MISS, /Try again/],
+  ] as const)(
+    "a %s changes nothing: no write, no credit, no summary row",
+    async (_label, answer, shown) => {
+      const onRunStateChange =
+        vi.fn<
+          (state: PracticeRunState, result: PracticeSessionResult) => void
+        >();
+      renderPractice({ onRunStateChange });
+      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL });
+      const before = sideJourneyLabel();
+
+      await recite(answer);
+      if (typeof shown === "string") {
+        expect(await screen.findByText(shown)).toBeVisible();
+      } else {
+        expect(
+          await screen.findByRole("button", { name: shown }),
+        ).toBeVisible();
+      }
+
+      expectNoProgressWrite();
+      expect(sideJourneyLabel()).toBe(before);
+      // No post-miss offer, and no next-review line: nothing was scheduled.
+      expect(
+        screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+      const [state, result] = onRunStateChange.mock.lastCall ?? [];
+      expect(state?.graded).toEqual([]);
+      expect(state?.attempts).toEqual([]);
+      // Level, gap and due date are what the card opened with.
+      expect(state?.progress[FIRST_ID]).toMatchObject({
+        status: notDueVerse.status,
+        learnStage: notDueVerse.learnStage,
+        stageReps: notDueVerse.stageReps,
+        intervalDays: notDueVerse.intervalDays,
+        ease: notDueVerse.ease,
+        dueAt: notDueVerse.dueAt,
+      });
+      expect(result?.attempts).toEqual([]);
+    },
+  );
+
+  it("shows the quiet link, and its refresher is practice only", async () => {
+    renderPractice();
+    await userEvent.click(
+      await screen.findByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    );
+    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
+    await recite(PASSAGE_ONE);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(await screen.findByText(refresherHeader(2))).toBeVisible();
+
+    await recite(BAD_MISS);
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    );
+    await recite(PASSAGE_ONE);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    expect(screen.getByText(PRACTICE_PASS_LEAD)).toBeVisible();
+
+    expectNoProgressWrite();
+  });
+
+  it("keeps a due verse's Practice try counted, with no quiet link", async () => {
+    renderPractice({ verses: [reviewingVerse] });
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    await waitFor(() => {
+      expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+    expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verseRefId: VERSE_REF_ID,
+        mode: "practice",
+        quality: "exact",
+      }),
+    );
   });
 });

@@ -53,6 +53,7 @@ import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
   LEARN_PROGRESS_ACCURACY,
+  isDueForReview,
   isLearningLocked,
   isLearningProgressAttempt,
   isReviewPhase,
@@ -438,7 +439,8 @@ const DEAL_FADE_OUT_S = 0.12;
  * (and pack) blocks only — verses learned together stay in Scripture order.
  *
  * Attempts use the session's explicit `learn` or `practice` mode and count
- * fully. The card is driven entirely by the server's
+ * fully, except a Practice try on a not-due Memorized verse, which records
+ * nothing. The card is driven entirely by the server's
  * `learnStage` + `stageReps`: a Read prime, then the fading support bands
  * (Guided → Challenge → From Memory) that re-randomize and thin their hints per
  * rep. Each recorded attempt adopts the returned `learnStage`/`stageReps`, so
@@ -667,6 +669,12 @@ export function PracticeBoard({
   // The active card's passage: a unified pack is one concatenated recitation,
   // even when it sits next to ordinary verses in the global review queue.
   const composite = currentVerse?.composite ?? null;
+  // A Practice try on a Memorized verse that is not due changes nothing (R44).
+  const practiceOnly =
+    kind === "practice" &&
+    composite === null &&
+    isReviewPhase(currentProgress.status) &&
+    !isDueForReview(currentProgress, now);
   const compositePassage = useEsvCompositePassage(
     composite?.members ?? NO_COMPOSITE_MEMBERS,
     { enabled: composite !== null },
@@ -999,7 +1007,9 @@ export function PracticeBoard({
                     }
                   : null
               }
-              offerRefresher={isReview}
+              preTryRefresher={
+                isReview ? "pre-try" : practiceOnly ? "practice" : undefined
+              }
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
               packMemberSchedules={composite?.memberSchedules}
@@ -1059,6 +1069,7 @@ export function PracticeBoard({
                 }
               }}
               onRecord={async (tokens, wordCount, opts) => {
+                if (practiceOnly) return { ok: true as const, schedule: null };
                 const verseId = currentVerse.id;
                 const hold = opts?.holdSchedule === true;
                 const counted: RecordVerseAttemptResult = composite
@@ -1267,8 +1278,12 @@ interface PracticeCardProps {
   /** Set when this card is a whole pack recited as one passage. */
   composite?: CompositeCardPassage | null;
   reviewItem?: "verse" | "passage";
-  /** Quiet refresher link. Gate on Memorized + loaded lives in the card. */
-  offerRefresher?: boolean;
+  /**
+   * Quiet refresher link and the round it opens: counted on a due review,
+   * practice only on a not-due Practice card. Gate on Memorized + loaded
+   * lives in the card.
+   */
+  preTryRefresher?: "pre-try" | "practice";
   /** Back / Home flush a held miss even if the card has not unmounted yet. */
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
@@ -1329,7 +1344,7 @@ function PracticeCard({
   showScheduleOutcome = false,
   composite = null,
   reviewItem = "verse",
-  offerRefresher = false,
+  preTryRefresher,
   leaveHeldRef,
   onSavingChange,
   onRecord,
@@ -1549,8 +1564,7 @@ function PracticeCard({
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
-    // Practice counts fully: every checked attempt records and reschedules. The
-    // lock keeps a double-tap from recording twice before the result view
+    // The lock keeps a double-tap from recording twice before the result view
     // (driven by `checked`) mounts and replaces this button. The action stays
     // disabled, labeled Saving..., until the record settles. Grading is local
     // and already on screen; the wait is the Convex write.
@@ -2102,14 +2116,14 @@ function PracticeCard({
                             : undefined
                         }
                         onRefresher={
-                          offerRefresher &&
+                          preTryRefresher &&
                           !composite &&
                           isReviewPhase(status) &&
                           !loading &&
                           !error &&
                           versePlainText !== "" &&
                           refresher.phase === "off"
-                            ? () => openRefresher("pre-try")
+                            ? () => openRefresher(preTryRefresher)
                             : undefined
                         }
                         disabled={submitPending}
