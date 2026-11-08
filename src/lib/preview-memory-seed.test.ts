@@ -7,6 +7,7 @@ import {
   isLearningLocked,
   isReviewPhase,
 } from "./memory-scheduler";
+import { isStaleVerse } from "./memory-stale";
 import {
   assertLearningLockGap,
   buildPreviewMemorySeed,
@@ -116,5 +117,36 @@ describe("preview memory seed", () => {
   it("seeds review history so dashboard charts are not empty", () => {
     expect(plan.reviews.length).toBeGreaterThan(10);
     expect(plan.reviews.every((review) => review.createdAt < NOW)).toBe(true);
+  });
+
+  it("seeds exactly two stale Memorized verses, one due and one not", () => {
+    const stale = plan.verses.filter((verse) =>
+      isStaleVerse({
+        status: verse.schedule.status,
+        dueAt: verse.schedule.dueAt,
+        intervalDays: verse.schedule.intervalDays,
+        now: NOW,
+        // Newest first, as `verseMemory.verseDetail` returns them.
+        lastReviews: plan.reviews
+          .filter((review) => review.verseId === verse.id)
+          .sort((a, b) => b.createdAt - a.createdAt),
+      }),
+    );
+    expect(stale.map((verse) => verse.id)).toEqual([
+      "matthew-6-33",
+      "joshua-1-9",
+    ]);
+    const [due, notDue] = stale;
+    expect(due && isDueForReview(due.schedule, NOW)).toBe(true);
+    expect(notDue && isDueForReview(notDue.schedule, NOW)).toBe(false);
+    for (const verse of stale) {
+      expect(verse.schedule.status).toBe("reviewing");
+      const newest = plan.reviews
+        .filter((review) => review.verseId === verse.id)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 3)
+        .map((review) => review.accuracy);
+      expect(newest.filter((accuracy) => accuracy < 60)).toHaveLength(2);
+    }
   });
 });

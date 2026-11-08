@@ -72,6 +72,8 @@ interface VerseSpec {
   reference: PreviewMemoryReference;
   /** Days from `now` until `dueAt`. Negative = overdue. */
   dueOffsetDays?: number;
+  /** The two newest reviews miss under 60%, so the verse is stale. */
+  recentMisses?: boolean;
 }
 
 /**
@@ -143,8 +145,9 @@ const VERSE_SPECS: readonly VerseSpec[] = [
   {
     id: "matthew-6-33",
     role: "reviewDue",
-    label: "Reviewing · due today",
-    howToTry: "Open Review — third due verse.",
+    label: "Reviewing · due today · 2 recent misses",
+    howToTry: "Open Review — third due verse, shows Refresh it first.",
+    recentMisses: true,
     reference: { book: "Matthew", chapter: 6, startVerse: 33, endVerse: 33 },
   },
   {
@@ -169,9 +172,10 @@ const VERSE_SPECS: readonly VerseSpec[] = [
   {
     id: "joshua-1-9",
     role: "reviewLater",
-    label: "Reviewing · in a week",
-    howToTry: "Should not be in Review. Use Extra practice.",
+    label: "Reviewing · in a week · 2 recent misses",
+    howToTry: "Should not be in Review. Practice it to see Refresh it first.",
     dueOffsetDays: 7,
+    recentMisses: true,
     reference: { book: "Joshua", chapter: 1, startVerse: 9, endVerse: 9 },
   },
   {
@@ -340,6 +344,7 @@ function scheduleForRole(
 function historyForVerse(
   verse: PreviewMemorySeedVerse,
   now: number,
+  recentMisses: boolean,
 ): PreviewMemorySeedReview[] {
   if (verse.role === "new") return [];
 
@@ -361,7 +366,13 @@ function historyForVerse(
         createdAt: now - day * DAY_MS,
       });
     }
-    return reviews;
+    if (!recentMisses) return reviews;
+    // Oldest first: the last two are the newest tries.
+    return reviews.map((review, index) =>
+      index >= reviews.length - 2
+        ? { ...review, quality: "off" as const, accuracy: 40 }
+        : review,
+    );
   }
 
   reviews.push({
@@ -400,7 +411,9 @@ export function buildPreviewMemorySeed(now: number): PreviewMemorySeedPlan {
   return {
     verses,
     packs: PACKS.map((pack) => ({ ...pack, verseIds: [...pack.verseIds] })),
-    reviews: verses.flatMap((verse) => historyForVerse(verse, now)),
+    reviews: verses.flatMap((verse, index) =>
+      historyForVerse(verse, now, VERSE_SPECS[index]?.recentMisses === true),
+    ),
   };
 }
 
