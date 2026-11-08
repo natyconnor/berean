@@ -21,6 +21,8 @@ import {
 } from "./session-complete";
 
 interface TodaySessionSummaryProps {
+  /** The session's header title, kept for coming back from a summary Refresh. */
+  title: string;
   /** Passages that took today's step, by title. */
   passages: readonly string[];
   /** Verses from the learning part, with where each landed. */
@@ -36,6 +38,7 @@ interface TodaySessionSummaryProps {
 
 /** One summary for the whole blended session: passages, learning, reviews. */
 export function TodaySessionSummary({
+  title,
   passages,
   learned,
   attempts,
@@ -85,7 +88,18 @@ export function TodaySessionSummary({
         ) : null}
         {learned.length > 0 ? <SessionCompleteRows verses={learned} /> : null}
         {attempts.length > 0 ? (
-          <ReviewResultRows attempts={attempts} returnTo={returnTo} />
+          <ReviewResultRows
+            attempts={attempts}
+            returnTo={returnTo}
+            summary={{
+              kind: "today",
+              title,
+              passages,
+              learned,
+              attempts,
+              extraPracticeHref,
+            }}
+          />
         ) : null}
       </div>
 

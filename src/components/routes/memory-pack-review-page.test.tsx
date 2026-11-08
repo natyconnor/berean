@@ -54,6 +54,8 @@ vi.mock("convex-helpers/react/cache", () => ({
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
   useCanGoBack: () => false,
+  useLocation: ({ select }: { select: (location: object) => unknown }) =>
+    select({ href: "/memory", state: {} }),
   Link: ({
     to,
     children,

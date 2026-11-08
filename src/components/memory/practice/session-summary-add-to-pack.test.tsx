@@ -189,6 +189,7 @@ describe("Add to pack on session summaries", () => {
   it("leaves passages off the Today summary, keeping it on verse rows", () => {
     renderWithTooltips(
       <TodaySessionSummary
+        title="Today"
         passages={["Psalm 23"]}
         learned={[
           {

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
+  offersSummaryRefresh,
   recalledCopy,
   refresherResultCopy,
   type ReviewSessionAttempt,
@@ -72,5 +73,112 @@ describe("recalledCopy", () => {
 describe("refresherResultCopy", () => {
   it("names the first and last scores when a refresher was used", () => {
     expect(refresherResultCopy([78, 100])).toBe("78% → 100% · Refresher used");
+  });
+});
+
+describe("offersSummaryRefresh (S9, R21)", () => {
+  function landed(
+    status: "new" | "learning" | "reviewing" | "mastered",
+  ): ReviewSessionAttempt["schedule"] {
+    return {
+      status,
+      learnStage: 3,
+      stageReps: 0,
+      intervalDays: 4,
+      ease: 2.3,
+      dueAt: 1,
+    };
+  }
+
+  function offers(attempts: ReviewSessionAttempt[]): boolean[] {
+    return groupReviewSessionAttempts(attempts).map(offersSummaryRefresh);
+  }
+
+  it.each([84, 60, 59, 0])(
+    "offers it on a %i%% last try that stays Memorized or Mastered",
+    (accuracy) => {
+      expect(
+        offers([
+          { ...john, accuracy, schedule: landed("reviewing") },
+          {
+            ...john,
+            reference: { ...john.reference, startVerse: 17, endVerse: 17 },
+            accuracy,
+            schedule: landed("mastered"),
+          },
+        ]),
+      ).toEqual([true, true]);
+    },
+  );
+
+  it.each([85, 100])("hides it on a %i%% last try", (accuracy) => {
+    expect(
+      offers([{ ...john, accuracy, schedule: landed("reviewing") }]),
+    ).toEqual([false]);
+  });
+
+  it("goes by the last try, not the lowest: 78% → 100% has none", () => {
+    expect(
+      offers([
+        { ...john, accuracy: 78, offerPractice: true },
+        {
+          ...john,
+          accuracy: 100,
+          refresherUsed: true,
+          schedule: landed("reviewing"),
+        },
+      ]),
+    ).toEqual([false]);
+    expect(
+      offers([
+        { ...john, accuracy: 68, offerPractice: true },
+        {
+          ...john,
+          accuracy: 70,
+          refresherUsed: true,
+          schedule: landed("reviewing"),
+        },
+      ]),
+    ).toEqual([true]);
+  });
+
+  it("uses the saved status of an applied held miss", () => {
+    expect(
+      offers([{ ...john, accuracy: 84, savedStatus: "reviewing" }]),
+    ).toEqual([true]);
+    expect(
+      offers([{ ...john, accuracy: 40, savedStatus: "learning" }]),
+    ).toEqual([false]);
+  });
+
+  it("hides it for Learning (including a lapse), New and unknown status", () => {
+    expect(
+      offers([{ ...john, accuracy: 40, schedule: landed("learning") }]),
+    ).toEqual([false]);
+    expect(
+      offers([{ ...john, accuracy: 40, schedule: landed("new") }]),
+    ).toEqual([false]);
+    expect(offers([{ ...john, accuracy: 40 }])).toEqual([false]);
+  });
+
+  it("hides it on a pack recited as one passage and its member rows", () => {
+    expect(
+      offers([
+        {
+          ...john,
+          accuracy: 50,
+          label: "Hope pack",
+          offerPractice: false,
+          schedule: landed("reviewing"),
+        },
+        {
+          ...john,
+          reference: { ...john.reference, startVerse: 18, endVerse: 18 },
+          accuracy: 50,
+          offerPractice: false,
+          schedule: landed("reviewing"),
+        },
+      ]),
+    ).toEqual([false, false]);
   });
 });

@@ -1,17 +1,34 @@
 import { type JSX, useEffect, useRef } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import {
+  CheckCircle2,
+  Lightbulb,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
 
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
+import { REFRESHER_LINK_CLASS } from "@/components/memory/memory-refresher-controls";
+import { RefreshStartError } from "@/components/memory/memory-restart-menu";
 import { AddToPack } from "@/components/memory/packs/add-to-pack";
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
 import { SessionSummaryActions } from "@/components/memory/practice/session-complete";
+import type { CardReference } from "@/components/study/study-card-model";
 import { Button } from "@/components/ui/button";
 import { useLiveNow } from "@/hooks/use-live-now";
+import {
+  type SessionSummarySnapshot,
+  useRefreshReturnFocus,
+  useStartVerseRefresh,
+} from "@/hooks/use-start-verse-refresh";
 import { formatDueDay } from "@/lib/memorize-plan";
+import { MEMORY_HOME } from "@/lib/memory-exit";
+import { REFRESH_MENU_LABEL } from "@/lib/memory-copy";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   groupReviewSessionAttempts,
+  offersSummaryRefresh,
   recalledCopy,
   refresherResultCopy,
   type ReviewSessionAttempt,
@@ -84,7 +101,19 @@ export function ReviewSummary({
         )}
 
         {hasAttempts && (
-          <ReviewResultRows attempts={attempts} returnTo={returnTo} />
+          <ReviewResultRows
+            attempts={attempts}
+            returnTo={returnTo}
+            summary={{
+              kind: "review",
+              attempts,
+              averageAccuracy,
+              remaining,
+              doneLabel,
+              extraPracticeHref,
+              canContinue: onContinue !== undefined,
+            }}
+          />
         )}
 
         <div className="flex flex-col gap-2">
@@ -181,15 +210,19 @@ function AccuracyScore({
 
 /**
  * Each reviewed verse with how well it was recalled, and Add to pack and
- * Practice shortcuts. A pack recited as one passage gets neither.
+ * Practice shortcuts. A pack recited as one passage gets neither. A verse
+ * still Memorized whose last try here was under 85% also gets Refresh (R21).
  */
 export function ReviewResultRows({
   attempts,
   returnTo,
+  summary,
   className,
 }: {
   attempts: ReviewSessionAttempt[];
   returnTo?: string;
+  /** The summary these rows sit in, kept for coming back from Refresh. */
+  summary: SessionSummarySnapshot;
   className?: string;
 }): JSX.Element {
   const navigate = useNavigate();
@@ -199,12 +232,13 @@ export function ReviewResultRows({
     <ul className={cn("divide-y rounded-lg border text-left", className)}>
       {groupReviewSessionAttempts(attempts).map((attempt) => {
         const label = attempt.label ?? formatVerseRefTitle(attempt.reference);
+        const refreshable = offersSummaryRefresh(attempt);
         return (
           <li
             key={label}
-            className="flex items-center justify-between gap-3 px-3 py-2.5"
+            className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5"
           >
-            <div className="min-w-0 flex-1">
+            <div className={cn("min-w-0 flex-1", refreshable && "basis-40")}>
               <p className="truncate text-sm font-medium">{label}</p>
               {attempt.schedule ? (
                 <div className="mt-1.5 space-y-1">
@@ -230,12 +264,20 @@ export function ReviewResultRows({
                 </p>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1">
               {attempt.label === undefined ? (
                 <AddToPack
                   reference={attempt.reference}
                   now={now}
                   variant="icon"
+                />
+              ) : null}
+              {refreshable ? (
+                <SummaryRefresh
+                  reference={attempt.reference}
+                  label={label}
+                  returnTo={returnTo}
+                  summary={summary}
                 />
               ) : null}
               {attempt.offerPractice === false ? null : (
@@ -261,5 +303,52 @@ export function ReviewResultRows({
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Summary Refresh: practice only, since today's miss is already counted. The
+ * summary is kept on its history entry, so Continue and Back come back to it
+ * and focus this control. The error shows under the row's actions (R34).
+ */
+function SummaryRefresh({
+  reference,
+  label,
+  returnTo,
+  summary,
+}: {
+  reference: CardReference;
+  label: string;
+  returnTo?: string;
+  summary: SessionSummarySnapshot;
+}): JSX.Element {
+  const href = useLocation({ select: (location) => location.href });
+  const refresh = useStartVerseRefresh(reference, returnTo ?? MEMORY_HOME);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useRefreshReturnFocus(reference, buttonRef);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={REFRESHER_LINK_CLASS}
+        aria-label={`${REFRESH_MENU_LABEL} ${label}`}
+        aria-busy={refresh.pending || undefined}
+        disabled={refresh.pending}
+        onClick={() => refresh.start(false, { href, snapshot: summary })}
+      >
+        {refresh.pending ? (
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Lightbulb className="size-3.5" aria-hidden />
+        )}
+        {REFRESH_MENU_LABEL}
+      </button>
+      <RefreshStartError
+        error={refresh.error}
+        className="order-last basis-full text-right"
+      />
+    </>
   );
 }

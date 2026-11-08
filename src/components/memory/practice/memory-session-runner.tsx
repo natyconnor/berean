@@ -1,7 +1,10 @@
 import { type JSX, type ReactNode, useState } from "react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 
+import { ReviewSummary } from "@/components/memory/review-summary";
 import {
   PracticeBoard,
+  PracticeShell,
   type PracticeRunState,
   type PracticeSessionResult,
   type PracticeVerse,
@@ -78,7 +81,64 @@ interface MemorySessionRunnerProps {
  * Mount this after the underlying query resolves; an empty queue at mount is
  * treated as an empty session.
  */
-export function MemorySessionRunner({
+export function MemorySessionRunner(
+  props: MemorySessionRunnerProps,
+): JSX.Element {
+  return props.kind === "review" ? (
+    <ReviewSessionRunner {...props} />
+  ) : (
+    <SessionRunner {...props} />
+  );
+}
+
+/** Review, which a summary Refresh comes back to with its summary as it was. */
+function ReviewSessionRunner(props: MemorySessionRunnerProps): JSX.Element {
+  const navigate = useNavigate();
+  const location = useLocation({
+    select: (current) => ({
+      href: current.href,
+      summary: current.state.sessionSummary,
+    }),
+  });
+  // Read once at mount: the summary this Review entry showed.
+  const [restored, setRestored] = useState(() =>
+    location.summary?.kind === "review" ? location.summary : undefined,
+  );
+
+  if (!restored) return <SessionRunner {...props} />;
+
+  const { scopeLabel, onExit, backLabel, exitHref, returnTo } = props;
+  return (
+    <PracticeShell
+      sessionLabel="Review"
+      scopeLabel={scopeLabel}
+      onExit={onExit}
+      backLabel={backLabel}
+      exitHref={exitHref}
+    >
+      <ReviewSummary
+        attempts={restored.attempts}
+        averageAccuracy={restored.averageAccuracy}
+        remaining={restored.remaining}
+        onDone={onExit}
+        onContinue={
+          restored.canContinue
+            ? () => {
+                // Today's queue was loaded on the way back: review it.
+                setRestored(undefined);
+                void navigate({ href: location.href, replace: true });
+              }
+            : undefined
+        }
+        doneLabel={restored.doneLabel}
+        extraPracticeHref={restored.extraPracticeHref}
+        returnTo={returnTo}
+      />
+    </PracticeShell>
+  );
+}
+
+function SessionRunner({
   verses,
   emptyState,
   ...boardProps

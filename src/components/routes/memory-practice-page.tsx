@@ -11,7 +11,10 @@ import { toPracticeVerse } from "@/components/memory/to-practice-verse";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
-import { refreshReturnState } from "@/hooks/use-start-verse-refresh";
+import {
+  refreshReturnState,
+  useSummaryRefreshExit,
+} from "@/hooks/use-start-verse-refresh";
 import {
   hasPracticeVerseScope,
   type MemoryPracticeSearch,
@@ -45,10 +48,14 @@ export function MemoryAllSessionPage({
   const exit = useMemoryExit(returnTo);
   const scoped = hasPracticeVerseScope(search);
   const refresh = scoped && search.refresh === true;
-  const onExit = refresh
-    ? () => exit.goWith(refreshReturnState(search))
-    : exit.go;
-  const backLabel = exit.label;
+  const summaryExit = useSummaryRefreshExit();
+  const toSummary = refresh ? summaryExit : null;
+  const onExit = toSummary
+    ? toSummary.go
+    : refresh
+      ? () => exit.goWith(refreshReturnState(search))
+      : exit.go;
+  const backLabel = toSummary ? toSummary.label : exit.label;
   const library = useFrozenQuery(
     api.verseMemory.listInMemory,
     scoped ? "skip" : {},

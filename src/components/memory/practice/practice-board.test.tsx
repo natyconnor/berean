@@ -78,6 +78,8 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
+  useLocation: ({ select }: { select: (location: object) => unknown }) =>
+    select({ href: "/memory/review", state: {} }),
 }));
 
 vi.mock("../../../../convex/_generated/api", () => ({
@@ -2497,6 +2499,28 @@ describe("PracticeBoard held first try", () => {
     );
   });
 
+  it.each([
+    ["stays Memorized", "reviewing", true],
+    ["drops to Learning", "learning", false],
+  ] as const)(
+    "offers summary Refresh after an applied close miss only when it %s (S9)",
+    async (_, status, shown) => {
+      mutationMock("verseMemory.applyHeldAttempt").mockResolvedValue({
+        applied: true,
+        schedule: { ...heldSchedule, status },
+      });
+      renderReview({ verses: [reviewingVerse] });
+      await holdColdMiss(CLOSE_MISS);
+      await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      expect(await screen.findByText("All caught up!")).toBeVisible();
+      const refresh = screen.queryByRole("button", {
+        name: "Refresh Psalm 23:1",
+      });
+      if (shown) expect(refresh).toBeVisible();
+      else expect(refresh).not.toBeInTheDocument();
+    },
+  );
+
   it("applies the held miss once on Back", async () => {
     const onExit = vi.fn();
     renderReview({ onExit });
@@ -2642,6 +2666,10 @@ describe("PracticeBoard held first try", () => {
     ).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText(/^Next review /)).toBeVisible();
     expect(screen.queryByText(/reps/i)).not.toBeInTheDocument();
+    // The last try passed: no summary Refresh (S9).
+    expect(
+      screen.queryByRole("button", { name: /^Refresh / }),
+    ).not.toBeInTheDocument();
   });
 
   it("replaces the held miss with a From memory miss and offers practice", async () => {
