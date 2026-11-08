@@ -642,6 +642,29 @@ describe("Today passage summary Refresh (S16, R51)", () => {
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
   });
 
+  it("says so in place when the passage can't start, and can retry (R34)", async () => {
+    fetchChaptersBatchMock.mockRejectedValueOnce(new Error("offline"));
+    const router = renderToday();
+    const button = await screen.findByRole("button", {
+      name: "Refresh Shepherd Psalm",
+    });
+    const before = rowsText();
+    await userEvent.click(button);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(REFRESH_START_ERROR);
+    expect(button.closest("li")).toContainElement(alert);
+    await waitFor(() => expect(button).toHaveFocus());
+    expect(button).toBeEnabled();
+    expect(
+      rowsText().map((text) => text?.replace(REFRESH_START_ERROR, "")),
+    ).toEqual(before);
+    expect(router.state.location.pathname).toBe("/memory/today");
+
+    await userEvent.click(button);
+    expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
+  });
+
   it("opens practice with every verse hinted and comes back to the same summary", async () => {
     const router = renderToday();
     expect(await screen.findByText("Average accuracy")).toBeInTheDocument();
