@@ -60,6 +60,19 @@ export const passagePieceValidator = v.object({
   carriedOver: v.optional(v.boolean()),
 });
 
+/** One verse of a passage; a passage is one book. */
+export const passageVerseKeyValidator = v.object({
+  chapter: v.number(),
+  verse: v.number(),
+});
+
+/** A verse's own score in an unhinted whole-passage try. */
+export const passageVerseScoreValidator = v.object({
+  chapter: v.number(),
+  verse: v.number(),
+  accuracy: v.number(),
+});
+
 /**
  * Stored `passageMemory` fields plus computed introduce budget, frontier, and
  * default rope-window meta. `remainingIntroduces`, `frontierIndex`,
@@ -87,6 +100,7 @@ export const passageViewValidator = v.object({
   celebratedAt: v.optional(v.number()),
   needsCelebration: v.boolean(),
   startedOverAt: v.optional(v.number()),
+  shakyVerses: v.optional(v.array(passageVerseKeyValidator)),
   createdAt: v.number(),
   updatedAt: v.number(),
   remainingIntroduces: v.number(),

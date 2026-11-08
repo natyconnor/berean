@@ -15,6 +15,8 @@ export interface CompositePassageSegment {
   reference: CardReference;
   /** The span's verse texts, joined by a single space. */
   text: string;
+  /** The same text verse by verse, for grading each verse on its own. */
+  verses: Array<{ number: number; text: string }>;
 }
 
 export interface CompositePassageState {
@@ -99,16 +101,18 @@ function chaptersByBook(
   return byBook;
 }
 
-function spanText(data: EsvChapterData, reference: CardReference): string {
+function spanVerses(
+  data: EsvChapterData,
+  reference: CardReference,
+): CompositePassageSegment["verses"] {
   return data.verses
     .filter(
       (verse) =>
         verse.number >= reference.startVerse &&
         verse.number <= reference.endVerse,
     )
-    .map((verse) => verse.text.trim())
-    .filter((text) => text.length > 0)
-    .join(" ");
+    .map((verse) => ({ number: verse.number, text: verse.text.trim() }))
+    .filter((verse) => verse.text.length > 0);
 }
 
 /**
@@ -221,7 +225,8 @@ export function useEsvCompositePassage(
           missing: true,
         };
       }
-      const segment = spanText(data, reference);
+      const verses = spanVerses(data, reference);
+      const segment = verses.map((verse) => verse.text).join(" ");
       if (segment.length === 0) {
         return {
           text: "",
@@ -236,7 +241,7 @@ export function useEsvCompositePassage(
       }
       text += segment;
       previousChapter = key;
-      segments.push({ reference, text: segment });
+      segments.push({ reference, text: segment, verses });
     }
 
     return { text, segments, missing: false };

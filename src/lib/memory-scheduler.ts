@@ -21,9 +21,9 @@ import { startOfZonedDay } from "./dashboard-buckets";
  *    alone, and still counts as a streak rep. A 60–84% recall on a verse
  *    loses one exact-path step and floors at the daily gap. Below
  *    {@link REVIEW_LAPSE_ACCURACY} a verse loses three, or drops to Learning
- *    at Challenge when fewer than three are banked. A passage close miss
- *    still steps back one level,
- *    and a passage bad miss stays reviewing on the daily gap, due tomorrow.
+ *    at Challenge when fewer than three are banked. A passage follows the
+ *    same losses on its overall score but never leaves Memorized: it floors
+ *    at the daily gap, due tomorrow.
  *    Due dates land at local midnight N calendar days later (with a 6-hour
  *    floor so a late-night 1-day review does not reopen at 12:01am).
  *
@@ -182,8 +182,8 @@ export interface ReviewInput {
    */
   timeZone?: string;
   /**
-   * Reviewing item. Passage misses keep the old step back and daily lapse.
-   * Omitted treats the item as a verse.
+   * Reviewing item. A passage miss never drops to Learning; it floors at the
+   * start of Memorized. Omitted treats the item as a verse.
    */
   item?: "verse" | "passage";
 }
@@ -201,8 +201,8 @@ export const MASTERED_INTERVAL_DAYS = 30;
 
 /**
  * Review accuracy below this is a bad miss. A verse loses three banked
- * reviews, or drops to Learning when fewer are banked. A passage stays
- * reviewing on the daily gap.
+ * reviews, or drops to Learning when fewer are banked. A passage floors at
+ * the daily gap instead.
  */
 export const REVIEW_LAPSE_ACCURACY = 60;
 
@@ -1050,7 +1050,7 @@ function scheduleVerseReviewMiss(
 ): MemorySchedule {
   const banked = bankedGoodReviews(s);
   const countsLapse = loss > CLOSE_REVIEW_LOSS;
-  if (countsLapse && banked < loss) {
+  if (countsLapse && banked < loss && r.item !== "passage") {
     return lapseReviewingToLearning(s, r);
   }
   return scheduleOnReviewingPathStep(
@@ -1078,59 +1078,16 @@ function lapseReviewingToLearning(
   };
 }
 
-function lapsePassageToDaily(
-  s: MemorySchedule,
-  r: ReviewInput,
-): MemorySchedule {
-  return {
-    status: "reviewing",
-    learnStage: s.learnStage,
-    stageReps: 0,
-    ease: clampEase(s.ease - 0.2),
-    intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
-    dueAt: computeDueAt(r, REVIEW_DAILY_INTERVAL_DAYS),
-    consecutiveCorrect: 0,
-    lapses: s.lapses + 1,
-    earlyReviewApplied: false,
-  };
-}
-
-function stepBackPassageOneLevel(
-  s: MemorySchedule,
-  r: ReviewInput,
-): MemorySchedule {
-  const step = reviewingIntervalStep(s.intervalDays);
-  const intervalDays =
-    step === "growing"
-      ? REVIEW_EVERY_OTHER_INTERVAL_DAYS
-      : REVIEW_DAILY_INTERVAL_DAYS;
-  return {
-    status: "reviewing",
-    learnStage: s.learnStage,
-    stageReps: 0,
-    ease: s.ease,
-    intervalDays,
-    dueAt: computeDueAt(r, intervalDays),
-    consecutiveCorrect: 0,
-    lapses: s.lapses,
-    earlyReviewApplied: false,
-  };
-}
-
 function scheduleReviewing(s: MemorySchedule, r: ReviewInput): MemorySchedule {
   const isEarly = r.now < s.dueAt;
   const outcome = reviewGradeOutcome(r.quality, r.accuracy);
 
   if (outcome === "lapse") {
-    return r.item === "passage"
-      ? lapsePassageToDaily(s, r)
-      : scheduleVerseReviewMiss(s, r, BAD_REVIEW_LOSS);
+    return scheduleVerseReviewMiss(s, r, BAD_REVIEW_LOSS);
   }
 
   if (outcome === "close") {
-    return r.item === "passage"
-      ? stepBackPassageOneLevel(s, r)
-      : scheduleVerseReviewMiss(s, r, CLOSE_REVIEW_LOSS);
+    return scheduleVerseReviewMiss(s, r, CLOSE_REVIEW_LOSS);
   }
 
   // One early success may push dueAt out from now; further early successes
@@ -1182,8 +1139,8 @@ export function keepReviewingSchedule(
 /**
  * A From memory pass after a missed first try. Softer than Continue: a close
  * miss keeps the current interval, reps and ease; a bad miss loses two
- * exact-path steps, or stays at Fill in the blanks when fewer than two are
- * banked.
+ * exact-path steps, or drops a verse to Fill in the blanks when fewer than
+ * two are banked (a passage floors at the daily gap).
  */
 export function afterMissPassSchedule(
   s: MemorySchedule,

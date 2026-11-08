@@ -42,11 +42,17 @@ export function MemoryPackReviewPage() {
     api.packs.resolveMembers,
     leftoversReady ? { id: typedPackId, now } : "skip",
   );
-  const passage = useQuery(api.passageMemory.getForPack, {
-    packId: typedPackId,
-    now,
-    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
-  });
+  // A held passage miss left by a reload or closed tab counts first.
+  const passage = useQuery(
+    api.passageMemory.getForPack,
+    leftoversReady
+      ? {
+          packId: typedPackId,
+          now,
+          tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+        }
+      : "skip",
+  );
 
   const review = useMemo(
     () =>

@@ -2,6 +2,7 @@ import {
   type JSX,
   type ReactNode,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -15,6 +16,7 @@ import {
   PassageRecallCard,
   type PassageRecallHint,
   type PassageRecallResult,
+  type PassageRecallResultView,
 } from "@/components/memory/passage/passage-recall-card";
 import {
   chromeStage,
@@ -42,6 +44,7 @@ import {
   pieceReference,
   pieceStatus,
   pickUpCue,
+  verseScores,
   stopBeforeCue,
   RECITE_IT_ALL_LABEL,
   remainingAddsIn,
@@ -58,9 +61,13 @@ import {
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
-import { PassageReviewSummary } from "@/components/memory/review-summary";
+import {
+  PassageReviewSummary,
+  type ReviewSessionAttempt,
+} from "@/components/memory/review-summary";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
+import { useVerseRefresher } from "@/components/memory/practice/use-verse-refresher";
 import { SessionColumns } from "@/components/memory/practice/session-columns";
 import {
   SessionHeaderProgress,
@@ -100,6 +107,25 @@ import {
   markPassageStepInProgress,
   releasePassageStepInProgress,
 } from "@/lib/passage-step-resume";
+import { formatDueDay } from "@/lib/memorize-plan";
+import {
+  NEED_A_REFRESHER_LABEL,
+  NEED_A_REFRESHER_PASSAGE_TOOLTIP,
+  NOW_TRY_WITHOUT_HINTS,
+  PRACTICE_ONLY_CLOSING,
+  REFRESH_SAVE_ERROR,
+  refresherHeader,
+  TRY_ANOTHER_REFRESHER_LABEL,
+} from "@/lib/memory-copy";
+import { isDueForReview } from "@/lib/memory-scheduler";
+import { previewNextSchedule } from "@/lib/memory-schedule-preview";
+import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
+import {
+  missedVerses,
+  shakyFirstLettersHint,
+  type PassageVerseKey,
+  type PassageVerseScore,
+} from "@/lib/passage-shaky";
 import { countVerseWords } from "@/lib/verse-hint";
 
 import { api } from "../../../../convex/_generated/api";
@@ -126,8 +152,31 @@ type BuiltRecall = {
   readContinue: boolean;
 };
 
-/** A saved standalone review: its score and next due date. */
-type SavedReview = { accuracy: number; dueAt: number };
+/**
+ * This session's counted tries, as a verse session records them for its
+ * summary (a replaced first try, then the From memory try), and the passage's
+ * next due date.
+ */
+type SavedReview = { attempts: ReviewSessionAttempt[]; dueAt: number };
+
+/** One unhinted whole-passage try to save as the passage's review. */
+type ReviewSave = {
+  quality: VerseAttemptQuality;
+  accuracy: number;
+  durationMs: number;
+  now: number;
+  verseScores: PassageVerseScore[];
+  refresherUsed?: true;
+  /** The held first try this From memory try replaces. */
+  replaceHeldId?: Id<"heldPassageAttempts">;
+};
+
+/** A cold miss held on the server, and the try it came from. */
+type HeldMiss = { heldId: Id<"heldPassageAttempts">; save: ReviewSave };
+
+const SAVE_ATTEMPT_ERROR = "Couldn't save that attempt. Please try again.";
+const FROM_MEMORY_PASSAGE_HINT =
+  "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.";
 
 interface PassageSessionProps {
   packId: Id<"packs">;
@@ -175,6 +224,11 @@ export function PassageSession({
   const timeZone = getViewerTimeZone();
   const introduceNext = useMutation(api.passageMemory.introduceNext);
   const recordAttempt = useMutation(api.passageMemory.recordAttempt);
+  const notePracticeRecital = useMutation(
+    api.passageMemory.notePracticeRecital,
+  );
+  const holdAttempt = useMutation(api.passageMemory.holdAttempt);
+  const applyHeldAttempt = useMutation(api.passageMemory.applyHeldAttempt);
 
   const [status, setStatus] = useState(view.status);
   const isMaintenance = status === "reviewing" || status === "mastered";
@@ -219,6 +273,22 @@ export function PassageSession({
   const [finishedReview, setFinishedReview] = useState<SavedReview | null>(
     null,
   );
+  // Memorized review refresher. A cold miss on a due passage is held on the
+  // server (as S5 holds a verse): Continue, leaving, the next load or the
+  // backstop counts it, and only a finished From memory try replaces it. Its
+  // weak verses are hinted right away.
+  const refresher = useVerseRefresher();
+  const [reviewDueAt, setReviewDueAt] = useState(view.dueAt);
+  const [shakyVerses, setShakyVerses] = useState<PassageVerseKey[]>(
+    view.shakyVerses ?? [],
+  );
+  const [heldMiss, setHeldMissState] = useState<HeldMiss | null>(null);
+  const heldIdRef = useRef<Id<"heldPassageAttempts"> | null>(null);
+  const [resultView, setResultView] = useState<PassageRecallResultView | null>(
+    null,
+  );
+  /** Try again on a failed save resends this, with the same result. */
+  const retrySaveRef = useRef<(() => Promise<void>) | null>(null);
   // The passage just became known by heart: "pending" holds the moment until
   // the learner continues past the result that finished it. "owed" is a moment
   // missed by leaving early, shown once this session opens with its text.
@@ -243,6 +313,20 @@ export function PassageSession({
     () => view.pieces.map((_, index) => composite.segments[index]?.text ?? ""),
     [view.pieces, composite.segments],
   );
+  // The same text verse by verse, so each verse is scored and hinted on its
+  // own even inside a multi-verse piece.
+  const passageVerses = useMemo<PassageVerse[]>(
+    () =>
+      composite.segments.flatMap((segment, pieceIndex) =>
+        segment.verses.map((verse) => ({
+          chapter: segment.reference.chapter,
+          verse: verse.number,
+          text: verse.text,
+          pieceIndex,
+        })),
+      ),
+    [composite.segments],
+  );
   const pieceWordCounts = useMemo(
     () => pieceTexts.map((text) => countVerseWords(text)),
     [pieceTexts],
@@ -257,8 +341,15 @@ export function PassageSession({
     recitingSection ? "section" : ropeOverride,
     wordCountsReady ? pieceWordCounts : undefined,
   );
+  const reviewDue =
+    isMaintenance && isDueForReview({ status, dueAt: reviewDueAt }, now);
   const liveRecall = isMaintenance
-    ? reviewRecall(packName, state.pieces, pieceTexts, composite)
+    ? reviewRecall(packName, state.pieces, pieceTexts, composite, {
+        step: refresher.step,
+        heldMiss,
+        shakyVerses,
+        passageVerses,
+      })
     : buildingRecall({
         packName,
         state,
@@ -335,45 +426,321 @@ export function PassageSession({
             ? (next.pieceWordCounts?.[pending.pieceIndex ?? 0] ?? undefined)
             : undefined,
       });
-      const remaining = remainingIntroduces({
-        addsOnDay: nextView.addsOnDay,
-        addDayKey: nextView.addDayKey,
-        todayKey: localDayIndex(attemptedAt, tz),
-      });
-      if (pending.kind === "review") {
-        setSavedReview({ accuracy: pending.accuracy, dueAt: nextView.dueAt });
-      }
-      if (status === "building" && nextView.needsCelebration) {
-        setMoment("pending");
-      }
-      if (status !== "mastered" && nextView.status === "mastered") {
-        celebrateMastered(packName);
-      }
-      setStatus(nextView.status);
-      setState({
-        ...next,
-        pieces: nextView.pieces,
-        addsOnDay: nextView.addsOnDay,
-        addDayKey: nextView.addDayKey,
-        now: attemptedAt,
-        pendingMutation: undefined,
-        phase: reconcilePassagePhase(
-          next.phase,
-          nextView.pieces,
-          remaining,
-          attemptedAt,
-        ),
-      });
+      adoptView(next, nextView, attemptedAt);
       setPersistError(null);
       return true;
     } catch {
       setPersistError(
         pending.name === "introduceNext"
           ? "Couldn't start the next verse. Please try again."
-          : "Couldn't save that attempt. Please try again.",
+          : SAVE_ATTEMPT_ERROR,
       );
       return false;
     }
+  }
+
+  function adoptView(
+    next: PassageSessionState,
+    nextView: PassageView,
+    attemptedAt: number,
+  ) {
+    const remaining = remainingIntroduces({
+      addsOnDay: nextView.addsOnDay,
+      addDayKey: nextView.addDayKey,
+      todayKey: localDayIndex(attemptedAt, tzOffsetMinutesAt(attemptedAt)),
+    });
+    if (status === "building" && nextView.needsCelebration) {
+      setMoment("pending");
+    }
+    if (status !== "mastered" && nextView.status === "mastered") {
+      celebrateMastered(packName);
+    }
+    setStatus(nextView.status);
+    setShakyVerses(nextView.shakyVerses ?? []);
+    setState({
+      ...next,
+      pieces: nextView.pieces,
+      addsOnDay: nextView.addsOnDay,
+      addDayKey: nextView.addDayKey,
+      now: attemptedAt,
+      pendingMutation: undefined,
+      phase: reconcilePassagePhase(
+        next.phase,
+        nextView.pieces,
+        remaining,
+        attemptedAt,
+      ),
+    });
+  }
+
+  /** Add counted tries to the summary, the way a verse session does. */
+  function adoptReview(
+    accuracies: number[],
+    dueAt: number,
+    refresherUsed = false,
+  ) {
+    const attempts = accuracies.flatMap(
+      (accuracy, index): ReviewSessionAttempt[] =>
+        pieceRefs[0]
+          ? [
+              {
+                reference: pieceRefs[0],
+                label: packName,
+                accuracy,
+                offerPractice: false,
+                ...(refresherUsed && index === accuracies.length - 1
+                  ? { refresherUsed: true }
+                  : {}),
+              },
+            ]
+          : [],
+    );
+    const saved = {
+      attempts: [...(savedReview?.attempts ?? []), ...attempts],
+      dueAt,
+    };
+    setSavedReview(saved);
+    setReviewDueAt(dueAt);
+    return saved;
+  }
+
+  /** Save a counted review try. Resolves its next due date, or null on failure. */
+  async function saveReview(save: ReviewSave): Promise<number | null> {
+    try {
+      const nextView = await recordAttempt({
+        packId,
+        kind: "review",
+        quality: save.quality,
+        accuracy: save.accuracy,
+        now: save.now,
+        tzOffsetMinutes: tzOffsetMinutesAt(save.now),
+        timeZone: getViewerTimeZone(),
+        durationMs: save.durationMs,
+        verseScores: save.verseScores,
+        refresherUsed: save.refresherUsed,
+        replaceHeldId: save.replaceHeldId,
+      });
+      // A From memory try that replaces a held miss keeps both tries.
+      adoptReview(
+        save.replaceHeldId && heldMiss
+          ? [heldMiss.save.accuracy, save.accuracy]
+          : [save.accuracy],
+        nextView.dueAt,
+        save.refresherUsed === true,
+      );
+      adoptView(state, nextView, save.now);
+      return nextView.dueAt;
+    } catch {
+      return null;
+    }
+  }
+
+  function setHeldMiss(next: HeldMiss | null) {
+    heldIdRef.current = next?.heldId ?? null;
+    setHeldMissState(next);
+  }
+
+  function applyHeld(heldId: Id<"heldPassageAttempts">) {
+    const now = Date.now();
+    return applyHeldAttempt({
+      heldId,
+      packId,
+      now,
+      tzOffsetMinutes: tzOffsetMinutesAt(now),
+    });
+  }
+
+  // Leaving a seen miss counts it: Back, Home, the next queue item, or the
+  // tab. If this apply never lands, the next load or the backstop does it.
+  const applyHeldOnLeave = useEffectEvent(() => {
+    const heldId = heldIdRef.current;
+    if (!heldId) return;
+    heldIdRef.current = null;
+    void applyHeld(heldId).catch(() => undefined);
+  });
+
+  useEffect(() => {
+    const leave = () => applyHeldOnLeave();
+    window.addEventListener("pagehide", leave);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
+  }, []);
+
+  /** Hold a cold miss on the server. Nothing counts until it is applied. */
+  async function holdReviewMiss(
+    save: ReviewSave,
+    shown: PassageRecallResultView,
+  ) {
+    retrySaveRef.current = () => holdReviewMiss(save, shown);
+    try {
+      const { heldId } = await holdAttempt({
+        packId,
+        quality: save.quality,
+        accuracy: save.accuracy,
+        verseScores: save.verseScores,
+        now: save.now,
+        tzOffsetMinutes: tzOffsetMinutesAt(save.now),
+        timeZone: getViewerTimeZone(),
+        durationMs: save.durationMs,
+      });
+      retrySaveRef.current = null;
+      setHeldMiss({ heldId, save });
+      setResultView(shown);
+    } catch {
+      setResultView({ tryAgain: true, saveError: REFRESH_SAVE_ERROR });
+    }
+  }
+
+  async function saveCountedRefresher(save: ReviewSave) {
+    retrySaveRef.current = () => saveCountedRefresher(save);
+    const dueAt = await saveReview(save);
+    if (dueAt === null) {
+      setResultView({ tryAgain: true, saveError: REFRESH_SAVE_ERROR });
+      return;
+    }
+    retrySaveRef.current = null;
+    if (save.replaceHeldId) setHeldMiss(null);
+    setResultView({
+      closingLine: nextReviewLine(dueAt, save.now),
+      offer:
+        save.accuracy < PASSAGE_PASS_ACCURACY
+          ? tryAnotherRefresher(openRefresher)
+          : undefined,
+    });
+  }
+
+  function openRefresher(kind: "pre-try" | "after-miss" | "practice") {
+    setResultView(null);
+    setHoldResult(false);
+    setHeldRecall(null);
+    refresher.open(kind);
+  }
+
+  /** A Memorized passage's typed try, cold or inside the refresher. */
+  async function gradeReview(result: PassageRecallResult): Promise<boolean> {
+    const save: ReviewSave = {
+      quality: result.quality,
+      accuracy: result.accuracy,
+      durationMs: result.durationMs,
+      now: Date.now(),
+      verseScores: verseScores(result.tokens, passageVerses),
+    };
+    const missed = result.accuracy < PASSAGE_PASS_ACCURACY;
+
+    if (refresher.phase === "step1") {
+      setResultView({ firstLetters: true, tryAgain: missed });
+      return true;
+    }
+    if (refresher.kind === "practice") {
+      try {
+        const nextView = await notePracticeRecital({
+          packId,
+          verseScores: save.verseScores,
+          now: save.now,
+          tzOffsetMinutes: tzOffsetMinutesAt(save.now),
+        });
+        setShakyVerses(nextView.shakyVerses ?? []);
+      } catch {
+        // Clearing shaky verses is a bonus; the practice result stands.
+      }
+      setResultView({
+        practiceOnly: true,
+        closingLine: PRACTICE_ONLY_CLOSING,
+        offer: tryAnotherRefresher(openRefresher),
+      });
+      return true;
+    }
+    if (refresher.phase === "step2") {
+      await saveCountedRefresher({
+        ...save,
+        refresherUsed: true,
+        replaceHeldId:
+          refresher.kind === "after-miss" ? heldMiss?.heldId : undefined,
+      });
+      return true;
+    }
+    if (missed && reviewDue) {
+      const preview = previewNextSchedule(
+        {
+          status,
+          learnStage: 3,
+          stageReps: view.stageReps,
+          dueAt: reviewDueAt,
+          ease: view.ease,
+          intervalDays: view.intervalDays,
+          consecutiveCorrect: view.consecutiveCorrect,
+          lapses: view.lapses,
+          earlyReviewApplied: view.earlyReviewApplied,
+        },
+        {
+          quality: save.quality,
+          accuracy: save.accuracy,
+          mode: "review",
+          now: save.now,
+          timeZone: getViewerTimeZone(),
+          item: "passage",
+        },
+      );
+      await holdReviewMiss(save, {
+        closingLine: preview ? nextReviewLine(preview.dueAt, save.now) : null,
+        offer: {
+          label: NEED_A_REFRESHER_LABEL,
+          tooltip: NEED_A_REFRESHER_PASSAGE_TOOLTIP,
+          onClick: () => openRefresher("after-miss"),
+        },
+        focusOffer: true,
+      });
+      return true;
+    }
+
+    if ((await saveReview(save)) === null) {
+      setPersistError(SAVE_ATTEMPT_ERROR);
+      return false;
+    }
+    setPersistError(null);
+    setHoldResult(true);
+    setHeldRecall(liveRecall);
+    return true;
+  }
+
+  /** Continue (or Try again) on a Memorized passage's result. */
+  async function continueReview(): Promise<boolean> {
+    const retrySave = retrySaveRef.current;
+    if (retrySave) {
+      await retrySave();
+      return false;
+    }
+    if (refresher.phase === "step1") {
+      const retry = resultView?.tryAgain === true;
+      setResultView(null);
+      if (!retry) refresher.continueToStep2();
+      return true;
+    }
+    let saved = savedReview;
+    const held = refresher.isOpen ? null : heldMiss;
+    if (held) {
+      try {
+        const nextView = await applyHeld(held.heldId);
+        setHeldMiss(null);
+        if (nextView) {
+          saved = adoptReview([held.save.accuracy], nextView.dueAt);
+          adoptView(state, nextView, held.save.now);
+        }
+      } catch {
+        setResultView((current) => ({
+          ...current,
+          tryAgain: true,
+          saveError: REFRESH_SAVE_ERROR,
+        }));
+        return false;
+      }
+    }
+    refresher.close();
+    setResultView(null);
+    handleContinueAfterResult(saved);
+    return true;
   }
 
   function withWordCounts(current: PassageSessionState): PassageSessionState {
@@ -386,26 +753,7 @@ export function PassageSession({
   }
 
   async function handleGraded(result: PassageRecallResult): Promise<boolean> {
-    if (isMaintenance) {
-      const saved = await persist(
-        {
-          ...state,
-          pendingMutation: {
-            name: "recordAttempt",
-            kind: "review",
-            accuracy: result.accuracy,
-          },
-        },
-        result.quality,
-        result.durationMs,
-      );
-      if (!saved) return false;
-      if (result.via === "typed") {
-        setHoldResult(true);
-        setHeldRecall(liveRecall);
-      }
-      return true;
-    }
+    if (isMaintenance) return gradeReview(result);
 
     const next = reducePassageSession(withWordCounts(state), {
       type: "attempt",
@@ -448,9 +796,9 @@ export function PassageSession({
     }
   }
 
-  function handleContinueAfterResult() {
-    if (endsAfterReview && savedReview) {
-      setFinishedReview(savedReview);
+  function handleContinueAfterResult(saved = savedReview) {
+    if (endsAfterReview && saved) {
+      setFinishedReview(saved);
       return;
     }
     if (moment === "pending") setMoment("showing");
@@ -682,12 +1030,14 @@ export function PassageSession({
             </div>
           ) : null}
           <PassageRecallCard
-            key={`${recall.mode}:${recall.title}`}
+            key={`${recall.mode}:${recall.title}:${refresher.phase}`}
             mode={recall.mode}
             phaseLabel={
               recall.mode === "frontier"
                 ? (PRACTICE_STAGES[recall.learnStage]?.label ?? "Learn")
-                : phaseLabel
+                : refresher.step
+                  ? refresherHeader(refresher.step)
+                  : phaseLabel
             }
             title={recall.title}
             subtitle={recall.subtitle}
@@ -707,8 +1057,21 @@ export function PassageSession({
             intervalDays={view.intervalDays}
             ease={view.ease}
             readContinue={recall.readContinue}
+            onRefresher={
+              reviewDue &&
+              !refresher.isOpen &&
+              !recall.loading &&
+              !recall.error &&
+              wordCountsReady &&
+              recall.versePlainText !== ""
+                ? () => openRefresher("pre-try")
+                : undefined
+            }
+            resultView={isMaintenance ? resultView : null}
             onSubmit={handleGraded}
-            onContinueAfterResult={handleContinueAfterResult}
+            onContinueAfterResult={
+              isMaintenance ? continueReview : () => handleContinueAfterResult()
+            }
           />
         </div>
       ) : null}
@@ -716,7 +1079,7 @@ export function PassageSession({
       {finishedReview ? (
         <PassageReviewSummary
           title={packName}
-          accuracy={finishedReview.accuracy}
+          attempts={finishedReview.attempts}
           dueAt={finishedReview.dueAt}
           onDone={leaveSession}
         />
@@ -927,11 +1290,68 @@ function heldRecallWithJourneyProgress(
   };
 }
 
+function nextReviewLine(dueAt: number, now: number): string {
+  return `Next review ${formatDueDay(dueAt, now)}`;
+}
+
+function tryAnotherRefresher(
+  open: (kind: "practice") => void,
+): NonNullable<PassageRecallResultView["offer"]> {
+  return {
+    label: TRY_ANOTHER_REFRESHER_LABEL,
+    onClick: () => open("practice"),
+  };
+}
+
+/** One graded verse of the passage and the learning piece it sits in. */
+type PassageVerse = PassageVerseKey & { text: string; pieceIndex: number };
+
+type ReviewRefresher = {
+  step: 1 | 2 | null;
+  heldMiss: HeldMiss | null;
+  shakyVerses: readonly PassageVerseKey[];
+  passageVerses: readonly PassageVerse[];
+};
+
+/**
+ * The refresher's hint: First letters shows first letters on shaky verses and
+ * on verses the held miss scored under 85%, every other word blank in place,
+ * verse by verse even inside one piece. From memory shows none.
+ */
+function reviewHint(
+  pieces: readonly PassagePiece[],
+  indexes: readonly number[],
+  refresher: ReviewRefresher,
+): PassageRecallHint {
+  if (refresher.step === 2) {
+    return { type: "hidden", message: NOW_TRY_WITHOUT_HINTS };
+  }
+  if (refresher.step === null) {
+    return { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT };
+  }
+  const { passageVerses, heldMiss } = refresher;
+  const masked = shakyFirstLettersHint(passageVerses, [
+    ...refresher.shakyVerses,
+    ...(heldMiss ? missedVerses(heldMiss.save.verseScores) : []),
+  ]);
+  const maskedPieces = pieces.map((_, pieceIndex) =>
+    masked
+      .filter((_, verse) => passageVerses[verse]?.pieceIndex === pieceIndex)
+      .join(" "),
+  );
+  return {
+    type: "text",
+    text: joinPieceTexts(pieces, indexes, maskedPieces),
+    label: "Hint",
+  };
+}
+
 function reviewRecall(
   packName: string,
   pieces: readonly PassagePiece[],
   texts: readonly string[],
   composite: { loading: boolean; error: string | null; retry: () => void },
+  refresher: ReviewRefresher,
 ): BuiltRecall {
   const indexes = pieces.map((_, index) => index);
   return {
@@ -943,11 +1363,7 @@ function reviewRecall(
     loading: composite.loading,
     error: composite.error,
     retry: composite.retry,
-    hint: {
-      type: "hidden",
-      message:
-        "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
-    },
+    hint: reviewHint(pieces, indexes, refresher),
     pickUpCue: null,
     stopBeforeCue: null,
     learnStage: 3,
@@ -986,11 +1402,7 @@ function ropeRecall(
     error: compositeError,
     retry,
     hint: allHidden
-      ? {
-          type: "hidden",
-          message:
-            "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
-        }
+      ? { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT }
       : { type: "text", text: hintText, label: "Hint" },
     pickUpCue: pickUpCue(pieces, pieceTexts, start),
     stopBeforeCue: allHidden ? stopBeforeCue(pieceTexts, end - 1) : null,

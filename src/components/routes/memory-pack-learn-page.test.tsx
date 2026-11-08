@@ -39,6 +39,10 @@ vi.mock("convex/react", () => ({
   useAction: (name: string) => actionMock(name),
 }));
 
+vi.mock("@/hooks/use-apply-leftover-held-attempts", () => ({
+  useLeftoverHeldAttemptsReady: () => true,
+}));
+
 vi.mock("convex-helpers/react/cache", () => ({
   useQuery: (name: string) => queryResults.get(name),
 }));

@@ -1,4 +1,7 @@
+import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
 import type { CardReference } from "@/components/study/study-card-model";
+import { countDiffWords, type DiffToken } from "@/lib/diff-words";
+import type { PassageVerseKey, PassageVerseScore } from "@/lib/passage-shaky";
 import { displayBookName } from "@/lib/bible-books";
 import {
   countVerseWords,
@@ -315,6 +318,41 @@ export function joinPieceTexts(
     previousChapter = key;
   }
   return result;
+}
+
+/**
+ * Each verse's own accuracy inside a whole-passage diff. `verses` are the
+ * graded text verse by verse, in order. An extra word belongs to the verse it
+ * was typed after.
+ */
+export function verseScores(
+  tokens: readonly DiffToken[],
+  verses: ReadonlyArray<PassageVerseKey & { text: string }>,
+): PassageVerseScore[] {
+  const wordCounts = verses.map((verse) => countDiffWords(verse.text));
+  const verseOfWord = wordCounts.flatMap((count, index) =>
+    Array.from({ length: count }, () => index),
+  );
+  const byVerse: DiffToken[][] = verses.map(() => []);
+  let expected = 0;
+  for (const token of tokens) {
+    const word =
+      token.status === "extra" ? Math.max(0, expected - 1) : expected;
+    if (token.status !== "extra") expected += 1;
+    const index = verseOfWord[Math.min(word, verseOfWord.length - 1)];
+    if (index !== undefined) byVerse[index]?.push(token);
+  }
+  return verses.flatMap(({ chapter, verse }, index) =>
+    wordCounts[index] === 0
+      ? []
+      : [
+          {
+            chapter,
+            verse,
+            accuracy: verseAttemptAccuracy(byVerse[index] ?? []),
+          },
+        ],
+  );
 }
 
 export function verseCountIn(pieces: readonly PassagePiece[]): number {

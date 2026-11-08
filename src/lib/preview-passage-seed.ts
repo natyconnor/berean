@@ -256,6 +256,76 @@ const THIRD_JOHN_VERSES: EsvVerse[] = [
   },
 ];
 
+const PSALM_13_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "How long, O Lord? Will you forget me forever? How long will you hide your face from me?",
+  },
+  {
+    number: 2,
+    text: "How long must I take counsel in my soul and have sorrow in my heart all the day? How long shall my enemy be exalted over me?",
+  },
+  {
+    number: 3,
+    text: "Consider and answer me, O Lord my God; light up my eyes, lest I sleep the sleep of death,",
+  },
+  {
+    number: 4,
+    text: "lest my enemy say, \u201cI have prevailed over him,\u201d lest my foes rejoice because I am shaken.",
+  },
+  {
+    number: 5,
+    text: "But I have trusted in your steadfast love; my heart shall rejoice in your salvation.",
+  },
+  {
+    number: 6,
+    text: "I will sing to the Lord, because he has dealt bountifully with me.",
+  },
+];
+
+const PSALM_15_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "O Lord, who shall sojourn in your tent? Who shall dwell on your holy hill?",
+  },
+  {
+    number: 2,
+    text: "He who walks blamelessly and does what is right and speaks truth in his heart;",
+  },
+  {
+    number: 3,
+    text: "who does not slander with his tongue and does no evil to his neighbor, nor takes up a reproach against his friend;",
+  },
+  {
+    number: 4,
+    text: "in whose eyes a vile person is despised, but who honors those who fear the Lord; who swears to his own hurt and does not change;",
+  },
+  {
+    number: 5,
+    text: "who does not put out his money at interest and does not take a bribe against the innocent. He who does these things shall never be moved.",
+  },
+];
+
+const PSALM_100_VERSES: EsvVerse[] = [
+  { number: 1, text: "Make a joyful noise to the Lord, all the earth!" },
+  {
+    number: 2,
+    text: "Serve the Lord with gladness! Come into his presence with singing!",
+  },
+  {
+    number: 3,
+    text: "Know that the Lord, he is God! It is he who made us, and we are his; we are his people, and the sheep of his pasture.",
+  },
+  {
+    number: 4,
+    text: "Enter his gates with thanksgiving, and his courts with praise! Give thanks to him; bless his name!",
+  },
+  {
+    number: 5,
+    text: "For the Lord is good; his steadfast love endures forever, and his faithfulness to all generations.",
+  },
+];
+
 function paintPieces(
   bases: readonly PassagePieceBase[],
   paint: ReadonlyArray<{
@@ -319,10 +389,66 @@ function thirdJohnPassagePieceBases(): PassagePieceBase[] {
   ]);
 }
 
-function psalm23PassagePieceBases(): PassagePieceBase[] {
-  return buildPassagePieces([
-    { book: "Psalms", chapter: 23, verses: PSALM_23_VERSES },
-  ]);
+/**
+ * A whole psalm, every piece solid, reviewing and due now: one fresh counted
+ * review per seed.
+ */
+function maintenanceDuePsalm(
+  now: number,
+  chapter: number,
+  verses: EsvVerse[],
+  howToTry: string,
+): PreviewPassageSeedPack {
+  const bases = buildPassagePieces([{ book: "Psalms", chapter, verses }]);
+  return {
+    id: `passage-review-psalm-${chapter}`,
+    role: "maintenanceDue",
+    name: `Sample · Psalm ${chapter} (maintenance due)`,
+    description:
+      "Fully solid passage in reviewing status, due now for maintenance.",
+    howToTry,
+    scope: scopeChapter("Psalms", chapter),
+    passage: {
+      status: "reviewing",
+      addsOnDay: 0,
+      schedule: reviewingDueSchedule(now),
+      pieces: paintPieces(
+        bases,
+        bases.map(() => ({ attachment: "solid" as const, learnStage: 3 })),
+      ),
+    },
+  };
+}
+
+/**
+ * Three more due maintenance passages, one per refresher case a tester walks
+ * through. Never seeded on a production Convex deployment.
+ */
+export function testerMaintenancePacks(
+  now: number,
+  convexDeployment: string | undefined,
+): PreviewPassageSeedPack[] {
+  if (convexDeployment?.startsWith("prod:") === true) return [];
+  return [
+    maintenanceDuePsalm(
+      now,
+      13,
+      PSALM_13_VERSES,
+      "Open Review or the pack. Miss a verse or two (60–84%), take the refresher, then pass From memory. That pass replaces the miss.",
+    ),
+    maintenanceDuePsalm(
+      now,
+      15,
+      PSALM_15_VERSES,
+      "Open Review or the pack. Tap Need a refresher? before trying, then miss the From memory try. That miss counts.",
+    ),
+    maintenanceDuePsalm(
+      now,
+      100,
+      PSALM_100_VERSES,
+      "Open Review or the pack and recite the whole passage for a normal review.",
+    ),
+  ];
 }
 
 /**
@@ -341,7 +467,6 @@ export function buildPreviewPassageSeed(
   const todayKey = localDayIndex(now, tzOffsetMinutes);
   const judeBases = judePassagePieceBases();
   const thirdJohnBases = thirdJohnPassagePieceBases();
-  const psalm23Bases = psalm23PassagePieceBases();
 
   // Mid-build Jude: early pieces solid, then attached, one learning frontier, rest unreached.
   const judePaint = judeBases.map((_, index) => {
@@ -429,28 +554,12 @@ export function buildPreviewPassageSeed(
         pieces: paintPieces(thirdJohnBases, thirdJohnPaint),
       },
     },
-    {
-      id: "passage-review-psalm-23",
-      role: "maintenanceDue",
-      name: "Sample · Psalm 23 (maintenance due)",
-      description:
-        "Fully solid passage in reviewing status, due now for maintenance.",
-      howToTry:
-        "Open Review or the pack. Pass once, then fail once — due date/ease should move both times (not only on ≥85%).",
-      scope: scopeChapter("Psalms", 23),
-      passage: {
-        status: "reviewing",
-        addsOnDay: 0,
-        schedule: reviewingDueSchedule(now),
-        pieces: paintPieces(
-          psalm23Bases,
-          psalm23Bases.map(() => ({
-            attachment: "solid" as const,
-            learnStage: 3,
-          })),
-        ),
-      },
-    },
+    maintenanceDuePsalm(
+      now,
+      23,
+      PSALM_23_VERSES,
+      "Open Review or the pack and recite the whole passage from memory.",
+    ),
   ];
 
   // Guardrail: sample scopes must stay uniquely keyed the same way create() does.

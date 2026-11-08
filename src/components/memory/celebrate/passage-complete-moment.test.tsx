@@ -32,6 +32,7 @@ function segment(startVerse: number, text: string): CompositePassageSegment {
   return {
     reference: { book: "Psalms", chapter: 1, startVerse, endVerse: startVerse },
     text,
+    verses: [{ number: startVerse, text }],
   };
 }
 

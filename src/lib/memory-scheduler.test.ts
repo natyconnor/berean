@@ -819,39 +819,6 @@ describe("reviewing score bands", () => {
       },
     },
     {
-      name: "60–84% on a passage still steps back to every-other-day",
-      schedule: {
-        intervalDays: 40,
-        status: "mastered",
-        stageReps: 0,
-        lapses: 2,
-      },
-      accuracy: 84,
-      item: "passage",
-      expect: {
-        status: "reviewing",
-        intervalDays: 2,
-        stageReps: 0,
-        ease: 2.3,
-        lapses: 2,
-        dueAt: NOW + 2 * DAY_MS,
-      },
-    },
-    {
-      name: "under 60% on a passage goes to daily, due tomorrow",
-      schedule: { intervalDays: 12, status: "mastered", lapses: 1 },
-      accuracy: 20,
-      quality: "off",
-      item: "passage",
-      expect: {
-        status: "reviewing",
-        intervalDays: 1,
-        stageReps: 0,
-        lapses: 2,
-        dueAt: NOW + DAY_MS,
-      },
-    },
-    {
       name: "halfway growth is at least +1 day",
       schedule: { intervalDays: 3, ease: 1.3 },
       accuracy: 90,
@@ -1074,6 +1041,132 @@ describe("planVerseAttemptSchedule", () => {
     expect(planned.next.learnStage).toBe(REVIEW_LAPSE_LEARN_STAGE);
     expect(planned.next.status).toBe(held.status);
     expect(planned.next.learnStage).toBe(held.learnStage);
+  });
+});
+
+describe("passage misses use the overall score and floor at Memorized", () => {
+  // Daily gap with three banked reviews, then every-other-day with none.
+  const threeBanked = reviewing({
+    intervalDays: REVIEW_DAILY_INTERVAL_DAYS,
+    stageReps: 3,
+    consecutiveCorrect: 3,
+    lapses: 1,
+  });
+  const fourBanked = reviewing({
+    intervalDays: REVIEW_EVERY_OTHER_INTERVAL_DAYS,
+    stageReps: 0,
+    consecutiveCorrect: 4,
+    lapses: 1,
+  });
+
+  function passageTry(
+    accuracy: number,
+    extra: Partial<VerseAttemptPlanInput> = {},
+  ): VerseAttemptPlanInput {
+    return review({
+      quality: accuracy >= 100 ? "exact" : accuracy >= 60 ? "close" : "off",
+      accuracy,
+      mode: "review",
+      item: "passage",
+      ...extra,
+    });
+  }
+
+  function expectStartOfMemorized(next: MemorySchedule) {
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(next.stageReps).toBe(0);
+    expect(next.dueAt).toBe(NOW + DAY_MS);
+    expect(reviewingBar(next)).toBe(0);
+  }
+
+  it("matches a verse for every score band while enough reviews are banked", () => {
+    for (const accuracy of [100, 85, 84, 60, 59]) {
+      const passage = scheduleNext(fourBanked, passageTry(accuracy));
+      const verse = scheduleNext(
+        fourBanked,
+        passageTry(accuracy, { item: "verse" }),
+      );
+      expect(passage).toEqual(verse);
+    }
+  });
+
+  it("loses one good review on a close miss (60 and 84)", () => {
+    for (const accuracy of [60, 84]) {
+      const next = scheduleNext(fourBanked, passageTry(accuracy));
+      expect(next.status).toBe("reviewing");
+      expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+      expect(next.stageReps).toBe(3);
+      expect(next.lapses).toBe(1);
+    }
+  });
+
+  it("loses three good reviews on a bad miss (59)", () => {
+    const next = scheduleNext(fourBanked, passageTry(59));
+    expect(next.status).toBe("reviewing");
+    expect(next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(next.stageReps).toBe(1);
+    expect(next.lapses).toBe(2);
+  });
+
+  it("never drops to Learning when too few reviews are banked", () => {
+    const empty = reviewing({ intervalDays: 1, stageReps: 0, lapses: 0 });
+    expectStartOfMemorized(scheduleNext(empty, passageTry(84)));
+    expectStartOfMemorized(scheduleNext(empty, passageTry(20)));
+    const two = reviewing({ intervalDays: 1, stageReps: 2 });
+    expectStartOfMemorized(scheduleNext(two, passageTry(59)));
+    const mastered = reviewing({ intervalDays: 40, status: "mastered" });
+    expect(scheduleNext(mastered, passageTry(59)).status).toBe("reviewing");
+  });
+
+  it("loses nothing on a refresher pass after a close miss", () => {
+    const planned = planVerseAttemptSchedule(
+      threeBanked,
+      passageTry(85, { refresherUsed: true, heldMissAccuracy: 70 }),
+    );
+    expect(planned.next).toEqual(
+      keepReviewingSchedule(threeBanked, { now: NOW }),
+    );
+  });
+
+  it("loses two good reviews on a refresher pass after a bad miss", () => {
+    const planned = planVerseAttemptSchedule(
+      threeBanked,
+      passageTry(100, { refresherUsed: true, heldMissAccuracy: 59 }),
+    );
+    expect(planned.next.status).toBe("reviewing");
+    expect(planned.next.intervalDays).toBe(REVIEW_DAILY_INTERVAL_DAYS);
+    expect(planned.next.stageReps).toBe(1);
+  });
+
+  it("floors a refresher pass after a bad miss with one banked review", () => {
+    const one = reviewing({ intervalDays: 1, stageReps: 1 });
+    expectStartOfMemorized(
+      planVerseAttemptSchedule(
+        one,
+        passageTry(100, { refresherUsed: true, heldMissAccuracy: 20 }),
+      ).next,
+    );
+  });
+
+  it("keeps the gap on a pre-try refresher pass, with no growth", () => {
+    for (const accuracy of [85, 100]) {
+      const planned = planVerseAttemptSchedule(
+        fourBanked,
+        passageTry(accuracy, { refresherUsed: true }),
+      );
+      expect(planned.next).toEqual(
+        keepReviewingSchedule(fourBanked, { now: NOW }),
+      );
+    }
+  });
+
+  it("counts a refresher miss as the miss for today", () => {
+    const planned = planVerseAttemptSchedule(
+      fourBanked,
+      passageTry(70, { refresherUsed: true, heldMissAccuracy: 40 }),
+    );
+    expect(planned.next).toEqual(scheduleNext(fourBanked, passageTry(70)));
   });
 });
 

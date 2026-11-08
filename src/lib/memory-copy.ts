@@ -202,6 +202,8 @@ export function canStartOverPassage(
 export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
 export const NEED_A_REFRESHER_TOOLTIP =
   "Do a refresher on this verse for some more practice.";
+export const NEED_A_REFRESHER_PASSAGE_TOOLTIP =
+  "Do a refresher on this passage for some more practice.";
 export const TRY_ANOTHER_REFRESHER_LABEL = "Try another refresher";
 export const REFRESH_IT_FIRST_LABEL = "Refresh it first";
 export const PRACTICE_ONLY_CLOSING =

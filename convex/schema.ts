@@ -6,6 +6,8 @@ import {
   passagePieceValidator,
   passageRangeValidator,
   passageStatusValidator,
+  passageVerseKeyValidator,
+  passageVerseScoreValidator,
   qualityValidator,
 } from "./lib/passageValues";
 
@@ -391,6 +393,27 @@ export default defineSchema({
     .index("by_verseMemoryId", ["verseMemoryId"]),
 
   /**
+   * A due Memorized passage's held first-try miss, like `heldVerseAttempts`.
+   * At most one per passage. Nothing is counted until it is applied or
+   * replaced by a finished From memory try. `_id` is the held id.
+   */
+  heldPassageAttempts: defineTable({
+    userId: v.id("users"),
+    packId: v.id("packs"),
+    passageMemoryId: v.id("passageMemory"),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    /** Each verse's own score in the try. */
+    verseScores: v.array(passageVerseScoreValidator),
+    attemptedAt: v.number(),
+    durationMs: v.optional(v.number()),
+    tzOffsetMinutes: v.number(),
+    timeZone: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_passageMemoryId", ["passageMemoryId"]),
+
+  /**
    * 1:1 with a pack while passage mode is active. Pieces are frozen at start.
    * Per-piece `dueAt` is the learning soft-lock; row `dueAt` is maintenance
    * when status is reviewing | mastered.
@@ -422,6 +445,9 @@ export default defineSchema({
     celebrationPendingAt: v.optional(v.number()),
     // Epoch for passage-page history after Start over. Absent until the first reset.
     startedOverAt: v.optional(v.number()),
+    // Memorized: verses under 85% on their own in a counted try, not yet
+    // recited cleanly since. The refresher hints only these.
+    shakyVerses: v.optional(v.array(passageVerseKeyValidator)),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

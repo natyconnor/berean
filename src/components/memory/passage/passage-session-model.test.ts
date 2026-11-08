@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PassagePiece } from "@/lib/passage-pieces";
 
 import {
+  verseScores,
   computeStallCue,
   CONNECT_TITLE,
   connectPairTitle,
@@ -13,6 +14,7 @@ import {
   stopBeforeCue,
 } from "./passage-session-model";
 import type { PassageSessionState } from "@/lib/passage-session";
+import { diffWords } from "@/lib/diff-words";
 
 describe("PASSAGE_SESSION_PHASE_LABELS", () => {
   it("names passage phases without reusing Practice", () => {
@@ -279,5 +281,46 @@ describe("repairWindowShowsStageHints / computeStallCue", () => {
     expect(cue?.label).toBe("Pick up after");
     expect(cue?.text).toMatch(/apart from you\.$/);
     expect(cue?.text).not.toMatch(/delight/);
+  });
+});
+
+describe("verseScores", () => {
+  // Psalm 13:3–4 as one learning piece: still two verses, scored apart.
+  const verses = [
+    {
+      chapter: 13,
+      verse: 3,
+      text: "Consider and answer me, O Lord my God;",
+    },
+    { chapter: 13, verse: 4, text: "lest my enemy say, I have prevailed." },
+  ];
+  const full = verses.map((verse) => verse.text).join(" ");
+
+  it("scores each verse on its own, even inside one piece", () => {
+    expect(verseScores(diffWords(verses[1].text, full), verses)).toEqual([
+      { chapter: 13, verse: 3, accuracy: 0 },
+      { chapter: 13, verse: 4, accuracy: 100 },
+    ]);
+    expect(verseScores(diffWords(verses[0].text, full), verses)).toEqual([
+      { chapter: 13, verse: 3, accuracy: 100 },
+      { chapter: 13, verse: 4, accuracy: 0 },
+    ]);
+  });
+
+  it("charges an extra word to the verse it was typed after", () => {
+    const tokens = diffWords(
+      "Consider and answer me, O Lord my good God; lest my enemy say, I have prevailed.",
+      full,
+    );
+    const [first, second] = verseScores(tokens, verses);
+    expect(first?.accuracy).toBeLessThan(100);
+    expect(second?.accuracy).toBe(100);
+  });
+
+  it("gives a verse without text no score", () => {
+    const tokens = diffWords(verses[0].text, verses[0].text);
+    expect(
+      verseScores(tokens, [verses[0], { chapter: 13, verse: 4, text: "" }]),
+    ).toEqual([{ chapter: 13, verse: 3, accuracy: 100 }]);
   });
 });

@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
@@ -14,7 +15,6 @@ import {
   requireOwnedPack,
   requirePassageForPack,
   toBuildingPassagePackItem,
-  toPassageSchedule,
   toPassageView,
   withNormalizedPieces,
 } from "./lib/passageMemory";
@@ -22,6 +22,7 @@ import { celebrationPendingPatch } from "./lib/passageCelebration";
 import {
   dueQueuePackItemValidator,
   passageAttemptKindValidator,
+  passageVerseScoreValidator,
   passageViewValidator,
   pieceBaseValidator,
   qualityValidator,
@@ -37,7 +38,15 @@ import {
   loadPassageDueRecords,
 } from "./lib/passageDue";
 import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
+import {
+  applyHeldPassageById,
+  commitPassageReview,
+  deleteHeldForPassage,
+  deleteHeldPassageIfOwned,
+  holdPassageMiss,
+} from "./lib/heldPassageAttempts";
 import { SHORT_VERSE_WORDS } from "../src/lib/memory-scheduler";
+import { shakyAfterUnhintedTry } from "../src/lib/passage-shaky";
 import {
   packAllowsPassageMode,
   rangeAllowsPassageMode,
@@ -59,7 +68,6 @@ import {
   freshReviewingSchedule,
   planStart,
 } from "../src/lib/passage-start";
-import { applyUnifiedGrade } from "../src/lib/unified-review-schedule";
 import { startOverPassagePatch } from "../src/lib/memory-start-over";
 
 /**
@@ -272,9 +280,14 @@ export const introduceNext = mutation({
   },
 });
 
+/** Each verse's own score in an unhinted whole-passage try. */
+const verseScoresValidator = v.array(passageVerseScoreValidator);
+
 /**
- * Log a graded attempt. Frontier applies per-piece learning rules; review
- * schedules the passage row on the ≥85% success path; rope/repair log only.
+ * Log a graded attempt. Frontier applies per-piece learning rules; rope/repair
+ * log only. A review goes through `commitPassageReview`. `refresherUsed`
+ * marks a refresher's From memory try; `replaceHeldId` is the held first try
+ * it replaces, which then no longer counts.
  */
 export const recordAttempt = mutation({
   args: {
@@ -288,6 +301,9 @@ export const recordAttempt = mutation({
     durationMs: v.optional(v.number()),
     pieceIndex: v.optional(v.number()),
     wordCount: v.optional(v.number()),
+    verseScores: v.optional(verseScoresValidator),
+    refresherUsed: v.optional(v.boolean()),
+    replaceHeldId: v.optional(v.id("heldPassageAttempts")),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -295,6 +311,24 @@ export const recordAttempt = mutation({
     const row = withNormalizedPieces(
       await requirePassageForPack(ctx, args.packId, userId),
     );
+
+    if (args.kind === "review") {
+      const held = args.replaceHeldId
+        ? await deleteHeldPassageIfOwned(ctx, userId, args.replaceHeldId)
+        : null;
+      const next = await commitPassageReview(ctx, row, {
+        quality: args.quality,
+        accuracy: args.accuracy,
+        now: args.now,
+        tzOffsetMinutes: args.tzOffsetMinutes,
+        timeZone: args.timeZone,
+        durationMs: args.durationMs,
+        verseScores: args.verseScores,
+        refresherUsed: args.refresherUsed,
+        heldMissAccuracy: held?.accuracy,
+      });
+      return toPassageView(next, args.now, args.tzOffsetMinutes);
+    }
 
     await insertPassageReview(ctx, {
       userId,
@@ -364,41 +398,6 @@ export const recordAttempt = mutation({
             }
           : {}),
       });
-    } else if (args.kind === "review") {
-      if (row.status === "reviewing" || row.status === "mastered") {
-        const scheduled = applyUnifiedGrade(toPassageSchedule(row), {
-          quality: args.quality,
-          accuracy: args.accuracy,
-          mode: "review",
-          now: args.now,
-          tzOffsetMinutes: args.tzOffsetMinutes,
-          timeZone: args.timeZone,
-          item: "passage",
-        });
-        const nextStatus =
-          scheduled.status === "mastered" || scheduled.status === "reviewing"
-            ? scheduled.status
-            : row.status;
-        next = await patchPassageMemory(ctx, row._id, {
-          pieces: row.pieces,
-          status: nextStatus,
-          ease: scheduled.ease,
-          intervalDays: scheduled.intervalDays,
-          dueAt: scheduled.dueAt,
-          consecutiveCorrect: scheduled.consecutiveCorrect,
-          lapses: scheduled.lapses,
-          stageReps: scheduled.stageReps,
-          earlyReviewApplied: scheduled.earlyReviewApplied,
-          lastSessionAt: args.now,
-          updatedAt: args.now,
-        });
-      } else {
-        next = await patchPassageMemory(ctx, row._id, {
-          pieces: row.pieces,
-          lastSessionAt: args.now,
-          updatedAt: args.now,
-        });
-      }
     } else {
       next = await patchPassageMemory(ctx, row._id, {
         pieces: row.pieces,
@@ -407,6 +406,110 @@ export const recordAttempt = mutation({
       });
     }
 
+    return toPassageView(next, args.now, args.tzOffsetMinutes);
+  },
+});
+
+/**
+ * Store a due Memorized passage's first unhinted miss without counting it.
+ * At most one per passage. Schedules a one-shot backstop that no-ops if the
+ * held try is already gone.
+ */
+export const holdAttempt = mutation({
+  args: {
+    packId: v.id("packs"),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    verseScores: verseScoresValidator,
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+    timeZone: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+  },
+  returns: v.object({ heldId: v.id("heldPassageAttempts") }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = await requirePassageForPack(ctx, args.packId, userId);
+    const heldId = await holdPassageMiss(
+      ctx,
+      row,
+      {
+        quality: args.quality,
+        accuracy: args.accuracy,
+        verseScores: args.verseScores,
+        attemptedAt: args.now,
+        tzOffsetMinutes: args.tzOffsetMinutes,
+        ...(args.timeZone !== undefined ? { timeZone: args.timeZone } : {}),
+        ...(args.durationMs !== undefined
+          ? { durationMs: args.durationMs }
+          : {}),
+      },
+      internal.passageMemory.applyHeldAttemptBackstop,
+    );
+    return { heldId };
+  },
+});
+
+/**
+ * Apply a held miss as today's counted review. A missing id is a no-op;
+ * either way the passage's current view comes back (null when it is gone).
+ */
+export const applyHeldAttempt = mutation({
+  args: {
+    heldId: v.id("heldPassageAttempts"),
+    packId: v.id("packs"),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: v.union(passageViewValidator, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    await applyHeldPassageById(ctx, args.heldId, userId);
+    const row = await loadPassageForPack(ctx, args.packId, userId);
+    return row ? toPassageView(row, args.now, args.tzOffsetMinutes) : null;
+  },
+});
+
+/** Closed-tab backstop. Does nothing when the held try is already gone. */
+export const applyHeldAttemptBackstop = internalMutation({
+  args: { heldId: v.id("heldPassageAttempts") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await applyHeldPassageById(ctx, args.heldId);
+    return null;
+  },
+});
+
+/**
+ * An unhinted practice-only recital of a Memorized passage (Try another
+ * refresher). Verses at 85%+ stop being shaky; nothing else changes and no
+ * attempt is logged.
+ */
+export const notePracticeRecital = mutation({
+  args: {
+    packId: v.id("packs"),
+    verseScores: verseScoresValidator,
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: passageViewValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = withNormalizedPieces(
+      await requirePassageForPack(ctx, args.packId, userId),
+    );
+    if (row.status !== "reviewing" && row.status !== "mastered") {
+      return toPassageView(row, args.now, args.tzOffsetMinutes);
+    }
+    await ctx.db.patch(row._id, {
+      shakyVerses: shakyAfterUnhintedTry(
+        row.shakyVerses ?? [],
+        args.verseScores,
+        false,
+      ),
+    });
+    const next = await ctx.db.get(row._id);
+    if (!next) throw new Error("Failed to update passage memory");
     return toPassageView(next, args.now, args.tzOffsetMinutes);
   },
 });
@@ -509,6 +612,7 @@ export const startOver = mutation({
     const row = withNormalizedPieces(
       await requirePassageForPack(ctx, args.packId, userId),
     );
+    await deleteHeldForPassage(ctx, row._id);
     const next = await patchPassageMemory(ctx, row._id, {
       ...startOverPassagePatch(row.pieces, args.now),
       updatedAt: args.now,

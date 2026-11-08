@@ -2,6 +2,7 @@ import {
   type JSX,
   type KeyboardEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -9,6 +10,10 @@ import {
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 
+import {
+  EmptyHintPrompt,
+  RefresherOfferButton,
+} from "@/components/memory/memory-refresher-controls";
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
 import {
   currentStageStep,
@@ -61,6 +66,21 @@ export type PassageRecallHint =
   | { type: "text"; text: string; label: string }
   | { type: "hidden"; message: string };
 
+/** What the result shows beyond the score and diff. Review refreshers only. */
+export type PassageRecallResultView = {
+  /** The main action reads Try again (a First letters miss, or a failed save). */
+  tryAgain?: boolean;
+  /** An outlined refresher button beside the main action. */
+  offer?: { label: string; tooltip?: string; onClick: () => void };
+  /** Focus the offer instead of the main action. */
+  focusOffer?: boolean;
+  closingLine?: string | null;
+  saveError?: string | null;
+  practiceOnly?: boolean;
+  /** A First letters try: no celebration, and a miss promises nothing. */
+  firstLetters?: boolean;
+};
+
 interface PassageRecallCardProps {
   mode: PassageRecallMode;
   phaseLabel: string;
@@ -88,8 +108,12 @@ interface PassageRecallCardProps {
   ease?: number;
   /** Read (full text) banks without typing. Frontier only. */
   readContinue?: boolean;
+  /** Quiet "Need a refresher?" link in an empty hint panel. */
+  onRefresher?: () => void;
+  resultView?: PassageRecallResultView | null;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
-  onContinueAfterResult?: () => void;
+  /** Resolve `false` to stay on the result, e.g. a save to retry. */
+  onContinueAfterResult?: () => void | Promise<boolean>;
 }
 
 export function PassageRecallCard({
@@ -113,6 +137,8 @@ export function PassageRecallCard({
   intervalDays,
   ease,
   readContinue = false,
+  onRefresher,
+  resultView = null,
   onSubmit,
   onContinueAfterResult,
 }: PassageRecallCardProps): JSX.Element {
@@ -125,7 +151,14 @@ export function PassageRecallCard({
   const [startedAt] = useState(() => Date.now());
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
+  const offerRef = useRef<HTMLButtonElement>(null);
   const { submit, pending: submitPending } = useSubmitLock();
+  const idPrefix = useId();
+  const headerId = `${idPrefix}-header`;
+  const hintMessageId = `${idPrefix}-hint`;
+  const bannerId = `${idPrefix}-banner`;
+  const errorId = `${idPrefix}-error`;
+  const focusOffer = Boolean(resultView?.focusOffer && resultView.offer);
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(learnStage, status);
@@ -155,7 +188,9 @@ export function PassageRecallCard({
   );
   const checkedAccuracy = verseAttemptAccuracy(checkedDiffTokens);
   const passed = checkedAccuracy >= PASSAGE_PASS_ACCURACY;
-  const offerTryAgain = checked && !passed && mode === "frontier";
+  const offerTryAgain =
+    (checked && !passed && mode === "frontier") ||
+    Boolean(resultView?.tryAgain);
 
   function checkAnswer() {
     if (!canCheckAnswer || checked) return;
@@ -196,19 +231,24 @@ export function PassageRecallCard({
   }
 
   function continueAttempt() {
-    setChecked(false);
-    setHeldGoalLabel(null);
-    setTypedAnswer("");
-    onContinueAfterResult?.();
-    window.requestAnimationFrame(() => answerInputRef.current?.focus());
+    submit(async () => {
+      if ((await onContinueAfterResult?.()) === false) return;
+      setChecked(false);
+      setHeldGoalLabel(null);
+      setTypedAnswer("");
+      window.requestAnimationFrame(() => answerInputRef.current?.focus());
+    });
   }
 
-  useEnterToClick(actionRef, !checked ? isReadPrime : true);
+  const saveError = resultView?.saveError ?? null;
+  const defaultActionRef = focusOffer && !saveError ? offerRef : actionRef;
+  useEnterToClick(defaultActionRef, !checked ? isReadPrime : true);
 
   useEffect(() => {
     if (!checked && !isReadPrime) return;
-    actionRef.current?.focus();
-  }, [checked, isReadPrime]);
+    if (submitPending) return;
+    defaultActionRef.current?.focus();
+  }, [checked, isReadPrime, defaultActionRef, submitPending]);
 
   // After Read advances into a typing band, focus the answer box. Continue is
   // unmounted on that transition, so without this focus is left on body.
@@ -236,6 +276,7 @@ export function PassageRecallCard({
         <CardHeader className="gap-3 text-center">
           <div>
             <p
+              id={headerId}
               className={cn(
                 "inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]",
                 stageColor.text,
@@ -302,11 +343,12 @@ export function PassageRecallCard({
                     </Button>
                   </div>
                 ) : hint.type === "hidden" ? (
-                  <div className="flex h-full min-h-[140px] items-center justify-center text-center font-sans">
-                    <p className="max-w-sm text-sm text-muted-foreground">
-                      {hint.message}
-                    </p>
-                  </div>
+                  <EmptyHintPrompt
+                    message={hint.message}
+                    messageId={hintMessageId}
+                    onRefresher={onRefresher}
+                    disabled={submitPending}
+                  />
                 ) : hint.type === "tokens" ? (
                   <HintTokenText tokens={hint.tokens} />
                 ) : (
@@ -336,6 +378,11 @@ export function PassageRecallCard({
                       : "min-h-[170px] resize-none",
                   )}
                   aria-label={fieldLabel}
+                  aria-describedby={
+                    hint.type === "hidden"
+                      ? `${headerId} ${hintMessageId}`
+                      : headerId
+                  }
                 />
               )}
             </>
@@ -348,6 +395,14 @@ export function PassageRecallCard({
                 versePlainText={versePlainText}
                 diffTokens={checkedDiffTokens}
                 note={passed ? undefined : `Pass at ${PASSAGE_PASS_ACCURACY}%`}
+                bannerId={bannerId}
+                errorId={errorId}
+                saveError={saveError}
+                closingLine={resultView?.closingLine}
+                practiceOnly={resultView?.practiceOnly}
+                unscheduled={resultView?.practiceOnly}
+                scheduleHeld={resultView?.firstLetters}
+                skipCelebrate={resultView?.firstLetters}
               />
             </div>
           )}
@@ -365,6 +420,16 @@ export function PassageRecallCard({
                 disabled={loading || Boolean(error)}
               />
             ) : null}
+            {checked && resultView?.offer ? (
+              <RefresherOfferButton
+                label={resultView.offer.label}
+                onClick={resultView.offer.onClick}
+                disabled={submitPending}
+                buttonRef={offerRef}
+                describedBy={bannerId}
+                tooltip={resultView.offer.tooltip}
+              />
+            ) : null}
             {checked ? (
               <Button
                 ref={actionRef}
@@ -373,6 +438,9 @@ export function PassageRecallCard({
                 className="flex-1 sm:flex-none"
                 onClick={continueAttempt}
                 loading={submitPending}
+                aria-describedby={
+                  saveError ? `${bannerId} ${errorId}` : bannerId
+                }
               >
                 {submitPending ? (
                   "Saving..."

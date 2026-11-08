@@ -75,6 +75,7 @@ import {
   replaceHeldForVerse,
   scheduleFromMemory,
 } from "./lib/heldVerseAttempts";
+import { applyLeftoverHeldPassagesForUser } from "./lib/heldPassageAttempts";
 import {
   attemptsSinceStartOver,
   startOverVersePatch,
@@ -705,13 +706,17 @@ export const applyHeldAttempt = mutation({
   },
 });
 
-/** Session and dashboard load: apply any leftover held tries. No polling. */
+/**
+ * Session and dashboard load: apply any leftover held tries, verse and
+ * passage. No polling.
+ */
 export const applyLeftoverHeldAttempts = mutation({
   args: {},
   returns: v.object({ applied: v.number() }),
   handler: async (ctx) => {
     const userId = await getCurrentUserId(ctx);
     const applied = await applyLeftoverHeldForUser(ctx, userId);
+    await applyLeftoverHeldPassagesForUser(ctx, userId);
     return { applied };
   },
 });

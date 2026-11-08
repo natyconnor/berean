@@ -288,7 +288,7 @@ export async function markPassageCelebrated(
 }
 
 /**
- * Delete a passage, its reviews, and its due cache. Its passage hearts stay as
+ * Delete a passage, its reviews, any held miss, and its due cache. Its passage hearts stay as
  * plain range hearts (`passageMemoryId` cleared).
  */
 export async function deletePassageAndReviews(
@@ -301,6 +301,13 @@ export async function deletePassageAndReviews(
     .collect();
   for (const review of reviews) {
     await ctx.db.delete(review._id);
+  }
+  const held = await ctx.db
+    .query("heldPassageAttempts")
+    .withIndex("by_passageMemoryId", (q) => q.eq("passageMemoryId", row._id))
+    .take(8);
+  for (const attempt of held) {
+    await ctx.db.delete(attempt._id);
   }
   const hearts = await ctx.db
     .query("savedVerses")
@@ -382,6 +389,7 @@ export function toPassageView(
     celebratedAt: row.celebratedAt,
     needsCelebration: needsCelebration(row),
     startedOverAt: row.startedOverAt,
+    shakyVerses: row.shakyVerses,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     remainingIntroduces: remainingIntroduces({

@@ -62,6 +62,7 @@ export function startOverPassagePatch(
     stageReps: seed.stageReps,
     earlyReviewApplied: seed.earlyReviewApplied,
     startedOverAt: now,
+    shakyVerses: undefined,
     lastSessionAt: session.lastSessionAt,
     addsOnDay: session.addsOnDay,
     addDayKey: session.addDayKey,
