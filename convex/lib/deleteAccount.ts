@@ -66,6 +66,13 @@ export async function deleteAllDataForUser(
   }
 
   for (const row of await ctx.db
+    .query("heldPassageAttempts")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect()) {
+    await ctx.db.delete(row._id);
+  }
+
+  for (const row of await ctx.db
     .query("passageMemory")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .collect()) {

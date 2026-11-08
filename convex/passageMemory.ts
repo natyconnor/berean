@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getCurrentUserId, getCurrentUserIdOrNull } from "./lib/auth";
 import {
@@ -14,7 +15,6 @@ import {
   requireOwnedPack,
   requirePassageForPack,
   toBuildingPassagePackItem,
-  toPassageSchedule,
   toPassageView,
   withNormalizedPieces,
 } from "./lib/passageMemory";
@@ -38,10 +38,13 @@ import {
 } from "./lib/passageDue";
 import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
 import {
-  isDueForReview,
-  planVerseAttemptSchedule,
-  SHORT_VERSE_WORDS,
-} from "../src/lib/memory-scheduler";
+  applyHeldPassageById,
+  commitPassageReview,
+  deleteHeldForPassage,
+  deleteHeldPassageIfOwned,
+  holdPassageMiss,
+} from "./lib/heldPassageAttempts";
+import { SHORT_VERSE_WORDS } from "../src/lib/memory-scheduler";
 import { piecesAfterUnhintedTry } from "../src/lib/passage-shaky";
 import {
   packAllowsPassageMode,
@@ -281,10 +284,9 @@ const pieceAccuraciesValidator = v.array(v.union(v.number(), v.null()));
 
 /**
  * Log a graded attempt. Frontier applies per-piece learning rules; rope/repair
- * log only. A Memorized review moves the one passage schedule by its overall
- * score and updates shaky verses from `pieceAccuracies`. `refresherUsed` marks
- * a refresher's From memory try; `heldMissAccuracy` is the first try it
- * replaces. A repeat at the same `now` is a retried save and changes nothing.
+ * log only. A review goes through `commitPassageReview`. `refresherUsed`
+ * marks a refresher's From memory try; `replaceHeldId` is the held first try
+ * it replaces, which then no longer counts.
  */
 export const recordAttempt = mutation({
   args: {
@@ -300,7 +302,7 @@ export const recordAttempt = mutation({
     wordCount: v.optional(v.number()),
     pieceAccuracies: v.optional(pieceAccuraciesValidator),
     refresherUsed: v.optional(v.boolean()),
-    heldMissAccuracy: v.optional(v.number()),
+    replaceHeldId: v.optional(v.id("heldPassageAttempts")),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -310,19 +312,21 @@ export const recordAttempt = mutation({
     );
 
     if (args.kind === "review") {
-      const retried = await ctx.db
-        .query("passageReviews")
-        .withIndex("by_userId_createdAt", (q) =>
-          q.eq("userId", userId).eq("createdAt", args.now),
-        )
-        .first();
-      if (
-        retried &&
-        retried.passageMemoryId === row._id &&
-        retried.kind === "review"
-      ) {
-        return toPassageView(row, args.now, args.tzOffsetMinutes);
-      }
+      const held = args.replaceHeldId
+        ? await deleteHeldPassageIfOwned(ctx, userId, args.replaceHeldId)
+        : null;
+      const next = await commitPassageReview(ctx, row, {
+        quality: args.quality,
+        accuracy: args.accuracy,
+        now: args.now,
+        tzOffsetMinutes: args.tzOffsetMinutes,
+        timeZone: args.timeZone,
+        durationMs: args.durationMs,
+        pieceAccuracies: args.pieceAccuracies,
+        refresherUsed: args.refresherUsed,
+        heldMissAccuracy: held?.accuracy,
+      });
+      return toPassageView(next, args.now, args.tzOffsetMinutes);
     }
 
     await insertPassageReview(ctx, {
@@ -393,50 +397,6 @@ export const recordAttempt = mutation({
             }
           : {}),
       });
-    } else if (args.kind === "review") {
-      if (row.status === "reviewing" || row.status === "mastered") {
-        const schedule = toPassageSchedule(row);
-        const { next: scheduled } = planVerseAttemptSchedule(schedule, {
-          quality: args.quality,
-          accuracy: args.accuracy,
-          mode: "review",
-          now: args.now,
-          tzOffsetMinutes: args.tzOffsetMinutes,
-          timeZone: args.timeZone,
-          item: "passage",
-          refresherUsed: args.refresherUsed,
-          heldMissAccuracy: args.heldMissAccuracy,
-        });
-        const nextStatus =
-          scheduled.status === "mastered" || scheduled.status === "reviewing"
-            ? scheduled.status
-            : row.status;
-        next = await patchPassageMemory(ctx, row._id, {
-          pieces: args.pieceAccuracies
-            ? piecesAfterUnhintedTry(
-                row.pieces,
-                args.pieceAccuracies,
-                isDueForReview(schedule, args.now),
-              )
-            : row.pieces,
-          status: nextStatus,
-          ease: scheduled.ease,
-          intervalDays: scheduled.intervalDays,
-          dueAt: scheduled.dueAt,
-          consecutiveCorrect: scheduled.consecutiveCorrect,
-          lapses: scheduled.lapses,
-          stageReps: scheduled.stageReps,
-          earlyReviewApplied: scheduled.earlyReviewApplied,
-          lastSessionAt: args.now,
-          updatedAt: args.now,
-        });
-      } else {
-        next = await patchPassageMemory(ctx, row._id, {
-          pieces: row.pieces,
-          lastSessionAt: args.now,
-          updatedAt: args.now,
-        });
-      }
     } else {
       next = await patchPassageMemory(ctx, row._id, {
         pieces: row.pieces,
@@ -446,6 +406,76 @@ export const recordAttempt = mutation({
     }
 
     return toPassageView(next, args.now, args.tzOffsetMinutes);
+  },
+});
+
+/**
+ * Store a due Memorized passage's first unhinted miss without counting it.
+ * At most one per passage. Schedules a one-shot backstop that no-ops if the
+ * held try is already gone.
+ */
+export const holdAttempt = mutation({
+  args: {
+    packId: v.id("packs"),
+    quality: qualityValidator,
+    accuracy: v.number(),
+    pieceAccuracies: pieceAccuraciesValidator,
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+    timeZone: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+  },
+  returns: v.object({ heldId: v.id("heldPassageAttempts") }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = await requirePassageForPack(ctx, args.packId, userId);
+    const heldId = await holdPassageMiss(
+      ctx,
+      row,
+      {
+        quality: args.quality,
+        accuracy: args.accuracy,
+        pieceAccuracies: args.pieceAccuracies,
+        attemptedAt: args.now,
+        tzOffsetMinutes: args.tzOffsetMinutes,
+        ...(args.timeZone !== undefined ? { timeZone: args.timeZone } : {}),
+        ...(args.durationMs !== undefined
+          ? { durationMs: args.durationMs }
+          : {}),
+      },
+      internal.passageMemory.applyHeldAttemptBackstop,
+    );
+    return { heldId };
+  },
+});
+
+/**
+ * Apply a held miss as today's counted review. A missing id is a no-op;
+ * either way the passage's current view comes back (null when it is gone).
+ */
+export const applyHeldAttempt = mutation({
+  args: {
+    heldId: v.id("heldPassageAttempts"),
+    packId: v.id("packs"),
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: v.union(passageViewValidator, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    await applyHeldPassageById(ctx, args.heldId, userId);
+    const row = await loadPassageForPack(ctx, args.packId, userId);
+    return row ? toPassageView(row, args.now, args.tzOffsetMinutes) : null;
+  },
+});
+
+/** Closed-tab backstop. Does nothing when the held try is already gone. */
+export const applyHeldAttemptBackstop = internalMutation({
+  args: { heldId: v.id("heldPassageAttempts") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await applyHeldPassageById(ctx, args.heldId);
+    return null;
   },
 });
 
@@ -577,6 +607,7 @@ export const startOver = mutation({
     const row = withNormalizedPieces(
       await requirePassageForPack(ctx, args.packId, userId),
     );
+    await deleteHeldForPassage(ctx, row._id);
     const next = await patchPassageMemory(ctx, row._id, {
       ...startOverPassagePatch(row.pieces, args.now),
       updatedAt: args.now,

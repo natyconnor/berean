@@ -11,6 +11,7 @@ import {
   dueQueueEntryToPracticeVerse,
   toPracticeVerse,
 } from "@/components/memory/to-practice-verse";
+import { useLeftoverHeldAttemptsReady } from "@/hooks/use-apply-leftover-held-attempts";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
@@ -63,11 +64,18 @@ export function MemoryPackSessionPage({
     id: typedPackId,
     now,
   });
-  const passage = useQuery(api.passageMemory.getForPack, {
-    packId: typedPackId,
-    now,
-    tzOffsetMinutes: new Date(now).getTimezoneOffset(),
-  });
+  // A held passage miss left by a reload or closed tab counts first.
+  const leftoversReady = useLeftoverHeldAttemptsReady();
+  const passage = useQuery(
+    api.passageMemory.getForPack,
+    leftoversReady
+      ? {
+          packId: typedPackId,
+          now,
+          tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+        }
+      : "skip",
+  );
 
   const unifiedEnabled = pack?.unifiedReviewEnabled === true;
   const sessionVerses = useMemo<PracticeVerse[]>(() => {

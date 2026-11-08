@@ -10,14 +10,14 @@ import type { EsvChapterData } from "../../../shared/esv-api";
 import { MemoryPackReviewPage } from "./memory-pack-review-page";
 import type { Id } from "../../../convex/_generated/dataModel";
 
-const { queryResults, actionMocks, mutationMocks, navigateMock } = vi.hoisted(
-  () => ({
+const { queryResults, actionMocks, mutationMocks, navigateMock, leftovers } =
+  vi.hoisted(() => ({
     queryResults: new Map<string, unknown>(),
     actionMocks: new Map<string, ReturnType<typeof vi.fn>>(),
     mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
     navigateMock: vi.fn(),
-  }),
-);
+    leftovers: { ready: true },
+  }));
 
 function actionMock(name: string) {
   const existing = actionMocks.get(name);
@@ -36,13 +36,14 @@ function mutationMock(name: string) {
 }
 
 vi.mock("@/hooks/use-apply-leftover-held-attempts", () => ({
-  useLeftoverHeldAttemptsReady: () => true,
+  useLeftoverHeldAttemptsReady: () => leftovers.ready,
   useApplyLeftoverHeldAttempts: () => {},
   resetApplyLeftoverHeldAttemptsForTests: () => {},
 }));
 
 vi.mock("convex/react", () => ({
-  useQuery: (name: string) => queryResults.get(name),
+  useQuery: (name: string, args: unknown) =>
+    args === "skip" ? undefined : queryResults.get(name),
   useMutation: (name: string) => mutationMock(name),
   useAction: (name: string) => actionMock(name),
 }));
@@ -171,6 +172,7 @@ describe("MemoryPackReviewPage", () => {
     mutationMocks.clear();
     navigateMock.mockReset();
     sessionStorage.clear();
+    leftovers.ready = true;
     actionMock("esv.get").mockResolvedValue(psalm23);
     actionMock("esv.getChaptersBatch").mockResolvedValue([
       { chapter: 23, data: psalm23 },
@@ -243,54 +245,24 @@ describe("MemoryPackReviewPage", () => {
     });
   });
 
+  it("opens a reviewing passage only after leftover held misses are applied", async () => {
+    leftovers.ready = false;
+    const view = renderReview({ unified: false, passage: reviewingPassage() });
+    expect(screen.queryByLabelText("Your recited passage")).toBeNull();
+
+    leftovers.ready = true;
+    view.rerender(
+      <TooltipProvider delayDuration={0}>
+        <MemoryPackReviewPage />
+      </TooltipProvider>,
+    );
+    expect(
+      await screen.findByLabelText("Your recited passage"),
+    ).toBeInTheDocument();
+  });
+
   it("recites a reviewing passage instead of a unified composite from hearts", async () => {
-    const now = getSessionNow();
-    const pieces = [
-      {
-        index: 0,
-        book: "Psalms",
-        chapter: 23,
-        startVerse: 1,
-        endVerse: 3,
-        sectionIndex: 0,
-        attachment: "solid" as const,
-        learnStage: 3,
-        stageReps: 0,
-      },
-      {
-        index: 1,
-        book: "Psalms",
-        chapter: 23,
-        startVerse: 4,
-        endVerse: 6,
-        sectionIndex: 0,
-        attachment: "solid" as const,
-        learnStage: 3,
-        stageReps: 0,
-      },
-    ];
-    renderReview({
-      unified: true,
-      passage: {
-        _id: "passage_1" as Id<"passageMemory">,
-        packId: "pack_1" as Id<"packs">,
-        status: "reviewing",
-        pieces,
-        addsOnDay: 0,
-        ease: 2.3,
-        intervalDays: 1,
-        dueAt: now - 1000,
-        consecutiveCorrect: 1,
-        lapses: 0,
-        stageReps: 0,
-        createdAt: now,
-        updatedAt: now,
-        remainingIntroduces: 5,
-        frontierIndex: 2,
-        rehearsalStartIndex: 0,
-        ropePieceIndexes: [0, 1],
-      },
-    });
+    renderReview({ unified: true, passage: reviewingPassage() });
 
     expect(
       await screen.findByRole("status", {
@@ -310,3 +282,50 @@ describe("MemoryPackReviewPage", () => {
     ).toBeInTheDocument();
   });
 });
+
+function reviewingPassage() {
+  const now = getSessionNow();
+  const pieces = [
+    {
+      index: 0,
+      book: "Psalms",
+      chapter: 23,
+      startVerse: 1,
+      endVerse: 3,
+      sectionIndex: 0,
+      attachment: "solid" as const,
+      learnStage: 3,
+      stageReps: 0,
+    },
+    {
+      index: 1,
+      book: "Psalms",
+      chapter: 23,
+      startVerse: 4,
+      endVerse: 6,
+      sectionIndex: 0,
+      attachment: "solid" as const,
+      learnStage: 3,
+      stageReps: 0,
+    },
+  ];
+  return {
+    _id: "passage_1" as Id<"passageMemory">,
+    packId: "pack_1" as Id<"packs">,
+    status: "reviewing",
+    pieces,
+    addsOnDay: 0,
+    ease: 2.3,
+    intervalDays: 1,
+    dueAt: now - 1000,
+    consecutiveCorrect: 1,
+    lapses: 0,
+    stageReps: 0,
+    createdAt: now,
+    updatedAt: now,
+    remainingIntroduces: 5,
+    frontierIndex: 2,
+    rehearsalStartIndex: 0,
+    ropePieceIndexes: [0, 1],
+  };
+}

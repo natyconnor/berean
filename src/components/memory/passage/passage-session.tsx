@@ -155,8 +155,12 @@ type ReviewSave = {
   now: number;
   pieceAccuracies: (number | null)[];
   refresherUsed?: true;
-  heldMissAccuracy?: number;
+  /** The held first try this From memory try replaces. */
+  replaceHeldId?: Id<"heldPassageAttempts">;
 };
+
+/** A cold miss held on the server, and the try it came from. */
+type HeldMiss = { heldId: Id<"heldPassageAttempts">; save: ReviewSave };
 
 const SAVE_ATTEMPT_ERROR = "Couldn't save that attempt. Please try again.";
 const FROM_MEMORY_PASSAGE_HINT =
@@ -211,6 +215,8 @@ export function PassageSession({
   const notePracticeRecital = useMutation(
     api.passageMemory.notePracticeRecital,
   );
+  const holdAttempt = useMutation(api.passageMemory.holdAttempt);
+  const applyHeldAttempt = useMutation(api.passageMemory.applyHeldAttempt);
 
   const [status, setStatus] = useState(view.status);
   const isMaintenance = status === "reviewing" || status === "mastered";
@@ -255,17 +261,19 @@ export function PassageSession({
   const [finishedReview, setFinishedReview] = useState<SavedReview | null>(
     null,
   );
-  // Memorized review refresher. A cold miss on a due passage is held, not
-  // saved: Continue or leaving saves it, and only a finished From memory try
-  // replaces it. Its weak verses are hinted right away.
+  // Memorized review refresher. A cold miss on a due passage is held on the
+  // server (as S5 holds a verse): Continue, leaving, the next load or the
+  // backstop counts it, and only a finished From memory try replaces it. Its
+  // weak verses are hinted right away.
   const refresher = useVerseRefresher();
   const [reviewDueAt, setReviewDueAt] = useState(view.dueAt);
-  const [heldMiss, setHeldMiss] = useState<ReviewSave | null>(null);
-  const heldMissRef = useRef<ReviewSave | null>(null);
+  const [heldMiss, setHeldMissState] = useState<HeldMiss | null>(null);
+  const heldIdRef = useRef<Id<"heldPassageAttempts"> | null>(null);
   const [resultView, setResultView] = useState<PassageRecallResultView | null>(
     null,
   );
-  const failedCountedSaveRef = useRef<ReviewSave | null>(null);
+  /** Try again on a failed save resends this, with the same result. */
+  const retrySaveRef = useRef<(() => Promise<void>) | null>(null);
   // The passage just became known by heart: "pending" holds the moment until
   // the learner continues past the result that finished it. "owed" is a moment
   // missed by leaving early, shown once this session opens with its text.
@@ -452,7 +460,7 @@ export function PassageSession({
         durationMs: save.durationMs,
         pieceAccuracies: save.pieceAccuracies,
         refresherUsed: save.refresherUsed,
-        heldMissAccuracy: save.heldMissAccuracy,
+        replaceHeldId: save.replaceHeldId,
       });
       adoptReview(save.accuracy, nextView.dueAt);
       adoptView(state, nextView, save.now);
@@ -462,28 +470,32 @@ export function PassageSession({
     }
   }
 
-  function holdMiss(miss: ReviewSave | null) {
-    heldMissRef.current = miss;
-    setHeldMiss(miss);
+  function setHeldMiss(next: HeldMiss | null) {
+    heldIdRef.current = next?.heldId ?? null;
+    setHeldMissState(next);
   }
 
-  /** Count the held cold miss as if Continue was pressed. */
-  async function applyHeldMiss(): Promise<boolean> {
-    const miss = heldMissRef.current;
-    if (!miss) return true;
-    holdMiss(null);
-    if ((await saveReview(miss)) !== null) return true;
-    holdMiss(miss);
-    return false;
+  function applyHeld(heldId: Id<"heldPassageAttempts">) {
+    const now = Date.now();
+    return applyHeldAttempt({
+      heldId,
+      packId,
+      now,
+      tzOffsetMinutes: tzOffsetMinutesAt(now),
+    });
   }
 
-  const applyHeldMissOnLeave = useEffectEvent(() => {
-    void applyHeldMiss();
+  // Leaving a seen miss counts it: Back, Home, the next queue item, or the
+  // tab. If this apply never lands, the next load or the backstop does it.
+  const applyHeldOnLeave = useEffectEvent(() => {
+    const heldId = heldIdRef.current;
+    if (!heldId) return;
+    heldIdRef.current = null;
+    void applyHeld(heldId).catch(() => undefined);
   });
 
-  // Leaving a seen miss counts it: Back, Home, the next queue item, or the tab.
   useEffect(() => {
-    const leave = () => applyHeldMissOnLeave();
+    const leave = () => applyHeldOnLeave();
     window.addEventListener("pagehide", leave);
     return () => {
       window.removeEventListener("pagehide", leave);
@@ -491,15 +503,40 @@ export function PassageSession({
     };
   }, []);
 
+  /** Hold a cold miss on the server. Nothing counts until it is applied. */
+  async function holdReviewMiss(
+    save: ReviewSave,
+    shown: PassageRecallResultView,
+  ) {
+    retrySaveRef.current = () => holdReviewMiss(save, shown);
+    try {
+      const { heldId } = await holdAttempt({
+        packId,
+        quality: save.quality,
+        accuracy: save.accuracy,
+        pieceAccuracies: save.pieceAccuracies,
+        now: save.now,
+        tzOffsetMinutes: tzOffsetMinutesAt(save.now),
+        timeZone: getViewerTimeZone(),
+        durationMs: save.durationMs,
+      });
+      retrySaveRef.current = null;
+      setHeldMiss({ heldId, save });
+      setResultView(shown);
+    } catch {
+      setResultView({ tryAgain: true, saveError: REFRESH_SAVE_ERROR });
+    }
+  }
+
   async function saveCountedRefresher(save: ReviewSave) {
-    failedCountedSaveRef.current = save;
+    retrySaveRef.current = () => saveCountedRefresher(save);
     const dueAt = await saveReview(save);
     if (dueAt === null) {
       setResultView({ tryAgain: true, saveError: REFRESH_SAVE_ERROR });
       return;
     }
-    failedCountedSaveRef.current = null;
-    if (save.heldMissAccuracy !== undefined) holdMiss(null);
+    retrySaveRef.current = null;
+    if (save.replaceHeldId) setHeldMiss(null);
     setResultView({
       closingLine: nextReviewLine(dueAt, save.now),
       offer:
@@ -551,18 +588,15 @@ export function PassageSession({
       return true;
     }
     if (refresher.phase === "step2") {
-      const held = heldMissRef.current;
       await saveCountedRefresher({
         ...save,
         refresherUsed: true,
-        ...(refresher.kind === "after-miss" && held
-          ? { heldMissAccuracy: held.accuracy }
-          : {}),
+        replaceHeldId:
+          refresher.kind === "after-miss" ? heldMiss?.heldId : undefined,
       });
       return true;
     }
     if (missed && reviewDue) {
-      holdMiss(save);
       const preview = previewNextSchedule(
         {
           status,
@@ -584,7 +618,7 @@ export function PassageSession({
           item: "passage",
         },
       );
-      setResultView({
+      await holdReviewMiss(save, {
         closingLine: preview ? nextReviewLine(preview.dueAt, save.now) : null,
         offer: {
           label: NEED_A_REFRESHER_LABEL,
@@ -608,9 +642,9 @@ export function PassageSession({
 
   /** Continue (or Try again) on a Memorized passage's result. */
   async function continueReview(): Promise<boolean> {
-    const failed = failedCountedSaveRef.current;
-    if (failed) {
-      await saveCountedRefresher(failed);
+    const retrySave = retrySaveRef.current;
+    if (retrySave) {
+      await retrySave();
       return false;
     }
     if (refresher.phase === "step1") {
@@ -620,12 +654,17 @@ export function PassageSession({
       return true;
     }
     let saved = savedReview;
-    const miss = refresher.isOpen ? null : heldMissRef.current;
-    if (miss) {
-      holdMiss(null);
-      const dueAt = await saveReview(miss);
-      if (dueAt === null) {
-        holdMiss(miss);
+    const held = refresher.isOpen ? null : heldMiss;
+    if (held) {
+      try {
+        const nextView = await applyHeld(held.heldId);
+        setHeldMiss(null);
+        if (nextView) {
+          adoptReview(held.save.accuracy, nextView.dueAt);
+          adoptView(state, nextView, held.save.now);
+          saved = { accuracy: held.save.accuracy, dueAt: nextView.dueAt };
+        }
+      } catch {
         setResultView((current) => ({
           ...current,
           tryAgain: true,
@@ -633,7 +672,6 @@ export function PassageSession({
         }));
         return false;
       }
-      saved = { accuracy: miss.accuracy, dueAt };
     }
     refresher.close();
     setResultView(null);
@@ -1211,13 +1249,13 @@ function reviewHint(
   texts: readonly string[],
   indexes: readonly number[],
   step: 1 | 2 | null,
-  heldMiss: ReviewSave | null,
+  heldMiss: HeldMiss | null,
 ): PassageRecallHint {
   if (step === 2) return { type: "hidden", message: NOW_TRY_WITHOUT_HINTS };
   if (step === null)
     return { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT };
   const targets = heldMiss
-    ? missedPieceIndexes(heldMiss.pieceAccuracies)
+    ? missedPieceIndexes(heldMiss.save.pieceAccuracies)
     : new Set<number>();
   pieces.forEach((piece, index) => {
     if (piece.shaky) targets.add(index);
@@ -1238,7 +1276,7 @@ function reviewRecall(
   pieces: readonly PassagePiece[],
   texts: readonly string[],
   composite: { loading: boolean; error: string | null; retry: () => void },
-  refresher: { step: 1 | 2 | null; heldMiss: ReviewSave | null },
+  refresher: { step: 1 | 2 | null; heldMiss: HeldMiss | null },
 ): BuiltRecall {
   const indexes = pieces.map((_, index) => index);
   return {

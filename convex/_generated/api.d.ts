@@ -18,6 +18,7 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_deleteAccount from "../lib/deleteAccount.js";
 import type * as lib_freezeScopePacks from "../lib/freezeScopePacks.js";
 import type * as lib_heartList from "../lib/heartList.js";
+import type * as lib_heldPassageAttempts from "../lib/heldPassageAttempts.js";
 import type * as lib_heldVerseAttempts from "../lib/heldVerseAttempts.js";
 import type * as lib_inMemoryBackfill from "../lib/inMemoryBackfill.js";
 import type * as lib_memorize from "../lib/memorize.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   "lib/deleteAccount": typeof lib_deleteAccount;
   "lib/freezeScopePacks": typeof lib_freezeScopePacks;
   "lib/heartList": typeof lib_heartList;
+  "lib/heldPassageAttempts": typeof lib_heldPassageAttempts;
   "lib/heldVerseAttempts": typeof lib_heldVerseAttempts;
   "lib/inMemoryBackfill": typeof lib_inMemoryBackfill;
   "lib/memorize": typeof lib_memorize;

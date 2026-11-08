@@ -67,6 +67,8 @@ vi.mock("../../../../convex/_generated/api", () => ({
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
       notePracticeRecital: "passageMemory.notePracticeRecital",
+      holdAttempt: "passageMemory.holdAttempt",
+      applyHeldAttempt: "passageMemory.applyHeldAttempt",
       markCelebrated: "passageMemory.markCelebrated",
     },
   },
@@ -898,12 +900,15 @@ describe("PassageSession", () => {
     const savedDueAt = () => getSessionNow() + 3 * DAY_MS;
 
     beforeEach(() => {
-      mutationMock("passageMemory.recordAttempt").mockResolvedValue(
-        passageView(solidPieces(), {
-          status: "reviewing",
-          dueAt: savedDueAt(),
-        }),
-      );
+      const saved = passageView(solidPieces(), {
+        status: "reviewing",
+        dueAt: savedDueAt(),
+      });
+      mutationMock("passageMemory.recordAttempt").mockResolvedValue(saved);
+      mutationMock("passageMemory.holdAttempt").mockResolvedValue({
+        heldId: "held_1",
+      });
+      mutationMock("passageMemory.applyHeldAttempt").mockResolvedValue(saved);
     });
 
     function renderReview(onExit: () => void = () => {}) {
@@ -929,11 +934,21 @@ describe("PassageSession", () => {
       await userEvent.click(button);
     }
 
+    /** The one counted try: saved directly, or held and then applied. */
     function savedAccuracy(): number {
-      const record = mutationMock("passageMemory.recordAttempt");
-      expect(record).toHaveBeenCalledTimes(1);
-      const [args] = record.mock.calls[0] as [{ accuracy: number }];
-      return args.accuracy;
+      const calls = [
+        ...mutationMock("passageMemory.recordAttempt").mock.calls,
+        ...mutationMock("passageMemory.holdAttempt").mock.calls,
+      ] as [{ accuracy: number }][];
+      expect(calls).toHaveLength(1);
+      return calls[0]?.[0].accuracy ?? -1;
+    }
+
+    function countedSaves(): number {
+      return (
+        mutationMock("passageMemory.recordAttempt").mock.calls.length +
+        mutationMock("passageMemory.applyHeldAttempt").mock.calls.length
+      );
     }
 
     it.each([
@@ -979,9 +994,7 @@ describe("PassageSession", () => {
 
         await userEvent.click(screen.getByRole("button", { name: "Done" }));
         expect(onExit).toHaveBeenCalledTimes(1);
-        expect(
-          mutationMock("passageMemory.recordAttempt"),
-        ).toHaveBeenCalledTimes(1);
+        expect(countedSaves()).toBe(1);
       },
     );
 
@@ -1060,6 +1073,10 @@ describe("PassageSession", () => {
       mutationMock("passageMemory.notePracticeRecital").mockResolvedValue(
         passageView(memorized(), { status: "reviewing", dueAt: SAVED_DUE() }),
       );
+      hold().mockResolvedValue({ heldId: "held_1" });
+      applyHeld().mockResolvedValue(
+        passageView(memorized(), { status: "reviewing", dueAt: SAVED_DUE() }),
+      );
     });
 
     function renderReview(view: PassageView = reviewView()) {
@@ -1077,6 +1094,8 @@ describe("PassageSession", () => {
     }
 
     const record = () => mutationMock("passageMemory.recordAttempt");
+    const hold = () => mutationMock("passageMemory.holdAttempt");
+    const applyHeld = () => mutationMock("passageMemory.applyHeldAttempt");
     const answerBox = () => screen.getByLabelText("Your recited passage");
 
     async function check(answer: string) {
@@ -1189,7 +1208,7 @@ describe("PassageSession", () => {
           kind: "review",
           accuracy: 100,
           refresherUsed: true,
-          heldMissAccuracy: undefined,
+          replaceHeldId: undefined,
           pieceAccuracies: [100, 100],
         }),
       );
@@ -1217,7 +1236,7 @@ describe("PassageSession", () => {
       expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____/);
     });
 
-    it("holds a cold miss on a due passage and counts it on Continue", async () => {
+    it("holds a cold miss on the server and counts it on Continue", async () => {
       renderReview();
       await check(WEAK_TWO);
       const offer = await screen.findByRole("button", {
@@ -1227,21 +1246,44 @@ describe("PassageSession", () => {
       expect(screen.getByText(PASSAGE_TOOLTIP)).toBeInTheDocument();
       expect(screen.getByText(/65% recalled/)).toBeInTheDocument();
       expect(screen.getByText(/^Next review /)).toBeInTheDocument();
+      expect(hold()).toHaveBeenCalledTimes(1);
+      expect(hold()).toHaveBeenCalledWith(
+        expect.objectContaining({ accuracy: 65, pieceAccuracies: [100, 25] }),
+      );
       expect(record()).not.toHaveBeenCalled();
+      expect(applyHeld()).not.toHaveBeenCalled();
 
       await clickButton(/Continue/);
-      expect(record()).toHaveBeenCalledTimes(1);
-      expect(record()).toHaveBeenCalledWith(
-        expect.objectContaining({
-          accuracy: 65,
-          pieceAccuracies: [100, 25],
-          refresherUsed: undefined,
-        }),
+      expect(applyHeld()).toHaveBeenCalledTimes(1);
+      expect(applyHeld()).toHaveBeenCalledWith(
+        expect.objectContaining({ heldId: "held_1", packId: PACK_ID }),
       );
       expect(
         await screen.findByRole("heading", { name: "Review complete" }),
       ).toBeInTheDocument();
       expect(screen.getByText("65%")).toBeInTheDocument();
+      expect(record()).not.toHaveBeenCalled();
+    });
+
+    it("shows no offer until the miss is held, and retries the same hold", async () => {
+      hold().mockRejectedValueOnce(new Error("offline"));
+      renderReview();
+      await check(WEAK_TWO);
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Couldn't save your result. Try again.",
+      );
+      expect(
+        screen.queryByRole("button", { name: "Need a refresher?" }),
+      ).toBeNull();
+      expect(screen.queryByText(/^Next review /)).toBeNull();
+
+      await clickButton(/Try again/);
+      const offer = await screen.findByRole("button", {
+        name: "Need a refresher?",
+      });
+      await waitFor(() => expect(offer).toHaveFocus());
+      const [first, second] = hold().mock.calls as unknown[][];
+      expect(second?.[0]).toEqual(first?.[0]);
     });
 
     it("saves an 85%+ cold try right away with no offer", async () => {
@@ -1283,7 +1325,7 @@ describe("PassageSession", () => {
         expect.objectContaining({
           accuracy: 100,
           refresherUsed: true,
-          heldMissAccuracy: 65,
+          replaceHeldId: "held_1",
           pieceAccuracies: [100, 100],
         }),
       );
@@ -1292,26 +1334,53 @@ describe("PassageSession", () => {
       await screen.findByRole("heading", { name: "Review complete" });
       expect(screen.getByText("100%")).toBeInTheDocument();
       expect(record()).toHaveBeenCalledTimes(1);
+      expect(applyHeld()).not.toHaveBeenCalled();
     });
 
-    it("counts a seen miss when leaving the result or its refresher", async () => {
+    it("counts a seen miss by its held id when leaving the result or its refresher", async () => {
       const first = renderReview();
       await check(WEAK_TWO);
+      await screen.findByRole("button", { name: "Need a refresher?" });
       first.unmount();
-      expect(record()).toHaveBeenCalledTimes(1);
-      expect(record()).toHaveBeenLastCalledWith(
-        expect.objectContaining({ accuracy: 65, refresherUsed: undefined }),
+      expect(applyHeld()).toHaveBeenCalledTimes(1);
+      expect(applyHeld()).toHaveBeenLastCalledWith(
+        expect.objectContaining({ heldId: "held_1" }),
       );
 
-      renderReview();
+      hold().mockResolvedValue({ heldId: "held_2" });
+      const second = renderReview();
       await check(WEAK_TWO);
       await clickButton("Need a refresher?");
       await screen.findByText("Refresh · First letters · 1 of 2");
       window.dispatchEvent(new Event("pagehide"));
-      await waitFor(() => expect(record()).toHaveBeenCalledTimes(2));
-      expect(record()).toHaveBeenLastCalledWith(
-        expect.objectContaining({ accuracy: 65, refresherUsed: undefined }),
+      expect(applyHeld()).toHaveBeenCalledTimes(2);
+      expect(applyHeld()).toHaveBeenLastCalledWith(
+        expect.objectContaining({ heldId: "held_2" }),
       );
+      // Already applied on pagehide: unmounting does not apply it again.
+      second.unmount();
+      expect(applyHeld()).toHaveBeenCalledTimes(2);
+      expect(record()).not.toHaveBeenCalled();
+    });
+
+    it("leaves a held miss to the server when the tab dies, and a reload opens fresh", async () => {
+      const first = renderReview();
+      await check(WEAK_TWO);
+      await screen.findByRole("button", { name: "Need a refresher?" });
+      // The leave-time apply never lands; the held row stays for the next
+      // load or the backstop, which apply it once (held-passage-attempts.test).
+      applyHeld().mockRejectedValueOnce(new Error("tab closed"));
+      first.unmount();
+      expect(applyHeld()).toHaveBeenCalledTimes(1);
+
+      // After the reload the passage is no longer due: no link, no hold.
+      renderReview(reviewView({ dueAt: SAVED_DUE() }));
+      await screen.findByText(/No hint text/);
+      expect(
+        screen.queryByRole("button", { name: "Need a refresher?" }),
+      ).toBeNull();
+      expect(hold()).toHaveBeenCalledTimes(1);
+      expect(record()).not.toHaveBeenCalled();
     });
 
     it("counts nothing when leaving a pre-try refresher", async () => {
@@ -1322,6 +1391,8 @@ describe("PassageSession", () => {
       await screen.findByText("Refresh · From memory · 2 of 2");
       unmount();
       expect(record()).not.toHaveBeenCalled();
+      expect(hold()).not.toHaveBeenCalled();
+      expect(applyHeld()).not.toHaveBeenCalled();
       expect(
         mutationMock("passageMemory.notePracticeRecital"),
       ).not.toHaveBeenCalled();
@@ -1366,8 +1437,8 @@ describe("PassageSession", () => {
       expect(record()).toHaveBeenCalledTimes(2);
     });
 
-    it("keeps a held miss when its save fails, then saves the same try", async () => {
-      record().mockRejectedValueOnce(new Error("offline"));
+    it("keeps a held miss when applying it fails, then applies the same one", async () => {
+      applyHeld().mockRejectedValueOnce(new Error("offline"));
       renderReview();
       await check(WEAK_TWO);
       await clickButton(/Continue/);
@@ -1376,9 +1447,11 @@ describe("PassageSession", () => {
       );
       await clickButton(/Try again/);
       await screen.findByRole("heading", { name: "Review complete" });
-      expect(record()).toHaveBeenCalledTimes(2);
-      const [first, second] = record().mock.calls as unknown[][];
-      expect(second?.[0]).toEqual(first?.[0]);
+      expect(applyHeld()).toHaveBeenCalledTimes(2);
+      const [first, second] = applyHeld().mock.calls as [{ heldId: string }][];
+      expect(second?.[0].heldId).toBe(first?.[0].heldId);
+      expect(hold()).toHaveBeenCalledTimes(1);
+      expect(record()).not.toHaveBeenCalled();
     });
 
     it("lets a counted refresher miss stand; another refresher is practice only", async () => {
