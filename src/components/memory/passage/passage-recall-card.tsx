@@ -110,6 +110,8 @@ interface PassageRecallCardProps {
   readContinue?: boolean;
   /** Quiet "Need a refresher?" link in an empty hint panel. */
   onRefresher?: () => void;
+  /** Stale: "Refresh it first" above the link, settled at the first keystroke. */
+  stale?: boolean;
   resultView?: PassageRecallResultView | null;
   onSubmit: (result: PassageRecallResult) => Promise<boolean | void>;
   /** Resolve `false` to stay on the result, e.g. a save to retry. */
@@ -138,6 +140,7 @@ export function PassageRecallCard({
   ease,
   readContinue = false,
   onRefresher,
+  stale = false,
   resultView = null,
   onSubmit,
   onContinueAfterResult,
@@ -159,6 +162,12 @@ export function PassageRecallCard({
   const bannerId = `${idPrefix}-banner`;
   const errorId = `${idPrefix}-error`;
   const focusOffer = Boolean(resultView?.focusOffer && resultView.offer);
+  // Like a verse card: the stale cue never appears once typing has started.
+  const [staleCue, setStaleCue] = useState<"pending" | "shown" | "off">(
+    "pending",
+  );
+  const showStaleCue =
+    staleCue === "shown" || (staleCue === "pending" && stale);
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(learnStage, status);
@@ -236,6 +245,7 @@ export function PassageRecallCard({
       setChecked(false);
       setHeldGoalLabel(null);
       setTypedAnswer("");
+      setStaleCue("off");
       window.requestAnimationFrame(() => answerInputRef.current?.focus());
     });
   }
@@ -347,6 +357,9 @@ export function PassageRecallCard({
                     message={hint.message}
                     messageId={hintMessageId}
                     onRefresher={onRefresher}
+                    onRefreshFirst={
+                      onRefresher && showStaleCue ? onRefresher : undefined
+                    }
                     disabled={submitPending}
                   />
                 ) : hint.type === "tokens" ? (
@@ -362,7 +375,12 @@ export function PassageRecallCard({
                 <Textarea
                   ref={answerInputRef}
                   value={typedAnswer}
-                  onChange={(event) => setTypedAnswer(event.target.value)}
+                  onChange={(event) => {
+                    if (staleCue === "pending") {
+                      setStaleCue(stale ? "shown" : "off");
+                    }
+                    setTypedAnswer(event.target.value);
+                  }}
                   onKeyDown={handleAnswerKeyDown}
                   placeholder={
                     compositeField
