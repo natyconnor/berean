@@ -1,5 +1,10 @@
 import type { CardReference } from "@/components/study/study-card-model";
-import type { MemorySchedule } from "@/lib/memory-scheduler";
+import {
+  isReviewPhase,
+  LEARN_PROGRESS_ACCURACY,
+  type MemorySchedule,
+  type MemoryStatus,
+} from "@/lib/memory-scheduler";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export interface ReviewSessionAttempt {
@@ -16,6 +21,8 @@ export interface ReviewSessionAttempt {
     MemorySchedule,
     "status" | "learnStage" | "stageReps" | "intervalDays" | "ease" | "dueAt"
   >;
+  /** Status the try saved when the row has no `schedule` (an applied held miss). */
+  savedStatus?: MemoryStatus;
 }
 
 /** Mean accuracy across every recitation, including retries. */
@@ -55,8 +62,27 @@ export function groupReviewSessionAttempts(
     groups[existing].accuracies.push(attempt.accuracy);
     if (attempt.refresherUsed) groups[existing].refresherUsed = true;
     if (attempt.schedule) groups[existing].schedule = attempt.schedule;
+    if (attempt.savedStatus) {
+      groups[existing].savedStatus = attempt.savedStatus;
+    }
   }
   return groups;
+}
+
+/**
+ * Summary Refresh (R21): a single verse whose last counted try in this
+ * summary is under 85% and that the save left Memorized (or Mastered).
+ */
+export function offersSummaryRefresh(row: GroupedReviewAttempt): boolean {
+  if (row.label !== undefined || row.offerPractice === false) return false;
+  const last = row.accuracies[row.accuracies.length - 1];
+  const status = row.schedule?.status ?? row.savedStatus;
+  return (
+    last !== undefined &&
+    last < LEARN_PROGRESS_ACCURACY &&
+    status !== undefined &&
+    isReviewPhase(status)
+  );
 }
 
 export function recalledCopy(accuracies: readonly number[]): string {

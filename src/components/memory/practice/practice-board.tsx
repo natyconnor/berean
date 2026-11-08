@@ -1071,6 +1071,9 @@ export function PracticeBoard({
                         reference: currentVerse.reference,
                         accuracy,
                         offerPractice: true,
+                        ...(result.schedule
+                          ? { savedStatus: result.schedule.status }
+                          : {}),
                       },
                     ]);
                   }
@@ -2550,7 +2553,7 @@ function HintTokenText({ tokens }: { tokens: ReadonlyArray<HintToken> }) {
   );
 }
 
-function PracticeShell({
+export function PracticeShell({
   sessionLabel,
   scopeLabel,
   onExit,

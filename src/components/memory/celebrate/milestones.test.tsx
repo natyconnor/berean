@@ -186,6 +186,7 @@ describe("first memorized verse banner", () => {
     render(
       <Onboarding>
         <TodaySessionSummary
+          title="Today"
           passages={[]}
           learned={[verse(1, { status: "reviewing", justMemorized: true })]}
           attempts={[]}

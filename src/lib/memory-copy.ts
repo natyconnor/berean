@@ -213,6 +213,8 @@ export const NOW_TRY_WITHOUT_HINTS = "Now try it without the hints.";
 export const REFRESH_SAVE_ERROR = "Couldn't save your result. Try again.";
 export const REFRESH_MENU_LABEL = "Refresh";
 export const REFRESH_START_ERROR = "Couldn't start the refresher. Try again.";
+/** Header Back of a Refresh started from a session summary, which it returns to. */
+export const SUMMARY_REFRESH_BACK_LABEL = "Back to summary";
 export const COUNTED_TODAY_CLOSING = "Counted as today's review";
 
 /** "Refresh · First letters · 1 of 2" / "Refresh · From memory · 2 of 2". */

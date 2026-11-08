@@ -1,5 +1,5 @@
 import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { ArrowLeft, CheckCircle2, Loader2, SearchX } from "lucide-react";
 
@@ -127,6 +127,33 @@ export function MemoryTodayPage(): JSX.Element {
     returnTo,
     subtitle: SESSION_SUBTITLES[only ?? "all"],
   };
+  // Back from a summary Refresh: the same summary, read once at mount.
+  const saved = useLocation({
+    select: (location) => location.state.sessionSummary,
+  });
+  const [restored] = useState(() =>
+    saved?.kind === "today" ? saved : undefined,
+  );
+
+  if (restored) {
+    return (
+      <TodayShell
+        title={restored.title}
+        chrome={chrome}
+        progress={{ label: "All done", fraction: 1 }}
+      >
+        <TodaySessionSummary
+          title={restored.title}
+          passages={restored.passages}
+          learned={restored.learned}
+          attempts={restored.attempts}
+          onDone={chrome.onExit}
+          extraPracticeHref={restored.extraPracticeHref}
+          returnTo={chrome.returnTo}
+        />
+      </TodayShell>
+    );
+  }
 
   return packId ? (
     <PackTodayLoader
@@ -709,6 +736,7 @@ function TodaySession({
         progress={{ label: "All done", fraction: 1 }}
       >
         <TodaySessionSummary
+          title={data.title}
           passages={passagesDone}
           learned={learned}
           attempts={attempts}

@@ -1,14 +1,26 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SUMMARY_REFRESH_BACK_LABEL } from "@/lib/memory-copy";
+
 import { MemoryAllSessionPage } from "./memory-practice-page";
 import type { Id } from "../../../convex/_generated/dataModel";
 
-const { frozenArgs, frozenResults, exitGo, exitGoWith } = vi.hoisted(() => ({
-  frozenArgs: new Map<string, unknown>(),
-  frozenResults: new Map<string, unknown>(),
-  exitGo: vi.fn(),
-  exitGoWith: vi.fn(),
+const { frozenArgs, frozenResults, exitGo, exitGoWith, history } = vi.hoisted(
+  () => ({
+    frozenArgs: new Map<string, unknown>(),
+    frozenResults: new Map<string, unknown>(),
+    exitGo: vi.fn(),
+    exitGoWith: vi.fn(),
+    history: { state: {}, back: vi.fn() },
+  }),
+);
+
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useLocation: ({ select }: { select: (location: object) => unknown }) =>
+    select({ href: "/memory/practice", state: history.state }),
+  useRouter: () => ({ history: { back: history.back } }),
 }));
 
 vi.mock("@/hooks/use-frozen-query", () => ({
@@ -38,8 +50,10 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     verses,
     scopeLabel,
     onExit,
+    backLabel,
   }: {
     onExit: () => void;
+    backLabel: string;
     verses: ReadonlyArray<{
       reference: {
         book: string;
@@ -53,6 +67,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
     <div>
       <h1>{scopeLabel}</h1>
       <p>{verses.length} verses</p>
+      <p>{backLabel}</p>
       <button type="button" onClick={() => onExit()}>
         Leave
       </button>
@@ -219,6 +234,8 @@ describe("MemoryAllSessionPage ••• Refresh return", () => {
     frozenResults.clear();
     exitGo.mockReset();
     exitGoWith.mockReset();
+    history.back.mockReset();
+    history.state = {};
     frozenResults.set("verseMemory.getInMemory", psalm46);
   });
 
@@ -243,5 +260,29 @@ describe("MemoryAllSessionPage ••• Refresh return", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leave" }));
     expect(exitGo).toHaveBeenCalledTimes(1);
     expect(exitGoWith).not.toHaveBeenCalled();
+  });
+
+  it("goes back to the summary a summary Refresh started from (S9)", () => {
+    history.state = { summaryRefresh: true };
+    render(
+      <MemoryAllSessionPage
+        kind="practice"
+        search={{ ...scope, refresh: true }}
+      />,
+    );
+    expect(screen.getByText(SUMMARY_REFRESH_BACK_LABEL)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }));
+    expect(history.back).toHaveBeenCalledTimes(1);
+    expect(exitGoWith).not.toHaveBeenCalled();
+    expect(exitGo).not.toHaveBeenCalled();
+  });
+
+  it("ignores the summary flag outside a Refresh", () => {
+    history.state = { summaryRefresh: true };
+    render(<MemoryAllSessionPage kind="practice" search={scope} />);
+    expect(screen.getByText("Back to Memory")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }));
+    expect(exitGo).toHaveBeenCalledTimes(1);
+    expect(history.back).not.toHaveBeenCalled();
   });
 });

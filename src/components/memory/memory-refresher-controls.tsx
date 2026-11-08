@@ -86,6 +86,10 @@ export function RefresherOfferButton({
   );
 }
 
+/** The quiet refresher text link: muted, underlined on hover, focus ring. */
+export const REFRESHER_LINK_CLASS =
+  "inline-flex items-center gap-1 rounded-sm text-[12.5px] font-medium text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50";
+
 export function NeedARefresherLink({
   onClick,
   disabled,
@@ -98,10 +102,7 @@ export function NeedARefresherLink({
   return (
     <button
       type="button"
-      className={cn(
-        "inline-flex items-center gap-1 rounded-sm text-[12.5px] font-medium text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
-        className,
-      )}
+      className={cn(REFRESHER_LINK_CLASS, className)}
       onClick={onClick}
       disabled={disabled}
     >

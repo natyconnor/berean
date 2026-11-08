@@ -26,8 +26,8 @@ type StubProgress =
   | { label: string }
   | ((run: { done: number; total: number }) => { label: string });
 
-const { frozenResults, liveResults, search, onExit, navigate } = vi.hoisted(
-  () => {
+const { frozenResults, liveResults, search, onExit, navigate, historyState } =
+  vi.hoisted(() => {
     const initial: TodaySearch = {};
     return {
       frozenResults: new Map<string, unknown>(),
@@ -35,9 +35,9 @@ const { frozenResults, liveResults, search, onExit, navigate } = vi.hoisted(
       search: { current: initial },
       onExit: vi.fn(),
       navigate: vi.fn(),
+      historyState: { current: {} },
     };
-  },
-);
+  });
 
 vi.mock("@/routes/memory/today", () => ({
   Route: { useSearch: () => search.current },
@@ -73,6 +73,13 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
+  useLocation: ({ select }: { select: (location: object) => unknown }) =>
+    select({ href: "/memory/today", state: historyState.current }),
+}));
+
+vi.mock("convex/react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("convex/react")>()),
+  useAction: () => vi.fn(),
 }));
 
 vi.mock("@/components/memory/passage/passage-session", () => ({
@@ -329,6 +336,7 @@ vi.mock("@/components/memory/practice/memory-session-runner", () => ({
 
 vi.mock("../../../convex/_generated/api", () => ({
   api: {
+    esv: { getPassage: "esv.getPassage" },
     packs: {
       get: "packs.get",
       resolveMembers: "packs.resolveMembers",
@@ -468,7 +476,65 @@ describe("MemoryTodayPage", () => {
     onExit.mockReset();
     navigate.mockReset();
     search.current = { return: "/memory" };
+    historyState.current = {};
     liveResults.set("passageMemory.getForPack", { _id: "passage_1" });
+  });
+
+  it("comes back from a summary Refresh to the same day summary, focused on its Refresh (S9)", async () => {
+    const psalm = { book: "Psalms", chapter: 46, startVerse: 10, endVerse: 10 };
+    historyState.current = {
+      refreshedVerse: verseRefKey(psalm),
+      sessionSummary: {
+        kind: "today",
+        title: "Hope pack",
+        passages: ["Psalm 23"],
+        learned: [],
+        attempts: [
+          {
+            reference: psalm,
+            accuracy: 70,
+            schedule: {
+              status: "reviewing",
+              learnStage: 3,
+              stageReps: 0,
+              intervalDays: 4,
+              ease: 2.3,
+              dueAt: NOW + 4 * 24 * 60 * 60 * 1000,
+            },
+          },
+        ],
+      },
+    };
+    // Nothing left in the live queue: the saved summary still shows.
+    renderToday();
+
+    expect(screen.getByText("Hope pack")).toBeInTheDocument();
+    expect(screen.getByText("Psalm 23")).toBeInTheDocument();
+    expect(screen.getByText("Today's verses done")).toBeInTheDocument();
+    const refresh = screen.getByRole("button", {
+      name: "Refresh Psalm 46:10",
+    });
+    expect(refresh).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a saved Review summary on the Today page", () => {
+    historyState.current = {
+      sessionSummary: {
+        kind: "review",
+        attempts: [],
+        averageAccuracy: null,
+        remaining: 0,
+        doneLabel: "Done",
+        canContinue: false,
+      },
+    };
+    renderToday();
+    expect(
+      screen.queryByRole("button", { name: /^Refresh / }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Today's verses done")).not.toBeInTheDocument();
   });
 
   it("runs passages, then learning, then reviews, with a pause between each", async () => {

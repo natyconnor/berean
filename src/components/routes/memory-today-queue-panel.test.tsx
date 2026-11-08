@@ -79,6 +79,8 @@ vi.mock("convex/react", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
+  useLocation: ({ select }: { select: (location: object) => unknown }) =>
+    select({ href: "/memory", state: {} }),
 }));
 
 vi.mock("@/components/memory/passage/passage-session", () => ({
