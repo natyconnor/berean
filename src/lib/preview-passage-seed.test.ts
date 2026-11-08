@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import type { Doc, Id } from "../../convex/_generated/dataModel";
+import { passageReviewTries } from "../../convex/lib/passageMemory";
+import { isStaleVerse } from "./memory-stale";
+
 import { passageHeartSpans } from "./hearted-verse-coverage";
 import { packAllowsPassageMode } from "./passage-eligibility";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
@@ -7,6 +11,8 @@ import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
 import {
   buildPreviewPassageSeed,
   testerMaintenancePacks,
+  testerStalePacks,
+  type PreviewPassageSeedPack,
 } from "./preview-passage-seed";
 import { scopesEqual } from "./scope-equality";
 
@@ -182,5 +188,120 @@ describe("testerMaintenancePacks", () => {
   it("drops the obsolete pass-then-fail advice from Psalm 23", () => {
     const psalm23 = base.find((pack) => pack.name.includes("Psalm 23"));
     expect(psalm23?.howToTry).not.toMatch(/fail once|both times/);
+  });
+});
+
+describe("testerStalePacks", () => {
+  const PASSAGE = "passageMemory:1" as Id<"passageMemory">;
+
+  /**
+   * The seed logs each review row in order; `recentReviews` reads them back
+   * newest first and the session runs the real stale check on them.
+   */
+  function staleNow(pack: PreviewPassageSeedPack): boolean {
+    const passage = pack.passage!;
+    const logged = (passage.reviews ?? []).map(
+      (review, index): Doc<"passageReviews"> => ({
+        _id: `passageReviews:${index}` as Id<"passageReviews">,
+        _creationTime: index,
+        userId: "users:1" as Id<"users">,
+        packId: "packs:1" as Id<"packs">,
+        passageMemoryId: PASSAGE,
+        kind: "review",
+        ...review,
+      }),
+    );
+    const newestFirst = [...logged].sort(
+      (a, b) => b._creationTime - a._creationTime,
+    );
+    return isStaleVerse({
+      status: passage.status === "mastered" ? "mastered" : "reviewing",
+      dueAt: passage.schedule.dueAt,
+      intervalDays: passage.schedule.intervalDays,
+      now: NOW,
+      lastReviews: passageReviewTries(newestFirst, PASSAGE),
+    });
+  }
+
+  it("adds nothing on a production deployment", () => {
+    expect(testerStalePacks(NOW, "prod:berean-123")).toEqual([]);
+  });
+
+  it.each(["dev:berean-123", "preview:berean-pr-367", undefined])(
+    "lands each fixture in its intended state on %s",
+    (deployment) => {
+      const packs = testerStalePacks(NOW, deployment);
+      const states = packs.map((pack) => {
+        const passage = pack.passage!;
+        return {
+          name: pack.name,
+          status: passage.status,
+          due: isPassageDueForReview(
+            { status: passage.status, dueAt: passage.schedule.dueAt },
+            NOW,
+          ),
+          stale: staleNow(pack),
+          shakyVerses: passage.shakyVerses,
+        };
+      });
+      expect(states).toEqual([
+        {
+          name: "Sample · Psalm 131 (stale, due)",
+          status: "reviewing",
+          due: true,
+          stale: true,
+          shakyVerses: [{ chapter: 131, verse: 2 }],
+        },
+        {
+          name: "Sample · Psalm 133 (stale, not due)",
+          status: "reviewing",
+          due: false,
+          stale: true,
+          shakyVerses: [{ chapter: 133, verse: 3 }],
+        },
+        {
+          name: "Sample · Psalm 134 (mastered, not due)",
+          status: "mastered",
+          due: false,
+          stale: false,
+          shakyVerses: [{ chapter: 134, verse: 2 }],
+        },
+      ]);
+    },
+  );
+
+  it("is stale by misses, not by time, and every shaky verse is in the passage", () => {
+    for (const pack of testerStalePacks(NOW, undefined)) {
+      const passage = pack.passage!;
+      // Never 7 days overdue: only the review history can make it stale.
+      expect(NOW - passage.schedule.dueAt).toBeLessThan(7 * 86_400_000);
+      expect(passage.reviews).toHaveLength(3);
+      expect(
+        passage.pieces.every((piece) => piece.attachment === "solid"),
+      ).toBe(true);
+      for (const key of passage.shakyVerses ?? []) {
+        expect(
+          passage.pieces.some(
+            (piece) =>
+              piece.chapter === key.chapter &&
+              piece.startVerse <= key.verse &&
+              key.verse <= piece.endVerse,
+          ),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("keeps every sample scope distinct from the other fixtures", () => {
+    const all = [
+      ...buildPreviewPassageSeed(NOW, TZ).packs,
+      ...testerMaintenancePacks(NOW, undefined),
+      ...testerStalePacks(NOW, undefined),
+    ];
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        expect(scopesEqual(all[i].scope, all[j].scope)).toBe(false);
+      }
+    }
   });
 });
