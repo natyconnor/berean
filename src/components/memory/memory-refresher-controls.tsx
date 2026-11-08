@@ -3,7 +3,10 @@ import { Lightbulb } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { TooltipButton } from "@/components/ui/tooltip-button";
-import { NEED_A_REFRESHER_LABEL } from "@/lib/memory-copy";
+import {
+  NEED_A_REFRESHER_LABEL,
+  REFRESH_IT_FIRST_LABEL,
+} from "@/lib/memory-copy";
 import { cn } from "@/lib/utils";
 
 const FROM_MEMORY_EMPTY_HINT =
@@ -14,12 +17,15 @@ const FROM_MEMORY_EMPTY_HINT_PASSAGE =
 export function EmptyHintPrompt({
   passage = false,
   onRefresher,
+  onRefreshFirst,
   disabled,
   message,
   messageId,
 }: {
   passage?: boolean;
   onRefresher?: () => void;
+  /** Stale verses: a more prominent "Refresh it first" above the link. */
+  onRefreshFirst?: () => void;
   disabled?: boolean;
   message?: string;
   messageId?: string;
@@ -30,6 +36,14 @@ export function EmptyHintPrompt({
         {message ??
           (passage ? FROM_MEMORY_EMPTY_HINT_PASSAGE : FROM_MEMORY_EMPTY_HINT)}
       </p>
+      {onRefreshFirst ? (
+        <RefresherOfferButton
+          label={REFRESH_IT_FIRST_LABEL}
+          onClick={onRefreshFirst}
+          disabled={disabled}
+          className="h-auto min-h-9 max-w-full flex-none whitespace-normal"
+        />
+      ) : null}
       {onRefresher ? (
         <NeedARefresherLink onClick={onRefresher} disabled={disabled} />
       ) : null}
@@ -44,6 +58,7 @@ export function RefresherOfferButton({
   buttonRef,
   describedBy,
   tooltip,
+  className,
 }: {
   label: string;
   onClick: () => void;
@@ -51,6 +66,7 @@ export function RefresherOfferButton({
   buttonRef?: Ref<HTMLButtonElement>;
   describedBy?: string;
   tooltip?: string;
+  className?: string;
 }) {
   const tooltipId = useId();
   const described = [describedBy, tooltip ? tooltipId : undefined]
@@ -66,7 +82,7 @@ export function RefresherOfferButton({
     ref: buttonRef,
     type: "button" as const,
     variant: "outline" as const,
-    className: "flex-1 sm:flex-none",
+    className: cn("flex-1 sm:flex-none", className),
     onClick,
     disabled,
     "aria-describedby": described || undefined,

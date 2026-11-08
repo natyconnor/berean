@@ -14,6 +14,7 @@ import {
 import { ArrowRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,7 @@ import {
   stepShortLabel,
 } from "@/lib/memory-copy";
 import { isHoldableColdMiss } from "@/lib/held-verse-attempt";
+import { isStaleVerse } from "@/lib/memory-stale";
 import { formatDueDay, nextStepCopy } from "@/lib/memorize-plan";
 import { withReturn } from "@/lib/memory-return";
 import {
@@ -980,6 +982,7 @@ export function PracticeBoard({
               key={currentVerse.id}
               sessionLabel={sessionLabel}
               reference={currentVerse.reference}
+              verseRefId={currentVerse.verseRefId}
               learnStage={currentProgress.learnStage}
               stageReps={currentProgress.stageReps}
               status={currentProgress.status}
@@ -1262,6 +1265,8 @@ interface CompositeCardPassage {
 interface PracticeCardProps {
   sessionLabel: MemorySessionLabel;
   reference: CardReference;
+  /** Reads this verse's recent tries for the stale "Refresh it first" cue. */
+  verseRefId?: Id<"verseRefs">;
   /** Server-authoritative band for this verse (0..3). */
   learnStage: number;
   /** Server-authoritative exact reps banked on the current band. */
@@ -1356,6 +1361,7 @@ interface PracticeCardProps {
 function PracticeCard({
   sessionLabel,
   reference,
+  verseRefId,
   learnStage,
   stageReps,
   status,
@@ -1479,6 +1485,44 @@ function PracticeCard({
     : data
       ? data.verses.map((v) => v.text).join(" ")
       : "";
+
+  // "Refresh it first" on a stale Memorized verse, decided before the first
+  // keystroke and gone for good once a try or refresher starts.
+  const showRefresherLink =
+    offerRefresher &&
+    !composite &&
+    isReviewPhase(status) &&
+    !loading &&
+    !error &&
+    versePlainText !== "" &&
+    refresher.phase === "off";
+  const liveNow = useLiveNow();
+  const staleDetail = useQuery(
+    api.verseMemory.verseDetail,
+    offerRefresher &&
+      !composite &&
+      !onRefreshDone &&
+      isReviewPhase(status) &&
+      verseRefId
+      ? { verseRefId, now: liveNow }
+      : "skip",
+  );
+  const staleNow =
+    showRefresherLink &&
+    staleDetail != null &&
+    isStaleVerse({
+      status: staleDetail.status,
+      dueAt: staleDetail.dueAt,
+      intervalDays: staleDetail.intervalDays,
+      now: liveNow,
+      startedOverAt: staleDetail.startedOverAt,
+      lastReviews: staleDetail.attempts,
+    });
+  const [staleCue, setStaleCue] = useState<"pending" | "shown" | "off">(
+    "pending",
+  );
+  const showStaleCue =
+    staleCue === "shown" || (staleCue === "pending" && staleNow);
 
   const stageInfo = PRACTICE_STAGES[learnStage] ?? PRACTICE_STAGES[0];
   const stageColor = practiceChromeFor(learnStage, status);
@@ -1826,6 +1870,7 @@ function PracticeCard({
     setPackMemberResults([]);
     if (!options?.keepJourneyPreview) onJourneyPreview?.(null);
     countedSaveNowRef.current = null;
+    setStaleCue("off");
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
 
@@ -1839,6 +1884,7 @@ function PracticeCard({
     setNextSchedule(null);
     countedSaveNowRef.current = null;
     if (kind === "practice") onJourneyPreview?.(null);
+    setStaleCue("off");
     refresher.open(kind);
     window.requestAnimationFrame(() => answerInputRef.current?.focus());
   }
@@ -1969,6 +2015,9 @@ function PracticeCard({
     event.preventDefault();
     checkAnswer();
   }
+
+  const openPreTryRefresher = () =>
+    openRefresher(practiceOnly ? "practice" : "pre-try");
 
   const step1Retry =
     refresher.phase === "step1" && checkedAccuracy < LEARN_PROGRESS_ACCURACY;
@@ -2167,17 +2216,11 @@ function PracticeCard({
                             : undefined
                         }
                         onRefresher={
-                          offerRefresher &&
-                          !composite &&
-                          isReviewPhase(status) &&
-                          !loading &&
-                          !error &&
-                          versePlainText !== "" &&
-                          refresher.phase === "off"
-                            ? () =>
-                                openRefresher(
-                                  practiceOnly ? "practice" : "pre-try",
-                                )
+                          showRefresherLink ? openPreTryRefresher : undefined
+                        }
+                        onRefreshFirst={
+                          showRefresherLink && showStaleCue
+                            ? openPreTryRefresher
                             : undefined
                         }
                         disabled={submitPending}
@@ -2191,7 +2234,12 @@ function PracticeCard({
                     <Textarea
                       ref={answerInputRef}
                       value={typedAnswer}
-                      onChange={(event) => setTypedAnswer(event.target.value)}
+                      onChange={(event) => {
+                        if (staleCue === "pending") {
+                          setStaleCue(staleNow ? "shown" : "off");
+                        }
+                        setTypedAnswer(event.target.value);
+                      }}
                       onKeyDown={handleAnswerKeyDown}
                       placeholder={
                         composite

@@ -203,6 +203,7 @@ export const NEED_A_REFRESHER_LABEL = "Need a refresher?";
 export const NEED_A_REFRESHER_TOOLTIP =
   "Do a refresher on this verse for some more practice.";
 export const TRY_ANOTHER_REFRESHER_LABEL = "Try another refresher";
+export const REFRESH_IT_FIRST_LABEL = "Refresh it first";
 export const PRACTICE_ONLY_CLOSING =
   "Practice only, your progress didn't change.";
 export const PRACTICE_PASS_LEAD = "Good work getting back on track.";

@@ -16,12 +16,14 @@ import {
   PRACTICE_PASS_EMOJI,
   PRACTICE_PASS_LEAD,
   PRACTICE_PASS_REST,
+  REFRESH_IT_FIRST_LABEL,
   REFRESH_SAVE_ERROR,
   TRY_ANOTHER_REFRESHER_LABEL,
   refresherHeader,
 } from "@/lib/memory-copy";
 import { formatDueDay } from "@/lib/memorize-plan";
 import {
+  DAY_MS,
   MASTERED_INTERVAL_DAYS,
   MIN_LEARNING_LOCK_MS,
   REVIEW_LAPSE_LEARN_STAGE,
@@ -100,6 +102,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       recordAttempt: "verseMemory.recordAttempt",
       holdAttempt: "verseMemory.holdAttempt",
       applyHeldAttempt: "verseMemory.applyHeldAttempt",
+      verseDetail: "verseMemory.verseDetail",
     },
   },
 }));
@@ -3753,5 +3756,549 @@ describe("PracticeBoard ••• Refresh", () => {
     await recite(PASSAGE_ONE);
     expect(await screen.findByText(REFRESH_SAVE_ERROR)).toBeVisible();
     expect(screen.queryByText(COUNTED_TODAY_CLOSING)).not.toBeInTheDocument();
+  });
+});
+
+describe("PracticeBoard stale Refresh it first", () => {
+  const NOW = getSessionNow();
+  const notDueVerse: PracticeVerse = {
+    ...reviewingVerse,
+    dueAt: NOW + 3 * DAY_MS,
+  };
+
+  /** `verseDetail` for the card's stale check; only the fields it reads. */
+  function verseDetail(
+    over: {
+      status?: "reviewing" | "mastered" | "learning" | "new";
+      dueAt?: number;
+      intervalDays?: number;
+      startedOverAt?: number;
+      accuracies?: number[];
+      attempts?: Array<{ accuracy: number; createdAt: number }>;
+    } = {},
+  ) {
+    return {
+      status: over.status ?? "reviewing",
+      dueAt: over.dueAt ?? NOW - 1000,
+      intervalDays: over.intervalDays ?? 5,
+      startedOverAt: over.startedOverAt,
+      attempts:
+        over.attempts ??
+        (over.accuracies ?? [92]).map((accuracy, index) => ({
+          accuracy,
+          createdAt: NOW - (index + 1) * DAY_MS,
+        })),
+    };
+  }
+  const overdueDetail = verseDetail({ dueAt: NOW - 8 * DAY_MS });
+
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+    mutationMock("verseMemory.holdAttempt").mockResolvedValue({
+      heldId: "held_1",
+    });
+    mutationMock("verseMemory.applyHeldAttempt").mockResolvedValue({
+      applied: true,
+      schedule: heldSchedule,
+    });
+  });
+
+  function renderBoard(
+    extra: Partial<Parameters<typeof PracticeBoard>[0]> = {},
+  ) {
+    return render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+          {...extra}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  async function findVisibleLink(): Promise<HTMLElement> {
+    const link = await screen.findByRole("button", {
+      name: NEED_A_REFRESHER_LABEL,
+    });
+    await waitFor(() => {
+      expect(link).toBeVisible();
+    });
+    return link;
+  }
+
+  const cue = () =>
+    screen.queryByRole("button", { name: REFRESH_IT_FIRST_LABEL });
+
+  async function recite(text: string) {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(text);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  async function passStep1() {
+    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
+    await recite(PASSAGE_ONE);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(await screen.findByText(refresherHeader(2))).toBeVisible();
+  }
+
+  function expectNoProgressWrite() {
+    expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("verseMemory.applyHeldAttempt")).not.toHaveBeenCalled();
+  }
+
+  it("puts an outlined Refresh it first between the sentence and the link on a stale due verse", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    renderBoard();
+    const link = await findVisibleLink();
+    const button = screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL });
+    const sentence = screen.getByText(
+      "No hint text. Type the verse from memory, then check your answer.",
+    );
+
+    expect(button).toBeVisible();
+    expect(button.tagName).toBe("BUTTON");
+    expect(button).toHaveAttribute("type", "button");
+    expect(button).toHaveAttribute("data-variant", "outline");
+    expect(button).toHaveAccessibleName(REFRESH_IT_FIRST_LABEL);
+    expect(button).toHaveClass("whitespace-normal", "h-auto", "max-w-full");
+    expect(button).not.toHaveClass("whitespace-nowrap", "flex-1");
+    expect(button).toHaveClass("focus-visible:ring-[3px]");
+    expect(button.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(button).not.toHaveAttribute("aria-describedby");
+    expect(
+      sentence.compareDocumentPosition(button) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      button.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // No reason line: nothing new besides the button.
+    expect(screen.queryByText(/stale|been a while/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+    expect(queryCalls).toContainEqual([
+      "verseMemory.verseDetail",
+      { verseRefId: VERSE_REF_ID, now: NOW },
+    ]);
+  });
+
+  it.each([
+    [
+      "2 of the last 3 tries under 60%",
+      verseDetail({ accuracies: [40, 90, 59] }),
+    ],
+    [
+      "overdue by its own gap",
+      verseDetail({ intervalDays: 20, dueAt: NOW - 20 * DAY_MS }),
+    ],
+    [
+      "Mastered and overdue",
+      verseDetail({
+        status: "mastered",
+        intervalDays: 35,
+        dueAt: NOW - 35 * DAY_MS,
+      }),
+    ],
+  ])("shows the button when %s", async (_label, detail) => {
+    queryResults.set("verseMemory.verseDetail", detail);
+    renderBoard({
+      verses: [{ ...reviewingVerse, status: detail.status }],
+    });
+    await findVisibleLink();
+    expect(cue()).toBeVisible();
+  });
+
+  it.each([
+    [
+      "1 of 3 under 60% and a 60–84% try",
+      verseDetail({ accuracies: [40, 72, 95] }),
+    ],
+    [
+      "overdue under its own gap",
+      verseDetail({ intervalDays: 20, dueAt: NOW - 10 * DAY_MS }),
+    ],
+    ["overdue under 7 days", verseDetail({ dueAt: NOW - 6 * DAY_MS })],
+    [
+      "misses only from before a Start over",
+      verseDetail({
+        startedOverAt: NOW - 2 * DAY_MS,
+        attempts: [
+          { accuracy: 95, createdAt: NOW - DAY_MS },
+          { accuracy: 20, createdAt: NOW - 3 * DAY_MS },
+          { accuracy: 10, createdAt: NOW - 4 * DAY_MS },
+        ],
+      }),
+    ],
+  ])("shows only the quiet link when %s", async (_label, detail) => {
+    queryResults.set("verseMemory.verseDetail", detail);
+    renderBoard();
+    await findVisibleLink();
+    expect(cue()).not.toBeInTheDocument();
+  });
+
+  it("never shows on Learning, New, the Learn flow, or a pack card", async () => {
+    queryResults.set(
+      "verseMemory.verseDetail",
+      verseDetail({ dueAt: NOW - 30 * DAY_MS, accuracies: [10, 20, 30] }),
+    );
+    const noCueOrLink = () => {
+      expect(cue()).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+      ).not.toBeInTheDocument();
+    };
+
+    const learning = renderBoard({
+      verses: [{ ...reviewingVerse, status: "learning", learnStage: 3 }],
+    });
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    noCueOrLink();
+    learning.unmount();
+
+    const learnFlow = renderBoard({ kind: "learning" });
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    noCueOrLink();
+    learnFlow.unmount();
+
+    const asNew = renderBoard({
+      verses: [{ ...reviewingVerse, status: "new", learnStage: 0 }],
+    });
+    expect(
+      await screen.findByText("Read it through, then continue"),
+    ).toBeInTheDocument();
+    noCueOrLink();
+    asNew.unmount();
+
+    fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
+    const pack = renderComposite();
+    expect(
+      await screen.findByLabelText("Your recited passage"),
+    ).toBeInTheDocument();
+    noCueOrLink();
+    pack.unmount();
+
+    // None of these even read the history.
+    expect(
+      queryCalls.filter(
+        ([name, args]) => name === "verseMemory.verseDetail" && args !== "skip",
+      ),
+    ).toEqual([]);
+  });
+
+  it("shows no button while the text loads or after it fails", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    getPassageMock.mockReset();
+    getPassageMock.mockReturnValue(new Promise(() => {}));
+    const loading = renderBoard();
+    expect(
+      await screen.findByLabelText("Your recalled verse"),
+    ).toBeInTheDocument();
+    expect(cue()).not.toBeInTheDocument();
+    loading.unmount();
+
+    getPassageMock.mockReset();
+    getPassageMock.mockRejectedValue(new Error("ESV is down"));
+    renderBoard();
+    expect(
+      await screen.findByText("Could not load verse text."),
+    ).toBeInTheDocument();
+    expect(cue()).not.toBeInTheDocument();
+  });
+
+  it("never appears once typing has started, even if the history arrives later", async () => {
+    // History has not loaded yet.
+    renderBoard();
+    await findVisibleLink();
+    expect(cue()).not.toBeInTheDocument();
+    const answer = screen.getByLabelText("Your recalled verse");
+    await userEvent.type(answer, "The");
+
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    await userEvent.type(answer, " Lord");
+    expect(answer).toHaveValue("The Lord");
+    expect(cue()).not.toBeInTheDocument();
+    expect(answer).toHaveFocus();
+  });
+
+  it("appears when slow history arrives before typing, and stays while typing", async () => {
+    const view = renderBoard();
+    await findVisibleLink();
+    expect(cue()).not.toBeInTheDocument();
+
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    view.rerender(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind="review"
+          verses={[reviewingVerse]}
+          scopeLabel="Memory"
+          onExit={() => {}}
+          remainingDue={0}
+        />
+      </TooltipProvider>,
+    );
+    expect(cue()).toBeVisible();
+    expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+
+    await userEvent.type(screen.getByLabelText("Your recalled verse"), "The");
+    // Even if the history changes under it, the shown button holds.
+    queryResults.set("verseMemory.verseDetail", verseDetail());
+    await userEvent.type(screen.getByLabelText("Your recalled verse"), " L");
+    expect(cue()).toBeVisible();
+  });
+
+  it("is reached by Tab before the link, and Enter opens the refresher with the answer focused", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    renderBoard();
+    const link = await findVisibleLink();
+    const answer = screen.getByLabelText("Your recalled verse");
+    expect(answer).toHaveFocus();
+
+    // Natural order: button, then link, then the answer box.
+    await userEvent.tab({ shift: true });
+    expect(link).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    const button = screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL });
+    expect(button).toHaveFocus();
+    await userEvent.tab();
+    expect(link).toHaveFocus();
+    await userEvent.tab();
+    expect(answer).toHaveFocus();
+
+    button.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
+    const step1 = screen.getByLabelText("Your recalled verse");
+    expect(step1).toHaveValue("");
+    await waitFor(() => {
+      expect(step1).toHaveFocus();
+    });
+    expect(cue()).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the same refresher with Space, and the link still opens it too", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    const first = renderBoard();
+    await findVisibleLink();
+    screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }).focus();
+    await userEvent.keyboard(" ");
+    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
+    first.unmount();
+
+    renderBoard();
+    await userEvent.click(await findVisibleLink());
+    expect(await screen.findByText(refresherHeader(1))).toBeVisible();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+    });
+    expect(cue()).not.toBeInTheDocument();
+  });
+
+  it("due: the From memory try counts as today's review, then Continue moves on", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    const record = mutationMock("verseMemory.recordAttempt");
+    record
+      .mockResolvedValueOnce(stillDueSchedule)
+      .mockResolvedValueOnce(heldSchedule);
+    const onRunStateChange =
+      vi.fn<(state: PracticeRunState, result: PracticeSessionResult) => void>();
+    renderBoard({
+      verses: [reviewingVerse, secondReviewingVerse],
+      onRunStateChange,
+    });
+    await findVisibleLink();
+    await userEvent.click(
+      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
+    );
+    await passStep1();
+    expect(cue()).not.toBeInTheDocument();
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
+    expect(cue()).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(record).toHaveBeenCalledTimes(2);
+    });
+    expect(record).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ hint: "first-letters", holdSchedule: true }),
+    );
+    const counted = record.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(counted).toMatchObject({
+      verseRefId: VERSE_REF_ID,
+      mode: "review",
+      quality: "exact",
+      refresherUsed: true,
+    });
+    expect(counted).not.toHaveProperty("holdSchedule");
+    await waitFor(() => {
+      const [state] = onRunStateChange.mock.lastCall ?? [];
+      expect(state?.graded).toEqual([FIRST_ID]);
+    });
+
+    // Continue moves on as S4 does; the next card starts clean.
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    const next = await screen.findByLabelText("Your recalled verse");
+    await waitFor(() => {
+      expect(next).toHaveFocus();
+    });
+    expect(next).toHaveValue("");
+    expect(screen.queryByText(refresherHeader(1))).not.toBeInTheDocument();
+  });
+
+  it("due: a From memory miss follows the counted miss path", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    renderBoard();
+    await findVisibleLink();
+    await userEvent.click(
+      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
+    );
+    await passStep1();
+    await recite(BAD_MISS);
+    expect(
+      await screen.findByText("We'll bring it back sooner."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    ).toBeVisible();
+    expect(cue()).not.toBeInTheDocument();
+  });
+
+  it("due Practice card: shows the button and its From memory try counts", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    const record = mutationMock("verseMemory.recordAttempt");
+    record
+      .mockResolvedValueOnce(stillDueSchedule)
+      .mockResolvedValueOnce(heldSchedule);
+    renderBoard({ kind: "practice" });
+    await findVisibleLink();
+    await userEvent.click(
+      screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
+    );
+    await passStep1();
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(record).toHaveBeenCalledTimes(2);
+    });
+    expect(record.mock.calls[1]?.[0]).toMatchObject({
+      mode: "practice",
+      refresherUsed: true,
+    });
+  });
+
+  it.each([
+    ["pass", PASSAGE_ONE],
+    ["miss", BAD_MISS],
+  ] as const)(
+    "not-due Practice: a %s ends practice only, writes nothing, and the button does not come back",
+    async (_label, answer) => {
+      queryResults.set(
+        "verseMemory.verseDetail",
+        verseDetail({ dueAt: notDueVerse.dueAt, accuracies: [30, 90, 20] }),
+      );
+      const onRunStateChange =
+        vi.fn<
+          (state: PracticeRunState, result: PracticeSessionResult) => void
+        >();
+      renderBoard({
+        kind: "practice",
+        verses: [notDueVerse],
+        onRunStateChange,
+      });
+      await findVisibleLink();
+      await userEvent.click(
+        screen.getByRole("button", { name: REFRESH_IT_FIRST_LABEL }),
+      );
+      await passStep1();
+      await recite(answer);
+      expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+      expectNoProgressWrite();
+      const [state, result] = onRunStateChange.mock.lastCall ?? [];
+      expect(state?.graded).toEqual([]);
+      expect(state?.attempts).toEqual([]);
+      expect(result?.attempts).toEqual([]);
+      expect(state?.progress[FIRST_ID]).toMatchObject({
+        status: notDueVerse.status,
+        learnStage: notDueVerse.learnStage,
+        stageReps: notDueVerse.stageReps,
+        intervalDays: notDueVerse.intervalDays,
+        ease: notDueVerse.ease,
+        dueAt: notDueVerse.dueAt,
+      });
+
+      if (answer === PASSAGE_ONE) {
+        // Continue returns to the cold try: link only, answer focused.
+        await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        const link = await findVisibleLink();
+        expect(link).toBeEnabled();
+        expect(cue()).not.toBeInTheDocument();
+        const cold = screen.getByLabelText("Your recalled verse");
+        expect(cold).toHaveValue("");
+        await waitFor(() => {
+          expect(cold).toHaveFocus();
+        });
+      }
+    },
+  );
+
+  it("is gone after a cold try and does not return on Try again", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    renderBoard({ kind: "practice", verses: [notDueVerse] });
+    await findVisibleLink();
+    expect(cue()).toBeVisible();
+    await recite(BAD_MISS);
+    expect(cue()).not.toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Try again/ }),
+    );
+    const link = await findVisibleLink();
+    expect(link).toBeEnabled();
+    expect(cue()).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Your recalled verse")).toHaveFocus();
+    });
+    expectNoProgressWrite();
+  });
+
+  it("is not added to a ••• Refresh, which already opens in the refresher", async () => {
+    queryResults.set("verseMemory.verseDetail", overdueDetail);
+    renderBoard({ refresh: true });
+    const header = await screen.findByText(refresherHeader(1));
+    await waitFor(() => {
+      expect(header).toBeVisible();
+    });
+    expect(cue()).not.toBeInTheDocument();
+    expect(
+      queryCalls.filter(
+        ([name, args]) => name === "verseMemory.verseDetail" && args !== "skip",
+      ),
+    ).toEqual([]);
   });
 });
