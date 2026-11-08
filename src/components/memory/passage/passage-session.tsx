@@ -126,7 +126,7 @@ import {
   type PassageVerseKey,
   type PassageVerseScore,
 } from "@/lib/passage-shaky";
-import { countVerseWords } from "@/lib/verse-hint";
+import { countVerseWords, maskVerseText } from "@/lib/verse-hint";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -361,8 +361,21 @@ export function PassageSession({
         retry: composite.retry,
         ropeIndexes,
       });
-  const recall = holdResult && heldRecall ? heldRecall : liveRecall;
-  const cue = stallCue ?? recall?.pickUpCue ?? null;
+  // A Learning passage refreshes only its warm-up and section recital (R32,
+  // R37): never the new verse, Fix a tricky spot or Connect (R31, R38).
+  const learningRefreshable =
+    !isMaintenance &&
+    (state.phase === "rope" ||
+      (state.phase === "section-complete" && recitingSection));
+  // The card being refreshed: the held result after a logged miss, or the
+  // unattempted card before a try. Its own state is left as it was.
+  const shownRecall = holdResult && heldRecall ? heldRecall : liveRecall;
+  const recall =
+    !isMaintenance && refresher.step && shownRecall
+      ? learningRefresherRecall(shownRecall, refresher.step)
+      : shownRecall;
+  // A logged miss's starting hint is for its next try, not the refresher.
+  const cue = (refresher.isOpen ? null : stallCue) ?? recall?.pickUpCue ?? null;
 
   const autoIntroduceStarted = useRef(false);
 
@@ -613,8 +626,12 @@ export function PassageSession({
 
   function openRefresher(kind: "pre-try" | "after-miss" | "practice") {
     setResultView(null);
-    setHoldResult(false);
-    setHeldRecall(null);
+    // A Learning passage keeps its logged result held under the refresher, so
+    // Continue still leads where that try led.
+    if (isMaintenance) {
+      setHoldResult(false);
+      setHeldRecall(null);
+    }
     refresher.open(kind);
   }
 
@@ -685,11 +702,7 @@ export function PassageSession({
       );
       await holdReviewMiss(save, {
         closingLine: preview ? nextReviewLine(preview.dueAt, save.now) : null,
-        offer: {
-          label: NEED_A_REFRESHER_LABEL,
-          tooltip: NEED_A_REFRESHER_PASSAGE_TOOLTIP,
-          onClick: () => openRefresher("after-miss"),
-        },
+        offer: needARefresher(() => openRefresher("after-miss")),
         focusOffer: true,
       });
       return true;
@@ -705,8 +718,8 @@ export function PassageSession({
     return true;
   }
 
-  /** Continue (or Try again) on a Memorized passage's result. */
-  async function continueReview(): Promise<boolean> {
+  /** Continue (or Try again) on a result, or on a refresher step. */
+  async function continueAfterResult(): Promise<boolean> {
     const retrySave = retrySaveRef.current;
     if (retrySave) {
       await retrySave();
@@ -754,6 +767,18 @@ export function PassageSession({
 
   async function handleGraded(result: PassageRecallResult): Promise<boolean> {
     if (isMaintenance) return gradeReview(result);
+    // A Learning passage's refresher is practice only: nothing is saved.
+    if (refresher.isOpen) {
+      setResultView(
+        refresher.phase === "step1"
+          ? {
+              firstLetters: true,
+              tryAgain: result.accuracy < PASSAGE_PASS_ACCURACY,
+            }
+          : { practiceOnly: true, closingLine: PRACTICE_ONLY_CLOSING },
+      );
+      return true;
+    }
 
     const next = reducePassageSession(withWordCounts(state), {
       type: "attempt",
@@ -770,6 +795,11 @@ export function PassageSession({
       setHeldRecall(heldRecallWithJourneyProgress(liveRecall, next));
       setHoldResult(true);
     }
+    setResultView(
+      learningRefreshable && result.accuracy < PASSAGE_PASS_ACCURACY
+        ? { offer: needARefresher(() => openRefresher("after-miss")) }
+        : null,
+    );
     setStallCue(computeStallCue(next, pieceTexts));
     return true;
   }
@@ -997,7 +1027,8 @@ export function PassageSession({
         <div className="space-y-3">
           {recall.mode === "rope" &&
           effectivePhase === "rope" &&
-          !holdResult ? (
+          !holdResult &&
+          !refresher.isOpen ? (
             <div className="flex flex-wrap items-center justify-center gap-2">
               {showSectionStart ? (
                 <Button
@@ -1058,7 +1089,7 @@ export function PassageSession({
             ease={view.ease}
             readContinue={recall.readContinue}
             onRefresher={
-              reviewDue &&
+              (isMaintenance ? reviewDue : learningRefreshable) &&
               !refresher.isOpen &&
               !recall.loading &&
               !recall.error &&
@@ -1067,11 +1098,9 @@ export function PassageSession({
                 ? () => openRefresher("pre-try")
                 : undefined
             }
-            resultView={isMaintenance ? resultView : null}
+            resultView={resultView}
             onSubmit={handleGraded}
-            onContinueAfterResult={
-              isMaintenance ? continueReview : () => handleContinueAfterResult()
-            }
+            onContinueAfterResult={continueAfterResult}
           />
         </div>
       ) : null}
@@ -1294,6 +1323,16 @@ function nextReviewLine(dueAt: number, now: number): string {
   return `Next review ${formatDueDay(dueAt, now)}`;
 }
 
+function needARefresher(
+  onClick: () => void,
+): NonNullable<PassageRecallResultView["offer"]> {
+  return {
+    label: NEED_A_REFRESHER_LABEL,
+    tooltip: NEED_A_REFRESHER_PASSAGE_TOOLTIP,
+    onClick,
+  };
+}
+
 function tryAnotherRefresher(
   open: (kind: "practice") => void,
 ): NonNullable<PassageRecallResultView["offer"]> {
@@ -1343,6 +1382,26 @@ function reviewHint(
     type: "text",
     text: joinPieceTexts(pieces, indexes, maskedPieces),
     label: "Hint",
+  };
+}
+
+/**
+ * A Learning warm-up or section recital as its refresher: first letters on
+ * every verse of the same range, then no hints.
+ */
+function learningRefresherRecall(base: BuiltRecall, step: 1 | 2): BuiltRecall {
+  return {
+    ...base,
+    hint:
+      step === 1
+        ? {
+            type: "text",
+            text: maskVerseText(base.versePlainText, "first-letters")
+              .map((token) => token.text)
+              .join(""),
+            label: "Hint",
+          }
+        : { type: "hidden", message: NOW_TRY_WITHOUT_HINTS },
   };
 }
 

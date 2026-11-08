@@ -6,7 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { formatDueDay } from "@/lib/memorize-plan";
-import { DAY_MS } from "@/lib/memory-scheduler";
+import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
+import { diffWords } from "@/lib/diff-words";
+import { DAY_MS, requiredRepsFor } from "@/lib/memory-scheduler";
+import { compositeHintForWindow } from "@/lib/passage-frontier";
 import type { PassagePiece } from "@/lib/passage-pieces";
 import {
   clearPassageStepInProgress,
@@ -1170,7 +1173,8 @@ describe("PassageSession", () => {
       ).toBeNull();
       notDue.unmount();
 
-      // A warm-up while learning shows the same empty panel, without a link.
+      // Recite it all while learning shows the same empty panel, without a
+      // link: only the warm-up and the section recital refresh (S15).
       renderSession(passageView(memorized()));
       await screen.findByText(/No hint text/);
       expect(
@@ -1629,6 +1633,622 @@ describe("PassageSession", () => {
       await userEvent.keyboard("{Enter}");
       await screen.findByRole("button", { name: /Continue/ });
       expect(record()).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Learning passage refresher (S15)", () => {
+    const LINK = "Need a refresher?";
+    const TOOLTIP = "Do a refresher on this passage for some more practice.";
+    const PRACTICE_ONLY = "Practice only, your progress didn't change.";
+    const STEP_ONE = "Refresh · First letters · 1 of 2";
+    const STEP_TWO = "Refresh · From memory · 2 of 2";
+    const VERSE_THREE =
+      "He restores my soul. He leads me in paths of righteousness.";
+    const WARMUP = `${PASSAGE_ONE} ${PASSAGE_TWO}`;
+    // 40 distinct words a verse, so a two-verse range can score 84% and 85%.
+    const LETTERS = "abcdefghijklmnopqrstuvwxyz";
+    const longVerse = (number: number) =>
+      Array.from(
+        { length: 40 },
+        (_, index) =>
+          `${LETTERS[number]}${LETTERS[index % 26]}${LETTERS[Math.floor(index / 26)]}`,
+      ).join(" ");
+    const LONG = [1, 2, 3, 4, 5].map(longVerse);
+    const LONG_PAIR = `${LONG[0]} ${LONG[1]}`;
+
+    const record = () => mutationMock("passageMemory.recordAttempt");
+    const answerBox = () => screen.getByLabelText("Your recited passage");
+    const queryLink = () => screen.queryByRole("button", { name: LINK });
+
+    const chapter = (texts: readonly string[]) => [
+      {
+        chapter: 23,
+        data: {
+          ...psalm23,
+          verses: texts.map((text, index) => ({ number: index + 1, text })),
+        },
+      },
+    ];
+
+    function serveChapter(texts: readonly string[]) {
+      fetchChaptersBatchMock.mockResolvedValue(chapter(texts));
+    }
+
+    /** Learning passage: verses 1–2 learned, verse 3 being learned. */
+    function warmup(
+      attachments: ["attached" | "solid", "attached" | "solid"],
+      texts: readonly string[] = [PASSAGE_ONE, PASSAGE_TWO, VERSE_THREE],
+    ): PassageView {
+      serveChapter(texts);
+      const now = getSessionNow();
+      const learned = (attachment: "attached" | "solid") => ({
+        learnStage: attachment === "solid" ? 3 : 2,
+        dueAt: now + DAY_MS,
+      });
+      const view = passageView(
+        [
+          piece(0, attachments[0], learned(attachments[0])),
+          piece(1, attachments[1], learned(attachments[1])),
+          piece(2, "learning", { learnStage: 1, dueAt: now }),
+        ],
+        { lastSessionAt: now - 60_000 },
+      );
+      // The server echoes the same passage back, as a warm-up try changes
+      // no piece.
+      record().mockResolvedValue(view);
+      return view;
+    }
+
+    /**
+     * Verses 1–3 learned (the whole warm-up, at 120 words), verse 4 being
+     * learned. A miss stalling on verse 3 repairs verses 2–3 only.
+     */
+    function longWarmup(): PassageView {
+      serveChapter(LONG.slice(0, 4));
+      const now = getSessionNow();
+      const solid = (index: number) =>
+        piece(index, "solid", { learnStage: 3, dueAt: now + DAY_MS });
+      const view = passageView(
+        [solid(0), solid(1), solid(2), piece(3, "learning", { dueAt: now })],
+        { lastSessionAt: now - 60_000 },
+      );
+      record().mockResolvedValue(view);
+      return view;
+    }
+    const LONG_WARMUP = LONG.slice(0, 3).join(" ");
+
+    /** Reopen mid-step, so the session starts on the due new verse. */
+    function resumeMidStep() {
+      sessionStorage.setItem(
+        PASSAGE_STEP_IN_PROGRESS_KEY,
+        JSON.stringify({ packId: PACK_ID, origin: performance.timeOrigin - 1 }),
+      );
+    }
+
+    /** Verse 2 finishes section 1 on this From memory try. */
+    function sectionView(): PassageView {
+      serveChapter(LONG.slice(0, 3));
+      resumeMidStep();
+      const now = getSessionNow();
+      const second = (attachment: "attached" | "solid") =>
+        piece(1, attachment, {
+          learnStage: 3,
+          stageReps: requiredRepsFor(3, 40) - 1,
+          dueAt: now,
+        });
+      record().mockResolvedValue(
+        passageView([
+          piece(0, "solid", { learnStage: 3 }),
+          second("solid"),
+          piece(2, "unreached", { sectionIndex: 1 }),
+        ]),
+      );
+      return passageView([
+        piece(0, "solid", { learnStage: 3 }),
+        second("attached"),
+        piece(2, "unreached", { sectionIndex: 1 }),
+      ]);
+    }
+
+    /** Verse 1 clears Challenge next to verse 2: Connect verses 1–2. */
+    function connectView(): PassageView {
+      serveChapter(LONG.slice(0, 2));
+      resumeMidStep();
+      const now = getSessionNow();
+      record().mockResolvedValue(
+        passageView([
+          piece(0, "attached", { learnStage: 3, dueAt: now + DAY_MS }),
+          piece(1, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+        ]),
+      );
+      return passageView([
+        piece(0, "attached", {
+          learnStage: 2,
+          stageReps: requiredRepsFor(2, 40) - 1,
+          dueAt: now,
+        }),
+        piece(1, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+      ]);
+    }
+
+    /** The leading words of `full` that score exactly `percent`. */
+    function typedAt(full: string, percent: number): string {
+      const words = full.split(" ");
+      for (let count = words.length; count > 0; count -= 1) {
+        const typed = words.slice(0, count).join(" ");
+        if (verseAttemptAccuracy(diffWords(typed, full)) === percent) {
+          return typed;
+        }
+      }
+      throw new Error(`No prefix scores ${percent}%`);
+    }
+
+    async function check(answer: string, label = "Your recited passage") {
+      const box = await screen.findByLabelText(label);
+      await userEvent.click(box);
+      await userEvent.paste(answer);
+      const button = screen.getByRole("button", { name: /Check answer/ });
+      await waitFor(() => expect(button).toBeEnabled());
+      await userEvent.click(button);
+      await screen.findByText(/recalled/);
+    }
+
+    async function clickButton(name: RegExp | string) {
+      await userEvent.click(await screen.findByRole("button", { name }));
+    }
+
+    async function expectFreshStep(header: string) {
+      expect(await screen.findByText(header)).toBeInTheDocument();
+      await waitFor(() => expect(answerBox()).toHaveFocus());
+      expect(answerBox()).toHaveValue("");
+    }
+
+    /** First letters, then From memory, both passed; ends on the closing. */
+    async function runRefresher(full: string) {
+      await expectFreshStep(STEP_ONE);
+      await check(full);
+      await clickButton(/Continue/);
+      await expectFreshStep(STEP_TWO);
+      await check(full);
+      expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
+      );
+    }
+
+    /** Only the logged try reaches the server, and nothing else is called. */
+    function expectOnlyLoggedTries(count: number) {
+      expect(record()).toHaveBeenCalledTimes(count);
+      for (const name of [
+        "passageMemory.holdAttempt",
+        "passageMemory.applyHeldAttempt",
+        "passageMemory.notePracticeRecital",
+        "passageMemory.introduceNext",
+      ]) {
+        expect(mutationMock(name)).not.toHaveBeenCalled();
+      }
+    }
+
+    function hintText(): string {
+      return screen.getByLabelText("Hint").textContent ?? "";
+    }
+
+    function header(name: string) {
+      return screen.getByRole("status", { name: `Session phase: ${name}` });
+    }
+
+    it("R32: puts the link under the empty warm-up hint and refreshes exactly the warm-up verses", async () => {
+      renderSession(warmup(["solid", "solid"]));
+      const sentence = await screen.findByText(
+        /^No hint text\. Type the passage/,
+      );
+      const link = await screen.findByRole("button", { name: LINK });
+      expect(sentence.parentElement).toBe(link.parentElement);
+      expect(
+        sentence.compareDocumentPosition(link) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+
+      await userEvent.click(link);
+      await expectFreshStep(STEP_ONE);
+      // First letters on both warm-up verses, nothing from verse 3.
+      expect(hintText()).toBe(
+        "T__ L___ i_ m_ s_______; I s____ n__ w___. H_ m____ m_ l__ d___ i_ g____ p_______.",
+      );
+      expect(hintText()).not.toMatch(/r_______/);
+      expect(screen.getByText(WARMUP_PROMPT_COPY)).toBeInTheDocument();
+      expect(answerBox()).toHaveAttribute(
+        "placeholder",
+        "Type the passage from memory",
+      );
+      // The range is fixed while refreshing: no start buttons, no link.
+      expect(
+        screen.queryByRole("button", { name: WARMUP_SKIP_LABEL }),
+      ).toBeNull();
+      expect(queryLink()).toBeNull();
+    });
+
+    it("R32: keeps a partial warm-up hint as it is, with the link beneath it", async () => {
+      const view = warmup(["solid", "attached"]);
+      renderSession(view);
+      const hint = await screen.findByLabelText("Hint");
+      expect(hint.textContent).toBe(
+        compositeHintForWindow(view.pieces, 0, 2, [
+          PASSAGE_ONE,
+          PASSAGE_TWO,
+          VERSE_THREE,
+        ]),
+      );
+      const link = await screen.findByRole("button", { name: LINK });
+      expect(
+        hint.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(hint.closest(".rounded-xl")).toContainElement(link);
+
+      await userEvent.click(link);
+      await expectFreshStep(STEP_ONE);
+      // Full first letters now, including the verse the hint had hidden.
+      expect(hintText()).toMatch(/^T__ L___ i_ m_ s_______;/);
+      expect(hintText()).toMatch(/H_ m____ m_ l__ d___/);
+    });
+
+    it("R32: refreshes a warm-up widened to the beginning of the passage, with nothing cut off", async () => {
+      serveChapter(LONG);
+      const now = getSessionNow();
+      const solid = (index: number) =>
+        piece(index, "solid", { learnStage: 3, dueAt: now + DAY_MS });
+      const view = passageView(
+        [solid(0), solid(1), solid(2), solid(3), piece(4, "learning")],
+        { lastSessionAt: now - 60_000 },
+      );
+      renderSession(view);
+      await clickButton("From the beginning of the passage");
+      await clickButton(LINK);
+      await expectFreshStep(STEP_ONE);
+      const firstLetters = (text: string) =>
+        text.replace(/(\p{L})\p{L}*/gu, (word, first: string) =>
+          first.padEnd(word.length, "_"),
+        );
+      expect(hintText()).toBe(LONG.slice(0, 4).map(firstLetters).join(" "));
+    });
+
+    it("R32: offers a refresher under 85% with focus on Continue, and none at 85% or 100%", async () => {
+      const first = renderSession(
+        warmup(["solid", "solid"], [...LONG.slice(0, 2), VERSE_THREE]),
+      );
+      await check(typedAt(LONG_PAIR, 84));
+      expect(screen.getByText(/84% recalled/)).toBeInTheDocument();
+      const offer = screen.getByRole("button", { name: LINK });
+      expect(screen.getByText(TOOLTIP)).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
+      );
+      expect(offer).not.toHaveFocus();
+      first.unmount();
+
+      for (const percent of [85, 100]) {
+        const run = renderSession(
+          warmup(["solid", "solid"], [...LONG.slice(0, 2), VERSE_THREE]),
+        );
+        await check(typedAt(LONG_PAIR, percent));
+        expect(
+          screen.getByText(new RegExp(`^${percent}% recalled`)),
+        ).toBeInTheDocument();
+        expect(queryLink()).toBeNull();
+        run.unmount();
+      }
+    });
+
+    it("R32: a pre-try refresher counts nothing and resumes the unattempted warm-up", async () => {
+      renderSession(warmup(["solid", "solid"]));
+      await clickButton(LINK);
+      await runRefresher(WARMUP);
+      expectOnlyLoggedTries(0);
+
+      await clickButton(/Continue/);
+      // Back on the same warm-up, untried and with no refresher state left.
+      expect(header("Warm up")).toBeInTheDocument();
+      await waitFor(() => expect(answerBox()).toHaveFocus());
+      expect(answerBox()).toHaveValue("");
+      expect(
+        screen.getByText(/^No hint text\. Type the passage/),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText("Hint")).toBeNull();
+      expect(screen.queryByText(/Refresh ·/)).toBeNull();
+      expect(screen.queryByText(PRACTICE_ONLY)).toBeNull();
+      expect(screen.getByRole("button", { name: LINK })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: WARMUP_SKIP_LABEL }),
+      ).toBeInTheDocument();
+      expectOnlyLoggedTries(0);
+
+      // The warm-up try itself is then logged once, as on main.
+      await check(WARMUP);
+      expect(record()).toHaveBeenCalledTimes(1);
+      expect(record()).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "rope", accuracy: 100 }),
+      );
+    });
+
+    it("R32: a post-miss refresher leaves the logged try and its next screen as they were", async () => {
+      // Without the refresher: the miss, then Continue.
+      const control = renderSession(longWarmup());
+      await check(LONG_PAIR);
+      expect(screen.getByText(/67% recalled/)).toBeInTheDocument();
+      await clickButton(/Continue/);
+      expect(header("Fix a tricky spot")).toBeInTheDocument();
+      expect(screen.getByText("Try this part again")).toBeInTheDocument();
+      const nextScreen = document.body.textContent;
+      const loggedTry = record().mock.calls[0]?.[0] as Record<string, unknown>;
+      expectOnlyLoggedTries(1);
+      control.unmount();
+      mutationMocks.clear();
+
+      // The same miss, then the refresher, then Continue.
+      renderSession(longWarmup());
+      await check(LONG_PAIR);
+      await clickButton(LINK);
+      // The refresher covers the warm-up's verses 1–3, not the tricky spot,
+      // and the tricky spot's starting hint stays out of it.
+      await expectFreshStep(STEP_ONE);
+      expect(hintText()).toMatch(/^b__ .* c__ .* d__ .*d__$/);
+      expect(screen.queryByText("Try this part again")).toBeNull();
+      const noRepairCue = () => {
+        expect(screen.queryByLabelText("Starting hint")).toBeNull();
+        expect(screen.queryByLabelText("Pick up after")).toBeNull();
+      };
+      noRepairCue();
+      // A First letters miss reads Try again, then a clean pass Continue.
+      await check("baa");
+      await clickButton(/Try again/);
+      await expectFreshStep(STEP_ONE);
+      await check(LONG_WARMUP);
+      await clickButton(/Continue/);
+      await expectFreshStep(STEP_TWO);
+      noRepairCue();
+      await check(LONG_WARMUP);
+      expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+      expectOnlyLoggedTries(1);
+
+      await clickButton(/Continue/);
+      expect(header("Fix a tricky spot")).toBeInTheDocument();
+      await waitFor(() => expect(answerBox()).toHaveFocus());
+      expect(answerBox()).toHaveValue("");
+      expect(document.body.textContent).toBe(nextScreen);
+      expectOnlyLoggedTries(1);
+      const refreshedTry = record().mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      const logged = ({
+        kind,
+        quality,
+        accuracy,
+        pieceIndex,
+      }: Record<string, unknown>) => ({ kind, quality, accuracy, pieceIndex });
+      expect(logged(refreshedTry)).toEqual(logged(loggedTry));
+      expect(loggedTry).toEqual(
+        expect.objectContaining({ kind: "rope", accuracy: 67 }),
+      );
+    });
+
+    it("R37: offers the section recital a link and an under-85% offer over that section's verses", async () => {
+      renderSession(sectionView());
+      await check(LONG[1] ?? "", "Your recalled verse");
+      await clickButton(/Continue/);
+      await clickButton(SECTION_RECITE_LABEL);
+      expect(await screen.findByText("This section")).toBeInTheDocument();
+      expect(
+        screen.getByText("Recite this section from memory"),
+      ).toBeInTheDocument();
+      await clickButton(LINK);
+      await expectFreshStep(STEP_ONE);
+      expect(hintText()).toMatch(/^b__ b__ .* c__/);
+      expect(hintText()).not.toMatch(/d__/);
+    });
+
+    it("R37: a section recital at 84% gets the offer, at 85% none, and the refresher keeps its next step", async () => {
+      async function reciteSection(percent: number) {
+        const run = renderSession(sectionView());
+        await check(LONG[1] ?? "", "Your recalled verse");
+        await clickButton(/Continue/);
+        await clickButton(SECTION_RECITE_LABEL);
+        await check(typedAt(LONG_PAIR, percent));
+        return run;
+      }
+
+      const atPass = await reciteSection(85);
+      expect(queryLink()).toBeNull();
+      atPass.unmount();
+      mutationMocks.clear();
+
+      const control = await reciteSection(84);
+      expect(screen.getByRole("button", { name: LINK })).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
+      );
+      await clickButton(/Continue/);
+      const nextScreen = document.body.textContent;
+      expectOnlyLoggedTries(2);
+      control.unmount();
+      mutationMocks.clear();
+
+      await reciteSection(84);
+      await clickButton(LINK);
+      await runRefresher(LONG_PAIR);
+      await clickButton(/Continue/);
+      expect(document.body.textContent).toBe(nextScreen);
+      expectOnlyLoggedTries(2);
+    });
+
+    it("first letters at 84% reads Try again and at 85% Continue; From memory has no hints", async () => {
+      renderSession(
+        warmup(["solid", "solid"], [...LONG.slice(0, 2), VERSE_THREE]),
+      );
+      await clickButton(LINK);
+      await expectFreshStep(STEP_ONE);
+      await check(typedAt(LONG_PAIR, 84));
+      expect(screen.queryByText(PRACTICE_ONLY)).toBeNull();
+      await clickButton(/Try again/);
+      await expectFreshStep(STEP_ONE);
+      await check(typedAt(LONG_PAIR, 85));
+      await clickButton(/Continue/);
+      await expectFreshStep(STEP_TWO);
+      expect(
+        screen.getByText("Now try it without the hints."),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText("Hint")).toBeNull();
+      expect(queryLink()).toBeNull();
+      // A From memory miss is still practice only, with no other offer.
+      await check(typedAt(LONG_PAIR, 30));
+      expect(screen.getByText(PRACTICE_ONLY)).toBeInTheDocument();
+      expect(queryLink()).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Try another refresher" }),
+      ).toBeNull();
+      expectOnlyLoggedTries(0);
+    });
+
+    it("Back during either step changes nothing", async () => {
+      const onExit = vi.fn();
+      const first = renderSession(warmup(["solid", "solid"]), onExit);
+      await clickButton(LINK);
+      await expectFreshStep(STEP_ONE);
+      await clickButton("Back to Memory");
+      expect(onExit).toHaveBeenCalledTimes(1);
+      expectOnlyLoggedTries(0);
+      first.unmount();
+
+      renderSession(warmup(["solid", "solid"]), onExit);
+      await check(PASSAGE_ONE);
+      await clickButton(LINK);
+      await check(WARMUP);
+      await clickButton(/Continue/);
+      await expectFreshStep(STEP_TWO);
+      await clickButton("Back to Memory");
+      expect(onExit).toHaveBeenCalledTimes(2);
+      expectOnlyLoggedTries(1);
+    });
+
+    it("R31: the new verse shows no link and no offer at any step", async () => {
+      serveChapter([PASSAGE_ONE, PASSAGE_TWO, VERSE_THREE]);
+      resumeMidStep();
+      renderSession(practicedDueView());
+      expect(
+        await screen.findByText("Type what you remember"),
+      ).toBeInTheDocument();
+      expect(queryLink()).toBeNull();
+      await check("The", "Your recalled verse");
+      expect(queryLink()).toBeNull();
+    });
+
+    it("R31: a new verse typed from memory shows no link", async () => {
+      serveChapter([PASSAGE_ONE]);
+      resumeMidStep();
+      renderSession(
+        passageView([piece(0, "learning", { learnStage: 3 })], {
+          lastSessionAt: getSessionNow() - 60_000,
+        }),
+      );
+      expect(
+        await screen.findByText(/^No hint text\. Type the verse/),
+      ).toBeInTheDocument();
+      expect(queryLink()).toBeNull();
+    });
+
+    it("Fix a tricky spot shows no link and no offer", async () => {
+      renderSession(warmup(["solid", "solid"]));
+      await check(PASSAGE_ONE);
+      await clickButton(/Continue/);
+      expect(header("Fix a tricky spot")).toBeInTheDocument();
+      expect(queryLink()).toBeNull();
+      await check("He");
+      expect(queryLink()).toBeNull();
+    });
+
+    it("R38: the Connect verses recital shows no link, and no offer at 30% or 84%", async () => {
+      for (const percent of [30, 84]) {
+        const run = renderSession(connectView());
+        await check(LONG[0] ?? "", "Your recalled verse");
+        await clickButton(/Continue/);
+        await clickButton(CONNECT_RECITE_LABEL);
+        expect(await screen.findByText("Together")).toBeInTheDocument();
+        expect(queryLink()).toBeNull();
+        await check(typedAt(LONG_PAIR, percent));
+        expect(
+          screen.getByText(new RegExp(`^${percent}% recalled`)),
+        ).toBeInTheDocument();
+        expect(queryLink()).toBeNull();
+        run.unmount();
+        mutationMocks.clear();
+      }
+    });
+
+    it("shows no link while loading or on a text error, then once Retry loads it", async () => {
+      let resolve: (value: unknown) => void = () => {};
+      const view = warmup(["solid", "solid"]);
+      fetchChaptersBatchMock.mockReturnValue(
+        new Promise((done) => {
+          resolve = done;
+        }),
+      );
+      const loading = renderSession(view);
+      expect(queryLink()).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /Check answer/ }),
+      ).toBeDisabled();
+      resolve(chapter([PASSAGE_ONE, PASSAGE_TWO, VERSE_THREE]));
+      expect(
+        await screen.findByRole("button", { name: LINK }),
+      ).toBeInTheDocument();
+      loading.unmount();
+      // Drop the text the first render cached, so this one fetches again.
+      sessionStorage.clear();
+
+      fetchChaptersBatchMock.mockRejectedValueOnce(new Error("offline"));
+      renderSession(view);
+      expect(
+        await screen.findByText("Could not load verse text."),
+      ).toBeInTheDocument();
+      expect(queryLink()).toBeNull();
+      serveChapter([PASSAGE_ONE, PASSAGE_TWO, VERSE_THREE]);
+      await clickButton("Retry");
+      expect(
+        await screen.findByRole("button", { name: LINK }),
+      ).toBeInTheDocument();
+    });
+
+    it("opens once on a double activation and runs by keyboard alone", async () => {
+      const user = userEvent.setup();
+      renderSession(warmup(["solid", "solid"]));
+      await user.dblClick(await screen.findByRole("button", { name: LINK }));
+      await expectFreshStep(STEP_ONE);
+      expect(screen.getAllByText(STEP_ONE)).toHaveLength(1);
+
+      // Shift+Enter adds a line; Enter checks.
+      await user.keyboard("The{Shift>}{Enter}{/Shift}Lord");
+      expect(answerBox()).toHaveValue("The\nLord");
+      expect(screen.queryByText(/recalled/)).toBeNull();
+      await user.clear(answerBox());
+      await user.paste(WARMUP);
+      await user.keyboard("{Enter}");
+      await screen.findByText(/recalled/);
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
+      );
+      await user.keyboard("{Enter}");
+      await expectFreshStep(STEP_TWO);
+      await user.paste(WARMUP);
+      await user.keyboard("{Enter}");
+      expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
+      );
+      await user.keyboard("{Enter}");
+      expect(header("Warm up")).toBeInTheDocument();
+      await waitFor(() => expect(answerBox()).toHaveFocus());
+      expectOnlyLoggedTries(0);
     });
   });
 
