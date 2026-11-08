@@ -41,6 +41,7 @@ import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
   COUNTED_TODAY_CLOSING,
   NEED_A_REFRESHER_LABEL,
+  NEED_A_REFRESHER_PASSAGE_TOOLTIP,
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
   PRACTICE_ONLY_CLOSING,
@@ -125,6 +126,14 @@ import {
   RefresherOfferButton,
 } from "../memory-refresher-controls";
 import { useFirstMasteredToast } from "../celebrate/use-milestone-hint";
+import type { PassageView } from "../passage/passage-session-types";
+import { verseScores } from "../passage/passage-session-model";
+import {
+  firstLettersHintText,
+  passageVersesIn,
+  usePassageReview,
+  type ReviewSave,
+} from "../passage/use-passage-review";
 import { useVerseRefresher } from "./use-verse-refresher";
 import {
   LearningJourneyBar,
@@ -329,6 +338,24 @@ interface OrderedVerse {
 }
 
 const NO_COMPOSITE_MEMBERS: CardReference[] = [];
+
+/** A held cold miss: a verse's, or a whole passage's on its Today card. */
+type HeldAttemptId = Id<"heldVerseAttempts"> | Id<"heldPassageAttempts">;
+
+/** A Memorized passage's saved schedule, in the shape a verse card adopts. */
+function scheduleFromPassageView(view: PassageView): MemorySchedule {
+  return {
+    status: view.status === "mastered" ? "mastered" : "reviewing",
+    learnStage: MAX_LEARN_STAGE,
+    stageReps: view.stageReps,
+    ease: view.ease,
+    intervalDays: view.intervalDays,
+    dueAt: view.dueAt,
+    consecutiveCorrect: view.consecutiveCorrect,
+    lapses: view.lapses,
+    earlyReviewApplied: view.earlyReviewApplied ?? false,
+  };
+}
 
 function scheduleSnapshotFrom(
   progress: Pick<
@@ -695,6 +722,92 @@ export function PracticeBoard({
     composite?.members ?? NO_COMPOSITE_MEMBERS,
     { enabled: composite !== null },
   );
+  // A due Memorized passage in Review: S11's held miss and refresher run on
+  // its one card (S16). Its shaky verses come from the passage itself.
+  const passageReview = usePassageReview();
+  const reviewPassage =
+    isReview &&
+    composite !== null &&
+    (composite.passageStatus === "reviewing" ||
+      composite.passageStatus === "mastered")
+      ? composite
+      : null;
+  const passageView = useQuery(
+    api.passageMemory.getForPack,
+    reviewPassage
+      ? {
+          packId: reviewPassage.packId,
+          now,
+          tzOffsetMinutes: new Date(now).getTimezoneOffset(),
+        }
+      : "skip",
+  );
+  // No all-verse fallback on this card: with nothing shaky, nothing is hinted.
+  const passageFirstLetters =
+    reviewPassage && passageView
+      ? firstLettersHintText(
+          compositePassage.segments,
+          passageReview.hintTargets(passageView.shakyVerses ?? []),
+        )
+      : undefined;
+
+  function passageSave(
+    tokens: ReadonlyArray<DiffToken>,
+    now: number,
+  ): ReviewSave | null {
+    const quality = classifyVerseAttempt(tokens);
+    if (!quality) return null;
+    return {
+      quality,
+      accuracy: verseAttemptAccuracy(tokens),
+      now,
+      verseScores: verseScores(
+        tokens,
+        passageVersesIn(compositePassage.segments),
+      ),
+    };
+  }
+
+  /**
+   * One try on the Today passage card. First letters saves nothing; a
+   * practice round only clears shaky verses; any other try counts, and a From
+   * memory try after a held miss replaces it.
+   */
+  async function recordPassageTry(
+    packId: Id<"packs">,
+    tokens: ReadonlyArray<DiffToken>,
+    opts: RecordOptions | undefined,
+  ): Promise<RecordVerseAttemptResult> {
+    if (opts?.hint) return { ok: true, schedule: null };
+    const save = passageSave(tokens, opts?.now ?? Date.now());
+    if (!save) return { ok: false };
+    if (opts?.skipSessionRow) {
+      await passageReview.notePractice(packId, save);
+      return { ok: true, schedule: null };
+    }
+    try {
+      const { view } = await passageReview.record(
+        packId,
+        opts?.refresherUsed ? { ...save, refresherUsed: true } : save,
+        opts?.replaceHeldId !== undefined,
+      );
+      return { ok: true, schedule: scheduleFromPassageView(view) };
+    } catch (error: unknown) {
+      devLog.warn("passageMemory", "recordAttempt failed", error);
+      return { ok: false };
+    }
+  }
+  // A whole pack's summary row goes by its name; a Today passage's row can
+  // also offer its summary Refresh.
+  const rowLabel = composite ? (composite.packName ?? scopeLabel) : undefined;
+  const passageRow = reviewPassage
+    ? {
+        passage: {
+          packId: reviewPassage.packId,
+          references: reviewPassage.members,
+        },
+      }
+    : {};
 
   // Fetch the active verse's text (cache-shared with PracticeCard) so the rail
   // and card can show a length-accurate journey bar via learningJourneyFraction.
@@ -739,17 +852,7 @@ export function PracticeBoard({
             tzOffsetMinutes,
             timeZone,
           });
-          return {
-            status: view.status === "mastered" ? "mastered" : "reviewing",
-            learnStage: MAX_LEARN_STAGE,
-            stageReps: view.stageReps,
-            ease: view.ease,
-            intervalDays: view.intervalDays,
-            dueAt: view.dueAt,
-            consecutiveCorrect: view.consecutiveCorrect,
-            lapses: view.lapses,
-            earlyReviewApplied: view.earlyReviewApplied ?? false,
-          };
+          return scheduleFromPassageView(view);
         }
         return await recordUnifiedReview({
           id: packId,
@@ -1018,7 +1121,10 @@ export function PracticeBoard({
                       ),
                       text: compositePassage.text,
                       segments: compositePassage.segments,
-                      loading: compositePassage.loading,
+                      // A Today passage card also waits for its shaky verses.
+                      loading:
+                        compositePassage.loading ||
+                        (reviewPassage !== null && passageView === undefined),
                       error: compositePassage.error,
                       retry: compositePassage.retry,
                     }
@@ -1030,10 +1136,25 @@ export function PracticeBoard({
               practiceReview={practiceMemorized && !practiceOnly}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
+              passageFirstLetters={passageFirstLetters}
               packMemberSchedules={composite?.memberSchedules}
               packMemberRefs={composite?.members}
               onJourneyPreview={setJourneyPreview}
               onHold={async (tokens, wordCount, answer, now) => {
+                if (reviewPassage) {
+                  const save = passageSave(tokens, now);
+                  if (!save) return { ok: false as const };
+                  try {
+                    const heldId = await passageReview.hold(
+                      reviewPassage.packId,
+                      save,
+                    );
+                    return { ok: true as const, heldId };
+                  } catch (error: unknown) {
+                    devLog.warn("passageMemory", "holdAttempt failed", error);
+                    return { ok: false as const };
+                  }
+                }
                 const quality = classifyVerseAttempt(tokens);
                 if (!quality || !currentVerse.verseRefId) {
                   return { ok: false as const };
@@ -1060,7 +1181,17 @@ export function PracticeBoard({
               onApplyHeld={async (heldId, accuracy) => {
                 const verseId = currentVerse.id;
                 try {
-                  const result = await applyHeldAttempt({ heldId });
+                  const result = reviewPassage
+                    ? await passageReview.applyHeld().then((applied) => ({
+                        applied: applied !== null,
+                        schedule: applied?.view
+                          ? scheduleFromPassageView(applied.view)
+                          : null,
+                      }))
+                    : await applyHeldAttempt({
+                        // A verse card only holds verse tries.
+                        heldId: heldId as Id<"heldVerseAttempts">,
+                      });
                   if (result.schedule) {
                     adoptVerseSchedule(verseId, result.schedule);
                   }
@@ -1073,7 +1204,9 @@ export function PracticeBoard({
                       {
                         reference: currentVerse.reference,
                         accuracy,
-                        offerPractice: true,
+                        label: rowLabel,
+                        offerPractice: composite === null,
+                        ...passageRow,
                         ...(result.schedule
                           ? { savedStatus: result.schedule.status }
                           : {}),
@@ -1093,36 +1226,39 @@ export function PracticeBoard({
                 if (practiceOnly) return { ok: true as const, schedule: null };
                 const verseId = currentVerse.id;
                 const hold = opts?.holdSchedule === true;
-                const counted: RecordVerseAttemptResult = composite
-                  ? await recordComposite(
-                      composite.packId,
-                      tokens,
-                      wordCount,
-                      composite.passageStatus,
-                    ).then((next) =>
-                      next
-                        ? { ok: true as const, schedule: next }
-                        : { ok: false as const },
-                    )
-                  : await recordWithSeqAdopt(
-                      verseId,
-                      {
-                        reference: currentVerse.reference,
-                        verseRefId: currentVerse.verseRefId,
+                const counted: RecordVerseAttemptResult = reviewPassage
+                  ? await recordPassageTry(reviewPassage.packId, tokens, opts)
+                  : composite
+                    ? await recordComposite(
+                        composite.packId,
                         tokens,
-                        stage: currentProgress.learnStage,
                         wordCount,
-                        now: opts?.now,
-                        hint: opts?.hint,
-                        holdSchedule: opts?.holdSchedule,
-                        refresherUsed: opts?.refresherUsed,
-                        replaceHeldId: opts?.replaceHeldId,
-                      },
-                      (schedule) => {
-                        if (hold || opts?.skipSessionRow) return;
-                        adoptVerseSchedule(verseId, schedule);
-                      },
-                    );
+                        composite.passageStatus,
+                      ).then((next) =>
+                        next
+                          ? { ok: true as const, schedule: next }
+                          : { ok: false as const },
+                      )
+                    : await recordWithSeqAdopt(
+                        verseId,
+                        {
+                          reference: currentVerse.reference,
+                          verseRefId: currentVerse.verseRefId,
+                          tokens,
+                          stage: currentProgress.learnStage,
+                          wordCount,
+                          now: opts?.now,
+                          hint: opts?.hint,
+                          holdSchedule: opts?.holdSchedule,
+                          refresherUsed: opts?.refresherUsed,
+                          replaceHeldId: opts?.replaceHeldId as
+                            Id<"heldVerseAttempts"> | undefined,
+                        },
+                        (schedule) => {
+                          if (hold || opts?.skipSessionRow) return;
+                          adoptVerseSchedule(verseId, schedule);
+                        },
+                      );
                 if (hold || opts?.skipSessionRow || !counted.ok) return counted;
                 if (composite && counted.schedule) {
                   adoptVerseSchedule(verseId, counted.schedule);
@@ -1161,17 +1297,18 @@ export function PracticeBoard({
                                 {
                                   reference: currentVerse.reference,
                                   accuracy: opts.heldMissAccuracy,
-                                  offerPractice: true as const,
+                                  label: rowLabel,
+                                  offerPractice: composite === null,
+                                  ...passageRow,
                                 },
                               ]
                             : []),
                           {
                             reference: currentVerse.reference,
                             accuracy,
-                            label: composite
-                              ? (composite.packName ?? scopeLabel)
-                              : undefined,
+                            label: rowLabel,
                             offerPractice: composite === null,
+                            ...passageRow,
                             ...(opts?.refresherUsed
                               ? { refresherUsed: true }
                               : {}),
@@ -1265,6 +1402,17 @@ interface CompositeCardPassage {
   retry: () => void;
 }
 
+/** How a card's try is saved, beyond its tokens. */
+interface RecordOptions {
+  now?: number;
+  hint?: "first-letters";
+  holdSchedule?: boolean;
+  refresherUsed?: boolean;
+  replaceHeldId?: HeldAttemptId;
+  skipSessionRow?: boolean;
+  heldMissAccuracy?: number;
+}
+
 interface PracticeCardProps {
   sessionLabel: MemorySessionLabel;
   reference: CardReference;
@@ -1321,27 +1469,25 @@ interface PracticeCardProps {
   /** Back / Home flush a held miss even if the card has not unmounted yet. */
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
+  /**
+   * A due Memorized passage's First letters hint: only its shaky verses and
+   * the held miss's weak ones. Set, the passage card runs the refresher and
+   * held miss a verse card does.
+   */
+  passageFirstLetters?: string;
   onRecord: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
-    opts?: {
-      now?: number;
-      hint?: "first-letters";
-      holdSchedule?: boolean;
-      refresherUsed?: boolean;
-      replaceHeldId?: Id<"heldVerseAttempts">;
-      skipSessionRow?: boolean;
-      heldMissAccuracy?: number;
-    },
+    opts?: RecordOptions,
   ) => Promise<RecordVerseAttemptResult>;
   onHold: (
     tokens: ReturnType<typeof diffWords>,
     wordCount: number,
     answer: string,
     now: number,
-  ) => Promise<{ ok: true; heldId: Id<"heldVerseAttempts"> } | { ok: false }>;
+  ) => Promise<{ ok: true; heldId: HeldAttemptId } | { ok: false }>;
   onApplyHeld: (
-    heldId: Id<"heldVerseAttempts">,
+    heldId: HeldAttemptId,
     accuracy: number,
   ) => Promise<RecordVerseAttemptResult>;
   /**
@@ -1385,6 +1531,7 @@ function PracticeCard({
   practiceReview = false,
   leaveHeldRef,
   onSavingChange,
+  passageFirstLetters,
   onRecord,
   onHold,
   onApplyHeld,
@@ -1423,7 +1570,7 @@ function PracticeCard({
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const reviewActionRef = useRef<HTMLButtonElement>(null);
   const refresherOfferRef = useRef<HTMLButtonElement>(null);
-  const heldIdRef = useRef<Id<"heldVerseAttempts"> | null>(null);
+  const heldIdRef = useRef<HeldAttemptId | null>(null);
   const heldAccuracyRef = useRef<number | null>(null);
   const [heldMissPreview, setHeldMissPreview] = useState<MemorySchedule | null>(
     null,
@@ -1459,10 +1606,13 @@ function PracticeCard({
   const gradePending = submitPending && submitKind === "grade";
   const practiceRound = refresher.kind === "practice";
   const practiceFromMemory = practiceRound && refresher.phase === "step2";
+  // A verse, or a due Memorized passage with its hint ready: the cards that
+  // hold a cold miss and offer the refresher.
+  const refresherCard = !composite || passageFirstLetters !== undefined;
   const countedFromMemory =
     showScheduleOutcome &&
     isReviewPhase(status) &&
-    !composite &&
+    refresherCard &&
     refresher.phase !== "step1" &&
     !practiceRound;
   // A try saved as the verse's review: a failed save shows the save error, and
@@ -1493,7 +1643,7 @@ function PracticeCard({
   // keystroke and gone for good once a try or refresher starts.
   const showRefresherLink =
     offerRefresher &&
-    !composite &&
+    refresherCard &&
     isReviewPhase(status) &&
     !loading &&
     !error &&
@@ -1534,7 +1684,10 @@ function PracticeCard({
     if (refresher.phase === "step1") {
       return {
         hintStage: "first-letters" as const,
-        tokens: maskVerseText(versePlainText, "first-letters"),
+        tokens:
+          passageFirstLetters === undefined
+            ? maskVerseText(versePlainText, "first-letters")
+            : [{ text: passageFirstLetters, word: false, masked: false }],
         wordCount: wc,
       };
     }
@@ -1554,7 +1707,13 @@ function PracticeCard({
       }),
       wordCount: wc,
     };
-  }, [versePlainText, learnStage, stageReps, refresher.phase]);
+  }, [
+    versePlainText,
+    learnStage,
+    stageReps,
+    refresher.phase,
+    passageFirstLetters,
+  ]);
 
   const requiredToday = requiredRepsFor(learnStage, wordCount);
   const liveGoalLabel =
@@ -1626,15 +1785,7 @@ function PracticeCard({
     !advancesOnContinue &&
     (status === "reviewing" || status === "mastered" || !madeLearningProgress);
 
-  function recordFlags(): {
-    now?: number;
-    hint?: "first-letters";
-    holdSchedule?: boolean;
-    refresherUsed?: boolean;
-    replaceHeldId?: Id<"heldVerseAttempts">;
-    skipSessionRow?: boolean;
-    heldMissAccuracy?: number;
-  } {
+  function recordFlags(): RecordOptions {
     const hold = refresher.phase === "step1";
     const afterMissStep2 =
       refresher.phase === "step2" && refresher.kind === "after-miss";
@@ -1671,7 +1822,7 @@ function PracticeCard({
       const accuracy = verseAttemptAccuracy(tokens);
       checkedAccuracyRef.current = accuracy;
       const holdingColdMiss = isHoldableColdMiss({
-        reviewPhase: isReviewPhase(status) && !composite,
+        reviewPhase: isReviewPhase(status) && refresherCard,
         due: showScheduleOutcome && scheduleSnapshot.dueAt <= now,
         accuracy,
         passAccuracy: LEARN_PROGRESS_ACCURACY,
@@ -1957,7 +2108,7 @@ function PracticeCard({
     checked &&
     !refresher.isOpen &&
     isReviewPhase(status) &&
-    !composite &&
+    refresherCard &&
     showScheduleOutcome &&
     checkedAccuracy < LEARN_PROGRESS_ACCURACY;
   const afterMissCountedResult =
@@ -2390,7 +2541,11 @@ function PracticeCard({
                     disabled={submitPending || !hasHeldTry}
                     buttonRef={refresherOfferRef}
                     describedBy={resultDescribedBy}
-                    tooltip={NEED_A_REFRESHER_TOOLTIP}
+                    tooltip={
+                      composite
+                        ? NEED_A_REFRESHER_PASSAGE_TOOLTIP
+                        : NEED_A_REFRESHER_TOOLTIP
+                    }
                   />
                 ) : null}
                 {showTryAnother ? (

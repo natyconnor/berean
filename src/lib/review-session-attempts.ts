@@ -24,6 +24,8 @@ export interface ReviewSessionAttempt {
   >;
   /** Status the try saved when the row has no `schedule` (an applied held miss). */
   savedStatus?: MemoryStatus;
+  /** A Memorized passage reviewed on its Today card, for its summary Refresh. */
+  passage?: { packId: string; references: CardReference[] };
 }
 
 /** Mean accuracy across every recitation, including retries. */
@@ -93,7 +95,7 @@ export function offersSummaryRefresh(row: GroupedReviewAttempt): boolean {
  */
 export function offersPassageSummaryRefresh(
   attempts: readonly ReviewSessionAttempt[],
-  status: PassageStatus | undefined,
+  status: PassageStatus | MemoryStatus | undefined,
 ): boolean {
   const last = attempts.at(-1);
   return (

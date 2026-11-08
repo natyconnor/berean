@@ -280,7 +280,7 @@ function PassageSummaryRefresh({
   );
 }
 
-function AccuracyScore({
+export function AccuracyScore({
   accuracy,
   label,
 }: {
@@ -300,7 +300,8 @@ function AccuracyScore({
 /**
  * Each reviewed verse with how well it was recalled, and Add to pack and
  * Practice shortcuts. A pack recited as one passage gets neither. A verse
- * still Memorized whose last try here was under 85% also gets Refresh (R21).
+ * still Memorized whose last try here was under 85% also gets Refresh (R21),
+ * and so does a Memorized passage reviewed on its Today card (R51).
  */
 export function ReviewResultRows({
   attempts,
@@ -321,7 +322,13 @@ export function ReviewResultRows({
     <ul className={cn("divide-y rounded-lg border text-left", className)}>
       {groupReviewSessionAttempts(attempts).map((attempt) => {
         const label = attempt.label ?? formatVerseRefTitle(attempt.reference);
-        const refreshable = offersSummaryRefresh(attempt);
+        const passage = attempt.passage;
+        const refreshable = passage
+          ? offersPassageSummaryRefresh(
+              attempts.filter((other) => other.label === attempt.label),
+              attempt.schedule?.status ?? attempt.savedStatus,
+            )
+          : offersSummaryRefresh(attempt);
         return (
           <li
             key={label}
@@ -361,7 +368,16 @@ export function ReviewResultRows({
                   variant="icon"
                 />
               ) : null}
-              {refreshable ? (
+              {refreshable && passage ? (
+                <PassageSummaryRefresh
+                  source={{
+                    ...passage,
+                    returnTo: returnTo ?? MEMORY_HOME,
+                  }}
+                  label={label}
+                  snapshot={summary}
+                />
+              ) : refreshable ? (
                 <SummaryRefresh
                   reference={attempt.reference}
                   label={label}
