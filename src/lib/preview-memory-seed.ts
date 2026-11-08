@@ -72,6 +72,8 @@ interface VerseSpec {
   reference: PreviewMemoryReference;
   /** Days from `now` until `dueAt`. Negative = overdue. */
   dueOffsetDays?: number;
+  /** With the stale fixture, the two newest reviews miss under 60%. */
+  recentMisses?: boolean;
 }
 
 /**
@@ -145,6 +147,7 @@ const VERSE_SPECS: readonly VerseSpec[] = [
     role: "reviewDue",
     label: "Reviewing · due today",
     howToTry: "Open Review — third due verse.",
+    recentMisses: true,
     reference: { book: "Matthew", chapter: 6, startVerse: 33, endVerse: 33 },
   },
   {
@@ -172,6 +175,7 @@ const VERSE_SPECS: readonly VerseSpec[] = [
     label: "Reviewing · in a week",
     howToTry: "Should not be in Review. Use Extra practice.",
     dueOffsetDays: 7,
+    recentMisses: true,
     reference: { book: "Joshua", chapter: 1, startVerse: 9, endVerse: 9 },
   },
   {
@@ -340,6 +344,7 @@ function scheduleForRole(
 function historyForVerse(
   verse: PreviewMemorySeedVerse,
   now: number,
+  recentMisses: boolean,
 ): PreviewMemorySeedReview[] {
   if (verse.role === "new") return [];
 
@@ -361,7 +366,13 @@ function historyForVerse(
         createdAt: now - day * DAY_MS,
       });
     }
-    return reviews;
+    if (!recentMisses) return reviews;
+    // Oldest first: the last two are the newest tries.
+    return reviews.map((review, index) =>
+      index >= reviews.length - 2
+        ? { ...review, quality: "off" as const, accuracy: 40 }
+        : review,
+    );
   }
 
   reviews.push({
@@ -381,8 +392,13 @@ function historyForVerse(
  *
  * `now` should be the same session clock the UI passes to Convex (`useLiveNow`)
  * so due/locked verses line up with the frozen client clock.
+ * `staleFixture` (non-production deployments only) makes Matthew 6:33 and
+ * Joshua 1:9 stale; without it the set is unchanged.
  */
-export function buildPreviewMemorySeed(now: number): PreviewMemorySeedPlan {
+export function buildPreviewMemorySeed(
+  now: number,
+  options: { staleFixture?: boolean } = {},
+): PreviewMemorySeedPlan {
   const verses = VERSE_SPECS.map((spec) => {
     const { schedule, lastReviewedAt } = scheduleForRole(spec, now);
     return {
@@ -400,7 +416,14 @@ export function buildPreviewMemorySeed(now: number): PreviewMemorySeedPlan {
   return {
     verses,
     packs: PACKS.map((pack) => ({ ...pack, verseIds: [...pack.verseIds] })),
-    reviews: verses.flatMap((verse) => historyForVerse(verse, now)),
+    reviews: verses.flatMap((verse, index) =>
+      historyForVerse(
+        verse,
+        now,
+        options.staleFixture === true &&
+          VERSE_SPECS[index]?.recentMisses === true,
+      ),
+    ),
   };
 }
 

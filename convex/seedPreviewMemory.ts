@@ -27,6 +27,10 @@ async function isAnonymousUser(
   return account !== null;
 }
 
+function isProdDeployment(): boolean {
+  return process.env.CONVEX_DEPLOYMENT?.startsWith("prod:") === true;
+}
+
 /**
  * Preview/dev sample data is meant for throwaway accounts. On a production
  * Convex deployment we only allow anonymous users (Vercel preview auto-sign-in)
@@ -37,8 +41,7 @@ async function assertPreviewMemorySeedAllowed(
   ctx: MutationCtx,
   userId: Id<"users">,
 ): Promise<void> {
-  const deployment = process.env.CONVEX_DEPLOYMENT;
-  if (!deployment?.startsWith("prod:")) return;
+  if (!isProdDeployment()) return;
   if (await isAnonymousUser(ctx, userId)) return;
   throw new Error(
     "Sample memory data on production is limited to anonymous preview users.",
@@ -210,7 +213,10 @@ export const seedPreviewMemory = mutation({
 
     const tzOffsetMinutes =
       args.tzOffsetMinutes ?? new Date(args.now).getTimezoneOffset();
-    const plan = buildPreviewMemorySeed(args.now);
+    // The stale test fixture never reaches a production deployment.
+    const plan = buildPreviewMemorySeed(args.now, {
+      staleFixture: !isProdDeployment(),
+    });
     const passagePlan = buildPreviewPassageSeed(args.now, tzOffsetMinutes);
     await clearUserMemory(ctx, userId);
 

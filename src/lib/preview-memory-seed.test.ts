@@ -7,6 +7,7 @@ import {
   isLearningLocked,
   isReviewPhase,
 } from "./memory-scheduler";
+import { isStaleVerse } from "./memory-stale";
 import {
   assertLearningLockGap,
   buildPreviewMemorySeed,
@@ -116,5 +117,67 @@ describe("preview memory seed", () => {
   it("seeds review history so dashboard charts are not empty", () => {
     expect(plan.reviews.length).toBeGreaterThan(10);
     expect(plan.reviews.every((review) => review.createdAt < NOW)).toBe(true);
+  });
+
+  function staleIds(seed: typeof plan): string[] {
+    return seed.verses
+      .filter((verse) =>
+        isStaleVerse({
+          status: verse.schedule.status,
+          dueAt: verse.schedule.dueAt,
+          intervalDays: verse.schedule.intervalDays,
+          now: NOW,
+          // Newest first, as `verseMemory.verseDetail` returns them.
+          lastReviews: seed.reviews
+            .filter((review) => review.verseId === verse.id)
+            .sort((a, b) => b.createdAt - a.createdAt),
+        }),
+      )
+      .map((verse) => verse.id);
+  }
+
+  it("seeds production exactly as before: no stale verse, every review 100% or 92%", () => {
+    expect(buildPreviewMemorySeed(NOW, { staleFixture: false })).toEqual(plan);
+    expect(staleIds(plan)).toEqual([]);
+    const reviewPhase = new Set(
+      plan.verses
+        .filter((verse) => isReviewPhase(verse.schedule.status))
+        .map((verse) => verse.id),
+    );
+    for (const review of plan.reviews) {
+      if (!reviewPhase.has(review.verseId)) continue;
+      expect(review.mode).toBe("review");
+      expect([
+        [100, "exact"],
+        [92, "close"],
+      ]).toContainEqual([review.accuracy, review.quality]);
+    }
+  });
+
+  it("non-production seeds exactly two stale Memorized verses, one due and one not", () => {
+    const fixture = buildPreviewMemorySeed(NOW, { staleFixture: true });
+    expect(staleIds(fixture)).toEqual(["matthew-6-33", "joshua-1-9"]);
+    const byId = new Map(fixture.verses.map((verse) => [verse.id, verse]));
+    const due = byId.get("matthew-6-33");
+    const notDue = byId.get("joshua-1-9");
+    expect(due?.schedule.status).toBe("reviewing");
+    expect(notDue?.schedule.status).toBe("reviewing");
+    expect(due && isDueForReview(due.schedule, NOW)).toBe(true);
+    expect(notDue && isDueForReview(notDue.schedule, NOW)).toBe(false);
+
+    // Same verses, schedules, packs and row count; only the newest two
+    // reviews of those two verses change, to 40% "off".
+    expect(fixture.verses).toEqual(plan.verses);
+    expect(fixture.packs).toEqual(plan.packs);
+    expect(fixture.reviews).toHaveLength(plan.reviews.length);
+    const changed = fixture.reviews.filter(
+      (review, index) =>
+        JSON.stringify(review) !== JSON.stringify(plan.reviews[index]),
+    );
+    expect(changed).toHaveLength(4);
+    for (const review of changed) {
+      expect(["matthew-6-33", "joshua-1-9"]).toContain(review.verseId);
+      expect(review).toMatchObject({ accuracy: 40, quality: "off" });
+    }
   });
 });
