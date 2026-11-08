@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { diffWords } from "@/lib/diff-words";
 import {
+  COUNTED_TODAY_CLOSING,
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
@@ -3532,5 +3533,225 @@ describe("PracticeBoard not-due Practice", () => {
     });
     expect(counted).not.toHaveProperty("holdSchedule");
     expect(counted).not.toHaveProperty("hint");
+  });
+});
+
+describe("PracticeBoard ••• Refresh", () => {
+  const notDueVerse: PracticeVerse = {
+    ...reviewingVerse,
+    dueAt: getSessionNow() + 3 * 24 * 60 * 60 * 1000,
+  };
+
+  beforeEach(() => {
+    queryResults.clear();
+    queryCalls.length = 0;
+    mutationMocks.clear();
+    navigateMock.mockReset();
+    sessionStorage.clear();
+    queryResults.set("savedVerses.listRecordingIds", []);
+    fetchChaptersBatchMock.mockReset();
+    getPassageMock.mockReset();
+    getPassageMock.mockResolvedValue(psalm23);
+    mutationMock("verseMemory.recordAttempt").mockResolvedValue(heldSchedule);
+  });
+
+  function renderRefresh(
+    kind: "review" | "practice",
+    verse: PracticeVerse,
+    onExit = vi.fn(),
+  ) {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PracticeBoard
+          kind={kind}
+          verses={[verse]}
+          scopeLabel="Psalm 23:1"
+          onExit={onExit}
+          backLabel="Back to verse"
+          remainingDue={0}
+          refresh
+        />
+      </TooltipProvider>,
+    );
+    return onExit;
+  }
+
+  async function recite(text: string) {
+    const answer = await screen.findByLabelText("Your recalled verse");
+    await userEvent.click(answer);
+    await userEvent.paste(text);
+    await userEvent.click(screen.getByRole("button", { name: /Check answer/ }));
+  }
+
+  /** The card fades in on mount: wait until step 1 shows. */
+  async function findStep1() {
+    const header = await screen.findByText(refresherHeader(1));
+    await waitFor(() => {
+      expect(header).toBeVisible();
+    });
+  }
+
+  async function passStep1() {
+    await findStep1();
+    await recite(PASSAGE_ONE);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Continue/ }),
+    );
+    expect(await screen.findByText(refresherHeader(2))).toBeVisible();
+  }
+
+  function recordCalls() {
+    return mutationMock("verseMemory.recordAttempt").mock.calls.map(
+      ([args]) => args as Record<string, unknown>,
+    );
+  }
+
+  function countedCalls() {
+    return recordCalls().filter((args) => args.holdSchedule !== true);
+  }
+
+  it("opens straight at First letters, with no cold try first", async () => {
+    renderRefresh("review", reviewingVerse);
+    await findStep1();
+    expect(
+      screen.queryByRole("button", { name: NEED_A_REFRESHER_LABEL }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/No hint text/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["Practice, pass", "practice", PASSAGE_ONE],
+    ["Practice, miss", "practice", BAD_MISS],
+    ["Review reopened after it counted, pass", "review", PASSAGE_ONE],
+    ["Review reopened after it counted, miss", "review", CLOSE_MISS],
+  ] as const)(
+    "is practice only on a not-due verse (%s) and Continue goes back",
+    async (_, kind, answer) => {
+      const onExit = renderRefresh(kind, notDueVerse);
+      await passStep1();
+      await recite(answer);
+      expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+      expect(screen.getByText(/% recalled/)).toBeVisible();
+      expect(screen.queryByText(COUNTED_TODAY_CLOSING)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      expect(onExit).toHaveBeenCalledTimes(1);
+      expect(mutationMock("verseMemory.recordAttempt")).not.toHaveBeenCalled();
+      expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
+      expect(
+        mutationMock("verseMemory.applyHeldAttempt"),
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["pass", PASSAGE_ONE],
+    ["miss", CLOSE_MISS],
+  ] as const)(
+    "counts From memory once on a due verse (%s) and Continue goes back",
+    async (_, answer) => {
+      const onExit = renderRefresh("review", reviewingVerse);
+      await passStep1();
+      expect(countedCalls()).toHaveLength(0);
+
+      await recite(answer);
+      expect(await screen.findByText(COUNTED_TODAY_CLOSING)).toBeVisible();
+      expect(screen.getByText(/Next review/)).toBeVisible();
+      expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
+      expect(countedCalls()).toEqual([
+        expect.objectContaining({
+          verseRefId: VERSE_REF_ID,
+          mode: "review",
+          refresherUsed: true,
+        }),
+      ]);
+
+      await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      expect(onExit).toHaveBeenCalledTimes(1);
+      expect(countedCalls()).toHaveLength(1);
+      expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the counted line when a due bad miss drops the verse to Learning", async () => {
+    // First letters saves as held; the counted From memory miss comes back
+    // in Learning at fill in the blanks, as the server does for a lapse.
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(heldSchedule)
+      .mockResolvedValue({
+        ...stillDueSchedule,
+        status: "learning",
+        learnStage: REVIEW_LAPSE_LEARN_STAGE,
+        intervalDays: 0,
+        consecutiveCorrect: 0,
+        lapses: 1,
+        dueAt: getSessionNow(),
+      });
+    const onExit = renderRefresh("review", {
+      ...reviewingVerse,
+      intervalDays: 1,
+      consecutiveCorrect: 0,
+    });
+    await passStep1();
+    await recite(BAD_MISS);
+    expect(await screen.findByText(COUNTED_TODAY_CLOSING)).toBeVisible();
+    expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
+    expect(countedCalls()).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(countedCalls()).toHaveLength(1);
+  });
+
+  it("keeps a later round after a counted miss practice only", async () => {
+    const onExit = renderRefresh("review", reviewingVerse);
+    await passStep1();
+    await recite(CLOSE_MISS);
+    await screen.findByText(COUNTED_TODAY_CLOSING);
+    await userEvent.click(
+      screen.getByRole("button", { name: TRY_ANOTHER_REFRESHER_LABEL }),
+    );
+    await passStep1();
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText(PRACTICE_ONLY_CLOSING)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(countedCalls()).toHaveLength(1);
+  });
+
+  it.each(["First letters", "From memory"] as const)(
+    "counts nothing when backing out at %s",
+    async (step) => {
+      const onExit = renderRefresh("review", reviewingVerse);
+      if (step === "First letters") {
+        await findStep1();
+        await recite(PASSAGE_ONE);
+        await screen.findByRole("button", { name: /Continue/ });
+      } else {
+        await passStep1();
+      }
+      await userEvent.click(
+        screen.getByRole("button", { name: "Back to verse" }),
+      );
+      expect(onExit).toHaveBeenCalledTimes(1);
+      expect(countedCalls()).toHaveLength(0);
+      expect(mutationMock("verseMemory.holdAttempt")).not.toHaveBeenCalled();
+      expect(
+        mutationMock("verseMemory.applyHeldAttempt"),
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it("holds the counted line until the result is saved", async () => {
+    // First letters saves; the From memory save fails.
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(heldSchedule)
+      .mockRejectedValue(new Error("offline"));
+    renderRefresh("review", reviewingVerse);
+    await passStep1();
+    await recite(PASSAGE_ONE);
+    expect(await screen.findByText(REFRESH_SAVE_ERROR)).toBeVisible();
+    expect(screen.queryByText(COUNTED_TODAY_CLOSING)).not.toBeInTheDocument();
   });
 });

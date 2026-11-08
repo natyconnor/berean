@@ -11,6 +11,7 @@ import { MemoryPanelHost, MemoryPanelPage } from "./memory-panel-host";
 const NOW = Date.UTC(2026, 9, 9, 18, 0, 0);
 
 const mocks = vi.hoisted(() => ({
+  locationState: {},
   queryResults: new Map<string, unknown>(),
   mutations: new Map<string, ReturnType<typeof vi.fn>>(),
   navigate: vi.fn(),
@@ -29,6 +30,11 @@ function mutation(name: string) {
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
+  useLocation: ({
+    select,
+  }: {
+    select: (location: { state: typeof mocks.locationState }) => unknown;
+  }) => select({ state: mocks.locationState }),
   useCanGoBack: () => mocks.canGoBack,
   Link: ({
     to,
@@ -46,6 +52,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutation(name),
+  useAction: () => vi.fn(),
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -60,6 +67,7 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
+    esv: { getPassage: "esv.getPassage" },
     memoryHome: { today: "memoryHome.today" },
     packs: {
       get: "packs.get",

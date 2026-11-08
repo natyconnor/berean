@@ -42,6 +42,23 @@ export function memoryVerseSessionHref(
 }
 
 /**
+ * ••• Refresh on one verse: a due verse opens Review (its From memory try
+ * counts), any other opens Practice (practice only). Both start in the
+ * refresher.
+ */
+export function memoryVerseRefreshHref(
+  due: boolean,
+  reference: {
+    book: string;
+    chapter: number;
+    startVerse: number;
+    endVerse: number;
+  },
+): string {
+  return `${memoryVerseSessionHref(due ? "review" : "practice", reference)}&refresh=1`;
+}
+
+/**
  * The blended session: building passages, then learning, then reviews.
  * With `packId`, only that pack's work today. With `only`, just passages and
  * new verses, or just reviews.

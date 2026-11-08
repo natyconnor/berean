@@ -1,10 +1,18 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
+  REFRESH_MENU_LABEL,
+  REFRESH_START_ERROR,
   START_OVER_CONFIRM_BODY,
   START_OVER_MENU_LABEL,
   STARTED_OVER_LABEL,
@@ -18,14 +26,21 @@ const NOW = Date.UTC(2026, 9, 12, 18, 0, 0);
 const RETURN_TO = "/memory/verse/v1";
 
 const mocks = vi.hoisted(() => ({
+  locationState: {},
   openSheet: vi.fn(),
   navigate: vi.fn(),
   startOver: vi.fn(),
   stopMemorizing: vi.fn(),
+  getPassage: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
+  useLocation: ({
+    select,
+  }: {
+    select: (location: { state: typeof mocks.locationState }) => unknown;
+  }) => select({ state: mocks.locationState }),
   Link: ({
     to,
     children,
@@ -43,6 +58,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("convex/react", () => ({
   useMutation: (name: string) =>
     name === "verseMemory.startOver" ? mocks.startOver : mocks.stopMemorizing,
+  useAction: () => mocks.getPassage,
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -56,6 +72,7 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("../../../convex/_generated/api", () => ({
   api: {
+    esv: { getPassage: "esv.getPassage" },
     packs: { listMine: "packs.listMine", addVerse: "packs.addVerse" },
     verseMemory: {
       verseDetail: "verseMemory.verseDetail",
@@ -353,10 +370,13 @@ function renderMenu(
     <VerseMemoryMenu
       verseRefId={"v1" as VerseDetailData["verseRefId"]}
       reference="Romans 8:28"
+      verse={{ book: "Romans", chapter: 8, startVerse: 28, endVerse: 28 }}
       status="reviewing"
+      dueAt={Date.now() + 3 * DAY_MS}
       learnStage={3}
       stageReps={0}
       lastReviewedAt={NOW - 8 * DAY_MS}
+      returnTo={RETURN_TO}
       onStopped={() => {}}
       {...overrides}
     />,
@@ -463,5 +483,118 @@ describe("VerseMemoryMenu", () => {
       screen.getByRole("heading", { name: "Start Romans 8:28 over?" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+
+const ROMANS_8 = {
+  canonical: "Romans 8",
+  copyright: "ESV",
+  verses: [{ number: 28, text: "And we know that for those who love God" }],
+};
+
+async function openMenu() {
+  await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+  await screen.findByRole("menuitem", { name: "Stop memorizing" });
+}
+
+function navigatedHref(): URL {
+  const [arg] = mocks.navigate.mock.calls[0] as [{ href: string }];
+  return new URL(arg.href, "https://app.test");
+}
+
+function refreshItem() {
+  return screen.queryByRole("menuitem", { name: REFRESH_MENU_LABEL });
+}
+
+describe("VerseMemoryMenu Refresh", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    mocks.locationState = {};
+    mocks.startOver.mockClear();
+    mocks.navigate.mockReset();
+    mocks.navigate.mockResolvedValue(undefined);
+    mocks.getPassage.mockReset();
+    mocks.getPassage.mockResolvedValue(ROMANS_8);
+  });
+
+  it.each([
+    ["New", { status: "new", learnStage: 0, lastReviewedAt: undefined }],
+    [
+      "Learning with real progress",
+      { status: "learning", learnStage: 2, lastReviewedAt: undefined },
+    ],
+  ] as const)("hides Refresh on a %s verse", async (_, overrides) => {
+    renderMenu(overrides);
+    await openMenu();
+    expect(refreshItem()).not.toBeInTheDocument();
+  });
+
+  it.each(["reviewing", "mastered"] as const)(
+    "shows Refresh above Start over on a %s verse",
+    async (status) => {
+      renderMenu({ status });
+      await openMenu();
+      const items = screen
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent);
+      expect(items[0]).toBe(REFRESH_MENU_LABEL);
+      expect(items[1]).toContain(START_OVER_MENU_LABEL);
+      expect(refreshItem()).not.toHaveAttribute("aria-disabled");
+    },
+  );
+
+  it("focuses ••• on return from this verse's Refresh, and only then", async () => {
+    mocks.locationState = { refreshedVerse: "Romans|8|28|28" };
+    const { unmount } = renderMenu();
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    unmount();
+
+    mocks.locationState = { refreshedVerse: "John|3|16|16" };
+    renderMenu();
+    expect(
+      screen.getByRole("button", { name: "More actions" }),
+    ).not.toHaveFocus();
+  });
+
+  it("opens a not-due verse's refresher in Practice, returning here", async () => {
+    renderMenu({ dueAt: Date.now() + 3 * DAY_MS });
+    await openMenu();
+    await userEvent.click(refreshItem()!);
+    await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    const href = navigatedHref();
+    expect(href.pathname).toBe("/memory/practice");
+    expect(href.searchParams.get("refresh")).toBe("1");
+    expect(href.searchParams.get("book")).toBe("Romans");
+    expect(href.searchParams.get("startVerse")).toBe("28");
+    expect(href.searchParams.get("return")).toBe(RETURN_TO);
+  });
+
+  it("opens a due verse's refresher in Review", async () => {
+    renderMenu({ dueAt: Date.now() - DAY_MS });
+    await openMenu();
+    await userEvent.click(refreshItem()!);
+    await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    const href = navigatedHref();
+    expect(href.pathname).toBe("/memory/review");
+    expect(href.searchParams.get("refresh")).toBe("1");
+    expect(href.searchParams.get("return")).toBe(RETURN_TO);
+  });
+
+  it("shows the error in place when the refresher can't start, then retries", async () => {
+    mocks.getPassage.mockRejectedValueOnce(new Error("offline"));
+    renderMenu();
+    await openMenu();
+    await userEvent.click(refreshItem()!);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REFRESH_START_ERROR,
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.startOver).not.toHaveBeenCalled();
+
+    await openMenu();
+    await userEvent.click(refreshItem()!);
+    await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

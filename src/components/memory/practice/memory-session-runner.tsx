@@ -42,6 +42,8 @@ interface MemorySessionRunnerProps {
     | ((api: { changeOrder: (order: PracticeOrder) => void }) => ReactNode);
   /** Card id to open first; the first card in order when absent. */
   initialVerseId?: string;
+  /** ••• Refresh: open in the refresher and leave after its result. */
+  refresh?: boolean;
   /** The card now on screen, after a rail pick, Next, or Shuffle. */
   onCurrentVerseId?: (id: string) => void;
   /** When set, this run reads card order from the session instead of its own. */

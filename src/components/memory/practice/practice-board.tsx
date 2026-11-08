@@ -38,6 +38,7 @@ import { devLog } from "@/lib/dev-log";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { diffWords, type DiffToken } from "@/lib/diff-words";
 import {
+  COUNTED_TODAY_CLOSING,
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
@@ -270,6 +271,11 @@ interface PracticeBoardProps {
     | ((api: { changeOrder: (order: PracticeOrder) => void }) => ReactNode);
   /** Card id to open first; the first card in order when absent or unknown. */
   initialVerseId?: string;
+  /**
+   * ••• Refresh: the card opens in the refresher, and Continue on its From
+   * memory result leaves the run for where it started.
+   */
+  refresh?: boolean;
   /** The card now on screen, after a rail pick, Next, or Shuffle. */
   onCurrentVerseId?: (id: string) => void;
   /** When set, this run reads card order from the session instead of its own. */
@@ -464,6 +470,7 @@ export function PracticeBoard({
   railHeader,
   rail,
   initialVerseId,
+  refresh = false,
   onCurrentVerseId,
   orderedIds,
   shownId,
@@ -670,13 +677,18 @@ export function PracticeBoard({
   // even when it sits next to ordinary verses in the global review queue.
   const composite = currentVerse?.composite ?? null;
   // A Practice try on a Memorized verse counts as its review only when the
-  // verse is due; otherwise it changes nothing (R44).
+  // verse is due; otherwise it changes nothing (R44). A ••• Refresh counts
+  // only on a due verse in Review (R18, R19), so a reload after it counted
+  // is practice.
+  const notDue = !isDueForReview(currentProgress, now);
   const practiceMemorized =
     kind === "practice" &&
     composite === null &&
     isReviewPhase(currentProgress.status);
   const practiceOnly =
-    practiceMemorized && !isDueForReview(currentProgress, now);
+    composite === null &&
+    isReviewPhase(currentProgress.status) &&
+    (refresh ? kind === "practice" || notDue : kind === "practice" && notDue);
   const compositePassage = useEsvCompositePassage(
     composite?.members ?? NO_COMPOSITE_MEMBERS,
     { enabled: composite !== null },
@@ -1011,6 +1023,7 @@ export function PracticeBoard({
               }
               offerRefresher={isReview || kind === "practice"}
               practiceOnly={practiceOnly}
+              onRefreshDone={refresh ? shellProps.onExit : undefined}
               practiceReview={practiceMemorized && !practiceOnly}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
@@ -1288,6 +1301,11 @@ interface PracticeCardProps {
    */
   practiceOnly?: boolean;
   /**
+   * ••• Refresh: the card opens in the refresher, and Continue on its From
+   * memory result calls this instead of returning to the cold try.
+   */
+  onRefreshDone?: () => void;
+  /**
    * A due Memorized Practice card: a try is saved as the review, so its result
    * shows the review's Next review line and save error.
    */
@@ -1354,6 +1372,7 @@ function PracticeCard({
   reviewItem = "verse",
   offerRefresher = false,
   practiceOnly = false,
+  onRefreshDone,
   practiceReview = false,
   leaveHeldRef,
   onSavingChange,
@@ -1368,7 +1387,9 @@ function PracticeCard({
   onJourneyPreview,
 }: PracticeCardProps): JSX.Element {
   const reduceMotion = useReducedMotion();
-  const refresher = useVerseRefresher();
+  const refresher = useVerseRefresher(
+    onRefreshDone ? (practiceOnly ? "practice" : "pre-try") : undefined,
+  );
   const [typedAnswer, setTypedAnswer] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const countedSaveNowRef = useRef<number | null>(null);
@@ -1379,6 +1400,9 @@ function PracticeCard({
   // Whether the checked try was practice only. Frozen at Check: a counted
   // miss reschedules the verse, which would flip `practiceOnly` mid-result.
   const [checkedPracticeOnly, setCheckedPracticeOnly] = useState(false);
+  // Whether the checked try counts as today's review. Frozen at Check for the
+  // same reason: a bad miss can drop the verse to Learning on save.
+  const [checkedCounted, setCheckedCounted] = useState(false);
   // Whether the checked try was a due Practice try saved as the review. Frozen
   // at Check for the same reason: the saved review makes the verse not due.
   const [checkedPracticeReview, setCheckedPracticeReview] = useState(false);
@@ -1638,6 +1662,7 @@ function PracticeCard({
       }
       setChecked(true);
       setCheckedPracticeOnly(practiceOnly);
+      setCheckedCounted(countedFromMemory);
       setCheckedPracticeReview(practiceReview);
       setOutcomeNow(now);
       setNextSchedule(preview);
@@ -1831,6 +1856,10 @@ function PracticeCard({
       }
       refresher.continueToStep2();
       resetTyping({ keepJourneyPreview });
+      return;
+    }
+    if (onRefreshDone && refresher.phase === "step2") {
+      onRefreshDone();
       return;
     }
     if (!refresher.isOpen && heldIdRef.current) {
@@ -2224,6 +2253,15 @@ function PracticeCard({
                       practiceFromMemory
                         ? PRACTICE_ONLY_CLOSING
                         : dateOnlyClosing
+                    }
+                    countedLine={
+                      onRefreshDone &&
+                      checkedCounted &&
+                      refresher.phase === "step2" &&
+                      !submitPending &&
+                      !saveError
+                        ? COUNTED_TODAY_CLOSING
+                        : null
                     }
                     practiceOnly={practiceFromMemory}
                   />

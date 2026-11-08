@@ -5,6 +5,8 @@ export interface MemoryVerseSearch {
   chapter?: number;
   startVerse?: number;
   endVerse?: number;
+  /** Open straight into the verse's refresher (••• Refresh). */
+  refresh?: true;
   /** Where Done and the session's back link go. */
   return?: string;
 }
@@ -53,12 +55,22 @@ export function validateMemoryVerseSearch(
       ? startVerse
       : Math.max(startVerse, endVerseCandidate);
 
-  return { book, chapter, startVerse, endVerse, ...returnSearch };
+  const refresh =
+    search.refresh === true || search.refresh === 1 || search.refresh === "1";
+
+  return {
+    book,
+    chapter,
+    startVerse,
+    endVerse,
+    ...(refresh ? { refresh: true as const } : {}),
+    ...returnSearch,
+  };
 }
 
 export function hasMemoryVerseScope(
   search: MemoryVerseSearch,
-): search is MemoryVerseScope {
+): search is MemoryVerseSearch & MemoryVerseScope {
   return (
     typeof search.book === "string" &&
     search.book.length > 0 &&

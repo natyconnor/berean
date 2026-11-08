@@ -18,7 +18,7 @@ export function validateMemoryReviewSearch(
 
 export function hasReviewVerseScope(
   search: MemoryReviewSearch,
-): search is MemoryReviewVerseScope {
+): search is MemoryReviewSearch & MemoryReviewVerseScope {
   return hasMemoryVerseScope(search);
 }
 
