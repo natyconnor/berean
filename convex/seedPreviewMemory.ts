@@ -14,7 +14,9 @@ import { isDueForLearning, isDueForReview } from "../src/lib/memory-scheduler";
 import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
 import {
   buildPreviewPassageSeed,
+  previewPassageMemoryFields,
   testerMaintenancePacks,
+  testerRefreshPacks,
 } from "../src/lib/preview-passage-seed";
 
 async function isAnonymousUser(
@@ -224,6 +226,7 @@ export const seedPreviewMemory = mutation({
     await clearUserMemory(ctx, userId);
     passagePlan.packs.push(
       ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
+      ...testerRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
     );
 
     const memoryIdByVerseId = new Map<string, Id<"verseMemory">>();
@@ -326,20 +329,19 @@ export const seedPreviewMemory = mutation({
       const passageId = await ctx.db.insert("passageMemory", {
         userId,
         packId,
-        status: pack.passage.status,
-        pieces: pack.passage.pieces,
-        addDayKey: pack.passage.addDayKey,
-        addsOnDay: pack.passage.addsOnDay,
-        ease: pack.passage.schedule.ease,
-        intervalDays: pack.passage.schedule.intervalDays,
-        dueAt: pack.passage.schedule.dueAt,
-        consecutiveCorrect: pack.passage.schedule.consecutiveCorrect,
-        lapses: pack.passage.schedule.lapses,
-        stageReps: pack.passage.schedule.stageReps,
-        earlyReviewApplied: pack.passage.schedule.earlyReviewApplied,
-        createdAt: args.now,
-        updatedAt: args.now,
+        ...previewPassageMemoryFields(pack.passage, args.now),
       });
+      for (const review of pack.passage.recentReviews ?? []) {
+        await ctx.db.insert("passageReviews", {
+          userId,
+          packId,
+          passageMemoryId: passageId,
+          kind: "review",
+          quality: review.accuracy === 100 ? "exact" : "close",
+          accuracy: review.accuracy,
+          createdAt: review.createdAt,
+        });
+      }
       const passageRow = await ctx.db.get(passageId);
       if (passageRow) {
         await upsertPassageMemoryDue(ctx, passageRow, args.now);

@@ -256,12 +256,13 @@ function PassageSummaryRefresh({
   snapshot: SessionSummarySnapshot;
 }): JSX.Element {
   const href = useLocation({ select: (location) => location.href });
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const refresh = useStartPassageRefresh(
     source.packId,
     source.references,
     source.returnTo,
+    buttonRef,
   );
-  const buttonRef = useRef<HTMLButtonElement>(null);
   useRefreshReturnFocus({ packId: source.packId }, buttonRef);
 
   return (

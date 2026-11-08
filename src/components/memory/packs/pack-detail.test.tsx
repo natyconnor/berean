@@ -1667,21 +1667,51 @@ describe("PackDetail passage Refresh (S13)", () => {
     );
   }
 
-  it("says so in place when the text can't load, and can retry", async () => {
+  it("says so in place when the text can't load (R34), keeps focus on •••, and can retry", async () => {
     memorized();
-    mocks.getPassage.mockRejectedValueOnce(new Error("offline"));
-    renderHost("pack:psalm16x");
-    await chooseRefresh();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      REFRESH_START_ERROR,
+    let fail: (error: Error) => void = () => {};
+    mocks.getPassage.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
     );
+    renderHost("pack:psalm16x");
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    const reviewLink = screen.getByRole("link", { name: /^Review / });
+    await chooseRefresh();
+    await waitFor(() => expect(trigger).toBeDisabled());
+    // A browser drops focus from a button that turns disabled.
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    await act(async () => {
+      fail(new Error("offline"));
+      await Promise.resolve();
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(REFRESH_START_ERROR);
+    expect(alert).toHaveTextContent(
+      /^Couldn't start the refresher\. Try again\.$/,
+    );
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(trigger).toBeEnabled();
+    // The page and progress are as they were.
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect(
       screen.getByRole("heading", { level: 2, name: "Psalm 16" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Review / })).toBe(reviewLink);
+    for (const [name, fn] of mocks.mutations) {
+      // Opening the page marks it opened; nothing else may run.
+      if (name !== "packs.touch") expect(fn).not.toHaveBeenCalled();
+    }
 
     await chooseRefresh();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    // The route test opens this href at Refresh · First letters · 1 of 2.
+    const href = navigatedHref();
+    expect(href.pathname).toBe("/memory/psalm16x/review");
+    expect(href.searchParams.get("refresh")).toBe("1");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
