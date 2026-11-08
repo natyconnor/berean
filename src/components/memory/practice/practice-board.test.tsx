@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
+import { reviewOutcomeMessage } from "@/components/study/verse-attempt-feedback";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import { diffWords } from "@/lib/diff-words";
@@ -3413,6 +3414,84 @@ describe("PracticeBoard not-due Practice", () => {
       );
     });
     expect(screen.getByText("We'll bring it back sooner.")).toBeVisible();
+  });
+
+  // The saved result's due date, far from anything a preview would compute.
+  const savedReview = {
+    ...stillDueSchedule,
+    intervalDays: 40,
+    dueAt: getSessionNow() + 40 * 24 * 60 * 60 * 1000,
+  };
+
+  it.each(["review", "practice"] as const)(
+    "a due %s pass shows Next review from the saved result",
+    async (kind) => {
+      mutationMock("verseMemory.recordAttempt").mockResolvedValue(savedReview);
+      renderPractice({ kind, verses: [reviewingVerse], remainingDue: 0 });
+      await findVisibleRefresherLink();
+      await recite(PASSAGE_ONE);
+
+      await waitFor(() => {
+        expect(mutationMock("verseMemory.recordAttempt")).toHaveBeenCalledTimes(
+          1,
+        );
+      });
+      const line = reviewOutcomeMessage({
+        outcome: "exact",
+        nextSchedule: savedReview,
+        now: Date.now(),
+        lapsedToLearning: false,
+      });
+      expect(line).toMatch(/^Next review /);
+      expect(await screen.findByText(line!)).toBeVisible();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["review", "practice"] as const)(
+    "a due %s save failure shows the review save error, then retries at the same time",
+    async (kind) => {
+      const record = mutationMock("verseMemory.recordAttempt");
+      record
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce(savedReview);
+      renderPractice({ kind, verses: [reviewingVerse], remainingDue: 0 });
+      await findVisibleRefresherLink();
+      await recite(PASSAGE_ONE);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        REFRESH_SAVE_ERROR,
+      );
+      expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
+      await waitFor(() => {
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      });
+      expect(record).toHaveBeenCalledTimes(2);
+      expect(await screen.findByText(/^Next review /)).toBeVisible();
+      // The retry resends the same try, at the first try's time.
+      const calls = record.mock.calls as Array<[Record<string, unknown>]>;
+      expect(calls[1]?.[0]).toEqual(calls[0]?.[0]);
+      expect(calls[0]?.[0]?.now).toEqual(expect.any(Number));
+    },
+  );
+
+  it("a not-due Practice result shows neither Next review nor a save error", async () => {
+    mutationMock("verseMemory.recordAttempt").mockRejectedValue(
+      new Error("offline"),
+    );
+    renderPractice();
+    await findVisibleRefresherLink();
+    await recite(PASSAGE_ONE);
+
+    expect(await screen.findByText("Word for word.")).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: /Try again|Continue/ }),
+    ).toBeEnabled();
+    expect(screen.queryByText(/Next review/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expectNoProgressWrite();
   });
 
   it("offers the quiet link on a due Practice card, and its From memory try counts", async () => {

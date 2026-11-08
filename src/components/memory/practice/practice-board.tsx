@@ -676,10 +676,15 @@ export function PracticeBoard({
   // The active card's passage: a unified pack is one concatenated recitation,
   // even when it sits next to ordinary verses in the global review queue.
   const composite = currentVerse?.composite ?? null;
-  // A Practice try on a Memorized verse that is not due changes nothing (R44).
-  // A ••• Refresh counts only on a due verse in Review (R18, R19), so a
-  // reload after it counted is practice.
+  // A Practice try on a Memorized verse counts as its review only when the
+  // verse is due; otherwise it changes nothing (R44). A ••• Refresh counts
+  // only on a due verse in Review (R18, R19), so a reload after it counted
+  // is practice.
   const notDue = !isDueForReview(currentProgress, now);
+  const practiceMemorized =
+    kind === "practice" &&
+    composite === null &&
+    isReviewPhase(currentProgress.status);
   const practiceOnly =
     composite === null &&
     isReviewPhase(currentProgress.status) &&
@@ -1019,6 +1024,7 @@ export function PracticeBoard({
               offerRefresher={isReview || kind === "practice"}
               practiceOnly={practiceOnly}
               onRefreshDone={refresh ? shellProps.onExit : undefined}
+              practiceReview={practiceMemorized && !practiceOnly}
               leaveHeldRef={leaveHeldRef}
               onSavingChange={setCardSaving}
               packMemberSchedules={composite?.memberSchedules}
@@ -1299,6 +1305,11 @@ interface PracticeCardProps {
    * memory result calls this instead of returning to the cold try.
    */
   onRefreshDone?: () => void;
+  /**
+   * A due Memorized Practice card: a try is saved as the review, so its result
+   * shows the review's Next review line and save error.
+   */
+  practiceReview?: boolean;
   /** Back / Home flush a held miss even if the card has not unmounted yet. */
   leaveHeldRef?: MutableRefObject<(() => void) | undefined>;
   onSavingChange?: (saving: boolean) => void;
@@ -1362,6 +1373,7 @@ function PracticeCard({
   offerRefresher = false,
   practiceOnly = false,
   onRefreshDone,
+  practiceReview = false,
   leaveHeldRef,
   onSavingChange,
   onRecord,
@@ -1391,6 +1403,9 @@ function PracticeCard({
   // Whether the checked try counts as today's review. Frozen at Check for the
   // same reason: a bad miss can drop the verse to Learning on save.
   const [checkedCounted, setCheckedCounted] = useState(false);
+  // Whether the checked try was a due Practice try saved as the review. Frozen
+  // at Check for the same reason: the saved review makes the verse not due.
+  const [checkedPracticeReview, setCheckedPracticeReview] = useState(false);
   // Snapshot of "First letters · N of M today" at Check so the step label stays
   // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
@@ -1441,6 +1456,10 @@ function PracticeCard({
     !composite &&
     refresher.phase !== "step1" &&
     !practiceRound;
+  // A try saved as the verse's review: a failed save shows the save error, and
+  // its retry resends the first try's time.
+  const savesReview =
+    countedFromMemory || (practiceReview && refresher.phase !== "step1");
 
   useEffect(() => {
     onSavingChange?.(submitPending);
@@ -1596,10 +1615,10 @@ function PracticeCard({
     setSubmitKind("grade");
     submit(async () => {
       const now =
-        countedFromMemory && countedSaveNowRef.current !== null
+        savesReview && countedSaveNowRef.current !== null
           ? countedSaveNowRef.current
           : Date.now();
-      if (countedFromMemory) countedSaveNowRef.current = now;
+      if (savesReview) countedSaveNowRef.current = now;
       const tokens = diffWords(typedAnswer, versePlainText);
       const quality = classifyVerseAttempt(tokens);
       const accuracy = verseAttemptAccuracy(tokens);
@@ -1644,6 +1663,7 @@ function PracticeCard({
       setChecked(true);
       setCheckedPracticeOnly(practiceOnly);
       setCheckedCounted(countedFromMemory);
+      setCheckedPracticeReview(practiceReview);
       setOutcomeNow(now);
       setNextSchedule(preview);
       if (preview && !practiceRound) {
@@ -1710,7 +1730,7 @@ function PracticeCard({
         return;
       }
       if (!result.ok) {
-        if (countedFromMemory) setSaveError(REFRESH_SAVE_ERROR);
+        if (savesReview) setSaveError(REFRESH_SAVE_ERROR);
         return;
       }
       setSaveError(null);
@@ -2212,7 +2232,9 @@ function PracticeCard({
                     typedAnswer={typedAnswer}
                     versePlainText={versePlainText}
                     diffTokens={checkedDiffTokens}
-                    showScheduleOutcome={showScheduleOutcome}
+                    showScheduleOutcome={
+                      showScheduleOutcome || checkedPracticeReview
+                    }
                     requireExactToAdvance={requiresExactToAdvance(
                       learnStage,
                       status,
