@@ -1,6 +1,7 @@
 import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
 import type { CardReference } from "@/components/study/study-card-model";
 import { countDiffWords, type DiffToken } from "@/lib/diff-words";
+import type { PassageVerseKey, PassageVerseScore } from "@/lib/passage-shaky";
 import { displayBookName } from "@/lib/bible-books";
 import {
   countVerseWords,
@@ -320,28 +321,37 @@ export function joinPieceTexts(
 }
 
 /**
- * Each piece's own accuracy inside a whole-passage diff, `null` for a piece
- * with no text. An extra word belongs to the verse it was typed after.
+ * Each verse's own accuracy inside a whole-passage diff. `verses` are the
+ * graded text verse by verse, in order. An extra word belongs to the verse it
+ * was typed after.
  */
-export function pieceAccuracies(
+export function verseScores(
   tokens: readonly DiffToken[],
-  pieceTexts: readonly string[],
-): (number | null)[] {
-  const wordCounts = pieceTexts.map(countDiffWords);
-  const pieceOfWord = wordCounts.flatMap((count, piece) =>
-    Array.from({ length: count }, () => piece),
+  verses: ReadonlyArray<PassageVerseKey & { text: string }>,
+): PassageVerseScore[] {
+  const wordCounts = verses.map((verse) => countDiffWords(verse.text));
+  const verseOfWord = wordCounts.flatMap((count, index) =>
+    Array.from({ length: count }, () => index),
   );
-  const byPiece: DiffToken[][] = pieceTexts.map(() => []);
+  const byVerse: DiffToken[][] = verses.map(() => []);
   let expected = 0;
   for (const token of tokens) {
     const word =
       token.status === "extra" ? Math.max(0, expected - 1) : expected;
     if (token.status !== "extra") expected += 1;
-    const piece = pieceOfWord[Math.min(word, pieceOfWord.length - 1)];
-    if (piece !== undefined) byPiece[piece]?.push(token);
+    const index = verseOfWord[Math.min(word, verseOfWord.length - 1)];
+    if (index !== undefined) byVerse[index]?.push(token);
   }
-  return byPiece.map((pieceTokens, piece) =>
-    wordCounts[piece] === 0 ? null : verseAttemptAccuracy(pieceTokens),
+  return verses.flatMap(({ chapter, verse }, index) =>
+    wordCounts[index] === 0
+      ? []
+      : [
+          {
+            chapter,
+            verse,
+            accuracy: verseAttemptAccuracy(byVerse[index] ?? []),
+          },
+        ],
   );
 }
 

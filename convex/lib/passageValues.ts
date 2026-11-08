@@ -58,7 +58,19 @@ export const passagePieceValidator = v.object({
   stageReps: v.number(),
   dueAt: v.optional(v.number()),
   carriedOver: v.optional(v.boolean()),
-  shaky: v.optional(v.boolean()),
+});
+
+/** One verse of a passage; a passage is one book. */
+export const passageVerseKeyValidator = v.object({
+  chapter: v.number(),
+  verse: v.number(),
+});
+
+/** A verse's own score in an unhinted whole-passage try. */
+export const passageVerseScoreValidator = v.object({
+  chapter: v.number(),
+  verse: v.number(),
+  accuracy: v.number(),
 });
 
 /**
@@ -88,6 +100,7 @@ export const passageViewValidator = v.object({
   celebratedAt: v.optional(v.number()),
   needsCelebration: v.boolean(),
   startedOverAt: v.optional(v.number()),
+  shakyVerses: v.optional(v.array(passageVerseKeyValidator)),
   createdAt: v.number(),
   updatedAt: v.number(),
   remainingIntroduces: v.number(),

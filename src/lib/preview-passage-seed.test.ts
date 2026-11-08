@@ -157,8 +157,8 @@ describe("testerMaintenancePacks", () => {
         expect(passage.pieces.length).toBeGreaterThanOrEqual(2);
         for (const piece of passage.pieces) {
           expect(piece).toMatchObject({ attachment: "solid", learnStage: 3 });
-          expect(piece.shaky).toBeUndefined();
         }
+        expect(passage).not.toHaveProperty("shakyVerses");
         expect(passage.pieces[0]?.startVerse).toBe(1);
         expect(
           isPassageDueForReview(

@@ -123,10 +123,8 @@ describe("startOverPassagePatch", () => {
   });
 
   it("forgets shaky verses, so tries before the reset never hint again", () => {
-    const [reset] = startOverPassagePieces([
-      piece(0, "solid", { shaky: true }),
-    ]);
-    expect(reset?.shaky).toBeUndefined();
+    const patch = startOverPassagePatch([piece(0, "solid")], NOW);
+    expect(patch).toHaveProperty("shakyVerses", undefined);
   });
 
   it("clears celebration so a second finish can show the moment again", () => {

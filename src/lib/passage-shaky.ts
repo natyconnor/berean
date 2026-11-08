@@ -1,60 +1,72 @@
-import type { PassagePiece } from "./passage-pieces";
 import { PASSAGE_PASS_ACCURACY } from "./passage-frontier";
 import { maskVerseText } from "./verse-hint";
 
 /**
  * Shaky verses on a Memorized passage. Each verse is scored on its own inside
- * a whole-passage recital: under 85% in a counted try marks it shaky, and 85%+
- * in any later unhinted try clears it. The passage schedule still follows the
- * overall score.
+ * a whole-passage recital, even inside a multi-verse learning piece: under 85%
+ * in a counted try marks it shaky, and 85%+ in any later unhinted try clears
+ * it. The passage schedule still follows the overall score.
  */
 
-/** Pieces scoring under 85% on their own. */
-export function missedPieceIndexes(
-  accuracies: readonly (number | null)[],
-): Set<number> {
-  const missed = new Set<number>();
-  accuracies.forEach((accuracy, index) => {
-    if (accuracy !== null && accuracy < PASSAGE_PASS_ACCURACY)
-      missed.add(index);
-  });
-  return missed;
+/** One verse of a passage. A passage is one book, so chapter + verse is unique. */
+export type PassageVerseKey = { chapter: number; verse: number };
+
+/** A verse's own score in one whole-passage try. */
+export type PassageVerseScore = PassageVerseKey & { accuracy: number };
+
+function sameVerse(a: PassageVerseKey, b: PassageVerseKey): boolean {
+  return a.chapter === b.chapter && a.verse === b.verse;
+}
+
+/** Verses scoring under 85% on their own. */
+export function missedVerses(
+  scores: readonly PassageVerseScore[],
+): PassageVerseKey[] {
+  return scores
+    .filter((score) => score.accuracy < PASSAGE_PASS_ACCURACY)
+    .map(({ chapter, verse }) => ({ chapter, verse }));
 }
 
 /**
- * Shaky flags after an unhinted try. 85%+ clears a verse; under 85% marks it
- * only when the try counted as the review.
+ * Shaky verses after an unhinted try. 85%+ clears a verse; under 85% marks it
+ * only when the try counted as the review. Verses the try did not score stay
+ * as they were.
  */
-export function piecesAfterUnhintedTry<T extends PassagePiece>(
-  pieces: readonly T[],
-  accuracies: readonly (number | null)[],
+export function shakyAfterUnhintedTry(
+  shaky: readonly PassageVerseKey[],
+  scores: readonly PassageVerseScore[],
   counted: boolean,
-): T[] {
-  return pieces.map((piece, index) => {
-    const accuracy = accuracies[index];
-    if (accuracy === null || accuracy === undefined) return piece;
-    if (accuracy >= PASSAGE_PASS_ACCURACY) return withoutShaky(piece);
-    return counted ? { ...piece, shaky: true } : piece;
-  });
-}
-
-function withoutShaky<T extends PassagePiece>(piece: T): T {
-  if (piece.shaky === undefined) return piece;
-  const next = { ...piece };
-  delete next.shaky;
-  return next;
+): PassageVerseKey[] {
+  const kept = shaky.filter(
+    (key) =>
+      !scores.some(
+        (score) =>
+          sameVerse(score, key) && score.accuracy >= PASSAGE_PASS_ACCURACY,
+      ),
+  );
+  if (!counted) return kept;
+  return [
+    ...kept,
+    ...missedVerses(scores).filter(
+      (key) => !kept.some((other) => sameVerse(other, key)),
+    ),
+  ];
 }
 
 /**
- * First letters on `targets` only, every other word blank in place, joined
- * like the passage text. No target means nothing is revealed.
+ * First letters on `targets` only, every other word blank in place. One
+ * masked text per verse, so a hint never spills onto a neighbouring verse in
+ * the same piece. No target means nothing is revealed.
  */
 export function shakyFirstLettersHint(
-  texts: readonly string[],
-  targets: ReadonlySet<number>,
+  verses: ReadonlyArray<PassageVerseKey & { text: string }>,
+  targets: readonly PassageVerseKey[],
 ): string[] {
-  return texts.map((text, index) =>
-    maskVerseText(text, targets.has(index) ? "first-letters" : "hidden")
+  return verses.map((verse) =>
+    maskVerseText(
+      verse.text,
+      targets.some((key) => sameVerse(key, verse)) ? "first-letters" : "hidden",
+    )
       .map((token) => token.text)
       .join(""),
   );

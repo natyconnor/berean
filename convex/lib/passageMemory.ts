@@ -389,6 +389,7 @@ export function toPassageView(
     celebratedAt: row.celebratedAt,
     needsCelebration: needsCelebration(row),
     startedOverAt: row.startedOverAt,
+    shakyVerses: row.shakyVerses,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     remainingIntroduces: remainingIntroduces({

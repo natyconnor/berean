@@ -1,90 +1,93 @@
 import { describe, expect, it } from "vitest";
 
-import type { PassagePiece } from "./passage-pieces";
 import {
-  missedPieceIndexes,
-  piecesAfterUnhintedTry,
+  missedVerses,
+  shakyAfterUnhintedTry,
   shakyFirstLettersHint,
 } from "./passage-shaky";
 
-function piece(index: number, shaky?: boolean): PassagePiece {
-  return {
-    index,
-    book: "Psalms",
-    chapter: 23,
-    startVerse: index + 1,
-    endVerse: index + 1,
-    sectionIndex: 0,
-    attachment: "solid",
-    learnStage: 3,
-    stageReps: 0,
-    ...(shaky ? { shaky } : {}),
-  };
-}
+// Psalm 13:3–4 sit in one learning piece; verse 5 is its own.
+const V3 = { chapter: 13, verse: 3 };
+const V4 = { chapter: 13, verse: 4 };
+const V5 = { chapter: 13, verse: 5 };
 
-describe("piecesAfterUnhintedTry", () => {
+describe("shakyAfterUnhintedTry", () => {
   it("marks each verse under 85% on its own in a counted try", () => {
-    const next = piecesAfterUnhintedTry(
-      [piece(0), piece(1), piece(2)],
-      [100, 84, 59],
-      true,
-    );
-    expect(next.map((item) => item.shaky === true)).toEqual([
-      false,
-      true,
-      true,
-    ]);
+    expect(
+      shakyAfterUnhintedTry(
+        [],
+        [
+          { ...V3, accuracy: 59 },
+          { ...V4, accuracy: 100 },
+          { ...V5, accuracy: 84 },
+        ],
+        true,
+      ),
+    ).toEqual([V3, V5]);
   });
 
-  it("clears a shaky verse at 85%+ even in a practice-only try", () => {
-    const next = piecesAfterUnhintedTry(
-      [piece(0, true), piece(1, true)],
-      [85, 84],
-      false,
-    );
-    expect(next[0]?.shaky).toBeUndefined();
-    expect(next[1]?.shaky).toBe(true);
+  it("clears only the verse recited cleanly, even in a practice-only try", () => {
+    expect(
+      shakyAfterUnhintedTry(
+        [V3, V4],
+        [
+          { ...V3, accuracy: 85 },
+          { ...V4, accuracy: 84 },
+        ],
+        false,
+      ),
+    ).toEqual([V4]);
   });
 
   it("never marks in a practice-only try", () => {
-    const [next] = piecesAfterUnhintedTry([piece(0)], [10], false);
-    expect(next?.shaky).toBeUndefined();
+    expect(shakyAfterUnhintedTry([], [{ ...V3, accuracy: 10 }], false)).toEqual(
+      [],
+    );
   });
 
-  it("leaves a verse without text alone", () => {
-    const pieces = [piece(0, true), piece(1)];
-    expect(piecesAfterUnhintedTry(pieces, [null, null], true)).toEqual(pieces);
+  it("keeps verses the try did not score, and lists each verse once", () => {
+    expect(
+      shakyAfterUnhintedTry([V3, V5], [{ ...V5, accuracy: 40 }], true),
+    ).toEqual([V3, V5]);
   });
 });
 
-describe("missedPieceIndexes", () => {
+describe("missedVerses", () => {
   it("lists verses under 85%", () => {
-    expect([...missedPieceIndexes([100, 85, 84, null, 0])]).toEqual([2, 4]);
+    expect(
+      missedVerses([
+        { ...V3, accuracy: 100 },
+        { ...V4, accuracy: 85 },
+        { ...V5, accuracy: 84 },
+      ]),
+    ).toEqual([V5]);
   });
 });
 
 describe("shakyFirstLettersHint", () => {
-  const texts = ["The Lord is", "my shepherd;", "I shall"];
+  const verses = [
+    { ...V3, text: "Consider and answer me," },
+    { ...V4, text: "lest my enemy say," },
+    { ...V5, text: "But I have trusted" },
+  ];
 
-  it("shows first letters on targets only, blanks in place elsewhere", () => {
-    expect(shakyFirstLettersHint(texts, new Set([1]))).toEqual([
-      "___ ____ __",
-      "m_ s_______;",
-      "_ _____",
+  it("hints a target verse only, never its neighbour in the same piece", () => {
+    expect(shakyFirstLettersHint(verses, [V4])).toEqual([
+      "________ ___ ______ __,",
+      "l___ m_ e____ s__,",
+      "___ _ ____ _______",
     ]);
   });
 
   it("reveals nothing when no verse is targeted", () => {
-    expect(shakyFirstLettersHint(texts, new Set()).join(" ")).not.toMatch(
-      /[a-z]/i,
-    );
+    expect(shakyFirstLettersHint(verses, []).join(" ")).not.toMatch(/[a-z]/i);
   });
 
   it("hints every verse when every verse is targeted", () => {
-    expect(shakyFirstLettersHint(texts, new Set([0, 1, 2]))).toEqual([
-      "T__ L___ i_",
-      "m_ s_______;",
-      "I s____",
+    expect(shakyFirstLettersHint(verses, [V3, V4, V5])).toEqual([
+      "C_______ a__ a_____ m_,",
+      "l___ m_ e____ s__,",
+      "B__ I h___ t______",
     ]);
   });
 });

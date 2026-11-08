@@ -96,12 +96,16 @@ async function seedDuePassage(ctx: MutationCtx) {
     userId: USER,
     packId: PACK,
     status: "reviewing",
-    pieces: [0, 1].map((index) => ({
+    // Psalm 13:1, then 13:2–3 as one multi-verse learning piece.
+    pieces: [
+      [1, 1],
+      [2, 3],
+    ].map(([startVerse, endVerse], index) => ({
       index,
       book: "Psalms",
-      chapter: 23,
-      startVerse: index + 1,
-      endVerse: index + 1,
+      chapter: 13,
+      startVerse: startVerse,
+      endVerse: endVerse,
       sectionIndex: 0,
       attachment: "solid",
       learnStage: 3,
@@ -120,10 +124,17 @@ async function seedDuePassage(ctx: MutationCtx) {
   return (await ctx.db.get(id)) as Doc<"passageMemory">;
 }
 
+const V2 = { chapter: 13, verse: 2 };
+
+/** Verse 2 omitted, verses 1 and 3 exact: 65% overall, a close miss. */
 const MISS = {
   quality: "close" as const,
   accuracy: 65,
-  pieceAccuracies: [100, 25],
+  verseScores: [
+    { chapter: 13, verse: 1, accuracy: 100 },
+    { ...V2, accuracy: 0 },
+    { chapter: 13, verse: 3, accuracy: 100 },
+  ],
   attemptedAt: NOW,
   tzOffsetMinutes: 0,
 };
@@ -174,10 +185,30 @@ describe("held passage misses (server)", () => {
     const [passage] = rows("passageMemory");
     // Every-other-day with four banked loses one: daily gap, three banked.
     expect(passage).toMatchObject({ intervalDays: 1, stageReps: 3 });
-    expect(passage?.pieces).toEqual([
-      expect.not.objectContaining({ shaky: true }),
-      expect.objectContaining({ shaky: true }),
-    ]);
+    // The held try's verse targets survive: only verse 2, not its piece-mate.
+    expect(passage?.shakyVerses).toEqual([V2]);
+  });
+
+  it("follows an overall pass but marks the sub-85 verse inside it", async () => {
+    const { ctx, rows } = fakeCtx();
+    const row = await seedDuePassage(ctx);
+    await commitPassageReview(ctx, row, {
+      quality: "close",
+      accuracy: 90,
+      now: NOW,
+      tzOffsetMinutes: 0,
+      verseScores: [
+        { chapter: 13, verse: 1, accuracy: 100 },
+        { ...V2, accuracy: 70 },
+        { chapter: 13, verse: 3, accuracy: 100 },
+      ],
+    });
+    // An 85–99% pass on every-other-day banks a rep and keeps the gap.
+    expect(rows("passageMemory")[0]).toMatchObject({
+      intervalDays: 2,
+      stageReps: 1,
+      shakyVerses: [V2],
+    });
   });
 
   it("counts once when the 24h backstop fires after nobody came back", async () => {
@@ -204,7 +235,10 @@ describe("held passage misses (server)", () => {
       accuracy: 100,
       now: NOW + 60_000,
       tzOffsetMinutes: 0,
-      pieceAccuracies: [100, 100],
+      verseScores: MISS.verseScores.map((score) => ({
+        ...score,
+        accuracy: 100,
+      })),
       refresherUsed: true,
       heldMissAccuracy: held?.accuracy,
     });
@@ -214,10 +248,12 @@ describe("held passage misses (server)", () => {
     expect(rows("passageReviews")).toEqual([
       expect.objectContaining({ accuracy: 100 }),
     ]);
-    // A refresher pass after a close miss keeps the gap.
+    // A refresher pass after a close miss keeps the gap; the clean From
+    // memory try leaves nothing shaky.
     expect(rows("passageMemory")[0]).toMatchObject({
       intervalDays: 2,
       stageReps: 0,
+      shakyVerses: [],
     });
   });
 

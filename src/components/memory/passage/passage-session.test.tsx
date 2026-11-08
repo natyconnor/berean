@@ -1049,13 +1049,19 @@ describe("PassageSession", () => {
     const PASSAGE_TOOLTIP =
       "Do a refresher on this passage for some more practice.";
 
-    const memorized = (shaky: readonly boolean[] = [false, false]) =>
-      shaky.map((isShaky, index) =>
-        piece(index, "solid", {
-          learnStage: 3,
-          ...(isShaky ? { shaky: true } : {}),
-        }),
-      );
+    const memorized = () => [
+      piece(0, "solid", { learnStage: 3 }),
+      piece(1, "solid", { learnStage: 3 }),
+    ];
+    // Psalm 23:1–2 as one multi-verse learning piece.
+    const onePiece = () => [
+      piece(0, "solid", { learnStage: 3, startVerse: 1, endVerse: 2 }),
+    ];
+    const verse = (number: number) => ({ chapter: 23, verse: number });
+    const scores = (first: number, second: number) => [
+      { ...verse(1), accuracy: first },
+      { ...verse(2), accuracy: second },
+    ];
 
     function reviewView(extra?: Partial<PassageView>): PassageView {
       return passageView(memorized(), {
@@ -1173,7 +1179,7 @@ describe("PassageSession", () => {
     });
 
     it("runs a pre-try refresher: First letters counts nothing, From memory counts and keeps it", async () => {
-      renderReview(reviewView({ pieces: memorized([false, true]) }));
+      renderReview(reviewView({ shakyVerses: [verse(2)] }));
       await clickButton("Need a refresher?");
       await expectFreshStep("Refresh · First letters · 1 of 2");
       // Only the shaky verse 2 is hinted; verse 1 before it stays blank.
@@ -1209,7 +1215,7 @@ describe("PassageSession", () => {
           accuracy: 100,
           refresherUsed: true,
           replaceHeldId: undefined,
-          pieceAccuracies: [100, 100],
+          verseScores: scores(100, 100),
         }),
       );
       expect(
@@ -1230,7 +1236,7 @@ describe("PassageSession", () => {
       expect(hintText()).not.toMatch(/[a-z]/i);
       unmount();
 
-      renderReview(reviewView({ pieces: memorized([true, true]) }));
+      renderReview(reviewView({ shakyVerses: [verse(1), verse(2)] }));
       await clickButton("Need a refresher?");
       await screen.findByText("Refresh · First letters · 1 of 2");
       expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____/);
@@ -1248,7 +1254,7 @@ describe("PassageSession", () => {
       expect(screen.getByText(/^Next review /)).toBeInTheDocument();
       expect(hold()).toHaveBeenCalledTimes(1);
       expect(hold()).toHaveBeenCalledWith(
-        expect.objectContaining({ accuracy: 65, pieceAccuracies: [100, 25] }),
+        expect.objectContaining({ accuracy: 65, verseScores: scores(100, 25) }),
       );
       expect(record()).not.toHaveBeenCalled();
       expect(applyHeld()).not.toHaveBeenCalled();
@@ -1326,7 +1332,7 @@ describe("PassageSession", () => {
           accuracy: 100,
           refresherUsed: true,
           replaceHeldId: "held_1",
-          pieceAccuracies: [100, 100],
+          verseScores: scores(100, 100),
         }),
       );
       await screen.findByText(/^Next review /);
@@ -1474,7 +1480,7 @@ describe("PassageSession", () => {
         await screen.findByText("Practice only, your progress didn't change."),
       ).toBeInTheDocument();
       expect(mutationMock("passageMemory.notePracticeRecital")).toBeCalledWith(
-        expect.objectContaining({ pieceAccuracies: [100, 100] }),
+        expect.objectContaining({ verseScores: scores(100, 100) }),
       );
       expect(record()).toHaveBeenCalledTimes(1);
       expect(
@@ -1483,6 +1489,69 @@ describe("PassageSession", () => {
       await clickButton(/Continue/);
       await screen.findByRole("heading", { name: "Review complete" });
       expect(screen.getByText("65%")).toBeInTheDocument();
+    });
+
+    describe("inside one multi-verse piece", () => {
+      // Verse 1 is 9 words, verse 2 is 8: either alone misses overall.
+      it("marks and hints only an omitted first verse, not its piece-mate", async () => {
+        renderReview(reviewView({ pieces: onePiece() }));
+        await check(PASSAGE_TWO);
+        expect(hold()).toHaveBeenCalledWith(
+          expect.objectContaining({ verseScores: scores(0, 100) }),
+        );
+        await clickButton("Need a refresher?");
+        await screen.findByText("Refresh · First letters · 1 of 2");
+        expect(hintText()).toMatch(
+          /^T__ L___ i_ m_ s_______; I s____ n__ w___\. _/,
+        );
+        expect(hintText()).not.toMatch(/H_/);
+      });
+
+      it("marks and hints only an omitted second verse, not its piece-mate", async () => {
+        renderReview(reviewView({ pieces: onePiece() }));
+        await check(PASSAGE_ONE);
+        expect(hold()).toHaveBeenCalledWith(
+          expect.objectContaining({ verseScores: scores(100, 0) }),
+        );
+        await clickButton("Need a refresher?");
+        await screen.findByText("Refresh · First letters · 1 of 2");
+        expect(hintText()).toMatch(/^[_\s;.]+ H_ m____ m_ l__ d___/);
+        expect(hintText()).not.toMatch(/T__/);
+      });
+
+      it("hints a remembered shaky verse alone within its piece", async () => {
+        renderReview(
+          reviewView({ pieces: onePiece(), shakyVerses: [verse(2)] }),
+        );
+        await clickButton("Need a refresher?");
+        await screen.findByText("Refresh · First letters · 1 of 2");
+        expect(hintText()).toMatch(/^[_\s;.]+ H_ m____/);
+        expect(hintText()).not.toMatch(/T__/);
+      });
+
+      it("sends practice scores per verse, so only the clean verse can clear", async () => {
+        renderReview(
+          reviewView({
+            pieces: onePiece(),
+            shakyVerses: [verse(1), verse(2)],
+          }),
+        );
+        await clickButton("Need a refresher?");
+        await check(FULL);
+        await clickButton(/Continue/);
+        await screen.findByText("Refresh · From memory · 2 of 2");
+        await check(WEAK_TWO);
+        await clickButton("Try another refresher");
+        await check(FULL);
+        await clickButton(/Continue/);
+        await screen.findByText("Refresh · From memory · 2 of 2");
+        await check(WEAK_TWO);
+        expect(
+          mutationMock("passageMemory.notePracticeRecital"),
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({ verseScores: scores(100, 25) }),
+        );
+      });
     });
 
     it("checks once on a double activation, with Enter and Shift+Enter", async () => {

@@ -8,7 +8,10 @@ import {
   LEARN_PROGRESS_ACCURACY,
   planVerseAttemptSchedule,
 } from "../../src/lib/memory-scheduler";
-import { piecesAfterUnhintedTry } from "../../src/lib/passage-shaky";
+import {
+  shakyAfterUnhintedTry,
+  type PassageVerseScore,
+} from "../../src/lib/passage-shaky";
 import {
   insertPassageReview,
   patchPassageMemory,
@@ -31,7 +34,7 @@ export type PassageReviewInput = {
   tzOffsetMinutes: number;
   timeZone?: string;
   durationMs?: number;
-  pieceAccuracies?: (number | null)[];
+  verseScores?: PassageVerseScore[];
   refresherUsed?: boolean;
   heldMissAccuracy?: number;
 };
@@ -92,13 +95,16 @@ export async function commitPassageReview(
     heldMissAccuracy: args.heldMissAccuracy,
   });
   return await patchPassageMemory(ctx, row._id, {
-    pieces: args.pieceAccuracies
-      ? piecesAfterUnhintedTry(
-          row.pieces,
-          args.pieceAccuracies,
-          isDueForReview(schedule, args.now),
-        )
-      : row.pieces,
+    pieces: row.pieces,
+    ...(args.verseScores
+      ? {
+          shakyVerses: shakyAfterUnhintedTry(
+            row.shakyVerses ?? [],
+            args.verseScores,
+            isDueForReview(schedule, args.now),
+          ),
+        }
+      : {}),
     status: scheduled.status === "mastered" ? "mastered" : "reviewing",
     ease: scheduled.ease,
     intervalDays: scheduled.intervalDays,
@@ -202,7 +208,7 @@ export async function applyHeldPassageRow(
     tzOffsetMinutes: held.tzOffsetMinutes,
     timeZone: held.timeZone,
     durationMs: held.durationMs,
-    pieceAccuracies: held.pieceAccuracies,
+    verseScores: held.verseScores,
   });
 }
 

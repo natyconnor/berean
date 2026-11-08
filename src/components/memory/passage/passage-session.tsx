@@ -44,7 +44,7 @@ import {
   pieceReference,
   pieceStatus,
   pickUpCue,
-  pieceAccuracies,
+  verseScores,
   stopBeforeCue,
   RECITE_IT_ALL_LABEL,
   remainingAddsIn,
@@ -117,7 +117,12 @@ import {
 import { isDueForReview } from "@/lib/memory-scheduler";
 import { previewNextSchedule } from "@/lib/memory-schedule-preview";
 import { PASSAGE_PASS_ACCURACY } from "@/lib/passage-frontier";
-import { missedPieceIndexes, shakyFirstLettersHint } from "@/lib/passage-shaky";
+import {
+  missedVerses,
+  shakyFirstLettersHint,
+  type PassageVerseKey,
+  type PassageVerseScore,
+} from "@/lib/passage-shaky";
 import { countVerseWords } from "@/lib/verse-hint";
 
 import { api } from "../../../../convex/_generated/api";
@@ -153,7 +158,7 @@ type ReviewSave = {
   accuracy: number;
   durationMs: number;
   now: number;
-  pieceAccuracies: (number | null)[];
+  verseScores: PassageVerseScore[];
   refresherUsed?: true;
   /** The held first try this From memory try replaces. */
   replaceHeldId?: Id<"heldPassageAttempts">;
@@ -267,6 +272,9 @@ export function PassageSession({
   // weak verses are hinted right away.
   const refresher = useVerseRefresher();
   const [reviewDueAt, setReviewDueAt] = useState(view.dueAt);
+  const [shakyVerses, setShakyVerses] = useState<PassageVerseKey[]>(
+    view.shakyVerses ?? [],
+  );
   const [heldMiss, setHeldMissState] = useState<HeldMiss | null>(null);
   const heldIdRef = useRef<Id<"heldPassageAttempts"> | null>(null);
   const [resultView, setResultView] = useState<PassageRecallResultView | null>(
@@ -298,6 +306,20 @@ export function PassageSession({
     () => view.pieces.map((_, index) => composite.segments[index]?.text ?? ""),
     [view.pieces, composite.segments],
   );
+  // The same text verse by verse, so each verse is scored and hinted on its
+  // own even inside a multi-verse piece.
+  const passageVerses = useMemo<PassageVerse[]>(
+    () =>
+      composite.segments.flatMap((segment, pieceIndex) =>
+        segment.verses.map((verse) => ({
+          chapter: segment.reference.chapter,
+          verse: verse.number,
+          text: verse.text,
+          pieceIndex,
+        })),
+      ),
+    [composite.segments],
+  );
   const pieceWordCounts = useMemo(
     () => pieceTexts.map((text) => countVerseWords(text)),
     [pieceTexts],
@@ -318,6 +340,8 @@ export function PassageSession({
     ? reviewRecall(packName, state.pieces, pieceTexts, composite, {
         step: refresher.step,
         heldMiss,
+        shakyVerses,
+        passageVerses,
       })
     : buildingRecall({
         packName,
@@ -425,6 +449,7 @@ export function PassageSession({
       celebrateMastered(packName);
     }
     setStatus(nextView.status);
+    setShakyVerses(nextView.shakyVerses ?? []);
     setState({
       ...next,
       pieces: nextView.pieces,
@@ -458,7 +483,7 @@ export function PassageSession({
         tzOffsetMinutes: tzOffsetMinutesAt(save.now),
         timeZone: getViewerTimeZone(),
         durationMs: save.durationMs,
-        pieceAccuracies: save.pieceAccuracies,
+        verseScores: save.verseScores,
         refresherUsed: save.refresherUsed,
         replaceHeldId: save.replaceHeldId,
       });
@@ -514,7 +539,7 @@ export function PassageSession({
         packId,
         quality: save.quality,
         accuracy: save.accuracy,
-        pieceAccuracies: save.pieceAccuracies,
+        verseScores: save.verseScores,
         now: save.now,
         tzOffsetMinutes: tzOffsetMinutesAt(save.now),
         timeZone: getViewerTimeZone(),
@@ -560,7 +585,7 @@ export function PassageSession({
       accuracy: result.accuracy,
       durationMs: result.durationMs,
       now: Date.now(),
-      pieceAccuracies: pieceAccuracies(result.tokens, pieceTexts),
+      verseScores: verseScores(result.tokens, passageVerses),
     };
     const missed = result.accuracy < PASSAGE_PASS_ACCURACY;
 
@@ -572,11 +597,11 @@ export function PassageSession({
       try {
         const nextView = await notePracticeRecital({
           packId,
-          pieceAccuracies: save.pieceAccuracies,
+          verseScores: save.verseScores,
           now: save.now,
           tzOffsetMinutes: tzOffsetMinutesAt(save.now),
         });
-        setState((current) => ({ ...current, pieces: nextView.pieces }));
+        setShakyVerses(nextView.shakyVerses ?? []);
       } catch {
         // Clearing shaky verses is a bonus; the practice result stands.
       }
@@ -1239,34 +1264,45 @@ function tryAnotherRefresher(
   };
 }
 
+/** One graded verse of the passage and the learning piece it sits in. */
+type PassageVerse = PassageVerseKey & { text: string; pieceIndex: number };
+
+type ReviewRefresher = {
+  step: 1 | 2 | null;
+  heldMiss: HeldMiss | null;
+  shakyVerses: readonly PassageVerseKey[];
+  passageVerses: readonly PassageVerse[];
+};
+
 /**
  * The refresher's hint: First letters shows first letters on shaky verses and
- * on verses the held miss scored under 85%, every other word blank in place.
- * From memory shows none.
+ * on verses the held miss scored under 85%, every other word blank in place,
+ * verse by verse even inside one piece. From memory shows none.
  */
 function reviewHint(
   pieces: readonly PassagePiece[],
-  texts: readonly string[],
   indexes: readonly number[],
-  step: 1 | 2 | null,
-  heldMiss: HeldMiss | null,
+  refresher: ReviewRefresher,
 ): PassageRecallHint {
-  if (step === 2) return { type: "hidden", message: NOW_TRY_WITHOUT_HINTS };
-  if (step === null)
+  if (refresher.step === 2) {
+    return { type: "hidden", message: NOW_TRY_WITHOUT_HINTS };
+  }
+  if (refresher.step === null) {
     return { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT };
-  const targets = heldMiss
-    ? missedPieceIndexes(heldMiss.save.pieceAccuracies)
-    : new Set<number>();
-  pieces.forEach((piece, index) => {
-    if (piece.shaky) targets.add(index);
-  });
+  }
+  const { passageVerses, heldMiss } = refresher;
+  const masked = shakyFirstLettersHint(passageVerses, [
+    ...refresher.shakyVerses,
+    ...(heldMiss ? missedVerses(heldMiss.save.verseScores) : []),
+  ]);
+  const maskedPieces = pieces.map((_, pieceIndex) =>
+    masked
+      .filter((_, verse) => passageVerses[verse]?.pieceIndex === pieceIndex)
+      .join(" "),
+  );
   return {
     type: "text",
-    text: joinPieceTexts(
-      pieces,
-      indexes,
-      shakyFirstLettersHint(texts, targets),
-    ),
+    text: joinPieceTexts(pieces, indexes, maskedPieces),
     label: "Hint",
   };
 }
@@ -1276,7 +1312,7 @@ function reviewRecall(
   pieces: readonly PassagePiece[],
   texts: readonly string[],
   composite: { loading: boolean; error: string | null; retry: () => void },
-  refresher: { step: 1 | 2 | null; heldMiss: HeldMiss | null },
+  refresher: ReviewRefresher,
 ): BuiltRecall {
   const indexes = pieces.map((_, index) => index);
   return {
@@ -1288,13 +1324,7 @@ function reviewRecall(
     loading: composite.loading,
     error: composite.error,
     retry: composite.retry,
-    hint: reviewHint(
-      pieces,
-      texts,
-      indexes,
-      refresher.step,
-      refresher.heldMiss,
-    ),
+    hint: reviewHint(pieces, indexes, refresher),
     pickUpCue: null,
     stopBeforeCue: null,
     learnStage: 3,

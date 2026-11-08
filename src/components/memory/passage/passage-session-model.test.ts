@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PassagePiece } from "@/lib/passage-pieces";
 
 import {
-  pieceAccuracies,
+  verseScores,
   computeStallCue,
   CONNECT_TITLE,
   connectPairTitle,
@@ -284,27 +284,43 @@ describe("repairWindowShowsStageHints / computeStallCue", () => {
   });
 });
 
-describe("pieceAccuracies", () => {
-  const texts = ["The Lord is my shepherd;", "I shall not want."];
-  const full = texts.join(" ");
+describe("verseScores", () => {
+  // Psalm 13:3–4 as one learning piece: still two verses, scored apart.
+  const verses = [
+    {
+      chapter: 13,
+      verse: 3,
+      text: "Consider and answer me, O Lord my God;",
+    },
+    { chapter: 13, verse: 4, text: "lest my enemy say, I have prevailed." },
+  ];
+  const full = verses.map((verse) => verse.text).join(" ");
 
-  it("scores each verse on its own inside a whole-passage diff", () => {
-    const tokens = diffWords("The Lord is my shepherd; I shall", full);
-    expect(pieceAccuracies(tokens, texts)).toEqual([100, 50]);
+  it("scores each verse on its own, even inside one piece", () => {
+    expect(verseScores(diffWords(verses[1].text, full), verses)).toEqual([
+      { chapter: 13, verse: 3, accuracy: 0 },
+      { chapter: 13, verse: 4, accuracy: 100 },
+    ]);
+    expect(verseScores(diffWords(verses[0].text, full), verses)).toEqual([
+      { chapter: 13, verse: 3, accuracy: 100 },
+      { chapter: 13, verse: 4, accuracy: 0 },
+    ]);
   });
 
   it("charges an extra word to the verse it was typed after", () => {
     const tokens = diffWords(
-      "The Lord is my good shepherd; I shall not want.",
+      "Consider and answer me, O Lord my good God; lest my enemy say, I have prevailed.",
       full,
     );
-    const [first, second] = pieceAccuracies(tokens, texts);
-    expect(first).toBeLessThan(100);
-    expect(second).toBe(100);
+    const [first, second] = verseScores(tokens, verses);
+    expect(first?.accuracy).toBeLessThan(100);
+    expect(second?.accuracy).toBe(100);
   });
 
   it("gives a verse without text no score", () => {
-    const tokens = diffWords("The Lord is my shepherd;", texts[0] ?? "");
-    expect(pieceAccuracies(tokens, [texts[0] ?? "", ""])).toEqual([100, null]);
+    const tokens = diffWords(verses[0].text, verses[0].text);
+    expect(
+      verseScores(tokens, [verses[0], { chapter: 13, verse: 4, text: "" }]),
+    ).toEqual([{ chapter: 13, verse: 3, accuracy: 100 }]);
   });
 });

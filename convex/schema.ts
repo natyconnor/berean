@@ -6,6 +6,8 @@ import {
   passagePieceValidator,
   passageRangeValidator,
   passageStatusValidator,
+  passageVerseKeyValidator,
+  passageVerseScoreValidator,
   qualityValidator,
 } from "./lib/passageValues";
 
@@ -401,8 +403,8 @@ export default defineSchema({
     passageMemoryId: v.id("passageMemory"),
     quality: qualityValidator,
     accuracy: v.number(),
-    /** Each verse's own score in the try; `null` for a verse with no text. */
-    pieceAccuracies: v.array(v.union(v.number(), v.null())),
+    /** Each verse's own score in the try. */
+    verseScores: v.array(passageVerseScoreValidator),
     attemptedAt: v.number(),
     durationMs: v.optional(v.number()),
     tzOffsetMinutes: v.number(),
@@ -443,6 +445,9 @@ export default defineSchema({
     celebrationPendingAt: v.optional(v.number()),
     // Epoch for passage-page history after Start over. Absent until the first reset.
     startedOverAt: v.optional(v.number()),
+    // Memorized: verses under 85% on their own in a counted try, not yet
+    // recited cleanly since. The refresher hints only these.
+    shakyVerses: v.optional(v.array(passageVerseKeyValidator)),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -22,6 +22,7 @@ import { celebrationPendingPatch } from "./lib/passageCelebration";
 import {
   dueQueuePackItemValidator,
   passageAttemptKindValidator,
+  passageVerseScoreValidator,
   passageViewValidator,
   pieceBaseValidator,
   qualityValidator,
@@ -45,7 +46,7 @@ import {
   holdPassageMiss,
 } from "./lib/heldPassageAttempts";
 import { SHORT_VERSE_WORDS } from "../src/lib/memory-scheduler";
-import { piecesAfterUnhintedTry } from "../src/lib/passage-shaky";
+import { shakyAfterUnhintedTry } from "../src/lib/passage-shaky";
 import {
   packAllowsPassageMode,
   rangeAllowsPassageMode,
@@ -279,8 +280,8 @@ export const introduceNext = mutation({
   },
 });
 
-/** Each verse's own score in an unhinted whole-passage try; `null` = no text. */
-const pieceAccuraciesValidator = v.array(v.union(v.number(), v.null()));
+/** Each verse's own score in an unhinted whole-passage try. */
+const verseScoresValidator = v.array(passageVerseScoreValidator);
 
 /**
  * Log a graded attempt. Frontier applies per-piece learning rules; rope/repair
@@ -300,7 +301,7 @@ export const recordAttempt = mutation({
     durationMs: v.optional(v.number()),
     pieceIndex: v.optional(v.number()),
     wordCount: v.optional(v.number()),
-    pieceAccuracies: v.optional(pieceAccuraciesValidator),
+    verseScores: v.optional(verseScoresValidator),
     refresherUsed: v.optional(v.boolean()),
     replaceHeldId: v.optional(v.id("heldPassageAttempts")),
   },
@@ -322,7 +323,7 @@ export const recordAttempt = mutation({
         tzOffsetMinutes: args.tzOffsetMinutes,
         timeZone: args.timeZone,
         durationMs: args.durationMs,
-        pieceAccuracies: args.pieceAccuracies,
+        verseScores: args.verseScores,
         refresherUsed: args.refresherUsed,
         heldMissAccuracy: held?.accuracy,
       });
@@ -419,7 +420,7 @@ export const holdAttempt = mutation({
     packId: v.id("packs"),
     quality: qualityValidator,
     accuracy: v.number(),
-    pieceAccuracies: pieceAccuraciesValidator,
+    verseScores: verseScoresValidator,
     now: v.number(),
     tzOffsetMinutes: v.number(),
     timeZone: v.optional(v.string()),
@@ -435,7 +436,7 @@ export const holdAttempt = mutation({
       {
         quality: args.quality,
         accuracy: args.accuracy,
-        pieceAccuracies: args.pieceAccuracies,
+        verseScores: args.verseScores,
         attemptedAt: args.now,
         tzOffsetMinutes: args.tzOffsetMinutes,
         ...(args.timeZone !== undefined ? { timeZone: args.timeZone } : {}),
@@ -487,7 +488,7 @@ export const applyHeldAttemptBackstop = internalMutation({
 export const notePracticeRecital = mutation({
   args: {
     packId: v.id("packs"),
-    pieceAccuracies: pieceAccuraciesValidator,
+    verseScores: verseScoresValidator,
     now: v.number(),
     tzOffsetMinutes: v.number(),
   },
@@ -501,7 +502,11 @@ export const notePracticeRecital = mutation({
       return toPassageView(row, args.now, args.tzOffsetMinutes);
     }
     await ctx.db.patch(row._id, {
-      pieces: piecesAfterUnhintedTry(row.pieces, args.pieceAccuracies, false),
+      shakyVerses: shakyAfterUnhintedTry(
+        row.shakyVerses ?? [],
+        args.verseScores,
+        false,
+      ),
     });
     const next = await ctx.db.get(row._id);
     if (!next) throw new Error("Failed to update passage memory");
