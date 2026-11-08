@@ -9,8 +9,9 @@ import {
   deleteHeldPassageIfOwned,
   holdPassageMiss,
 } from "../../convex/lib/heldPassageAttempts";
+import { toPassageSchedule } from "../../convex/lib/passageMemory";
 import { HELD_ATTEMPT_BACKSTOP_MS } from "./held-verse-attempt";
-import { DAY_MS } from "./memory-scheduler";
+import { DAY_MS, keepReviewingSchedule } from "./memory-scheduler";
 
 /** Just enough of Convex's `ctx` for these helpers: equality/range filters. */
 function fakeCtx() {
@@ -91,7 +92,10 @@ const USER = "users:u" as Id<"users">;
 const PACK = "packs:p" as Id<"packs">;
 const BACKSTOP = "backstop" as unknown as Parameters<typeof holdPassageMiss>[3];
 
-async function seedDuePassage(ctx: MutationCtx) {
+async function seedDuePassage(
+  ctx: MutationCtx,
+  schedule: Partial<Doc<"passageMemory">> = {},
+) {
   const id = await ctx.db.insert("passageMemory", {
     userId: USER,
     packId: PACK,
@@ -120,6 +124,7 @@ async function seedDuePassage(ctx: MutationCtx) {
     stageReps: 0,
     createdAt: NOW - 30 * DAY_MS,
     updatedAt: NOW - DAY_MS,
+    ...schedule,
   });
   return (await ctx.db.get(id)) as Doc<"passageMemory">;
 }
@@ -254,6 +259,41 @@ describe("held passage misses (server)", () => {
       intervalDays: 2,
       stageReps: 0,
       shakyVerses: [],
+    });
+  });
+
+  it("keeps the Psalm 23 sample's 1-day gap after a close miss and a refresher pass", async () => {
+    const { ctx, rows } = fakeCtx();
+    // The preview sample's schedule: daily gap, nothing banked yet.
+    const sample = { intervalDays: 1, stageReps: 0, consecutiveCorrect: 2 };
+    const row = await seedDuePassage(ctx, sample);
+    const heldId = await holdPassageMiss(
+      ctx,
+      row,
+      { ...MISS, accuracy: 68 },
+      BACKSTOP,
+    );
+
+    const held = await deleteHeldPassageIfOwned(ctx, USER, heldId);
+    await commitPassageReview(ctx, row, {
+      quality: "exact",
+      accuracy: 100,
+      now: NOW + 60_000,
+      tzOffsetMinutes: 0,
+      refresherUsed: true,
+      heldMissAccuracy: held?.accuracy,
+    });
+
+    // Counted as today's review, and nothing lost: same gap, reps and ease,
+    // due again after that gap (tomorrow).
+    expect(rows("passageReviews")).toHaveLength(1);
+    expect(rows("passageMemory")[0]).toMatchObject({
+      ...sample,
+      ease: 2.3,
+      dueAt: keepReviewingSchedule(toPassageSchedule(row), {
+        now: NOW + 60_000,
+        tzOffsetMinutes: 0,
+      }).dueAt,
     });
   });
 

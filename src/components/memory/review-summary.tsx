@@ -11,6 +11,7 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { formatDueDay } from "@/lib/memorize-plan";
 import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
+  averageReviewAccuracy,
   groupReviewSessionAttempts,
   recalledCopy,
   refresherResultCopy,
@@ -112,17 +113,22 @@ export function ReviewSummary({
  */
 export function PassageReviewSummary({
   title,
-  accuracy,
+  attempts,
   dueAt,
   onDone,
 }: {
   title: string;
-  accuracy: number;
+  /**
+   * Counted tries in session order, as a verse session records them. Their
+   * mean is the accuracy; a refresher shows both tries like a verse row.
+   */
+  attempts: ReviewSessionAttempt[];
   /** Next review from the saved schedule. */
   dueAt: number;
   onDone: () => void;
 }): JSX.Element {
   const now = useLiveNow();
+  const [row] = groupReviewSessionAttempts(attempts);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -145,11 +151,19 @@ export function PassageReviewSummary({
       </div>
 
       <div className="mt-6 space-y-6">
-        <AccuracyScore accuracy={accuracy} label="Accuracy" />
+        <AccuracyScore
+          accuracy={averageReviewAccuracy(attempts) ?? 0}
+          label="Accuracy"
+        />
         <ul className="divide-y rounded-lg border text-left">
           <li className="flex items-center justify-between gap-3 px-3 py-2.5">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium break-words">{title}</p>
+              {row?.refresherUsed ? (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {refresherResultCopy(row.accuracies)}
+                </p>
+              ) : null}
               <p className="mt-1.5 text-xs text-muted-foreground">
                 Next review {formatDueDay(dueAt, now)}
               </p>

@@ -61,7 +61,10 @@ import {
 } from "@/components/memory/passage/passage-session-model";
 import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { useCarriedOverNotice } from "@/components/memory/passage/use-carried-over-notice";
-import { PassageReviewSummary } from "@/components/memory/review-summary";
+import {
+  PassageReviewSummary,
+  type ReviewSessionAttempt,
+} from "@/components/memory/review-summary";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import { useVerseRefresher } from "@/components/memory/practice/use-verse-refresher";
@@ -149,8 +152,12 @@ type BuiltRecall = {
   readContinue: boolean;
 };
 
-/** A saved standalone review: its score and next due date. */
-type SavedReview = { accuracy: number; dueAt: number };
+/**
+ * This session's counted tries, as a verse session records them for its
+ * summary (a replaced first try, then the From memory try), and the passage's
+ * next due date.
+ */
+type SavedReview = { attempts: ReviewSessionAttempt[]; dueAt: number };
 
 /** One unhinted whole-passage try to save as the passage's review. */
 type ReviewSave = {
@@ -466,9 +473,35 @@ export function PassageSession({
     });
   }
 
-  function adoptReview(accuracy: number, dueAt: number) {
-    setSavedReview({ accuracy, dueAt });
+  /** Add counted tries to the summary, the way a verse session does. */
+  function adoptReview(
+    accuracies: number[],
+    dueAt: number,
+    refresherUsed = false,
+  ) {
+    const attempts = accuracies.flatMap(
+      (accuracy, index): ReviewSessionAttempt[] =>
+        pieceRefs[0]
+          ? [
+              {
+                reference: pieceRefs[0],
+                label: packName,
+                accuracy,
+                offerPractice: false,
+                ...(refresherUsed && index === accuracies.length - 1
+                  ? { refresherUsed: true }
+                  : {}),
+              },
+            ]
+          : [],
+    );
+    const saved = {
+      attempts: [...(savedReview?.attempts ?? []), ...attempts],
+      dueAt,
+    };
+    setSavedReview(saved);
     setReviewDueAt(dueAt);
+    return saved;
   }
 
   /** Save a counted review try. Resolves its next due date, or null on failure. */
@@ -487,7 +520,14 @@ export function PassageSession({
         refresherUsed: save.refresherUsed,
         replaceHeldId: save.replaceHeldId,
       });
-      adoptReview(save.accuracy, nextView.dueAt);
+      // A From memory try that replaces a held miss keeps both tries.
+      adoptReview(
+        save.replaceHeldId && heldMiss
+          ? [heldMiss.save.accuracy, save.accuracy]
+          : [save.accuracy],
+        nextView.dueAt,
+        save.refresherUsed === true,
+      );
       adoptView(state, nextView, save.now);
       return nextView.dueAt;
     } catch {
@@ -685,9 +725,8 @@ export function PassageSession({
         const nextView = await applyHeld(held.heldId);
         setHeldMiss(null);
         if (nextView) {
-          adoptReview(held.save.accuracy, nextView.dueAt);
+          saved = adoptReview([held.save.accuracy], nextView.dueAt);
           adoptView(state, nextView, held.save.now);
-          saved = { accuracy: held.save.accuracy, dueAt: nextView.dueAt };
         }
       } catch {
         setResultView((current) => ({
@@ -1040,7 +1079,7 @@ export function PassageSession({
       {finishedReview ? (
         <PassageReviewSummary
           title={packName}
-          accuracy={finishedReview.accuracy}
+          attempts={finishedReview.attempts}
           dueAt={finishedReview.dueAt}
           onDone={leaveSession}
         />

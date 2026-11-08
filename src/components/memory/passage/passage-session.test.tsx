@@ -1227,6 +1227,8 @@ describe("PassageSession", () => {
       expect(
         await screen.findByRole("heading", { name: "Review complete" }),
       ).toBeInTheDocument();
+      // No first try to show: the From memory score and the note, as a verse.
+      expect(screen.getByText("100% · Refresher used")).toBeInTheDocument();
     });
 
     it("hints nothing when no verse is shaky, and every verse when all are", async () => {
@@ -1303,6 +1305,44 @@ describe("PassageSession", () => {
       ).toBeNull();
     });
 
+    it("summarizes the cold try, then From memory, and averages only those", async () => {
+      renderReview();
+      // Seven exact words, two small typos, three more exact, five missing:
+      // (10 + 2 × 0.8) / 17 = 68%.
+      await check("The Lorf is my shepherf; I shall not want. He makes me");
+      expect(await screen.findByText(/68% recalled/)).toBeInTheDocument();
+      await clickButton("Need a refresher?");
+      // A First letters miss and then a pass never reach the summary.
+      await check("The Lord");
+      await clickButton(/Try again/);
+      await check(FULL);
+      await clickButton(/Continue/);
+      await screen.findByText("Refresh · From memory · 2 of 2");
+      await check(FULL);
+      await clickButton(/Continue/);
+
+      await screen.findByRole("heading", { name: "Review complete" });
+      expect(screen.getByText("84%")).toBeInTheDocument();
+      expect(
+        screen.getByText("68% → 100% · Refresher used"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}`,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("still shows one score when no refresher was used", async () => {
+      renderReview();
+      await check(`${PASSAGE_ONE} He makes me lie down in green`);
+      await clickButton(/Continue/);
+      await screen.findByRole("heading", { name: "Review complete" });
+      expect(screen.getByText("94%")).toBeInTheDocument();
+      expect(screen.queryByText(/Refresher used/)).toBeNull();
+      expect(screen.queryByText(/→/)).toBeNull();
+    });
+
     it("saves a not-due miss right away with no offer", async () => {
       renderReview(reviewView({ dueAt: SAVED_DUE() }));
       await check(WEAK_TWO);
@@ -1338,7 +1378,11 @@ describe("PassageSession", () => {
       await screen.findByText(/^Next review /);
       await clickButton(/Continue/);
       await screen.findByRole("heading", { name: "Review complete" });
-      expect(screen.getByText("100%")).toBeInTheDocument();
+      // Both unhinted tries count: (65 + 100) / 2, rounded.
+      expect(screen.getByText("83%")).toBeInTheDocument();
+      expect(
+        screen.getByText("65% → 100% · Refresher used"),
+      ).toBeInTheDocument();
       expect(record()).toHaveBeenCalledTimes(1);
       expect(applyHeld()).not.toHaveBeenCalled();
     });
