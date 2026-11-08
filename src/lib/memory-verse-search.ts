@@ -55,17 +55,23 @@ export function validateMemoryVerseSearch(
       ? startVerse
       : Math.max(startVerse, endVerseCandidate);
 
-  const refresh =
-    search.refresh === true || search.refresh === 1 || search.refresh === "1";
-
   return {
     book,
     chapter,
     startVerse,
     endVerse,
-    ...(refresh ? { refresh: true as const } : {}),
+    ...parseRefreshSearch(search),
     ...returnSearch,
   };
+}
+
+/** `refresh=1`: open straight into the refresher (••• or summary Refresh). */
+export function parseRefreshSearch(search: Record<string, unknown>): {
+  refresh?: true;
+} {
+  const refresh =
+    search.refresh === true || search.refresh === 1 || search.refresh === "1";
+  return refresh ? { refresh: true } : {};
 }
 
 export function hasMemoryVerseScope(

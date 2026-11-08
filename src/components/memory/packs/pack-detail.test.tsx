@@ -95,7 +95,10 @@ vi.mock("convex-helpers/react/cache", () => ({
 
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
-    esv: { getPassage: "esv.getPassage" },
+    esv: {
+      getPassage: "esv.getPassage",
+      getChaptersBatch: "esv.getChaptersBatch",
+    },
     memoryHome: { today: "memoryHome.today" },
     packs: {
       get: "packs.get",
@@ -1491,5 +1494,257 @@ describe("PackDetail row Refresh", () => {
     ).toBeInTheDocument();
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect(mocks.mutations.get("verseMemory.startOver")).not.toHaveBeenCalled();
+  });
+});
+
+describe("PackDetail passage Refresh (S13)", () => {
+  const memorizedPieces = () => [
+    piece(0, 1, 4, "solid"),
+    piece(1, 5, 6, "solid"),
+    piece(2, 7, 11, "solid"),
+  ];
+  const psalm16 = {
+    canonical: "Psalm 16",
+    copyright: "ESV",
+    verses: Array.from({ length: 11 }, (_, index) => ({
+      number: index + 1,
+      text: `Verse ${index + 1} text.`,
+    })),
+  };
+
+  function memorized(extra: Record<string, unknown> = {}) {
+    passages = {
+      psalm16x: passageView({
+        status: "reviewing",
+        pieces: memorizedPieces(),
+        intervalDays: 4,
+        dueAt: NOW - HOUR_MS,
+        frontierIndex: 3,
+        ropePieceIndexes: [0, 1, 2],
+        ...extra,
+      }),
+    };
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    mocks.locationState = {};
+    mocks.getPassage.mockReset();
+    mocks.getPassage.mockResolvedValue([{ chapter: 16, data: psalm16 }]);
+    mocks.navigate.mockResolvedValue(undefined);
+  });
+
+  async function menuItems() {
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await screen.findByRole("menu");
+    return screen.getAllByRole("menuitem").map((item) => item.textContent);
+  }
+
+  function navigatedHref() {
+    const [arg] = mocks.navigate.mock.calls[0] as [{ href: string }];
+    return new URL(arg.href, "https://app.test");
+  }
+
+  it.each([
+    ["due Memorized", {}],
+    ["not-due Memorized", { dueAt: NOW + 3 * DAY_MS }],
+    ["due Mastered", { status: "mastered", intervalDays: 40 }],
+    [
+      "not-due Mastered",
+      { status: "mastered", intervalDays: 40, dueAt: NOW + 30 * DAY_MS },
+    ],
+  ])(
+    "shows Refresh above Start over on a %s passage",
+    async (_label, extra) => {
+      memorized(extra);
+      renderHost("pack:psalm16x");
+      const items = await menuItems();
+      expect(items[0]).toBe(REFRESH_MENU_LABEL);
+      expect(items[1]).toContain(START_OVER_MENU_LABEL);
+      expect(items[2]).toBe("Stop memorizing");
+      expect(items).toHaveLength(3);
+      // No detail line, unlike Start over.
+      expect(
+        screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+      ).toHaveTextContent(/^Refresh$/);
+    },
+  );
+
+  it("hides Refresh on a Learning passage, with or without progress", async () => {
+    // Verse 1–4 learned, the rest unreached: Start over, no Refresh (S14).
+    const learning = renderHost("pack:psalm16x");
+    let items = await menuItems();
+    expect(items).not.toContain(REFRESH_MENU_LABEL);
+    expect(items.some((item) => item?.includes(START_OVER_MENU_LABEL))).toBe(
+      true,
+    );
+    learning.unmount();
+
+    // Nothing reached (R28): neither Refresh nor Start over.
+    passages = {
+      psalm16x: passageView({
+        pieces: [
+          piece(0, 1, 4, "unreached"),
+          piece(1, 5, 6, "unreached"),
+          piece(2, 7, 11, "unreached"),
+        ],
+      }),
+    };
+    renderHost("pack:psalm16x");
+    items = await menuItems();
+    expect(items).toEqual(["Stop memorizing"]);
+  });
+
+  it("hides Refresh with no text to refresh and on a whole pack", async () => {
+    memorized({ pieces: [] });
+    const empty = renderHost("pack:psalm16x");
+    expect(await menuItems()).not.toContain(REFRESH_MENU_LABEL);
+    empty.unmount();
+
+    // A verse pack whose verses are all Memorized: rows only (R25).
+    renderHost("pack:psalm23x");
+    expect(await menuItems()).not.toContain(REFRESH_MENU_LABEL);
+  });
+
+  it("flashes no Refresh while the passage is still loading", () => {
+    mocks.queryByArgs.set("passageMemory.getForPack", () => undefined);
+    renderHost("pack:psalm16x");
+    expect(
+      screen.queryByRole("button", { name: "More actions" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(REFRESH_MENU_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("keeps passage verse rows as chips with no Refresh", () => {
+    memorized();
+    renderHost("pack:psalm16x");
+    expect(
+      screen.queryByRole("button", { name: /^Options for/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Refresh/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["due opens Review", NOW - HOUR_MS, "/memory/psalm16x/review"],
+    ["not due opens Practice", NOW + 3 * DAY_MS, "/memory/psalm16x/practice"],
+  ])("loads the whole passage, then %s", async (_label, dueAt, pathname) => {
+    memorized({ dueAt });
+    renderHost("pack:psalm16x");
+    const reviewReturn =
+      dueAt <= NOW
+        ? new URL(
+            screen
+              .getByRole("link", { name: /^Review / })
+              .getAttribute("href")!,
+            "https://app.test",
+          ).searchParams.get("return")
+        : null;
+    await menuItems();
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+    );
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(mocks.getPassage).toHaveBeenCalledWith({
+      book: "Psalms",
+      chapters: [16],
+    });
+    const href = navigatedHref();
+    expect(href.pathname).toBe(pathname);
+    expect(href.searchParams.get("refresh")).toBe("1");
+    expect(href.searchParams.get("return")).toBe(
+      reviewReturn ?? "/memory/psalm16x",
+    );
+    expect(mocks.navigate.mock.calls[0]?.[0]).not.toHaveProperty("state");
+    expect(mutation("passageMemory.startOver")).not.toHaveBeenCalled();
+  });
+
+  async function chooseRefresh() {
+    await menuItems();
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+    );
+  }
+
+  it("says so in place when the text can't load, and can retry", async () => {
+    memorized();
+    mocks.getPassage.mockRejectedValueOnce(new Error("offline"));
+    renderHost("pack:psalm16x");
+    await chooseRefresh();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REFRESH_START_ERROR,
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Psalm 16" }),
+    ).toBeInTheDocument();
+
+    await chooseRefresh();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("opens nothing when the passage has no text", async () => {
+    memorized();
+    mocks.getPassage.mockResolvedValueOnce([
+      { chapter: 16, data: { ...psalm16, verses: [] } },
+    ]);
+    renderHost("pack:psalm16x");
+    await chooseRefresh();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REFRESH_START_ERROR,
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(await menuItems()).toContain("Stop memorizing");
+  });
+
+  it("starts once while the text loads, busy on the ••• button", async () => {
+    memorized();
+    let resolve: (value: unknown) => void = () => {};
+    mocks.getPassage.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    renderHost("pack:psalm16x");
+    await menuItems();
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+    );
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    await waitFor(() => expect(trigger).toBeDisabled());
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    // The page stays put while it loads; a second Refresh is ignored.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Psalm 16" }),
+    ).toBeInTheDocument();
+    await userEvent.click(trigger);
+    const again = screen.queryByRole("menuitem", { name: REFRESH_MENU_LABEL });
+    if (again) await userEvent.click(again);
+    resolve([{ chapter: 16, data: psalm16 }]);
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    expect(mocks.getPassage).toHaveBeenCalledTimes(1);
+  });
+
+  it("focuses ••• on return from its Refresh", async () => {
+    memorized();
+    mocks.locationState = { refreshedPassage: "psalm16x" };
+    renderHost("pack:psalm16x");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "More actions" }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("leaves focus alone after another passage's Refresh", async () => {
+    memorized();
+    mocks.locationState = { refreshedPassage: "otherpack" };
+    renderHost("pack:psalm16x");
+    await screen.findByRole("button", { name: "More actions" });
+    expect(
+      screen.getByRole("button", { name: "More actions" }),
+    ).not.toHaveFocus();
   });
 });

@@ -65,7 +65,9 @@ import {
   PassageReviewSummary,
   type ReviewSessionAttempt,
 } from "@/components/memory/review-summary";
+import type { SessionSummarySnapshot } from "@/hooks/use-start-verse-refresh";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
+import { MEMORY_HOME } from "@/lib/memory-exit";
 import { PRACTICE_STAGES } from "@/components/memory/practice/practice-stages";
 import { useVerseRefresher } from "@/components/memory/practice/use-verse-refresher";
 import { SessionColumns } from "@/components/memory/practice/session-columns";
@@ -109,6 +111,7 @@ import {
 } from "@/lib/passage-step-resume";
 import { formatDueDay } from "@/lib/memorize-plan";
 import {
+  COUNTED_TODAY_CLOSING,
   NEED_A_REFRESHER_LABEL,
   NEED_A_REFRESHER_PASSAGE_TOOLTIP,
   NOW_TRY_WITHOUT_HINTS,
@@ -155,9 +158,19 @@ type BuiltRecall = {
 /**
  * This session's counted tries, as a verse session records them for its
  * summary (a replaced first try, then the From memory try), and the passage's
- * next due date.
+ * next due date and status after them.
  */
-type SavedReview = { attempts: ReviewSessionAttempt[]; dueAt: number };
+type SavedReview = {
+  attempts: ReviewSessionAttempt[];
+  dueAt: number;
+  status?: PassageView["status"];
+};
+
+/** A passage summary kept on its history entry, shown again as it was. */
+export type PassageSummarySnapshot = Extract<
+  SessionSummarySnapshot,
+  { kind: "passage" }
+>;
 
 /** One unhinted whole-passage try to save as the passage's review. */
 type ReviewSave = {
@@ -205,6 +218,15 @@ interface PassageSessionProps {
    * summary instead of reciting the passage again.
    */
   endsAfterReview?: boolean;
+  /**
+   * ••• or summary Refresh on a Memorized passage: opens in the refresher.
+   * From Review, its From memory try counts when the passage is due (R30);
+   * from Practice it never does (R50, R51). Continue on that result leaves
+   * with `onExit`.
+   */
+  refresh?: "review" | "practice";
+  /** Coming back from a summary Refresh: that summary, as it was. */
+  restoredSummary?: PassageSummarySnapshot;
 }
 
 export function PassageSession({
@@ -218,6 +240,8 @@ export function PassageSession({
   progress,
   aside,
   endsAfterReview = false,
+  refresh,
+  restoredSummary,
 }: PassageSessionProps): JSX.Element {
   const now = useLiveNow();
   const tzOffsetMinutes = tzOffsetMinutesAt(now);
@@ -271,13 +295,23 @@ export function PassageSession({
   const [persistError, setPersistError] = useState<string | null>(null);
   const [savedReview, setSavedReview] = useState<SavedReview | null>(null);
   const [finishedReview, setFinishedReview] = useState<SavedReview | null>(
-    null,
+    restoredSummary ?? null,
   );
   // Memorized review refresher. A cold miss on a due passage is held on the
   // server (as S5 holds a verse): Continue, leaving, the next load or the
   // backstop counts it, and only a finished From memory try replaces it. Its
   // weak verses are hinted right away.
-  const refresher = useVerseRefresher();
+  const refresher = useVerseRefresher(
+    refresh === undefined || !isMaintenance
+      ? undefined
+      : refresh === "review" &&
+          isDueForReview({ status, dueAt: view.dueAt }, now)
+        ? "pre-try"
+        : "practice",
+  );
+  // A ••• or summary Refresh's own round hints every verse when none is shaky
+  // (Nov 8, 9:36 AM). Any later round hints as S11 does.
+  const [hintAllIfSteady, setHintAllIfSteady] = useState(refresh !== undefined);
   const [reviewDueAt, setReviewDueAt] = useState(view.dueAt);
   const [shakyVerses, setShakyVerses] = useState<PassageVerseKey[]>(
     view.shakyVerses ?? [],
@@ -349,6 +383,7 @@ export function PassageSession({
         heldMiss,
         shakyVerses,
         passageVerses,
+        hintAllIfSteady,
       })
     : buildingRecall({
         packName,
@@ -476,7 +511,7 @@ export function PassageSession({
   /** Add counted tries to the summary, the way a verse session does. */
   function adoptReview(
     accuracies: number[],
-    dueAt: number,
+    { dueAt, status: nextStatus }: Pick<PassageView, "dueAt" | "status">,
     refresherUsed = false,
   ) {
     const attempts = accuracies.flatMap(
@@ -498,6 +533,7 @@ export function PassageSession({
     const saved = {
       attempts: [...(savedReview?.attempts ?? []), ...attempts],
       dueAt,
+      status: nextStatus,
     };
     setSavedReview(saved);
     setReviewDueAt(dueAt);
@@ -525,7 +561,7 @@ export function PassageSession({
         save.replaceHeldId && heldMiss
           ? [heldMiss.save.accuracy, save.accuracy]
           : [save.accuracy],
-        nextView.dueAt,
+        nextView,
         save.refresherUsed === true,
       );
       adoptView(state, nextView, save.now);
@@ -604,6 +640,7 @@ export function PassageSession({
     if (save.replaceHeldId) setHeldMiss(null);
     setResultView({
       closingLine: nextReviewLine(dueAt, save.now),
+      countedLine: refresh ? COUNTED_TODAY_CLOSING : null,
       offer:
         save.accuracy < PASSAGE_PASS_ACCURACY
           ? tryAnotherRefresher(openRefresher)
@@ -615,6 +652,7 @@ export function PassageSession({
     setResultView(null);
     setHoldResult(false);
     setHeldRecall(null);
+    setHintAllIfSteady(false);
     refresher.open(kind);
   }
 
@@ -718,6 +756,11 @@ export function PassageSession({
       if (!retry) refresher.continueToStep2();
       return true;
     }
+    if (refresh && refresher.isOpen) {
+      // Straight back to where the Refresh started; no summary between.
+      leaveSession();
+      return false;
+    }
     let saved = savedReview;
     const held = refresher.isOpen ? null : heldMiss;
     if (held) {
@@ -725,7 +768,7 @@ export function PassageSession({
         const nextView = await applyHeld(held.heldId);
         setHeldMiss(null);
         if (nextView) {
-          saved = adoptReview([held.save.accuracy], nextView.dueAt);
+          saved = adoptReview([held.save.accuracy], nextView);
           adoptView(state, nextView, held.save.now);
         }
       } catch {
@@ -1082,6 +1125,13 @@ export function PassageSession({
           attempts={finishedReview.attempts}
           dueAt={finishedReview.dueAt}
           onDone={leaveSession}
+          refresh={{
+            packId,
+            references: pieceRefs,
+            status: finishedReview.status,
+            returnTo: exitHref ?? MEMORY_HOME,
+          }}
+          restored={restoredSummary !== undefined}
         />
       ) : null}
 
@@ -1311,12 +1361,15 @@ type ReviewRefresher = {
   heldMiss: HeldMiss | null;
   shakyVerses: readonly PassageVerseKey[];
   passageVerses: readonly PassageVerse[];
+  /** With nothing to target, hint every verse (••• and summary Refresh). */
+  hintAllIfSteady: boolean;
 };
 
 /**
  * The refresher's hint: First letters shows first letters on shaky verses and
  * on verses the held miss scored under 85%, every other word blank in place,
- * verse by verse even inside one piece. From memory shows none.
+ * verse by verse even inside one piece; with none and `hintAllIfSteady`, on
+ * every verse. From memory shows none.
  */
 function reviewHint(
   pieces: readonly PassagePiece[],
@@ -1330,10 +1383,14 @@ function reviewHint(
     return { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT };
   }
   const { passageVerses, heldMiss } = refresher;
-  const masked = shakyFirstLettersHint(passageVerses, [
+  const targets = [
     ...refresher.shakyVerses,
     ...(heldMiss ? missedVerses(heldMiss.save.verseScores) : []),
-  ]);
+  ];
+  const masked = shakyFirstLettersHint(
+    passageVerses,
+    targets.length === 0 && refresher.hintAllIfSteady ? passageVerses : targets,
+  );
   const maskedPieces = pieces.map((_, pieceIndex) =>
     masked
       .filter((_, verse) => passageVerses[verse]?.pieceIndex === pieceIndex)

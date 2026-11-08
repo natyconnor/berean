@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import { useLeftoverHeldAttemptsReady } from "@/hooks/use-apply-leftover-held-attempts";
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useMemoryExit } from "@/hooks/use-memory-back";
+import { usePassageRefreshExit } from "@/hooks/use-start-verse-refresh";
 import { isReviewPhase } from "@/lib/memory-scheduler";
 import { remainingDueAfterQueue } from "@/lib/memory-session";
 import { Route } from "@/routes/memory_.$packId.review";
@@ -27,7 +28,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export function MemoryPackReviewPage() {
   const navigate = useNavigate();
   const { packId } = Route.useParams();
-  const { return: returnTo } = Route.useSearch();
+  const { return: returnTo, refresh } = Route.useSearch();
   const typedPackId = packId as Id<"packs">;
   const now = useLiveNow();
   const leftoversReady = useLeftoverHeldAttemptsReady();
@@ -36,6 +37,14 @@ export function MemoryPackReviewPage() {
   const exit = useMemoryExit(returnTo, packHref);
   const onExit = exit.go;
   const backLabel = exit.label;
+  const refreshExit = usePassageRefreshExit(exit, typedPackId);
+  // Back from a summary Refresh: the same summary, read once at mount.
+  const saved = useLocation({
+    select: (location) => location.state.sessionSummary,
+  });
+  const [restoredSummary] = useState(() =>
+    saved?.kind === "passage" && saved.packId === packId ? saved : undefined,
+  );
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
   const members = useFrozenQuery(
@@ -112,10 +121,12 @@ export function MemoryPackReviewPage() {
         packId={typedPackId}
         view={passage}
         packName={pack.name}
-        onExit={onExit}
-        backLabel={backLabel}
+        onExit={refresh ? refreshExit.go : onExit}
+        backLabel={refresh ? refreshExit.label : backLabel}
         exitHref={exit.href}
         endsAfterReview
+        refresh={refresh ? "review" : undefined}
+        restoredSummary={restoredSummary}
       />
     );
   }

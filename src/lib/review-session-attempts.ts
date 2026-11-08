@@ -5,6 +5,7 @@ import {
   type MemorySchedule,
   type MemoryStatus,
 } from "@/lib/memory-scheduler";
+import type { PassageStatus } from "@/lib/passage-heart-info";
 import { formatVerseRef } from "@/lib/verse-ref-utils";
 
 export interface ReviewSessionAttempt {
@@ -82,6 +83,23 @@ export function offersSummaryRefresh(row: GroupedReviewAttempt): boolean {
     last < LEARN_PROGRESS_ACCURACY &&
     status !== undefined &&
     isReviewPhase(status)
+  );
+}
+
+/**
+ * Passage summary Refresh (R51): the passage's last counted try in this
+ * summary, the only unhinted tries it records, is under 85% and the save left
+ * it Memorized (or Mastered). Not its lowest score: "78% → 100%" gets none.
+ */
+export function offersPassageSummaryRefresh(
+  attempts: readonly ReviewSessionAttempt[],
+  status: PassageStatus | undefined,
+): boolean {
+  const last = attempts.at(-1);
+  return (
+    last !== undefined &&
+    last.accuracy < LEARN_PROGRESS_ACCURACY &&
+    (status === "reviewing" || status === "mastered")
   );
 }
 

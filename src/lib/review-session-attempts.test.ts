@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
+  offersPassageSummaryRefresh,
   offersSummaryRefresh,
   recalledCopy,
   refresherResultCopy,
@@ -180,5 +181,60 @@ describe("offersSummaryRefresh (S9, R21)", () => {
         },
       ]),
     ).toEqual([false, false]);
+  });
+});
+
+describe("offersPassageSummaryRefresh (S13, R51)", () => {
+  const psalm: ReviewSessionAttempt = {
+    reference: { book: "Psalms", chapter: 23, startVerse: 1, endVerse: 2 },
+    label: "Psalm 23",
+    accuracy: 100,
+    offerPractice: false,
+  };
+  const tries = (...accuracies: number[]): ReviewSessionAttempt[] =>
+    accuracies.map((accuracy, index) => ({
+      ...psalm,
+      accuracy,
+      ...(index > 0 ? { refresherUsed: true } : {}),
+    }));
+
+  it.each([84, 60, 59, 0])(
+    "offers it on a %i%% counted miss that stays Memorized or Mastered",
+    (accuracy) => {
+      expect(offersPassageSummaryRefresh(tries(accuracy), "reviewing")).toBe(
+        true,
+      );
+      expect(offersPassageSummaryRefresh(tries(accuracy), "mastered")).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each([85, 100])("hides it on a %i%% counted pass", (accuracy) => {
+    expect(offersPassageSummaryRefresh(tries(accuracy), "reviewing")).toBe(
+      false,
+    );
+  });
+
+  it("goes by the last counted try, not the lowest: 78% → 100% has none", () => {
+    expect(offersPassageSummaryRefresh(tries(78, 100), "reviewing")).toBe(
+      false,
+    );
+    expect(offersPassageSummaryRefresh(tries(68, 70), "reviewing")).toBe(true);
+  });
+
+  it("hides it with no counted try (practice-only or hinted only)", () => {
+    expect(offersPassageSummaryRefresh([], "reviewing")).toBe(false);
+  });
+
+  it("hides it for a Learning passage or a missing status", () => {
+    expect(offersPassageSummaryRefresh(tries(40), "building")).toBe(false);
+    expect(offersPassageSummaryRefresh(tries(40), undefined)).toBe(false);
+  });
+
+  it("leaves the verse-only guard alone: a passage row gets no verse Refresh", () => {
+    expect(
+      groupReviewSessionAttempts(tries(40)).map(offersSummaryRefresh),
+    ).toEqual([false]);
   });
 });

@@ -11,19 +11,27 @@ import {
 import { toEsvQuery } from "../../shared/esv-query";
 import { verseRefKey } from "../../shared/verse-ref-key";
 import type { SessionCompleteVerse } from "@/components/memory/practice/session-complete";
+import { prefetchCompositePassage } from "@/hooks/use-esv-composite-passage";
+import type { MemoryExitAction } from "@/hooks/use-memory-back";
 import { useSubmitLock } from "@/hooks/use-submit-lock";
 import {
   REFRESH_START_ERROR,
   SUMMARY_REFRESH_BACK_LABEL,
 } from "@/lib/memory-copy";
+import type { PassageStatus } from "@/lib/passage-heart-info";
 import type { ReviewSessionAttempt } from "@/lib/review-session-attempts";
 import { withReturn } from "@/lib/memory-return";
-import { memoryVerseRefreshHref } from "@/lib/memory-session-path";
+import {
+  memoryPassageRefreshHref,
+  memoryVerseRefreshHref,
+} from "@/lib/memory-session-path";
 
 declare module "@tanstack/react-router" {
   interface HistoryState {
     /** `verseRefKey` of the verse a ••• Refresh just left, to focus its ••• again. */
     refreshedVerse?: string;
+    /** Pack id of the passage a Refresh just left, to focus its control again. */
+    refreshedPassage?: string;
     /** The session summary on this entry, shown again on coming back to it. */
     sessionSummary?: SessionSummarySnapshot;
     /** This Refresh started from a session summary; leaving goes back to it. */
@@ -50,6 +58,14 @@ export type SessionSummarySnapshot =
       learned: ReadonlyArray<SessionCompleteVerse>;
       attempts: ReviewSessionAttempt[];
       extraPracticeHref?: string;
+    }
+  | {
+      kind: "passage";
+      packId: string;
+      title: string;
+      attempts: ReviewSessionAttempt[];
+      dueAt: number;
+      status?: PassageStatus;
     };
 
 type VerseReference = {
@@ -59,52 +75,47 @@ type VerseReference = {
   endVerse: number;
 };
 
+/** What a Refresh runs on: one verse, or a whole Memorized passage. */
+type RefreshTarget = VerseReference | { packId: string };
+
+type SummaryOrigin = { href: string; snapshot: SessionSummarySnapshot };
+
 /**
- * ••• Refresh: load the verse text while the menu's page stays put, then open
- * the refresher. When the text can't load, `error` is shown in place (R34) and
+ * Open a Refresh once `loadText` has its text, while the page that started it
+ * stays put. When the text can't load, `error` is shown in place (R34) and
  * nothing counts. From a session summary, `summary` is saved on the summary's
  * own history entry first, so leaving the refresher goes back to it.
  */
-export function useStartVerseRefresh(
-  reference: VerseReference,
+function useStartRefresh(
+  target: RefreshTarget,
   returnTo: string,
+  loadText: () => Promise<void>,
 ) {
-  const fetchPassage = useAction(api.esv.getPassage);
   const navigate = useNavigate();
   const lock = useSubmitLock();
   const [error, setError] = useState<string | null>(null);
 
-  const start = (
-    due: boolean,
-    summary?: { href: string; snapshot: SessionSummarySnapshot },
-  ) =>
+  const start = (due: boolean, summary?: SummaryOrigin) =>
     lock.submit(async () => {
       setError(null);
       try {
-        const query = toEsvQuery(reference.book, reference.chapter);
-        const chapter =
-          getCachedPassage(query) ?? (await fetchPassage({ query }));
-        setCachedPassage(query, chapter);
-        const verses = sliceEsvChapterToVerseRange(
-          chapter,
-          reference.startVerse,
-          reference.endVerse,
-        ).verses;
-        if (!verses.some((verse) => verse.text.trim() !== "")) {
-          throw new Error("No verse text");
-        }
+        await loadText();
         if (summary) {
           await navigate({
             href: summary.href,
             replace: true,
             state: {
               sessionSummary: summary.snapshot,
-              ...refreshReturnState(reference),
+              ...refreshReturnState(target),
             },
           });
         }
+        const href =
+          "packId" in target
+            ? memoryPassageRefreshHref(due, target.packId)
+            : memoryVerseRefreshHref(due, target);
         await navigate({
-          href: withReturn(memoryVerseRefreshHref(due, reference), returnTo),
+          href: withReturn(href, returnTo),
           ...(summary ? { state: { summaryRefresh: true } } : {}),
         });
       } catch {
@@ -115,9 +126,44 @@ export function useStartVerseRefresh(
   return { start, pending: lock.pending, error };
 }
 
-/** History state for leaving a ••• Refresh of `reference`. */
-export function refreshReturnState(reference: VerseReference) {
-  return { refreshedVerse: verseRefKey(reference) };
+/** ••• or summary Refresh on one verse. */
+export function useStartVerseRefresh(
+  reference: VerseReference,
+  returnTo: string,
+) {
+  const fetchPassage = useAction(api.esv.getPassage);
+  return useStartRefresh(reference, returnTo, async () => {
+    const query = toEsvQuery(reference.book, reference.chapter);
+    const chapter = getCachedPassage(query) ?? (await fetchPassage({ query }));
+    setCachedPassage(query, chapter);
+    const verses = sliceEsvChapterToVerseRange(
+      chapter,
+      reference.startVerse,
+      reference.endVerse,
+    ).verses;
+    if (!verses.some((verse) => verse.text.trim() !== "")) {
+      throw new Error("No verse text");
+    }
+  });
+}
+
+/** ••• or summary Refresh on a whole Memorized passage (R30, R50, R51). */
+export function useStartPassageRefresh(
+  packId: string,
+  references: readonly VerseReference[],
+  returnTo: string,
+) {
+  const fetchChaptersBatch = useAction(api.esv.getChaptersBatch);
+  return useStartRefresh({ packId }, returnTo, () =>
+    prefetchCompositePassage(references, fetchChaptersBatch),
+  );
+}
+
+/** History state for leaving a Refresh of `target`. */
+export function refreshReturnState(target: RefreshTarget) {
+  return "packId" in target
+    ? { refreshedPassage: target.packId }
+    : { refreshedVerse: verseRefKey(target) };
 }
 
 /**
@@ -140,17 +186,37 @@ export function useSummaryRefreshExit(): {
 }
 
 /**
- * Back from a ••• Refresh of `reference`: focus the ••• it started from, once
- * it has mounted. Nothing happens when that control is gone.
+ * Leaving a passage Refresh (Continue or Back): back to the summary it started
+ * from, else to the page it started from with focus on its •••.
+ */
+export function usePassageRefreshExit(
+  exit: Pick<MemoryExitAction, "label" | "goWith">,
+  packId: string,
+): { label: string; go: () => void } {
+  const toSummary = useSummaryRefreshExit();
+  return (
+    toSummary ?? {
+      label: exit.label,
+      go: () => exit.goWith(refreshReturnState({ packId })),
+    }
+  );
+}
+
+/**
+ * Back from a Refresh of `target`: focus the control it started from, once it
+ * has mounted. Nothing happens when that control is gone.
  */
 export function useRefreshReturnFocus(
-  reference: VerseReference,
+  target: RefreshTarget,
   triggerRef: RefObject<HTMLElement | null>,
 ) {
   const refreshed = useLocation({
-    select: (location) => location.state.refreshedVerse,
+    select: (location) =>
+      "packId" in target
+        ? location.state.refreshedPassage
+        : location.state.refreshedVerse,
   });
-  const key = verseRefKey(reference);
+  const key = "packId" in target ? target.packId : verseRefKey(target);
   useEffect(() => {
     if (refreshed === key) triggerRef.current?.focus();
   }, [refreshed, key, triggerRef]);
