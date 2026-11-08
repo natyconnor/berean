@@ -2219,6 +2219,108 @@ describe("PassageSession", () => {
       ).toBeInTheDocument();
     });
 
+    describe("warm-up start and skip controls", () => {
+      const SIX = [
+        PASSAGE_ONE,
+        PASSAGE_TWO,
+        VERSE_THREE,
+        "Even though I walk through the valley.",
+        "You prepare a table before me.",
+        "Surely goodness and mercy shall follow me.",
+      ];
+      // The default warm-up is verses 3–5, inside a section that starts at
+      // verse 2, so all three controls show.
+      const RANGE = SIX.slice(2, 5).join(" ");
+      const CONTROLS = [
+        "From the start of this section",
+        "From the beginning of the passage",
+        WARMUP_SKIP_LABEL,
+      ];
+
+      function allControlsWarmup(): PassageView {
+        serveChapter(SIX);
+        const now = getSessionNow();
+        const solid = (index: number) =>
+          piece(index, "solid", {
+            learnStage: 3,
+            dueAt: now + DAY_MS,
+            sectionIndex: index === 0 ? 0 : 1,
+          });
+        const view = passageView(
+          [
+            solid(0),
+            solid(1),
+            solid(2),
+            solid(3),
+            solid(4),
+            piece(5, "learning", { sectionIndex: 1, dueAt: now }),
+          ],
+          { lastSessionAt: now - 60_000 },
+        );
+        record().mockResolvedValue(view);
+        return view;
+      }
+
+      function expectControls(shown: boolean) {
+        for (const name of CONTROLS) {
+          const control = screen.queryByRole("button", { name });
+          if (shown) expect(control).toBeInTheDocument();
+          else expect(control).toBeNull();
+        }
+        // The session's Back stays available throughout.
+        expect(
+          screen.getByRole("button", { name: "Back to Memory" }),
+        ).toBeEnabled();
+      }
+
+      it("hides all three during step 1, step 2 and the step-2 result, and restores them on the untried warm-up", async () => {
+        renderSession(allControlsWarmup());
+        await screen.findByRole("button", { name: LINK });
+        expectControls(true);
+
+        await clickButton(LINK);
+        await expectFreshStep(STEP_ONE);
+        expectControls(false);
+        await check(RANGE);
+        expectControls(false);
+        await clickButton(/Continue/);
+        await expectFreshStep(STEP_TWO);
+        expectControls(false);
+        await check(RANGE);
+        expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+        expectControls(false);
+
+        await clickButton(/Continue/);
+        expect(header("Warm up")).toBeInTheDocument();
+        await waitFor(() => expect(answerBox()).toHaveFocus());
+        expectControls(true);
+        expectOnlyLoggedTries(0);
+      });
+
+      it("keeps them hidden through a post-miss refresher and does not restore them after it", async () => {
+        renderSession(allControlsWarmup());
+        await check(SIX[2] ?? "");
+        expectControls(false);
+
+        await clickButton(LINK);
+        await expectFreshStep(STEP_ONE);
+        expectControls(false);
+        await check(RANGE);
+        await clickButton(/Continue/);
+        await expectFreshStep(STEP_TWO);
+        expectControls(false);
+        await check(RANGE);
+        expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+        expectControls(false);
+
+        // The logged try's normal next screen, with no warm-up controls.
+        await clickButton(/Continue/);
+        expect(header("Fix a tricky spot")).toBeInTheDocument();
+        expectControls(false);
+        expectOnlyLoggedTries(1);
+      });
+    });
+
     it("opens once on a double activation and runs by keyboard alone", async () => {
       const user = userEvent.setup();
       renderSession(warmup(["solid", "solid"]));
