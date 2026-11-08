@@ -1,5 +1,12 @@
 import { StrictMode } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1983,29 +1990,53 @@ describe("PassageSession", () => {
           });
         });
 
-        it("shows a start error in the row, keeps the summary and retries once at a time", async () => {
+        it("shows the R34 error in the row, keeps the summary and focus, then retries into step 1", async () => {
           await finishedSummary(() => check(WEAK_TWO));
           const saves = [record(), hold(), applyHeld(), practice()].map(
             (mock) => mock.mock.calls.length,
           );
           sessionStorage.clear();
+          let fail: (error: Error) => void = () => {};
           let resolve: (value: unknown) => void = () => {};
           fetchChaptersBatchMock
-            .mockRejectedValueOnce(new Error("offline"))
+            .mockReturnValueOnce(
+              new Promise((_, reject) => {
+                fail = reject;
+              }),
+            )
             .mockReturnValueOnce(
               new Promise((done) => {
                 resolve = done;
               }),
             );
-          await userEvent.click(await refreshButton());
-          expect(await screen.findByRole("alert")).toHaveTextContent(
-            "Couldn't start the refresher. Try again.",
+          const button = await refreshButton();
+          await userEvent.click(button);
+          expect(button).toBeDisabled();
+          // A browser drops focus from a button that turns disabled; jsdom
+          // keeps it, so move it away as a browser would.
+          act(() =>
+            screen.getByRole("heading", { name: "Review complete" }).focus(),
           );
+          expect(button).not.toHaveFocus();
+          await act(async () => {
+            fail(new Error("offline"));
+            await Promise.resolve();
+          });
+
+          const alert = await screen.findByRole("alert");
+          expect(alert).toHaveTextContent(
+            /^Couldn't start the refresher\. Try again\.$/,
+          );
+          expect(screen.getAllByRole("alert")).toHaveLength(1);
+          expect(alert.closest("li")).toContainElement(button);
+          await waitFor(() => expect(button).toHaveFocus());
+          expect(button).toBeEnabled();
           expectSummary("65%");
+          expect(
+            screen.getByRole("heading", { name: "Review complete" }),
+          ).toBeInTheDocument();
           expect(router.navigate).not.toHaveBeenCalled();
 
-          const button = await refreshButton();
-          expect(button).toBeEnabled();
           await userEvent.dblClick(button);
           expect(button).toBeDisabled();
           expect(button).toHaveAttribute("aria-busy", "true");
@@ -2018,6 +2049,18 @@ describe("PassageSession", () => {
               (mock) => mock.mock.calls.length,
             ),
           ).toEqual(saves);
+
+          // The practice route it opened starts at First letters.
+          const [, [opened]] = router.navigate.mock.calls as [
+            unknown,
+            [{ href: string }],
+          ];
+          expect(opened.href).toBe(
+            "/memory/pack_1/practice?refresh=1&return=%2Fmemory",
+          );
+          cleanup();
+          renderRefresh("practice", reviewView({ dueAt: SAVED_DUE() }));
+          await expectFreshStep("Refresh · First letters · 1 of 2");
         });
 
         it.each(["a pass", "a miss", "Back"])(

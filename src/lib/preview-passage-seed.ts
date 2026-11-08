@@ -1,5 +1,5 @@
 import type { EsvVerse } from "../../shared/esv-api";
-import { EASE_START, type MemorySchedule } from "./memory-scheduler";
+import { DAY_MS, EASE_START, type MemorySchedule } from "./memory-scheduler";
 import { PASSAGE_MAX_ADDS_PER_DAY, localDayIndex } from "./passage-frontier";
 import {
   buildPassagePieces,
@@ -8,11 +8,16 @@ import {
   type PieceAttachment,
 } from "./passage-pieces";
 import type { PassageRowStatus } from "./passage-start";
+import type { PassageVerseKey } from "./passage-shaky";
 import { scopesEqual } from "./scope-equality";
 import type { VerseScope } from "./verse-scope-match";
 
 export type PreviewPassageSeedRole =
-  "readyToStart" | "buildingDue" | "budgetExhausted" | "maintenanceDue";
+  | "readyToStart"
+  | "buildingDue"
+  | "budgetExhausted"
+  | "maintenanceDue"
+  | "masteredNotDue";
 
 /** Pack scope as stored on `packs.scope` (tags are unused for verse matching). */
 export type PreviewPassagePackScope = VerseScope & {
@@ -34,8 +39,40 @@ export type PreviewPassageSeedPack = {
     addsOnDay: number;
     addDayKey?: number;
     schedule: MemorySchedule;
+    /** Verses remembered as shaky (S11), hinted by a passage refresher. */
+    shakyVerses?: PassageVerseKey[];
+    /** Counted whole-passage reviews, newest first. */
+    recentReviews?: Array<{ accuracy: number; createdAt: number }>;
   };
 };
+
+type PreviewPassage = NonNullable<PreviewPassageSeedPack["passage"]>;
+
+/** The `passageMemory` fields a seeded passage is stored with. */
+export function previewPassageMemoryFields(
+  passage: PreviewPassage,
+  now: number,
+) {
+  return {
+    status: passage.status,
+    pieces: passage.pieces,
+    addDayKey: passage.addDayKey,
+    addsOnDay: passage.addsOnDay,
+    ease: passage.schedule.ease,
+    intervalDays: passage.schedule.intervalDays,
+    dueAt: passage.schedule.dueAt,
+    consecutiveCorrect: passage.schedule.consecutiveCorrect,
+    lapses: passage.schedule.lapses,
+    stageReps: passage.schedule.stageReps,
+    earlyReviewApplied: passage.schedule.earlyReviewApplied,
+    ...(passage.shakyVerses ? { shakyVerses: passage.shakyVerses } : {}),
+    ...(passage.recentReviews?.[0]
+      ? { lastSessionAt: passage.recentReviews[0].createdAt }
+      : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 export type PreviewPassageSeedPlan = {
   packs: PreviewPassageSeedPack[];
@@ -326,6 +363,17 @@ const PSALM_100_VERSES: EsvVerse[] = [
   },
 ];
 
+const PSALM_117_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "Praise the Lord, all nations! Extol him, all peoples!",
+  },
+  {
+    number: 2,
+    text: "For great is his steadfast love toward us, and the faithfulness of the Lord endures forever. Praise the Lord!",
+  },
+];
+
 function paintPieces(
   bases: readonly PassagePieceBase[],
   paint: ReadonlyArray<{
@@ -448,6 +496,56 @@ export function testerMaintenancePacks(
       PSALM_100_VERSES,
       "Open Review or the pack and recite the whole passage for a normal review.",
     ),
+  ];
+}
+
+/**
+ * S13 ••• Refresh on a not-due Mastered passage: Psalm 117, verse 2 shaky,
+ * three clean recent reviews. Never seeded on a production Convex deployment.
+ */
+export function testerRefreshPacks(
+  now: number,
+  convexDeployment: string | undefined,
+): PreviewPassageSeedPack[] {
+  if (convexDeployment?.startsWith("prod:") === true) return [];
+  const bases = buildPassagePieces([
+    { book: "Psalms", chapter: 117, verses: PSALM_117_VERSES },
+  ]);
+  return [
+    {
+      id: "passage-mastered-psalm-117",
+      role: "masteredNotDue",
+      name: "Sample · Psalm 117 (Mastered, verse 2 shaky)",
+      description:
+        "Mastered passage, not due, with verse 2 remembered as shaky.",
+      howToTry:
+        "Open the pack → ••• → Refresh. First letters hints only verse 2. It's practice only: the next review date stays the same.",
+      scope: scopeChapter("Psalms", 117),
+      passage: {
+        status: "mastered",
+        addsOnDay: 0,
+        schedule: {
+          status: "mastered",
+          learnStage: 3,
+          stageReps: 0,
+          ease: EASE_START,
+          intervalDays: 32,
+          dueAt: now + 20 * DAY_MS,
+          consecutiveCorrect: 8,
+          lapses: 0,
+          earlyReviewApplied: false,
+        },
+        pieces: paintPieces(
+          bases,
+          bases.map(() => ({ attachment: "solid" as const, learnStage: 3 })),
+        ),
+        shakyVerses: [{ chapter: 117, verse: 2 }],
+        recentReviews: [12, 44, 76].map((daysAgo) => ({
+          accuracy: 100,
+          createdAt: now - daysAgo * DAY_MS,
+        })),
+      },
+    },
   ];
 }
 

@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 
+import type { Id } from "../../convex/_generated/dataModel";
+import { toPassageView } from "../../convex/lib/passageMemory";
 import { passageHeartSpans } from "./hearted-verse-coverage";
+import { isStaleVerse } from "./memory-stale";
 import { packAllowsPassageMode } from "./passage-eligibility";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
 import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
 import {
   buildPreviewPassageSeed,
+  previewPassageMemoryFields,
   testerMaintenancePacks,
+  testerRefreshPacks,
 } from "./preview-passage-seed";
+import { shakyFirstLettersHint } from "./passage-shaky";
 import { scopesEqual } from "./scope-equality";
 
 const NOW = 1_700_000_000_000;
@@ -182,5 +188,89 @@ describe("testerMaintenancePacks", () => {
   it("drops the obsolete pass-then-fail advice from Psalm 23", () => {
     const psalm23 = base.find((pack) => pack.name.includes("Psalm 23"));
     expect(psalm23?.howToTry).not.toMatch(/fail once|both times/);
+  });
+});
+
+describe("testerRefreshPacks (S13)", () => {
+  it("adds nothing on a production deployment", () => {
+    expect(testerRefreshPacks(NOW, "prod:berean-123")).toEqual([]);
+  });
+
+  it.each(["dev:berean-123", "preview:berean-pr-368", undefined])(
+    "lands Psalm 117 Mastered, not due, verse 2 shaky and clean on %s",
+    (deployment) => {
+      const [pack, ...rest] = testerRefreshPacks(NOW, deployment);
+      expect(rest).toEqual([]);
+      expect(pack?.name).toBe("Sample · Psalm 117 (Mastered, verse 2 shaky)");
+      const passage = pack.passage!;
+
+      // The row the seed stores, read back through the server's view.
+      const view = toPassageView(
+        {
+          _id: "passageMemory:117" as Id<"passageMemory">,
+          _creationTime: NOW,
+          userId: "users:u" as Id<"users">,
+          packId: "packs:117" as Id<"packs">,
+          ...previewPassageMemoryFields(passage, NOW),
+        },
+        NOW,
+        TZ,
+      );
+      expect(view.status).toBe("mastered");
+      expect(view.shakyVerses).toEqual([{ chapter: 117, verse: 2 }]);
+      expect(view.needsCelebration).toBe(false);
+      expect(isPassageDueForReview(view, NOW)).toBe(false);
+      expect(
+        view.pieces.every(
+          (piece) => piece.attachment === "solid" && piece.learnStage === 3,
+        ),
+      ).toBe(true);
+      expect(view.pieces[0]?.startVerse).toBe(1);
+      expect(view.pieces.at(-1)?.endVerse).toBe(2);
+
+      // Clean recent history: every try passed, so it isn't stale.
+      expect(passage.recentReviews).toHaveLength(3);
+      expect(
+        passage.recentReviews!.every((review) => review.accuracy >= 85),
+      ).toBe(true);
+      expect(view.lastSessionAt).toBe(passage.recentReviews![0]?.createdAt);
+      expect(
+        isStaleVerse({
+          status: view.status === "mastered" ? "mastered" : "reviewing",
+          dueAt: view.dueAt,
+          intervalDays: view.intervalDays,
+          now: NOW,
+          lastReviews: passage.recentReviews!,
+        }),
+      ).toBe(false);
+
+      // A refresher hints only the shaky verse 2, not verse 1 before it.
+      const [first, second] = shakyFirstLettersHint(
+        [
+          { chapter: 117, verse: 1, text: "Praise the Lord, all nations!" },
+          { chapter: 117, verse: 2, text: "For great is his steadfast love" },
+        ],
+        view.shakyVerses ?? [],
+      );
+      expect(first).not.toMatch(/[a-z]/i);
+      expect(second).toBe("F__ g____ i_ h__ s________ l___");
+    },
+  );
+
+  it("uses a psalm no other sample (or S12's 131, 133, 134) uses", () => {
+    const all = [
+      ...buildPreviewPassageSeed(NOW, TZ).packs,
+      ...testerMaintenancePacks(NOW, undefined),
+      ...testerRefreshPacks(NOW, undefined),
+    ];
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        expect(scopesEqual(all[i].scope, all[j].scope)).toBe(false);
+      }
+    }
+    const [pack] = testerRefreshPacks(NOW, undefined);
+    expect(pack?.scope.chapterRanges).toEqual([
+      { book: "Psalms", startChapter: 117, endChapter: 117 },
+    ]);
   });
 });

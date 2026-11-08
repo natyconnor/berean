@@ -147,16 +147,26 @@ export function useStartVerseRefresh(
   });
 }
 
-/** ••• or summary Refresh on a whole Memorized passage (R30, R50, R51). */
+/**
+ * ••• or summary Refresh on a whole Memorized passage (R30, R50, R51). When
+ * it can't start (R34), focus goes back to `controlRef`, which the launch
+ * disabled while the text loaded.
+ */
 export function useStartPassageRefresh(
   packId: string,
   references: readonly VerseReference[],
   returnTo: string,
+  controlRef: RefObject<HTMLElement | null>,
 ) {
   const fetchChaptersBatch = useAction(api.esv.getChaptersBatch);
-  return useStartRefresh({ packId }, returnTo, () =>
+  const refresh = useStartRefresh({ packId }, returnTo, () =>
     prefetchCompositePassage(references, fetchChaptersBatch),
   );
+  const failed = refresh.error !== null && !refresh.pending;
+  useEffect(() => {
+    if (failed) controlRef.current?.focus();
+  }, [failed, controlRef]);
+  return refresh;
 }
 
 /** History state for leaving a Refresh of `target`. */

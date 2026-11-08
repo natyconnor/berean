@@ -1364,7 +1364,12 @@ function PackDetailMenu({
     () => (passage?.pieces ?? []).map(pieceReference),
     [passage?.pieces],
   );
-  const refresh = useStartPassageRefresh(pack._id, pieceRefs, frame.returnTo);
+  const refresh = useStartPassageRefresh(
+    pack._id,
+    pieceRefs,
+    frame.returnTo,
+    triggerRef,
+  );
   useRefreshReturnFocus({ packId: pack._id }, triggerRef);
   const hasRestart = showRefresh || showStartOver;
 
