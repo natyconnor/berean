@@ -72,7 +72,7 @@ interface VerseSpec {
   reference: PreviewMemoryReference;
   /** Days from `now` until `dueAt`. Negative = overdue. */
   dueOffsetDays?: number;
-  /** The two newest reviews miss under 60%, so the verse is stale. */
+  /** With the stale fixture, the two newest reviews miss under 60%. */
   recentMisses?: boolean;
 }
 
@@ -145,8 +145,8 @@ const VERSE_SPECS: readonly VerseSpec[] = [
   {
     id: "matthew-6-33",
     role: "reviewDue",
-    label: "Reviewing · due today · 2 recent misses",
-    howToTry: "Open Review — third due verse, shows Refresh it first.",
+    label: "Reviewing · due today",
+    howToTry: "Open Review — third due verse.",
     recentMisses: true,
     reference: { book: "Matthew", chapter: 6, startVerse: 33, endVerse: 33 },
   },
@@ -172,8 +172,8 @@ const VERSE_SPECS: readonly VerseSpec[] = [
   {
     id: "joshua-1-9",
     role: "reviewLater",
-    label: "Reviewing · in a week · 2 recent misses",
-    howToTry: "Should not be in Review. Practice it to see Refresh it first.",
+    label: "Reviewing · in a week",
+    howToTry: "Should not be in Review. Use Extra practice.",
     dueOffsetDays: 7,
     recentMisses: true,
     reference: { book: "Joshua", chapter: 1, startVerse: 9, endVerse: 9 },
@@ -392,8 +392,13 @@ function historyForVerse(
  *
  * `now` should be the same session clock the UI passes to Convex (`useLiveNow`)
  * so due/locked verses line up with the frozen client clock.
+ * `staleFixture` (non-production deployments only) makes Matthew 6:33 and
+ * Joshua 1:9 stale; without it the set is unchanged.
  */
-export function buildPreviewMemorySeed(now: number): PreviewMemorySeedPlan {
+export function buildPreviewMemorySeed(
+  now: number,
+  options: { staleFixture?: boolean } = {},
+): PreviewMemorySeedPlan {
   const verses = VERSE_SPECS.map((spec) => {
     const { schedule, lastReviewedAt } = scheduleForRole(spec, now);
     return {
@@ -412,7 +417,12 @@ export function buildPreviewMemorySeed(now: number): PreviewMemorySeedPlan {
     verses,
     packs: PACKS.map((pack) => ({ ...pack, verseIds: [...pack.verseIds] })),
     reviews: verses.flatMap((verse, index) =>
-      historyForVerse(verse, now, VERSE_SPECS[index]?.recentMisses === true),
+      historyForVerse(
+        verse,
+        now,
+        options.staleFixture === true &&
+          VERSE_SPECS[index]?.recentMisses === true,
+      ),
     ),
   };
 }
