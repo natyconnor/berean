@@ -3595,6 +3595,36 @@ describe("PracticeBoard ••• Refresh", () => {
     },
   );
 
+  it("keeps the counted line when a due bad miss drops the verse to Learning", async () => {
+    // First letters saves as held; the counted From memory miss comes back
+    // in Learning at fill in the blanks, as the server does for a lapse.
+    mutationMock("verseMemory.recordAttempt")
+      .mockResolvedValueOnce(heldSchedule)
+      .mockResolvedValue({
+        ...stillDueSchedule,
+        status: "learning",
+        learnStage: REVIEW_LAPSE_LEARN_STAGE,
+        intervalDays: 0,
+        consecutiveCorrect: 0,
+        lapses: 1,
+        dueAt: getSessionNow(),
+      });
+    const onExit = renderRefresh("review", {
+      ...reviewingVerse,
+      intervalDays: 1,
+      consecutiveCorrect: 0,
+    });
+    await passStep1();
+    await recite(BAD_MISS);
+    expect(await screen.findByText(COUNTED_TODAY_CLOSING)).toBeVisible();
+    expect(screen.queryByText(PRACTICE_ONLY_CLOSING)).not.toBeInTheDocument();
+    expect(countedCalls()).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(countedCalls()).toHaveLength(1);
+  });
+
   it("keeps a later round after a counted miss practice only", async () => {
     const onExit = renderRefresh("review", reviewingVerse);
     await passStep1();

@@ -1388,6 +1388,9 @@ function PracticeCard({
   // Whether the checked try was practice only. Frozen at Check: a counted
   // miss reschedules the verse, which would flip `practiceOnly` mid-result.
   const [checkedPracticeOnly, setCheckedPracticeOnly] = useState(false);
+  // Whether the checked try counts as today's review. Frozen at Check for the
+  // same reason: a bad miss can drop the verse to Learning on save.
+  const [checkedCounted, setCheckedCounted] = useState(false);
   // Snapshot of "First letters · N of M today" at Check so the step label stays
   // on the step just finished while the journey bar adopts banked progress early.
   const [heldGoalLabel, setHeldGoalLabel] = useState<string | null>(null);
@@ -1640,6 +1643,7 @@ function PracticeCard({
       }
       setChecked(true);
       setCheckedPracticeOnly(practiceOnly);
+      setCheckedCounted(countedFromMemory);
       setOutcomeNow(now);
       setNextSchedule(preview);
       if (preview && !practiceRound) {
@@ -2230,7 +2234,7 @@ function PracticeCard({
                     }
                     countedLine={
                       onRefreshDone &&
-                      countedFromMemory &&
+                      checkedCounted &&
                       refresher.phase === "step2" &&
                       !submitPending &&
                       !saveError
