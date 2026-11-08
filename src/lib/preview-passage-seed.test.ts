@@ -4,7 +4,10 @@ import { passageHeartSpans } from "./hearted-verse-coverage";
 import { packAllowsPassageMode } from "./passage-eligibility";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
 import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
-import { buildPreviewPassageSeed } from "./preview-passage-seed";
+import {
+  buildPreviewPassageSeed,
+  testerMaintenancePacks,
+} from "./preview-passage-seed";
 import { scopesEqual } from "./scope-equality";
 
 const NOW = 1_700_000_000_000;
@@ -114,5 +117,70 @@ describe("buildPreviewPassageSeed", () => {
     expect(
       pieces.every((piece) => piece.endVerse - piece.startVerse + 1 <= 4),
     ).toBe(true);
+  });
+});
+
+describe("testerMaintenancePacks", () => {
+  const base = buildPreviewPassageSeed(NOW, TZ).packs;
+
+  it("adds nothing on a production deployment, so production seeds as before", () => {
+    expect(testerMaintenancePacks(NOW, "prod:berean-123")).toEqual([]);
+    expect(base.map((pack) => pack.name)).toEqual([
+      "Sample · Psalm 1 (start passage)",
+      "Sample · Jude (building)",
+      "Sample · 3 John (budget used)",
+      "Sample · Psalm 23 (maintenance due)",
+    ]);
+  });
+
+  it.each(["dev:berean-123", "preview:berean-pr-364", undefined])(
+    "adds three due maintenance passages on %s",
+    (deployment) => {
+      const extra = testerMaintenancePacks(NOW, deployment);
+      expect(extra.map((pack) => pack.name)).toEqual([
+        "Sample · Psalm 13 (maintenance due)",
+        "Sample · Psalm 15 (maintenance due)",
+        "Sample · Psalm 100 (maintenance due)",
+      ]);
+      for (const pack of extra) {
+        expect(pack.role).toBe("maintenanceDue");
+        expect(pack.scope.chapterRanges).toHaveLength(1);
+        const passage = pack.passage!;
+        expect(passage.status).toBe("reviewing");
+        expect(passage.schedule).toMatchObject({
+          status: "reviewing",
+          dueAt: NOW,
+          intervalDays: 1,
+          stageReps: 0,
+          consecutiveCorrect: 2,
+        });
+        expect(passage.pieces.length).toBeGreaterThanOrEqual(2);
+        for (const piece of passage.pieces) {
+          expect(piece).toMatchObject({ attachment: "solid", learnStage: 3 });
+          expect(piece.shaky).toBeUndefined();
+        }
+        expect(passage.pieces[0]?.startVerse).toBe(1);
+        expect(
+          isPassageDueForReview(
+            { status: passage.status, dueAt: passage.schedule.dueAt },
+            NOW,
+          ),
+        ).toBe(true);
+      }
+    },
+  );
+
+  it("keeps every sample scope distinct", () => {
+    const all = [...base, ...testerMaintenancePacks(NOW, undefined)];
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        expect(scopesEqual(all[i].scope, all[j].scope)).toBe(false);
+      }
+    }
+  });
+
+  it("drops the obsolete pass-then-fail advice from Psalm 23", () => {
+    const psalm23 = base.find((pack) => pack.name.includes("Psalm 23"));
+    expect(psalm23?.howToTry).not.toMatch(/fail once|both times/);
   });
 });

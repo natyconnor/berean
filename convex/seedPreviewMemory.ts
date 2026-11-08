@@ -12,7 +12,10 @@ import {
 } from "./lib/passageDue";
 import { isDueForLearning, isDueForReview } from "../src/lib/memory-scheduler";
 import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
-import { buildPreviewPassageSeed } from "../src/lib/preview-passage-seed";
+import {
+  buildPreviewPassageSeed,
+  testerMaintenancePacks,
+} from "../src/lib/preview-passage-seed";
 
 async function isAnonymousUser(
   ctx: MutationCtx,
@@ -213,6 +216,9 @@ export const seedPreviewMemory = mutation({
     const plan = buildPreviewMemorySeed(args.now);
     const passagePlan = buildPreviewPassageSeed(args.now, tzOffsetMinutes);
     await clearUserMemory(ctx, userId);
+    passagePlan.packs.push(
+      ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
+    );
 
     const memoryIdByVerseId = new Map<string, Id<"verseMemory">>();
     const verseRefIdByVerseId = new Map<string, Id<"verseRefs">>();
