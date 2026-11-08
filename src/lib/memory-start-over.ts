@@ -30,6 +30,7 @@ export function startOverPassagePieces(
     learnStage: 0,
     stageReps: 0,
     dueAt: undefined,
+    shaky: undefined,
   }));
 }
 

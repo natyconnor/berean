@@ -37,7 +37,12 @@ import {
   loadPassageDueRecords,
 } from "./lib/passageDue";
 import { ensurePassageHearts, stopMemorizingVerse } from "./lib/memorize";
-import { SHORT_VERSE_WORDS } from "../src/lib/memory-scheduler";
+import {
+  isDueForReview,
+  planVerseAttemptSchedule,
+  SHORT_VERSE_WORDS,
+} from "../src/lib/memory-scheduler";
+import { piecesAfterUnhintedTry } from "../src/lib/passage-shaky";
 import {
   packAllowsPassageMode,
   rangeAllowsPassageMode,
@@ -59,7 +64,6 @@ import {
   freshReviewingSchedule,
   planStart,
 } from "../src/lib/passage-start";
-import { applyUnifiedGrade } from "../src/lib/unified-review-schedule";
 import { startOverPassagePatch } from "../src/lib/memory-start-over";
 
 /**
@@ -272,9 +276,15 @@ export const introduceNext = mutation({
   },
 });
 
+/** Each verse's own score in an unhinted whole-passage try; `null` = no text. */
+const pieceAccuraciesValidator = v.array(v.union(v.number(), v.null()));
+
 /**
- * Log a graded attempt. Frontier applies per-piece learning rules; review
- * schedules the passage row on the ≥85% success path; rope/repair log only.
+ * Log a graded attempt. Frontier applies per-piece learning rules; rope/repair
+ * log only. A Memorized review moves the one passage schedule by its overall
+ * score and updates shaky verses from `pieceAccuracies`. `refresherUsed` marks
+ * a refresher's From memory try; `heldMissAccuracy` is the first try it
+ * replaces. A repeat at the same `now` is a retried save and changes nothing.
  */
 export const recordAttempt = mutation({
   args: {
@@ -288,6 +298,9 @@ export const recordAttempt = mutation({
     durationMs: v.optional(v.number()),
     pieceIndex: v.optional(v.number()),
     wordCount: v.optional(v.number()),
+    pieceAccuracies: v.optional(pieceAccuraciesValidator),
+    refresherUsed: v.optional(v.boolean()),
+    heldMissAccuracy: v.optional(v.number()),
   },
   returns: passageViewValidator,
   handler: async (ctx, args) => {
@@ -295,6 +308,22 @@ export const recordAttempt = mutation({
     const row = withNormalizedPieces(
       await requirePassageForPack(ctx, args.packId, userId),
     );
+
+    if (args.kind === "review") {
+      const retried = await ctx.db
+        .query("passageReviews")
+        .withIndex("by_userId_createdAt", (q) =>
+          q.eq("userId", userId).eq("createdAt", args.now),
+        )
+        .first();
+      if (
+        retried &&
+        retried.passageMemoryId === row._id &&
+        retried.kind === "review"
+      ) {
+        return toPassageView(row, args.now, args.tzOffsetMinutes);
+      }
+    }
 
     await insertPassageReview(ctx, {
       userId,
@@ -366,7 +395,8 @@ export const recordAttempt = mutation({
       });
     } else if (args.kind === "review") {
       if (row.status === "reviewing" || row.status === "mastered") {
-        const scheduled = applyUnifiedGrade(toPassageSchedule(row), {
+        const schedule = toPassageSchedule(row);
+        const { next: scheduled } = planVerseAttemptSchedule(schedule, {
           quality: args.quality,
           accuracy: args.accuracy,
           mode: "review",
@@ -374,13 +404,21 @@ export const recordAttempt = mutation({
           tzOffsetMinutes: args.tzOffsetMinutes,
           timeZone: args.timeZone,
           item: "passage",
+          refresherUsed: args.refresherUsed,
+          heldMissAccuracy: args.heldMissAccuracy,
         });
         const nextStatus =
           scheduled.status === "mastered" || scheduled.status === "reviewing"
             ? scheduled.status
             : row.status;
         next = await patchPassageMemory(ctx, row._id, {
-          pieces: row.pieces,
+          pieces: args.pieceAccuracies
+            ? piecesAfterUnhintedTry(
+                row.pieces,
+                args.pieceAccuracies,
+                isDueForReview(schedule, args.now),
+              )
+            : row.pieces,
           status: nextStatus,
           ease: scheduled.ease,
           intervalDays: scheduled.intervalDays,
@@ -407,6 +445,36 @@ export const recordAttempt = mutation({
       });
     }
 
+    return toPassageView(next, args.now, args.tzOffsetMinutes);
+  },
+});
+
+/**
+ * An unhinted practice-only recital of a Memorized passage (Try another
+ * refresher). Verses at 85%+ stop being shaky; nothing else changes and no
+ * attempt is logged.
+ */
+export const notePracticeRecital = mutation({
+  args: {
+    packId: v.id("packs"),
+    pieceAccuracies: pieceAccuraciesValidator,
+    now: v.number(),
+    tzOffsetMinutes: v.number(),
+  },
+  returns: passageViewValidator,
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const row = withNormalizedPieces(
+      await requirePassageForPack(ctx, args.packId, userId),
+    );
+    if (row.status !== "reviewing" && row.status !== "mastered") {
+      return toPassageView(row, args.now, args.tzOffsetMinutes);
+    }
+    await ctx.db.patch(row._id, {
+      pieces: piecesAfterUnhintedTry(row.pieces, args.pieceAccuracies, false),
+    });
+    const next = await ctx.db.get(row._id);
+    if (!next) throw new Error("Failed to update passage memory");
     return toPassageView(next, args.now, args.tzOffsetMinutes);
   },
 });

@@ -25,6 +25,11 @@ export type PassagePiece = PassagePieceBase & {
    * passage skipped or resumed it instead of starting it fresh.
    */
   carriedOver?: boolean;
+  /**
+   * Memorized passage: this verse scored under 85% on its own in a counted
+   * try and has not been recited cleanly since. Its refresher hints it.
+   */
+  shaky?: boolean;
 };
 
 export type PassageChapterInput = {

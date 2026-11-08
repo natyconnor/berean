@@ -38,6 +38,11 @@ function normalize(word: string): string {
     .replace(TRIM_PUNCT_PATTERN, "");
 }
 
+/** Words `diffWords` grades in `text`, so a passage diff can be split by verse. */
+export function countDiffWords(text: string): number {
+  return tokenize(text).length;
+}
+
 function tokenize(input: string): string[] {
   const trimmed = input.trim();
   if (trimmed.length === 0) return [];

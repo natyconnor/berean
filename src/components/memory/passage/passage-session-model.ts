@@ -1,4 +1,6 @@
+import { verseAttemptAccuracy } from "@/components/study/study-attempt-quality";
 import type { CardReference } from "@/components/study/study-card-model";
+import { countDiffWords, type DiffToken } from "@/lib/diff-words";
 import { displayBookName } from "@/lib/bible-books";
 import {
   countVerseWords,
@@ -315,6 +317,32 @@ export function joinPieceTexts(
     previousChapter = key;
   }
   return result;
+}
+
+/**
+ * Each piece's own accuracy inside a whole-passage diff, `null` for a piece
+ * with no text. An extra word belongs to the verse it was typed after.
+ */
+export function pieceAccuracies(
+  tokens: readonly DiffToken[],
+  pieceTexts: readonly string[],
+): (number | null)[] {
+  const wordCounts = pieceTexts.map(countDiffWords);
+  const pieceOfWord = wordCounts.flatMap((count, piece) =>
+    Array.from({ length: count }, () => piece),
+  );
+  const byPiece: DiffToken[][] = pieceTexts.map(() => []);
+  let expected = 0;
+  for (const token of tokens) {
+    const word =
+      token.status === "extra" ? Math.max(0, expected - 1) : expected;
+    if (token.status !== "extra") expected += 1;
+    const piece = pieceOfWord[Math.min(word, pieceOfWord.length - 1)];
+    if (piece !== undefined) byPiece[piece]?.push(token);
+  }
+  return byPiece.map((pieceTokens, piece) =>
+    wordCounts[piece] === 0 ? null : verseAttemptAccuracy(pieceTokens),
+  );
 }
 
 export function verseCountIn(pieces: readonly PassagePiece[]): number {

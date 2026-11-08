@@ -122,6 +122,13 @@ describe("startOverPassagePatch", () => {
     expect(startOverPassageSession()).toEqual({ addsOnDay: 0 });
   });
 
+  it("forgets shaky verses, so tries before the reset never hint again", () => {
+    const [reset] = startOverPassagePieces([
+      piece(0, "solid", { shaky: true }),
+    ]);
+    expect(reset?.shaky).toBeUndefined();
+  });
+
   it("clears celebration so a second finish can show the moment again", () => {
     const celebrated = {
       status: "reviewing" as const,

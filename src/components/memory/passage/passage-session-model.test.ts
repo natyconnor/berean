@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PassagePiece } from "@/lib/passage-pieces";
 
 import {
+  pieceAccuracies,
   computeStallCue,
   CONNECT_TITLE,
   connectPairTitle,
@@ -13,6 +14,7 @@ import {
   stopBeforeCue,
 } from "./passage-session-model";
 import type { PassageSessionState } from "@/lib/passage-session";
+import { diffWords } from "@/lib/diff-words";
 
 describe("PASSAGE_SESSION_PHASE_LABELS", () => {
   it("names passage phases without reusing Practice", () => {
@@ -279,5 +281,30 @@ describe("repairWindowShowsStageHints / computeStallCue", () => {
     expect(cue?.label).toBe("Pick up after");
     expect(cue?.text).toMatch(/apart from you\.$/);
     expect(cue?.text).not.toMatch(/delight/);
+  });
+});
+
+describe("pieceAccuracies", () => {
+  const texts = ["The Lord is my shepherd;", "I shall not want."];
+  const full = texts.join(" ");
+
+  it("scores each verse on its own inside a whole-passage diff", () => {
+    const tokens = diffWords("The Lord is my shepherd; I shall", full);
+    expect(pieceAccuracies(tokens, texts)).toEqual([100, 50]);
+  });
+
+  it("charges an extra word to the verse it was typed after", () => {
+    const tokens = diffWords(
+      "The Lord is my good shepherd; I shall not want.",
+      full,
+    );
+    const [first, second] = pieceAccuracies(tokens, texts);
+    expect(first).toBeLessThan(100);
+    expect(second).toBe(100);
+  });
+
+  it("gives a verse without text no score", () => {
+    const tokens = diffWords("The Lord is my shepherd;", texts[0] ?? "");
+    expect(pieceAccuracies(tokens, [texts[0] ?? "", ""])).toEqual([100, null]);
   });
 });
