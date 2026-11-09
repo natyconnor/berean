@@ -15,6 +15,7 @@ import { useLeftoverHeldAttemptsReady } from "@/hooks/use-apply-leftover-held-at
 import { useFrozenQuery } from "@/hooks/use-frozen-query";
 import { useLiveNow } from "@/hooks/use-live-now";
 import { useMemoryExit } from "@/hooks/use-memory-back";
+import { usePassageRefreshExit } from "@/hooks/use-start-verse-refresh";
 import {
   dismissLearnPackForToday,
   learnDismissDayKey,
@@ -32,13 +33,14 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 export function MemoryPackPracticePage() {
   const { packId } = Route.useParams();
-  const { return: returnTo } = Route.useSearch();
+  const { return: returnTo, refresh } = Route.useSearch();
 
   return (
     <MemoryPackSessionPage
       kind="practice"
       packId={packId as Id<"packs">}
       returnTo={returnTo}
+      refresh={refresh}
     />
   );
 }
@@ -47,17 +49,21 @@ export function MemoryPackSessionPage({
   kind,
   packId: typedPackId,
   returnTo,
+  refresh = false,
 }: {
   kind: MemorySessionKind;
   packId: Id<"packs">;
   /** Where Done and Back go; else the pack page. */
   returnTo?: string;
+  /** A Memorized passage's ••• or summary Refresh, practice only (R50, R51). */
+  refresh?: boolean;
 }) {
   const now = useLiveNow();
   const packHref = `/memory/${encodeURIComponent(typedPackId)}`;
   const exit = useMemoryExit(returnTo, packHref);
   const onExit = exit.go;
   const backLabel = exit.label;
+  const refreshExit = usePassageRefreshExit(exit, typedPackId);
 
   const pack = useQuery(api.packs.get, { id: typedPackId });
   const members = useFrozenQuery(api.packs.resolveMembers, {
@@ -191,7 +197,7 @@ export function MemoryPackSessionPage({
         packId={typedPackId}
         view={passage}
         packName={pack.name}
-        onExit={onExit}
+        onExit={refresh ? refreshExit.go : onExit}
         onDoneForToday={
           isLearning
             ? () => {
@@ -200,8 +206,9 @@ export function MemoryPackSessionPage({
               }
             : undefined
         }
-        backLabel={backLabel}
+        backLabel={refresh ? refreshExit.label : backLabel}
         exitHref={exit.href}
+        refresh={refresh ? "practice" : undefined}
       />
     );
   }

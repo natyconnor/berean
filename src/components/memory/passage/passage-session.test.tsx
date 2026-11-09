@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -40,15 +41,21 @@ import {
   WARMUP_PROMPT_COPY,
   WARMUP_SKIP_LABEL,
 } from "./passage-session-model";
-import { PassageSession } from "./passage-session";
+import { PassageSession, type PassageSummarySnapshot } from "./passage-session";
 import type { PassageView } from "./passage-session-types";
 import { CARRIED_OVER_SEEN_KEY_PREFIX } from "./use-carried-over-notice";
 
-const { mutationMocks, fetchChaptersBatchMock, queryMock } = vi.hoisted(() => ({
-  mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
-  fetchChaptersBatchMock: vi.fn(),
-  queryMock: vi.fn<(name: string, args: unknown) => unknown>(),
-}));
+const { mutationMocks, fetchChaptersBatchMock, queryMock, router } = vi.hoisted(
+  () => ({
+    mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
+    fetchChaptersBatchMock: vi.fn(),
+    queryMock: vi.fn<(name: string, args: unknown) => unknown>(),
+    router: {
+      location: { href: "/memory/pack_1/review", state: {} },
+      navigate: vi.fn(),
+    },
+  }),
+);
 
 function mutationMock(name: string) {
   const existing = mutationMocks.get(name);
@@ -59,7 +66,9 @@ function mutationMock(name: string) {
 }
 
 vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => router.navigate,
+  useLocation: ({ select }: { select: (location: object) => unknown }) =>
+    select(router.location),
 }));
 
 vi.mock("convex/react", () => ({
@@ -1536,6 +1545,590 @@ describe("PassageSession", () => {
       await clickButton(/Continue/);
       await screen.findByRole("heading", { name: "Review complete" });
       expect(screen.getByText("65%")).toBeInTheDocument();
+    });
+
+    describe("••• and summary Refresh (S13)", () => {
+      const BACK = "Back to Psalm 23";
+      const COUNTED = "Counted as today's review";
+      const PRACTICE_ONLY = "Practice only, your progress didn't change.";
+      const practice = () => mutationMock("passageMemory.notePracticeRecital");
+
+      beforeEach(() => {
+        router.navigate.mockReset();
+        router.navigate.mockResolvedValue(undefined);
+        router.location = { href: "/memory/pack_1/review", state: {} };
+      });
+
+      function renderRefresh(
+        refresh: "review" | "practice",
+        view: PassageView = reviewView(),
+      ) {
+        const onExit = vi.fn();
+        const utils = render(
+          <TooltipProvider delayDuration={0}>
+            <PassageSession
+              packId={PACK_ID}
+              view={view}
+              packName="Psalm 23"
+              onExit={onExit}
+              backLabel={BACK}
+              endsAfterReview={refresh === "review"}
+              refresh={refresh}
+            />
+          </TooltipProvider>,
+        );
+        return { onExit, ...utils };
+      }
+
+      /** First letters passed, now on the unhinted From memory step. */
+      async function toFromMemory() {
+        await check(FULL);
+        await clickButton(/Continue/);
+        await expectFreshStep("Refresh · From memory · 2 of 2");
+        expect(
+          screen.getByText("Now try it without the hints."),
+        ).toBeInTheDocument();
+        expect(screen.queryByLabelText("Hint")).toBeNull();
+      }
+
+      function expectNothingCounted() {
+        expect(record()).not.toHaveBeenCalled();
+        expect(hold()).not.toHaveBeenCalled();
+        expect(applyHeld()).not.toHaveBeenCalled();
+      }
+
+      it("opens at First letters over the whole passage, never a cold prompt", async () => {
+        let resolve: (value: unknown) => void = () => {};
+        fetchChaptersBatchMock.mockReturnValue(
+          new Promise((done) => {
+            resolve = done;
+          }),
+        );
+        renderRefresh("review");
+        expect(
+          screen.getByText("Refresh · First letters · 1 of 2"),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/No hint text/)).toBeNull();
+        resolve([{ chapter: 23, data: psalm23 }]);
+        await expectFreshStep("Refresh · First letters · 1 of 2");
+        expect(
+          screen.getByText("2 verses · whole passage"),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText("Recite the whole passage from memory"),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/No hint text/)).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: "Need a refresher?" }),
+        ).toBeNull();
+      });
+
+      it.each(["review", "practice"] as const)(
+        "hints every verse when none is shaky (%s)",
+        async (refresh) => {
+          renderRefresh(refresh);
+          await screen.findByLabelText("Hint");
+          expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____ m_ l__ d___/);
+        },
+      );
+
+      it("hints only the shaky verses, never the verse before one", async () => {
+        const { unmount } = renderRefresh(
+          "review",
+          reviewView({ shakyVerses: [verse(2)] }),
+        );
+        await screen.findByLabelText("Hint");
+        expect(hintText()).toMatch(/^[_\s;.]+ H_ m____ m_ l__ d___/);
+        expect(hintText()).not.toMatch(/T__/);
+        unmount();
+
+        renderRefresh(
+          "practice",
+          reviewView({ shakyVerses: [verse(1), verse(2)] }),
+        );
+        await screen.findByLabelText("Hint");
+        expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____/);
+      });
+
+      it("hints a shaky verse alone inside a multi-verse piece", async () => {
+        renderRefresh(
+          "review",
+          reviewView({ pieces: onePiece(), shakyVerses: [verse(1)] }),
+        );
+        await screen.findByLabelText("Hint");
+        expect(hintText()).toMatch(
+          /^T__ L___ i_ m_ s_______; I s____ n__ w___\. _/,
+        );
+        expect(hintText()).not.toMatch(/H_/);
+      });
+
+      it("keeps the all-verses fallback out of a later refresher round", async () => {
+        const { unmount } = renderRefresh("review");
+        await toFromMemory();
+        await check(WEAK_TWO);
+        await clickButton("Try another refresher");
+        await expectFreshStep("Refresh · First letters · 1 of 2");
+        // The saved view marks nothing shaky: S11's hint, nothing revealed.
+        expect(hintText()).not.toMatch(/[a-z]/i);
+        unmount();
+
+        renderRefresh("practice");
+        await toFromMemory();
+        await check(FULL);
+        await clickButton("Try another refresher");
+        await expectFreshStep("Refresh · First letters · 1 of 2");
+        expect(hintText()).not.toMatch(/[a-z]/i);
+      });
+
+      it("retries First letters without limit and counts nothing for it", async () => {
+        renderRefresh("review");
+        for (let round = 0; round < 3; round += 1) {
+          await check("The Lord");
+          expect(await screen.findByText(/recalled/)).toBeInTheDocument();
+          expect(screen.queryByText(COUNTED)).toBeNull();
+          await clickButton(/Try again/);
+          await expectFreshStep("Refresh · First letters · 1 of 2");
+        }
+        await toFromMemory();
+        expectNothingCounted();
+        expect(practice()).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ["100%", FULL, 100],
+        ["94%", `${PASSAGE_ONE} He makes me lie down in green`, 94],
+        ["65%", WEAK_TWO, 65],
+        ["53%", PASSAGE_ONE, 53],
+        ["0%", "nothing here matches", 0],
+      ])(
+        "counts a due From memory %s once, then goes back with no summary (R30)",
+        async (_label, answer, accuracy) => {
+          const { onExit } = renderRefresh("review");
+          await toFromMemory();
+          await check(answer);
+
+          expect(
+            await screen.findByText(
+              `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}`,
+            ),
+          ).toBeInTheDocument();
+          expect(screen.getByText(COUNTED)).toBeInTheDocument();
+          expect(screen.queryByText(PRACTICE_ONLY)).toBeNull();
+          expect(record()).toHaveBeenCalledTimes(1);
+          expect(record()).toHaveBeenCalledWith(
+            expect.objectContaining({
+              kind: "review",
+              accuracy,
+              refresherUsed: true,
+              replaceHeldId: undefined,
+            }),
+          );
+          // No held cold miss, so no post-miss softening.
+          expect(hold()).not.toHaveBeenCalled();
+          expect(practice()).not.toHaveBeenCalled();
+          expect(
+            screen.queryByRole("button", { name: "Try another refresher" }),
+          ).toSatisfy((offer) => (accuracy < 85 ? offer !== null : !offer));
+
+          await clickButton(/Continue/);
+          expect(onExit).toHaveBeenCalledTimes(1);
+          expect(
+            screen.queryByRole("heading", { name: "Review complete" }),
+          ).toBeNull();
+          expect(record()).toHaveBeenCalledTimes(1);
+          expect(applyHeld()).not.toHaveBeenCalled();
+        },
+      );
+
+      it("shows no counted line or date until the save lands, then retries the same result", async () => {
+        let finish: (value: unknown) => void = () => {};
+        record()
+          .mockRejectedValueOnce(new Error("offline"))
+          .mockReturnValueOnce(
+            new Promise((done) => {
+              finish = done;
+            }),
+          );
+        const { onExit } = renderRefresh("review");
+        await toFromMemory();
+        await check(WEAK_TWO);
+
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+          "Couldn't save your result. Try again.",
+        );
+        expect(screen.queryByText(COUNTED)).toBeNull();
+        expect(screen.queryByText(/^Next review /)).toBeNull();
+        await userEvent.dblClick(
+          screen.getByRole("button", { name: /Try again/ }),
+        );
+        expect(
+          await screen.findByRole("button", { name: "Saving..." }),
+        ).toBeDisabled();
+        expect(screen.queryByText(COUNTED)).toBeNull();
+        expect(record()).toHaveBeenCalledTimes(2);
+        const [first, second] = record().mock.calls as unknown[][];
+        expect(second?.[0]).toEqual(first?.[0]);
+
+        finish(
+          passageView(memorized(), { status: "reviewing", dueAt: SAVED_DUE() }),
+        );
+        expect(await screen.findByText(COUNTED)).toBeInTheDocument();
+        expect(onExit).not.toHaveBeenCalled();
+        await clickButton(/Continue/);
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(record()).toHaveBeenCalledTimes(2);
+      });
+
+      it.each(["First letters", "From memory"])(
+        "counts nothing on Back from %s",
+        async (step) => {
+          const { onExit } = renderRefresh("review");
+          await screen.findByLabelText("Hint");
+          if (step === "From memory") await toFromMemory();
+          await userEvent.click(screen.getByRole("button", { name: BACK }));
+          expect(onExit).toHaveBeenCalledTimes(1);
+          expectNothingCounted();
+          expect(practice()).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        ["a not-due menu Refresh (R50)", "review" as const, SAVED_DUE],
+        ["a summary Refresh (R51)", "practice" as const, SAVED_DUE],
+        [
+          "a summary Refresh even if due",
+          "practice" as const,
+          () => getSessionNow() - 1,
+        ],
+      ])(
+        "keeps %s practice only, pass or miss",
+        async (_label, refresh, dueAt) => {
+          const { onExit } = renderRefresh(
+            refresh,
+            reviewView({ dueAt: dueAt() }),
+          );
+          await check("The Lord");
+          await clickButton(/Try again/);
+          await toFromMemory();
+          // First letters never touches shaky metadata.
+          expect(practice()).not.toHaveBeenCalled();
+
+          await check(WEAK_TWO);
+          expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+          expect(screen.queryByText(COUNTED)).toBeNull();
+          expect(screen.queryByText(/^Next review /)).toBeNull();
+          expect(practice()).toHaveBeenCalledWith(
+            expect.objectContaining({ verseScores: scores(100, 25) }),
+          );
+          await clickButton("Try another refresher");
+          await toFromMemory();
+          await check(FULL);
+          expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+          expect(practice()).toHaveBeenLastCalledWith(
+            expect.objectContaining({ verseScores: scores(100, 100) }),
+          );
+
+          await clickButton(/Continue/);
+          expect(onExit).toHaveBeenCalledTimes(1);
+          expectNothingCounted();
+          expect(
+            screen.queryByRole("heading", { name: "Review complete" }),
+          ).toBeNull();
+        },
+      );
+
+      it("adopts the shaky verses a practice recital leaves (AC29)", async () => {
+        // The server cleared verse 1 at 85%+ and kept verse 2 at 84%.
+        practice().mockResolvedValue(
+          passageView(memorized(), {
+            status: "reviewing",
+            dueAt: SAVED_DUE(),
+            shakyVerses: [verse(2)],
+          }),
+        );
+        renderRefresh(
+          "practice",
+          reviewView({ dueAt: SAVED_DUE(), shakyVerses: [verse(1), verse(2)] }),
+        );
+        await toFromMemory();
+        await check(WEAK_TWO);
+        await clickButton("Try another refresher");
+        await screen.findByText("Refresh · First letters · 1 of 2");
+        expect(hintText()).toMatch(/^[_\s;.]+ H_ m____/);
+        expect(hintText()).not.toMatch(/T__/);
+      });
+
+      it("keeps the practice result when shaky metadata can't save", async () => {
+        practice().mockRejectedValue(new Error("offline"));
+        renderRefresh("practice", reviewView({ dueAt: SAVED_DUE() }));
+        await toFromMemory();
+        await check(FULL);
+        expect(await screen.findByText(PRACTICE_ONLY)).toBeInTheDocument();
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(
+          screen.getByRole("button", { name: /Continue/ }),
+        ).toBeInTheDocument();
+      });
+
+      describe("summary Refresh (R51)", () => {
+        const refreshButton = () =>
+          screen.findByRole("button", { name: "Refresh Psalm 23" });
+
+        /** A finished review: its rows and accuracy, as they show. */
+        async function finishedSummary(steps: () => Promise<void>) {
+          const utils = renderReview();
+          await steps();
+          await clickButton(/Continue/);
+          await screen.findByRole("heading", { name: "Review complete" });
+          return utils;
+        }
+
+        function expectSummary(accuracy: string, line?: string) {
+          expect(screen.getByText(accuracy)).toBeInTheDocument();
+          expect(screen.getByText("Accuracy")).toBeInTheDocument();
+          expect(
+            screen.getByText("Psalm 23", { selector: "li p" }),
+          ).toBeVisible();
+          if (line) expect(screen.getByText(line)).toBeInTheDocument();
+          expect(
+            screen.getByText(
+              `Next review ${formatDueDay(SAVED_DUE(), getSessionNow())}`,
+            ),
+          ).toBeInTheDocument();
+        }
+
+        it("offers it on a counted cold miss and on a bad miss", async () => {
+          const { unmount } = await finishedSummary(() => check(WEAK_TWO));
+          expectSummary("65%");
+          expect(await refreshButton()).toBeInTheDocument();
+          unmount();
+
+          hold().mockClear();
+          await finishedSummary(() => check("nothing here matches"));
+          expectSummary("0%");
+          expect(await refreshButton()).toBeInTheDocument();
+        });
+
+        it("offers it after a pre-try refresher's From memory miss", async () => {
+          await finishedSummary(async () => {
+            await clickButton("Need a refresher?");
+            await check(FULL);
+            await clickButton(/Continue/);
+            await screen.findByText("Refresh · From memory · 2 of 2");
+            await check(WEAK_TWO);
+          });
+          expectSummary("65%", "65% · Refresher used");
+          expect(await refreshButton()).toBeInTheDocument();
+        });
+
+        it("goes by the last counted try: none after 65% → 100%", async () => {
+          await finishedSummary(async () => {
+            await check(WEAK_TWO);
+            await clickButton("Need a refresher?");
+            await check(FULL);
+            await clickButton(/Continue/);
+            await screen.findByText("Refresh · From memory · 2 of 2");
+            await check(FULL);
+          });
+          expectSummary("83%", "65% → 100% · Refresher used");
+          expect(
+            screen.queryByRole("button", { name: "Refresh Psalm 23" }),
+          ).toBeNull();
+        });
+
+        it("ignores a practice-only round after a counted miss", async () => {
+          await finishedSummary(async () => {
+            await clickButton("Need a refresher?");
+            await check(FULL);
+            await clickButton(/Continue/);
+            await screen.findByText("Refresh · From memory · 2 of 2");
+            await check(WEAK_TWO);
+            await clickButton("Try another refresher");
+            await check(FULL);
+            await clickButton(/Continue/);
+            await screen.findByText("Refresh · From memory · 2 of 2");
+            await check(FULL);
+          });
+          expectSummary("65%", "65% · Refresher used");
+          expect(await refreshButton()).toBeInTheDocument();
+        });
+
+        it("hides it on a counted pass", async () => {
+          await finishedSummary(() =>
+            check(`${PASSAGE_ONE} He makes me lie down in green`),
+          );
+          expectSummary("94%");
+          expect(
+            screen.queryByRole("button", { name: "Refresh Psalm 23" }),
+          ).toBeNull();
+        });
+
+        it("keeps the summary on its entry, then opens a practice-only Refresh", async () => {
+          await finishedSummary(() => check(WEAK_TWO));
+          await userEvent.click(await refreshButton());
+
+          await waitFor(() => expect(router.navigate).toHaveBeenCalledTimes(2));
+          expect(router.navigate).toHaveBeenNthCalledWith(1, {
+            href: "/memory/pack_1/review",
+            replace: true,
+            state: {
+              sessionSummary: {
+                kind: "passage",
+                packId: PACK_ID,
+                title: "Psalm 23",
+                attempts: [expect.objectContaining({ accuracy: 65 })],
+                dueAt: SAVED_DUE(),
+                status: "reviewing",
+              },
+              refreshedPassage: PACK_ID,
+            },
+          });
+          expect(router.navigate).toHaveBeenNthCalledWith(2, {
+            href: "/memory/pack_1/practice?refresh=1&return=%2Fmemory",
+            state: { summaryRefresh: true },
+          });
+        });
+
+        it("shows the R34 error in the row, keeps the summary and focus, then retries into step 1", async () => {
+          await finishedSummary(() => check(WEAK_TWO));
+          const saves = [record(), hold(), applyHeld(), practice()].map(
+            (mock) => mock.mock.calls.length,
+          );
+          sessionStorage.clear();
+          let fail: (error: Error) => void = () => {};
+          let resolve: (value: unknown) => void = () => {};
+          fetchChaptersBatchMock
+            .mockReturnValueOnce(
+              new Promise((_, reject) => {
+                fail = reject;
+              }),
+            )
+            .mockReturnValueOnce(
+              new Promise((done) => {
+                resolve = done;
+              }),
+            );
+          const button = await refreshButton();
+          await userEvent.click(button);
+          expect(button).toBeDisabled();
+          // A browser drops focus from a button that turns disabled; jsdom
+          // keeps it, so move it away as a browser would.
+          act(() =>
+            screen.getByRole("heading", { name: "Review complete" }).focus(),
+          );
+          expect(button).not.toHaveFocus();
+          await act(async () => {
+            fail(new Error("offline"));
+            await Promise.resolve();
+          });
+
+          const alert = await screen.findByRole("alert");
+          expect(alert).toHaveTextContent(
+            /^Couldn't start the refresher\. Try again\.$/,
+          );
+          expect(screen.getAllByRole("alert")).toHaveLength(1);
+          expect(alert.closest("li")).toContainElement(button);
+          await waitFor(() => expect(button).toHaveFocus());
+          expect(button).toBeEnabled();
+          expectSummary("65%");
+          expect(
+            screen.getByRole("heading", { name: "Review complete" }),
+          ).toBeInTheDocument();
+          expect(router.navigate).not.toHaveBeenCalled();
+
+          await userEvent.dblClick(button);
+          expect(button).toBeDisabled();
+          expect(button).toHaveAttribute("aria-busy", "true");
+          expect(fetchChaptersBatchMock).toHaveBeenCalledTimes(3);
+          resolve([{ chapter: 23, data: psalm23 }]);
+          await waitFor(() => expect(router.navigate).toHaveBeenCalledTimes(2));
+          expect(screen.queryByRole("alert")).toBeNull();
+          expect(
+            [record(), hold(), applyHeld(), practice()].map(
+              (mock) => mock.mock.calls.length,
+            ),
+          ).toEqual(saves);
+
+          // The practice route it opened starts at First letters.
+          const [, [opened]] = router.navigate.mock.calls as [
+            unknown,
+            [{ href: string }],
+          ];
+          expect(opened.href).toBe(
+            "/memory/pack_1/practice?refresh=1&return=%2Fmemory",
+          );
+          cleanup();
+          renderRefresh("practice", reviewView({ dueAt: SAVED_DUE() }));
+          await expectFreshStep("Refresh · First letters · 1 of 2");
+        });
+
+        it.each(["a pass", "a miss", "Back"])(
+          "comes back after %s to the same summary, focused on Refresh",
+          async (journey) => {
+            const first = await finishedSummary(() => check(WEAK_TWO));
+            await userEvent.click(await refreshButton());
+            await waitFor(() =>
+              expect(router.navigate).toHaveBeenCalledTimes(2),
+            );
+            const [[{ state }]] = router.navigate.mock.calls as [
+              [{ state: { sessionSummary: PassageSummarySnapshot } }],
+            ];
+            const snapshot = state.sessionSummary;
+            first.unmount();
+            const saves = record().mock.calls.length + hold().mock.calls.length;
+
+            // The practice-only Refresh, on its own history entry.
+            const { onExit, unmount } = renderRefresh(
+              "practice",
+              reviewView({ dueAt: SAVED_DUE() }),
+            );
+            if (journey === "Back") {
+              await screen.findByLabelText("Hint");
+              await userEvent.click(screen.getByRole("button", { name: BACK }));
+            } else {
+              await toFromMemory();
+              await check(journey === "a pass" ? FULL : WEAK_TWO);
+              await screen.findByText(PRACTICE_ONLY);
+              await clickButton(/Continue/);
+            }
+            expect(onExit).toHaveBeenCalledTimes(1);
+            expect(router.navigate).toHaveBeenCalledTimes(2);
+            expect(record().mock.calls.length + hold().mock.calls.length).toBe(
+              saves,
+            );
+            unmount();
+
+            // Back on the summary's entry, as the route restores it.
+            router.location = {
+              href: "/memory/pack_1/review",
+              state: { sessionSummary: snapshot, refreshedPassage: PACK_ID },
+            };
+            render(
+              <TooltipProvider delayDuration={0}>
+                <PassageSession
+                  packId={PACK_ID}
+                  view={reviewView({ dueAt: SAVED_DUE() })}
+                  packName="Psalm 23"
+                  onExit={() => {}}
+                  endsAfterReview
+                  restoredSummary={snapshot}
+                />
+              </TooltipProvider>,
+            );
+            expect(
+              screen.getByRole("heading", { name: "Review complete" }),
+            ).not.toHaveFocus();
+            expectSummary("65%");
+            await waitFor(async () =>
+              expect(await refreshButton()).toHaveFocus(),
+            );
+            expect(screen.queryByLabelText("Your recited passage")).toBeNull();
+            expect(record().mock.calls.length + hold().mock.calls.length).toBe(
+              saves,
+            );
+          },
+        );
+      });
     });
 
     describe("inside one multi-verse piece", () => {

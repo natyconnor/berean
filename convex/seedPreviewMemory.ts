@@ -14,7 +14,9 @@ import { isDueForLearning, isDueForReview } from "../src/lib/memory-scheduler";
 import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
 import {
   buildPreviewPassageSeed,
+  previewPassageMemoryFields,
   testerMaintenancePacks,
+  testerRefreshPacks,
   testerSectionRecitalPacks,
   testerStalePacks,
 } from "../src/lib/preview-passage-seed";
@@ -227,6 +229,7 @@ export const seedPreviewMemory = mutation({
     passagePlan.packs.push(
       ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerStalePacks(args.now, process.env.CONVEX_DEPLOYMENT),
+      ...testerRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerSectionRecitalPacks(args.now, process.env.CONVEX_DEPLOYMENT),
     );
 
@@ -330,22 +333,7 @@ export const seedPreviewMemory = mutation({
       const passageId = await ctx.db.insert("passageMemory", {
         userId,
         packId,
-        status: pack.passage.status,
-        pieces: pack.passage.pieces,
-        addDayKey: pack.passage.addDayKey,
-        addsOnDay: pack.passage.addsOnDay,
-        ease: pack.passage.schedule.ease,
-        intervalDays: pack.passage.schedule.intervalDays,
-        dueAt: pack.passage.schedule.dueAt,
-        consecutiveCorrect: pack.passage.schedule.consecutiveCorrect,
-        lapses: pack.passage.schedule.lapses,
-        stageReps: pack.passage.schedule.stageReps,
-        earlyReviewApplied: pack.passage.schedule.earlyReviewApplied,
-        ...(pack.passage.shakyVerses
-          ? { shakyVerses: pack.passage.shakyVerses }
-          : {}),
-        createdAt: args.now,
-        updatedAt: args.now,
+        ...previewPassageMemoryFields(pack.passage, args.now),
       });
       for (const review of pack.passage.reviews ?? []) {
         await ctx.db.insert("passageReviews", {

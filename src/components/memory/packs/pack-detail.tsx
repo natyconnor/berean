@@ -31,12 +31,16 @@ import { useMemoryPanelFrame } from "@/components/memory/drawer/memory-panel-con
 import { MemoryPanelFrame } from "@/components/memory/drawer/memory-panel-frame";
 import { InternalLink } from "@/components/memory/internal-link";
 import {
+  RefreshMenuItem,
   RefreshStartError,
   StartedOverStatus,
   StartOverConfirm,
   StartOverMenuItem,
 } from "@/components/memory/memory-restart-menu";
-import { FRONTIER_LOCKED_COPY } from "@/components/memory/passage/passage-session-model";
+import {
+  FRONTIER_LOCKED_COPY,
+  pieceReference,
+} from "@/components/memory/passage/passage-session-model";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -86,6 +90,7 @@ import { MAX_PACK_NAME_LENGTH, spanKey } from "@/lib/memorize-status";
 import { spanDisplayTitle } from "@/lib/memorize-target";
 import {
   useRefreshReturnFocus,
+  useStartPassageRefresh,
   useStartVerseRefresh,
 } from "@/hooks/use-start-verse-refresh";
 import { withReturn } from "@/lib/memory-return";
@@ -1343,6 +1348,30 @@ function PackDetailMenu({
   const togetherLock = useSubmitLock();
   const showStartOver =
     isPassage && !started && canStartOverPassage(passage?.pieces ?? []);
+  // A Memorized (or Mastered) passage, due or not (R30, R50). Hidden, not
+  // disabled, for anything else (R28); Learning passages are S14.
+  const showRefresh =
+    passage !== null &&
+    !started &&
+    passage.pieces.length > 0 &&
+    passage.status !== "building";
+  const refreshDue =
+    passage !== null &&
+    passage.status !== "building" &&
+    isDueForReview({ status: passage.status, dueAt: passage.dueAt }, now);
+  const frame = useMemoryPanelFrame();
+  const pieceRefs = useMemo(
+    () => (passage?.pieces ?? []).map(pieceReference),
+    [passage?.pieces],
+  );
+  const refresh = useStartPassageRefresh(
+    pack._id,
+    pieceRefs,
+    frame.returnTo,
+    triggerRef,
+  );
+  useRefreshReturnFocus({ packId: pack._id }, triggerRef);
+  const hasRestart = showRefresh || showStartOver;
 
   useLayoutEffect(() => {
     if (!pendingTriggerFocus.current) return;
@@ -1437,8 +1466,9 @@ function PackDetailMenu({
         className="size-11 text-muted-foreground sm:size-8"
         aria-label="More actions"
         disabled={startLock.pending}
+        loading={refresh.pending}
       >
-        <MoreHorizontal aria-hidden />
+        {refresh.pending ? null : <MoreHorizontal aria-hidden />}
       </Button>
     </DropdownMenuTrigger>
   );
@@ -1456,6 +1486,12 @@ function PackDetailMenu({
           setStartConfirmOpen(true);
         }}
       >
+        {showRefresh ? (
+          <RefreshMenuItem
+            disabled={startLock.pending}
+            onSelect={() => refresh.start(refreshDue)}
+          />
+        ) : null}
         {showStartOver ? (
           <StartOverMenuItem
             disabled={startLock.pending}
@@ -1466,7 +1502,7 @@ function PackDetailMenu({
             }}
           />
         ) : null}
-        {showStartOver && reviewTogether ? <DropdownMenuSeparator /> : null}
+        {hasRestart && reviewTogether ? <DropdownMenuSeparator /> : null}
         {reviewTogether ? (
           <>
             <DropdownMenuCheckboxItem
@@ -1492,7 +1528,7 @@ function PackDetailMenu({
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
           </>
-        ) : showStartOver ? (
+        ) : hasRestart ? (
           <DropdownMenuSeparator />
         ) : null}
         <DropdownMenuItem
@@ -1531,6 +1567,10 @@ function PackDetailMenu({
         ) : (
           menu
         )}
+        <RefreshStartError
+          error={refresh.error}
+          className="basis-full text-right"
+        />
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

@@ -11,6 +11,8 @@ import {
 } from "@tanstack/react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PassageSession } from "@/components/memory/passage/passage-session";
+import type { PassageView } from "@/components/memory/passage/passage-session-types";
 import { MemorySessionRunner } from "@/components/memory/practice/memory-session-runner";
 import {
   PracticeBoard,
@@ -32,13 +34,16 @@ import {
   averageReviewAccuracy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
+import type { Id } from "../../../convex/_generated/dataModel";
 import type { EsvChapterData } from "../../../shared/esv-api";
 
-const { mutationMocks, getPassageMock, queryResults } = vi.hoisted(() => ({
-  mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
-  getPassageMock: vi.fn(),
-  queryResults: new Map<string, unknown>(),
-}));
+const { mutationMocks, getPassageMock, fetchChaptersBatchMock, queryResults } =
+  vi.hoisted(() => ({
+    mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
+    getPassageMock: vi.fn(),
+    fetchChaptersBatchMock: vi.fn(),
+    queryResults: new Map<string, unknown>(),
+  }));
 
 function mutationMock(name: string) {
   const existing = mutationMocks.get(name);
@@ -50,7 +55,8 @@ function mutationMock(name: string) {
 
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => mutationMock(name),
-  useAction: () => getPassageMock,
+  useAction: (name: string) =>
+    name === "esv.getChaptersBatch" ? fetchChaptersBatchMock : getPassageMock,
 }));
 
 vi.mock("convex-helpers/react/cache", () => ({
@@ -69,7 +75,14 @@ vi.mock("../../../convex/_generated/api", () => ({
       getPassage: "esv.getPassage",
     },
     packs: { recordUnifiedReview: "packs.recordUnifiedReview" },
-    passageMemory: { recordAttempt: "passageMemory.recordAttempt" },
+    passageMemory: {
+      getForPack: "passageMemory.getForPack",
+      recordAttempt: "passageMemory.recordAttempt",
+      holdAttempt: "passageMemory.holdAttempt",
+      applyHeldAttempt: "passageMemory.applyHeldAttempt",
+      notePracticeRecital: "passageMemory.notePracticeRecital",
+      markCelebrated: "passageMemory.markCelebrated",
+    },
     savedVerses: {
       listAll: "savedVerses.listAll",
       listRecordingIds: "savedVerses.listRecordingIds",
@@ -520,5 +533,184 @@ describe("Summary Refresh (S9, R21)", () => {
     });
     expect(refresh.closest("li")).toHaveClass("flex-wrap");
     expect(refresh.parentElement).toHaveClass("flex-wrap");
+  });
+});
+
+describe("Today passage summary Refresh (S16, R51)", () => {
+  const PACK_ID = "pack_ps23" as Id<"packs">;
+  const members = [ref(1), ref(2)];
+  // A Today run's passage: a counted 65% miss that left it Memorized.
+  const passageAttempts: ReviewSessionAttempt[] = [
+    { reference: ref(24), accuracy: 100, schedule: schedule("reviewing") },
+    {
+      reference: ref(1),
+      label: "Shepherd Psalm",
+      accuracy: 65,
+      offerPractice: false,
+      savedStatus: "reviewing",
+      passage: { packId: PACK_ID, references: members },
+    },
+  ];
+
+  function view(): PassageView {
+    const now = getSessionNow();
+    return {
+      _id: "passage_1" as Id<"passageMemory">,
+      packId: PACK_ID,
+      status: "reviewing",
+      pieces: members.map((member, index) => ({
+        index,
+        ...member,
+        sectionIndex: 0,
+        attachment: "solid" as const,
+        learnStage: 3,
+        stageReps: 0,
+      })),
+      addsOnDay: 0,
+      ease: 2.3,
+      intervalDays: 1,
+      dueAt: now + DAY,
+      consecutiveCorrect: 0,
+      lapses: 0,
+      stageReps: 0,
+      needsCelebration: false,
+      createdAt: now,
+      updatedAt: now,
+      remainingIntroduces: 0,
+      frontierIndex: 2,
+      rehearsalStartIndex: 0,
+      ropePieceIndexes: [0, 1],
+      // Nothing shaky: the summary Refresh hints every verse.
+      shakyVerses: [],
+    };
+  }
+
+  function renderToday() {
+    const root = createRootRoute({
+      component: () => (
+        <TooltipProvider delayDuration={0}>
+          <Outlet />
+        </TooltipProvider>
+      ),
+    });
+    const today = createRoute({
+      getParentRoute: () => root,
+      path: "/memory/today",
+      component: () => (
+        <TodaySessionSummary
+          title="Today"
+          passages={[]}
+          learned={[]}
+          attempts={passageAttempts}
+          onDone={onDone}
+          returnTo="/memory"
+        />
+      ),
+    });
+    const practice = createRoute({
+      getParentRoute: () => root,
+      path: "/memory/$packId/practice",
+      component: function PassageRefreshPage() {
+        const exit = useSummaryRefreshExit();
+        return (
+          <PassageSession
+            packId={PACK_ID}
+            view={view()}
+            packName="Shepherd Psalm"
+            onExit={() => exit?.go()}
+            backLabel={exit?.label}
+            refresh="practice"
+          />
+        );
+      },
+    });
+    const router = createRouter({
+      routeTree: root.addChildren([today, practice]),
+      history: createMemoryHistory({ initialEntries: ["/memory/today"] }),
+    });
+    render(<RouterProvider router={router} />);
+    return router;
+  }
+
+  function headline() {
+    return screen.getByText("Average accuracy").previousElementSibling
+      ?.textContent;
+  }
+
+  beforeEach(() => {
+    fetchChaptersBatchMock.mockReset();
+    fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
+  });
+
+  it("says so in place when the passage can't start, and can retry (R34)", async () => {
+    fetchChaptersBatchMock.mockRejectedValueOnce(new Error("offline"));
+    const router = renderToday();
+    const button = await screen.findByRole("button", {
+      name: "Refresh Shepherd Psalm",
+    });
+    const before = rowsText();
+    await userEvent.click(button);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(REFRESH_START_ERROR);
+    expect(button.closest("li")).toContainElement(alert);
+    await waitFor(() => expect(button).toHaveFocus());
+    expect(button).toBeEnabled();
+    expect(
+      rowsText().map((text) => text?.replace(REFRESH_START_ERROR, "")),
+    ).toEqual(before);
+    expect(router.state.location.pathname).toBe("/memory/today");
+
+    await userEvent.click(button);
+    expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
+  });
+
+  it("opens practice with every verse hinted and comes back to the same summary", async () => {
+    const router = renderToday();
+    expect(await screen.findByText("Average accuracy")).toBeInTheDocument();
+    expect(headline()).toBe("83%");
+    const before = rowsText();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh Shepherd Psalm" }),
+    );
+
+    expect(await screen.findByText(refresherHeader(1))).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/memory/${PACK_ID}/practice`);
+    expect(router.state.location.search).toMatchObject({
+      refresh: 1,
+      return: "/memory",
+    });
+    expect(router.state.location.state.summaryRefresh).toBe(true);
+    // None shaky: every verse gets first letters (S13 fallback).
+    expect(screen.getByLabelText("Hint").textContent).toMatch(
+      /^T__ L___ i_ .* H_ m____ m_ l__ d___/,
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: SUMMARY_REFRESH_BACK_LABEL }),
+    );
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/memory/today");
+    });
+    expect(router.state.location.state).toMatchObject({
+      refreshedPassage: PACK_ID,
+      sessionSummary: {
+        kind: "today",
+        title: "Today",
+        attempts: passageAttempts,
+      },
+    });
+    expect(headline()).toBe("83%");
+    expect(rowsText()).toEqual(before);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Refresh Shepherd Psalm" }),
+      ).toHaveFocus(),
+    );
+    expect(mutationMock("passageMemory.recordAttempt")).not.toHaveBeenCalled();
+    expect(mutationMock("passageMemory.holdAttempt")).not.toHaveBeenCalled();
+    expect(
+      mutationMock("passageMemory.applyHeldAttempt"),
+    ).not.toHaveBeenCalled();
   });
 });

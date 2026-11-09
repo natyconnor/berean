@@ -76,6 +76,8 @@ export type PassageRecallResultView = {
   /** Focus the offer instead of the main action. */
   focusOffer?: boolean;
   closingLine?: string | null;
+  /** "Counted as today's review" after a counted ••• Refresh. */
+  countedLine?: string | null;
   saveError?: string | null;
   practiceOnly?: boolean;
   /** A First letters try: no celebration, and a miss promises nothing. */
@@ -433,6 +435,7 @@ export function PassageRecallCard({
                 errorId={errorId}
                 saveError={saveError}
                 closingLine={resultView?.closingLine}
+                countedLine={resultView?.countedLine}
                 practiceOnly={resultView?.practiceOnly}
                 unscheduled={resultView?.practiceOnly}
                 scheduleHeld={resultView?.firstLetters}

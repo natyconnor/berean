@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useRef } from "react";
+import { type JSX, type RefObject, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   CheckCircle2,
@@ -20,6 +20,7 @@ import { useLiveNow } from "@/hooks/use-live-now";
 import {
   type SessionSummarySnapshot,
   useRefreshReturnFocus,
+  useStartPassageRefresh,
   useStartVerseRefresh,
 } from "@/hooks/use-start-verse-refresh";
 import { formatDueDay } from "@/lib/memorize-plan";
@@ -29,11 +30,13 @@ import { memoryPracticeSearch } from "@/lib/memory-practice-search";
 import {
   averageReviewAccuracy,
   groupReviewSessionAttempts,
+  offersPassageSummaryRefresh,
   offersSummaryRefresh,
   recalledCopy,
   refresherResultCopy,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
+import type { PassageStatus } from "@/lib/passage-heart-info";
 import { cn } from "@/lib/utils";
 import { formatVerseRefTitle } from "@/lib/verse-ref-utils";
 
@@ -136,15 +139,28 @@ export function ReviewSummary({
   );
 }
 
+/** What a passage summary needs to offer its Refresh (R51). */
+export type PassageSummaryRefreshSource = {
+  packId: string;
+  references: readonly CardReference[];
+  /** The status the counted tries saved. */
+  status?: PassageStatus;
+  /** Where the refresher's Home link points. */
+  returnTo: string;
+};
+
 /**
  * End of a standalone passage review: its score and when it comes back. One
- * passage, so no queue claim, mastery bar or extra actions.
+ * passage, so no queue claim, mastery bar or extra actions. A miss that left
+ * it Memorized gets a practice-only Refresh (R51).
  */
 export function PassageReviewSummary({
   title,
   attempts,
   dueAt,
   onDone,
+  refresh,
+  restored = false,
 }: {
   title: string;
   /**
@@ -155,14 +171,20 @@ export function PassageReviewSummary({
   /** Next review from the saved schedule. */
   dueAt: number;
   onDone: () => void;
+  refresh?: PassageSummaryRefreshSource;
+  /** Shown again after a summary Refresh, which focuses its Refresh instead. */
+  restored?: boolean;
 }): JSX.Element {
   const now = useLiveNow();
   const [row] = groupReviewSessionAttempts(attempts);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const refreshable =
+    refresh !== undefined &&
+    offersPassageSummaryRefresh(attempts, refresh.status);
 
   useEffect(() => {
-    headingRef.current?.focus();
-  }, []);
+    if (!restored) headingRef.current?.focus();
+  }, [restored]);
 
   return (
     <MemoryDashboardCard className="mx-auto w-full max-w-md p-6 text-center">
@@ -185,8 +207,8 @@ export function PassageReviewSummary({
           label="Accuracy"
         />
         <ul className="divide-y rounded-lg border text-left">
-          <li className="flex items-center justify-between gap-3 px-3 py-2.5">
-            <div className="min-w-0 flex-1">
+          <li className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+            <div className={cn("min-w-0 flex-1", refreshable && "basis-40")}>
               <p className="text-sm font-medium break-words">{title}</p>
               {row?.refresherUsed ? (
                 <p className="mt-1.5 text-xs text-muted-foreground">
@@ -197,6 +219,20 @@ export function PassageReviewSummary({
                 Next review {formatDueDay(dueAt, now)}
               </p>
             </div>
+            {refreshable ? (
+              <PassageSummaryRefresh
+                source={refresh}
+                label={title}
+                snapshot={{
+                  kind: "passage",
+                  packId: refresh.packId,
+                  title,
+                  attempts,
+                  dueAt,
+                  status: refresh.status,
+                }}
+              />
+            ) : null}
           </li>
         </ul>
         <SessionSummaryActions exitLabel="Done" onExit={onDone} />
@@ -205,7 +241,47 @@ export function PassageReviewSummary({
   );
 }
 
-function AccuracyScore({
+/**
+ * Passage summary Refresh: practice only, since today's miss is already
+ * counted. The summary is kept on its history entry, so Continue and Back come
+ * back to it and focus this control. The error shows under the row (R34).
+ */
+function PassageSummaryRefresh({
+  source,
+  label,
+  snapshot,
+}: {
+  source: PassageSummaryRefreshSource;
+  label: string;
+  snapshot: SessionSummarySnapshot;
+}): JSX.Element {
+  const href = useLocation({ select: (location) => location.href });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const refresh = useStartPassageRefresh(
+    source.packId,
+    source.references,
+    source.returnTo,
+    buttonRef,
+  );
+  useRefreshReturnFocus({ packId: source.packId }, buttonRef);
+
+  return (
+    <>
+      <RefreshLinkButton
+        buttonRef={buttonRef}
+        label={`${REFRESH_MENU_LABEL} ${label}`}
+        pending={refresh.pending}
+        onClick={() => refresh.start(false, { href, snapshot })}
+      />
+      <RefreshStartError
+        error={refresh.error}
+        className="order-last basis-full text-right"
+      />
+    </>
+  );
+}
+
+export function AccuracyScore({
   accuracy,
   label,
 }: {
@@ -225,7 +301,8 @@ function AccuracyScore({
 /**
  * Each reviewed verse with how well it was recalled, and Add to pack and
  * Practice shortcuts. A pack recited as one passage gets neither. A verse
- * still Memorized whose last try here was under 85% also gets Refresh (R21).
+ * still Memorized whose last try here was under 85% also gets Refresh (R21),
+ * and so does a Memorized passage reviewed on its Today card (R51).
  */
 export function ReviewResultRows({
   attempts,
@@ -246,7 +323,13 @@ export function ReviewResultRows({
     <ul className={cn("divide-y rounded-lg border text-left", className)}>
       {groupReviewSessionAttempts(attempts).map((attempt) => {
         const label = attempt.label ?? formatVerseRefTitle(attempt.reference);
-        const refreshable = offersSummaryRefresh(attempt);
+        const passage = attempt.passage;
+        const refreshable = passage
+          ? offersPassageSummaryRefresh(
+              attempts.filter((other) => other.label === attempt.label),
+              attempt.schedule?.status ?? attempt.savedStatus,
+            )
+          : offersSummaryRefresh(attempt);
         return (
           <li
             key={label}
@@ -267,6 +350,11 @@ export function ReviewResultRows({
                     <p className="text-xs text-muted-foreground">
                       {refresherResultCopy(attempt.accuracies)}
                     </p>
+                  ) : passage ? (
+                    // A passage row always shows its result with its date.
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      {recalledCopy(attempt.accuracies)}
+                    </p>
                   ) : null}
                   <p className="text-xs text-muted-foreground">
                     Next review {formatDueDay(attempt.schedule.dueAt, now)}
@@ -286,7 +374,16 @@ export function ReviewResultRows({
                   variant="icon"
                 />
               ) : null}
-              {refreshable ? (
+              {refreshable && passage ? (
+                <PassageSummaryRefresh
+                  source={{
+                    ...passage,
+                    returnTo: returnTo ?? MEMORY_HOME,
+                  }}
+                  label={label}
+                  snapshot={summary}
+                />
+              ) : refreshable ? (
                 <SummaryRefresh
                   reference={attempt.reference}
                   label={label}
@@ -343,26 +440,48 @@ function SummaryRefresh({
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        type="button"
-        className={REFRESHER_LINK_CLASS}
-        aria-label={`${REFRESH_MENU_LABEL} ${label}`}
-        aria-busy={refresh.pending || undefined}
-        disabled={refresh.pending}
+      <RefreshLinkButton
+        buttonRef={buttonRef}
+        label={`${REFRESH_MENU_LABEL} ${label}`}
+        pending={refresh.pending}
         onClick={() => refresh.start(false, { href, snapshot: summary })}
-      >
-        {refresh.pending ? (
-          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-        ) : (
-          <Lightbulb className="size-3.5" aria-hidden />
-        )}
-        {REFRESH_MENU_LABEL}
-      </button>
+      />
       <RefreshStartError
         error={refresh.error}
         className="order-last basis-full text-right"
       />
     </>
+  );
+}
+
+/** The quiet Lightbulb Refresh on a summary row. */
+function RefreshLinkButton({
+  buttonRef,
+  label,
+  pending,
+  onClick,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  label: string;
+  pending: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className={REFRESHER_LINK_CLASS}
+      aria-label={label}
+      aria-busy={pending || undefined}
+      disabled={pending}
+      onClick={onClick}
+    >
+      {pending ? (
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+      ) : (
+        <Lightbulb className="size-3.5" aria-hidden />
+      )}
+      {REFRESH_MENU_LABEL}
+    </button>
   );
 }
