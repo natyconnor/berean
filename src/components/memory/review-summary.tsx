@@ -350,6 +350,11 @@ export function ReviewResultRows({
                     <p className="text-xs text-muted-foreground">
                       {refresherResultCopy(attempt.accuracies)}
                     </p>
+                  ) : passage ? (
+                    // A passage row always shows its result with its date.
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      {recalledCopy(attempt.accuracies)}
+                    </p>
                   ) : null}
                   <p className="text-xs text-muted-foreground">
                     Next review {formatDueDay(attempt.schedule.dueAt, now)}

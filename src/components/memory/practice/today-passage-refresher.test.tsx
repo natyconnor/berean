@@ -526,9 +526,11 @@ describe("Today passage card: held cold miss", () => {
       const rows = onComplete.mock.calls[0][0].attempts.filter(
         (row) => row.label === PACK_NAME,
       );
-      expect(rows).toEqual([
-        expect.objectContaining({ accuracy: 59, savedStatus: "reviewing" }),
-      ]);
+      expect(rows.map((row) => row.accuracy)).toEqual([59]);
+      expect(rows[0]?.schedule).toMatchObject({
+        status: "reviewing",
+        dueAt: NOW + DAY_MS,
+      });
     },
   );
 
@@ -825,6 +827,33 @@ describe("Today end summary", () => {
     );
     // Passed after the refresher: no summary Refresh.
     expect(within(row).queryByRole("button", { name: /^Refresh / })).toBeNull();
+  });
+
+  it("shows a held miss counted on Continue with its score, bar and next review", async () => {
+    const { onComplete, unmount } = renderRun("alone");
+    await checkPassage(answer(50, 30));
+    await offer();
+    await clickContinue();
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    const { attempts } = onComplete.mock.calls[0][0];
+    unmount();
+
+    renderSummary(attempts);
+    // The held try is the run's only counted try.
+    expect(headline()).toBe("60%");
+    expect(passageRows()).toHaveLength(1);
+    const row = passageRows()[0];
+    expect(row).toHaveTextContent("60% recalled");
+    expect(
+      within(row).getByLabelText(/^Progress to mastered: /),
+    ).toBeInTheDocument();
+    // The date the apply saved, not a projection.
+    expect(row).toHaveTextContent(
+      `Next review ${formatDueDay(NOW + DAY_MS, Date.now())}`,
+    );
+    expect(
+      within(row).getByRole("button", { name: `Refresh ${PACK_NAME}` }),
+    ).toBeInTheDocument();
   });
 
   it("averages only unhinted counted tries in a mixed run", async () => {

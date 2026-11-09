@@ -1207,8 +1207,12 @@ export function PracticeBoard({
                         label: rowLabel,
                         offerPractice: composite === null,
                         ...passageRow,
+                        // A passage row keeps the applied schedule for its
+                        // bar and date, like its other counted rows.
                         ...(result.schedule
-                          ? { savedStatus: result.schedule.status }
+                          ? reviewPassage
+                            ? { schedule: result.schedule }
+                            : { savedStatus: result.schedule.status }
                           : {}),
                       },
                     ]);
