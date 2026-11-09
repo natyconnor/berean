@@ -8,13 +8,19 @@ import {
 import { passageHeartSpans } from "./hearted-verse-coverage";
 import { isStaleVerse } from "./memory-stale";
 import { packAllowsPassageMode } from "./passage-eligibility";
+import { requiredRepsFor } from "./memory-scheduler";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
 import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
+import {
+  reducePassageSession,
+  type PassageSessionState,
+} from "./passage-session";
 import {
   buildPreviewPassageSeed,
   previewPassageMemoryFields,
   testerMaintenancePacks,
   testerRefreshPacks,
+  testerSectionRecitalPacks,
   testerStalePacks,
   type PreviewPassageSeedPack,
 } from "./preview-passage-seed";
@@ -223,6 +229,99 @@ describe("testerMaintenancePacks", () => {
   it("drops the obsolete pass-then-fail advice from Psalm 23", () => {
     const psalm23 = base.find((pack) => pack.name.includes("Psalm 23"));
     expect(psalm23?.howToTry).not.toMatch(/fail once|both times/);
+  });
+});
+
+describe("testerSectionRecitalPacks", () => {
+  it("adds nothing on a production deployment", () => {
+    expect(testerSectionRecitalPacks(NOW, "prod:berean-123")).toEqual([]);
+  });
+
+  it.each(["dev:berean-123", "preview:berean-pr-366", undefined])(
+    "adds one Learning Psalm 112 on %s",
+    (deployment) => {
+      expect(
+        testerSectionRecitalPacks(NOW, deployment).map((pack) => pack.name),
+      ).toEqual(["Sample · Psalm 112 (section almost done)"]);
+    },
+  );
+
+  const [pack] = testerSectionRecitalPacks(NOW, undefined);
+  const passage = pack.passage!;
+  const pieces = passage.pieces;
+  const firstSection = pieces.filter((piece) => piece.sectionIndex === 0);
+  const last = firstSection.at(-1)!;
+
+  it("is a Learning passage, due to learn today, on a passage no other fixture uses", () => {
+    expect(pack).toMatchObject({
+      role: "sectionOneStepLeft",
+      scope: { chapterRanges: [{ book: "Psalms", startChapter: 112 }] },
+    });
+    expect(passage.status).toBe("building");
+    expect(
+      isPassageDueForLearning(
+        {
+          status: passage.status,
+          dueAt: passage.schedule.dueAt,
+          pieces,
+          addsOnDay: passage.addsOnDay,
+          addDayKey: passage.addDayKey,
+        },
+        NOW,
+        TZ,
+      ),
+    ).toBe(true);
+    const others = [
+      ...buildPreviewPassageSeed(NOW, TZ).packs,
+      ...testerMaintenancePacks(NOW, undefined),
+      ...testerStalePacks(NOW, undefined),
+      ...testerRefreshPacks(NOW, undefined),
+    ];
+    for (const other of others) {
+      expect(scopesEqual(other.scope, pack.scope)).toBe(false);
+    }
+    expect(pack.name).not.toMatch(/Psalm 1(17|31|33|34)\b/);
+  });
+
+  it("leaves its first section one From memory pass from complete", () => {
+    expect(new Set(pieces.map((piece) => piece.sectionIndex)).size).toBe(2);
+    expect(firstSection.length).toBeGreaterThanOrEqual(2);
+    for (const piece of firstSection.slice(0, -1)) {
+      expect(piece).toMatchObject({ attachment: "solid", learnStage: 3 });
+    }
+    expect(last).toMatchObject({
+      attachment: "attached",
+      learnStage: 3,
+      stageReps: requiredRepsFor(3) - 1,
+      dueAt: NOW,
+    });
+    for (const piece of pieces.slice(firstSection.length)) {
+      expect(piece.attachment).toBe("unreached");
+    }
+  });
+
+  it("reaches Section complete on that one pass, and not on a miss", () => {
+    const state: PassageSessionState = {
+      phase: "frontier",
+      pieces,
+      addsOnDay: passage.addsOnDay,
+      now: NOW,
+      tzOffsetMinutes: TZ,
+    };
+    const passed = reducePassageSession(state, {
+      type: "attempt",
+      accuracy: 100,
+      now: NOW,
+    });
+    expect(passed.phase).toBe("section-complete");
+    expect(passed.pieces[last.index]?.attachment).toBe("solid");
+
+    const missed = reducePassageSession(state, {
+      type: "attempt",
+      accuracy: 50,
+      now: NOW,
+    });
+    expect(missed.phase).not.toBe("section-complete");
   });
 });
 

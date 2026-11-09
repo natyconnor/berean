@@ -17,6 +17,7 @@ import {
   previewPassageMemoryFields,
   testerMaintenancePacks,
   testerRefreshPacks,
+  testerSectionRecitalPacks,
   testerStalePacks,
 } from "../src/lib/preview-passage-seed";
 
@@ -229,6 +230,7 @@ export const seedPreviewMemory = mutation({
       ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerStalePacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
+      ...testerSectionRecitalPacks(args.now, process.env.CONVEX_DEPLOYMENT),
     );
 
     const memoryIdByVerseId = new Map<string, Id<"verseMemory">>();

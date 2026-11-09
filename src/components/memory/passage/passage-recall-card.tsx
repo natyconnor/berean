@@ -12,6 +12,7 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import {
   EmptyHintPrompt,
+  NeedARefresherLink,
   RefresherOfferButton,
 } from "@/components/memory/memory-refresher-controls";
 import { LearningJourneyBar } from "@/components/memory/practice/learning-journey-bar";
@@ -110,7 +111,7 @@ interface PassageRecallCardProps {
   ease?: number;
   /** Read (full text) banks without typing. Frontier only. */
   readContinue?: boolean;
-  /** Quiet "Need a refresher?" link in an empty hint panel. */
+  /** Quiet "Need a refresher?" link in the hint panel, beneath any hint. */
   onRefresher?: () => void;
   /** Stale: "Refresh it first" above the link, settled at the first keystroke. */
   stale?: boolean;
@@ -364,12 +365,27 @@ export function PassageRecallCard({
                     }
                     disabled={submitPending}
                   />
-                ) : hint.type === "tokens" ? (
-                  <HintTokenText tokens={hint.tokens} />
                 ) : (
-                  <p className="whitespace-pre-wrap" aria-label={hint.label}>
-                    {hint.text}
-                  </p>
+                  <>
+                    {hint.type === "tokens" ? (
+                      <HintTokenText tokens={hint.tokens} />
+                    ) : (
+                      <p
+                        className="whitespace-pre-wrap"
+                        aria-label={hint.label}
+                      >
+                        {hint.text}
+                      </p>
+                    )}
+                    {onRefresher ? (
+                      <div className="mt-4 flex justify-center font-sans">
+                        <NeedARefresherLink
+                          onClick={onRefresher}
+                          disabled={submitPending}
+                        />
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
 
