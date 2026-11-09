@@ -16,6 +16,7 @@ import {
   buildPreviewPassageSeed,
   testerMaintenancePacks,
   testerSectionRecitalPacks,
+  testerStalePacks,
 } from "../src/lib/preview-passage-seed";
 
 async function isAnonymousUser(
@@ -225,6 +226,7 @@ export const seedPreviewMemory = mutation({
     await clearUserMemory(ctx, userId);
     passagePlan.packs.push(
       ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
+      ...testerStalePacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerSectionRecitalPacks(args.now, process.env.CONVEX_DEPLOYMENT),
     );
 
@@ -339,9 +341,23 @@ export const seedPreviewMemory = mutation({
         lapses: pack.passage.schedule.lapses,
         stageReps: pack.passage.schedule.stageReps,
         earlyReviewApplied: pack.passage.schedule.earlyReviewApplied,
+        ...(pack.passage.shakyVerses
+          ? { shakyVerses: pack.passage.shakyVerses }
+          : {}),
         createdAt: args.now,
         updatedAt: args.now,
       });
+      for (const review of pack.passage.reviews ?? []) {
+        await ctx.db.insert("passageReviews", {
+          userId,
+          packId,
+          passageMemoryId: passageId,
+          kind: "review",
+          quality: review.quality,
+          accuracy: review.accuracy,
+          createdAt: review.createdAt,
+        });
+      }
       const passageRow = await ctx.db.get(passageId);
       if (passageRow) {
         await upsertPassageMemoryDue(ctx, passageRow, args.now);
