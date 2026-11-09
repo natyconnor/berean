@@ -1,5 +1,9 @@
 import type { EsvVerse } from "../../shared/esv-api";
-import { EASE_START, type MemorySchedule } from "./memory-scheduler";
+import {
+  EASE_START,
+  requiredRepsFor,
+  type MemorySchedule,
+} from "./memory-scheduler";
 import { PASSAGE_MAX_ADDS_PER_DAY, localDayIndex } from "./passage-frontier";
 import {
   buildPassagePieces,
@@ -12,7 +16,11 @@ import { scopesEqual } from "./scope-equality";
 import type { VerseScope } from "./verse-scope-match";
 
 export type PreviewPassageSeedRole =
-  "readyToStart" | "buildingDue" | "budgetExhausted" | "maintenanceDue";
+  | "readyToStart"
+  | "buildingDue"
+  | "budgetExhausted"
+  | "maintenanceDue"
+  | "sectionOneStepLeft";
 
 /** Pack scope as stored on `packs.scope` (tags are unused for verse matching). */
 export type PreviewPassagePackScope = VerseScope & {
@@ -326,6 +334,50 @@ const PSALM_100_VERSES: EsvVerse[] = [
   },
 ];
 
+const PSALM_112_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "Praise the Lord! Blessed is the man who fears the Lord, who greatly delights in his commandments!",
+    heading: "The Righteous Will Never Be Moved",
+  },
+  {
+    number: 2,
+    text: "His offspring will be mighty in the land; the generation of the upright will be blessed.",
+  },
+  {
+    number: 3,
+    text: "Wealth and riches are in his house, and his righteousness endures forever.",
+  },
+  {
+    number: 4,
+    text: "Light dawns in the darkness for the upright; he is gracious, merciful, and righteous.",
+  },
+  {
+    number: 5,
+    text: "It is well with the man who deals generously and lends; who conducts his affairs with justice.",
+  },
+  {
+    number: 6,
+    text: "For the righteous will never be moved; he will be remembered forever.",
+  },
+  {
+    number: 7,
+    text: "He is not afraid of bad news; his heart is firm, trusting in the Lord.",
+  },
+  {
+    number: 8,
+    text: "His heart is steady; he will not be afraid, until he looks in triumph on his adversaries.",
+  },
+  {
+    number: 9,
+    text: "He has distributed freely; he has given to the poor; his righteousness endures forever; his horn is exalted in honor.",
+  },
+  {
+    number: 10,
+    text: "The wicked man sees it and is angry; he gnashes his teeth and melts away; the desire of the wicked will perish!",
+  },
+];
+
 function paintPieces(
   bases: readonly PassagePieceBase[],
   paint: ReadonlyArray<{
@@ -420,6 +472,10 @@ function maintenanceDuePsalm(
   };
 }
 
+function isProdDeployment(convexDeployment: string | undefined): boolean {
+  return convexDeployment?.startsWith("prod:") === true;
+}
+
 /**
  * Three more due maintenance passages, one per refresher case a tester walks
  * through. Never seeded on a production Convex deployment.
@@ -428,7 +484,7 @@ export function testerMaintenancePacks(
   now: number,
   convexDeployment: string | undefined,
 ): PreviewPassageSeedPack[] {
-  if (convexDeployment?.startsWith("prod:") === true) return [];
+  if (isProdDeployment(convexDeployment)) return [];
   return [
     maintenanceDuePsalm(
       now,
@@ -448,6 +504,57 @@ export function testerMaintenancePacks(
       PSALM_100_VERSES,
       "Open Review or the pack and recite the whole passage for a normal review.",
     ),
+  ];
+}
+
+/**
+ * A Learning Psalm 112 one From memory pass from finishing its first section,
+ * so a tester reaches "Recite this section" and its refresher (S15, R37).
+ * Never seeded on a production Convex deployment.
+ */
+export function testerSectionRecitalPacks(
+  now: number,
+  convexDeployment: string | undefined,
+): PreviewPassageSeedPack[] {
+  if (isProdDeployment(convexDeployment)) return [];
+  const bases = buildPassagePieces([
+    { book: "Psalms", chapter: 112, verses: PSALM_112_VERSES },
+  ]);
+  // Sections run in order from 0, so this is the first section's last piece.
+  const lastOfSection =
+    bases.filter((piece) => piece.sectionIndex === 0).length - 1;
+  const pieces = paintPieces(
+    bases,
+    bases.map((_, index) =>
+      index < lastOfSection
+        ? { attachment: "solid" as const, learnStage: 3 }
+        : index === lastOfSection
+          ? {
+              attachment: "attached" as const,
+              learnStage: 3,
+              stageReps: requiredRepsFor(3) - 1,
+              dueAt: now,
+            }
+          : { attachment: "unreached" as const },
+    ),
+  );
+  return [
+    {
+      id: "passage-section-psalm-112",
+      role: "sectionOneStepLeft",
+      name: "Sample · Psalm 112 (section almost done)",
+      description:
+        "Learning passage one From memory pass from finishing its first section.",
+      howToTry:
+        "Open the pack or Learn → Psalm 112. Skip warm-up, type the due verse from memory and Check answer, then Continue. On Section complete, tap Recite this section: Need a refresher? sits under the hint, and a try under 85% offers it beside Continue.",
+      scope: scopeChapter("Psalms", 112),
+      passage: {
+        status: "building",
+        addsOnDay: 0,
+        schedule: buildingSchedule(now),
+        pieces,
+      },
+    },
   ];
 }
 

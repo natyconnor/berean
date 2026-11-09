@@ -15,6 +15,7 @@ import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
 import {
   buildPreviewPassageSeed,
   testerMaintenancePacks,
+  testerSectionRecitalPacks,
 } from "../src/lib/preview-passage-seed";
 
 async function isAnonymousUser(
@@ -224,6 +225,7 @@ export const seedPreviewMemory = mutation({
     await clearUserMemory(ctx, userId);
     passagePlan.packs.push(
       ...testerMaintenancePacks(args.now, process.env.CONVEX_DEPLOYMENT),
+      ...testerSectionRecitalPacks(args.now, process.env.CONVEX_DEPLOYMENT),
     );
 
     const memoryIdByVerseId = new Map<string, Id<"verseMemory">>();

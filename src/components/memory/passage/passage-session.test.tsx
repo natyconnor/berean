@@ -15,6 +15,7 @@ import {
   clearPassageStepInProgress,
   PASSAGE_STEP_IN_PROGRESS_KEY,
 } from "@/lib/passage-step-resume";
+import { testerSectionRecitalPacks } from "@/lib/preview-passage-seed";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -2217,6 +2218,77 @@ describe("PassageSession", () => {
       expect(
         await screen.findByRole("button", { name: LINK }),
       ).toBeInTheDocument();
+    });
+
+    it("R37: the Psalm 112 preview fixture reaches Recite this section and its refresher by the tester's steps", async () => {
+      const [pack] = testerSectionRecitalPacks(getSessionNow(), undefined);
+      const pieces = pack.passage!.pieces;
+      const section = pieces.filter((item) => item.sectionIndex === 0);
+      const due = section.at(-1)!;
+      const text = (verse: number) => `Psalm verse ${LETTERS[verse]} words`;
+      const versesOf = (item: PassagePiece) =>
+        Array.from(
+          { length: item.endVerse - item.startVerse + 1 },
+          (_, offset) => text(item.startVerse + offset),
+        ).join(" ");
+      fetchChaptersBatchMock.mockResolvedValue([
+        {
+          chapter: 112,
+          data: {
+            ...psalm23,
+            canonical: "Psalm 112",
+            verses: pieces
+              .flatMap((item) =>
+                Array.from(
+                  { length: item.endVerse - item.startVerse + 1 },
+                  (_, offset) => item.startVerse + offset,
+                ),
+              )
+              .map((number) => ({ number, text: text(number) })),
+          },
+        },
+      ]);
+      // The server marks the due piece solid on that pass.
+      record().mockResolvedValue(
+        passageView(
+          pieces.map((item) =>
+            item.index === due.index
+              ? { ...item, attachment: "solid" as const }
+              : item,
+          ),
+        ),
+      );
+      render(
+        <TooltipProvider delayDuration={0}>
+          <PassageSession
+            packId={PACK_ID}
+            view={passageView(pieces, {
+              lastSessionAt: getSessionNow() - 60_000,
+            })}
+            packName="Psalm 112"
+            onExit={() => {}}
+          />
+        </TooltipProvider>,
+      );
+
+      // Skip warm-up, type the due verse from memory, Check answer, Continue.
+      await clickButton(WARMUP_SKIP_LABEL);
+      await check(versesOf(due), "Your recalled verse");
+      await clickButton(/Continue/);
+      // Section complete → Recite this section, with the link before a try.
+      expect(await screen.findByText("Section complete")).toBeInTheDocument();
+      await clickButton(SECTION_RECITE_LABEL);
+      expect(await screen.findByText("This section")).toBeInTheDocument();
+      await clickButton(LINK);
+      await expectFreshStep(STEP_ONE);
+      expect(hintText()).toBe(
+        section
+          .map(versesOf)
+          .join(" ")
+          .replace(/(\p{L})\p{L}*/gu, (word, first: string) =>
+            first.padEnd(word.length, "_"),
+          ),
+      );
     });
 
     describe("warm-up start and skip controls", () => {
