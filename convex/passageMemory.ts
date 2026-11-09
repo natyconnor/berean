@@ -11,6 +11,7 @@ import {
   markPassageCelebrated,
   memberToHeart,
   memberToSchedule,
+  passageReviewTries,
   patchPassageMemory,
   requireOwnedPack,
   requirePassageForPack,
@@ -92,6 +93,27 @@ export const getForPack = query({
     if (!row) return null;
 
     return toPassageView(row, args.now, args.tzOffsetMinutes);
+  },
+});
+
+/** How many recent passage logs the stale check scans. */
+const RECENT_REVIEW_SCAN = 20;
+
+/** The passage's recent review tries, newest first, for the stale check. */
+export const recentReviews = query({
+  args: { packId: v.id("packs") },
+  returns: v.array(v.object({ accuracy: v.number(), createdAt: v.number() })),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserIdOrNull(ctx);
+    if (!userId) return [];
+    const row = await loadPassageForPack(ctx, args.packId, userId);
+    if (!row) return [];
+    const logs = await ctx.db
+      .query("passageReviews")
+      .withIndex("by_packId", (q) => q.eq("packId", args.packId))
+      .order("desc")
+      .take(RECENT_REVIEW_SCAN);
+    return passageReviewTries(logs, row._id);
   },
 });
 

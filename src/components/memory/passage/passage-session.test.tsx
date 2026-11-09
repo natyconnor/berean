@@ -1,5 +1,11 @@
 import { StrictMode } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,9 +40,10 @@ import { PassageSession } from "./passage-session";
 import type { PassageView } from "./passage-session-types";
 import { CARRIED_OVER_SEEN_KEY_PREFIX } from "./use-carried-over-notice";
 
-const { mutationMocks, fetchChaptersBatchMock } = vi.hoisted(() => ({
+const { mutationMocks, fetchChaptersBatchMock, queryMock } = vi.hoisted(() => ({
   mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
   fetchChaptersBatchMock: vi.fn(),
+  queryMock: vi.fn<(name: string, args: unknown) => unknown>(),
 }));
 
 function mutationMock(name: string) {
@@ -57,6 +64,10 @@ vi.mock("convex/react", () => ({
     name === "esv.getChaptersBatch" ? fetchChaptersBatchMock : vi.fn(),
 }));
 
+vi.mock("convex-helpers/react/cache", () => ({
+  useQuery: (name: string, args: unknown) => queryMock(name, args),
+}));
+
 vi.mock("../../../../convex/_generated/api", () => ({
   api: {
     esv: {
@@ -70,6 +81,7 @@ vi.mock("../../../../convex/_generated/api", () => ({
       holdAttempt: "passageMemory.holdAttempt",
       applyHeldAttempt: "passageMemory.applyHeldAttempt",
       markCelebrated: "passageMemory.markCelebrated",
+      recentReviews: "passageMemory.recentReviews",
     },
   },
 }));
@@ -162,6 +174,11 @@ function renderSession(view: PassageView, onExit: () => void = () => {}) {
 describe("PassageSession", () => {
   beforeEach(() => {
     mutationMocks.clear();
+    // The passage's own review history: none, so never stale by misses.
+    queryMock.mockReset();
+    queryMock.mockImplementation((_name: string, args: unknown) =>
+      args === "skip" ? undefined : [],
+    );
     clearPassageStepInProgress(PACK_ID);
     sessionStorage.clear();
     fetchChaptersBatchMock.mockReset();
@@ -1148,7 +1165,7 @@ describe("PassageSession", () => {
       expect(screen.getByText("2 verses · whole passage")).toBeInTheDocument();
     });
 
-    it("shows no link on a text error, a not-due passage or while learning", async () => {
+    it("shows no link on a text error or while learning", async () => {
       fetchChaptersBatchMock.mockRejectedValue(new Error("offline"));
       const { unmount } = renderReview();
       expect(
@@ -1163,13 +1180,6 @@ describe("PassageSession", () => {
       fetchChaptersBatchMock.mockResolvedValue([
         { chapter: 23, data: psalm23 },
       ]);
-      const notDue = renderReview(reviewView({ dueAt: SAVED_DUE() }));
-      await screen.findByText(/No hint text/);
-      expect(
-        screen.queryByRole("button", { name: "Need a refresher?" }),
-      ).toBeNull();
-      notDue.unmount();
-
       // A warm-up while learning shows the same empty panel, without a link.
       renderSession(passageView(memorized()));
       await screen.findByText(/No hint text/);
@@ -1343,16 +1353,6 @@ describe("PassageSession", () => {
       expect(screen.queryByText(/→/)).toBeNull();
     });
 
-    it("saves a not-due miss right away with no offer", async () => {
-      renderReview(reviewView({ dueAt: SAVED_DUE() }));
-      await check(WEAK_TWO);
-      expect(record()).toHaveBeenCalledTimes(1);
-      await screen.findByRole("button", { name: /Continue/ });
-      expect(
-        screen.queryByRole("button", { name: "Need a refresher?" }),
-      ).toBeNull();
-    });
-
     it("hints the held miss's weak verses at once, then replaces the miss", async () => {
       renderReview();
       await check(WEAK_TWO);
@@ -1423,12 +1423,10 @@ describe("PassageSession", () => {
       first.unmount();
       expect(applyHeld()).toHaveBeenCalledTimes(1);
 
-      // After the reload the passage is no longer due: no link, no hold.
+      // After the reload the passage is no longer due: a miss is practice.
       renderReview(reviewView({ dueAt: SAVED_DUE() }));
-      await screen.findByText(/No hint text/);
-      expect(
-        screen.queryByRole("button", { name: "Need a refresher?" }),
-      ).toBeNull();
+      await check(WEAK_TWO);
+      await screen.findByText("Practice only, your progress didn't change.");
       expect(hold()).toHaveBeenCalledTimes(1);
       expect(record()).not.toHaveBeenCalled();
     });
@@ -1595,6 +1593,481 @@ describe("PassageSession", () => {
         ).toHaveBeenCalledWith(
           expect.objectContaining({ verseScores: scores(100, 25) }),
         );
+      });
+    });
+
+    describe("S12: Practice anytime on a not-due passage (R40)", () => {
+      const notePractice = () =>
+        mutationMock("passageMemory.notePracticeRecital");
+      const notDueView = (extra?: Partial<PassageView>) =>
+        reviewView({ dueAt: SAVED_DUE(), ...extra });
+
+      function renderPractice(view: PassageView, onExit = vi.fn()) {
+        render(
+          <TooltipProvider delayDuration={0}>
+            <PassageSession
+              packId={PACK_ID}
+              view={view}
+              packName="Psalm 23"
+              onExit={onExit}
+            />
+          </TooltipProvider>,
+        );
+        return onExit;
+      }
+
+      /** Practice saves nothing and never reaches a session summary. */
+      function expectNothingCounted() {
+        expect(record()).not.toHaveBeenCalled();
+        expect(hold()).not.toHaveBeenCalled();
+        expect(applyHeld()).not.toHaveBeenCalled();
+        expect(screen.queryByText(/^Next review /)).toBeNull();
+        expect(
+          screen.queryByRole("heading", { name: "Review complete" }),
+        ).toBeNull();
+        expect(screen.queryByText("Accuracy")).toBeNull();
+      }
+
+      /** Continue goes back to the page it came from, without a new prompt. */
+      async function continueBack(onExit: ReturnType<typeof vi.fn>) {
+        await clickButton(/Continue/);
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(/No hint text/)).toBeNull();
+        expect(
+          screen.getByText("Practice only, your progress didn't change."),
+        ).toBeInTheDocument();
+        expectNothingCounted();
+      }
+
+      it.each([
+        ["Memorized", "a pass", "reviewing", FULL, /100% recalled/, [100, 100]],
+        [
+          "Memorized",
+          "a miss",
+          "reviewing",
+          WEAK_TWO,
+          /65% recalled/,
+          [100, 25],
+        ],
+        ["Mastered", "a pass", "mastered", FULL, /100% recalled/, [100, 100]],
+        ["Mastered", "a miss", "mastered", WEAK_TWO, /65% recalled/, [100, 25]],
+      ] as const)(
+        "R40: a not-due %s passage's plain Practice is practice only on %s, then Continue returns",
+        async (_label, _score, status, answer, recalled, [first, second]) => {
+          const onExit = renderPractice(notDueView({ status }));
+          expect(
+            screen.getByText("Recite the whole passage from memory"),
+          ).toBeInTheDocument();
+          expect(
+            screen.getByText("2 verses · whole passage"),
+          ).toBeInTheDocument();
+          expect(
+            await screen.findByRole("button", { name: "Need a refresher?" }),
+          ).toBeInTheDocument();
+          await waitFor(() => expect(answerBox()).toHaveFocus());
+
+          await check(answer);
+          expect(await screen.findByText(recalled)).toBeInTheDocument();
+          expect(
+            screen.getByText("Practice only, your progress didn't change."),
+          ).toBeInTheDocument();
+          // No post-miss offer, held miss or early review.
+          expect(
+            screen.queryByRole("button", { name: /refresher/ }),
+          ).toBeNull();
+          expect(notePractice()).toHaveBeenCalledTimes(1);
+          expect(notePractice()).toHaveBeenCalledWith(
+            expect.objectContaining({
+              packId: PACK_ID,
+              verseScores: scores(first, second),
+            }),
+          );
+          expectNothingCounted();
+          await waitFor(() =>
+            expect(
+              screen.getByRole("button", { name: /Continue/ }),
+            ).toHaveFocus(),
+          );
+          await continueBack(onExit);
+        },
+      );
+
+      it.each([
+        ["a pass", FULL, /100% recalled/, [100, 100]],
+        ["a miss", WEAK_TWO, /65% recalled/, [100, 25]],
+      ] as const)(
+        "R40: its refresher is practice only at both steps, ending on %s, then Continue returns",
+        async (_label, answer, recalled, [first, second]) => {
+          const onExit = renderPractice(
+            notDueView({ shakyVerses: [verse(2)] }),
+          );
+          await clickButton("Need a refresher?");
+          await expectFreshStep("Refresh · First letters · 1 of 2");
+          // Only the remembered shaky verse 2; verse 1 before it stays blank.
+          expect(hintText()).toMatch(/^[_\s;.]+ H_ m____ m_ l__ d___/);
+          expect(hintText()).not.toMatch(/T__/);
+
+          await check("The Lord");
+          await clickButton(/Try again/);
+          await expectFreshStep("Refresh · First letters · 1 of 2");
+          // A hinted 100% never clears shakiness.
+          await check(FULL);
+          expect(notePractice()).not.toHaveBeenCalled();
+          await clickButton(/Continue/);
+          await expectFreshStep("Refresh · From memory · 2 of 2");
+          expect(
+            screen.getByText("Now try it without the hints."),
+          ).toBeInTheDocument();
+          expect(screen.queryByLabelText("Hint")).toBeNull();
+
+          await check(answer);
+          expect(await screen.findByText(recalled)).toBeInTheDocument();
+          expect(
+            screen.getByText("Practice only, your progress didn't change."),
+          ).toBeInTheDocument();
+          expect(notePractice()).toHaveBeenCalledTimes(1);
+          expect(notePractice()).toHaveBeenCalledWith(
+            expect.objectContaining({ verseScores: scores(first, second) }),
+          );
+          expectNothingCounted();
+          await continueBack(onExit);
+        },
+      );
+
+      it("R40: another refresher from its result stays practice only", async () => {
+        const onExit = renderPractice(notDueView());
+        await clickButton("Need a refresher?");
+        await check(FULL);
+        await clickButton(/Continue/);
+        await check(WEAK_TWO);
+        await clickButton("Try another refresher");
+        await expectFreshStep("Refresh · First letters · 1 of 2");
+        await check(FULL);
+        await clickButton(/Continue/);
+        await screen.findByText("Refresh · From memory · 2 of 2");
+        await check(FULL);
+        await screen.findByText("Practice only, your progress didn't change.");
+        expect(notePractice()).toHaveBeenCalledTimes(2);
+        expectNothingCounted();
+        await continueBack(onExit);
+      });
+
+      it("R40: First letters hints nothing when no verse is shaky, every verse when all are", async () => {
+        renderPractice(notDueView());
+        await clickButton("Need a refresher?");
+        await screen.findByText("Refresh · First letters · 1 of 2");
+        expect(hintText()).not.toMatch(/[a-z]/i);
+        cleanup();
+
+        renderPractice(notDueView({ shakyVerses: [verse(1), verse(2)] }));
+        await clickButton("Need a refresher?");
+        await screen.findByText("Refresh · First letters · 1 of 2");
+        expect(hintText()).toMatch(/^T__ L___ i_ .* H_ m____/);
+      });
+
+      it("R40: a failed shaky-verse save keeps the practice result, with no error or retry", async () => {
+        notePractice().mockRejectedValue(new Error("offline"));
+        const onExit = renderPractice(notDueView({ shakyVerses: [verse(2)] }));
+        await check(FULL);
+        expect(await screen.findByText(/100% recalled/)).toBeInTheDocument();
+        expect(
+          screen.getByText("Practice only, your progress didn't change."),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+        await continueBack(onExit);
+        expect(notePractice()).toHaveBeenCalledTimes(1);
+      });
+
+      it("R40: Back out of its refresher counts nothing and uses the session exit", async () => {
+        const onExit = renderPractice(notDueView());
+        await clickButton("Need a refresher?");
+        await check(FULL);
+        await clickButton(/Continue/);
+        await screen.findByText("Refresh · From memory · 2 of 2");
+        await clickButton("Back to Memory");
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(notePractice()).not.toHaveBeenCalled();
+        expectNothingCounted();
+      });
+    });
+
+    describe("S12: stale passage prompt (R48)", () => {
+      const REFRESH_FIRST = "Refresh it first";
+      const notePractice = () =>
+        mutationMock("passageMemory.notePracticeRecital");
+      const reviews = (...accuracies: number[]) =>
+        accuracies.map((accuracy, index) => ({
+          accuracy,
+          createdAt: getSessionNow() - (index + 1) * DAY_MS,
+        }));
+      // Due 8 days ago on a 2-day gap: stale by time.
+      const staleDue = () =>
+        reviewView({ dueAt: getSessionNow() - 8 * DAY_MS });
+
+      function history(value: unknown) {
+        queryMock.mockImplementation((_name: string, args: unknown) =>
+          args === "skip" ? undefined : value,
+        );
+      }
+
+      function renderPractice(view: PassageView) {
+        return render(
+          <TooltipProvider delayDuration={0}>
+            <PassageSession
+              packId={PACK_ID}
+              view={view}
+              packName="Psalm 23"
+              onExit={() => {}}
+            />
+          </TooltipProvider>,
+        );
+      }
+
+      async function expectCueStack() {
+        const sentence = await screen.findByText(
+          "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.",
+        );
+        const refreshFirst = screen.getByRole("button", {
+          name: REFRESH_FIRST,
+        });
+        const link = screen.getByRole("button", { name: "Need a refresher?" });
+        // Sentence, then Refresh it first, then the quiet link.
+        expect(
+          sentence.compareDocumentPosition(refreshFirst) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(
+          refreshFirst.compareDocumentPosition(link) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        // No tooltip.
+        expect(refreshFirst).not.toHaveAttribute("aria-describedby");
+        return refreshFirst;
+      }
+
+      async function expectLinkOnly() {
+        expect(
+          await screen.findByRole("button", { name: "Need a refresher?" }),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+      }
+
+      it("R48: reads only this passage's own review history", () => {
+        renderReview();
+        expect(queryMock).toHaveBeenCalledWith("passageMemory.recentReviews", {
+          packId: PACK_ID,
+        });
+        cleanup();
+        queryMock.mockClear();
+        renderSession(passageView(memorized()));
+        expect(queryMock).toHaveBeenCalledWith(
+          "passageMemory.recentReviews",
+          "skip",
+        );
+        expect(queryMock).not.toHaveBeenCalledWith(
+          "passageMemory.recentReviews",
+          expect.objectContaining({ packId: PACK_ID }),
+        );
+      });
+
+      it("R48: a stale due passage stacks the cue; Refresh it first opens the counted refresher", async () => {
+        renderReview(staleDue());
+        const refreshFirst = await expectCueStack();
+        refreshFirst.focus();
+        await userEvent.keyboard("{Enter}");
+        await expectFreshStep("Refresh · First letters · 1 of 2");
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+        await check(FULL);
+        await clickButton(/Continue/);
+        await expectFreshStep("Refresh · From memory · 2 of 2");
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+        await check(FULL);
+        expect(record()).toHaveBeenCalledTimes(1);
+        expect(record()).toHaveBeenCalledWith(
+          expect.objectContaining({ refresherUsed: true, accuracy: 100 }),
+        );
+        expect(await screen.findByText(/^Next review /)).toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+        await clickButton(/Continue/);
+        await screen.findByRole("heading", { name: "Review complete" });
+        expect(screen.getByText("100% · Refresher used")).toBeInTheDocument();
+        expect(notePractice()).not.toHaveBeenCalled();
+      });
+
+      it("R48: the quiet link on a stale due passage opens the same counted refresher", async () => {
+        renderReview(staleDue());
+        await expectCueStack();
+        await clickButton("Need a refresher?");
+        await expectFreshStep("Refresh · First letters · 1 of 2");
+        await check(FULL);
+        await clickButton(/Continue/);
+        await check(FULL);
+        expect(record()).toHaveBeenCalledWith(
+          expect.objectContaining({ refresherUsed: true }),
+        );
+      });
+
+      it("R48: two of the last three tries under 60% make a not-due passage stale; its cue opens practice", async () => {
+        history(reviews(59, 100, 40));
+        renderPractice(reviewView({ dueAt: SAVED_DUE() }));
+        const refreshFirst = await expectCueStack();
+        await userEvent.dblClick(refreshFirst);
+        await expectFreshStep("Refresh · First letters · 1 of 2");
+        await check(FULL);
+        await clickButton(/Continue/);
+        await screen.findByText("Refresh · From memory · 2 of 2");
+        await check(FULL);
+        expect(
+          await screen.findByText(
+            "Practice only, your progress didn't change.",
+          ),
+        ).toBeInTheDocument();
+        expect(notePractice()).toHaveBeenCalledTimes(1);
+        expect(record()).not.toHaveBeenCalled();
+        expect(hold()).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ["60% is not a stale miss", reviews(60, 59, 60), {}],
+        ["only the newest three tries count", reviews(100, 100, 59, 40), {}],
+        [
+          "tries before Start over are ignored",
+          reviews(59, 40, 30),
+          { startedOverAt: getSessionNow() - DAY_MS / 2 },
+        ],
+        [
+          "6 days overdue on a short gap is not stale",
+          [],
+          { dueAt: getSessionNow() - 6 * DAY_MS },
+        ],
+        [
+          "its own longer gap must pass first",
+          [],
+          { dueAt: getSessionNow() - 9 * DAY_MS, intervalDays: 10 },
+        ],
+      ] as const)(
+        "R48: not stale, link only: %s",
+        async (_label, tries, extra) => {
+          history(tries);
+          renderReview(reviewView(extra));
+          await expectLinkOnly();
+        },
+      );
+
+      it("R48: stale at its own longer gap, overdue by exactly that gap", async () => {
+        renderReview(
+          reviewView({
+            dueAt: getSessionNow() - 10 * DAY_MS,
+            intervalDays: 10,
+          }),
+        );
+        await expectCueStack();
+      });
+
+      it("R48: shows no link or cue until the history loads, and none while learning", async () => {
+        history(undefined);
+        const { rerender } = renderReview(staleDue());
+        await screen.findByText(/No hint text/);
+        expect(
+          screen.queryByRole("button", { name: "Need a refresher?" }),
+        ).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+
+        history([]);
+        rerender(
+          <TooltipProvider delayDuration={0}>
+            <PassageSession
+              packId={PACK_ID}
+              view={staleDue()}
+              packName="Psalm 23"
+              onExit={() => {}}
+              endsAfterReview
+            />
+          </TooltipProvider>,
+        );
+        await expectCueStack();
+        cleanup();
+
+        // A warm-up while learning: never a cue, even on old misses.
+        history(reviews(10, 10, 10));
+        renderSession(passageView(memorized()));
+        await screen.findByText(/No hint text/);
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+      });
+
+      it("R48: the cue never appears once typing has started, but stays if already shown", async () => {
+        history(undefined);
+        const view = staleDue();
+        const ui = () => (
+          <TooltipProvider delayDuration={0}>
+            <PassageSession
+              packId={PACK_ID}
+              view={view}
+              packName="Psalm 23"
+              onExit={() => {}}
+              endsAfterReview
+            />
+          </TooltipProvider>
+        );
+        const { rerender } = render(ui());
+        await userEvent.type(
+          await screen.findByLabelText("Your recited passage"),
+          "The",
+        );
+        history([]);
+        rerender(ui());
+        await expectLinkOnly();
+        cleanup();
+
+        renderReview(staleDue());
+        await expectCueStack();
+        await userEvent.type(answerBox(), "The");
+        expect(
+          screen.getByRole("button", { name: REFRESH_FIRST }),
+        ).toBeInTheDocument();
+      });
+
+      it("R48: shows no cue on a text error or a graded result", async () => {
+        fetchChaptersBatchMock.mockRejectedValue(new Error("offline"));
+        renderReview(staleDue());
+        expect(
+          await screen.findByText("Could not load verse text."),
+        ).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: "Need a refresher?" }),
+        ).toBeNull();
+        cleanup();
+
+        fetchChaptersBatchMock.mockResolvedValue([
+          { chapter: 23, data: psalm23 },
+        ]);
+        renderReview(staleDue());
+        await expectCueStack();
+        await check(FULL);
+        await screen.findByRole("button", { name: /Continue/ });
+        expect(
+          screen.queryByRole("button", { name: REFRESH_FIRST }),
+        ).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: "Need a refresher?" }),
+        ).toBeNull();
       });
     });
 
