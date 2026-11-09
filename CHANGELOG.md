@@ -30,6 +30,28 @@
 * Pack wizard actions sit under the step content with clearer create icons
 * Passage sessions warm up with practiced verses before new learning, with optional practice after verses are done for the day
 
+## [1.20.0](https://github.com/natyconnor/berean/compare/v1.19.1...v1.20.0) (2026-11-09)
+
+
+### Features
+
+* Memory: score reviews in four bands ([#346](https://github.com/natyconnor/berean/issues/346) S1) ([#347](https://github.com/natyconnor/berean/issues/347)) ([4917993](https://github.com/natyconnor/berean/commit/491799319bf40f961cf195389309538a3f6ee601))
+* Memory: Start over for passages and pack rows ([#346](https://github.com/natyconnor/berean/issues/346) S3) ([#349](https://github.com/natyconnor/berean/issues/349)) ([cde5834](https://github.com/natyconnor/berean/commit/cde5834c5e80c25a5eb47c909574356667e69ef3))
+* **memory:** pre-try refresher for a due Memorized verse ([#351](https://github.com/natyconnor/berean/issues/351)) ([64ba5fe](https://github.com/natyconnor/berean/commit/64ba5fedc1160e22675e3cae576d6b1de25dfacf))
+* **memory:** quiet practice-only refresher pass copy ([#355](https://github.com/natyconnor/berean/issues/355)) ([dd925ea](https://github.com/natyconnor/berean/commit/dd925ead30e79109fad74154e76143b232e8bfe3))
+* **memory:** show where a from-memory passage recall stops ([#356](https://github.com/natyconnor/berean/issues/356)) ([6da2f0b](https://github.com/natyconnor/berean/commit/6da2f0b8ae2a17eeddbf552c2149ca4623d3a689))
+* S10: Refresh it first on stale Memorized verses ([#346](https://github.com/natyconnor/berean/issues/346)) ([#363](https://github.com/natyconnor/berean/issues/363)) ([3c20e76](https://github.com/natyconnor/berean/commit/3c20e7685a56db0ac8e1bccf4cf5b8b7c95bf43c))
+* S12: passage Practice anytime and stale prompt ([#346](https://github.com/natyconnor/berean/issues/346)) ([#367](https://github.com/natyconnor/berean/issues/367)) ([111a579](https://github.com/natyconnor/berean/commit/111a579dd02ebe278fd20f3c14a62a4331fdcf58))
+* S13: passage ••• Refresh and summary Refresh ([#346](https://github.com/natyconnor/berean/issues/346)) ([#368](https://github.com/natyconnor/berean/issues/368)) ([df2075c](https://github.com/natyconnor/berean/commit/df2075c0b537425b303d8b4f1de43882080ddf4e))
+* S14: Learning passage ••• Refresh over the learned verses ([#346](https://github.com/natyconnor/berean/issues/346)) ([#373](https://github.com/natyconnor/berean/issues/373)) ([9d45fa8](https://github.com/natyconnor/berean/commit/9d45fa8259c339aa4d44d70e8738f256b0b6419b))
+* S15: Learning-passage refreshers in warm-up and section recital ([#346](https://github.com/natyconnor/berean/issues/346)) ([#366](https://github.com/natyconnor/berean/issues/366)) ([415cb17](https://github.com/natyconnor/berean/commit/415cb179d008660846ac3ffa92dd03a2c9f4bebe))
+
+
+### Bug Fixes
+
+* **memory:** finish passage Review with a summary after Continue ([#359](https://github.com/natyconnor/berean/issues/359)) ([bacab3c](https://github.com/natyconnor/berean/commit/bacab3cb0a00029bcc04e0519592ac1f652b3008))
+* **memory:** sync refresher progress display ([#358](https://github.com/natyconnor/berean/issues/358)) ([36a6fe8](https://github.com/natyconnor/berean/commit/36a6fe87855447381db151717d2e094cee4094b0))
+
 ## [1.19.1](https://github.com/natyconnor/berean/compare/v1.19.0...v1.19.1) (2026-10-28)
 
 
