@@ -44,6 +44,7 @@ import {
   pieceReference,
   pieceStatus,
   pickUpCue,
+  refreshPieceIndexes,
   verseScores,
   stopBeforeCue,
   RECITE_IT_ALL_LABEL,
@@ -180,6 +181,7 @@ export type PassageSummarySnapshot = Extract<
 const SAVE_ATTEMPT_ERROR = "Couldn't save that attempt. Please try again.";
 const FROM_MEMORY_PASSAGE_HINT =
   "No hint text. Type the passage from memory — verse numbers not needed — then check your answer.";
+const TYPE_THIS_PART_PROMPT = "Type this part from memory";
 
 interface PassageSessionProps {
   packId: Id<"packs">;
@@ -209,10 +211,11 @@ interface PassageSessionProps {
    */
   endsAfterReview?: boolean;
   /**
-   * ••• or summary Refresh on a Memorized passage: opens in the refresher.
-   * From Review, its From memory try counts when the passage is due (R30);
-   * from Practice it never does (R50, R51). Continue on that result leaves
-   * with `onExit`.
+   * ••• or summary Refresh on a passage: opens in the refresher. From
+   * Review, its From memory try counts when a Memorized passage is due (R30);
+   * from Practice it never does (R50, R51). On a Learning passage it covers
+   * only the learned verses and saves nothing (R39). Continue on that result
+   * leaves with `onExit`.
    */
   refresh?: "review" | "practice";
   /** Coming back from a summary Refresh: that summary, as it was. */
@@ -241,6 +244,15 @@ export function PassageSession({
 
   const [status, setStatus] = useState(view.status);
   const isMaintenance = status === "reviewing" || status === "mastered";
+  // A Learning passage's ••• Refresh (S14): only the verses learned when it
+  // opened (R39), practice only, and nothing in it is saved.
+  const [learnedWindow] = useState(() =>
+    refresh !== undefined && view.status === "building"
+      ? refreshPieceIndexes(view.status, view.pieces)
+      : null,
+  );
+  // The Learning session itself, as opposed to a review or a Refresh.
+  const learning = !isMaintenance && learnedWindow === null;
   // Opened on a Memorized passage that is not due (Practice anytime): every
   // try and refresher is practice only, and Continue leaves (R40).
   const [practiceSession] = useState(
@@ -258,7 +270,7 @@ export function PassageSession({
   );
 
   const endStep = () => {
-    clearPassageStepInProgress(packId);
+    if (learnedWindow === null) clearPassageStepInProgress(packId);
   };
   const leaveSession = () => {
     endStep();
@@ -298,12 +310,14 @@ export function PassageSession({
   // backstop counts it, and only a finished From memory try replaces it. Its
   // weak verses are hinted right away.
   const refresher = useVerseRefresher(
-    refresh === undefined || !isMaintenance
-      ? undefined
-      : refresh === "review" &&
-          isDueForReview({ status, dueAt: view.dueAt }, now)
-        ? "pre-try"
-        : "practice",
+    learnedWindow
+      ? "practice"
+      : refresh === undefined || !isMaintenance
+        ? undefined
+        : refresh === "review" &&
+            isDueForReview({ status, dueAt: view.dueAt }, now)
+          ? "pre-try"
+          : "practice",
   );
   // A ••• or summary Refresh's own round hints every verse when none is shaky
   // (Nov 8, 9:36 AM). Any later round hints as S11 does.
@@ -325,19 +339,18 @@ export function PassageSession({
     view.needsCelebration ? "owed" : null,
   );
   const celebrateMastered = useFirstMasteredToast();
-  const carriedOver = useCarriedOverNotice(
-    view._id,
-    state.pieces,
-    !isMaintenance,
-  );
+  const carriedOver = useCarriedOverNotice(view._id, state.pieces, learning);
 
   const pieceRefs = useMemo(
     () => view.pieces.map(pieceReference),
     [view.pieces],
   );
-  const composite = useEsvCompositePassage(pieceRefs, {
-    enabled: view.pieces.length > 0,
-  });
+  // A Refresh loads only what it covers. The learned window is the rope, a
+  // prefix, so its segments still line up with `view.pieces` by index.
+  const composite = useEsvCompositePassage(
+    learnedWindow ? pieceRefs.slice(0, learnedWindow.length) : pieceRefs,
+    { enabled: view.pieces.length > 0 },
+  );
   const pieceTexts = useMemo(
     () => view.pieces.map((_, index) => composite.segments[index]?.text ?? ""),
     [view.pieces, composite.segments],
@@ -375,36 +388,44 @@ export function PassageSession({
       startedOverAt: view.startedOverAt,
       lastReviews: recentReviews,
     });
-  const liveRecall = isMaintenance
-    ? reviewRecall(packName, state.pieces, pieceTexts, composite, {
-        step: refresher.step,
-        targets: review.hintTargets(shakyVerses),
-        segments: composite.segments,
-        passageVerses,
-        hintAllIfSteady,
-      })
-    : buildingRecall({
-        packName,
-        state,
-        recitingSection,
-        recitingConnect,
-        pieceTexts,
-        compositeLoading: composite.loading,
-        compositeError: composite.error,
-        retry: composite.retry,
-        ropeIndexes,
-      });
+  const liveRecall =
+    isMaintenance || learnedWindow
+      ? reviewRecall(
+          packName,
+          state.pieces,
+          learnedWindow ?? state.pieces.map((_, index) => index),
+          pieceTexts,
+          composite,
+          {
+            step: refresher.step,
+            targets: review.hintTargets(shakyVerses),
+            segments: composite.segments,
+            passageVerses,
+            hintAllIfSteady,
+          },
+        )
+      : buildingRecall({
+          packName,
+          state,
+          recitingSection,
+          recitingConnect,
+          pieceTexts,
+          compositeLoading: composite.loading,
+          compositeError: composite.error,
+          retry: composite.retry,
+          ropeIndexes,
+        });
   // A Learning passage refreshes only its warm-up and section recital (R32,
   // R37): never the new verse, Fix a tricky spot or Connect (R31, R38).
   const learningRefreshable =
-    !isMaintenance &&
+    learning &&
     (state.phase === "rope" ||
       (state.phase === "section-complete" && recitingSection));
   // The card being refreshed: the held result after a logged miss, or the
   // unattempted card before a try. Its own state is left as it was.
   const shownRecall = holdResult && heldRecall ? heldRecall : liveRecall;
   const recall =
-    !isMaintenance && refresher.step && shownRecall
+    learning && refresher.step && shownRecall
       ? learningRefresherRecall(shownRecall, refresher.step)
       : shownRecall;
   // A logged miss's starting hint is for its next try, not the refresher.
@@ -413,6 +434,8 @@ export function PassageSession({
   const autoIntroduceStarted = useRef(false);
 
   useEffect(() => {
+    // A Refresh is no step of the Learning session: it leaves the marker be.
+    if (learnedWindow) return;
     if (state.phase === "passage-complete") {
       clearPassageStepInProgress(packId);
       return;
@@ -421,7 +444,7 @@ export function PassageSession({
     return () => {
       releasePassageStepInProgress(packId);
     };
-  }, [packId, state.phase]);
+  }, [packId, state.phase, learnedWindow]);
 
   async function persist(
     next: PassageSessionState,
@@ -859,7 +882,7 @@ export function PassageSession({
     ? state.phase
     : reconcilePassagePhase(state.phase, state.pieces, remaining, state.now);
   const needsFirstVerse =
-    !isMaintenance &&
+    learning &&
     effectivePhase === "offer-introduce" &&
     !hasStartedPassage(state.pieces);
 
@@ -894,12 +917,12 @@ export function PassageSession({
     (ropePieceIndexes(state.pieces)[0] ?? 0) < defaultRehearsalStart;
 
   const showNextVersePanel =
-    !isMaintenance &&
+    learning &&
     !holdResult &&
     !needsFirstVerse &&
     effectivePhase === "offer-introduce";
   const showDoneToday =
-    !isMaintenance &&
+    learning &&
     !holdResult &&
     (effectivePhase === "frontier-locked" ||
       effectivePhase === "budget-exhausted");
@@ -914,7 +937,9 @@ export function PassageSession({
 
   return (
     <PassageSessionShell
-      phaseLabel={finishedReview ? undefined : phaseLabel}
+      // A Learning passage's Refresh names its step on the card only, with
+      // no Learning phase (no warm-up chrome) in the header.
+      phaseLabel={finishedReview || learnedWindow ? undefined : phaseLabel}
       packName={packName}
       onExit={leaveSession}
       onHome={endStep}
@@ -966,7 +991,8 @@ export function PassageSession({
         />
       ) : null}
 
-      {effectivePhase === "section-complete" &&
+      {learning &&
+      effectivePhase === "section-complete" &&
       !holdResult &&
       !recitingSection ? (
         <SectionCompletePanel
@@ -975,7 +1001,10 @@ export function PassageSession({
         />
       ) : null}
 
-      {effectivePhase === "connect" && !holdResult && !recitingConnect ? (
+      {learning &&
+      effectivePhase === "connect" &&
+      !holdResult &&
+      !recitingConnect ? (
         <ConnectPanel
           title={connectPairTitle(
             (state.rehearsalRopeIndexes ?? [])
@@ -1342,6 +1371,7 @@ type ReviewRefresher = {
   step: 1 | 2 | null;
   /** Shaky verses and the held miss's weak ones. */
   targets: readonly PassageVerseKey[];
+  /** The verses recited: the whole passage, or a Refresh's learned window. */
   segments: readonly CompositePassageSegment[];
   passageVerses: readonly PassageVerseKey[];
   /** With nothing to target, hint every verse (••• and summary Refresh). */
@@ -1351,8 +1381,8 @@ type ReviewRefresher = {
 /**
  * The refresher's hint: First letters shows first letters on shaky verses and
  * on verses the held miss scored under 85%, every other word blank in place,
- * verse by verse even inside one piece; with none and `hintAllIfSteady`, on
- * every verse. From memory shows none.
+ * verse by verse even inside one piece; with none of those among the verses
+ * recited and `hintAllIfSteady`, on every verse. From memory shows none.
  */
 function reviewHint(refresher: ReviewRefresher): PassageRecallHint {
   if (refresher.step === 2) {
@@ -1361,7 +1391,13 @@ function reviewHint(refresher: ReviewRefresher): PassageRecallHint {
   if (refresher.step === null) {
     return { type: "hidden", message: FROM_MEMORY_PASSAGE_HINT };
   }
-  const { targets, passageVerses } = refresher;
+  const { passageVerses } = refresher;
+  const targets = refresher.targets.filter((target) =>
+    passageVerses.some(
+      (verse) =>
+        verse.chapter === target.chapter && verse.verse === target.verse,
+    ),
+  );
   return {
     type: "text",
     text: firstLettersHintText(
@@ -1394,19 +1430,29 @@ function learningRefresherRecall(base: BuiltRecall, step: 1 | 2): BuiltRecall {
   };
 }
 
+/**
+ * A whole-passage recital over `indexes`: the whole passage on a Memorized
+ * one, the learned verses on a Learning one's Refresh, which never claims to
+ * be the whole passage.
+ */
 function reviewRecall(
   packName: string,
   pieces: readonly PassagePiece[],
+  indexes: readonly number[],
   texts: readonly string[],
   composite: { loading: boolean; error: string | null; retry: () => void },
   refresher: ReviewRefresher,
 ): BuiltRecall {
-  const indexes = pieces.map((_, index) => index);
+  const whole = indexes.length === pieces.length;
   return {
     mode: "review",
-    title: packName,
-    subtitle: `${verseCountIn(pieces)} verses · whole passage`,
-    promptLine: "Recite the whole passage from memory",
+    title: whole ? packName : windowTitle(packName, pieces, indexes),
+    subtitle: whole
+      ? `${verseCountIn(pieces)} verses · whole passage`
+      : undefined,
+    promptLine: whole
+      ? "Recite the whole passage from memory"
+      : TYPE_THIS_PART_PROMPT,
     versePlainText: joinPieceTexts(pieces, indexes, texts),
     loading: composite.loading,
     error: composite.error,
@@ -1539,7 +1585,7 @@ function buildingRecall(args: {
       mode: "repair",
       title: windowTitle(packName, state.pieces, indexes),
       subtitle: "Try this part again",
-      promptLine: "Type this part from memory",
+      promptLine: TYPE_THIS_PART_PROMPT,
       versePlainText: joinPieceTexts(state.pieces, indexes, pieceTexts),
       loading: compositeLoading,
       error: compositeError,

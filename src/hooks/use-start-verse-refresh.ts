@@ -148,9 +148,10 @@ export function useStartVerseRefresh(
 }
 
 /**
- * ••• or summary Refresh on a whole Memorized passage (R30, R50, R51). When
- * it can't start (R34), focus goes back to `controlRef`, which the launch
- * disabled while the text loaded.
+ * ••• or summary Refresh on a passage: `references` are what it covers, the
+ * whole of a Memorized one (R30, R50, R51) or a Learning one's learned verses
+ * (R39). When it can't start (R34), focus goes back to `controlRef`, which
+ * the launch disabled while the text loaded.
  */
 export function useStartPassageRefresh(
   packId: string,

@@ -362,6 +362,20 @@ export function verseCountIn(pieces: readonly PassagePiece[]): number {
   );
 }
 
+/**
+ * The pieces a passage ••• Refresh covers: on a Learning passage, only what is
+ * learned, the rope (S14, R39); on a Memorized one, every piece (S13). Empty
+ * means there is nothing to refresh.
+ */
+export function refreshPieceIndexes(
+  status: PassageView["status"],
+  pieces: readonly PassagePiece[],
+): number[] {
+  return status === "building"
+    ? ropePieceIndexes(pieces)
+    : pieces.map((_, index) => index);
+}
+
 export function windowTitle(
   packName: string,
   pieces: readonly PassagePiece[],

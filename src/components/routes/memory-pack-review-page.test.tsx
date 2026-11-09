@@ -375,6 +375,93 @@ describe("MemoryPackReviewPage", () => {
       expect(navigateMock).not.toHaveBeenCalled();
     });
 
+    describe("on a Learning passage (S14)", () => {
+      /** Verses 1–3 learned, 4–6 being learned. */
+      const learning = () => {
+        const passage = reviewingPassage();
+        return {
+          ...passage,
+          status: "building",
+          dueAt: getSessionNow(),
+          pieces: [
+            passage.pieces[0],
+            { ...passage.pieces[1], attachment: "learning", learnStage: 1 },
+          ],
+          frontierIndex: 1,
+          ropePieceIndexes: [0],
+        };
+      };
+      const LEARNED =
+        "The Lord is my shepherd; I shall not want. He makes me lie down in green pastures. He restores my soul.";
+
+      async function check(answer: string) {
+        const box = await screen.findByLabelText("Your recited passage");
+        await userEvent.click(box);
+        await userEvent.paste(answer);
+        await userEvent.click(
+          screen.getByRole("button", { name: /Check answer/ }),
+        );
+        await screen.findByText(/recalled/);
+      }
+
+      function expectNothingSaved() {
+        for (const [name, fn] of mutationMocks) {
+          expect(fn, name).not.toHaveBeenCalled();
+        }
+      }
+
+      beforeEach(() => {
+        router.search = { refresh: true, return: "/memory/pack_1" };
+      });
+
+      it("runs First letters, From memory and Continue back to the passage page, saving nothing", async () => {
+        renderReview({
+          unified: false,
+          passage: learning(),
+          page: <MemoryPackPracticePage />,
+        });
+        expect(
+          await screen.findByText("Refresh · First letters · 1 of 2"),
+        ).toBeInTheDocument();
+        expect(screen.getByText("Psalm 23:1–3")).toBeInTheDocument();
+        await check(LEARNED);
+        await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        expect(
+          await screen.findByText("Refresh · From memory · 2 of 2"),
+        ).toBeInTheDocument();
+        await check(LEARNED);
+        expect(
+          screen.getByText("Practice only, your progress didn't change."),
+        ).toBeInTheDocument();
+        await userEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        expect(navigateMock).toHaveBeenCalledTimes(1);
+        expect(navigateMock).toHaveBeenCalledWith({
+          href: "/memory/pack_1",
+          replace: true,
+          state: { refreshedPassage: "pack_1" },
+        });
+        expectNothingSaved();
+      });
+
+      it("goes back to the passage page on Back, saving nothing", async () => {
+        renderReview({
+          unified: false,
+          passage: learning(),
+          page: <MemoryPackPracticePage />,
+        });
+        await screen.findByText("Refresh · First letters · 1 of 2");
+        await userEvent.click(
+          screen.getByRole("button", { name: "Back to Psalm 23" }),
+        );
+        expect(navigateMock).toHaveBeenCalledWith({
+          href: "/memory/pack_1",
+          replace: true,
+          state: { refreshedPassage: "pack_1" },
+        });
+        expectNothingSaved();
+      });
+    });
+
     it("shows a kept passage summary as it was, and ignores another pack's", async () => {
       const dueAt = getSessionNow() + 24 * 60 * 60 * 1000;
       const snapshot = {

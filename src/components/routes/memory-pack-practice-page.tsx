@@ -55,7 +55,7 @@ export function MemoryPackSessionPage({
   packId: Id<"packs">;
   /** Where Done and Back go; else the pack page. */
   returnTo?: string;
-  /** A Memorized passage's ••• or summary Refresh, practice only (R50, R51). */
+  /** A passage's ••• or summary Refresh, practice only (R39, R50, R51). */
   refresh?: boolean;
 }) {
   const now = useLiveNow();

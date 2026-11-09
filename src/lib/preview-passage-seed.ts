@@ -25,7 +25,8 @@ export type PreviewPassageSeedRole =
   | "staleDue"
   | "staleNotDue"
   | "masteredNotDue"
-  | "sectionOneStepLeft";
+  | "sectionOneStepLeft"
+  | "learningRefresh";
 
 /** One graded whole-passage review try, stored as a `passageReviews` row. */
 export type PreviewPassageReview = {
@@ -460,6 +461,42 @@ const PSALM_133_VERSES: EsvVerse[] = [
   },
 ];
 
+const PSALM_121_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "I lift up my eyes to the hills. From where does my help come?",
+    heading: "My Help Comes from the Lord",
+  },
+  {
+    number: 2,
+    text: "My help comes from the Lord, who made heaven and earth.",
+  },
+  {
+    number: 3,
+    text: "He will not let your foot be moved; he who keeps you will not slumber.",
+  },
+  {
+    number: 4,
+    text: "Behold, he who keeps Israel will neither slumber nor sleep.",
+  },
+  {
+    number: 5,
+    text: "The Lord is your keeper; the Lord is your shade on your right hand.",
+  },
+  {
+    number: 6,
+    text: "The sun shall not strike you by day, nor the moon by night.",
+  },
+  {
+    number: 7,
+    text: "The Lord will keep you from all evil; he will keep your life.",
+  },
+  {
+    number: 8,
+    text: "The Lord will keep your going out and your coming in from this time forth and forevermore.",
+  },
+];
+
 const PSALM_134_VERSES: EsvVerse[] = [
   {
     number: 1,
@@ -830,6 +867,65 @@ export function testerRefreshPacks(
         reviewTry(now, 12, 100),
       ],
     }),
+  ];
+}
+
+/**
+ * S14 ••• Refresh on a Learning passage: Psalm 121 with its first piece solid,
+ * its second attached and remembered shaky, its third still being learned and
+ * the rest unreached. Never seeded on a production Convex deployment.
+ */
+export function testerLearningRefreshPacks(
+  now: number,
+  convexDeployment: string | undefined,
+): PreviewPassageSeedPack[] {
+  if (isProdDeployment(convexDeployment)) return [];
+  const bases = buildPassagePieces([
+    { book: "Psalms", chapter: 121, verses: PSALM_121_VERSES },
+  ]);
+  const shaky = bases[1];
+  if (!shaky) return [];
+  return [
+    {
+      id: "passage-learning-refresh-psalm-121",
+      role: "learningRefresh",
+      name: "Sample · Psalm 121 (Learning, one verse shaky)",
+      description:
+        "Learning passage: two pieces learned (the second shaky), one in progress, the rest not started.",
+      howToTry:
+        "Open the pack → ••• → Refresh (above Start over). First letters covers only the learned verses and hints only the shaky one; the verse in progress never appears. It's practice only: Continue or Back returns to the pack with nothing changed.",
+      scope: scopeChapter("Psalms", 121),
+      passage: {
+        status: "building",
+        addsOnDay: 0,
+        schedule: buildingSchedule(now),
+        pieces: paintPieces(
+          bases,
+          bases.map((_, index) =>
+            index === 0
+              ? {
+                  attachment: "solid" as const,
+                  learnStage: 3,
+                  dueAt: now + DAY_MS,
+                }
+              : index === 1
+                ? {
+                    attachment: "attached" as const,
+                    learnStage: 2,
+                    dueAt: now + DAY_MS,
+                  }
+                : index === 2
+                  ? {
+                      attachment: "learning" as const,
+                      learnStage: 1,
+                      dueAt: now,
+                    }
+                  : { attachment: "unreached" as const },
+          ),
+        ),
+        shakyVerses: [{ chapter: 121, verse: shaky.startVerse }],
+      },
+    },
   ];
 }
 

@@ -18,6 +18,7 @@ import {
 import {
   buildPreviewPassageSeed,
   previewPassageMemoryFields,
+  testerLearningRefreshPacks,
   testerMaintenancePacks,
   testerRefreshPacks,
   testerSectionRecitalPacks,
@@ -25,6 +26,7 @@ import {
   type PreviewPassageSeedPack,
 } from "./preview-passage-seed";
 import { shakyFirstLettersHint } from "./passage-shaky";
+import { refreshPieceIndexes } from "@/components/memory/passage/passage-session-model";
 import { scopesEqual } from "./scope-equality";
 
 const NOW = 1_700_000_000_000;
@@ -388,6 +390,68 @@ describe("testerRefreshPacks (S13)", () => {
     const [pack] = testerRefreshPacks(NOW, undefined);
     expect(pack?.scope.chapterRanges).toEqual([
       { book: "Psalms", startChapter: 117, endChapter: 117 },
+    ]);
+  });
+});
+
+describe("testerLearningRefreshPacks (S14)", () => {
+  it("adds nothing on a production deployment", () => {
+    expect(testerLearningRefreshPacks(NOW, "prod:berean-123")).toEqual([]);
+  });
+
+  it.each(["dev:berean-123", "preview:berean-pr-370", undefined])(
+    "lands a Learning Psalm 121 with learned, shaky, in-progress and unreached verses on %s",
+    (deployment) => {
+      const [pack, ...rest] = testerLearningRefreshPacks(NOW, deployment);
+      expect(rest).toEqual([]);
+      expect(pack?.name).toBe("Sample · Psalm 121 (Learning, one verse shaky)");
+
+      // The row the seed stores, read back through the server's view.
+      const view = toPassageView(
+        {
+          _id: "passageMemory:121" as Id<"passageMemory">,
+          _creationTime: NOW,
+          userId: "users:u" as Id<"users">,
+          packId: "packs:121" as Id<"packs">,
+          ...previewPassageMemoryFields(pack.passage!, NOW),
+        },
+        NOW,
+        TZ,
+      );
+      expect(view.status).toBe("building");
+      expect(view.pieces.map((piece) => piece.attachment).slice(0, 3)).toEqual([
+        "solid",
+        "attached",
+        "learning",
+      ]);
+      expect(view.pieces.length).toBeGreaterThan(3);
+      for (const piece of view.pieces.slice(3)) {
+        expect(piece.attachment).toBe("unreached");
+      }
+      // The Refresh covers the first two pieces; the shaky verse is in the
+      // second, so it is a learned verse.
+      const learned = refreshPieceIndexes(view.status, view.pieces);
+      expect(learned).toEqual([0, 1]);
+      expect(view.shakyVerses).toEqual([
+        { chapter: 121, verse: view.pieces[1]?.startVerse },
+      ]);
+    },
+  );
+
+  it("uses Psalm 121, which no other sample uses", () => {
+    const [pack] = testerLearningRefreshPacks(NOW, undefined);
+    const others = [
+      ...buildPreviewPassageSeed(NOW, TZ).packs,
+      ...testerMaintenancePacks(NOW, undefined),
+      ...testerStalePacks(NOW, undefined),
+      ...testerRefreshPacks(NOW, undefined),
+      ...testerSectionRecitalPacks(NOW, undefined),
+    ];
+    for (const other of others) {
+      expect(scopesEqual(other.scope, pack.scope)).toBe(false);
+    }
+    expect(pack.scope.chapterRanges).toEqual([
+      { book: "Psalms", startChapter: 121, endChapter: 121 },
     ]);
   });
 });
