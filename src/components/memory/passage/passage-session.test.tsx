@@ -23,6 +23,7 @@ import {
   PASSAGE_STEP_IN_PROGRESS_KEY,
 } from "@/lib/passage-step-resume";
 import { testerSectionRecitalPacks } from "@/lib/preview-passage-seed";
+import { maskVerseText } from "@/lib/verse-hint";
 import type { EsvChapterData } from "../../../../shared/esv-api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -3489,6 +3490,350 @@ describe("PassageSession", () => {
       expect(header("Warm up")).toBeInTheDocument();
       await waitFor(() => expect(answerBox()).toHaveFocus());
       expectOnlyLoggedTries(0);
+    });
+  });
+
+  describe("Learning passage ••• Refresh (S14)", () => {
+    const BACK = "Back to Psalm 23";
+    const PRACTICE_ONLY = "Practice only, your progress didn't change.";
+    const STEP_ONE = "Refresh · First letters · 1 of 2";
+    const STEP_TWO = "Refresh · From memory · 2 of 2";
+    const VERSE_THREE =
+      "He restores my soul. He leads me in paths of righteousness.";
+    const LEARNED = `${PASSAGE_ONE} ${PASSAGE_TWO}`;
+    // 40 distinct words a verse, so the two learned verses can score 84% and 85%.
+    const LETTERS = "abcdefghijklmnopqrstuvwxyz";
+    const longVerse = (number: number) =>
+      Array.from(
+        { length: 40 },
+        (_, index) =>
+          `${LETTERS[number]}${LETTERS[index % 26]}${LETTERS[Math.floor(index / 26)]}`,
+      ).join(" ");
+
+    const answerBox = () => screen.getByLabelText("Your recited passage");
+    const verse = (number: number) => ({ chapter: 23, verse: number });
+    const masked = (text: string, mode: "hidden" | "first-letters") =>
+      maskVerseText(text, mode)
+        .map((token) => token.text)
+        .join("");
+
+    /** The chapter as served: only `texts`, so later verses have no text. */
+    function serveChapter(texts: readonly string[]) {
+      fetchChaptersBatchMock.mockResolvedValue([
+        {
+          chapter: 23,
+          data: {
+            ...psalm23,
+            verses: texts.map((text, index) => ({ number: index + 1, text })),
+          },
+        },
+      ]);
+    }
+
+    /**
+     * Verse 1 solid, verse 2 attached, verse 3 being learned, verse 4 not
+     * reached. Only verses 1–2 have text, so loading more would fail.
+     */
+    function learningView(
+      extra?: Partial<PassageView>,
+      texts: readonly string[] = [PASSAGE_ONE, PASSAGE_TWO],
+    ): PassageView {
+      serveChapter(texts);
+      const now = getSessionNow();
+      return passageView(
+        [
+          piece(0, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+          piece(1, "attached", { learnStage: 2, dueAt: now + DAY_MS }),
+          piece(2, "learning", { learnStage: 1, dueAt: now }),
+          piece(3, "unreached"),
+        ],
+        { lastSessionAt: now - 60_000, ...extra },
+      );
+    }
+
+    function renderRefresh(view: PassageView = learningView()) {
+      const onExit = vi.fn();
+      const utils = render(
+        <TooltipProvider delayDuration={0}>
+          <PassageSession
+            packId={PACK_ID}
+            view={view}
+            packName="Psalm 23"
+            onExit={onExit}
+            backLabel={BACK}
+            refresh="practice"
+          />
+        </TooltipProvider>,
+      );
+      return { onExit, ...utils };
+    }
+
+    async function check(answer: string) {
+      const box = await screen.findByLabelText("Your recited passage");
+      await userEvent.click(box);
+      await userEvent.paste(answer);
+      const button = screen.getByRole("button", { name: /Check answer/ });
+      await waitFor(() => expect(button).toBeEnabled());
+      await userEvent.click(button);
+      await screen.findByText(/recalled/);
+    }
+
+    async function clickButton(name: RegExp | string) {
+      await userEvent.click(await screen.findByRole("button", { name }));
+    }
+
+    async function expectFreshStep(header: string) {
+      expect(await screen.findByText(header)).toBeInTheDocument();
+      await waitFor(() => expect(answerBox()).toHaveFocus());
+      expect(answerBox()).toHaveValue("");
+    }
+
+    function hintText(): string {
+      return screen.getByLabelText("Hint").textContent ?? "";
+    }
+
+    /** No mutation ran: nothing about the passage was saved. */
+    function expectNothingSaved() {
+      for (const [name, fn] of mutationMocks) {
+        expect(fn, name).not.toHaveBeenCalled();
+      }
+    }
+
+    it("opens at First letters over the learned verses only, with no warm-up chrome", async () => {
+      renderRefresh();
+      await expectFreshStep(STEP_ONE);
+      // The learned verses' title, never "whole passage" for a prefix.
+      expect(screen.getByText("Psalm 23:1–2")).toBeInTheDocument();
+      expect(
+        screen.getByText("Type this part from memory"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/whole passage/)).toBeNull();
+      expect(screen.queryByText(WARMUP_PROMPT_COPY)).toBeNull();
+      expect(screen.queryByText(WARMUP_SKIP_LABEL)).toBeNull();
+      expect(
+        screen.queryByRole("status", { name: /Session phase/ }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Need a refresher?" }),
+      ).toBeNull();
+      // Every learned verse is hinted (none is shaky); verse 3, in progress,
+      // and verse 4, unreached, never appear.
+      expect(hintText()).toBe(
+        `${masked(PASSAGE_ONE, "first-letters")} ${masked(PASSAGE_TWO, "first-letters")}`,
+      );
+      expect(screen.queryByText(/restores/)).toBeNull();
+
+      // The answer is the learned verses: typing them is 100%.
+      await check(LEARNED);
+      expect(screen.getByText("100% recalled")).toBeInTheDocument();
+    });
+
+    it("covers a single learned verse alone", async () => {
+      const now = getSessionNow();
+      serveChapter([PASSAGE_ONE]);
+      renderRefresh(
+        passageView([
+          piece(0, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+          piece(1, "learning", { learnStage: 1, dueAt: now }),
+        ]),
+      );
+      await expectFreshStep(STEP_ONE);
+      expect(screen.getByText("Psalm 23:1")).toBeInTheDocument();
+      expect(hintText()).toBe(masked(PASSAGE_ONE, "first-letters"));
+      await check(PASSAGE_ONE);
+      expect(screen.getByText("100% recalled")).toBeInTheDocument();
+    });
+
+    it("hints only the shaky learned verses, every other learned word blank", async () => {
+      renderRefresh(learningView({ shakyVerses: [verse(2)] }));
+      await expectFreshStep(STEP_ONE);
+      expect(hintText()).toBe(
+        `${masked(PASSAGE_ONE, "hidden")} ${masked(PASSAGE_TWO, "first-letters")}`,
+      );
+      expect(hintText()).not.toMatch(/T__/);
+    });
+
+    it.each([
+      ["only the verse in progress", [verse(3)]],
+      ["only an unreached verse", [verse(4)]],
+      ["none", []],
+    ])(
+      "hints every learned verse when the shaky ones are %s",
+      async (_label, shakyVerses) => {
+        renderRefresh(
+          learningView({ shakyVerses }, [
+            PASSAGE_ONE,
+            PASSAGE_TWO,
+            VERSE_THREE,
+            "Even though I walk through the valley.",
+          ]),
+        );
+        await expectFreshStep(STEP_ONE);
+        expect(hintText()).toBe(
+          `${masked(PASSAGE_ONE, "first-letters")} ${masked(PASSAGE_TWO, "first-letters")}`,
+        );
+        expect(hintText()).not.toMatch(/H_ r_______|E___/);
+      },
+    );
+
+    it("First letters at 84% reads Try again and at 85% Continue; From memory is unhinted and ends practice only", async () => {
+      const long = [longVerse(1), longVerse(2)];
+      const full = long.join(" ");
+      const typedAt = (percent: number) => {
+        const words = full.split(" ");
+        for (let count = words.length; count > 0; count -= 1) {
+          const typed = words.slice(0, count).join(" ");
+          if (verseAttemptAccuracy(diffWords(typed, full)) === percent) {
+            return typed;
+          }
+        }
+        throw new Error(`No prefix scores ${percent}%`);
+      };
+      const { onExit } = renderRefresh(learningView(undefined, long));
+      await expectFreshStep(STEP_ONE);
+      await check(typedAt(84));
+      expect(screen.queryByText(PRACTICE_ONLY)).toBeNull();
+      await clickButton(/Try again/);
+      await expectFreshStep(STEP_ONE);
+      await check(typedAt(85));
+      await clickButton(/Continue/);
+
+      await expectFreshStep(STEP_TWO);
+      expect(
+        screen.getByText("Now try it without the hints."),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText("Hint")).toBeNull();
+      await check(typedAt(30));
+      expect(screen.getByText(PRACTICE_ONLY)).toBeInTheDocument();
+      // Just the score, the closing and Continue.
+      for (const name of [
+        /Refresh/,
+        "Try another refresher",
+        "Need a refresher?",
+        /Try again/,
+      ]) {
+        expect(screen.queryByRole("button", { name })).toBeNull();
+      }
+      expect(screen.queryByText("Counted as today's review")).toBeNull();
+      expect(screen.queryByText(/^Next review /)).toBeNull();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Continue/ })).toHaveFocus(),
+      );
+
+      await clickButton(/Continue/);
+      expect(onExit).toHaveBeenCalledTimes(1);
+      expectNothingSaved();
+    });
+
+    it("Continue after a pass leaves straight to the passage page", async () => {
+      const { onExit } = renderRefresh();
+      await expectFreshStep(STEP_ONE);
+      await check(LEARNED);
+      await clickButton(/Continue/);
+      await expectFreshStep(STEP_TWO);
+      await check(LEARNED);
+      expect(screen.getByText(PRACTICE_ONLY)).toBeInTheDocument();
+      await clickButton(/Continue/);
+      expect(onExit).toHaveBeenCalledTimes(1);
+      // No Learning screen flashes up on the way out.
+      expect(screen.queryByText(NEXT_VERSE_PROMPT_COPY)).toBeNull();
+      expect(screen.queryByText(WARMUP_PROMPT_COPY)).toBeNull();
+      expectNothingSaved();
+    });
+
+    it.each(["First letters", "From memory"])(
+      "Back during %s leaves to the passage page and saves nothing",
+      async (step) => {
+        // A Learning step left in progress in this tab stays as it was.
+        const marker = JSON.stringify({
+          packId: PACK_ID,
+          origin: performance.timeOrigin - 1,
+        });
+        sessionStorage.setItem(PASSAGE_STEP_IN_PROGRESS_KEY, marker);
+        const { onExit, unmount } = renderRefresh();
+        await expectFreshStep(STEP_ONE);
+        if (step === "From memory") {
+          await check(LEARNED);
+          await clickButton(/Continue/);
+          await expectFreshStep(STEP_TWO);
+          await userEvent.type(answerBox(), "The Lord");
+        } else {
+          await userEvent.type(answerBox(), "The Lord");
+        }
+        await clickButton(BACK);
+        expect(onExit).toHaveBeenCalledTimes(1);
+        unmount();
+        window.dispatchEvent(new Event("pagehide"));
+        expectNothingSaved();
+        expect(sessionStorage.getItem(PASSAGE_STEP_IN_PROGRESS_KEY)).toBe(
+          marker,
+        );
+      },
+    );
+
+    it("keeps its own window on a passage mid-section, with no Learning panels", async () => {
+      // Verse 2 just finished section 1: the Learning session would offer
+      // Section complete here.
+      serveChapter([PASSAGE_ONE, PASSAGE_TWO]);
+      const now = getSessionNow();
+      renderRefresh(
+        passageView([
+          piece(0, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+          piece(1, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+          piece(2, "unreached", { sectionIndex: 1 }),
+        ]),
+      );
+      await expectFreshStep(STEP_ONE);
+      expect(screen.queryByText(SECTION_COMPLETE_COPY)).toBeNull();
+      expect(screen.queryByText(NEXT_VERSE_PROMPT_COPY)).toBeNull();
+      expect(screen.queryByText(DONE_FOR_NOW_LABEL)).toBeNull();
+      expect(screen.getByText("Psalm 23:1–2")).toBeInTheDocument();
+      expectNothingSaved();
+    });
+
+    it("shows the text error with Retry, and no score, until the text loads", async () => {
+      const view = learningView();
+      fetchChaptersBatchMock.mockRejectedValueOnce(new Error("offline"));
+      renderRefresh(view);
+      expect(
+        await screen.findByText("Could not load verse text."),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/recalled/)).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /Check answer/ }),
+      ).toBeDisabled();
+      await clickButton("Retry");
+      await screen.findByLabelText("Hint");
+      expect(screen.getByText(STEP_ONE)).toBeInTheDocument();
+      expect(hintText()).toBe(
+        `${masked(PASSAGE_ONE, "first-letters")} ${masked(PASSAGE_TWO, "first-letters")}`,
+      );
+      expectNothingSaved();
+    });
+
+    it("leaves S15's warm-up refresher hinting its whole range, shaky or not", async () => {
+      serveChapter([PASSAGE_ONE, PASSAGE_TWO, VERSE_THREE]);
+      const now = getSessionNow();
+      render(
+        <TooltipProvider delayDuration={0}>
+          <PassageSession
+            packId={PACK_ID}
+            view={passageView(
+              [
+                piece(0, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+                piece(1, "solid", { learnStage: 3, dueAt: now + DAY_MS }),
+                piece(2, "learning", { learnStage: 1, dueAt: now }),
+              ],
+              { lastSessionAt: now - 60_000, shakyVerses: [verse(2)] },
+            )}
+            packName="Psalm 23"
+            onExit={() => {}}
+          />
+        </TooltipProvider>,
+      );
+      await clickButton("Need a refresher?");
+      await expectFreshStep(STEP_ONE);
+      expect(hintText()).toBe(masked(LEARNED, "first-letters"));
     });
   });
 

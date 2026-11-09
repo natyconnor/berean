@@ -1570,16 +1570,7 @@ describe("PackDetail passage Refresh (S13)", () => {
     },
   );
 
-  it("hides Refresh on a Learning passage, with or without progress", async () => {
-    // Verse 1–4 learned, the rest unreached: Start over, no Refresh (S14).
-    const learning = renderHost("pack:psalm16x");
-    let items = await menuItems();
-    expect(items).not.toContain(REFRESH_MENU_LABEL);
-    expect(items.some((item) => item?.includes(START_OVER_MENU_LABEL))).toBe(
-      true,
-    );
-    learning.unmount();
-
+  it("hides Refresh on a Learning passage with nothing reached", async () => {
     // Nothing reached (R28): neither Refresh nor Start over.
     passages = {
       psalm16x: passageView({
@@ -1591,8 +1582,7 @@ describe("PackDetail passage Refresh (S13)", () => {
       }),
     };
     renderHost("pack:psalm16x");
-    items = await menuItems();
-    expect(items).toEqual(["Stop memorizing"]);
+    expect(await menuItems()).toEqual(["Stop memorizing"]);
   });
 
   it("hides Refresh with no text to refresh and on a whole pack", async () => {
@@ -1776,5 +1766,218 @@ describe("PackDetail passage Refresh (S13)", () => {
     expect(
       screen.getByRole("button", { name: "More actions" }),
     ).not.toHaveFocus();
+  });
+});
+
+describe("PackDetail Learning passage Refresh (S14)", () => {
+  // Verses 1–4 and 5–6 have text; 7–11 don't, so a launch that loaded more
+  // than the learned verses would fail.
+  const learnedText = {
+    canonical: "Psalm 16",
+    copyright: "ESV",
+    verses: Array.from({ length: 6 }, (_, index) => ({
+      number: index + 1,
+      text: `Verse ${index + 1} text.`,
+    })),
+  };
+
+  function learning(pieces: PassagePiece[]) {
+    passages = { psalm16x: passageView({ pieces }) };
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    mocks.locationState = {};
+    mocks.getPassage.mockReset();
+    mocks.getPassage.mockResolvedValue([{ chapter: 16, data: learnedText }]);
+    mocks.navigate.mockResolvedValue(undefined);
+  });
+
+  async function menuItems() {
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await screen.findByRole("menu");
+    return screen.getAllByRole("menuitem").map((item) => item.textContent);
+  }
+
+  async function chooseRefresh() {
+    await menuItems();
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+    );
+  }
+
+  function navigatedHref() {
+    const [arg] = mocks.navigate.mock.calls[0] as [{ href: string }];
+    return new URL(arg.href, "https://app.test");
+  }
+
+  function expectNothingWritten() {
+    for (const [name, fn] of mocks.mutations) {
+      // Opening the page marks it opened; nothing else may run.
+      if (name !== "packs.touch") expect(fn).not.toHaveBeenCalled();
+    }
+  }
+
+  it.each([
+    [
+      "a verse in progress",
+      [
+        piece(0, 1, 4, "learning", { learnStage: 1, stageReps: 2 }),
+        piece(1, 5, 6, "unreached"),
+        piece(2, 7, 11, "unreached"),
+      ],
+    ],
+    [
+      "a later verse kept from before, off the rope",
+      [
+        piece(0, 1, 4, "learning", { learnStage: 1 }),
+        piece(1, 5, 6, "unreached"),
+        piece(2, 7, 11, "solid", { carriedOver: true }),
+      ],
+    ],
+  ])(
+    "R52: with real progress but no verse learned (%s), shows Start over and no Refresh",
+    async (_label, pieces) => {
+      learning(pieces);
+      renderHost("pack:psalm16x");
+      const items = await menuItems();
+      expect(items).not.toContain(REFRESH_MENU_LABEL);
+      expect(items[0]).toContain(START_OVER_MENU_LABEL);
+      expect(items).toHaveLength(2);
+      // Hidden, not disabled.
+      expect(screen.queryByText(REFRESH_MENU_LABEL)).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    [
+      "one solid verse",
+      [
+        piece(0, 1, 4, "solid"),
+        piece(1, 5, 6, "unreached"),
+        piece(2, 7, 11, "unreached"),
+      ],
+    ],
+    [
+      "solid and attached verses, a verse in progress and unreached ones",
+      [
+        piece(0, 1, 4, "solid"),
+        piece(1, 5, 6, "attached", { learnStage: 2 }),
+        piece(2, 7, 11, "learning", { learnStage: 1 }),
+      ],
+    ],
+  ])(
+    "shows Refresh above Start over with %s, and opens a practice-only Refresh",
+    async (_label, pieces) => {
+      learning(pieces);
+      renderHost("pack:psalm16x");
+      const items = await menuItems();
+      expect(items[0]).toBe(REFRESH_MENU_LABEL);
+      expect(items[1]).toContain(START_OVER_MENU_LABEL);
+      expect(items[2]).toBe("Stop memorizing");
+      expect(items).toHaveLength(3);
+      expect(
+        screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+      ).toHaveTextContent(/^Refresh$/);
+
+      await userEvent.click(
+        screen.getByRole("menuitem", { name: REFRESH_MENU_LABEL }),
+      );
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+      // Only the learned verses' text loads: 7–11 have none, and it opens.
+      expect(mocks.getPassage).toHaveBeenCalledWith({
+        book: "Psalms",
+        chapters: [16],
+      });
+      const href = navigatedHref();
+      expect(href.pathname).toBe("/memory/psalm16x/practice");
+      expect(href.searchParams.get("refresh")).toBe("1");
+      expect(href.searchParams.get("return")).toBe("/memory/psalm16x");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expectNothingWritten();
+    },
+  );
+
+  it("can't start when a learned verse has no text", async () => {
+    // Verse 5–6 is learned, but its text is missing.
+    mocks.getPassage.mockResolvedValue([
+      {
+        chapter: 16,
+        data: { ...learnedText, verses: learnedText.verses.slice(0, 4) },
+      },
+    ]);
+    learning([
+      piece(0, 1, 4, "solid"),
+      piece(1, 5, 6, "attached", { learnStage: 2 }),
+      piece(2, 7, 11, "learning", { learnStage: 1 }),
+    ]);
+    renderHost("pack:psalm16x");
+    await chooseRefresh();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REFRESH_START_ERROR,
+    );
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("R34: says so in place when the text can't load, keeps focus on •••, and can retry", async () => {
+    learning([
+      piece(0, 1, 4, "solid"),
+      piece(1, 5, 6, "learning", { learnStage: 1 }),
+      piece(2, 7, 11, "unreached"),
+    ]);
+    let fail: (error: Error) => void = () => {};
+    mocks.getPassage.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
+    );
+    renderHost("pack:psalm16x");
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    await chooseRefresh();
+    await waitFor(() => expect(trigger).toBeDisabled());
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    // A browser drops focus from a button that turns disabled.
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    await act(async () => {
+      fail(new Error("offline"));
+      await Promise.resolve();
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      /^Couldn't start the refresher\. Try again\.$/,
+    );
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(trigger).toBeEnabled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Psalm 16" }),
+    ).toBeInTheDocument();
+    expectNothingWritten();
+
+    // Refresh is enabled again, and a retry opens it.
+    await chooseRefresh();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    const href = navigatedHref();
+    expect(href.pathname).toBe("/memory/psalm16x/practice");
+    expect(href.searchParams.get("refresh")).toBe("1");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expectNothingWritten();
+  });
+
+  it("focuses ••• on return from its Refresh", async () => {
+    learning([
+      piece(0, 1, 4, "solid"),
+      piece(1, 5, 6, "learning", { learnStage: 1 }),
+      piece(2, 7, 11, "unreached"),
+    ]);
+    mocks.locationState = { refreshedPassage: "psalm16x" };
+    renderHost("pack:psalm16x");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "More actions" }),
+      ).toHaveFocus(),
+    );
   });
 });

@@ -83,9 +83,9 @@ export function memoryPackSessionHref(
 }
 
 /**
- * ••• or summary Refresh on a Memorized passage: Review when due (its From
- * memory try counts), Practice otherwise (practice only). Both start in the
- * refresher.
+ * ••• or summary Refresh on a passage: Review when due (its From memory try
+ * counts), Practice otherwise (practice only), as a Learning passage always
+ * is. Both start in the refresher.
  */
 export function memoryPassageRefreshHref(due: boolean, packId: string): string {
   return `${memoryPackSessionHref(due ? "review" : "practice", packId)}?refresh=1`;

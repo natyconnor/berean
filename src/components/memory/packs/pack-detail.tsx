@@ -40,6 +40,7 @@ import {
 import {
   FRONTIER_LOCKED_COPY,
   pieceReference,
+  refreshPieceIndexes,
 } from "@/components/memory/passage/passage-session-model";
 import { Button } from "@/components/ui/button";
 import {
@@ -1348,22 +1349,23 @@ function PackDetailMenu({
   const togetherLock = useSubmitLock();
   const showStartOver =
     isPassage && !started && canStartOverPassage(passage?.pieces ?? []);
-  // A Memorized (or Mastered) passage, due or not (R30, R50). Hidden, not
-  // disabled, for anything else (R28); Learning passages are S14.
-  const showRefresh =
-    passage !== null &&
-    !started &&
-    passage.pieces.length > 0 &&
-    passage.status !== "building";
+  // A Memorized (or Mastered) passage, due or not (R30, R50), or a Learning
+  // one with a verse learned (R39). Hidden, not disabled, with nothing to
+  // refresh (R28, R52).
+  const pieceRefs = useMemo(() => {
+    if (!passage) return [];
+    const covered = refreshPieceIndexes(passage.status, passage.pieces);
+    return passage.pieces
+      .filter((_, index) => covered.includes(index))
+      .map(pieceReference);
+  }, [passage]);
+  const showRefresh = !started && pieceRefs.length > 0;
+  // A Learning passage is never due: its Refresh is practice only.
   const refreshDue =
     passage !== null &&
     passage.status !== "building" &&
     isDueForReview({ status: passage.status, dueAt: passage.dueAt }, now);
   const frame = useMemoryPanelFrame();
-  const pieceRefs = useMemo(
-    () => (passage?.pieces ?? []).map(pieceReference),
-    [passage?.pieces],
-  );
   const refresh = useStartPassageRefresh(
     pack._id,
     pieceRefs,

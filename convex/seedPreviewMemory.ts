@@ -15,6 +15,7 @@ import { buildPreviewMemorySeed } from "../src/lib/preview-memory-seed";
 import {
   buildPreviewPassageSeed,
   previewPassageMemoryFields,
+  testerLearningRefreshPacks,
   testerMaintenancePacks,
   testerRefreshPacks,
   testerSectionRecitalPacks,
@@ -231,6 +232,7 @@ export const seedPreviewMemory = mutation({
       ...testerStalePacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
       ...testerSectionRecitalPacks(args.now, process.env.CONVEX_DEPLOYMENT),
+      ...testerLearningRefreshPacks(args.now, process.env.CONVEX_DEPLOYMENT),
     );
 
     const memoryIdByVerseId = new Map<string, Id<"verseMemory">>();
