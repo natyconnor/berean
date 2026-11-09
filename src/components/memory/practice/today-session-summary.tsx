@@ -3,13 +3,17 @@ import { Check } from "lucide-react";
 
 import { FirstMemorizedBanner } from "@/components/memory/celebrate/first-memorized-banner";
 import { MemoryDashboardCard } from "@/components/memory/memory-surface";
-import { ReviewResultRows } from "@/components/memory/review-summary";
+import {
+  AccuracyScore,
+  ReviewResultRows,
+} from "@/components/memory/review-summary";
 import {
   SESSION_COMPLETE_FOOTER,
   SESSION_COMPLETE_TITLE,
 } from "@/lib/memory-copy";
 import { todaySessionDoneLine } from "@/lib/memory-today-session";
 import {
+  averageReviewAccuracy,
   groupReviewSessionAttempts,
   type ReviewSessionAttempt,
 } from "@/lib/review-session-attempts";
@@ -47,6 +51,8 @@ export function TodaySessionSummary({
   returnTo,
 }: TodaySessionSummaryProps): JSX.Element {
   const reviews = groupReviewSessionAttempts(attempts).length;
+  // Every unhinted counted try; First letters and practice never reach here.
+  const averageAccuracy = averageReviewAccuracy(attempts);
   return (
     <MemoryDashboardCard className="mx-auto w-full max-w-lg p-6">
       <div className="flex items-start gap-3">
@@ -71,6 +77,14 @@ export function TodaySessionSummary({
       <FirstMemorizedBanner verses={learned} className="mt-5" />
 
       <div className="mt-6 space-y-3">
+        {averageAccuracy !== null ? (
+          <div className="text-center">
+            <AccuracyScore
+              accuracy={averageAccuracy}
+              label="Average accuracy"
+            />
+          </div>
+        ) : null}
         {passages.length > 0 ? (
           <ul className="divide-y rounded-lg border text-left">
             {passages.map((title) => (
