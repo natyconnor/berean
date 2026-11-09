@@ -1,23 +1,58 @@
 import { describe, expect, it } from "vitest";
 
 import type { Doc, Id } from "../../convex/_generated/dataModel";
-import { passageReviewTries } from "../../convex/lib/passageMemory";
-import { isStaleVerse } from "./memory-stale";
-
+import {
+  passageReviewTries,
+  toPassageView,
+} from "../../convex/lib/passageMemory";
 import { passageHeartSpans } from "./hearted-verse-coverage";
+import { isStaleVerse } from "./memory-stale";
 import { packAllowsPassageMode } from "./passage-eligibility";
 import { PASSAGE_MAX_ADDS_PER_DAY } from "./passage-frontier";
 import { isPassageDueForLearning, isPassageDueForReview } from "./passage-due";
 import {
   buildPreviewPassageSeed,
+  previewPassageMemoryFields,
   testerMaintenancePacks,
+  testerRefreshPacks,
   testerStalePacks,
   type PreviewPassageSeedPack,
 } from "./preview-passage-seed";
+import { shakyFirstLettersHint } from "./passage-shaky";
 import { scopesEqual } from "./scope-equality";
 
 const NOW = 1_700_000_000_000;
 const TZ = 300;
+const PASSAGE = "passageMemory:1" as Id<"passageMemory">;
+
+/**
+ * The seed logs each review row in order; `recentReviews` reads them back
+ * newest first and the session runs the real stale check on them.
+ */
+function staleNow(pack: PreviewPassageSeedPack): boolean {
+  const passage = pack.passage!;
+  const logged = (passage.reviews ?? []).map(
+    (review, index): Doc<"passageReviews"> => ({
+      _id: `passageReviews:${index}` as Id<"passageReviews">,
+      _creationTime: index,
+      userId: "users:1" as Id<"users">,
+      packId: "packs:1" as Id<"packs">,
+      passageMemoryId: PASSAGE,
+      kind: "review",
+      ...review,
+    }),
+  );
+  const newestFirst = [...logged].sort(
+    (a, b) => b._creationTime - a._creationTime,
+  );
+  return isStaleVerse({
+    status: passage.status === "mastered" ? "mastered" : "reviewing",
+    dueAt: passage.schedule.dueAt,
+    intervalDays: passage.schedule.intervalDays,
+    now: NOW,
+    lastReviews: passageReviewTries(newestFirst, PASSAGE),
+  });
+}
 
 describe("buildPreviewPassageSeed", () => {
   const plan = buildPreviewPassageSeed(NOW, TZ);
@@ -191,38 +226,74 @@ describe("testerMaintenancePacks", () => {
   });
 });
 
+describe("testerRefreshPacks (S13)", () => {
+  it("adds nothing on a production deployment", () => {
+    expect(testerRefreshPacks(NOW, "prod:berean-123")).toEqual([]);
+  });
+
+  it.each(["dev:berean-123", "preview:berean-pr-368", undefined])(
+    "lands Psalm 117 Mastered, not due, verse 2 shaky and clean on %s",
+    (deployment) => {
+      const [pack, ...rest] = testerRefreshPacks(NOW, deployment);
+      expect(rest).toEqual([]);
+      expect(pack?.name).toBe("Sample · Psalm 117 (Mastered, verse 2 shaky)");
+      const passage = pack.passage!;
+
+      // The row the seed stores, read back through the server's view.
+      const view = toPassageView(
+        {
+          _id: "passageMemory:117" as Id<"passageMemory">,
+          _creationTime: NOW,
+          userId: "users:u" as Id<"users">,
+          packId: "packs:117" as Id<"packs">,
+          ...previewPassageMemoryFields(passage, NOW),
+        },
+        NOW,
+        TZ,
+      );
+      expect(view.status).toBe("mastered");
+      expect(view.shakyVerses).toEqual([{ chapter: 117, verse: 2 }]);
+      expect(view.needsCelebration).toBe(false);
+      expect(isPassageDueForReview(view, NOW)).toBe(false);
+      expect(
+        view.pieces.every(
+          (piece) => piece.attachment === "solid" && piece.learnStage === 3,
+        ),
+      ).toBe(true);
+      expect(view.pieces[0]?.startVerse).toBe(1);
+      expect(view.pieces.at(-1)?.endVerse).toBe(2);
+
+      // Clean recent history: every try passed, so it isn't stale.
+      expect(passage.reviews).toHaveLength(3);
+      expect(
+        passage.reviews!.every(
+          (review) => review.accuracy === 100 && review.quality === "exact",
+        ),
+      ).toBe(true);
+      expect(staleNow(pack)).toBe(false);
+
+      // A refresher hints only the shaky verse 2, not verse 1 before it.
+      const [first, second] = shakyFirstLettersHint(
+        [
+          { chapter: 117, verse: 1, text: "Praise the Lord, all nations!" },
+          { chapter: 117, verse: 2, text: "For great is his steadfast love" },
+        ],
+        view.shakyVerses ?? [],
+      );
+      expect(first).not.toMatch(/[a-z]/i);
+      expect(second).toBe("F__ g____ i_ h__ s________ l___");
+    },
+  );
+
+  it("uses Psalm 117, which no other sample (or S12's 131, 133, 134) uses", () => {
+    const [pack] = testerRefreshPacks(NOW, undefined);
+    expect(pack?.scope.chapterRanges).toEqual([
+      { book: "Psalms", startChapter: 117, endChapter: 117 },
+    ]);
+  });
+});
+
 describe("testerStalePacks", () => {
-  const PASSAGE = "passageMemory:1" as Id<"passageMemory">;
-
-  /**
-   * The seed logs each review row in order; `recentReviews` reads them back
-   * newest first and the session runs the real stale check on them.
-   */
-  function staleNow(pack: PreviewPassageSeedPack): boolean {
-    const passage = pack.passage!;
-    const logged = (passage.reviews ?? []).map(
-      (review, index): Doc<"passageReviews"> => ({
-        _id: `passageReviews:${index}` as Id<"passageReviews">,
-        _creationTime: index,
-        userId: "users:1" as Id<"users">,
-        packId: "packs:1" as Id<"packs">,
-        passageMemoryId: PASSAGE,
-        kind: "review",
-        ...review,
-      }),
-    );
-    const newestFirst = [...logged].sort(
-      (a, b) => b._creationTime - a._creationTime,
-    );
-    return isStaleVerse({
-      status: passage.status === "mastered" ? "mastered" : "reviewing",
-      dueAt: passage.schedule.dueAt,
-      intervalDays: passage.schedule.intervalDays,
-      now: NOW,
-      lastReviews: passageReviewTries(newestFirst, PASSAGE),
-    });
-  }
-
   it("adds nothing on a production deployment", () => {
     expect(testerStalePacks(NOW, "prod:berean-123")).toEqual([]);
   });
@@ -297,6 +368,7 @@ describe("testerStalePacks", () => {
       ...buildPreviewPassageSeed(NOW, TZ).packs,
       ...testerMaintenancePacks(NOW, undefined),
       ...testerStalePacks(NOW, undefined),
+      ...testerRefreshPacks(NOW, undefined),
     ];
     for (let i = 0; i < all.length; i++) {
       for (let j = i + 1; j < all.length; j++) {

@@ -1,4 +1,9 @@
+import {
+  validateMemoryReturnSearch,
+  type MemoryReturnSearch,
+} from "./memory-return";
 import { parseMemoryPanelFrom, type MemoryPanelFrom } from "./memory-panel";
+import { parseRefreshSearch } from "./memory-verse-search";
 
 export type MemoryPackSearch = {
   /** Opened from Your verses: the page shows "‹ Your verses". */
@@ -11,4 +16,16 @@ export function validateMemoryPackSearch(
 ): MemoryPackSearch {
   const from = parseMemoryPanelFrom(search.from);
   return from ? { from } : {};
+}
+
+/** `/memory/$packId/review` and `/practice` search: a passage Refresh opens with `refresh=1`. */
+export type MemoryPackSessionSearch = MemoryReturnSearch & { refresh?: true };
+
+export function validateMemoryPackSessionSearch(
+  search: Record<string, unknown>,
+): MemoryPackSessionSearch {
+  return {
+    ...validateMemoryReturnSearch(search),
+    ...parseRefreshSearch(search),
+  };
 }

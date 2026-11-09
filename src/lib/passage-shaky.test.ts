@@ -91,3 +91,19 @@ describe("shakyFirstLettersHint", () => {
     ]);
   });
 });
+
+describe("practice-only recital (S13, AC29)", () => {
+  it("clears a shaky verse at 85% but not at 84%, and adds no marks", () => {
+    expect(
+      shakyAfterUnhintedTry(
+        [V3, V4],
+        [
+          { ...V3, accuracy: 85 },
+          { ...V4, accuracy: 84 },
+          { ...V5, accuracy: 0 },
+        ],
+        false,
+      ),
+    ).toEqual([V4]);
+  });
+});

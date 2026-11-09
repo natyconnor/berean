@@ -116,6 +116,42 @@ function spanVerses(
 }
 
 /**
+ * Warm the shared chapter cache for `references`, so a passage session opened
+ * next resolves its text without a round trip. Throws when the text can't
+ * load or a span has none.
+ */
+export async function prefetchCompositePassage(
+  references: readonly CardReference[],
+  fetchChaptersBatch: (args: {
+    book: string;
+    chapters: number[];
+  }) => Promise<Array<{ chapter: number; data: EsvChapterData }>>,
+): Promise<void> {
+  const byChapter = new Map<string, EsvChapterData>();
+  for (const [book, chapters] of chaptersByBook(uniqueChapters(references))) {
+    const missing: number[] = [];
+    for (const chapter of chapters) {
+      const cached = getCachedPassage(toEsvQuery(book, chapter));
+      if (cached) byChapter.set(chapterKey(book, chapter), cached);
+      else missing.push(chapter);
+    }
+    if (missing.length === 0) continue;
+    for (const result of await fetchChaptersBatch({
+      book,
+      chapters: missing,
+    })) {
+      setCachedPassage(toEsvQuery(book, result.chapter), result.data);
+      byChapter.set(chapterKey(book, result.chapter), result.data);
+    }
+  }
+  const hasText = references.every((reference) => {
+    const data = byChapter.get(chapterKey(reference.book, reference.chapter));
+    return data !== undefined && spanVerses(data, reference).length > 0;
+  });
+  if (references.length === 0 || !hasText) throw new Error("No passage text");
+}
+
+/**
  * The concatenated ESV text behind a composite recitation card.
  *
  * Chapter text is fetched one `getChaptersBatch` call per book and written

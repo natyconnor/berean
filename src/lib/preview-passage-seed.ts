@@ -55,6 +55,31 @@ export type PreviewPassageSeedPack = {
   };
 };
 
+type PreviewPassage = NonNullable<PreviewPassageSeedPack["passage"]>;
+
+/** The `passageMemory` fields a seeded passage is stored with. */
+export function previewPassageMemoryFields(
+  passage: PreviewPassage,
+  now: number,
+) {
+  return {
+    status: passage.status,
+    pieces: passage.pieces,
+    addDayKey: passage.addDayKey,
+    addsOnDay: passage.addsOnDay,
+    ease: passage.schedule.ease,
+    intervalDays: passage.schedule.intervalDays,
+    dueAt: passage.schedule.dueAt,
+    consecutiveCorrect: passage.schedule.consecutiveCorrect,
+    lapses: passage.schedule.lapses,
+    stageReps: passage.schedule.stageReps,
+    earlyReviewApplied: passage.schedule.earlyReviewApplied,
+    ...(passage.shakyVerses ? { shakyVerses: passage.shakyVerses } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export type PreviewPassageSeedPlan = {
   packs: PreviewPassageSeedPack[];
 };
@@ -341,6 +366,17 @@ const PSALM_100_VERSES: EsvVerse[] = [
   {
     number: 5,
     text: "For the Lord is good; his steadfast love endures forever, and his faithfulness to all generations.",
+  },
+];
+
+const PSALM_117_VERSES: EsvVerse[] = [
+  {
+    number: 1,
+    text: "Praise the Lord, all nations! Extol him, all peoples!",
+  },
+  {
+    number: 2,
+    text: "For great is his steadfast love toward us, and the faithfulness of the Lord endures forever. Praise the Lord!",
   },
 ];
 
@@ -647,6 +683,46 @@ export function testerStalePacks(
         reviewTry(now, 70, 100),
         reviewTry(now, 40, 92),
         reviewTry(now, 10, 96),
+      ],
+    }),
+  ];
+}
+
+/**
+ * S13 ••• Refresh on a not-due Mastered passage: Psalm 117, verse 2 shaky,
+ * three clean recent reviews. Never seeded on a production Convex deployment.
+ */
+export function testerRefreshPacks(
+  now: number,
+  convexDeployment: string | undefined,
+): PreviewPassageSeedPack[] {
+  if (convexDeployment?.startsWith("prod:") === true) return [];
+  return [
+    maintainedPsalm({
+      chapter: 117,
+      verses: PSALM_117_VERSES,
+      role: "masteredNotDue",
+      label: "Mastered, verse 2 shaky",
+      description:
+        "Mastered passage, not due, with verse 2 remembered as shaky.",
+      howToTry:
+        "Open the pack → ••• → Refresh. First letters hints only verse 2. It's practice only: the next review date stays the same.",
+      schedule: {
+        status: "mastered",
+        learnStage: 3,
+        stageReps: 0,
+        ease: EASE_START,
+        intervalDays: 32,
+        dueAt: now + 20 * DAY_MS,
+        consecutiveCorrect: 8,
+        lapses: 0,
+        earlyReviewApplied: false,
+      },
+      shakyVerses: [2],
+      reviews: [
+        reviewTry(now, 76, 100),
+        reviewTry(now, 44, 100),
+        reviewTry(now, 12, 100),
       ],
     }),
   ];

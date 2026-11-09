@@ -94,7 +94,11 @@ vi.mock("../../../../convex/_generated/api", () => ({
       recordUnifiedReview: "packs.recordUnifiedReview",
     },
     passageMemory: {
+      getForPack: "passageMemory.getForPack",
       recordAttempt: "passageMemory.recordAttempt",
+      holdAttempt: "passageMemory.holdAttempt",
+      applyHeldAttempt: "passageMemory.applyHeldAttempt",
+      notePracticeRecital: "passageMemory.notePracticeRecital",
     },
     savedVerses: {
       listAll: "savedVerses.listAll",
@@ -168,6 +172,7 @@ describe("PracticeBoard composite recitation", () => {
     navigateMock.mockReset();
     sessionStorage.clear();
     queryResults.set("savedVerses.listRecordingIds", []);
+    queryResults.set("passageMemory.getForPack", { shakyVerses: [] });
     fetchChaptersBatchMock.mockReset();
     fetchChaptersBatchMock.mockResolvedValue([{ chapter: 23, data: psalm23 }]);
     getPassageMock.mockReset();

@@ -321,3 +321,92 @@ describe("held passage misses (server)", () => {
     expect(rows("passageReviews")).toHaveLength(0);
   });
 });
+
+describe("••• Refresh From memory on a due passage (S13, R30)", () => {
+  /** The daily gap's due day, as the scheduler aligns it. */
+  const tomorrow = (row: Doc<"passageMemory">) =>
+    keepReviewingSchedule(
+      { ...toPassageSchedule(row), intervalDays: 1 },
+      { now: NOW, tzOffsetMinutes: 0 },
+    ).dueAt;
+  const scored = (accuracy: number) => ({
+    quality:
+      accuracy === 100
+        ? ("exact" as const)
+        : accuracy >= 60
+          ? ("close" as const)
+          : ("off" as const),
+    accuracy,
+    now: NOW,
+    tzOffsetMinutes: 0,
+    // Verse 2 carries the miss; the menu round has no held first try.
+    verseScores: [
+      { chapter: 13, verse: 1, accuracy: 100 },
+      { ...V2, accuracy },
+      { chapter: 13, verse: 3, accuracy: 100 },
+    ],
+    refresherUsed: true,
+  });
+
+  it.each([85, 100])(
+    "keeps the gap on a %i%% pass, counted once",
+    async (accuracy) => {
+      const { ctx, rows } = fakeCtx();
+      const row = await seedDuePassage(ctx);
+      await commitPassageReview(ctx, row, scored(accuracy));
+
+      expect(rows("passageReviews")).toEqual([
+        expect.objectContaining({ kind: "review", accuracy }),
+      ]);
+      const kept = keepReviewingSchedule(toPassageSchedule(row), {
+        now: NOW,
+        tzOffsetMinutes: 0,
+      });
+      expect(rows("passageMemory")[0]).toMatchObject({
+        status: "reviewing",
+        intervalDays: kept.intervalDays,
+        stageReps: kept.stageReps,
+        dueAt: kept.dueAt,
+        shakyVerses: [],
+      });
+    },
+  );
+
+  it.each([
+    // Every-other-day with four banked: a close miss loses one, a bad miss
+    // three, with no softening for the pre-try round.
+    [84, 3],
+    [60, 3],
+    [59, 1],
+  ])("follows R49 once on a %i%% miss", async (accuracy, stageReps) => {
+    const { ctx, rows } = fakeCtx();
+    const row = await seedDuePassage(ctx);
+    await commitPassageReview(ctx, row, scored(accuracy));
+
+    expect(rows("passageReviews")).toHaveLength(1);
+    expect(rows("passageMemory")[0]).toMatchObject({
+      status: "reviewing",
+      intervalDays: 1,
+      stageReps,
+      dueAt: tomorrow(row),
+      shakyVerses: [V2],
+    });
+  });
+
+  it("floors a 0% miss at the start of Memorized", async () => {
+    const { ctx, rows } = fakeCtx();
+    const row = await seedDuePassage(ctx, {
+      intervalDays: 1,
+      stageReps: 0,
+      consecutiveCorrect: 0,
+    });
+    await commitPassageReview(ctx, row, scored(0));
+
+    expect(rows("passageMemory")[0]).toMatchObject({
+      status: "reviewing",
+      intervalDays: 1,
+      stageReps: 0,
+      dueAt: tomorrow(row),
+    });
+  });
+});

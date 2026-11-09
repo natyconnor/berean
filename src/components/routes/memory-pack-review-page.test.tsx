@@ -7,17 +7,29 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSessionNow } from "@/hooks/use-live-now";
 import type { EsvChapterData } from "../../../shared/esv-api";
 
+import { MemoryPackPracticePage } from "./memory-pack-practice-page";
 import { MemoryPackReviewPage } from "./memory-pack-review-page";
 import type { Id } from "../../../convex/_generated/dataModel";
 
-const { queryResults, actionMocks, mutationMocks, navigateMock, leftovers } =
-  vi.hoisted(() => ({
-    queryResults: new Map<string, unknown>(),
-    actionMocks: new Map<string, ReturnType<typeof vi.fn>>(),
-    mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
-    navigateMock: vi.fn(),
-    leftovers: { ready: true },
-  }));
+const {
+  queryResults,
+  actionMocks,
+  mutationMocks,
+  navigateMock,
+  leftovers,
+  router,
+} = vi.hoisted(() => ({
+  queryResults: new Map<string, unknown>(),
+  actionMocks: new Map<string, ReturnType<typeof vi.fn>>(),
+  mutationMocks: new Map<string, ReturnType<typeof vi.fn>>(),
+  navigateMock: vi.fn(),
+  leftovers: { ready: true },
+  router: {
+    search: {},
+    state: {},
+    back: vi.fn(),
+  },
+}));
 
 function actionMock(name: string) {
   const existing = actionMocks.get(name);
@@ -55,8 +67,9 @@ vi.mock("convex-helpers/react/cache", () => ({
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
   useCanGoBack: () => false,
+  useRouter: () => ({ history: { back: router.back } }),
   useLocation: ({ select }: { select: (location: object) => unknown }) =>
-    select({ href: "/memory", state: {} }),
+    select({ href: "/memory/pack_1/review", state: router.state }),
   Link: ({
     to,
     children,
@@ -74,7 +87,14 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/routes/memory_.$packId.review", () => ({
   Route: {
     useParams: () => ({ packId: "pack_1" }),
-    useSearch: () => ({}),
+    useSearch: () => router.search,
+  },
+}));
+
+vi.mock("@/routes/memory_.$packId.practice", () => ({
+  Route: {
+    useParams: () => ({ packId: "pack_1" }),
+    useSearch: () => router.search,
   },
 }));
 
@@ -95,6 +115,7 @@ vi.mock("../../../convex/_generated/api", () => ({
       getForPack: "passageMemory.getForPack",
       introduceNext: "passageMemory.introduceNext",
       recordAttempt: "passageMemory.recordAttempt",
+      notePracticeRecital: "passageMemory.notePracticeRecital",
     },
   },
 }));
@@ -142,10 +163,12 @@ function renderReview({
   unified,
   members = [member(1, 3), member(4, 6)],
   passage = null,
+  page = <MemoryPackReviewPage />,
 }: {
   unified: boolean;
   members?: ReturnType<typeof member>[];
   passage?: unknown;
+  page?: ReactNode;
 }) {
   queryResults.set("packs.get", {
     _id: "pack_1",
@@ -160,11 +183,7 @@ function renderReview({
   queryResults.set("savedVerses.listRecordingIds", []);
   queryResults.set("passageMemory.getForPack", passage);
 
-  return render(
-    <TooltipProvider delayDuration={0}>
-      <MemoryPackReviewPage />
-    </TooltipProvider>,
-  );
+  return render(<TooltipProvider delayDuration={0}>{page}</TooltipProvider>);
 }
 
 describe("MemoryPackReviewPage", () => {
@@ -175,6 +194,9 @@ describe("MemoryPackReviewPage", () => {
     navigateMock.mockReset();
     sessionStorage.clear();
     leftovers.ready = true;
+    router.search = {};
+    router.state = {};
+    router.back.mockReset();
     actionMock("esv.get").mockResolvedValue(psalm23);
     actionMock("esv.getChaptersBatch").mockResolvedValue([
       { chapter: 23, data: psalm23 },
@@ -282,6 +304,120 @@ describe("MemoryPackReviewPage", () => {
     expect(
       await screen.findByLabelText("Your recited passage"),
     ).toBeInTheDocument();
+  });
+
+  describe("passage Refresh (S13)", () => {
+    const BACK_TO_PASSAGE = "Back to Psalm 23";
+    const notDue = () => ({
+      ...reviewingPassage(),
+      dueAt: getSessionNow() + 3 * 24 * 60 * 60 * 1000,
+    });
+
+    it("opens a due ••• Refresh in the refresher and goes back to the passage page", async () => {
+      router.search = { refresh: true, return: "/memory/pack_1" };
+      renderReview({ unified: false, passage: reviewingPassage() });
+
+      expect(
+        await screen.findByText("Refresh · First letters · 1 of 2"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/No hint text/)).toBeNull();
+      await userEvent.click(
+        screen.getByRole("button", { name: BACK_TO_PASSAGE }),
+      );
+      expect(navigateMock).toHaveBeenCalledWith({
+        href: "/memory/pack_1",
+        replace: true,
+        state: { refreshedPassage: "pack_1" },
+      });
+      expect(router.back).not.toHaveBeenCalled();
+      expect(
+        mutationMock("passageMemory.recordAttempt"),
+      ).not.toHaveBeenCalled();
+    });
+
+    it("opens a not-due ••• Refresh from Practice, back to the passage page", async () => {
+      router.search = { refresh: true, return: "/memory/pack_1" };
+      renderReview({
+        unified: false,
+        passage: notDue(),
+        page: <MemoryPackPracticePage />,
+      });
+
+      expect(
+        await screen.findByText("Refresh · First letters · 1 of 2"),
+      ).toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole("button", { name: BACK_TO_PASSAGE }),
+      );
+      expect(navigateMock).toHaveBeenCalledWith({
+        href: "/memory/pack_1",
+        replace: true,
+        state: { refreshedPassage: "pack_1" },
+      });
+    });
+
+    it("leaves a summary Refresh by going back to the summary", async () => {
+      router.search = { refresh: true, return: "/memory" };
+      router.state = { summaryRefresh: true };
+      renderReview({
+        unified: false,
+        passage: notDue(),
+        page: <MemoryPackPracticePage />,
+      });
+
+      expect(
+        await screen.findByText("Refresh · First letters · 1 of 2"),
+      ).toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Back to summary" }),
+      );
+      expect(router.back).toHaveBeenCalledTimes(1);
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+
+    it("shows a kept passage summary as it was, and ignores another pack's", async () => {
+      const dueAt = getSessionNow() + 24 * 60 * 60 * 1000;
+      const snapshot = {
+        kind: "passage",
+        packId: "pack_1",
+        title: "Psalm 23",
+        attempts: [
+          {
+            reference: {
+              book: "Psalms",
+              chapter: 23,
+              startVerse: 1,
+              endVerse: 3,
+            },
+            label: "Psalm 23",
+            accuracy: 65,
+            offerPractice: false,
+          },
+        ],
+        dueAt,
+        status: "reviewing",
+      };
+      router.state = { sessionSummary: snapshot, refreshedPassage: "pack_1" };
+      const kept = renderReview({ unified: false, passage: notDue() });
+      expect(
+        screen.getByRole("heading", { name: "Review complete" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("65%")).toBeInTheDocument();
+      expect(
+        await screen.findByRole("button", { name: "Refresh Psalm 23" }),
+      ).toHaveFocus();
+      expect(screen.queryByLabelText("Your recited passage")).toBeNull();
+      kept.unmount();
+
+      router.state = { sessionSummary: { ...snapshot, packId: "pack_2" } };
+      renderReview({ unified: false, passage: reviewingPassage() });
+      expect(
+        await screen.findByLabelText("Your recited passage"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "Review complete" }),
+      ).toBeNull();
+    });
   });
 });
 
